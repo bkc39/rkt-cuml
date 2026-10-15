@@ -141,8 +141,10 @@
           (info-file "cuml-toy-lib" field toy-deps)
           (list "cuml-toy-lib/cuml/toy.rkt"
                 '(module toy racket/base
-                   (provide kmeans)
-                   (define kmeans 0)))))
+                   (provide kmeans
+                            kmeans-fit)
+                   (define kmeans 0)
+                   (define kmeans-fit 0)))))
 
   (for ([field (in-list '(deps build-deps implies))])
     (test-case (format "a family's ~a may name only base, raft and cuml-core-lib" field)
@@ -159,7 +161,7 @@
     (check-equal? (filter-map family-of '("cuml-core-lib" "cuml-cluster-lib" "cuml-lib" "lint"))
                   '("cluster")))
 
-  (test-case "a family module that provides a bare algorithm name is reported"
+  (test-case "a family module that provides a bare algorithm name is reported, and only that name"
     (call-with-tree
      (toy-tree 'deps '("base" "cuml-core-lib"))
      (lambda (dir)
