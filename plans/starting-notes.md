@@ -9,10 +9,13 @@ These notes collect what rkt-raft milestone 1 established (bkc39/rkt-raft epic #
     - `with-array-views #:resources` binds each array to an `rr_view` and the resources to a `raft::handle_t*`. It keeps both alive for the native call, waits for the arrays' pending GPU work first, and refuses re-entry.
     - The status checker turns the downstream shim's last error into `exn:fail:raft`.
     - `raft-abi-pointer` exposes the ABI tag.
+    - Since #21/#32 (merged): `define-job` runs a long native call as a job on the resources' native worker; `status-checker` is for short calls only.
+    - Since #22 (merged): deposit records (`with-deposits`, `deposit->list`, `raftrkt/deposit.hpp`) for outputs sized by the call.
   - C++ helper headers from rkt-raft's flake dev output:
     - `raftrkt/view.hpp`: a view becomes a typed pointer, or a RAFT mdspan view. It also provides `handle_of` and `require_on_device`.
     - `raftrkt/error.hpp`: `translate_exceptions` and `classify`, plus `device_scope` and `sync_guard`.
     - `raftrkt/abi.h`.
+    - `raftrkt/job.hpp` (`run_job`) and `raftrkt/deposit.hpp` (#32, #22).
   - **The rule:** synchronise the handle's stream on every exit, including when an exception is thrown.
 - **One RAPIDS package set** exported by rkt-raft's flake: libraft, librmm and rapids-logger 26.8.0, libcuml 26.8.0, libcuvs 26.8.1, and nvJitLink 13.3. Build against exactly that set; RAFT has no versioned namespace, and `raft::handle_t`'s layout changed in 26.08.
 - **The k-means canary,** `downstream/kmeans-canary/` in rkt-raft:
@@ -33,7 +36,7 @@ These notes collect what rkt-raft milestone 1 established (bkc39/rkt-raft epic #
 | k-means | `ML::kmeans::fit`, `predict`, `fit_predict`, `transform` | float and double; `KMeansParams` with `rng_state`; X row-major |
 | DBSCAN | `ML::Dbscan::fit` | labels int32; optional core-sample indices; `ML::distance::DistanceType` |
 | Agglomerative | `ML::linkage::single_linkage` | float; children 2×(n−1) int32 |
-| HDBSCAN | `hdbscan` in `cluster/hdbscan.hpp` | eight output arrays, `HDBSCANParams`, `hdbscan_output`; the condensed tree's size is known only after the call (rkt-raft #22) |
+| HDBSCAN | `hdbscan` in `cluster/hdbscan.hpp` | eight output arrays, `HDBSCANParams`, `hdbscan_output`; the condensed tree's size is known only after the call: raft's deposits (rkt-raft #22, merged) |
 | Spectral clustering | `ML::SpectralClustering::fit_predict` | `raft::resources` plus `device_matrix_view` and `device_vector_view`, or a COO graph |
 | Test data | `ML::Datasets::make_blobs` | int64 labels |
 
@@ -42,14 +45,14 @@ These notes collect what rkt-raft milestone 1 established (bkc39/rkt-raft epic #
 1. Grow the canary into the k-means binding (fit, predict, fit_predict, transform; float and double).
 2. DBSCAN.
 3. Single-linkage agglomerative clustering.
-4. HDBSCAN, after rkt-raft #22 or with a two-call workaround.
+4. HDBSCAN, on raft's deposits (rkt-raft #22, merged).
 5. Spectral clustering.
 
 Use cuML's own metrics (`cuml/metrics/metrics.hpp`), e.g. the adjusted Rand index, until rkt-raft has `raft/stats`. Twins are `cuml` Python plus scikit-learn.
 
 ## Process (as rkt-raft)
 
-- One package, one collection, one manual.
+- Several packages, one `cuml/` collection, one manual (`plans/layout.md`).
 - Legs as GitHub stacked PRs, each with its guide chapter and reference section.
 - An independent adversarial review per PR, and every finding addressed.
 - No contracts until a dedicated leg.
@@ -58,5 +61,4 @@ Use cuML's own metrics (`cuml/metrics/metrics.hpp`), e.g. the adjusted Rand inde
 - Open questions inherited from rkt-raft:
   - #9, the GPU runner;
   - #15, the ffi2 port;
-  - #21, atomic native calls;
-  - #22, outputs of unknown size.
+  - #21 and #22 are merged (jobs, deposits).
