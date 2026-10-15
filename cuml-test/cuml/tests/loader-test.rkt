@@ -5,7 +5,7 @@
          (only-in cuml/core/private/native load-family)
          (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/match match)
-         (only-in rackunit check-equal? check-pred check-regexp-match test-case)
+         (only-in rackunit check-equal? check-false check-pred check-regexp-match test-case)
          (only-in raft exn:fail:raft-kind)
          (only-in raft/private/resource with-release))
 
@@ -41,5 +41,8 @@
 
 (test-case "a stale library without the family's entries raises exn:fail:cuml with the advice"
   (define e (load-failure (lambda (path) (copy-file shared-object-without-entries path))))
-  (check-load-failure e #rx"^cuml/cluster: libcumlrkt_cluster is staged but would not load\n")
-  (check-regexp-match #rx"cuml_cluster_last_error" (exn-message e)))
+  (check-load-failure
+   e
+   #rx"^cuml/cluster: libcumlrkt_cluster lacks entry cuml_cluster_last_error; it is stale, restage it\n")
+  (check-false (regexp-match? #rx"driver|LD_LIBRARY_PATH" (exn-message e))
+               "a missing entry is a stale library, not a driver problem"))

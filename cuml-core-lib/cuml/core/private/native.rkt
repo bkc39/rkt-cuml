@@ -27,22 +27,35 @@
        not-staged-advice)
       (format "libcumlrkt_~a is not staged\n  looked in: ~a\n  ~a" family dir not-staged-advice)))
 
-(define (load-error family dir e)
-  (exn:fail:cuml
-   (format "cuml/~a: ~a" family (load-problem family (simplify-path dir) (exn-message e)))
-   (current-continuation-marks)
-   'generic))
+(define (cuml-load-error family message)
+  (exn:fail:cuml (format "cuml/~a: ~a" family message) (current-continuation-marks) 'generic))
 
-(define (family-entries family dir)
-  (with-handlers ([exn:fail? (lambda (e) (raise (load-error family dir e)))])
-    (define library (ffi-lib (build-path dir (string-append "libcumlrkt_" family))))
-    (define (entry name type)
-      (get-ffi-obj (format "cuml_~a_~a" family name) library type))
-    (values library
-            (entry "last_error" (_fun -> _bytes/nul-terminated))
-            (entry "last_error_kind" (_fun -> _int))
-            (entry "check_abi" (_fun _pointer -> _int))
-            (entry "libcuml_version" (_fun -> _string/utf-8)))))
+(define (family-library family dir)
+  (with-handlers ([exn:fail? (lambda (e)
+                               (raise (cuml-load-error family
+                                                       (load-problem family dir (exn-message e)))))])
+    (ffi-lib (build-path dir (string-append "libcumlrkt_" family)))))
+
+(define ((stale-entry family dir name))
+  (raise (cuml-load-error
+          family
+          (format "libcumlrkt_~a lacks entry ~a; it is stale, restage it\n  found in: ~a\n  ~a"
+                  family
+                  name
+                  dir
+                  not-staged-advice))))
+
+(define (family-entries family native-libs-dir)
+  (define dir (simplify-path native-libs-dir))
+  (define library (family-library family dir))
+  (define (entry name type)
+    (define c-name (format "cuml_~a_~a" family name))
+    (get-ffi-obj c-name library type (stale-entry family dir c-name)))
+  (values library
+          (entry "last_error" (_fun -> _bytes/nul-terminated))
+          (entry "last_error_kind" (_fun -> _int))
+          (entry "check_abi" (_fun _pointer -> _int))
+          (entry "libcuml_version" (_fun -> _string/utf-8))))
 
 (define (load-family family native-libs-dir)
   (define-values (library last-error last-error-kind check-abi libcuml-version)
