@@ -21,8 +21,6 @@
 (define (same-bytes? a b)
   (and (file-exists? b) (= (file-size a) (file-size b)) (equal? (file->bytes a) (file->bytes b))))
 
-;; A temp file and rename(2), never a write in place: rewriting a library
-;; that a live process has mapped faults that process.
 (define (stage-file! src dst)
   (unless (same-bytes? src dst)
     (call-with-atomic-output-file dst
