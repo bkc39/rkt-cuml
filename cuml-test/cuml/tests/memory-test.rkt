@@ -87,6 +87,5 @@
           calls
           base-free
           lowest-free)
-  (check-false (device-free-held? base-free lowest-free)
-               "the leaked arrays exceed the device slack")
+  (check-false (device-free-held? base-free lowest-free) "the leaked arrays exceed the device slack")
   (check-equal? (length kept) calls "the kept arrays stayed alive through the check"))

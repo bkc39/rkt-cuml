@@ -323,26 +323,25 @@
       '';
       racketHome = racketHomeFor rkt-raft;
 
-      racketHomeKeys =
-        pkgs.runCommand "rkt-cuml-racket-home-keys" { } ''
-            export HOME=$TMPDIR/home
-            export XDG_CACHE_HOME=$TMPDIR/cache
-            mkdir -p checkout-a checkout-b
-            home_in() (
-              cd "$1"
-              eval "$2"
-              printf '%s' "$PLTUSERHOME"
-            )
-            pin_a=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
-            pin_b=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/b-rkt-raft")})
-            other=$(home_in checkout-b ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
-            again=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
-            [ "$pin_a" != "$pin_b" ] || { echo "a rkt-raft pin bump keeps PLTUSERHOME $pin_a" >&2; exit 1; }
-            [ "$pin_a" != "$other" ] || { echo "two checkouts share PLTUSERHOME $pin_a" >&2; exit 1; }
-            [ "$pin_a" = "$again" ] || { echo "PLTUSERHOME is not stable: $pin_a, $again" >&2; exit 1; }
-            echo "PLTUSERHOME per checkout and rkt-raft pin: $pin_a, $pin_b, $other"
-            touch $out
-          '';
+      racketHomeKeys = pkgs.runCommand "rkt-cuml-racket-home-keys" { } ''
+        export HOME=$TMPDIR/home
+        export XDG_CACHE_HOME=$TMPDIR/cache
+        mkdir -p checkout-a checkout-b
+        home_in() (
+          cd "$1"
+          eval "$2"
+          printf '%s' "$PLTUSERHOME"
+        )
+        pin_a=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
+        pin_b=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/b-rkt-raft")})
+        other=$(home_in checkout-b ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
+        again=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
+        [ "$pin_a" != "$pin_b" ] || { echo "a rkt-raft pin bump keeps PLTUSERHOME $pin_a" >&2; exit 1; }
+        [ "$pin_a" != "$other" ] || { echo "two checkouts share PLTUSERHOME $pin_a" >&2; exit 1; }
+        [ "$pin_a" = "$again" ] || { echo "PLTUSERHOME is not stable: $pin_a, $again" >&2; exit 1; }
+        echo "PLTUSERHOME per checkout and rkt-raft pin: $pin_a, $pin_b, $other"
+        touch $out
+      '';
 
       provisionRacket = ''
         export CUML_NATIVE_LIB_PATH=${shim}
