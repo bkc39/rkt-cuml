@@ -95,6 +95,9 @@ resources, or deposit outputs sized by the call (`raftrkt::deposit`,
 use `status-checker` (with `with-array-views #:resources`) for short calls
 only.
 
+A short (atomic) call is for sub-millisecond work only; anything longer is a
+job.
+
 ### Racket
 
 `cuml/core/private/native.rkt`'s `load-family` loads
@@ -105,7 +108,9 @@ ABI check and returns a `cuml-family`. A family's
 `cuml/<family>` performs the handshake. The library is staged into
 `cuml-<family>-lib/cuml/<family>/native-libs/`: by the dev shell, by
 `nix run .#copy-native-libs`, or by the collection's pre-installer
-(`cuml/<family>/info.rkt`) from `$CUML_NATIVE_LIB_PATH/lib`. rkt-raft's
+(`cuml/<family>/info.rkt`) from `$CUML_NATIVE_LIB_PATH/lib`. Staging writes
+a temp file and renames it over the old library, never in place: rewriting a
+library that a live process has mapped faults that process. rkt-raft's
 catalog arc (rkt-raft #24) will ship raft as a `raft-x86_64-linux` natipkg;
 the families will follow once it lands.
 
@@ -140,46 +145,53 @@ nix run --max-jobs 1 --cores 4 .#copy-native-libs   # restage the shims after a 
 cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loop
 ```
 
-`nix develop`, from the checkout's root: filters `/usr/local/cuda*` off
-`LD_LIBRARY_PATH` and links the driver into `.cuda-driver/` (rkt-raft's
-hook); stages the shims; gives the checkout its own `PLTUSERHOME` under
-`~/.cache/rkt-cuml-devshell/`; installs rkt-raft's docs dependencies, raft
-(linked from a writable copy of the rkt-raft tree, whose manual reads files
-outside `raft/`, rkt-raft #23; its docs are built, with rkt-raft's
-`packages.kmeans-canary` for their examples, so the manual links to them) and the cuml packages (linked), and the pinned Resyntax, raco fmt,
-raco review and cuml-lint. It exports `CUML_SHIM_TESTS`,
-`CUML_CUDA_DRIVER_PATH`, `CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH` and
-`RAFT_NATIVE_LIB_PATH`, and provides rkt-raft's `python-twins` (cuml-cu13
-26.8, scikit-learn). After a change of the rkt-raft pin, delete the
-checkout's `PLTUSERHOME`.
+`nix develop` exports `CUML_SHIM_TESTS`, `CUML_CUDA_DRIVER_PATH`,
+`CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH` and
+`RAFT_SHIM_PROBE` (rkt-raft's probe library, which the memory test reads the
+pool through). A change of the rkt-raft pin or of a package's `info.rkt`
+misses the install stamp, and the next shell entry removes the linked raft
+and links the new pin's tree; nothing in `PLTUSERHOME` needs deleting by hand.
 
 ### Build memory
 
 The lab host shares 62 GB with other sessions and has OOM'd under parallel
 builds. Run nix as `nix … --max-jobs 1 --cores 4`; the flake caps CMake at 4
-jobs and nvcc at `--threads=1`; check `free -g` before a heavy build and
+jobs, nvcc at `--threads=1` and every `raco setup` (and `raco pkg install`
+that runs one) at `-j 4`; check `free -g` before a heavy build and
 wait below 30 GB available. Never two shim builds at once.
 
 ### Gates
 
-`.racket-dev.rktd` declares them for the racket-dev runner
-(`racket <plugin>/hooks/gate.rkt . all`); `push-gates` is the pre-push
-subset.
+native, format, no-syntax-rule, no-raw-malloc, gpu-suite-signals, layout,
+pkg-deps, review, compile, test, gpu, resyntax, docs, check: `.racket-dev.rktd`
+declares their commands for the racket-dev runner
+(`racket <plugin>/hooks/gate.rkt . all`), and `push-gates` is the pre-push
+subset. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
+`fmt/core`), which fmt documents as unstable: re-check `format-fun` and
+`format-hash-pairs` when `nix/racket-tools.nix` moves to a new fmt.
+`scripts/check-layout.rkt` uses `threading`, which the flake installs from
+rkt-polars' pinned `racket-deps` (with rkt-raft's docs dependencies).
 
-| Gate | Checks |
-|---|---|
-| native | stages the nix-built shims into `native-libs/` |
-| format | treefmt (`nix fmt -- --ci`): raco fmt, clang-format, nixfmt, shfmt, shellcheck, actionlint, ruff |
-| no-syntax-rule, no-raw-malloc | grep gates over the Racket sources |
-| gpu-suite-signals | SIGINT/TERM/HUP stop the whole GPU suite and re-raise |
-| layout | family deps, cuml-lib's deps, no reserved name exported |
-| pkg-deps | `raco setup --check-pkg-deps --unused-pkg-deps` over every cuml package |
-| review | `raco review` over every `.rkt`, then cuml-lint's tests |
-| compile, test | `raco make`; `raco test --process --timeout 45` (each file bounded; `test-timeouts` in `cuml/tests/info.rkt`) |
-| gpu | `scripts/gpu-suite.sh`, prints the SKIP count; red on a SKIP that needs a GPU |
-| resyntax | Resyntax against the merge base with master, red on any suggestion |
-| docs | the manual, red on a warning or broken link |
-| check | `nix flake check`: shim (gtests via ctest, 6 s each), racket, racket-review, layout, formatting, clang-tidy, line-count, racket-version, grep gates |
+### Test support
+
+raft has no public test support yet, so the tests import raft internals;
+replace each when raft offers a public form:
+
+| Module | Bindings | Used by |
+|---|---|---|
+| `raft/private/resource` | `with-release` | `loader-test`, `private/device-memory`, `private/python-env` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test` |
+| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test` |
+| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `memory-test` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `memory-test` (through `test-pools`), `private/python-env` |
+
+The Python twins run with `LD_LIBRARY_PATH` set to the dev shell's driver
+farm only, so no host CUDA library shadows the ones the wheels were patched
+against. `import cuml` is probed from the temp directory with
+`PYTHONSAFEPATH`: `python3 -c` puts the working directory on `sys.path`,
+where a same-named directory would shadow the wheel and answer yes with
+nothing installed.
 
 ## Documentation
 
@@ -199,54 +211,3 @@ subset.
 `gpu.yml` (the GPU suite and the manual on the self-hosted runner, gated on
 `vars.GPU_RUNNER`), with rkt-raft's tailnet cache action. The repository has
 no remote yet, so neither has run; actionlint checks them in `format`.
-
-## Decisions recorded in leg 0
-
-- **`exn:fail:cuml` subtypes `exn:fail:raft`** (raft exports the struct with
-  `struct-out`), so a raft handler catches cuML's failures. `load-family`
-  passes its constructor to `status-checker`, and `define-job` takes it as
-  `#:exn`.
-- **One library per family**, `libcumlrkt_<family>.so`, entry points
-  `cuml_<family>_*`. The common entries are four explicit lines per family,
-  not a macro.
-- **The cluster shim proves the pipeline only**: the ABI handshake,
-  `cuml_cluster_libcuml_version` ("26.08.00", formatted at compile time from
-  `cuml/version_config.hpp` as `raft-version` formats RAFT's) and
-  `ML::Datasets::make_blobs`, bound both as a job (`define-job`) and as a
-  short call (`with-array-views #:resources` + `status-checker`), so both
-  downstream paths raise `exn:fail:cuml`. `blobs` lives in
-  `cuml/cluster/private/blobs.rkt`; nothing public but `exn:fail:cuml`.
-- **The failing-call tests use the shim's refusals** (`n-clusters` 0, an
-  int32 `out`): `make_blobs` raises for no input the shim lets through.
-  Zero rows, zero features and more clusters than rows all succeed, so the
-  first test that carries a message from cuML itself comes with the first
-  estimator.
-- **`cuml/cluster` requires its loader** although it exports nothing yet, so
-  `(require cuml/cluster)` loads the shim and checks the ABI.
-- **Collection-level `info.rkt` files** sit in the deepest directory that
-  needs them (`cuml/scribblings`, `cuml/cluster`, `cuml/tests`), so no two
-  packages ship `cuml/info.rkt`.
-- **The meta package `cuml`** depends on and implies cuml-lib and cuml-doc,
-  not cuml-test, as typed-racket's does.
-- **The flake reuses rkt-raft's** `nix/racket-tools.nix`, `nix/treefmt.nix`,
-  `packages.{rapids,shim,raft-dev,python-twins}` and its docs-dependency
-  inputs (polars, datasets) through `rkt-raft.inputs`, so the pins are
-  raft's. rkt-raft follows this flake's nixpkgs and treefmt-nix, both at
-  raft's locked revisions, so its store paths are unchanged.
-- **Not carried over from rkt-raft yet:** the ASAN/UBSAN shim build (the GPU
-  suite runs the gtests under compute-sanitizer memcheck), the bounded
-  death-test gate (no death tests), the binding census
-  (`check-bindings.rkt`).
-
-## Open owner questions
-
-1. Package versions start at 0.1 and require `("raft" #:version "0.2")`;
-   the GitHub repository name and when to create the remote.
-2. An ASAN/UBSAN build of the shims as a flake check, as rkt-raft's
-   `shim-sanitizers` (a second nvcc build in CI)?
-3. A per-family binding census like rkt-raft's `check-bindings.rkt`?
-4. Distribution after rkt-raft #24: one natipkg per family
-   (`cuml-cluster-x86_64-linux`) or one for all shims?
-5. From `plans/layout.md` #3: the estimator generics in cuml-core-lib
-   (recommended), functional fit, capability generics with a `fit-predict`
-   fallback.

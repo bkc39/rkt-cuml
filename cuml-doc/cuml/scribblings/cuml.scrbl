@@ -4,15 +4,14 @@
                      racket/base
                      raft))
 
-@(define ev (make-base-eval #:lang 'racket/base '(require cuml raft)))
+@(define ev (make-base-eval #:lang 'racket/base '(require cuml/core raft)))
 
 @title{cuML: GPU machine learning for Racket}
 @author{bkc}
 
 This library binds @hyperlink["https://github.com/rapidsai/cuml"]{NVIDIA
 cuML}, the RAPIDS library of machine-learning algorithms on the GPU. It works
-on the device arrays and device resources of @racketmodname[raft], and
-reports failures as raft does.
+on the device arrays and device resources of @racketmodname[raft].
 
 @bold{License.} This package is distributed under @bold{Apache-2.0}.
 
@@ -28,7 +27,7 @@ Install it with @exec{raco pkg install cuml}.
 
 @section[#:tag "errors"]{Errors}
 
-@defmodule[cuml]
+@defmodule[#:multi (cuml cuml/core)]
 
 @defstruct*[(exn:fail:cuml exn:fail:raft) ()]{
 

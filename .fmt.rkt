@@ -1,8 +1,5 @@
 #lang racket/base
 
-;; format-fun and format-hash-pairs use fmt's internal document model
-;; (fmt/common, fmt/core), which fmt documents as unstable: re-check them when
-;; nix/racket-tools.nix moves to a new fmt.
 (require (only-in fmt/common atom atom? commentable-inline-comment newl? node-content node? visible?)
          (only-in fmt/conventions
                   format-#%app

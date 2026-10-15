@@ -6,7 +6,7 @@
 ;;
 ;; A command whose first word is `nix` runs as is; every other command is
 ;; prefixed by `shell`. nix reads the git-tracked tree, so stage new files
-;; before any nix gate. AGENTS.md's Gates table says what each gate checks.
+;; before any nix gate.
 
 ((shell "nix develop --max-jobs 1 --cores 4 --command")
  (base-ref "master")
@@ -17,7 +17,7 @@
   (no-raw-malloc  ("scripts/no-raw-malloc.sh" #:shell ""))
   (gpu-suite-signals ("scripts/gpu-suite-signals.sh" #:shell ""))
   (layout         "racket scripts/check-layout.rkt")
-  (pkg-deps       "raco setup --no-docs --check-pkg-deps --unused-pkg-deps --pkgs cuml-core-lib cuml-cluster-lib cuml-lib cuml-doc cuml-test cuml")
+  (pkg-deps       "raco setup -j 4 --no-docs --check-pkg-deps --unused-pkg-deps --pkgs cuml-core-lib cuml-cluster-lib cuml-lib cuml-doc cuml-test cuml")
   (review         "scripts/review.sh")
   (compile        "raco make -v cuml-lib/cuml/main.rkt cuml-doc/cuml/scribblings/cuml.scrbl scripts/check-layout.rkt")
   (test           "raco test --process --timeout 45 cuml-test lint scripts/check-layout.rkt")

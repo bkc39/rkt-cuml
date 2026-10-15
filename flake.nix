@@ -129,14 +129,14 @@
       # rkt-raft's recipe at rkt-raft's pins: raft's build-deps (polars,
       # datasets) installed offline, so raft installs with --deps fail.
       installDocsDeps = skip: ''
-        raco pkg install --batch --copy --no-docs --scope user ${skip} \
+        raco pkg install --batch -j 4 --copy --no-docs --scope user ${skip} \
           ${raftInputs.rkt-polars.packages.${system}.racket-deps}/*/
         _polars_src="$(mktemp -d)/polars"
         cp -r ${raftInputs.rkt-polars}/polars "$_polars_src"
         chmod -R u+w "$_polars_src"
         cp ${raftInputs.rkt-polars}/polars/native-libs/candidates/linux/libcompat.so "$_polars_src/native-libs/"
         rm -rf "$_polars_src/native-libs/candidates"
-        raco pkg install --batch --copy --no-docs --scope user ${skip} --name polars "$_polars_src"
+        raco pkg install --batch -j 4 --copy --no-docs --scope user ${skip} --name polars "$_polars_src"
         raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
           --name al2-test-runner ${raftInputs.al2-test-runner-src}
         raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
@@ -184,8 +184,8 @@
           ${installDocsDeps ""}
           ${installRaft "$TMPDIR/rkt-raft" ""}
           ${installCuml ""}
-          raco setup --no-docs --pkgs raft
-          raco setup --no-docs --check-pkg-deps --unused-pkg-deps --pkgs ${cumlPackageNames}
+          raco setup -j 4 --no-docs --pkgs raft
+          raco setup -j 4 --no-docs --check-pkg-deps --unused-pkg-deps --pkgs ${cumlPackageNames}
           runHook postBuild
         '';
         doCheck = true;
@@ -247,11 +247,11 @@
           export HOME=$TMPDIR/home
           export PLTUSERHOME=$TMPDIR/racket-home
           mkdir -p $PLTUSERHOME
-          raco pkg install --batch --copy --no-docs --deps fail --scope user \
+          raco pkg install --batch -j 4 --copy --no-docs --deps fail --scope user \
             ${racketTools.sources}/*/
           raco pkg install --batch --no-docs --no-setup --deps fail --scope user \
             --link --name cuml-lint ./lint
-          raco setup --no-docs --pkgs cuml-lint
+          raco setup -j 4 --no-docs --pkgs cuml-lint
           bash scripts/review.sh
           runHook postBuild
         '';
@@ -267,6 +267,8 @@
           ''
             export HOME=$TMPDIR/home
             export PLTUSERHOME=$TMPDIR/racket-home
+            raco pkg install --batch -j 4 --copy --no-docs --deps fail --scope user \
+              ${raftInputs.rkt-polars.packages.${system}.racket-deps}/threading-lib
             cp -r $src source
             chmod -R u+w source
             cd source
@@ -330,11 +332,14 @@
           (
             set -e
             ${installDocsDeps "--skip-installed"}
+            if raco pkg show --scope user raft | grep -q '^ *raft '; then
+              raco pkg remove --batch --force --no-setup --scope user raft
+            fi
             ${installRaft "$PLTUSERHOME/${baseNameOf (toString rkt-raft)}" "--skip-installed"}
             ${installCuml "--skip-installed"}
             RAFT_KMEANS_CANARY=${raft.kmeans-canary}/lib/libkmeans_canary.so \
-              raco setup --pkgs raft
-            raco setup --no-docs --pkgs ${cumlPackageNames}
+              raco setup -j 4 --pkgs raft
+            raco setup -j 4 --no-docs --pkgs ${cumlPackageNames}
           )
           _setup_rc=$?
           if [ "$_setup_rc" = 0 ]; then
@@ -352,9 +357,9 @@
         if [ ! -f "$_tools_stamp" ]; then
           echo "Installing raco fmt, raco review and cuml-lint into $PLTUSERHOME"
           rm -f "$PLTUSERHOME"/.tools-installed-* 2>/dev/null || true
-          if raco pkg install --batch --copy --no-docs --scope user --skip-installed \
+          if raco pkg install --batch -j 4 --copy --no-docs --scope user --skip-installed \
                ${racketTools.sources}/*/ \
-             && raco pkg install --batch --no-docs --scope user --skip-installed \
+             && raco pkg install --batch -j 4 --no-docs --scope user --skip-installed \
                   --link --name cuml-lint "$PWD/lint"; then
             touch "$_tools_stamp"
           else
@@ -369,7 +374,7 @@
         if [ ! -f "$_lint_stamp" ]; then
           echo "Installing Resyntax into $PLTUSERHOME"
           rm -f "$PLTUSERHOME"/.resyntax-installed-* 2>/dev/null || true
-          if raco pkg install --batch --auto --no-docs --scope user \
+          if raco pkg install --batch -j 4 --auto --no-docs --scope user \
                --skip-installed "${resyntaxSource}" \
              && raco pkg update --batch --auto --update-deps --no-docs \
                   --scope user "${resyntaxSource}"; then
@@ -407,6 +412,7 @@
         export LD_LIBRARY_PATH="$_drv_farm''${_filtered:+:$_filtered}"
         export CUML_CUDA_DRIVER_PATH="$_drv_farm"
         export CUML_SHIM_TESTS="${shim.tests}/bin"
+        export RAFT_SHIM_PROBE="${raft.shim.tests}/lib/libraftrkt_probe.so"
         export CUML_RAPIDS_PREFIX="${rapids}"
         export CMAKE_BUILD_PARALLEL_LEVEL=${toString buildJobs}
       '';
