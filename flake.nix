@@ -278,7 +278,9 @@
             chmod -R u+w source
             cd source
             raco test scripts/check-layout.rkt
-            racket scripts/check-layout.rkt --deps-only
+            racket scripts/check-layout.rkt --deps-only --same-version \
+              ${racketTools.sources}/threading-lib \
+              ${raftInputs.rkt-polars.packages.${system}.racket-deps}/threading-lib
             touch $out
           '';
 
@@ -311,35 +313,67 @@
 
       resyntaxSource = "https://github.com/jackfirth/resyntax.git#40f3497321f8590eb6a0b7c7984a9116323b7ebf";
 
-      # PLTUSERHOME lives outside $PWD and is keyed on the checkout's path
-      # and the rkt-raft pin: raco refuses a --link target inside a collects
-      # dir, worktrees must not share installed packages, and a pin bump
-      # gets a fresh home with none of the old pin's packages in it.
-      racketHomeFor = raftSource: ''
+      # PLTUSERHOME lives outside $PWD (raco refuses a --link target inside a
+      # collects dir), one directory per checkout so worktrees never share
+      # installed packages, and below it one home per rkt-raft and tool pin:
+      # every install skips what is installed, so a pin bump needs a fresh
+      # home. Entering the shell deletes everything else under the checkout's
+      # directory: old pins' homes, and homes from before this layout.
+      racketHomeFor = raftSource: toolsSource: ''
         _cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/rkt-cuml-devshell"
-        _project_id=$(printf '%s\n%s' "$PWD" "${raftSource}" | sha256sum | cut -c1-12)
-        export PLTUSERHOME="$_cache_root/$_project_id"
+        _checkout_id=$(printf '%s' "$PWD" | sha256sum | cut -c1-12)
+        _pins_id=$(printf '%s\n%s' "${raftSource}" "${toolsSource}" | sha256sum | cut -c1-12)
+        _checkout_homes="$_cache_root/$_checkout_id"
+        export PLTUSERHOME="$_checkout_homes/$_pins_id"
+        if [ -d "$_checkout_homes" ]; then
+          find "$_checkout_homes" -mindepth 1 -maxdepth 1 ! -name "$_pins_id" \
+            -printf "Removing this checkout's stale home entry %p\n" -exec rm -rf -- {} +
+        fi
         mkdir -p "$PLTUSERHOME"
       '';
-      racketHome = racketHomeFor rkt-raft;
+      racketHome = racketHomeFor rkt-raft racketTools.sources;
 
       racketHomeKeys = pkgs.runCommand "rkt-cuml-racket-home-keys" { } ''
         export HOME=$TMPDIR/home
         export XDG_CACHE_HOME=$TMPDIR/cache
-        mkdir -p checkout-a checkout-b
+        root=$XDG_CACHE_HOME/rkt-cuml-devshell
+        mkdir -p checkout-a checkout-b "$XDG_CACHE_HOME/other-tool/0123456789ab"
         home_in() (
           cd "$1"
-          eval "$2"
+          eval "$2" >&2
           printf '%s' "$PLTUSERHOME"
         )
-        pin_a=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
-        pin_b=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/b-rkt-raft")})
-        other=$(home_in checkout-b ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
-        again=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
-        [ "$pin_a" != "$pin_b" ] || { echo "a rkt-raft pin bump keeps PLTUSERHOME $pin_a" >&2; exit 1; }
-        [ "$pin_a" != "$other" ] || { echo "two checkouts share PLTUSERHOME $pin_a" >&2; exit 1; }
-        [ "$pin_a" = "$again" ] || { echo "PLTUSERHOME is not stable: $pin_a, $again" >&2; exit 1; }
-        echo "PLTUSERHOME per checkout and rkt-raft pin: $pin_a, $pin_b, $other"
+        fail() { echo "$1" >&2; exit 1; }
+        key_a=${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft" "/nix/store/a-tools")}
+        key_raft=${lib.escapeShellArg (racketHomeFor "/nix/store/b-rkt-raft" "/nix/store/a-tools")}
+        key_tools=${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft" "/nix/store/b-tools")}
+
+        pin_a=$(home_in checkout-a "$key_a")
+        touch "$pin_a/stamp"
+        again=$(home_in checkout-a "$key_a")
+        [ "$pin_a" = "$again" ] || fail "PLTUSERHOME is not stable: $pin_a, $again"
+        [ -f "$pin_a/stamp" ] || fail "re-entering a home emptied it"
+        other=$(home_in checkout-b "$key_a")
+        [ "$pin_a" != "$other" ] || fail "two checkouts share PLTUSERHOME $pin_a"
+        mkdir -p "$(dirname "$pin_a")/.local/share/racket"
+        touch "$(dirname "$pin_a")/.cuml-installed-0"
+
+        raft_b=$(home_in checkout-a "$key_raft")
+        [ "$pin_a" != "$raft_b" ] || fail "a rkt-raft pin bump keeps PLTUSERHOME $pin_a"
+        [ ! -e "$pin_a" ] || fail "a rkt-raft pin bump leaves the old home $pin_a"
+        tools_b=$(home_in checkout-a "$key_tools")
+        [ "$raft_b" != "$tools_b" ] && [ "$pin_a" != "$tools_b" ] \
+          || fail "a tool pin bump keeps PLTUSERHOME $tools_b"
+        [ ! -e "$raft_b" ] || fail "a tool pin bump leaves the old home $raft_b"
+
+        [ "$(dirname "$pin_a")" = "$root/$(basename "$(dirname "$pin_a")")" ] \
+          || fail "homes are not <checkout>/<pins> under $root: $pin_a"
+        [ "$(dirname "$pin_a")" = "$(dirname "$tools_b")" ] || fail "one checkout's homes are not siblings"
+        [ -d "$other" ] || fail "another checkout's home was deleted: $other"
+        [ "$(ls -A "$(dirname "$pin_a")")" = "$(basename "$tools_b")" ] \
+          || fail "stale entries survive beside $tools_b: $(ls -A "$(dirname "$pin_a")")"
+        [ -d "$XDG_CACHE_HOME/other-tool/0123456789ab" ] || fail "a directory outside $root was deleted"
+        echo "PLTUSERHOME per checkout and pins, old pins removed: $pin_a -> $raft_b -> $tools_b; $other"
         touch $out
       '';
 

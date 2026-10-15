@@ -149,15 +149,19 @@ cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loo
 `CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH` and
 `RAFT_SHIM_PROBE` (rkt-raft's probe library, which the memory test reads the
 pool through). `PLTUSERHOME` is
-`~/.cache/rkt-cuml-devshell/<hash of the checkout path and the rkt-raft store
-path>`, so a bump of the rkt-raft pin enters a fresh, empty home: the next
-shell entry copies the new pin's tree, links raft from it, installs raft's
-docs dependencies (polars, data-frame, datasets, datasets-core,
-al2-test-runner, rkt-polars' racket-deps) at the new pin's revisions, and
-reinstalls the tools and Resyntax.
-The old pin's home stays behind unused; deleting it only reclaims disk. A
-change of a package's `info.rkt` or of the shim misses the install stamp
-inside the same home and re-runs the install and setup.
+`~/.cache/rkt-cuml-devshell/<hash of the checkout path>/<hash of the rkt-raft
+and nix/racket-tools.nix store paths>`. Every install skips what is already
+installed, so a bump of either pin enters a fresh, empty home. Every shell
+entry deletes everything else under this checkout's directory (old pins'
+homes), and nothing outside it.
+The next shell entry copies the new pin's raft tree, links raft from it,
+installs raft's docs dependencies (polars, data-frame, datasets,
+datasets-core, al2-test-runner, rkt-polars' racket-deps) and the tools at
+the new revisions, and reinstalls Resyntax. A change of a package's
+`info.rkt` or of the shim misses the install stamp inside the same home and
+re-runs the install and setup. Homes keyed on the checkout and the
+rkt-raft pin alone (before this layout) sit directly under
+`~/.cache/rkt-cuml-devshell/` and can be deleted by hand.
 
 ### Build memory
 
@@ -178,7 +182,9 @@ subset. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
 `format-hash-pairs` when `nix/racket-tools.nix` moves to a new fmt.
 `scripts/check-layout.rkt` uses `threading`; `nix/racket-tools.nix` pins
 `threading-lib` beside fmt and review, and every Racket home the flake builds
-installs it from there first.
+installs it from there first. rkt-polars' `threading-doc` builds against
+that pin, so the `layout` check fails unless both `threading-lib` versions
+agree.
 
 ### Test support
 

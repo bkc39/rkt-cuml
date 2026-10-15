@@ -85,6 +85,21 @@
               [problem (in-list (reserved-problems (path->string module) (exported-names module)))])
     problem))
 
+(define (package-version dir)
+  ((get-info/full dir) 'version (lambda () #f)))
+
+(define (version-problems . dirs)
+  (match dirs
+    ['() '()]
+    [(list dir-a dir-b) (versions-differ dir-a dir-b)]))
+
+(define (versions-differ dir-a dir-b)
+  (define version-a (package-version dir-a))
+  (define version-b (package-version dir-b))
+  (cond
+    [(equal? version-a version-b) '()]
+    [else (list (format "~a is version ~a but ~a is version ~a" dir-a version-a dir-b version-b))]))
+
 (define (layout-problems dir #:exports? exports?)
   (define family-names (families dir))
   (append (append-map (curry family-deps-problems dir) family-names)
@@ -100,9 +115,17 @@
   (require (only-in racket/cmdline command-line))
 
   (define exports? #t)
+  (define same-version '())
   (command-line #:once-each
-                [("--deps-only") "check info.rkt deps only, loading no module" (set! exports? #f)])
-  (define problems (layout-problems (simplify-path root) #:exports? exports?))
+                [("--deps-only") "check info.rkt deps only, loading no module" (set! exports? #f)]
+                [("--same-version")
+                 package-a
+                 package-b
+                 "check that two package directories have one version"
+                 (set! same-version (list package-a package-b))])
+  (define problems
+    (append (layout-problems (simplify-path root) #:exports? exports?)
+            (apply version-problems same-version)))
   (for-each displayln problems)
   (cond
     [(pair? problems) (exit 1)]
@@ -167,4 +190,17 @@
      (lambda (dir)
        (check-equal? (layout-problems dir #:exports? #t)
                      (list (format "~a exports kmeans, a name reserved for cuml's estimator wrappers"
-                                   (build-path dir "cuml-toy-lib/cuml/toy.rkt"))))))))
+                                   (build-path dir "cuml-toy-lib/cuml/toy.rkt")))))))
+
+  (test-case "two package directories with different versions are reported"
+    (call-with-tree (list (info-file "pin-a" 'version "2.0")
+                          (info-file "pin-b" 'version "2.1")
+                          (info-file "pin-c" 'version "2.0"))
+                    (lambda (dir)
+                      (define (in-tree package)
+                        (build-path dir package))
+                      (check-equal? (version-problems (in-tree "pin-a") (in-tree "pin-c")) '())
+                      (check-equal? (version-problems (in-tree "pin-a") (in-tree "pin-b"))
+                                    (list (format "~a is version 2.0 but ~a is version 2.1"
+                                                  (in-tree "pin-a")
+                                                  (in-tree "pin-b"))))))))

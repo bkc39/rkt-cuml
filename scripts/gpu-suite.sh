@@ -68,7 +68,7 @@ raco test --process --timeout 45 cuml-test >"$racket_log" 2>&1 || {
   cat "$racket_log"
   exit 1
 }
-grep -E "^SKIP|^twin |^memory: |tests? passed|failure" "$racket_log"
+grep -E "^SKIP|^twin |^memory: |^device memory: |tests? passed|failure" "$racket_log"
 cat "$racket_log" >>"$log"
 
 unexpected=$(grep "^SKIP" "$log" | grep -v "^SKIP: a GPU is present" || true)
