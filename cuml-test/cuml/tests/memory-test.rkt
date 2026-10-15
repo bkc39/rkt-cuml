@@ -2,23 +2,24 @@
 
 (require (only-in cuml/cluster/private/blobs blobs blobs/short-call)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-false check-true)
+         (only-in rackunit check-equal? check-true)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until drain-finalizers! settled-count)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/device-memory.rkt" device-free-bytes))
+         (only-in "private/device-memory.rkt" process-device-bytes))
 
 (define calls 500)
 (define sample-every 100)
 (define buffers-per-call 2)
 (define n-samples 65536)
 (define n-features 4)
-(define device-slack (* 256 1024 1024))
+(define device 0)
+(define device-slack (* 128 1024 1024))
 
 (define (pool-sample)
   (drain-finalizers!)
-  (list (probe-pool-used 0) (device-free-bytes)))
+  (list (probe-pool-used device) (process-device-bytes #:device device)))
 
 (define (call-blobs make-blobs)
   (call-with-values (lambda () (make-blobs n-samples n-features #:centers 3 #:seed 5)) list))
@@ -33,15 +34,14 @@
       (keep! (call-blobs make-blobs)))
     (pool-sample)))
 
-(define (device-free-held? baseline-free lowest-free)
-  (define floor-free (- baseline-free device-slack))
-  (or (>= lowest-free floor-free) (>= (cadr (pool-sample)) floor-free)))
+(define (device-growth base-bytes samples)
+  (- (apply max (map cadr samples)) base-bytes))
 
 (test-pools "500 blobs calls, jobs and short calls alike, leave device memory flat and free every buffer"
   (for ([make-blobs (in-list (list blobs blobs/short-call))])
     (warm-up make-blobs)
     (define failures (settled-count release-failure-count))
-    (match-define (list base-used base-free) (pool-sample))
+    (match-define (list base-used base-bytes) (pool-sample))
     (define live (jobs-live))
     (define threads (executor-threads))
     (define drops (settled-count buffer-drop-count))
@@ -50,9 +50,9 @@
     (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
     (define freed (- (buffer-drop-count) drops))
     (define used (map car samples))
-    (define lowest-free (apply min (map cadr samples)))
+    (define growth (device-growth base-bytes samples))
     (printf
-     "memory: ~a ~a calls of ~ax~a; pool used ~a bytes before, ~a after each ~a; device free ~a before, lowest ~a after (cuMemGetInfo, shared GPU); ~a buffers freed of ~a allocated; ~a release failures\n"
+     "memory: ~a ~a calls of ~ax~a; pool used ~a bytes before, ~a after each ~a; this process's device memory ~a bytes before, ~a after each ~a; ~a buffers freed of ~a allocated; ~a release failures\n"
      calls
      (object-name make-blobs)
      n-samples
@@ -60,8 +60,9 @@
      base-used
      used
      sample-every
-     base-free
-     lowest-free
+     base-bytes
+     (map cadr samples)
+     sample-every
      freed
      wanted
      (- (release-failure-count) failures))
@@ -72,20 +73,19 @@
     (check-true (<= (executor-threads) (add1 threads)))
     (for ([u (in-list used)])
       (check-equal? u base-used "pool use returns to the baseline after a collection"))
-    (check-true (device-free-held? base-free lowest-free)
-                (format "device-wide free memory fell ~a bytes below the baseline, past the ~a slack"
-                        (- base-free lowest-free)
-                        device-slack))))
+    (check-true
+     (<= growth device-slack)
+     (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack))))
 
-(test-pools "the device-free check fails when every call's arrays stay alive"
+(test-pools "the device-memory check fails when every call's arrays stay alive"
   (warm-up blobs)
-  (match-define (list _ base-free) (pool-sample))
+  (match-define (list _ base-bytes) (pool-sample))
   (define kept '())
   (define samples (sampled-calls blobs (lambda (arrays) (set! kept (cons arrays kept)))))
-  (define lowest-free (apply min (map cadr samples)))
-  (printf "memory: ~a blobs calls kept alive; device free ~a before, lowest ~a after\n"
-          calls
-          base-free
-          lowest-free)
-  (check-false (device-free-held? base-free lowest-free) "the leaked arrays exceed the device slack")
-  (check-equal? (length kept) calls "the kept arrays stayed alive through the check"))
+  (match-define (list _ ... (list _ held-bytes)) samples)
+  (printf
+   "memory: ~a blobs calls kept alive; this process's device memory ~a bytes before, ~a after\n"
+   calls
+   base-bytes
+   held-bytes)
+  (check-true (> (- held-bytes base-bytes) device-slack) "the kept arrays exceed the device slack"))

@@ -187,12 +187,12 @@ replace each when raft offers a public form:
 
 | Module | Bindings | Used by |
 |---|---|---|
-| `raft/private/resource` | `with-release` | `loader-test`, `private/device-memory`, `private/python-env` |
+| `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/python-env` |
 | `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test` |
 | `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test` |
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `memory-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `memory-test` (through `test-pools`), `private/python-env` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `memory-test` (through `test-pools`), `private/python-env` |
 
 The Python twins run with `LD_LIBRARY_PATH` set to the dev shell's driver
 farm only, so no host CUDA library shadows the ones the wheels were patched
@@ -200,6 +200,12 @@ against. `import cuml` is probed from the temp directory with
 `PYTHONSAFEPATH`: `python3 -c` puts the working directory on `sys.path`,
 where a same-named directory would shadow the wheel and answer yes with
 nothing installed.
+
+The memory test measures this process's device memory through NVML
+(`nvmlDeviceGetComputeRunningProcesses_v3` for the CUDA device's UUID,
+filtered by pid), not `cuMemGetInfo`, which counts every process on the GPU.
+NVML reports it at once, in 2 MiB pages, with about 262 MiB of context;
+the blobs loop grows it by one 32 MiB step, hence the 128 MiB slack.
 
 ## Documentation
 
