@@ -15,6 +15,7 @@
                   ffi-lib)
          (only-in ffi/unsafe/define define-ffi-definer make-not-available)
          (only-in racket/format ~r)
+         (only-in racket/match match)
          (only-in racket/os getpid)
          (only-in racket/string string-append*)
          (only-in raft/private/resource with-release))
@@ -125,11 +126,9 @@
     (define-values (status handle) (nvml-device-by-uuid uuid))
     (nvml-ok 'nvmlDeviceGetHandleByUUID status)
     (define used
-      (cond
-        [(assv pid (compute-processes handle))
-         =>
-         cdr]
-        [else 0]))
+      (match (assv pid (compute-processes handle))
+        [(cons _ bytes) bytes]
+        [#f 0]))
     (when (= used nvml-value-not-available)
       (error 'process-device-bytes "NVML does not report per-process memory on ~a" uuid))
     used))

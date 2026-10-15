@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/cluster/private/blobs blobs blobs/short-call)
+         (only-in racket/list last)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
@@ -82,7 +83,7 @@
   (match-define (list _ base-bytes) (pool-sample))
   (define kept '())
   (define samples (sampled-calls blobs (lambda (arrays) (set! kept (cons arrays kept)))))
-  (match-define (list _ ... (list _ held-bytes)) samples)
+  (match-define (list _ held-bytes) (last samples))
   (printf
    "memory: ~a blobs calls kept alive; this process's device memory ~a bytes before, ~a after\n"
    calls
