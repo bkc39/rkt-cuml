@@ -1,52 +1,61 @@
 #lang racket/base
 
 (require (only-in racket/list append-map)
-         (only-in racket/set seteq set-member?)
          (only-in review/ext pop-scope push-scope recur track-binding)
+         ;; whole-module: its syntax classes come with it
+         syntax/parse/define
          ;; whole-module: its syntax classes come with it
          syntax/parse/pre)
 
 (provide review-syntax
          should-review?)
 
-(define scoped-test-forms (seteq 'test-gpu 'test-twin 'test-without-gpu))
+(define-syntax-parse-rule (with-scope body:expr ...+)
+  (dynamic-wind push-scope
+                (lambda ()
+                  body ...)
+                pop-scope))
 
-(define (named? head name)
-  (eq? (syntax-e head) name))
+(define (review-scoped-body leading body) ;; noqa
+  (for-each recur leading)
+  (with-scope (for-each recur body)))
+
+(define-syntax-class reviewed-form
+  #:datum-literals (define-syntax-parse-rule quasiquote
+                     quote
+                     test-gpu
+                     test-twin
+                     test-unless-skipped
+                     test-without-gpu)
+  (pattern (quote (_ . _))
+    #:attr review void)
+  (pattern (quasiquote datum)
+    #:attr review (lambda () (for-each recur (unquoted #'datum 1))))
+  (pattern (define-syntax-parse-rule (name:id . _)
+             _ ...)
+    #:attr review (lambda () (track-binding #'name)))
+  (pattern (test-unless-skipped reason name body ...)
+    #:attr review (lambda () (review-scoped-body (list #'reason #'name) (attribute body))))
+  (pattern ((~or* test-gpu test-twin test-without-gpu) name body ...)
+    #:attr review (lambda () (review-scoped-body (list #'name) (attribute body)))))
 
 (define (should-review? stx)
   (syntax-parse stx
-    [(head:id (_ . _))
-     #:when (named? #'head 'quote)
-     #t]
-    [(head:id _)
-     #:when (named? #'head 'quasiquote)
-     #t]
-    [(head:id (_:id . _) _ ...)
-     #:when (named? #'head 'define-syntax-parse-rule)
-     #t]
-    [(head:id _ _ _ ...)
-     #:when (named? #'head 'test-unless-skipped)
-     #t]
-    [(head:id _ _ ...)
-     #:when (set-member? scoped-test-forms (syntax-e #'head))
-     #t]
+    [_:reviewed-form #t]
     [_ #f]))
 
-(define (unquote? head)
-  (memq (syntax-e head) '(unquote unquote-splicing)))
+(define (review-syntax stx)
+  (syntax-parse stx
+    [form:reviewed-form ((attribute form.review))]))
 
 (define (unquoted stx depth)
   (syntax-parse stx
-    [(head:id e)
-     #:when (and (unquote? #'head) (= depth 1))
+    #:datum-literals (quasiquote unquote unquote-splicing)
+    [((~or* unquote unquote-splicing) e)
+     #:when (= depth 1)
      (list #'e)]
-    [(head:id e)
-     #:when (unquote? #'head)
-     (unquoted #'e (sub1 depth))]
-    [(head:id e)
-     #:when (named? #'head 'quasiquote)
-     (unquoted #'e (add1 depth))]
+    [((~or* unquote unquote-splicing) e) (unquoted #'e (sub1 depth))]
+    [(quasiquote e) (unquoted #'e (add1 depth))]
     [(a . d) (append (unquoted #'a depth) (unquoted #'d depth))]
     [#(e ...) (append-map (lambda (e) (unquoted e depth)) (syntax->list #'(e ...)))]
     [_ (append-map (lambda (e) (unquoted e depth)) (quasiquoted-parts (syntax-e stx)))]))
@@ -57,25 +66,3 @@
     [(hash? datum) (hash-map datum (lambda (_key value) value) #t)]
     [(prefab-struct-key datum) (cdr (vector->list (struct->vector datum)))]
     [else '()]))
-
-(define (review-scoped-body leading body)
-  (for-each recur leading)
-  (push-scope)
-  (for-each recur body)
-  (pop-scope))
-
-(define (review-syntax stx)
-  (syntax-parse stx
-    [(head:id (_ . _))
-     #:when (named? #'head 'quote)
-     (void)]
-    [(head:id datum)
-     #:when (named? #'head 'quasiquote)
-     (for-each recur (unquoted #'datum 1))]
-    [(head:id (name:id . _) _ ...)
-     #:when (named? #'head 'define-syntax-parse-rule)
-     (track-binding #'name)]
-    [(head:id reason name body ...)
-     #:when (named? #'head 'test-unless-skipped)
-     (review-scoped-body (list #'reason #'name) (syntax->list #'(body ...)))]
-    [(_ name body ...) (review-scoped-body (list #'name) (syntax->list #'(body ...)))]))
