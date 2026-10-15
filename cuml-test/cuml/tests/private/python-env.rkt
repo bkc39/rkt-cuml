@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require (only-in json read-json write-json)
+(require (only-in json read-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/port open-output-nowhere)
@@ -15,8 +15,6 @@
 
 (define python (find-executable-path "python3"))
 
-;; The child sees only the dev shell's driver farm, so no host CUDA library
-;; can shadow the ones the wheels were patched against.
 (define (call-with-twin-env thunk #:env [extra '()])
   (define env (environment-variables-copy (current-environment-variables)))
   (define driver (getenv "CUML_CUDA_DRIVER_PATH"))
@@ -27,9 +25,6 @@
   (parameterize ([current-environment-variables env])
     (thunk)))
 
-;; Probed from the temp directory with PYTHONSAFEPATH: `python3 -c` puts the
-;; working directory on sys.path, where a same-named directory would shadow
-;; the wheel and answer yes with nothing installed.
 (define (python-imports? module)
   (and python
        (call-with-twin-env #:env '(("PYTHONSAFEPATH" . "1"))
@@ -46,21 +41,17 @@
         [(not (python-imports? "cuml")) "no Python twin (import cuml failed)"]
         [else #f])))
 
-(define (remove-directory dir)
-  (delete-directory/files dir #:must-exist? #f))
-
-(define (run-twin script input)
-  (with-release ([dir (make-temporary-directory "cuml-twin-~a") remove-directory])
-    (define in-path (build-path dir "in.json"))
+(define (run-twin script)
+  (with-release ([dir
+                  (make-temporary-directory "cuml-twin-~a")
+                  (lambda (dir) (delete-directory/files dir #:must-exist? #f))])
     (define out-path (build-path dir "out.json"))
-    (call-with-output-file in-path (lambda (out) (write-json input out)))
     (define err (open-output-string))
     (define ok?
-      (call-with-twin-env
-       (lambda ()
-         (parameterize ([current-directory dir]
-                        [current-error-port err])
-           (system* python (path->string script) (path->string in-path) (path->string out-path))))))
+      (call-with-twin-env (lambda ()
+                            (parameterize ([current-directory dir]
+                                           [current-error-port err])
+                              (system* python (path->string script) (path->string out-path))))))
     (unless ok?
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))

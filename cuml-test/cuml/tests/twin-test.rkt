@@ -9,6 +9,6 @@
 (define-runtime-path twin "python/version_twin.py")
 
 (test-twin "the Python twin imports the cuML release the cluster shim was built against"
-  (define version (hash-ref (run-twin twin (hasheq)) 'version))
+  (define version (hash-ref (run-twin twin) 'version))
   (printf "twin version: cuml ~a, libcumlrkt_cluster ~a\n" version libcuml-version)
   (check-equal? version libcuml-version))
