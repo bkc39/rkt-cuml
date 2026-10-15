@@ -1,16 +1,19 @@
 #lang racket/base
 
 (require (only-in racket/file find-files)
+         (only-in racket/function curry)
          (only-in racket/list append-map filter-map)
          (only-in racket/match match)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
-         (only-in setup/getinfo get-info/full))
+         (only-in setup/getinfo get-info/full)
+         (only-in threading ~>))
 
 (define-runtime-path root "..")
 
 (define family-allowed-deps '("base" "raft" "cuml-core-lib"))
 (define core-allowed-deps '("base" "raft"))
+(define dependency-fields '(deps build-deps implies))
 (define reserved-names
   '(agglomerative-clustering dbscan hdbscan kmeans single-linkage spectral-clustering))
 
@@ -19,8 +22,14 @@
     [(cons name _) name]
     [name name]))
 
-(define (package-deps dir)
-  (map dep-name ((get-info/full dir) 'deps (lambda () '()))))
+(define (package-deps dir package)
+  (define info (get-info/full (build-path dir package)))
+  (for*/list ([field (in-list dependency-fields)]
+              [dep (in-list (info field (lambda () '())))])
+    (dep-name dep)))
+
+(define (family-package family)
+  (format "cuml-~a-lib" family))
 
 (define (family-of package)
   (match (regexp-match #rx"^cuml-(.+)-lib$" package)
@@ -28,7 +37,7 @@
     [_ #f]))
 
 (define (families dir)
-  (sort (filter-map family-of (map path->string (directory-list dir))) string<?))
+  (~> (directory-list dir) (map path->string _) (filter-map family-of _) (sort string<?)))
 
 (define (deps-problems package deps allowed)
   (for/list ([dep (in-list deps)]
@@ -45,47 +54,47 @@
              #:when (memq name reserved-names))
     (format "~a exports ~a, a name reserved for cuml's estimator wrappers" module name)))
 
+(define (public-module-file? path)
+  (and (regexp-match? #rx"[.]rkt$" path)
+       (not (regexp-match? #rx"/(private|compiled)/" path))
+       (not (regexp-match? #rx"/info[.]rkt$" path))))
+
 (define (public-modules dir family)
-  (define collection (build-path dir (format "cuml-~a-lib" family) "cuml"))
+  (define collection (build-path dir (family-package family) "cuml"))
   (define nested (build-path collection family))
-  (cons (build-path collection (string-append family ".rkt"))
-        (if (directory-exists? nested)
-            (sort (find-files (lambda (p)
-                                (and (regexp-match? #rx"[.]rkt$" p)
-                                     (not (regexp-match? #rx"/(private|compiled)/" p))
-                                     (not (regexp-match? #rx"/info[.]rkt$" p))))
-                              nested)
-                  path<?)
-            '())))
+  (define nested-modules
+    (if (directory-exists? nested)
+        (find-files public-module-file? nested)
+        '()))
+  (cons (build-path collection (string-append family ".rkt")) (sort nested-modules path<?)))
 
 (define (exported-names module)
-  (void (module-declared? module #t))
+  (dynamic-require module (void))
   (define-values (variables syntaxes) (module->exports module))
   (for*/list ([phase+names (in-list (append variables syntaxes))]
               #:when (eqv? (car phase+names) 0)
               [entry (in-list (cdr phase+names))])
     (car entry)))
 
+(define (family-deps-problems dir family)
+  (define package (family-package family))
+  (deps-problems package (package-deps dir package) family-allowed-deps))
+
+(define (family-exports-problems dir family)
+  (for*/list ([module (in-list (public-modules dir family))]
+              [problem (in-list (reserved-problems (path->string module) (exported-names module)))])
+    problem))
+
 (define (layout-problems dir #:exports? exports?)
   (define family-names (families dir))
-  (define (package-dir name)
-    (build-path dir name))
-  (append
-   (append-map (lambda (family)
-                 (define package (format "cuml-~a-lib" family))
-                 (deps-problems package (package-deps (package-dir package)) family-allowed-deps))
-               family-names)
-   (deps-problems "cuml-core-lib" (package-deps (package-dir "cuml-core-lib")) core-allowed-deps)
-   (missing-problems "cuml-lib"
-                     (package-deps (package-dir "cuml-lib"))
-                     (cons "cuml-core-lib" (map (lambda (f) (format "cuml-~a-lib" f)) family-names)))
-   (if exports?
-       (for*/list ([family (in-list family-names)]
-                   [module (in-list (public-modules dir family))]
-                   [problem (in-list (reserved-problems (path->string module)
-                                                        (exported-names module)))])
-         problem)
-       '())))
+  (append (append-map (curry family-deps-problems dir) family-names)
+          (deps-problems "cuml-core-lib" (package-deps dir "cuml-core-lib") core-allowed-deps)
+          (missing-problems "cuml-lib"
+                            (package-deps dir "cuml-lib")
+                            (cons "cuml-core-lib" (map family-package family-names)))
+          (if exports?
+              (append-map (curry family-exports-problems dir) family-names)
+              '())))
 
 (module+ main
   (require (only-in racket/cmdline command-line))
@@ -103,18 +112,44 @@
              (if exports? " and exports" ""))]))
 
 (module+ test
-  (require (only-in rackunit check-equal? test-case))
+  (require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
+           (only-in rackunit check-equal? test-case))
 
-  (test-case "a family package may depend only on base, raft and cuml-core-lib"
-    (check-equal? (deps-problems "cuml-cluster-lib"
-                                 (map dep-name '("base" ("raft" #:version "0.2") "cuml-core-lib"))
-                                 family-allowed-deps)
-                  '())
-    (check-equal?
-     (deps-problems "cuml-cluster-lib" '("base" "cuml-lib" "cuml-linear-lib") family-allowed-deps)
-     (list
-      "cuml-cluster-lib depends on cuml-lib; it may depend only on (base raft cuml-core-lib)"
-      "cuml-cluster-lib depends on cuml-linear-lib; it may depend only on (base raft cuml-core-lib)")))
+  (define (write-tree-file! dir file)
+    (match file
+      [(list path form)
+       (define full (build-path dir path))
+       (make-directory* (simplify-path (build-path full 'up)))
+       (with-output-to-file full (lambda () (write form)))]))
+
+  (define (call-with-tree files proc)
+    (define dir (make-temporary-directory "check-layout-~a"))
+    (dynamic-wind void
+                  (lambda ()
+                    (for-each (curry write-tree-file! dir) files)
+                    (proc dir))
+                  (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+  (define (info-file package field deps)
+    (list (format "~a/info.rkt" package)
+          `(module info info
+             (define ,field ',deps))))
+
+  (define (toy-tree field toy-deps)
+    (list (info-file "cuml-core-lib" 'deps '("base" "raft"))
+          (info-file "cuml-lib" 'deps '("base" "cuml-core-lib" "cuml-toy-lib"))
+          (info-file "cuml-toy-lib" field toy-deps)
+          (list "cuml-toy-lib/cuml/toy.rkt"
+                '(module toy racket/base
+                   (provide kmeans)
+                   (define kmeans 0)))))
+
+  (for ([field (in-list '(deps build-deps implies))])
+    (test-case (format "a family's ~a may name only base, raft and cuml-core-lib" field)
+      (check-equal?
+       (call-with-tree (toy-tree field '("base" ("raft" #:version "0.2") "cuml-lib"))
+                       (lambda (dir) (layout-problems dir #:exports? #f)))
+       '("cuml-toy-lib depends on cuml-lib; it may depend only on (base raft cuml-core-lib)"))))
 
   (test-case "cuml-lib must depend on every family"
     (check-equal? (missing-problems "cuml-lib" '("base" "cuml-core-lib") '("cuml-cluster-lib"))
@@ -124,6 +159,10 @@
     (check-equal? (filter-map family-of '("cuml-core-lib" "cuml-cluster-lib" "cuml-lib" "lint"))
                   '("cluster")))
 
-  (test-case "a bare algorithm name is refused in a family's exports"
-    (check-equal? (reserved-problems "cuml/cluster" '(kmeans-fit kmeans dbscan-fit))
-                  '("cuml/cluster exports kmeans, a name reserved for cuml's estimator wrappers"))))
+  (test-case "a family module that provides a bare algorithm name is reported"
+    (call-with-tree
+     (toy-tree 'deps '("base" "cuml-core-lib"))
+     (lambda (dir)
+       (check-equal? (layout-problems dir #:exports? #t)
+                     (list (format "~a exports kmeans, a name reserved for cuml's estimator wrappers"
+                                   (build-path dir "cuml-toy-lib/cuml/toy.rkt"))))))))
