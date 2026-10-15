@@ -148,9 +148,16 @@ cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loo
 `nix develop` exports `CUML_SHIM_TESTS`, `CUML_CUDA_DRIVER_PATH`,
 `CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH` and
 `RAFT_SHIM_PROBE` (rkt-raft's probe library, which the memory test reads the
-pool through). A change of the rkt-raft pin or of a package's `info.rkt`
-misses the install stamp, and the next shell entry removes the linked raft
-and links the new pin's tree; nothing in `PLTUSERHOME` needs deleting by hand.
+pool through). `PLTUSERHOME` is
+`~/.cache/rkt-cuml-devshell/<hash of the checkout path and the rkt-raft store
+path>`, so a bump of the rkt-raft pin enters a fresh, empty home: the next
+shell entry copies the new pin's tree, links raft from it, installs raft's
+docs dependencies (polars, data-frame, datasets, datasets-core,
+al2-test-runner, rkt-polars' racket-deps) at the new pin's revisions, and
+reinstalls the tools and Resyntax.
+The old pin's home stays behind unused; deleting it only reclaims disk. A
+change of a package's `info.rkt` or of the shim misses the install stamp
+inside the same home and re-runs the install and setup.
 
 ### Build memory
 
@@ -169,8 +176,9 @@ declares their commands for the racket-dev runner
 subset. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
 `fmt/core`), which fmt documents as unstable: re-check `format-fun` and
 `format-hash-pairs` when `nix/racket-tools.nix` moves to a new fmt.
-`scripts/check-layout.rkt` uses `threading`, which the flake installs from
-rkt-polars' pinned `racket-deps` (with rkt-raft's docs dependencies).
+`scripts/check-layout.rkt` uses `threading`; `nix/racket-tools.nix` pins
+`threading-lib` beside fmt and review, and every Racket home the flake builds
+installs it from there first.
 
 ### Test support
 

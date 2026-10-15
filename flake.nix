@@ -54,7 +54,7 @@
       raftInputs = rkt-raft.inputs;
       inherit (raft) rapids;
       pythonEnv = raft.python-twins;
-      racketTools = pkgs.callPackage "${rkt-raft}/nix/racket-tools.nix" { inherit racket; };
+      racketTools = pkgs.callPackage ./nix/racket-tools.nix { inherit racket; };
       treefmtEval = treefmt-nix.lib.evalModule pkgs (
         import "${rkt-raft}/nix/treefmt.nix" { inherit racketTools; }
       );
@@ -126,6 +126,11 @@
         '') families}
       '';
 
+      installThreading = skip: ''
+        raco pkg install --batch -j 4 --copy --no-docs --deps fail --scope user ${skip} \
+          ${racketTools.sources}/threading-lib
+      '';
+
       # rkt-raft's recipe at rkt-raft's pins: raft's build-deps (polars,
       # datasets) installed offline, so raft installs with --deps fail.
       installDocsDeps = skip: ''
@@ -181,7 +186,8 @@
           mkdir -p $PLTUSERHOME
           ${stageNativeLibs shim}
           [ "$_stage_failed" = 0 ] || exit 1
-          ${installDocsDeps ""}
+          ${installThreading ""}
+          ${installDocsDeps "--skip-installed"}
           ${installRaft "$TMPDIR/rkt-raft" ""}
           ${installCuml ""}
           raco setup -j 4 --no-docs --pkgs raft
@@ -267,8 +273,7 @@
           ''
             export HOME=$TMPDIR/home
             export PLTUSERHOME=$TMPDIR/racket-home
-            raco pkg install --batch -j 4 --copy --no-docs --deps fail --scope user \
-              ${raftInputs.rkt-polars.packages.${system}.racket-deps}/threading-lib
+            ${installThreading ""}
             cp -r $src source
             chmod -R u+w source
             cd source
@@ -306,15 +311,38 @@
 
       resyntaxSource = "https://github.com/jackfirth/resyntax.git#40f3497321f8590eb6a0b7c7984a9116323b7ebf";
 
-      # PLTUSERHOME lives outside $PWD and is keyed on the checkout's path:
-      # raco refuses a --link target inside a collects dir, and worktrees
-      # must not share installed packages.
-      racketHome = ''
+      # PLTUSERHOME lives outside $PWD and is keyed on the checkout's path
+      # and the rkt-raft pin: raco refuses a --link target inside a collects
+      # dir, worktrees must not share installed packages, and a pin bump
+      # gets a fresh home with none of the old pin's packages in it.
+      racketHomeFor = raftSource: ''
         _cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/rkt-cuml-devshell"
-        _project_id=$(printf '%s' "$PWD" | sha256sum | cut -c1-12)
+        _project_id=$(printf '%s\n%s' "$PWD" "${raftSource}" | sha256sum | cut -c1-12)
         export PLTUSERHOME="$_cache_root/$_project_id"
         mkdir -p "$PLTUSERHOME"
       '';
+      racketHome = racketHomeFor rkt-raft;
+
+      racketHomeKeys =
+        pkgs.runCommand "rkt-cuml-racket-home-keys" { } ''
+            export HOME=$TMPDIR/home
+            export XDG_CACHE_HOME=$TMPDIR/cache
+            mkdir -p checkout-a checkout-b
+            home_in() (
+              cd "$1"
+              eval "$2"
+              printf '%s' "$PLTUSERHOME"
+            )
+            pin_a=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
+            pin_b=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/b-rkt-raft")})
+            other=$(home_in checkout-b ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
+            again=$(home_in checkout-a ${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft")})
+            [ "$pin_a" != "$pin_b" ] || { echo "a rkt-raft pin bump keeps PLTUSERHOME $pin_a" >&2; exit 1; }
+            [ "$pin_a" != "$other" ] || { echo "two checkouts share PLTUSERHOME $pin_a" >&2; exit 1; }
+            [ "$pin_a" = "$again" ] || { echo "PLTUSERHOME is not stable: $pin_a, $again" >&2; exit 1; }
+            echo "PLTUSERHOME per checkout and rkt-raft pin: $pin_a, $pin_b, $other"
+            touch $out
+          '';
 
       provisionRacket = ''
         export CUML_NATIVE_LIB_PATH=${shim}
@@ -322,7 +350,7 @@
         if [ "$_stage_failed" != 0 ]; then
           echo "  *** a cuML shim was NOT staged; cuml will load a stale shim or none." >&2
         fi
-        _info_hash=$(printf '%s\n' ${rkt-raft} ${shim} \
+        _info_hash=$(printf '%s\n' ${shim} \
                      | cat - ${lib.concatMapStringsSep " " (p: "${p}/info.rkt") cumlPackages} \
                      | sha256sum | cut -c1-16)
         _pkg_stamp="$PLTUSERHOME/.cuml-installed-$_info_hash"
@@ -331,10 +359,8 @@
           rm -f "$PLTUSERHOME"/.cuml-installed-* 2>/dev/null || true
           (
             set -e
+            ${installThreading "--skip-installed"}
             ${installDocsDeps "--skip-installed"}
-            if raco pkg show --scope user raft | grep -q '^ *raft '; then
-              raco pkg remove --batch --force --no-setup --scope user raft
-            fi
             ${installRaft "$PLTUSERHOME/${baseNameOf (toString rkt-raft)}" "--skip-installed"}
             ${installCuml "--skip-installed"}
             RAFT_KMEANS_CANARY=${raft.kmeans-canary}/lib/libkmeans_canary.so \
@@ -456,6 +482,7 @@
 
       checks.${system} = {
         inherit shim layout;
+        racket-home-keys = racketHomeKeys;
         racket = racketPackage;
         racket-review = racketReview;
         formatting = treefmtEval.config.build.check self;

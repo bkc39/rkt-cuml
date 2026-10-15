@@ -69,11 +69,13 @@
   packages ship `cuml/info.rkt`.
 - **The meta package `cuml`** depends on and implies cuml-lib and cuml-doc,
   not cuml-test, as typed-racket's does.
-- **The flake reuses rkt-raft's** `nix/racket-tools.nix`, `nix/treefmt.nix`,
+- **The flake reuses rkt-raft's** `nix/treefmt.nix`,
   `packages.{rapids,shim,raft-dev,python-twins}` and its docs-dependency
   inputs (polars, datasets) through `rkt-raft.inputs`, so the pins are
   raft's. rkt-raft follows this flake's nixpkgs and treefmt-nix, both at
-  raft's locked revisions, so its store paths are unchanged.
+  raft's locked revisions, so its store paths are unchanged. The Racket
+  tools (fmt, review, pretty-expressive, threading-lib) are pinned in this
+  repo's own `nix/racket-tools.nix`.
 - **Not carried over from rkt-raft yet:** the ASAN/UBSAN shim build (the GPU
   suite runs the gtests under compute-sanitizer memcheck), the bounded
   death-test gate (no death tests), the binding census
