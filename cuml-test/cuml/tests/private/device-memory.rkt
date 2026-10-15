@@ -1,12 +1,14 @@
 #lang racket/base
 
 (require (only-in ffi/unsafe _fun _int _pointer _ptr _size _uint ffi-lib)
-         (only-in ffi/unsafe/define define-ffi-definer)
+         (only-in ffi/unsafe/define define-ffi-definer make-not-available)
          (only-in raft/private/resource with-release))
 
 (provide device-free-bytes)
 
-(define-ffi-definer define-cuda (ffi-lib "libcuda" '("1")))
+(define-ffi-definer define-cuda
+                    (ffi-lib "libcuda" '("1") #:fail (lambda () #f))
+                    #:default-make-fail make-not-available)
 
 (define-cuda cu-init (_fun _uint -> _int) #:c-id cuInit)
 (define-cuda cu-primary-retain
