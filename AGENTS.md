@@ -153,7 +153,11 @@ pool through). `PLTUSERHOME` is
 and nix/racket-tools.nix store paths>`. Every install skips what is already
 installed, so a bump of either pin enters a fresh, empty home. Every shell
 entry deletes everything else under this checkout's directory (old pins'
-homes), and nothing outside it.
+homes), and nothing outside it, so entering a shell with a new pin deletes
+the home of a shell still open on the old pin in the same checkout: close
+it first, or nest the new shell inside it (a nested shell deletes nothing).
+If hashing the checkout or the pins fails, the entry warns and deletes
+nothing.
 The next shell entry copies the new pin's raft tree, links raft from it,
 installs raft's docs dependencies (polars, data-frame, datasets,
 datasets-core, al2-test-runner, rkt-polars' racket-deps) and the tools at
@@ -183,8 +187,8 @@ subset. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
 `scripts/check-layout.rkt` uses `threading`; `nix/racket-tools.nix` pins
 `threading-lib` beside fmt and review, and every Racket home the flake builds
 installs it from there first. rkt-polars' `threading-doc` builds against
-that pin, so the `layout` check fails unless both `threading-lib` versions
-agree.
+that pin, so the `layout` check fails unless both `threading-lib` trees
+have the same version and the same sources.
 
 ### Test support
 
