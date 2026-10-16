@@ -96,6 +96,7 @@
                     "test-host-probe"
                     "test-pools"
                     "test-probe"
+                    "test-process-memory"
                     "test-twin"
                     "test-without-gpu"
                     "with-device-resources")

@@ -21,7 +21,8 @@
          (only-in raft/private/resource with-release))
 
 (provide call-with-device-allocation
-         process-device-bytes)
+         process-device-bytes
+         process-memory-skip)
 
 (define-ffi-definer define-cuda
                     (ffi-lib "libcuda" '("1") #:fail (lambda () #f))
@@ -37,6 +38,7 @@
    [gpu-instance _uint]
    [compute-instance _uint]))
 
+(define nvml-not-found 6)
 (define nvml-insufficient-size 7)
 (define nvml-value-not-available #xFFFFFFFFFFFFFFFF)
 
@@ -120,11 +122,25 @@
      (nvml-ok 'nvmlDeviceGetComputeRunningProcesses status)
      processes]))
 
+(define (device-handle uuid)
+  (define-values (status handle) (nvml-device-by-uuid uuid))
+  (cond
+    [(= status nvml-not-found) #f]
+    [else
+     (nvml-ok 'nvmlDeviceGetHandleByUUID status)
+     handle]))
+
+(define (process-memory-skip #:device [device 0] #:uuid [uuid (device-uuid device)])
+  (with-release ([_session (nvml-session) end-nvml-session])
+    (and (not (device-handle uuid))
+         (format "no per-process device memory (NVML lists no device ~a; a MIG instance?)" uuid))))
+
 (define (process-device-bytes #:device [device 0] #:pid [pid (getpid)])
   (define uuid (device-uuid device))
   (with-release ([_session (nvml-session) end-nvml-session])
-    (define-values (status handle) (nvml-device-by-uuid uuid))
-    (nvml-ok 'nvmlDeviceGetHandleByUUID status)
+    (define handle (device-handle uuid))
+    (unless handle
+      (error 'process-device-bytes "NVML lists no device ~a" uuid))
     (define used
       (match (assv pid (compute-processes handle))
         [(cons _ bytes) bytes]

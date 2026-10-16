@@ -202,7 +202,7 @@ replace each when raft offers a public form:
 | `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test` |
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `memory-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `memory-test` (through `test-pools`), `private/python-env` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `memory-test`, `private/python-env` |
 
 The Python twins run with `LD_LIBRARY_PATH` set to the dev shell's driver
 farm only, so no host CUDA library shadows the ones the wheels were patched
@@ -216,6 +216,10 @@ The memory test measures this process's device memory through NVML
 filtered by pid), not `cuMemGetInfo`, which counts every process on the GPU.
 NVML reports it at once, in 2 MiB pages, with about 262 MiB of context;
 the blobs loop grows it by one 32 MiB step, hence the 128 MiB slack.
+Where NVML lists no device for the CUDA UUID (a MIG instance), both memory
+tests SKIP. The device-memory test's holder process sets
+`PR_SET_PDEATHSIG`, so it dies with the test even when `raco test --timeout`
+kills the test outright.
 
 ## Documentation
 

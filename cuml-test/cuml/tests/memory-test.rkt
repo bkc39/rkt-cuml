@@ -7,8 +7,11 @@
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until drain-finalizers! settled-count)
+         (only-in raft/tests/private/gpu test-unless-skipped)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/device-memory.rkt" process-device-bytes))
+         ;; whole-module: its syntax classes come with it
+         syntax/parse/define
+         (only-in "private/device-memory.rkt" process-device-bytes process-memory-skip))
 
 (define calls 500)
 (define sample-every 100)
@@ -21,6 +24,15 @@
 (define (pool-sample)
   (drain-finalizers!)
   (list (probe-pool-used device) (process-device-bytes #:device device)))
+
+(define (baseline-sample)
+  (match-define (and sample (list _ bytes)) (pool-sample))
+  (check-true (positive? bytes) "NVML lists this process once it holds a CUDA context")
+  sample)
+
+(define-syntax-parse-rule (test-process-memory name:expr body:expr ...+)
+  (test-pools name
+    (test-unless-skipped (process-memory-skip #:device device) name body ...)))
 
 (define (call-blobs make-blobs)
   (call-with-values (lambda () (make-blobs n-samples n-features #:centers 3 #:seed 5)) list))
@@ -38,11 +50,11 @@
 (define (device-growth base-bytes samples)
   (- (apply max (map cadr samples)) base-bytes))
 
-(test-pools "500 blobs calls, jobs and short calls alike, leave device memory flat and free every buffer"
+(test-process-memory "500 blobs calls, jobs and short calls alike, leave device memory flat and free every buffer"
   (for ([make-blobs (in-list (list blobs blobs/short-call))])
     (warm-up make-blobs)
     (define failures (settled-count release-failure-count))
-    (match-define (list base-used base-bytes) (pool-sample))
+    (match-define (list base-used base-bytes) (baseline-sample))
     (define live (jobs-live))
     (define threads (executor-threads))
     (define drops (settled-count buffer-drop-count))
@@ -78,9 +90,9 @@
      (<= growth device-slack)
      (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack))))
 
-(test-pools "the device-memory check fails when every call's arrays stay alive"
+(test-process-memory "the device-memory check fails when every call's arrays stay alive"
   (warm-up blobs)
-  (match-define (list _ base-bytes) (pool-sample))
+  (match-define (list _ base-bytes) (baseline-sample))
   (define kept '())
   (define samples (sampled-calls blobs (lambda (arrays) (set! kept (cons arrays kept)))))
   (match-define (list _ held-bytes) (last samples))
