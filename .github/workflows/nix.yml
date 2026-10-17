@@ -13,9 +13,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-cache
-        with:
-          ts-oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          ts-oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
       - name: treefmt (formatters, shellcheck, actionlint, ruff), raco review, grep gates, layout
         run: >-
           nix build --keep-going --print-build-logs
@@ -42,9 +39,6 @@ jobs:
           df -h /
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-cache
-        with:
-          ts-oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          ts-oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
       - name: Build, test and lint (GPU cases print SKIP)
         run: nix flake check --max-jobs 1 --cores 4 --keep-going --print-build-logs
 
@@ -57,9 +51,6 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/nix-cache
-        with:
-          ts-oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-          ts-oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
       - name: Resyntax lint (default rules)
         env:
           BASE_REF: ${{ github.event.pull_request.base.sha || 'origin/master' }}
