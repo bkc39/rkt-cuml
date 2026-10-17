@@ -156,6 +156,10 @@ entry deletes everything else under this checkout's directory (old pins'
 homes), and nothing outside it, so entering a shell with a new pin deletes
 the home of a shell still open on the old pin in the same checkout: close
 it first, or nest the new shell inside it (a nested shell deletes nothing).
+Every entry also deletes the rest of `~/.cache/rkt-cuml-devshell/`, keeping
+only the directories of checkouts that still exist (each records its path in
+`.checkout`), so the homes of removed worktrees and of older layouts go on
+the next entry from any checkout.
 If hashing the checkout or the pins fails, the entry warns and deletes
 nothing.
 The next shell entry copies the new pin's raft tree, links raft from it,
@@ -163,9 +167,7 @@ installs raft's docs dependencies (polars, data-frame, datasets,
 datasets-core, al2-test-runner, rkt-polars' racket-deps) and the tools at
 the new revisions, and reinstalls Resyntax. A change of a package's
 `info.rkt` or of the shim misses the install stamp inside the same home and
-re-runs the install and setup. Homes keyed on the checkout and the
-rkt-raft pin alone (before this layout) sit directly under
-`~/.cache/rkt-cuml-devshell/` and can be deleted by hand.
+re-runs the install and setup.
 
 ### Build memory
 
@@ -237,5 +239,7 @@ kills the test outright.
 
 `.github/workflows/nix.yml` (lint, `nix flake check`, Resyntax) and
 `gpu.yml` (the GPU suite and the manual on the self-hosted runner, gated on
-`vars.GPU_RUNNER`), with rkt-raft's tailnet cache action. The repository has
-no remote yet, so neither has run; actionlint checks them in `format`.
+`vars.GPU_RUNNER`), with the GitHub Actions nix cache; actionlint checks them
+in `format`. No GPU runner is registered (#1), so the GPU suite runs locally:
+before a PR merges, run the `gpu` gate on a GPU host and give its result in
+the PR.

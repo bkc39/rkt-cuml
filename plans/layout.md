@@ -81,25 +81,30 @@
   death-test gate (no death tests), the binding census
   (`check-bindings.rkt`).
 
+## Owner decisions (2026-10-17)
+
+- The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require
+  `("raft" #:version "0.2")`.
+- **One native package** carries every family's shim. A package per family
+  is deferred (#2).
+- **No contracts** in the initial versions of cuml.
+- `threading-lib` follows upstream's latest commit. The pin in
+  `nix/racket-tools.nix` is upstream HEAD (`e79cfe55`).
+- No GPU runner for now (#1). The GPU suite runs locally before each merge.
+- No tailnet nix cache in CI; the GitHub Actions cache only.
+- The dev shell deletes stale Racket homes aggressively (AGENTS.md).
+
 ## Open owner questions
 
-1. Package versions start at 0.1 and require `("raft" #:version "0.2")`;
-   the GitHub repository name and when to create the remote.
-2. An ASAN/UBSAN build of the shims as a flake check, as rkt-raft's
+1. An ASAN/UBSAN build of the shims as a flake check, as rkt-raft's
    `shim-sanitizers` (a second nvcc build in CI)?
-3. A per-family binding census like rkt-raft's `check-bindings.rkt`?
-4. Distribution after rkt-raft #24: one natipkg per family
-   (`cuml-cluster-x86_64-linux`) or one for all shims?
-5. From `plans/layout.md` #3: the estimator generics in cuml-core-lib
+2. A per-family binding census like rkt-raft's `check-bindings.rkt`?
+3. From `plans/layout.md` #3: the estimator generics in cuml-core-lib
    (recommended), functional fit, capability generics with a `fit-predict`
    fallback.
-6. Contracts for cuml's procedures: none in leg 0 (the private `blobs`
-   helpers have none). Adopt raft's contracts policy when the first public
-   procedure lands, or settle a cuml one?
+4. The device-memory test helper calls NVML and the CUDA driver from Racket
+   directly; keep that, or route it through a probe shim?
+5. On a MIG-partitioned GPU the per-process memory tests SKIP; accept that
+   SKIP in the `gpu` gate?
 
-## Follow-ups (no issue tracker yet)
-
-- rkt-raft: its docs build requires `RAFT_KMEANS_CANARY` and reads files
-  outside `raft/` (rkt-raft #23), so downstream repositories install raft
-  from a writable copy of the whole tree and set the canary; drop both
-  workarounds in `flake.nix` when #23 lands.
+Follow-ups are GitHub issues.
