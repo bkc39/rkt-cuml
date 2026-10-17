@@ -325,9 +325,11 @@
       # installed packages, and below it one home per rkt-raft and tool pin:
       # every install skips what is installed, so a pin bump needs a fresh
       # home. Entering the shell deletes everything else under the checkout's
-      # directory: old pins' homes, and homes from before this layout. A shell
-      # nested in one with another pin keeps its parent's home, and ids that
-      # are not 12 hex digits (a failed hash) delete nothing.
+      # directory (old pins' homes), and every other entry of the cache root
+      # but the directories of checkouts that still exist, which each record
+      # their path in .checkout. A shell nested in one with another pin keeps
+      # its parent's home, and ids that are not 12 hex digits (a failed hash)
+      # delete nothing.
       racketHomeFor = raftSource: toolsSource: ''
         _cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/rkt-cuml-devshell"
         _checkout_id=$(printf '%s' "$PWD" | sha256sum | cut -c1-12)
@@ -338,11 +340,23 @@
         _hex12='^[0-9a-f]{12}$'
         if ! [[ "$_checkout_id" =~ $_hex12 && "$_pins_id" =~ $_hex12 ]]; then
           echo "warning: could not hash the checkout or pins ('$_checkout_id', '$_pins_id'); not removing stale homes" >&2
-        elif [ "''${_parent_home%/*}" = "$_checkout_homes" ] && [ "$_parent_home" != "$PLTUSERHOME" ]; then
-          echo "Nested in a shell using $_parent_home; not removing this checkout's other homes" >&2
-        elif [ -d "$_checkout_homes" ]; then
-          find "$_checkout_homes" -mindepth 1 -maxdepth 1 ! -name "$_pins_id" \
-            -printf "Removing this checkout's stale home entry %p\n" -exec rm -rf -- {} +
+        else
+          for _entry in "$_cache_root"/* "$_cache_root"/.[!.]*; do
+            _owner=$(cat "$_entry/.checkout" 2>/dev/null || true)
+            if [ -e "$_entry" ] && [ "''${_entry##*/}" != "$_checkout_id" ] \
+               && ! { [ -n "$_owner" ] && [ -d "$_owner" ]; }; then
+              echo "Removing $_entry: its checkout ''${_owner:-(unrecorded)} is gone" >&2
+              rm -rf -- "$_entry"
+            fi
+          done
+          if [ "''${_parent_home%/*}" = "$_checkout_homes" ] && [ "$_parent_home" != "$PLTUSERHOME" ]; then
+            echo "Nested in a shell using $_parent_home; not removing this checkout's other homes" >&2
+          elif [ -d "$_checkout_homes" ]; then
+            find "$_checkout_homes" -mindepth 1 -maxdepth 1 ! -name "$_pins_id" ! -name .checkout \
+              -printf "Removing this checkout's stale home entry %p\n" -exec rm -rf -- {} +
+          fi
+          mkdir -p "$_checkout_homes"
+          printf '%s\n' "$PWD" > "$_checkout_homes/.checkout"
         fi
         mkdir -p "$PLTUSERHOME"
       '';
@@ -385,13 +399,19 @@
           || fail "homes are not <checkout>/<pins> under $root: $pin_a"
         [ "$(dirname "$pin_a")" = "$(dirname "$tools_b")" ] || fail "one checkout's homes are not siblings"
         [ -d "$other" ] || fail "another checkout's home was deleted: $other"
-        [ "$(ls -A "$(dirname "$pin_a")")" = "$(basename "$tools_b")" ] \
+        [ "$(ls -A "$(dirname "$pin_a")" | grep -vx .checkout)" = "$(basename "$tools_b")" ] \
           || fail "stale entries survive beside $tools_b: $(ls -A "$(dirname "$pin_a")")"
         [ -d "$XDG_CACHE_HOME/other-tool/0123456789ab" ] || fail "a directory outside $root was deleted"
 
         nested=$(PLTUSERHOME="$tools_b" home_in checkout-a "$key_a")
         [ "$nested" = "$pin_a" ] || fail "a nested shell's home is $nested, not $pin_a"
         [ -d "$tools_b" ] || fail "a nested shell deleted its parent shell's home $tools_b"
+
+        mkdir -p checkout-gone
+        gone=$(home_in checkout-gone "$key_a")
+        rmdir checkout-gone
+        mkdir -p "$root/0123456789ab/0123456789ab"
+        touch "$root/notes"
 
         mkdir -p failing-hash
         printf '#!${pkgs.runtimeShell}\nexit 1\n' > failing-hash/sha256sum
@@ -402,7 +422,16 @@
         )
         [ -d "$other" ] || fail "a failed hash deleted another checkout's home $other (home $unhashed)"
         [ -d "$tools_b" ] && [ -d "$pin_a" ] || fail "a failed hash deleted this checkout's homes"
-        echo "PLTUSERHOME per checkout and pins, old pins removed: $pin_a -> $raft_b -> $tools_b; $other"
+        [ -d "$gone" ] || fail "a failed hash deleted a removed checkout's home $gone"
+
+        final=$(home_in checkout-a "$key_tools")
+        [ ! -e "$(dirname "$gone")" ] || fail "a removed checkout's homes survive: $gone"
+        [ ! -e "$root/0123456789ab" ] || fail "an unrecorded home from an older layout survives"
+        [ ! -e "$root/notes" ] || fail "a stray entry of the cache root survives"
+        [ -d "$other" ] || fail "a live checkout's home was deleted: $other"
+        [ -d "$final" ] || fail "entering a shell deleted its own home $final"
+        [ -d "$XDG_CACHE_HOME/other-tool/0123456789ab" ] || fail "a directory outside $root was deleted"
+        echo "PLTUSERHOME per checkout and pins, old pins and removed checkouts deleted: $pin_a -> $raft_b -> $tools_b; $other"
         touch $out
       '';
 
