@@ -154,7 +154,9 @@
 
       # raft is linked from a writable copy of the whole rkt-raft tree: its
       # manual excerpts files outside raft/ (rkt-raft #23), and its
-      # pre-installer stages libraftrkt into raft/native-libs.
+      # pre-installer stages libraftrkt into raft/native-libs. Its
+      # raft-x86_64-linux dependency is the in-tree package, which holds no
+      # libraries: RAFT_NATIVE_LIB_PATH supplies the nix-built shim.
       installRaft = dest: skip: ''
         export RAFT_NATIVE_LIB_PATH=${raft.shim}
         _raft_root="${dest}"
@@ -163,6 +165,8 @@
           cp -r ${rkt-raft} "$_raft_root"
           chmod -R u+w "$_raft_root"
         fi
+        raco pkg install --batch --deps fail --no-setup --link --scope user ${skip} \
+          --name raft-x86_64-linux "$_raft_root/raft-x86_64-linux"
         raco pkg install --batch --deps fail --no-setup --link --scope user ${skip} \
           --name raft "$_raft_root/raft"
       '';
@@ -190,7 +194,7 @@
           ${installDocsDeps "--skip-installed"}
           ${installRaft "$TMPDIR/rkt-raft" ""}
           ${installCuml ""}
-          raco setup -j 4 --no-docs --pkgs raft
+          raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft
           raco setup -j 4 --no-docs --check-pkg-deps --unused-pkg-deps --pkgs ${cumlPackageNames}
           runHook postBuild
         '';
@@ -422,7 +426,7 @@
             ${installRaft "$PLTUSERHOME/${baseNameOf (toString rkt-raft)}" "--skip-installed"}
             ${installCuml "--skip-installed"}
             RAFT_KMEANS_CANARY=${raft.kmeans-canary}/lib/libkmeans_canary.so \
-              raco setup -j 4 --pkgs raft
+              raco setup -j 4 --pkgs raft-x86_64-linux raft
             raco setup -j 4 --no-docs --pkgs ${cumlPackageNames}
           )
           _setup_rc=$?
