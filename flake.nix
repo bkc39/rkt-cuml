@@ -7,7 +7,7 @@
     treefmt-nix.inputs.nixpkgs.follows = "nixpkgs";
     # The shim links rkt-raft's RAPIDS set, which must be exactly the one
     # libraftrkt was built against: RAFT has no versioned namespace.
-    rkt-raft.url = "github:bkc39/rkt-raft/f52d1382c1385025a0852842133c09fb20d13396";
+    rkt-raft.url = "github:bkc39/rkt-raft/36b118de999c298851e97b9c4199c0555fa42af4";
     rkt-raft.inputs.nixpkgs.follows = "nixpkgs";
     rkt-raft.inputs.treefmt-nix.follows = "treefmt-nix";
   };

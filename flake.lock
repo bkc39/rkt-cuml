@@ -116,17 +116,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1792078892,
-        "narHash": "sha256-YJEIxYyjDoOmG7UBk0cTJCMe/GvBJehZV3t90hNym2A=",
+        "lastModified": 1792256988,
+        "narHash": "sha256-TzrGVhDelvCJDRE+GdvpRj+KXScTc7gpIOoGdXupZC8=",
         "owner": "bkc39",
         "repo": "rkt-raft",
-        "rev": "f52d1382c1385025a0852842133c09fb20d13396",
+        "rev": "36b118de999c298851e97b9c4199c0555fa42af4",
         "type": "github"
       },
       "original": {
         "owner": "bkc39",
         "repo": "rkt-raft",
-        "rev": "f52d1382c1385025a0852842133c09fb20d13396",
+        "rev": "36b118de999c298851e97b9c4199c0555fa42af4",
         "type": "github"
       }
     },
