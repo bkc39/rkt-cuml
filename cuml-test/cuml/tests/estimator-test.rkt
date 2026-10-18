@@ -22,12 +22,7 @@
                   transformer?)
          (only-in racket/generic exn:fail:support?)
          (only-in racket/list make-list)
-         (only-in rackunit
-                  check-equal?
-                  check-false
-                  check-regexp-match
-                  check-true
-                  test-case)
+         (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
          (only-in "private/cuml-error.rkt" raised))
 
 (define fit-calls (box '()))
@@ -59,35 +54,35 @@
      (for/list ([x (in-list X)])
        (- x (threshold-cut e))))]
   #:methods gen:scorer
-  [(define (score e X [y #f] #:sample-weight [w #f])
+  [(define (score e X [_y #f] #:sample-weight [_w #f])
      (- (for/sum ([x (in-list X)]) (expt (- x (threshold-cut e)) 2))))])
 
 (struct labeller ()
   #:methods gen:estimator
-  [(define (fit e X [y #f] #:sample-weight [w #f])
+  [(define (fit e _X [_y #f] #:sample-weight [_w #f])
      e)
-   (define (fitted? e)
+   (define (fitted? _e)
      #f)
-   (define (estimator-params e)
+   (define (estimator-params _e)
      (hasheq))
-   (define (estimator-set-params e params)
+   (define (estimator-set-params e _params)
      e)]
   #:methods gen:clusterer
-  [(define (fit-predict e X [y #f] #:sample-weight [w #f])
+  [(define (fit-predict _e _X [_y #f] #:sample-weight [_w #f])
      'labeller-marker)])
 
 (define bare-fits (box 0))
 
 (struct bare-clusterer ()
   #:methods gen:estimator
-  [(define (fit e X [y #f] #:sample-weight [w #f])
+  [(define (fit e _X [_y #f] #:sample-weight [_w #f])
      (set-box! bare-fits (add1 (unbox bare-fits)))
      e)
-   (define (fitted? e)
+   (define (fitted? _e)
      #f)
-   (define (estimator-params e)
+   (define (estimator-params _e)
      (hasheq))
-   (define (estimator-set-params e params)
+   (define (estimator-set-params e _params)
      e)]
   #:methods gen:clusterer
   [])
@@ -127,7 +122,8 @@
     (for* ([y (in-list (list #f (map (lambda (x) (modulo x 2)) X)))]
            [w (in-list (list #f (random-weights (length X))))])
       (define f (fit e X y #:sample-weight w))
-      (define-values (labels predict-calls) (calls-of (lambda () (fit-predict e X y #:sample-weight w))))
+      (define-values (labels predict-calls)
+        (calls-of (lambda () (fit-predict e X y #:sample-weight w))))
       (check-equal? labels (predict f X))
       (check-equal? predict-calls (list (list X y w)))
       (define-values (moved transform-calls)
@@ -149,9 +145,8 @@
 
 (test-case "E6: a value without the capability is a contract violation naming the generic"
   (define X '(1 2 3))
-  (for ([thunk (list (lambda () (predict 3 X))
-                     (lambda () (fit 3 X))
-                     (lambda () (transform (labeller) X)))]
+  (for ([thunk
+         (list (lambda () (predict 3 X)) (lambda () (fit 3 X)) (lambda () (transform (labeller) X)))]
         [pattern (list #rx"^predict: contract violation:\n  expected: predictor\\?"
                        #rx"^fit: contract violation:\n  expected: estimator\\?"
                        #rx"^transform: contract violation:\n  expected: transformer\\?")])

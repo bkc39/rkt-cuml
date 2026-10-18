@@ -57,21 +57,22 @@
     [('auto _) 10]
     [(runs _) runs]))
 
-(define (kmeans-fit X
-                    #:init (init 'scalable-k-means++)
-                    #:n-clusters [n-clusters (init-rows init 8)]
-                    #:max-iter [max-iter 300]
-                    #:tol [tol 1e-4]
-                    #:n-init [n-init 'auto]
-                    #:random-state [random-state 0]
-                    #:oversampling-factor [oversampling-factor 2.0]
-                    #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
-                    #:sample-weight [sample-weight #f]
-                    #:resources [resources (current-device-resources)])
+(define (kmeans-fit/who who
+                        X
+                        #:init (init 'scalable-k-means++)
+                        #:n-clusters [n-clusters (init-rows init 8)]
+                        #:max-iter [max-iter 300]
+                        #:tol [tol 1e-4]
+                        #:n-init [n-init 'auto]
+                        #:random-state [random-state 0]
+                        #:oversampling-factor [oversampling-factor 2.0]
+                        #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
+                        #:sample-weight [sample-weight #f]
+                        #:resources [resources (current-device-resources)])
   (define-values (code factor start) (seeding init oversampling-factor))
-  (define out (deposit-for 'kmeans-fit resources))
+  (define out (deposit-for who resources))
   (define-values (inertia n-iter)
-    (cuml-cluster-kmeans-fit-job 'kmeans-fit
+    (cuml-cluster-kmeans-fit-job who
                                  resources
                                  X
                                  sample-weight
@@ -94,41 +95,38 @@
   (match-define (list result) (deposit->list out))
   result)
 
-(define (kmeans-predict centroids
-                        X
-                        #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
-                        #:resources [resources (current-device-resources)])
-  (deposited cuml-cluster-kmeans-predict-job
-             'kmeans-predict
-             resources
-             centroids
-             X
-             max-samples-per-batch))
+(define (kmeans-predict/who who
+                            centroids
+                            X
+                            #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
+                            #:resources [resources (current-device-resources)])
+  (deposited cuml-cluster-kmeans-predict-job who resources centroids X max-samples-per-batch))
 
-(define (kmeans-transform centroids
+(define (kmeans-transform/who who
+                              centroids
+                              X
+                              #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
+                              #:resources [resources (current-device-resources)])
+  (deposited cuml-cluster-kmeans-transform-job who resources centroids X max-samples-per-batch))
+
+(define (kmeans-score/who who
+                          centroids
                           X
+                          #:sample-weight [sample-weight #f]
                           #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
                           #:resources [resources (current-device-resources)])
-  (deposited cuml-cluster-kmeans-transform-job
-             'kmeans-transform
-             resources
-             centroids
-             X
-             max-samples-per-batch))
+  (- (cuml-cluster-kmeans-score-job who resources centroids X sample-weight max-samples-per-batch)))
 
-(define (kmeans-score centroids
-                      X
-                      #:sample-weight [sample-weight #f]
-                      #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
-                      #:resources [resources (current-device-resources)])
-  (- (cuml-cluster-kmeans-score-job 'kmeans-score
-                                    resources
-                                    centroids
-                                    X
-                                    sample-weight
-                                    max-samples-per-batch)))
+(define (named proc who)
+  (define-values (required accepted) (procedure-keywords proc))
+  (procedure-reduce-keyword-arity-mask
+   (make-keyword-procedure (lambda (kws vals . args) (keyword-apply proc kws vals who args)))
+   (arithmetic-shift (procedure-arity-mask proc) -1)
+   required
+   accepted
+   who))
 
-(define kmeans-fit/who (make-keyword-procedure (lambda _ (error 'unimplemented))))
-(define kmeans-predict/who (make-keyword-procedure (lambda _ (error 'unimplemented))))
-(define kmeans-transform/who (make-keyword-procedure (lambda _ (error 'unimplemented))))
-(define kmeans-score/who (make-keyword-procedure (lambda _ (error 'unimplemented))))
+(define kmeans-fit (named kmeans-fit/who 'kmeans-fit))
+(define kmeans-predict (named kmeans-predict/who 'kmeans-predict))
+(define kmeans-transform (named kmeans-transform/who 'kmeans-transform))
+(define kmeans-score (named kmeans-score/who 'kmeans-score))

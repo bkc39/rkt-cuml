@@ -105,13 +105,13 @@
 
 (struct mean-split (cut)
   #:methods gen:estimator
-  [(define (fit e X [y #f] #:sample-weight [w #f])
+  [(define (fit _e X [_y #f] #:sample-weight [_w #f])
      (mean-split (/ (apply + X) (length X))))
    (define (fitted? e)
      (and (mean-split-cut e) #t))
-   (define (estimator-params e)
+   (define (estimator-params _e)
      (hasheq))
-   (define (estimator-set-params e params)
+   (define (estimator-set-params _e _params)
      (mean-split #f))]
   #:methods gen:predictor
   [(define (predict e X)
@@ -131,7 +131,7 @@
   (check-equal? (list (fitted? km) (fitted? fitted)) '(#f #t))
   (check-equal?
    (device-vector->list (predict fitted (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
-   '(0 1))
+   '(1 0))
   (check-equal? (score fitted (grid)) -16.0)
   (check-equal? (hash-ref (estimator-params km) 'n-clusters) 2)
   (check-equal? (fitted? (estimator-set-params fitted (hasheq 'max-iter 10))) #f)

@@ -9,6 +9,7 @@
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in rackunit check-equal? check-not-equal? check-true test-case)
+         (only-in threading ~>)
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   close?
@@ -21,7 +22,6 @@
                   string-inits
                   tolerance
                   vec)
-         (only-in threading ~>)
          (only-in "private/python-env.rkt" run-twin test-twin))
 
 (define-runtime-path twin "python/kmeans_twin.py")
