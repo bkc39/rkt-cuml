@@ -156,6 +156,32 @@
     with deps `("base")` is a follow-up if glmnet adopts the interface.
   - **Q-L.** k-means' `fit` and `score` ignore `y`.
 
+## Decisions recorded in leg 3 (DBSCAN, #8)
+
+- `dbscan-fit` (`cuml/cluster/private/dbscan.rkt`) binds cuML's brute-force
+  `ML::Dbscan::fit` for float32 and float64 with int32 or int64 labels,
+  through one job, `cuml_cluster_dbscan_fit_job`. The deposit helper
+  (`deposit-for`), the shim's argument checks (`shim/cluster/src/support.hpp`)
+  and the estimator support (`cuml/private/estimator-support.rkt`) are shared
+  with k-means.
+- The `dbscan` estimator is an estimator and a clusterer; its defaults come
+  from `dbscan-defaults`.
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** `#:out-dtype`, Python's name, on `dbscan-fit` and as an
+    estimator parameter.
+  - **Q-B.** int32 labels over more than 2^31-1 elements are refused, not
+    switched to int64.
+  - **Q-C.** `'cosine` runs on an n×d scratch copy, so `X` is not modified.
+  - **Q-D.** A row of norm 0 under `'cosine` is refused.
+  - **Q-E.** Non-finite `X` is passed through, and its rows are noise.
+  - **Q-F.** `eps` not greater than 0 and `min-samples` below 1 are refused.
+  - **Q-G.** `eps` is the exact double for float64.
+  - **Q-H.** Core-sample indices are always computed.
+  - **Q-I.** `'rbc` is deferred to #17.
+  - **Q-J.** `dbscan-result` has no cluster count.
+- A batch size that cuML would compute as 0, explicit or automatic, is
+  refused, since cuML divides by it (SIGFPE).
+
 ## Owner decisions (2026-10-17)
 
 - The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require

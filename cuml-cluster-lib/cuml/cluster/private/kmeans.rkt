@@ -1,15 +1,10 @@
 #lang racket/base
 
 (require (only-in racket/match match match* match-define)
-         (only-in raft
-                  current-device-resources
-                  device-matrix?
-                  exn:fail:raft
-                  exn:fail:raft-kind
-                  exn:fail:raft?
-                  shape)
-         (only-in raft/unsafe deposit deposit->list)
+         (only-in raft current-device-resources device-matrix? shape)
+         (only-in raft/unsafe deposit->list)
          (only-in "define-who.rkt" define/who)
+         (only-in "deposit.rkt" deposit-for)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job
                   cuml-cluster-kmeans-predict-job
@@ -57,15 +52,6 @@
     ['random (values 1 oversampling-factor #f)]
     [(? device-matrix?) (values 2 oversampling-factor init)]
     [_ (values -1 oversampling-factor #f)]))
-
-(define ((renamed who) e)
-  (raise (exn:fail:raft (regexp-replace #rx"^deposit:" (exn-message e) (format "~a:" who))
-                        (exn-continuation-marks e)
-                        (exn:fail:raft-kind e))))
-
-(define (deposit-for who resources)
-  (with-handlers ([exn:fail:raft? (renamed who)])
-    (deposit #:resources resources)))
 
 (define (n-init-runs n-init code)
   (match* (n-init code)

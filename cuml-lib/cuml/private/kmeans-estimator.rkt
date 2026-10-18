@@ -9,10 +9,13 @@
                   kmeans-result-labels
                   kmeans-score/who
                   kmeans-transform/who)
-         (only-in cuml/core exn:fail:cuml)
          (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
-         (only-in racket/string string-append*)
-         (only-in raft current-device-resources))
+         (only-in "estimator-support.rkt"
+                  call-with-params
+                  logic-error
+                  params->string
+                  resources-of
+                  updated-params))
 
 (provide kmeans
          kmeans?
@@ -28,26 +31,11 @@
          max-samples-per-batch
          resources))
 
-(define (name->keyword name)
-  (string->keyword (symbol->string name)))
-
 (define (default name)
   (hash-ref kmeans-defaults name))
 
-(define (logic-error message . args)
-  (raise (exn:fail:cuml (apply format message args) (current-continuation-marks) 'logic)))
-
-(define (resources-of params)
-  (or (hash-ref params 'resources) (current-device-resources)))
-
 (define (fitted-model who e X sample-weight)
-  (define params (kmeans-params e))
-  (define arguments (hash-set* params 'resources (resources-of params) 'sample-weight sample-weight))
-  (define names (sort (hash-keys arguments) symbol<?))
-  (keyword-apply kmeans-fit/who
-                 (map name->keyword names)
-                 (map (lambda (name) (hash-ref arguments name)) names)
-                 (list who X)))
+  (call-with-params kmeans-fit/who who X (kmeans-params e) (hasheq 'sample-weight sample-weight)))
 
 (define (model-of who e)
   (or (kmeans-model e) (logic-error "~a: kmeans is not fitted" who)))
@@ -69,24 +57,13 @@
                     #:max-samples-per-batch (hash-ref params 'max-samples-per-batch)
                     #:resources (resources-of params)))
 
-(define (updated params changes)
-  (for/fold ([merged params]) ([(key value) (in-hash changes)])
-    (cond
-      [(hash-has-key? merged key) (hash-set merged key value)]
-      [else (logic-error "estimator-set-params: kmeans has no parameter ~s" key)])))
-
 (define (kmeans->string e)
   (define params (kmeans-params e))
   (define defaults
     (hash-set (kmeans-params (kmeans))
               'n-clusters
               (init-rows (hash-ref params 'init) (default 'n-clusters))))
-  (define marker (if (kmeans-model e) " fitted" ""))
-  (define shown
-    (for/list ([name (in-list parameter-names)]
-               #:unless (equal? (hash-ref params name) (hash-ref defaults name)))
-      (format " #:~a ~v" name (hash-ref params name))))
-  (format "#<kmeans~a~a>" marker (string-append* shown)))
+  (params->string 'kmeans parameter-names params defaults (and (kmeans-model e) #t)))
 
 (struct kmeans (params model)
   #:constructor-name kmeans*
@@ -99,7 +76,7 @@
    (define (estimator-params e)
      (kmeans-params e))
    (define (estimator-set-params e params)
-     (kmeans* (updated (kmeans-params e) params) #f))]
+     (kmeans* (updated-params 'kmeans (kmeans-params e) params) #f))]
   #:methods gen:predictor
   [(define (predict e X)
      (on-centroids kmeans-predict/who 'predict e (model-of 'predict e) X))]
