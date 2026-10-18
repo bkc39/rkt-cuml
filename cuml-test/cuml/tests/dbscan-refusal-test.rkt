@@ -34,14 +34,12 @@
   (define u (other dt))
   (define X (grid dt))
   (define fit
-    (make-keyword-procedure
-     (lambda (kws vals samples)
-       (lambda () (keyword-apply dbscan-fit kws vals (list samples) #:out-dtype out)))))
+    (make-keyword-procedure (lambda (kws vals samples)
+                              (lambda ()
+                                (keyword-apply dbscan-fit kws vals (list samples) #:out-dtype out)))))
   (list
    (row "D0" "X: expected float32 or float64, got int32" (fit (blank-matrix 10 2 'int32)))
-   (row "D1"
-        "out-dtype: expected int32 or int64"
-        (lambda () (dbscan-fit X #:out-dtype 'float32)))
+   (row "D1" "out-dtype: expected int32 or int64" (lambda () (dbscan-fit X #:out-dtype 'float32)))
    (row "D2" "metric: expected euclidean, cosine or precomputed" (fit X #:metric 'l2))
    (row "D3 rank" "X: expected rank 2, got rank 1" (fit (blank-vector 10 dt)))
    (row "D3 layout"
@@ -79,7 +77,9 @@
    (row "D1 before D2"
         "out-dtype: expected int32 or int64"
         (lambda () (dbscan-fit X #:out-dtype 'float32 #:metric 'l2)))
-   (row "D2 before D3" "metric: expected euclidean, cosine or precomputed" (fit (blank-vector 10 dt) #:metric 'l2))
+   (row "D2 before D3"
+        "metric: expected euclidean, cosine or precomputed"
+        (fit (blank-vector 10 dt) #:metric 'l2))
    (row "D8 before D9"
         "sample-weight: expected 10 elements, got 9"
         (fit X #:eps 0 #:sample-weight (blank-vector 9 dt)))
@@ -133,8 +133,7 @@
                   (lambda (dir) (delete-directory/files dir #:must-exist? #f))])
     (define path (build-path dir "crash.rkt"))
     (call-with-output-file path (lambda (out) (write crash-program out)))
-    (define-values (process stdout stdin stderr)
-      (subprocess #f #f #f (find-exe) path))
+    (define-values (process stdout stdin stderr) (subprocess #f #f #f (find-exe) path))
     (close-output-port stdin)
     (define output (port->string stdout))
     (define errors (port->string stderr))

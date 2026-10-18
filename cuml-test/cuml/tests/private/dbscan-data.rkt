@@ -98,16 +98,16 @@
     (cond
       [(and (vector-ref core? i) (= (vector-ref labels i) -1))
        (let spread ([frontier (list i)])
-         (for ([j (in-list frontier)])
-           (vector-set! labels j next))
-         (define reached
-           (remove-duplicates (for*/list ([j (in-list frontier)]
-                                          [m (in-list (vector-ref neighbours j))]
-                                          #:when (vector-ref core? m)
-                                          #:when (= (vector-ref labels m) -1))
-                                m)))
-         (unless (null? reached)
-           (spread reached)))
+         (cond
+           [(null? frontier) (void)]
+           [else
+            (for ([j (in-list frontier)])
+              (vector-set! labels j next))
+            (spread (remove-duplicates (for*/list ([j (in-list frontier)]
+                                                   [m (in-list (vector-ref neighbours j))]
+                                                   #:when (vector-ref core? m)
+                                                   #:when (= (vector-ref labels m) -1))
+                                         m)))]))
        (add1 next)]
       [else next]))
   (define options

@@ -58,7 +58,11 @@
 
 (define (weights-of s n)
   (match (spec-kind s)
-    ['weighted (seeded 6 (lambda () (for/list ([_ (in-range n)]) (add1 (random 3)))))]
+    ['weighted
+     (seeded 6
+             (lambda ()
+               (for/list ([_ (in-range n)])
+                 (add1 (random 3)))))]
     [_ #f]))
 
 (struct run (spec rows weights found))
@@ -99,22 +103,22 @@
   (check-equal? version "26.08.00")
   (check-equal? version libcuml-version)
   (define equal-count
-    (for/sum ([r (in-list runs)]
-              [theirs (in-list results)])
-      (match-define (run s _ _ (list labels core)) r)
-      (define out (symbol->string (spec-out-dtype s)))
-      (define same? (equal? (list labels core) (list (hash-ref theirs 'labels) (hash-ref theirs 'core))))
-      (printf "twin ~a: ~a clusters, ~a core samples, ~a noise; ~a\n"
-              (spec-name s)
-              (add1 (apply max -1 labels))
-              (length core)
-              (for/sum ([l (in-list labels)]) (if (= l -1) 1 0))
-              (if same? "equal" "DIFFERENT"))
-      (test-case (spec-name s)
-        (check-equal? labels (hash-ref theirs 'labels) "labels")
-        (check-equal? core (hash-ref theirs 'core) "core samples")
-        (check-equal? (hash-ref theirs 'dtypes) (list out out)))
-      (if same? 1 0)))
+    (for/sum ([r (in-list runs)] [theirs (in-list results)])
+             (match-define (run s _ _ (list labels core)) r)
+             (define out (symbol->string (spec-out-dtype s)))
+             (define same?
+               (equal? (list labels core) (list (hash-ref theirs 'labels) (hash-ref theirs 'core))))
+             (printf "twin ~a: ~a clusters, ~a core samples, ~a noise; ~a\n"
+                     (spec-name s)
+                     (add1 (apply max -1 labels))
+                     (length core)
+                     (for/sum ([l (in-list labels)]) (if (= l -1) 1 0))
+                     (if same? "equal" "DIFFERENT"))
+             (test-case (spec-name s)
+               (check-equal? labels (hash-ref theirs 'labels) "labels")
+               (check-equal? core (hash-ref theirs 'core) "core samples")
+               (check-equal? (hash-ref theirs 'dtypes) (list out out)))
+             (if same? 1 0)))
   (printf "twin summary: ~a DBSCAN cases; labels and core samples equal in ~a\n"
           (length runs)
           equal-count))

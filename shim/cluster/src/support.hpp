@@ -33,11 +33,9 @@ matrix<T, Index> rows_of(const rr_view* view, const char* name, int64_t rows,
     v.strides[0] = 0;
     v.strides[1] = 0;
   }
-  T* data = raftrkt::matrix_data<T, Index>(&v, name,
-                                           raftrkt::layout::row_major, rows,
-                                           cols);
-  return {data, static_cast<Index>(v.shape[0]),
-          static_cast<Index>(v.shape[1])};
+  T* data = raftrkt::matrix_data<T, Index>(&v, name, raftrkt::layout::row_major,
+                                           rows, cols);
+  return {data, static_cast<Index>(v.shape[0]), static_cast<Index>(v.shape[1])};
 }
 
 inline void require_at_least(const std::string& what, int64_t got,

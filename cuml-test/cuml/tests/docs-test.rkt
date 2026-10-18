@@ -172,8 +172,9 @@
                 '(0 0 0 0 1 1 1 -1)))
 
 (test-gpu "the manual: the labels take the out-dtype, and eps 0 is refused"
-  (check-equal? (dtype (dbscan-result-labels (dbscan-fit (points) #:eps 2 #:min-samples 4 #:out-dtype 'int64)))
-                'int64)
+  (check-equal?
+   (dtype (dbscan-result-labels (dbscan-fit (points) #:eps 2 #:min-samples 4 #:out-dtype 'int64)))
+   'int64)
   (check-cuml-error 'logic
                     "dbscan-fit: eps: expected greater than 0, got 0"
                     (lambda () (dbscan-fit (points) #:eps 0))))

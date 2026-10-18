@@ -33,7 +33,9 @@
   (define rows (map (lambda (r) (map add1 r)) (integer-grid n-samples 2 40 6)))
   (list (mat rows 'float32)
         (mat (distance-matrix (integer-grid 400 2 20 7)) 'float64)
-        (vec (for/list ([i (in-range n-samples)]) (add1 (modulo i 3))) 'float32)))
+        (vec (for/list ([i (in-range n-samples)])
+               (add1 (modulo i 3)))
+             'float32)))
 
 (define (one-round X D w e)
   (dbscan-fit X #:eps 1.5 #:min-samples 4)

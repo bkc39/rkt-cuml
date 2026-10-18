@@ -26,8 +26,8 @@
          (only-in "private/kmeans-data.rkt" dtypes))
 
 (define fitted
-  (make-keyword-procedure
-   (lambda (kws vals X) (result->lists (keyword-apply dbscan-fit kws vals (list X))))))
+  (make-keyword-procedure (lambda (kws vals X)
+                            (result->lists (keyword-apply dbscan-fit kws vals (list X))))))
 
 (define (oracle-of rows eps min-samples #:weights [weights #f])
   (dbscan-oracle (length rows)
@@ -79,8 +79,7 @@
     (test-case (symbol->string dt)
       (define X (mat big-rows dt))
       (for ([mbytes (in-list '(1 2 5))])
-        (check-batched (fitted X #:eps 1.5 #:min-samples 4 #:max-mbytes-per-batch mbytes)
-                       big-oracle))
+        (check-batched (fitted X #:eps 1.5 #:min-samples 4 #:max-mbytes-per-batch mbytes) big-oracle))
       (check-one-batch (fitted X #:eps 1.5 #:min-samples 4) big-oracle)
       (check-equal? (fitted X #:eps 1.5 #:min-samples 4 #:max-mbytes-per-batch 0)
                     (fitted X #:eps 1.5 #:min-samples 4)))))
@@ -108,8 +107,9 @@
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (define found (fitted (mat rows dt) #:eps 1.5 #:min-samples 5))
-      (check-equal? (fitted (mat (map (lambda (r) (map + r '(-7 40 3))) rows) dt) #:eps 1.5 #:min-samples 5)
-                    found)
+      (check-equal?
+       (fitted (mat (map (lambda (r) (map + r '(-7 40 3))) rows) dt) #:eps 1.5 #:min-samples 5)
+       found)
       (check-equal? (fitted (mat (map (lambda (r) (map - r)) rows) dt) #:eps 1.5 #:min-samples 5)
                     found))))
 
@@ -136,25 +136,18 @@
                             #:min-samples 4
                             #:sample-weight (vec (map (lambda (_) 1) rows) dt))
                     (fitted (mat rows dt) #:eps 1.5 #:min-samples 4))
-      (check-equal? (fitted (mat '((0) (10) (20)) dt)
-                            #:eps 1
-                            #:min-samples 5
-                            #:sample-weight (vec '(1 5 1) dt))
-                    '((-1 0 -1) (1)))
+      (check-equal?
+       (fitted (mat '((0) (10) (20)) dt) #:eps 1 #:min-samples 5 #:sample-weight (vec '(1 5 1) dt))
+       '((-1 0 -1) (1)))
       (define negative '((1) (1) (0) (2)))
-      (check-equal? (fitted (mat negative dt)
-                            #:eps 1
-                            #:min-samples 5
-                            #:sample-weight (vec '(1 1 3 -1) dt))
-                    '((0 0 0 -1) (2)))
-      (check-equal? (fitted (mat negative dt) #:eps 1 #:min-samples 5)
-                    '((-1 -1 -1 -1) ()))
+      (check-equal?
+       (fitted (mat negative dt) #:eps 1 #:min-samples 5 #:sample-weight (vec '(1 1 3 -1) dt))
+       '((0 0 0 -1) (2)))
+      (check-equal? (fitted (mat negative dt) #:eps 1 #:min-samples 5) '((-1 -1 -1 -1) ()))
       (check-equal? (fitted (mat negative dt) #:eps 1 #:min-samples 4) '((0 0 0 0) (0 1)))
-      (check-equal? (fitted (mat negative dt)
-                            #:eps 1
-                            #:min-samples 5
-                            #:sample-weight (vec '(1 1 3 1) dt))
-                    '((0 0 0 0) (0 1 2))))))
+      (check-equal?
+       (fitted (mat negative dt) #:eps 1 #:min-samples 5 #:sample-weight (vec '(1 1 3 1) dt))
+       '((0 0 0 0) (0 1 2))))))
 
 (define pre-rows (integer-grid 2001 2 60 33))
 (define pre-distances (distance-matrix pre-rows))
@@ -166,9 +159,10 @@
       (define D (mat pre-distances dt))
       (for* ([eps (in-list '(1.5 2.5))]
              [mbytes (in-list '(#f 1))])
-        (check-equal? (fitted D #:eps eps #:min-samples 5 #:metric 'precomputed #:max-mbytes-per-batch mbytes)
-                      (fitted X #:eps eps #:min-samples 5 #:max-mbytes-per-batch mbytes)
-                      (format "eps ~a, max-mbytes-per-batch ~a" eps mbytes))))))
+        (check-equal?
+         (fitted D #:eps eps #:min-samples 5 #:metric 'precomputed #:max-mbytes-per-batch mbytes)
+         (fitted X #:eps eps #:min-samples 5 #:max-mbytes-per-batch mbytes)
+         (format "eps ~a, max-mbytes-per-batch ~a" eps mbytes))))))
 
 (test-gpu "L8: cosine labels match the host oracle on one minus the cosine similarity"
   (define eps 0.02)

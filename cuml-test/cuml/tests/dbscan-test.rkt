@@ -24,12 +24,11 @@
 (define out-dtypes '(int32 int64))
 
 (define fitted
-  (make-keyword-procedure
-   (lambda (kws vals X) (result->lists (keyword-apply dbscan-fit kws vals (list X))))))
+  (make-keyword-procedure (lambda (kws vals X)
+                            (result->lists (keyword-apply dbscan-fit kws vals (list X))))))
 
 (define (fit-lists X #:eps eps #:min-samples min-samples #:metric [metric 'euclidean])
-  (define lists
-    (result->lists (dbscan-fit X #:eps eps #:min-samples min-samples #:metric metric)))
+  (define lists (result->lists (dbscan-fit X #:eps eps #:min-samples min-samples #:metric metric)))
   (check-equal? (apply structure-problems lists) '())
   lists)
 
@@ -49,11 +48,9 @@
                                                      #:out-dtype out
                                                      #:sample-weight (vec grid-weights dt))))
                     grid-weighted-core)
-      (check-equal? (fit-lists (mat (distance-matrix grid-rows) dt)
-                               #:eps 2
-                               #:min-samples 4
-                               #:metric 'precomputed)
-                    (list grid-labels grid-core)))))
+      (check-equal?
+       (fit-lists (mat (distance-matrix grid-rows) dt) #:eps 2 #:min-samples 4 #:metric 'precomputed)
+       (list grid-labels grid-core)))))
 
 (define (unround-cloud n d seed)
   (seeded seed

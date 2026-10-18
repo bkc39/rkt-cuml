@@ -26,7 +26,7 @@
   #:omit-define-syntaxes
   #:methods gen:estimator
   [(define (fit e X [_y #f] #:sample-weight [sample-weight #f])
-     (error 'unimplemented))
+     (dbscan* (dbscan-params e) (fitted-model 'fit e X sample-weight)))
    (define (fitted? e)
      (and (dbscan-model e) #t))
    (define (estimator-params e)
@@ -35,7 +35,7 @@
      (dbscan* (updated-params 'dbscan (dbscan-params e) params) #f))]
   #:methods gen:clusterer
   [(define (fit-predict e X [_y #f] #:sample-weight [sample-weight #f])
-     (error 'unimplemented))]
+     (dbscan-result-labels (fitted-model 'fit-predict e X sample-weight)))]
   #:methods gen:equal+hash
   [(define (equal-proc a b recur)
      (and (recur (dbscan-params a) (dbscan-params b)) (eq? (dbscan-model a) (dbscan-model b))))
@@ -53,4 +53,10 @@
                 #:out-dtype [out-dtype (default 'out-dtype)]
                 #:max-mbytes-per-batch [max-mbytes-per-batch (default 'max-mbytes-per-batch)]
                 #:resources [resources #f])
-  (error 'unimplemented))
+  (dbscan* (hasheq 'eps eps
+                   'min-samples min-samples
+                   'metric metric
+                   'out-dtype out-dtype
+                   'max-mbytes-per-batch max-mbytes-per-batch
+                   'resources resources)
+           #f))

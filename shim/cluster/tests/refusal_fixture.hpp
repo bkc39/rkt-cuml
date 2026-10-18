@@ -26,8 +26,9 @@ inline std::string name() {
   return std::is_same_v<T, float> ? "float32" : "float64";
 }
 
-inline rr_view shaped(const device_array& a, std::initializer_list<int64_t> shape,
-               bool col_major = false) {
+inline rr_view shaped(const device_array& a,
+                      std::initializer_list<int64_t> shape,
+                      bool col_major = false) {
   rr_view v = a.view;
   v.rank = static_cast<int32_t>(shape.size());
   int32_t i = 0;

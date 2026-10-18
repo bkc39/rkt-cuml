@@ -24,9 +24,9 @@ struct dbscan_call {
 };
 
 inline std::string dbscan(const resources& res, const dbscan_call& c) {
-  return outcome(cuml_cluster_dbscan_fit(
-      res.handle, c.x, c.sample_weight, c.out, c.eps, c.min_samples, c.metric,
-      c.out_dtype, c.max_mbytes_per_batch));
+  return outcome(cuml_cluster_dbscan_fit(res.handle, c.x, c.sample_weight,
+                                         c.out, c.eps, c.min_samples, c.metric,
+                                         c.out_dtype, c.max_mbytes_per_batch));
 }
 
 }  // namespace cumlrkt::test

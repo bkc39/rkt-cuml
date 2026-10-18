@@ -103,8 +103,8 @@ void hand_grid(int32_t out_dtype) {
                       .min_samples = grid_min_samples,
                       .out_dtype = out_dtype};
   ASSERT_EQ(dbscan(res, c), "accepted");
-  EXPECT_EQ(shapes(out), (std::vector<int64_t>{2, out_dtype, grid_rows,
-                                               out_dtype, 2}));
+  EXPECT_EQ(shapes(out),
+            (std::vector<int64_t>{2, out_dtype, grid_rows, out_dtype, 2}));
   EXPECT_EQ(labels_of(out, out_dtype, 0), grid_labels);
   EXPECT_EQ(labels_of(out, out_dtype, 1), grid_core);
   dbscan_call weighted = c;
@@ -141,9 +141,10 @@ void leaves_x_unchanged() {
   const std::vector<T> d_before = d->template read<T>();
   for (const int32_t metric : {CUML_CLUSTER_DBSCAN_METRIC_EUCLIDEAN,
                                CUML_CLUSTER_DBSCAN_METRIC_COSINE}) {
-    const labelling found = fitted(
-        res, {.x = &x->view, .eps = cloud_eps, .metric = metric,
-              .max_mbytes_per_batch = 1});
+    const labelling found = fitted(res, {.x = &x->view,
+                                         .eps = cloud_eps,
+                                         .metric = metric,
+                                         .max_mbytes_per_batch = 1});
     EXPECT_EQ(found.status, "accepted");
     EXPECT_EQ(x->template read<T>(), x_before) << metric;
   }
@@ -195,11 +196,10 @@ void precomputed_partial_batch() {
   const auto d = upload<T>(res, {cloud_rows, cloud_rows},
                            distances<T>(host, cloud_rows, cloud_cols));
   for (const int64_t mbytes : {int64_t{0}, int64_t{1}}) {
-    const labelling direct =
-        fitted(res, {.x = &x->view,
-                     .eps = cloud_eps,
-                     .min_samples = grid_min_samples,
-                     .max_mbytes_per_batch = mbytes});
+    const labelling direct = fitted(res, {.x = &x->view,
+                                          .eps = cloud_eps,
+                                          .min_samples = grid_min_samples,
+                                          .max_mbytes_per_batch = mbytes});
     const labelling precomputed =
         fitted(res, {.x = &d->view,
                      .eps = cloud_eps,

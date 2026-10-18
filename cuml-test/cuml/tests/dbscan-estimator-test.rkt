@@ -91,22 +91,25 @@
       (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
       (check-false (dbscan-model e))
       (check-true (dbscan-result? (dbscan-model fitted-e)))
-      (check-equal? (result->lists (dbscan-model fitted-e)) (result->lists (dbscan-fit X #:eps 2 #:min-samples 4)))
+      (check-equal? (result->lists (dbscan-model fitted-e))
+                    (result->lists (dbscan-fit X #:eps 2 #:min-samples 4)))
       (check-equal? (format "~v" fitted-e) "#<dbscan fitted #:eps 2 #:min-samples 4>")
       (check-not-equal? fitted-e (fit e X))
       (check-equal? fitted-e fitted-e)
       (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
       (check-equal? (device-vector->list (fit-predict e X)) grid-labels)
-      (check-equal? (cadr (result->lists (dbscan-model (fit e X #:sample-weight (vec grid-weights dt)))))
-                    grid-weighted-core)
+      (check-equal?
+       (cadr (result->lists (dbscan-model (fit e X #:sample-weight (vec grid-weights dt)))))
+       grid-weighted-core)
       (define rows (integer-grid 300 2 20 3))
       (define options (dbscan #:eps 1.5 #:min-samples 4 #:out-dtype 'int64 #:max-mbytes-per-batch 1))
       (check-equal? (device-vector->list (fit-predict options (mat rows dt)))
                     (device-vector->list (dbscan-result-labels (dbscan-fit (mat rows dt)
-                                                                            #:eps 1.5
-                                                                            #:min-samples 4
-                                                                            #:out-dtype 'int64
-                                                                            #:max-mbytes-per-batch 1)))))))
+                                                                           #:eps 1.5
+                                                                           #:min-samples 4
+                                                                           #:out-dtype 'int64
+                                                                           #:max-mbytes-per-batch
+                                                                           1)))))))
 
 (test-gpu "L19: errors are named after the generic that was called"
   (define X (mat grid-rows 'float64))

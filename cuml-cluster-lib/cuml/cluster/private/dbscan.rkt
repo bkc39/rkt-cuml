@@ -39,8 +39,19 @@
                         #:min-samples [min-samples (default 'min-samples)]
                         #:metric [metric (default 'metric)]
                         #:out-dtype [out-dtype (default 'out-dtype)]
-                        #:max-mbytes-per-batch
-                        [max-mbytes-per-batch (default 'max-mbytes-per-batch)]
+                        #:max-mbytes-per-batch [max-mbytes-per-batch (default 'max-mbytes-per-batch)]
                         #:sample-weight [sample-weight #f]
                         #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define out (deposit-for who resources))
+  (cuml-cluster-dbscan-fit-job who
+                               resources
+                               X
+                               sample-weight
+                               out
+                               eps
+                               min-samples
+                               (metric-code metric)
+                               (out-dtype-code out-dtype)
+                               (or max-mbytes-per-batch 0))
+  (match-define (list labels core) (deposit->list out))
+  (dbscan-result labels core))
