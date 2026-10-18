@@ -32,7 +32,7 @@
                               (lambda () (keyword-apply kmeans-fit kws vals args)))))
   (define fit3
     (make-keyword-procedure
-     (lambda (kws vals X) (lambda () (keyword-apply kmeans-fit kws vals (list X) #:n-clusters 3)))))
+     (lambda (kws vals samples) (lambda () (keyword-apply kmeans-fit kws vals (list samples) #:n-clusters 3)))))
   (list
    (row "F1" "X: expected float32 or float64, got int32" (fit3 (matrix 10 2 'int32)))
    (row "F2" "X: expected rank 2, got rank 1" (fit3 (vec 10 dt)))

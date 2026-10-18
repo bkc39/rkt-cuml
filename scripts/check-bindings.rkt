@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/file find-files)
-         (only-in racket/list append-map count remove-duplicates)
+         (only-in racket/list append-map count last remove-duplicates)
          (only-in racket/match == match match-lambda)
          (only-in racket/port with-output-to-string)
          ;; whole-module: define-runtime-path needs bindings only-in strips
@@ -70,9 +70,9 @@
     (for/list ([n (in-list names)])
       (planned (symbol->string n) status issue)))
   (append-map (match-lambda
-                [(list 'common names ...) (entries names 'due 'common)]
-                [(list 'scaffold status names ...) (entries names status 'scaffold)]
-                [(list 'issue issue status names ...) (entries names status issue)])
+                [(list* 'common names) (entries names 'due 'common)]
+                [(list* 'scaffold status names) (entries names status 'scaffold)]
+                [(list* 'issue issue status names) (entries names status issue)])
               plan))
 
 (define (job-bodies exports bindings)
@@ -130,7 +130,7 @@
   (match issues
     ['() "none"]
     [(list one) (format "issue ~a" one)]
-    [(list first _ ... last) (format "issues ~a-~a" first last)]))
+    [(cons first more) (format "issues ~a-~a" first (last more))]))
 
 (define (count-of kind findings)
   (for/sum ([f (in-list findings)])

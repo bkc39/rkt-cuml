@@ -111,11 +111,11 @@
 
 (test-gpu "a fit on its own device resources gives usable outputs"
   (with-device-resources ([r (device-resources)])
-    (define-values (X _labels) (blobs 600 3 #:centers 3 #:seed 4 #:resources r))
+    (define-values (points _labels) (blobs 600 3 #:centers 3 #:seed 4 #:resources r))
     (match-define (kmeans-result centroids labels inertia _)
-      (kmeans-fit X #:n-clusters 3 #:random-state 1 #:resources r))
+      (kmeans-fit points #:n-clusters 3 #:random-state 1 #:resources r))
     (check-equal? (shape centroids) '(3 3))
-    (check-equal? (device-vector->list (kmeans-predict centroids X #:resources r))
+    (check-equal? (device-vector->list (kmeans-predict centroids points #:resources r))
                   (device-vector->list labels))
-    (check-equal? (kmeans-score centroids X #:resources r) (- inertia))
-    (check-equal? (shape (kmeans-transform centroids X #:resources r)) '(600 3))))
+    (check-equal? (kmeans-score centroids points #:resources r) (- inertia))
+    (check-equal? (shape (kmeans-transform centroids points #:resources r)) '(600 3))))
