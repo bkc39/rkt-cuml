@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cuda_runtime_api.h>
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -42,12 +44,49 @@ inline values download(const device_array& a) {
   return {host.begin(), host.end()};
 }
 
+struct record {
+  explicit record(const resources& res) {
+    r.handle = res.handle;
+    r.device = 0;
+    r.state = RR_DEPOSIT_OPEN;
+  }
+  ~record() {
+    if (r.state == RR_DEPOSIT_FILLED) {
+      r.release(r.owner);
+    }
+  }
+  record(const record&) = delete;
+  record& operator=(const record&) = delete;
+  record(record&&) = delete;
+  record& operator=(record&&) = delete;
+
+  template <typename T>
+  [[nodiscard]] std::vector<T> read(int32_t i) const {
+    const rr_view& v = r.regions[i];
+    std::vector<T> host(static_cast<std::size_t>(v.shape[0]) *
+                        (v.rank == 2 ? v.shape[1] : 1));
+    if (!host.empty()) {
+      EXPECT_EQ(cudaMemcpy(host.data(), v.data, host.size() * sizeof(T),
+                           cudaMemcpyDeviceToHost),
+                cudaSuccess);
+    }
+    return host;
+  }
+
+  rr_deposit r{};
+};
+
+template <typename T>
+inline values download(const record& d, int32_t i) {
+  const std::vector<T> host = d.template read<T>(i);
+  return {host.begin(), host.end()};
+}
+
 struct fit_call {
   const rr_view* x = nullptr;
   const rr_view* sample_weight = nullptr;
   const rr_view* init = nullptr;
-  const rr_view* centroids = nullptr;
-  const rr_view* labels = nullptr;
+  rr_deposit* out = nullptr;
   int32_t n_clusters = pair;
   int32_t init_method = CUML_CLUSTER_KMEANS_INIT_ARRAY;
   int32_t max_iter = default_max_iter;
@@ -68,27 +107,32 @@ inline fit_outcome fit(const resources& res, const fit_call& c) {
   double inertia = -1;
   int32_t n_iter = -1;
   const int status = cuml_cluster_kmeans_fit(
-      res.handle, c.x, c.sample_weight, c.init, c.centroids, c.labels,
-      c.n_clusters, c.init_method, c.max_iter, c.tol, c.n_init,
-      c.oversampling_factor, c.batch_samples, c.seed, &inertia, &n_iter);
+      res.handle, c.x, c.sample_weight, c.init, c.out, c.n_clusters,
+      c.init_method, c.max_iter, c.tol, c.n_init, c.oversampling_factor,
+      c.batch_samples, c.seed, &inertia, &n_iter);
   return {outcome(status), inertia, n_iter};
 }
 
 inline std::string predict(const resources& res, const rr_view* centroids,
-                           const rr_view* x, const rr_view* sample_weight,
-                           const rr_view* labels,
+                           const rr_view* x, rr_deposit* out,
                            int32_t batch_samples = default_batch) {
+  return outcome(cuml_cluster_kmeans_predict(res.handle, centroids, x, out,
+                                             batch_samples));
+}
+
+inline std::string score(const resources& res, const rr_view* centroids,
+                         const rr_view* x, const rr_view* sample_weight,
+                         int32_t batch_samples = default_batch) {
   double inertia = -1;
-  return outcome(cuml_cluster_kmeans_predict(res.handle, centroids, x,
-                                             sample_weight, labels,
-                                             batch_samples, &inertia));
+  return outcome(cuml_cluster_kmeans_score(
+      res.handle, centroids, x, sample_weight, batch_samples, &inertia));
 }
 
 inline std::string transform(const resources& res, const rr_view* centroids,
-                             const rr_view* x, const rr_view* distances,
+                             const rr_view* x, rr_deposit* out,
                              int32_t batch_samples = default_batch) {
-  return outcome(cuml_cluster_kmeans_transform(res.handle, centroids, x,
-                                               distances, batch_samples));
+  return outcome(cuml_cluster_kmeans_transform(res.handle, centroids, x, out,
+                                               batch_samples));
 }
 
 }  // namespace cumlrkt::test

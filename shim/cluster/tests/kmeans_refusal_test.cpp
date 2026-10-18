@@ -75,17 +75,14 @@ struct refusal_case {
         x(shaped(data, {rows, cols})),
         w(shaped(data, {rows})),
         init(shaped(outs, {k, cols})),
-        centroids(shaped(outs, {k, cols})),
-        labels(shaped(ints, {rows})),
-        distances(shaped(outs, {rows, k})) {
+        centroids(shaped(outs, {k, cols})) {
     data.write(std::vector<T>(pool, 0));
     outs.write(std::vector<T>(pool, 0));
   }
 
-  [[nodiscard]] fit_call call() const {
+  [[nodiscard]] fit_call call(record& out) const {
     return {.x = &x,
-            .centroids = &centroids,
-            .labels = &labels,
+            .out = &out.r,
             .n_clusters = k,
             .init_method = CUML_CLUSTER_KMEANS_INIT_KMEANS_PLUS_PLUS};
   }
@@ -98,9 +95,13 @@ struct refusal_case {
   rr_view w;
   rr_view init;
   rr_view centroids;
-  rr_view labels;
-  rr_view distances;
 };
+
+void expect_untouched(const record& out) {
+  EXPECT_EQ(out.r.state, RR_DEPOSIT_OPEN);
+  EXPECT_EQ(out.r.count, 0);
+  EXPECT_EQ(out.r.owner, nullptr);
+}
 
 // NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
 // refusal row, each a branch to clang-tidy
@@ -109,11 +110,13 @@ void fit_refusals() {
   SCOPED_TRACE(name<T>());
   const resources res;
   const refusal_case<T> r(res);
+  record out(res);
   const auto refused = [&](fit_call c) {
     const fit_outcome o = fit(res, c);
     EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << o.status;
     EXPECT_EQ(o.inertia, 0);
     EXPECT_EQ(o.n_iter, 0);
+    expect_untouched(out);
     return o.status;
   };
   const std::string t = name<T>();
@@ -129,10 +132,8 @@ void fit_refusals() {
   const rr_view init_short = shaped(r.outs, {k - 1, cols});
   const rr_view init_wide = shaped(r.outs, {k, wide});
   const rr_view init_col = shaped(r.outs, {k, cols}, true);
-  const rr_view centroids_short = shaped(r.outs, {k - 1, cols});
-  const rr_view labels_short = shaped(r.ints, {rows - 1});
   const rr_view x_elsewhere = on_device(r.x, 1);
-  fit_call c = r.call();
+  fit_call c = r.call(out);
   const fit_call base = c;
   const fit_call with_init = [&] {
     fit_call a = base;
@@ -190,13 +191,8 @@ void fit_refusals() {
   c.batch_samples = -1;
   EXPECT_EQ(refused(c), "max-samples-per-batch: expected at least 0, got -1");
   c = base;
-  c.centroids = &centroids_short;
-  EXPECT_EQ(refused(c), "centroids: expected 3 rows, got 2");
-  c.centroids = nullptr;
-  EXPECT_EQ(refused(c), "centroids is NULL");
-  c = base;
-  c.labels = &labels_short;
-  EXPECT_EQ(refused(c), "labels: expected 10 elements, got 9");
+  c.out = nullptr;
+  EXPECT_EQ(refused(c), "out is NULL");
   c = base;
   c.x = &x_elsewhere;
   EXPECT_EQ(refused(c), "X: on device 1, but the resources are on device 0");
@@ -206,6 +202,12 @@ void fit_refusals() {
   c = base;
   c.oversampling_factor = -1;
   EXPECT_TRUE(cuvs_refused(refused(c), "oversampling_factor<0"));
+  record filled(res);
+  ASSERT_EQ(fit(res, r.call(filled)).status, "accepted");
+  const void* owner = filled.r.owner;
+  EXPECT_EQ(fit(res, r.call(filled)).status, "out: already filled");
+  EXPECT_EQ(filled.r.owner, owner);
+  EXPECT_EQ(filled.r.count, 2);
 }
 // NOLINTEND(readability-function-cognitive-complexity)
 
@@ -229,6 +231,7 @@ void apply_refusals() {
   const rr_view x_rank1 = shaped(r.data, {rows});
   const rr_view x_no_rows = shaped(r.data, {0, cols});
   const rr_view x_elsewhere = on_device(r.x, 1);
+  record out(res);
   const struct {
     const rr_view* centroids;
     const rr_view* x;
@@ -248,37 +251,33 @@ void apply_refusals() {
        "X: on device 1, but the resources are on device 0"},
   };
   for (const auto& row : rows_of_table) {
-    EXPECT_EQ(predict(res, row.centroids, row.x, nullptr, &r.labels),
-              row.message);
-    EXPECT_EQ(predict(res, row.centroids, row.x, nullptr, nullptr),
-              row.message);
+    EXPECT_EQ(predict(res, row.centroids, row.x, &out.r), row.message);
     EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
-    EXPECT_EQ(transform(res, row.centroids, row.x, &r.distances), row.message);
+    EXPECT_EQ(score(res, row.centroids, row.x, nullptr), row.message);
+    EXPECT_EQ(transform(res, row.centroids, row.x, &out.r), row.message);
+    expect_untouched(out);
   }
   const rr_view w_other = shaped(r.other, {rows});
   const rr_view w_short = shaped(r.data, {rows - 1});
-  EXPECT_EQ(predict(res, &r.centroids, &r.x, &w_other, nullptr),
+  EXPECT_EQ(score(res, &r.centroids, &r.x, &w_other),
             "sample-weight: expected " + t + ", got " + u);
-  EXPECT_EQ(predict(res, &r.centroids, &r.x, &w_short, nullptr),
+  EXPECT_EQ(score(res, &r.centroids, &r.x, &w_short),
             "sample-weight: expected 10 elements, got 9");
   const std::string batch =
       "max-samples-per-batch: expected at least 0, got -1";
-  EXPECT_EQ(predict(res, &r.centroids, &r.x, nullptr, &r.labels, -1), batch);
-  EXPECT_EQ(transform(res, &r.centroids, &r.x, &r.distances, -1), batch);
-  const rr_view labels_short = shaped(r.ints, {rows - 1});
-  const rr_view distances_short = shaped(r.outs, {rows - 1, k});
-  EXPECT_EQ(predict(res, &r.centroids, &r.x, nullptr, &labels_short),
-            "labels: expected 10 elements, got 9");
-  EXPECT_EQ(transform(res, &r.centroids, &r.x, &distances_short),
-            "distances: expected 10 rows, got 9");
+  EXPECT_EQ(predict(res, &r.centroids, &r.x, &out.r, -1), batch);
+  EXPECT_EQ(score(res, &r.centroids, &r.x, nullptr, -1), batch);
+  EXPECT_EQ(transform(res, &r.centroids, &r.x, &out.r, -1), batch);
+  EXPECT_EQ(predict(res, &r.centroids, &r.x, nullptr), "out is NULL");
+  EXPECT_EQ(transform(res, &r.centroids, &r.x, nullptr), "out is NULL");
   const rr_view many_x = shaped(r.data, {forged_rows, cols});
   const rr_view many_c = shaped(r.outs, {forged_clusters, cols});
-  const rr_view huge = shaped(r.outs, {forged_rows, forged_clusters});
-  EXPECT_EQ(transform(res, &many_c, &many_x, &huge),
+  EXPECT_EQ(transform(res, &many_c, &many_x, &out.r),
             "distances: 100000x50000 elements do not fit the index type");
+  expect_untouched(out);
   double inertia = -1;
-  EXPECT_NE(cuml_cluster_kmeans_predict(res.handle, &c_int, &r.x, nullptr,
-                                        nullptr, default_batch, &inertia),
+  EXPECT_NE(cuml_cluster_kmeans_score(res.handle, &c_int, &r.x, nullptr,
+                                      default_batch, &inertia),
             RR_OK);
   EXPECT_EQ(inertia, 0);
 }
@@ -297,31 +296,31 @@ void first_in_order_wins() {
   const rr_view w_short = shaped(r.data, {rows - 1});
   const rr_view c_int = shaped(r.ints, {k, cols});
   const rr_view x_other = shaped(r.other, {rows, cols});
-  fit_call c = r.call();
+  record out(res);
+  fit_call c = r.call(out);
   c.x = &x_int;
   c.n_clusters = 0;
   EXPECT_EQ(fit(res, c).status, "X: expected float32 or float64, got int32");
   c.x = &int_elsewhere;
   EXPECT_EQ(fit(res, c).status,
             "X: on device 1, but the resources are on device 0");
-  c = r.call();
+  c = r.call(out);
   c.x = &x_rank1;
   c.n_clusters = too_many;
   EXPECT_EQ(fit(res, c).status, "X: expected rank 2, got rank 1");
-  c = r.call();
+  c = r.call(out);
   c.n_clusters = 0;
   c.sample_weight = &w_short;
   EXPECT_EQ(fit(res, c).status, "n-clusters: expected at least 1, got 0");
-  c = r.call();
+  c = r.call(out);
   c.sample_weight = &w_short;
   c.init_method = unknown_method;
   EXPECT_EQ(fit(res, c).status, "sample-weight: expected 10 elements, got 9");
-  c = r.call();
+  c = r.call(out);
   c.max_iter = -1;
   c.n_init = 0;
-  c.centroids = nullptr;
   EXPECT_EQ(fit(res, c).status, "max-iter: expected at least 0, got -1");
-  EXPECT_EQ(predict(res, &c_int, &x_other, nullptr, nullptr),
+  EXPECT_EQ(predict(res, &c_int, &x_other, &out.r),
             "centroids: expected float32 or float64, got int32");
 }
 // NOLINTEND(readability-function-cognitive-complexity)

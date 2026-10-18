@@ -17,6 +17,7 @@
                   argmin-row
                   blob-data
                   cell-means
+                  cyclic-weights
                   dtypes
                   far-start
                   first-rows
@@ -30,15 +31,15 @@
                   host
                   host-vector
                   mat
+                  norm2
                   shift
                   squared-distance
                   start
                   step-weights
+                  string-inits
                   vec
                   weighted-grid8
                   weighted-start))
-
-(define string-inits '(scalable-k-means++ k-means++ random))
 
 (define (outcome r)
   (match-define (kmeans-result centroids labels inertia n-iter) r)
@@ -69,9 +70,6 @@
         (check-true (and (flonum? inertia) (>= inertia 0.0)))
         (check-true (<= 0 n-iter 50))))))
 
-(define (norm2 v)
-  (for/sum ([a (in-list v)]) (* a a)))
-
 (define (margin-ok? x row centroids tolerance)
   (match-define (list* best second _) (sort row <))
   (define scale (max 1.0 (+ (norm2 x) (apply max (map norm2 centroids)))))
@@ -82,10 +80,7 @@
          [seed (in-range 1 9)])
     (test-case (format "~a, seed ~a" dt seed)
       (define X (blob-data 400 3 5 (+ seed 100) dt))
-      (define w
-        (vec (for/list ([i (in-range 400)])
-               (add1 (modulo (* i 7) 5)))
-             dt))
+      (define w (vec (cyclic-weights 400) dt))
       (match-define (kmeans-result centroids labels inertia _)
         (kmeans-fit X #:n-clusters 5 #:random-state seed))
       (check-equal? (host-vector (kmeans-predict centroids X)) (host-vector labels))
@@ -120,12 +115,16 @@
 
 (test-gpu "law C: the transform's argmin is predict on the grids, exactly"
   (for* ([dt (in-list dtypes)]
-         [grid+start (in-list (list (list grid8 start) (list grid64 grid64-start)))])
-    (match-define (list rows first) grid+start)
+         [(rows first) (in-parallel (list grid8 grid64) (list start grid64-start))])
     (define X (mat rows dt))
     (define centroids (kmeans-result-centroids (kmeans-fit X #:init (mat first dt))))
     (check-equal? (map argmin-row (host (kmeans-transform centroids X)))
                   (host-vector (kmeans-predict centroids X)))))
+
+(define (permute xs order)
+  (define v (list->vector xs))
+  (for/list ([i (in-list order)])
+    (vector-ref v i)))
 
 (define (same-for-both-dtypes f)
   (match-define (list single double) (map f dtypes))
@@ -184,15 +183,11 @@
      (define order
        (for/list ([i (in-range 64)])
          (modulo (* i 13) 64)))
-     (define permuted
-       (for/list ([i (in-list order)])
-         (list-ref grid64 i)))
+     (define permuted (permute grid64 order))
      (match-define (list p-centroids p-labels _ _)
        (outcome (fit-grid permuted grid64-start dt #:max-iter 1)))
      (check-equal? p-centroids centroids)
-     (check-equal? p-labels
-                   (for/list ([i (in-list order)])
-                     (list-ref labels i)))
+     (check-equal? p-labels (permute labels order))
      (list centroids labels))))
 
 (test-gpu "law D: fits repeat for a seed, and an array init ignores n-init"

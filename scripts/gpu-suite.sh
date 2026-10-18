@@ -44,6 +44,11 @@ for t in "${gtests[@]}"; do
   "$t" --gtest_brief=1 | tee -a "$log"
 done
 
+lsan_suppressions=$PWD/shim/sanitizers/lsan.supp
+if [ -f "$lsan_suppressions" ]; then
+  export LSAN_OPTIONS="suppressions=$lsan_suppressions${LSAN_OPTIONS:+:$LSAN_OPTIONS}"
+fi
+
 echo "== shim gtests under ASAN and UBSAN"
 for t in "${gtests[@]}"; do
   ASAN_OPTIONS=$CUML_ASAN_OPTIONS UBSAN_OPTIONS=$CUML_UBSAN_OPTIONS \

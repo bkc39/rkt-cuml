@@ -3,14 +3,20 @@
 (require (only-in cuml/cluster/private/blobs blobs)
          (only-in racket/list take)
          (only-in raft
+                  device-matrix
                   device-matrix->list*
+                  device-vector
                   device-vector->list
                   list*->device-matrix
                   list->device-vector))
 
 (provide argmin-row
+         blank-matrix
+         blank-vector
          blob-data
          cell-means
+         close?
+         cyclic-weights
          dtypes
          far-start
          first-rows
@@ -24,15 +30,21 @@
          host
          host-vector
          mat
+         norm2
+         scaled-close?
          shift
          squared-distance
          start
          step-weights
+         string-inits
+         tolerance
          vec
          weighted-grid8
          weighted-start)
 
 (define dtypes '(float32 float64))
+
+(define string-inits '(scalable-k-means++ k-means++ random))
 
 (define grid8 '((0 0) (0 2) (2 0) (2 2) (10 10) (10 12) (12 10) (12 12)))
 (define grid8-labels '(0 0 0 0 1 1 1 1))
@@ -69,6 +81,16 @@
 (define (vec xs dt)
   (list->device-vector xs #:dtype dt))
 
+(define (blank-matrix rows cols dt #:layout [order 'row-major])
+  (device-matrix rows cols #:dtype dt #:layout order))
+
+(define (blank-vector n dt)
+  (device-vector n #:dtype dt))
+
+(define (cyclic-weights n)
+  (for/list ([i (in-range n)])
+    (add1 (modulo (* i 7) 5))))
+
 (define (host m)
   (device-matrix->list* m))
 
@@ -94,3 +116,15 @@
     (if (< v best-value)
         (values j v)
         (values best best-value))))
+
+(define (norm2 v)
+  (for/sum ([a (in-list v)]) (* a a)))
+
+(define (tolerance dt)
+  (if (eq? dt 'float32) 1e-5 1e-12))
+
+(define (close? actual expected tol)
+  (<= (abs (- actual expected)) (* tol (max 1.0 (abs expected)))))
+
+(define (scaled-close? actual expected scale tol)
+  (<= (abs (- actual expected)) (* tol (max 1.0 scale))))

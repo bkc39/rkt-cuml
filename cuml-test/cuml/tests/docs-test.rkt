@@ -10,7 +10,7 @@
                   kmeans-score
                   kmeans-transform)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? test-case)
+         (only-in rackunit check-equal? check-exn test-case)
          (only-in raft
                   device-matrix->list*
                   device-vector->list
@@ -20,7 +20,7 @@
                   list*->device-matrix
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/cuml-error.rkt" check-cuml-error))
+         (only-in "private/cuml-error.rkt" check-cuml-error raised))
 
 (test-case "the manual: a raft handler catches exn:fail:cuml and reads its kind"
   (check-equal? (with-handlers ([exn:fail:raft? exn:fail:raft-kind])
@@ -84,3 +84,10 @@
   (match-define (list* first-row _) (device-matrix->list* (kmeans-transform cells (grid))))
   (check-equal? first-row '(2.0 242.0))
   (check-equal? (list (kmeans-score cells (grid)) (- inertia)) '(-16.0 -16.0)))
+
+(test-gpu "the manual: an X that is not a device array raises raft's error, not cuML's"
+  (define e (raised (lambda () (kmeans-fit '((0 0) (1 1)) #:n-clusters 1))))
+  (check-equal? (list (exn:fail:raft? e) (exn:fail:cuml? e)) '(#t #f)))
+
+(test-gpu "the manual: an inexact number argument raises exn:fail:contract"
+  (check-exn exn:fail:contract? (lambda () (kmeans-fit (grid) #:n-clusters 2 #:n-init 2.5))))

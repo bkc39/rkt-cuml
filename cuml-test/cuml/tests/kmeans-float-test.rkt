@@ -6,51 +6,56 @@
                   kmeans-result-inertia
                   kmeans-score
                   kmeans-transform)
-         (only-in racket/list make-list remove-duplicates)
+         (only-in racket/list argmin make-list remove-duplicates)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/kmeans-data.rkt" blob-data dtypes first-rows host squared-distance vec))
-
-(define (tolerance dt)
-  (if (eq? dt 'float32) 1e-5 1e-12))
-
-(define (norm2 v)
-  (for/sum ([a (in-list v)]) (* a a)))
+         (only-in "private/kmeans-data.rkt"
+                  blob-data
+                  cyclic-weights
+                  dtypes
+                  first-rows
+                  host
+                  norm2
+                  scaled-close?
+                  squared-distance
+                  string-inits
+                  tolerance
+                  vec))
 
 (define (host-inertia rows centroids weights)
-  (define total (for/sum ([w (in-list weights)]) w))
-  (define scale (/ (length rows) total))
-  (for/sum ([x (in-list rows)] [w (in-list weights)])
-           (* w
-              scale
-              (for/fold ([best +inf.0]) ([c (in-list centroids)])
-                (min best (squared-distance x c))))))
+  (define rescale (/ (length rows) (apply + weights)))
+  (for/fold ([inertia 0.0]
+             [scale 0.0])
+            ([x (in-list rows)]
+             [w (in-list weights)])
+    (define c (argmin (lambda (centroid) (squared-distance x centroid)) centroids))
+    (define w-hat (* w rescale))
+    (values (+ inertia (* w-hat (squared-distance x c)))
+            (+ scale (* w-hat (+ (norm2 x) (norm2 c)))))))
 
-(define (relatively-close? actual expected tol)
-  (<= (abs (- actual expected)) (* tol (max 1.0 (abs expected)))))
+(define (check-inertia actual rows centroids weights dt what)
+  (define-values (expected scale) (host-inertia rows centroids weights))
+  (check-true (scaled-close? actual expected scale (tolerance dt))
+              (format "~a ~a against the host's ~a (scale ~a)" what actual expected scale)))
 
 (test-gpu "law F: the inertia is the weighted sum of squared distances to the nearest centroid"
-  (for* ([dt (in-list '(float64))]
+  (for* ([dt (in-list dtypes)]
          [seed (in-range 1 4)])
     (test-case (format "~a, seed ~a" dt seed)
       (define X (blob-data 300 3 4 (+ seed 100) dt))
-      (define weights
-        (for/list ([i (in-range 300)])
-          (add1 (modulo (* i 7) 5))))
-      (define w (vec weights dt))
+      (define weights (cyclic-weights 300))
       (match-define (kmeans-result centroids _ inertia _)
-        (kmeans-fit X #:n-clusters 4 #:random-state seed #:sample-weight w))
+        (kmeans-fit X #:n-clusters 4 #:random-state seed #:sample-weight (vec weights dt)))
       (define rows (host X))
       (define cs (host centroids))
-      (define expected (host-inertia rows cs weights))
-      (check-true (relatively-close? inertia expected (tolerance dt))
-                  (format "inertia ~a against the host's ~a" inertia expected))
-      (define unweighted (- (kmeans-score centroids X)))
-      (define expected-unweighted (host-inertia rows cs (make-list 300 1)))
-      (check-true
-       (relatively-close? unweighted expected-unweighted (tolerance dt))
-       (format "unweighted inertia ~a against the host's ~a" unweighted expected-unweighted)))))
+      (check-inertia inertia rows cs weights dt "inertia")
+      (check-inertia (- (kmeans-score centroids X))
+                     rows
+                     cs
+                     (make-list 300 1)
+                     dt
+                     "unweighted inertia"))))
 
 (test-gpu "law F: transform gives the squared Euclidean distances"
   (for* ([dt (in-list dtypes)]
@@ -64,7 +69,7 @@
       (for ([c (in-list cs)]
             [d (in-list found)])
         (define expected (squared-distance x c))
-        (check-true (<= (abs (- d expected)) (* (tolerance dt) (max 1.0 (+ (norm2 x) (norm2 c)))))
+        (check-true (scaled-close? d expected (+ (norm2 x) (norm2 c)) (tolerance dt))
                     (format "~a: distance ~a against the host's ~a" dt d expected))))))
 
 (test-gpu "law F: Lloyd's iterations never raise the inertia"
@@ -80,7 +85,7 @@
 
 (test-gpu "law F: the random state changes the seeding of overlapping data"
   (define X (blob-data 2000 4 8 42 'float32 #:std 4.0))
-  (for ([init (in-list '(scalable-k-means++ k-means++ random))])
+  (for ([init (in-list string-inits)])
     (define inertias
       (for/list ([seed (in-range 1 4)])
         (kmeans-result-inertia (kmeans-fit X #:n-clusters 8 #:init init #:random-state seed))))

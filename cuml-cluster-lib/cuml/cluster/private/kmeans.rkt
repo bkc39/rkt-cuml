@@ -1,17 +1,12 @@
 #lang racket/base
 
-(require (only-in racket/match match match*)
-         (only-in raft
-                  current-device-resources
-                  device-array?
-                  device-matrix
-                  device-matrix?
-                  device-vector
-                  dtype
-                  shape)
+(require (only-in racket/match match match* match-define)
+         (only-in raft current-device-resources device-matrix? shape)
+         (only-in raft/unsafe deposit deposit->list)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job
                   cuml-cluster-kmeans-predict-job
+                  cuml-cluster-kmeans-score-job
                   cuml-cluster-kmeans-transform-job))
 
 (provide (struct-out kmeans-result)
@@ -22,23 +17,12 @@
 
 (struct kmeans-result (centroids labels inertia n-iter))
 
+(define default-batch-samples 32768)
+
 (define (init-rows init fallback)
   (match (and (device-matrix? init) (shape init))
     [(list rows _) rows]
     [_ fallback]))
-
-(define (matrix-shape a)
-  (match (and (device-array? a) (shape a))
-    [(list rows cols) (list rows cols)]
-    [_ #f]))
-
-(define (fit-outputs X k resources)
-  (match (matrix-shape X)
-    [(list n d)
-     #:when (and (exact-integer? k) (>= d 1) (<= 1 k n))
-     (values (device-matrix k d #:dtype (dtype X) #:resources resources)
-             (device-vector n #:dtype 'int32 #:resources resources))]
-    [_ (values #f #f)]))
 
 (define (seeding init oversampling-factor)
   (match init
@@ -62,19 +46,18 @@
                     #:n-init [n-init 'auto]
                     #:random-state [random-state 0]
                     #:oversampling-factor [oversampling-factor 2.0]
-                    #:max-samples-per-batch [max-samples-per-batch 32768]
+                    #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
                     #:sample-weight [sample-weight #f]
                     #:resources [resources (current-device-resources)])
-  (define-values (centroids labels) (fit-outputs X n-clusters resources))
   (define-values (code factor start) (seeding init oversampling-factor))
+  (define out (deposit #:resources resources))
   (define-values (inertia n-iter)
     (cuml-cluster-kmeans-fit-job 'kmeans-fit
                                  resources
                                  X
                                  sample-weight
                                  start
-                                 centroids
-                                 labels
+                                 out
                                  n-clusters
                                  code
                                  max-iter
@@ -83,58 +66,45 @@
                                  factor
                                  max-samples-per-batch
                                  random-state))
+  (match-define (list centroids labels) (deposit->list out))
   (kmeans-result centroids labels inertia n-iter))
 
-(define (sample-rows X)
-  (match (matrix-shape X)
-    [(list n _)
-     #:when (>= n 1)
-     n]
-    [_ #f]))
+(define (deposited job who resources centroids X max-samples-per-batch)
+  (define out (deposit #:resources resources))
+  (job who resources centroids X out max-samples-per-batch)
+  (match-define (list result) (deposit->list out))
+  result)
 
 (define (kmeans-predict centroids
                         X
-                        #:max-samples-per-batch [max-samples-per-batch 32768]
+                        #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
                         #:resources [resources (current-device-resources)])
-  (define labels
-    (match (sample-rows X)
-      [#f #f]
-      [n (device-vector n #:dtype 'int32 #:resources resources)]))
-  (cuml-cluster-kmeans-predict-job 'kmeans-predict
-                                   resources
-                                   centroids
-                                   X
-                                   #f
-                                   labels
-                                   max-samples-per-batch)
-  labels)
+  (deposited cuml-cluster-kmeans-predict-job
+             'kmeans-predict
+             resources
+             centroids
+             X
+             max-samples-per-batch))
 
 (define (kmeans-transform centroids
                           X
-                          #:max-samples-per-batch [max-samples-per-batch 32768]
+                          #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
                           #:resources [resources (current-device-resources)])
-  (define distances
-    (match* ((sample-rows X) (sample-rows centroids))
-      [((? exact-integer? n) (? exact-integer? k))
-       (device-matrix n k #:dtype (dtype centroids) #:resources resources)]
-      [(_ _) #f]))
-  (cuml-cluster-kmeans-transform-job 'kmeans-transform
-                                     resources
-                                     centroids
-                                     X
-                                     distances
-                                     max-samples-per-batch)
-  distances)
+  (deposited cuml-cluster-kmeans-transform-job
+             'kmeans-transform
+             resources
+             centroids
+             X
+             max-samples-per-batch))
 
 (define (kmeans-score centroids
                       X
                       #:sample-weight [sample-weight #f]
-                      #:max-samples-per-batch [max-samples-per-batch 32768]
+                      #:max-samples-per-batch [max-samples-per-batch default-batch-samples]
                       #:resources [resources (current-device-resources)])
-  (- (cuml-cluster-kmeans-predict-job 'kmeans-score
-                                      resources
-                                      centroids
-                                      X
-                                      sample-weight
-                                      #f
-                                      max-samples-per-batch)))
+  (- (cuml-cluster-kmeans-score-job 'kmeans-score
+                                    resources
+                                    centroids
+                                    X
+                                    sample-weight
+                                    max-samples-per-batch)))

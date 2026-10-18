@@ -2,12 +2,6 @@
 
 #|review: ignore|#
 
-;; whole-module: struct-out needs the structure-type bindings only-in strips
-(require "cluster/private/kmeans.rkt"
-         (only-in "cluster/private/native.rkt")) ;; noqa
+(require "cluster/private/kmeans.rkt")
 
-(provide (struct-out kmeans-result)
-         kmeans-fit
-         kmeans-predict
-         kmeans-score
-         kmeans-transform)
+(provide (all-from-out "cluster/private/kmeans.rkt"))

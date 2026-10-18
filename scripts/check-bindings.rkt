@@ -1,8 +1,9 @@
 #lang racket/base
 
 (require (only-in racket/file find-files)
-         (only-in racket/list append-map count last remove-duplicates)
-         (only-in racket/match == match match-lambda)
+         (only-in racket/function negate)
+         (only-in racket/list append-map count filter-map last remove-duplicates)
+         (only-in racket/match == match match-define match-lambda)
          (only-in racket/port with-output-to-string)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
@@ -28,11 +29,11 @@
                              (error 'check-bindings "nm failed on ~a" library)))))
 
 (define (exports-in nm-text)
-  (~> (for/list ([line (in-list (string-split nm-text "\n"))])
-        (match (string-split line)
-          [(list _ _ symbol) (unprefixed symbol)]
-          [_ #f]))
-      (filter values _)
+  (~> (filter-map (lambda (line)
+                    (match (string-split line)
+                      [(list _ _ symbol) (unprefixed symbol)]
+                      [_ #f]))
+                  (string-split nm-text "\n"))
       (sort string<?)))
 
 (define (c-id-of name options)
@@ -54,10 +55,7 @@
     (parameterize ([read-accept-reader #t]
                    [read-accept-lang #t])
       (call-with-input-file path read)))
-  (filter-unprefixed (form-bindings form)))
-
-(define (filter-unprefixed c-ids)
-  (filter values (map unprefixed c-ids)))
+  (filter-map unprefixed (form-bindings form)))
 
 (define (racket-module? path)
   (and (regexp-match? #rx"[.]rkt$" path) (not (regexp-match? #rx"/compiled/" path))))
@@ -84,14 +82,18 @@
 
 (define (census exports bindings plan)
   (define entries (plan-entries plan))
+  (define names (map planned-name entries))
   (define bodies (job-bodies exports bindings))
-  (define (with-status status present?)
+  (define distinct (sort (remove-duplicates bindings) string<?))
+  (define (exported? p)
+    (member (planned-name p) exports))
+  (define (named status keep?)
     (for/list ([p (in-list entries)]
                #:when (eq? (planned-status p) status)
-               #:when (eq? (and (member (planned-name p) exports) #t) present?))
+               #:when (keep? p))
       (planned-name p)))
-  (define (findings kind names)
-    (for/list ([n (in-list names)])
+  (define (findings kind found)
+    (for/list ([n (in-list found)])
       (list kind n)))
   (append (findings 'UNBOUND
                     (for/list ([e (in-list exports)]
@@ -99,26 +101,26 @@
                                #:unless (member e bodies))
                       e))
           (findings 'MISSING
-                    (for/list ([b (in-list (sort (remove-duplicates bindings) string<?))]
+                    (for/list ([b (in-list distinct)]
                                #:unless (member b exports))
                       b))
           (findings 'TWICE
-                    (for/list ([b (in-list (sort (remove-duplicates bindings) string<?))]
+                    (for/list ([b (in-list distinct)]
                                #:when (< 1 (count (lambda (c) (equal? c b)) bindings)))
                       b))
           (findings 'UNPLANNED
                     (for/list ([e (in-list exports)]
-                               #:unless (member e (map planned-name entries))
-                               #:unless (member (string-append e "_job") (map planned-name entries)))
+                               #:unless (member e names)
+                               #:unless (member (string-append e "_job") names))
                       e))
-          (findings 'DUE (with-status 'due #f))
-          (findings 'STALE-PLAN (with-status 'planned #t))
-          (findings 'PLANNED (with-status 'planned #f))))
+          (findings 'DUE (named 'due (negate exported?)))
+          (findings 'STALE-PLAN (named 'planned exported?))
+          (findings 'PLANNED (named 'planned (negate exported?)))))
 
 (define (failed? findings)
-  (for/or ([f (in-list findings)])
-    (match f
-      [(list kind _) (memq kind failure-kinds)])))
+  (ormap (match-lambda
+           [(list kind _) (memq kind failure-kinds)])
+         findings))
 
 (define (issue-range plan)
   (define issues
@@ -150,8 +152,8 @@
             (module-bindings (in-root "cuml-core-lib/cuml/core/private/native.rkt"))))
   (define findings (census exports bindings plan))
   (for ([f (in-list findings)])
-    (match f
-      [(list kind name) (printf "~a ~a~a\n" kind prefix name)]))
+    (match-define (list kind name) f)
+    (printf "~a ~a~a\n" kind prefix name))
   (printf "~a: ~a exports, ~a bindings, ~a job bodies; ~a planned (~a)\n"
           family
           (length exports)
@@ -204,11 +206,15 @@
                                                (STALE-PLAN "dbscan_fit_job")))
     (check-true (and (failed? findings) #t)))
 
-  (test-case "bindings come from define-cluster, its #:c-id and the define-job string"
+  (define (call-with-temporary-directory proc)
     (define dir (make-temporary-directory "check-bindings-~a"))
-    (dynamic-wind
-     void
-     (lambda ()
+    (dynamic-wind void
+                  (lambda () (proc dir))
+                  (lambda () (delete-directory/files dir #:must-exist? #f))))
+
+  (test-case "bindings come from define-cluster, its #:c-id and the define-job string"
+    (call-with-temporary-directory
+     (lambda (dir)
        (make-directory* (build-path dir "private"))
        (with-output-to-file
         (build-path dir "private" "native.rkt")
@@ -218,8 +224,7 @@
                     (define-cluster blobs-short (_fun -> _int) #:c-id cuml_cluster_short_blobs)
                     (define-job cuml-cluster-fit-job library "cuml_cluster_kmeans_fit_job" (handle))
                     (define-job other-job library "raft_elsewhere" (handle))))))
-       (check-equal? (tree-bindings dir) '("make_blobs" "short_blobs" "kmeans_fit_job")))
-     (lambda () (delete-directory/files dir #:must-exist? #f))))
+       (check-equal? (tree-bindings dir) '("make_blobs" "short_blobs" "kmeans_fit_job")))))
 
   (test-case "nm lines become unprefixed export names"
     (check-equal?

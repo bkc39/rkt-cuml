@@ -117,6 +117,7 @@
           runHook preCheck
           export ASAN_OPTIONS=${sanitizerOptions.asan}
           export UBSAN_OPTIONS=${sanitizerOptions.ubsan}
+          ${lib.optionalString (builtins.pathExists ./shim/sanitizers/lsan.supp) "export LSAN_OPTIONS=suppressions=${./shim/sanitizers/lsan.supp}"}
           ctest -j1 --output-on-failure
           runHook postCheck
         '';

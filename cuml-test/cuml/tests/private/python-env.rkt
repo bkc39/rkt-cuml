@@ -10,8 +10,7 @@
          ;; whole-module: its syntax classes come with it
          syntax/parse/define)
 
-(provide close?
-         run-twin
+(provide run-twin
          test-twin)
 
 (define python (find-executable-path "python3"))
@@ -59,9 +58,6 @@
     (unless ok?
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))
-
-(define (close? actual expected tolerance)
-  (<= (abs (- actual expected)) (* tolerance (max 1.0 (abs expected)))))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped twin-skip name body ...))

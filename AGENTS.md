@@ -195,7 +195,9 @@ keyed by issue, plans each export; a leg flips its planned entries to due.
 a GPU only Abi and Version run, and the GPU suite runs the sanitized gtests
 on the device). An LSan leak rooted only in libcuml or libcuda frames goes in
 `shim/sanitizers/lsan.supp` with its reason in the commit; never a
-libcumlrkt frame. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
+libcumlrkt frame. When that file exists, the check's ctest and the GPU
+suite's sanitized gtests run with `LSAN_OPTIONS=suppressions=<it>`, and
+`gpu-suite-signals` pins that the suite passes it. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
 `fmt/core`), which fmt documents as unstable: re-check `format-fun` and
 `format-hash-pairs` when `nix/racket-tools.nix` moves to a new fmt.
 `scripts/check-layout.rkt` uses `threading`; `nix/racket-tools.nix` pins
@@ -225,8 +227,8 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `cuml-error` | `check-cuml-error kind message-or-regexp thunk`, `raised` |
 | `process-memory` | `pool-sample`, `baseline-sample`, `test-process-memory`, `device-slack`, ... (the memory tests' sampling) |
 | `device-memory` | `process-device-bytes`, `no-process-memory-reason`, `process-memory-skip` |
-| `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions) |
-| `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `close?` |
+| `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions, weights, blank arrays) and tolerances (`tolerance`, `close?`, `scaled-close?`) |
+| `python-env` | `run-twin script input` (in.json to out.json), `test-twin` |
 
 Every SKIP line the GPU suite allows matches one ERE in
 `scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there

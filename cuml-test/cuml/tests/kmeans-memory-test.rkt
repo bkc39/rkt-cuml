@@ -1,18 +1,26 @@
 #lang racket/base
 
-(require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result kmeans-score kmeans-transform)
+(require (only-in cuml exn:fail:cuml?)
+         (only-in cuml/cluster
+                  kmeans-fit
+                  kmeans-predict
+                  kmeans-result
+                  kmeans-result-centroids
+                  kmeans-score
+                  kmeans-transform)
          (only-in cuml/cluster/private/blobs blobs)
          (only-in ffi/unsafe void/reference-sink)
          (only-in racket/format ~r)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-true)
+         (only-in rackunit check-equal? check-pred check-true)
          (only-in raft device-resources device-vector->list shape with-device-resources)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" raised)
+         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/process-memory.rkt"
                   baseline-sample
                   device-growth
@@ -41,14 +49,33 @@
   (kmeans-transform centroids X)
   (kmeans-score centroids X))
 
-(define (refuse X)
-  (raised (lambda () (kmeans-fit X #:n-clusters (add1 n-samples)))))
+(define (refusals X)
+  (define centroids (kmeans-result-centroids (kmeans-fit X #:n-clusters n-clusters #:max-iter 1)))
+  (define wide-weights (blank-vector n-samples 'float64))
+  (define wide-centroids (blank-matrix n-clusters n-features 'float64))
+  (define col-major (blank-matrix n-samples n-features 'float32 #:layout 'col-major))
+  (list (lambda () (kmeans-fit X #:n-clusters (add1 n-samples)))
+        (lambda () (kmeans-fit X #:n-clusters n-clusters #:sample-weight wide-weights))
+        (lambda () (kmeans-predict wide-centroids X))
+        (lambda () (kmeans-transform centroids col-major))
+        (lambda () (kmeans-fit X #:n-clusters n-clusters #:n-init 0))
+        (lambda () (kmeans-fit X #:n-clusters n-clusters #:max-iter -1))
+        (lambda () (kmeans-fit X #:n-clusters n-clusters #:max-samples-per-batch -1))
+        (lambda () (kmeans-fit X #:n-clusters n-clusters #:tol 0))))
 
-(test-process-memory "300 rounds of fit, predict, transform and score free every buffer and leave device memory flat"
+(define (refuse-all calls)
+  (for* ([thunk (in-list calls)]
+         [_ (in-range refusals-per-sample)])
+    (check-pred exn:fail:cuml? (raised thunk))))
+
+(test-process-memory (format
+                      "~a rounds of fit, predict, transform and score free every buffer and leave device memory flat"
+                      rounds)
   (define X (data))
+  (define calls (refusals X))
   (for ([_ (in-range 5)])
     (one-round X)
-    (refuse X))
+    (refuse-all calls))
   (define failures (settled-count release-failure-count))
   (match-define (list base-used base-bytes) (baseline-sample))
   (define live (jobs-live))
@@ -64,38 +91,31 @@
         (one-round X))
       (define sample (pool-sample))
       (define before (settled-count buffer-drop-count))
-      (for ([_ (in-range refusals-per-sample)])
-        (refuse X))
+      (refuse-all calls)
       (define after-refusals (pool-sample))
       (define refused (- (settled-count buffer-drop-count) before))
       (check-equal? (sample-used after-refusals)
                     (sample-used sample)
-                    "a refused fit holds no pool memory")
+                    "a refused call holds no pool memory")
       (values (cons sample samples) (cons refused refused-drops))))
   (define wanted (* buffers-per-round rounds))
   (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
   (define freed (- (buffer-drop-count) drops))
-  (void/reference-sink X)
+  (void/reference-sink X calls)
   (define used (map sample-used samples))
   (define growth (device-growth base-bytes samples))
   (printf
-   "memory: ~a k-means rounds of ~ax~a (k ~a) in ~a s, ~a refused fits; pool used ~a bytes before, ~a after each ~a; this process's device memory ~a bytes before, ~a after each ~a; ~a buffers freed of ~a allocated, ~a by refusals; ~a release failures\n"
+   "memory: ~a rounds and ~a refused calls in ~a s; pool used ~a before, ~a after; device ~a before, ~a after; ~a of ~a buffers freed, ~a by refusals\n"
    rounds
-   n-samples
-   n-features
-   n-clusters
+   (* refusals-per-sample (length calls) (length samples))
    (~r (/ (- (current-inexact-milliseconds) started) 1000.0) #:precision 1)
-   (* refusals-per-sample (length samples))
    base-used
    used
-   sample-every
    base-bytes
    (map sample-bytes samples)
-   sample-every
    freed
    wanted
-   refused-drops
-   (- (release-failure-count) failures))
+   refused-drops)
   (check-equal? freed wanted)
   (check-equal? refused-drops
                 (make-list (length samples) 0)

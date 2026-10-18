@@ -4,12 +4,23 @@
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list take)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match* match-define)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
-         (only-in rackunit check-equal? check-true test-case)
-         (only-in "private/kmeans-data.rkt" blob-data host host-vector mat squared-distance vec)
-         (only-in "private/python-env.rkt" close? run-twin test-twin))
+         (only-in rackunit check-equal? check-not-equal? check-true test-case)
+         (only-in "private/kmeans-data.rkt"
+                  blob-data
+                  close?
+                  dtypes
+                  host
+                  host-vector
+                  mat
+                  norm2
+                  scaled-close?
+                  string-inits
+                  tolerance
+                  vec)
+         (only-in "private/python-env.rkt" run-twin test-twin))
 
 (define-runtime-path twin "python/kmeans_twin.py")
 
@@ -23,7 +34,7 @@
                                       (fit 250 3 2 float64 random 8)))
 
 (define overlapping
-  (for*/list ([init (in-list '(scalable-k-means++ k-means++ random))]
+  (for*/list ([init (in-list string-inits)]
               [seed (in-list '(1 2 3))])
     `(overlapping 2000 4 8 float32 ,init ,seed)))
 
@@ -152,64 +163,62 @@
               [(a e) (in-parallel (in-list a-row) (in-list e-row))])
     (max m (relative-deviation a e))))
 
-(define deviations (make-hasheq))
-(define off-by-one '())
+(struct fitted (labels centroids inertia n-iter))
 
-(define (note! dt deviation)
-  (hash-update! deviations dt (lambda (m) (max m deviation)) 0.0))
+(define (run-fitted r)
+  (match-define (run _ _ _ _ (kmeans-result centroids labels inertia n-iter)) r)
+  (fitted (host-vector labels) (host centroids) inertia n-iter))
 
-(define (compare-fit r theirs)
-  (match-define (run s _ _ _ (kmeans-result centroids labels inertia n-iter)) r)
-  (define ours-labels (host-vector labels))
-  (define ours-centroids (host centroids))
-  (define their-iter (hash-ref theirs 'n_iter))
-  (define deviation (max-deviation ours-centroids (hash-ref theirs 'centroids)))
-  (define inertia-deviation (relative-deviation inertia (hash-ref theirs 'inertia)))
+(define (row<? a b)
+  (match* (a b)
+    [((cons x xs) (cons y ys)) (or (< x y) (and (= x y) (row<? xs ys)))]
+    [(_ _) #f]))
+
+(define (sorted-rows rows)
+  (sort rows row<?))
+
+(struct comparison (dt deviation off-by-one? problems))
+
+(define (problem ok? message)
+  (if ok?
+      '()
+      (list message)))
+
+(define (compare-fit s ours theirs)
+  (match-define (fitted labels centroids inertia n-iter) ours)
+  (define tol (if (eq? (spec-dt s) 'float32) 1e-4 1e-9))
+  (define their-centroids (hash-ref theirs 'centroids))
+  (define iter-gap (abs (- n-iter (hash-ref theirs 'n_iter))))
   (define ari (hash-ref theirs 'ari))
-  (note! (spec-dt s) (max deviation inertia-deviation))
-  (unless (= n-iter their-iter)
-    (set! off-by-one (cons (spec-name s) off-by-one)))
-  (printf "twin ~a: n_iter ~a/~a, inertia ~a/~a, centroid deviation ~a, ARI ~a\n"
-          (spec-name s)
-          n-iter
-          their-iter
-          inertia
-          (hash-ref theirs 'inertia)
-          deviation
-          ari)
+  (define inertia-deviation (relative-deviation inertia (hash-ref theirs 'inertia)))
+  (define sorted-deviation (max-deviation (sorted-rows centroids) (sorted-rows their-centroids)))
   (define exact-iter? (and (eq? (spec-init s) 'array) (memv (option s 'max-iter 300) '(0 1))))
   (define random-restarts? (and (eq? (spec-init s) 'random) (not (eqv? (option s 'n-init 'auto) 1))))
-  (match (list (spec-dt s) (spec-kind s))
-    [(list 'float64 _)
-     #:when random-restarts?
-     (check-equal? ari 1.0)
-     (check-true (<= inertia-deviation 1e-9) "inertia within 1e-9")]
-    [(list 'float64 _)
-     (check-equal? ours-labels (hash-ref theirs 'labels))
-     (check-equal? n-iter their-iter)
-     (check-true (<= deviation 1e-9) "centroids within 1e-9")
-     (check-true (<= inertia-deviation 1e-9) "inertia within 1e-9")]
-    [(list 'float32 'overlapping)
-     (check-true (<= (abs (- n-iter their-iter)) 1) "n_iter within 1")
-     (check-true (if (= n-iter their-iter)
-                     (= ari 1.0)
-                     (>= ari 0.99))
-                 (format "ARI ~a" ari))
-     (check-true (<= inertia-deviation 1e-4) "inertia within 1e-4")]
-    [(list 'float32 _)
-     (check-equal? ours-labels (hash-ref theirs 'labels))
-     (check-true (<= deviation 1e-4) "centroids within 1e-4")
-     (check-true (<= inertia-deviation 1e-4) "inertia within 1e-4")
-     (if exact-iter?
-         (check-equal? n-iter their-iter)
-         (check-true (<= (abs (- n-iter their-iter)) 1) "n_iter within 1"))]))
-
-(define (norm2 v)
-  (for/sum ([a (in-list v)]) (* a a)))
+  (define problems
+    (append (problem (<= inertia-deviation tol) (format "inertia within ~a" tol))
+            (match* ((spec-dt s) (spec-kind s))
+              [('float32 'overlapping)
+               (append (problem (<= iter-gap 1) "n_iter within 1")
+                       (problem (if (zero? iter-gap)
+                                    (= ari 1.0)
+                                    (>= ari 0.99))
+                                (format "ARI ~a" ari)))]
+              [(_ _)
+               #:when random-restarts?
+               (append (problem (= ari 1.0) (format "ARI ~a" ari))
+                       (problem (<= sorted-deviation tol) (format "sorted centroids within ~a" tol)))]
+              [(dt _)
+               (append (problem (equal? labels (hash-ref theirs 'labels)) "labels")
+                       (problem (<= (max-deviation centroids their-centroids) tol)
+                                (format "centroids within ~a" tol))
+                       (if (or (eq? dt 'float64) exact-iter?)
+                           (problem (zero? iter-gap) "n_iter equal")
+                           (problem (<= iter-gap 1) "n_iter within 1")))])))
+  (comparison (spec-dt s) (max sorted-deviation inertia-deviation) (positive? iter-gap) problems))
 
 (define (compare-apply a theirs)
   (match-define (applied s Y C _ labels transform score weighted-score) a)
-  (define tolerance (if (eq? (spec-dt s) 'float32) 1e-5 1e-12))
+  (define tol (tolerance (spec-dt s)))
   (define cs (host C))
   (printf "twin apply ~a: score ~a/~a, weighted score ~a/~a\n"
           (spec-name s)
@@ -224,10 +233,24 @@
     (for ([c (in-list cs)]
           [d (in-list ours)]
           [e (in-list their-row)])
-      (check-true (<= (abs (- d e)) (* tolerance (max 1.0 (+ (norm2 y) (norm2 c)))))
+      (check-true (scaled-close? d e (+ (norm2 y) (norm2 c)) tol)
                   (format "transform ~a against the twin's ~a" d e))))
-  (check-true (close? score (hash-ref theirs 'score) tolerance) "score")
-  (check-true (close? weighted-score (hash-ref theirs 'weighted_score) tolerance) "weighted score"))
+  (check-true (close? score (hash-ref theirs 'score) tol) "score")
+  (check-true (close? weighted-score (hash-ref theirs 'weighted_score) tol) "weighted score"))
+
+(test-case "compare-fit takes a random-restart answer that permutes the clusters, not a moved centroid"
+  (define ours (fitted '(0 0 1 1 2) '((0.0 0.0) (5.0 5.0) (9.0 1.0)) 10.0 4))
+  (define (answer last-row)
+    (hasheq 'labels '(2 2 0 0 1)
+            'centroids (list '(5.0 5.0) last-row '(0.0 0.0))
+            'inertia 10.0
+            'n_iter 5
+            'ari 1.0))
+  (for ([dt (in-list dtypes)]
+        [moved (in-list '(1.001 1.00000001))])
+    (define s (parse `(fit 400 3 5 ,dt random 3)))
+    (check-equal? (comparison-problems (compare-fit s ours (answer '(9.0 1.0)))) '())
+    (check-not-equal? (comparison-problems (compare-fit s ours (answer (list 9.0 moved)))) '())))
 
 (test-twin "kmeans-fit, predict, transform and score match cuml.KMeans on the same data and seeds"
   (define specs (map parse (append separated overlapping weighted parameters)))
@@ -243,10 +266,33 @@
   (check-equal? version "26.08.00")
   (check-equal? version libcuml-version)
   (check-equal? (list (length runs) (length appliers)) '(27 10))
-  (for ([r (in-list runs)]
-        [theirs (in-list results)])
-    (test-case (spec-name (run-spec r))
-      (compare-fit r theirs)))
+  (define comparisons
+    (for/list ([r (in-list runs)]
+               [theirs (in-list results)])
+      (define s (run-spec r))
+      (define ours (run-fitted r))
+      (define c (compare-fit s ours theirs))
+      (printf "twin ~a: n_iter ~a/~a, inertia ~a/~a, centroid deviation ~a, ARI ~a\n"
+              (spec-name s)
+              (fitted-n-iter ours)
+              (hash-ref theirs 'n_iter)
+              (fitted-inertia ours)
+              (hash-ref theirs 'inertia)
+              (comparison-deviation c)
+              (hash-ref theirs 'ari))
+      (test-case (spec-name s)
+        (check-equal? (comparison-problems c) '()))
+      c))
+  (define (largest dt)
+    (for/fold ([m 0.0])
+              ([c (in-list comparisons)]
+               #:when (eq? (comparison-dt c) dt))
+      (max m (comparison-deviation c))))
+  (define off-by-one
+    (for/list ([r (in-list runs)]
+               [c (in-list comparisons)]
+               #:when (comparison-off-by-one? c))
+      (spec-name (run-spec r))))
   (for ([a (in-list appliers)]
         [theirs (in-list (list-tail results (length runs)))])
     (test-case (format "apply ~a" (spec-name (applied-spec a)))
@@ -255,8 +301,6 @@
    "twin summary: ~a fit and ~a apply cases; largest relative deviation float32 ~a, float64 ~a; n_iter off by one in ~a\n"
    (length runs)
    (length appliers)
-   (hash-ref deviations 'float32 0.0)
-   (hash-ref deviations 'float64 0.0)
-   (if (null? off-by-one)
-       "none"
-       (reverse off-by-one))))
+   (largest 'float32)
+   (largest 'float64)
+   (if (null? off-by-one) "none" off-by-one)))

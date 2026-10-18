@@ -6,7 +6,7 @@
                      racket/match
                      raft))
 
-@(define ev (make-base-eval #:lang 'racket/base '(require cuml raft racket/match)))
+@(define ev (make-base-eval #:lang 'racket/base '(require cuml raft racket/match threading)))
 
 @title[#:tag "clustering"]{k-means clustering}
 
@@ -78,21 +78,22 @@ the samples processed at once. The outputs live on @racket[resources].
 
 @examples[#:eval ev #:label #f
 (define start (list*->device-matrix '((1 0) (11 11)) #:dtype 'float64))
-(device-matrix->list* (kmeans-result-centroids (kmeans-fit X #:init start #:max-iter 1)))
+(~> (kmeans-fit X #:init start #:max-iter 1) kmeans-result-centroids device-matrix->list*)
 ]
 
 With @racket[#:max-iter 0] the result is the seeding:
 
 @examples[#:eval ev #:label #f
-(device-matrix->list* (kmeans-result-centroids (kmeans-fit X #:init start #:max-iter 0)))
+(~> (kmeans-fit X #:init start #:max-iter 0) kmeans-result-centroids device-matrix->list*)
 ]
 
 Weights pull the centroids:
 
 @examples[#:eval ev #:label #f
 (define w (list->device-vector '(1 3 1 3 1 1 1 1) #:dtype 'float64))
-(device-matrix->list*
- (kmeans-result-centroids (kmeans-fit X #:init start #:max-iter 1 #:sample-weight w)))
+(~> (kmeans-fit X #:init start #:max-iter 1 #:sample-weight w)
+    kmeans-result-centroids
+    device-matrix->list*)
 ]
 
 There must be at least as many samples as clusters:
@@ -127,7 +128,7 @@ each row of @racket[X] to each centroid, as cuML computes them, in the
 centroids' dtype.
 
 @examples[#:eval ev #:label #f
-(car (device-matrix->list* (kmeans-transform cells X)))
+(~> (kmeans-transform cells X) device-matrix->list* car)
 ]}
 
 @defproc[(kmeans-score [centroids device-matrix?]
@@ -146,7 +147,7 @@ was fitted on, it is @racket[(- (kmeans-result-inertia r))].
 ]}
 
 @bold{Errors.} Each procedure raises @racket[exn:fail:cuml] of kind @racket['logic], before
-the GPU is touched, when:
+the GPU is touched and leaving nothing allocated, when:
 @itemlist[
  @item{@racket[X] or @racket[centroids] is not a row-major @racket['float32]
        or @racket['float64] matrix with at least one row and one column, or
@@ -161,6 +162,9 @@ the GPU is touched, when:
  @item{@racket[max-iter] or @racket[max-samples-per-batch] is negative, or
        @racket[n-init] is less than 1.}]
 cuML itself refuses a @racket[tol] that is not positive and a negative
-@racket[oversampling-factor], with its own message.
+@racket[oversampling-factor], with its own message, also leaving nothing
+allocated. An @racket[X] or @racket[centroids] that is not a device array
+raises raft's @racket[exn:fail:raft], and a number argument that is not
+exact, such as @racket[#:n-init 2.5], raises @racket[exn:fail:contract].
 
 @(close-eval ev)

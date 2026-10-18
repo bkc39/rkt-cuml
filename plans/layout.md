@@ -85,9 +85,12 @@
   contracts. The bodies live in `cuml/cluster/private/kmeans.rkt`; the three
   shim entries are jobs (`define-job ... #:exn exn:fail:cuml`), with no
   short call.
-- The Racket body allocates an output on the call's resources only when its
-  shape is valid, and passes `#f` otherwise, so the shim's refusal names
-  the argument. The init names map to the shim's codes in one `match`.
+- The shim allocates every output after its checks and hands it back in a
+  raft deposit record (fit: centroids and labels; predict: labels;
+  transform: distances), so no refusal leaves an allocation behind; score
+  is its own entry with a scratch label vector. The Racket body opens the
+  deposit on the call's resources and adopts its regions. The init names
+  map to the shim's codes in one `match`.
 - The shim's refusals run in a fixed table order, first refusal wins, before
   the GPU is touched; an empty matrix has no layout to check.
 - The decisions posted on #5, each with the recommended answer:

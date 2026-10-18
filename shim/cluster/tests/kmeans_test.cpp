@@ -39,37 +39,38 @@ struct grid_case {
   grid_case(const resources& res, const values& data, const values& first,
             int64_t k = pair)
       : x(upload<T>(res, {grid_rows, grid_cols}, data)),
-        init(upload<T>(res, {k, grid_cols}, first)),
-        centroids(res.r, float_dtype<T>, {k, grid_cols}),
-        labels(res.r, RR_DTYPE_INT32, {grid_rows}) {}
+        init(upload<T>(res, {k, grid_cols}, first)) {}
 
-  [[nodiscard]] fit_call call() const {
+  [[nodiscard]] fit_call call(record& out) const {
     return {.x = &x->view,
             .init = &init->view,
-            .centroids = &centroids.view,
-            .labels = &labels.view,
-            .n_clusters = static_cast<int32_t>(centroids.view.shape[0])};
+            .out = &out.r,
+            .n_clusters = static_cast<int32_t>(init->view.shape[0])};
   }
 
   std::unique_ptr<device_array> x;
   std::unique_ptr<device_array> init;
-  device_array centroids;
-  device_array labels;
 };
+
+constexpr int32_t centroids_region = 0;
+constexpr int32_t labels_region = 1;
 
 template <typename T>
 void one_step_from_given_centroids() {
   SCOPED_TRACE(float_dtype<T>);
   const resources res;
   const grid_case<T> g(res, grid, start);
-  fit_call c = g.call();
+  record out(res);
+  fit_call c = g.call(out);
   c.max_iter = 1;
   const fit_outcome r = fit(res, c);
   ASSERT_EQ(r.status, "accepted");
-  EXPECT_EQ(download<T>(g.centroids), cell_means);
+  EXPECT_EQ(out.r.count, 2);
+  EXPECT_EQ(out.r.regions[centroids_region].dtype, float_dtype<T>);
+  EXPECT_EQ(download<T>(out, centroids_region), cell_means);
   EXPECT_EQ(r.n_iter, 1);
   EXPECT_EQ(r.inertia, grid_inertia);
-  EXPECT_EQ(g.labels.template read<int32_t>(), grid_labels);
+  EXPECT_EQ(out.template read<int32_t>(labels_region), grid_labels);
 }
 
 template <typename T>
@@ -77,11 +78,12 @@ void max_iter_zero_keeps_the_init() {
   SCOPED_TRACE(float_dtype<T>);
   const resources res;
   const grid_case<T> g(res, grid, start);
-  fit_call c = g.call();
+  record out(res);
+  fit_call c = g.call(out);
   c.max_iter = 0;
   const fit_outcome r = fit(res, c);
   ASSERT_EQ(r.status, "accepted");
-  EXPECT_EQ(download<T>(g.centroids), start);
+  EXPECT_EQ(download<T>(out, centroids_region), start);
   EXPECT_EQ(r.n_iter, 0);
   EXPECT_EQ(r.inertia, start_inertia);
 }
@@ -91,9 +93,10 @@ void leaves_the_init_untouched() {
   SCOPED_TRACE(float_dtype<T>);
   const resources res;
   const grid_case<T> g(res, grid, start);
-  ASSERT_EQ(fit(res, g.call()).status, "accepted");
+  record out(res);
+  ASSERT_EQ(fit(res, g.call(out)).status, "accepted");
   EXPECT_EQ(download<T>(*g.init), start);
-  EXPECT_EQ(download<T>(g.centroids), cell_means);
+  EXPECT_EQ(download<T>(out, centroids_region), cell_means);
 }
 
 template <typename T>
@@ -111,7 +114,8 @@ void every_init_fits_the_grid() {
         seeding{CUML_CLUSTER_KMEANS_INIT_KMEANS_PLUS_PLUS, 0.0, 1},
         seeding{CUML_CLUSTER_KMEANS_INIT_RANDOM, 2.0, random_restarts}}) {
     SCOPED_TRACE(s.method);
-    fit_call c = g.call();
+    record out(res);
+    fit_call c = g.call(out);
     c.init = nullptr;
     c.init_method = s.method;
     c.oversampling_factor = s.factor;
@@ -129,7 +133,8 @@ void weighted_inertia_is_normalised() {
   const resources res;
   const grid_case<T> g(res, weighted_grid, weighted_start);
   const auto w = upload<T>(res, {grid_rows}, grid_weights);
-  fit_call c = g.call();
+  record out(res);
+  fit_call c = g.call(out);
   c.sample_weight = &w->view;
   const fit_outcome r = fit(res, c);
   ASSERT_EQ(r.status, "accepted");
@@ -141,39 +146,37 @@ void empty_cluster_keeps_its_centroid() {
   SCOPED_TRACE(float_dtype<T>);
   const resources res;
   const grid_case<T> g(res, grid, far_start, far_k);
-  fit_call c = g.call();
+  record out(res);
+  fit_call c = g.call(out);
   c.max_iter = 1;
   ASSERT_EQ(fit(res, c).status, "accepted");
-  EXPECT_EQ(download<T>(g.centroids), far_start);
+  EXPECT_EQ(download<T>(out, centroids_region), far_start);
 }
 
 template <typename T>
-void predict_labels_and_inertia() {
+void predict_labels() {
   SCOPED_TRACE(float_dtype<T>);
   const resources res;
   const auto x = upload<T>(res, {grid_rows, grid_cols}, grid);
   const auto c = upload<T>(res, {pair, grid_cols}, cell_means);
-  const device_array labels(res.r, RR_DTYPE_INT32, {grid_rows});
-  double inertia = -1;
-  ASSERT_EQ(outcome(cuml_cluster_kmeans_predict(res.handle, &c->view, &x->view,
-                                                nullptr, &labels.view,
-                                                default_batch, &inertia)),
-            "accepted");
-  EXPECT_EQ(labels.read<int32_t>(), grid_labels);
-  EXPECT_EQ(inertia, grid_inertia);
+  record out(res);
+  ASSERT_EQ(predict(res, &c->view, &x->view, &out.r), "accepted");
+  ASSERT_EQ(out.r.count, 1);
+  EXPECT_EQ(out.r.regions[0].dtype, RR_DTYPE_INT32);
+  EXPECT_EQ(out.read<int32_t>(0), grid_labels);
 }
 
 template <typename T>
-void predict_null_labels_use_scratch() {
+void score_is_the_inertia() {
   SCOPED_TRACE(float_dtype<T>);
   const resources res;
   const auto x = upload<T>(res, {grid_rows, grid_cols}, grid);
   const auto c = upload<T>(res, {pair, grid_cols}, cell_means);
   double inertia = -1;
-  ASSERT_EQ(outcome(cuml_cluster_kmeans_predict(res.handle, &c->view, &x->view,
-                                                nullptr, nullptr, default_batch,
-                                                &inertia)),
-            "accepted");
+  ASSERT_EQ(
+      outcome(cuml_cluster_kmeans_score(res.handle, &c->view, &x->view, nullptr,
+                                        default_batch, &inertia)),
+      "accepted");
   EXPECT_EQ(inertia, grid_inertia);
 }
 
@@ -183,11 +186,12 @@ void squared_distances() {
   const resources res;
   const auto x = upload<T>(res, {grid_rows, grid_cols}, grid);
   const auto c = upload<T>(res, {pair, grid_cols}, cell_means);
-  const device_array d(res.r, float_dtype<T>, {grid_rows, pair});
-  ASSERT_EQ(outcome(cuml_cluster_kmeans_transform(
-                res.handle, &c->view, &x->view, &d.view, default_batch)),
-            "accepted");
-  const values found = download<T>(d);
+  record out(res);
+  ASSERT_EQ(transform(res, &c->view, &x->view, &out.r), "accepted");
+  ASSERT_EQ(out.r.count, 1);
+  EXPECT_EQ(out.r.regions[0].shape[0], grid_rows);
+  EXPECT_EQ(out.r.regions[0].shape[1], pair);
+  const values found = download<T>(out, 0);
   EXPECT_EQ(found[0], near_corner);
   EXPECT_EQ(found[1], far_corner);
   EXPECT_EQ(found[far_row * pair], near_far_cell);
@@ -230,16 +234,16 @@ TEST(Fit, EmptyClusterKeepsItsCentroid) {
   empty_cluster_keeps_its_centroid<double>();
 }
 
-TEST(Predict, LabelsAndInertiaOfTheGrid) {
+TEST(Predict, LabelsOfTheGrid) {
   CUMLRKT_REQUIRE_GPU();
-  predict_labels_and_inertia<float>();
-  predict_labels_and_inertia<double>();
+  predict_labels<float>();
+  predict_labels<double>();
 }
 
-TEST(Predict, NullLabelsUseScratch) {
+TEST(Score, IsTheInertiaOfTheGrid) {
   CUMLRKT_REQUIRE_GPU();
-  predict_null_labels_use_scratch<float>();
-  predict_null_labels_use_scratch<double>();
+  score_is_the_inertia<float>();
+  score_is_the_inertia<double>();
 }
 
 TEST(Transform, SquaredDistances) {
