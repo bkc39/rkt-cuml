@@ -1,10 +1,16 @@
 #lang racket/base
 
-(require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-score kmeans-transform)
-         (only-in rackunit test-case)
-         (only-in raft list*->device-matrix)
+(require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result? kmeans-score kmeans-transform)
+         (only-in racket/match match)
+         (only-in rackunit check-equal? check-pred fail test-case)
+         (only-in raft
+                  device-resources
+                  exn:fail:raft-kind
+                  exn:fail:raft?
+                  list*->device-matrix
+                  with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes))
 
 (struct row (id message call))
@@ -56,12 +62,12 @@
    (row "F18"
         "max-samples-per-batch: expected at least 0, got -1"
         (fit3 X #:max-samples-per-batch -1))
-   (row "F21"
-        #px"RAFT failure at file=[^ ]+ line=[0-9]+: invalid parameter \\(tol<=0\\)"
-        (fit3 X #:tol 0))
-   (row "F22"
-        #px"RAFT failure at file=[^ ]+ line=[0-9]+: invalid parameter \\(oversampling_factor<0\\)"
-        (fit3 X #:oversampling-factor -1))
+   (row "F21" "tol: expected greater than 0, got 0" (fit3 X #:tol 0))
+   (row "F21 nan" "tol: expected greater than 0, got nan" (fit3 X #:tol +nan.0))
+   (row "F22" "oversampling-factor: expected at least 0, got -1" (fit3 X #:oversampling-factor -1))
+   (row "F22 nan"
+        "oversampling-factor: expected at least 0, got nan"
+        (fit3 X #:oversampling-factor +nan.0))
    (row "F1 before F6"
         "X: expected float32 or float64, got int32"
         (fit (blank-matrix 10 2 'int32) #:n-clusters 0))))
@@ -106,13 +112,8 @@
              "sample-weight: expected 10 elements, got 9"
              (lambda () (kmeans-score C X #:sample-weight (blank-vector 9 dt))))))
 
-(define (prefixed who message)
-  (if (regexp? message)
-      (pregexp (string-append "^" (symbol->string who) ": " (object-name message)))
-      (format "~a: ~a" who message)))
-
 (define (check-row who r thunk)
-  (check-cuml-error 'logic (prefixed who (row-message r)) thunk))
+  (check-cuml-error 'logic (format "~a: ~a" who (row-message r)) thunk))
 
 (define appliers
   (hasheq 'kmeans-predict kmeans-predict
@@ -131,6 +132,37 @@
          [(who proc) (in-hash appliers)])
     (test-case (format "~a ~a (~a)" who (row-id r) dt)
       (check-row who r (lambda () ((row-call r) proc))))))
+
+(test-gpu "k-means++ ignores the oversampling factor"
+  (for ([dt (in-list dtypes)])
+    (check-pred kmeans-result?
+                (kmeans-fit (grid dt) #:n-clusters 3 #:init 'k-means++ #:oversampling-factor -1))))
+
+(test-gpu "kmeans-transform refuses distances past the index type, before allocating them"
+  (for ([dt (in-list dtypes)])
+    (test-case (symbol->string dt)
+      (check-cuml-error 'logic
+                        "kmeans-transform: distances: 100000x50000 elements do not fit the index type"
+                        (lambda ()
+                          (kmeans-transform (blank-matrix 50000 4 dt) (blank-matrix 100000 4 dt)))))))
+
+(test-gpu "released resources are refused under the procedure's own name"
+  (define X (grid 'float64))
+  (define C (blank-matrix 3 2 'float64))
+  (define released (with-device-resources ([r (device-resources)]) r))
+  (define calls
+    (hasheq 'kmeans-fit (lambda () (kmeans-fit X #:n-clusters 3 #:resources released))
+            'kmeans-predict (lambda () (kmeans-predict C X #:resources released))
+            'kmeans-transform (lambda () (kmeans-transform C X #:resources released))
+            'kmeans-score (lambda () (kmeans-score C X #:resources released))))
+  (for ([(who thunk) (in-hash calls)])
+    (test-case (symbol->string who)
+      (match (raised thunk)
+        [(? exn:fail:raft? e)
+         (check-equal? (exn:fail:raft-kind e) 'logic)
+         (check-equal? (exn-message e)
+                       (format "~a: the device resources on device 0 were released" who))]
+        [other (fail (format "expected an exn:fail:raft, got ~e" other))]))))
 
 (test-gpu "kmeans-score refuses bad sample weights"
   (for* ([dt (in-list dtypes)]

@@ -94,8 +94,10 @@
 - The shim's refusals run in a fixed table order, first refusal wins, before
   the GPU is touched; an empty matrix has no layout to check.
 - The decisions posted on #5, each with the recommended answer:
-  - **Q-A.** cuVS's parameter errors (tol <= 0, oversampling-factor < 0)
-    pass through as they are; tests match the first line with a regexp.
+  - **Q-A.** Reversed in review: the shim refuses `tol` <= 0 and a negative
+    `oversampling-factor` itself, before allocating, in the repo's wording
+    (`tol: expected greater than 0, got 0`); cuVS refused them only after
+    the outputs were allocated.
   - **Q-B.** `#:random-state` defaults to 0.
   - **Q-C.** `#:n-clusters` is inferred from a matrix `#:init`; an
     explicit mismatch is refused.

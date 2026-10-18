@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cuml/cluster/kmeans.hpp>
+#include <format>
 #include <initializer_list>
 #include <limits>
 #include <memory>
@@ -73,6 +74,26 @@ void require_at_least(const std::string& what, int64_t got, int64_t least) {
     throw logic_error(what + ": expected at least " + std::to_string(least) +
                       ", got " + std::to_string(got));
   }
+}
+
+void require_positive(const char* what, double got) {
+  if (!(got > 0)) {
+    throw logic_error(
+        std::format("{}: expected greater than 0, got {}", what, got));
+  }
+}
+
+void require_non_negative(const char* what, double got) {
+  if (!(got >= 0)) {
+    throw logic_error(
+        std::format("{}: expected at least 0, got {}", what, got));
+  }
+}
+
+void settle(const raft::handle_t& handle) {
+  raftrkt::cuda_check(
+      cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),
+      "cudaStreamSynchronize");
 }
 
 void require_some(const char* name, const char* axis, int extent) {
@@ -153,6 +174,8 @@ void fit(const raft::handle_t& handle, const fit_arrays& arrays,
   require_at_least("max-iter", options.max_iter, 0);
   require_at_least("n-init", options.n_init, 1);
   require_at_least("max-samples-per-batch", options.batch_samples, 0);
+  require_positive("tol", options.tol);
+  require_non_negative("oversampling-factor", options.oversampling_factor);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   const auto count =
       static_cast<std::size_t>(k) * static_cast<std::size_t>(x.d);
@@ -185,6 +208,7 @@ void fit(const raft::handle_t& handle, const fit_arrays& arrays,
   const std::initializer_list<rr_view> regions{
       raftrkt::region(centroids, k, x.d, layout::row_major),
       raftrkt::region(outputs->labels)};
+  settle(handle);
   raftrkt::deposit(arrays.out, "out", handle, std::move(outputs), regions);
   *results.inertia = static_cast<double>(inertia);
   *results.n_iter = n_iter;
@@ -226,6 +250,7 @@ void predict(const raft::handle_t& handle, const predict_arrays& arrays,
   ML::kmeans::predict(handle, p, in.centroids.data, in.x.data, in.x.n, in.x.d,
                       nullptr, true, labels->data(), inertia);
   const std::initializer_list<rr_view> regions{raftrkt::region(*labels)};
+  settle(handle);
   raftrkt::deposit(arrays.out, "out", handle, std::move(labels), regions);
 }
 
@@ -273,6 +298,7 @@ void transform(const raft::handle_t& handle, const transform_arrays& arrays,
                         distances->data());
   const std::initializer_list<rr_view> regions{raftrkt::region(
       distances->data(), in.x.n, in.centroids.n, layout::row_major)};
+  settle(handle);
   raftrkt::deposit(arrays.out, "out", handle, std::move(distances), regions);
 }
 

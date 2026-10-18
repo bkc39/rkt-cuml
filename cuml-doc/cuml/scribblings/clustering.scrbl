@@ -160,11 +160,17 @@ the GPU is touched and leaving nothing allocated, when:
        dtype, another shape than @racket[(n-clusters n-features)], or not
        row-major;}
  @item{@racket[max-iter] or @racket[max-samples-per-batch] is negative, or
-       @racket[n-init] is less than 1.}]
-cuML itself refuses a @racket[tol] that is not positive and a negative
-@racket[oversampling-factor], with its own message, also leaving nothing
-allocated. An @racket[X] or @racket[centroids] that is not a device array
-raises raft's @racket[exn:fail:raft], and a number argument that is not
-exact, such as @racket[#:n-init 2.5], raises @racket[exn:fail:contract].
+       @racket[n-init] is less than 1;}
+ @item{@racket[tol] is not greater than 0, or @racket[oversampling-factor]
+       is negative or NaN with any @racket[init] but @racket['k-means++],
+       which ignores it;}
+ @item{@racket[kmeans-transform]'s @racket[(n n-clusters)] distances have
+       more elements than a 32-bit index reaches, such as a
+       @racket[(100000 4)] @racket[X] on @racket[(50000 4)] centroids:
+       @tt{distances: 100000x50000 elements do not fit the index type}.}]
+An @racket[X] or @racket[centroids] that is not a device array, or
+@racket[resources] that were released, raises raft's @racket[exn:fail:raft]
+naming the procedure, and a number argument that is not exact, such as
+@racket[#:n-init 2.5], raises @racket[exn:fail:contract].
 
 @(close-eval ev)

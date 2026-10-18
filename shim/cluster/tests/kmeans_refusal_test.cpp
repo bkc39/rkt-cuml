@@ -2,9 +2,15 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cuda/memory_resource>
 #include <initializer_list>
+#include <limits>
+#include <rmm/mr/cuda_memory_resource.hpp>
+#include <rmm/mr/per_device_resource.hpp>
+#include <rmm/mr/statistics_resource_adaptor.hpp>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "cluster_fixture.hpp"
@@ -59,11 +65,30 @@ rr_view on_device(rr_view v, int32_t device) {
   return v;
 }
 
-bool cuvs_refused(const std::string& message, const std::string& parameter) {
-  return message.rfind("RAFT failure at file=", 0) == 0 &&
-         message.find("invalid parameter (" + parameter + ")") !=
-             std::string::npos;
-}
+class allocation_meter {
+ public:
+  allocation_meter()
+      : previous_(rmm::mr::set_current_device_resource(
+            rmm::mr::cuda_memory_resource{})),
+        stats_(previous_) {
+    rmm::mr::set_current_device_resource(stats_);
+  }
+  ~allocation_meter() {
+    rmm::mr::set_current_device_resource(std::move(previous_));
+  }
+  allocation_meter(const allocation_meter&) = delete;
+  allocation_meter& operator=(const allocation_meter&) = delete;
+  allocation_meter(allocation_meter&&) = delete;
+  allocation_meter& operator=(allocation_meter&&) = delete;
+
+  [[nodiscard]] int64_t peak() const {
+    return stats_.get_bytes_counter().peak;
+  }
+
+ private:
+  cuda::mr::any_resource<cuda::mr::device_accessible> previous_;
+  rmm::mr::statistics_resource_adaptor stats_;
+};
 
 template <typename T>
 struct refusal_case {
@@ -198,10 +223,12 @@ void fit_refusals() {
   EXPECT_EQ(refused(c), "X: on device 1, but the resources are on device 0");
   c = base;
   c.tol = 0;
-  EXPECT_TRUE(cuvs_refused(refused(c), "tol<=0"));
+  EXPECT_EQ(refused(c), "tol: expected greater than 0, got 0");
+  c.tol = std::numeric_limits<double>::quiet_NaN();
+  EXPECT_EQ(refused(c), "tol: expected greater than 0, got nan");
   c = base;
   c.oversampling_factor = -1;
-  EXPECT_TRUE(cuvs_refused(refused(c), "oversampling_factor<0"));
+  EXPECT_EQ(refused(c), "oversampling-factor: expected at least 0, got -1");
   record filled(res);
   ASSERT_EQ(fit(res, r.call(filled)).status, "accepted");
   const void* owner = filled.r.owner;
@@ -325,12 +352,35 @@ void first_in_order_wins() {
 }
 // NOLINTEND(readability-function-cognitive-complexity)
 
+template <typename T>
+void refused_parameters_allocate_nothing() {
+  SCOPED_TRACE(name<T>());
+  const resources res;
+  const refusal_case<T> r(res);
+  record out(res);
+  fit_call tol = r.call(out);
+  tol.tol = 0;
+  fit_call oversampling = r.call(out);
+  oversampling.oversampling_factor = -1;
+  const allocation_meter meter;
+  EXPECT_NE(fit(res, tol).status, "accepted");
+  EXPECT_NE(fit(res, oversampling).status, "accepted");
+  EXPECT_EQ(meter.peak(), 0);
+  expect_untouched(out);
+}
+
 TEST(Refusals, NameTheArgument) {
   CUMLRKT_REQUIRE_GPU();
   fit_refusals<float>();
   fit_refusals<double>();
   apply_refusals<float>();
   apply_refusals<double>();
+}
+
+TEST(Refusals, RefusedParametersAllocateNothing) {
+  CUMLRKT_REQUIRE_GPU();
+  refused_parameters_allocate_nothing<float>();
+  refused_parameters_allocate_nothing<double>();
 }
 
 TEST(Refusals, FirstInOrderWins) {

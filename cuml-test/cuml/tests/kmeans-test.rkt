@@ -8,6 +8,7 @@
                   kmeans-result-labels
                   kmeans-score
                   kmeans-transform)
+         (only-in racket/function curry)
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
@@ -122,9 +123,7 @@
                   (host-vector (kmeans-predict centroids X)))))
 
 (define (permute xs order)
-  (define v (list->vector xs))
-  (for/list ([i (in-list order)])
-    (vector-ref v i)))
+  (map (curry vector-ref (list->vector xs)) order))
 
 (define (same-for-both-dtypes f)
   (match-define (list single double) (map f dtypes))

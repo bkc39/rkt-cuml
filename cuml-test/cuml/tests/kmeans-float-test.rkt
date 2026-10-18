@@ -34,9 +34,14 @@
     (values (+ inertia (* w-hat (squared-distance x c)))
             (+ scale (* w-hat (+ (norm2 x) (norm2 c)))))))
 
+(define (inertia-tolerance dt)
+  (if (eq? dt 'float32)
+      1e-6
+      (tolerance dt)))
+
 (define (check-inertia actual rows centroids weights dt what)
   (define-values (expected scale) (host-inertia rows centroids weights))
-  (check-true (scaled-close? actual expected scale (tolerance dt))
+  (check-true (scaled-close? actual expected scale (inertia-tolerance dt))
               (format "~a ~a against the host's ~a (scale ~a)" what actual expected scale)))
 
 (test-gpu "law F: the inertia is the weighted sum of squared distances to the nearest centroid"

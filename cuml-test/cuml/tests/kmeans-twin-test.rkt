@@ -169,13 +169,14 @@
   (match-define (run _ _ _ _ (kmeans-result centroids labels inertia n-iter)) r)
   (fitted (host-vector labels) (host centroids) inertia n-iter))
 
-(define (row<? a b)
-  (match* (a b)
-    [((cons x xs) (cons y ys)) (or (< x y) (and (= x y) (row<? xs ys)))]
-    [(_ _) #f]))
-
-(define (sorted-rows rows)
-  (sort rows row<?))
+(define (matched-centroids labels their-labels their-centroids)
+  (define theirs (list->vector their-centroids))
+  (define pairing
+    (for/hash ([ours (in-list labels)]
+               [their (in-list their-labels)])
+      (values ours their)))
+  (for/list ([i (in-range (vector-length theirs))])
+    (vector-ref theirs (hash-ref pairing i i))))
 
 (struct comparison (dt deviation off-by-one? problems))
 
@@ -191,7 +192,8 @@
   (define iter-gap (abs (- n-iter (hash-ref theirs 'n_iter))))
   (define ari (hash-ref theirs 'ari))
   (define inertia-deviation (relative-deviation inertia (hash-ref theirs 'inertia)))
-  (define sorted-deviation (max-deviation (sorted-rows centroids) (sorted-rows their-centroids)))
+  (define matched-deviation
+    (max-deviation centroids (matched-centroids labels (hash-ref theirs 'labels) their-centroids)))
   (define exact-iter? (and (eq? (spec-init s) 'array) (memv (option s 'max-iter 300) '(0 1))))
   (define random-restarts? (and (eq? (spec-init s) 'random) (not (eqv? (option s 'n-init 'auto) 1))))
   (define problems
@@ -206,7 +208,8 @@
               [(_ _)
                #:when random-restarts?
                (append (problem (= ari 1.0) (format "ARI ~a" ari))
-                       (problem (<= sorted-deviation tol) (format "sorted centroids within ~a" tol)))]
+                       (problem (<= matched-deviation tol)
+                                (format "centroids matched by label within ~a" tol)))]
               [(dt _)
                (append (problem (equal? labels (hash-ref theirs 'labels)) "labels")
                        (problem (<= (max-deviation centroids their-centroids) tol)
@@ -214,7 +217,7 @@
                        (if (or (eq? dt 'float64) exact-iter?)
                            (problem (zero? iter-gap) "n_iter equal")
                            (problem (<= iter-gap 1) "n_iter within 1")))])))
-  (comparison (spec-dt s) (max sorted-deviation inertia-deviation) (positive? iter-gap) problems))
+  (comparison (spec-dt s) (max matched-deviation inertia-deviation) (positive? iter-gap) problems))
 
 (define (compare-apply a theirs)
   (match-define (applied s Y C _ labels transform score weighted-score) a)
@@ -251,6 +254,21 @@
     (define s (parse `(fit 400 3 5 ,dt random 3)))
     (check-equal? (comparison-problems (compare-fit s ours (answer '(9.0 1.0)))) '())
     (check-not-equal? (comparison-problems (compare-fit s ours (answer (list 9.0 moved)))) '())))
+
+(test-case "compare-fit pairs a random-restart answer's centroids by label, not by sort order"
+  (for ([dt (in-list dtypes)]
+        [near (in-list '(1.00001 1.0000000001))]
+        [moved (in-list '(0.001 0.00000001))])
+    (define s (parse `(fit 400 3 5 ,dt random 3)))
+    (define ours (fitted '(0 0 1 1) (list '(1.0 5.0) (list near 0.0)) 10.0 4))
+    (define (answer last-row)
+      (hasheq 'labels '(0 0 1 1)
+              'centroids (list (list near 5.0) last-row)
+              'inertia 10.0
+              'n_iter 5
+              'ari 1.0))
+    (check-equal? (comparison-problems (compare-fit s ours (answer '(1.0 0.0)))) '())
+    (check-not-equal? (comparison-problems (compare-fit s ours (answer (list 1.0 moved)))) '())))
 
 (test-twin "kmeans-fit, predict, transform and score match cuml.KMeans on the same data and seeds"
   (define specs (map parse (append separated overlapping weighted parameters)))

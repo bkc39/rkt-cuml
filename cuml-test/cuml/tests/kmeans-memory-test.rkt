@@ -61,7 +61,8 @@
         (lambda () (kmeans-fit X #:n-clusters n-clusters #:n-init 0))
         (lambda () (kmeans-fit X #:n-clusters n-clusters #:max-iter -1))
         (lambda () (kmeans-fit X #:n-clusters n-clusters #:max-samples-per-batch -1))
-        (lambda () (kmeans-fit X #:n-clusters n-clusters #:tol 0))))
+        (lambda () (kmeans-fit X #:n-clusters n-clusters #:tol 0))
+        (lambda () (kmeans-fit X #:n-clusters n-clusters #:oversampling-factor -1))))
 
 (define (refuse-all calls)
   (for* ([thunk (in-list calls)]
@@ -96,7 +97,7 @@
       (define refused (- (settled-count buffer-drop-count) before))
       (check-equal? (sample-used after-refusals)
                     (sample-used sample)
-                    "a refused call holds no pool memory")
+                    "a refused call holds no pool memory once it returns")
       (values (cons sample samples) (cons refused refused-drops))))
   (define wanted (* buffers-per-round rounds))
   (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
@@ -117,9 +118,7 @@
    wanted
    refused-drops)
   (check-equal? freed wanted)
-  (check-equal? refused-drops
-                (make-list (length samples) 0)
-                "refusals free nothing: they allocate nothing")
+  (check-equal? refused-drops (make-list (length samples) 0) "refusals hand Racket no buffer to drop")
   (check-equal? (- (release-failure-count) failures) 0)
   (check-true (collect-until (lambda () (= (jobs-live) live))))
   (check-true (<= (executor-threads) (add1 threads)))

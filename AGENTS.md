@@ -98,6 +98,10 @@ only.
 A short (atomic) call is for sub-millisecond work only; anything longer is a
 job.
 
+Synchronise the handle's stream before `raftrkt::deposit`, so only scalar
+writes follow the publish: a fault that surfaces in a later sync raises with
+the outputs already published, held by the record until a collection.
+
 ### Racket
 
 `cuml/core/private/native.rkt`'s `load-family` loads
