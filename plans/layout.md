@@ -129,7 +129,9 @@
 - The `kmeans` estimator lives in `cuml-lib/cuml/private/kmeans-estimator.rkt`
   over the `/who` forms of leg 1's procedures, which
   `cuml/cluster/private/kmeans.rkt` provides and `cuml/cluster` does not
-  export; the public procedures are the `/who` forms with their own name.
+  export; `define/who` (`cuml/cluster/private/define-who.rkt`) defines each
+  public procedure and its `/who` form from one header, and the estimator
+  takes its defaults and `init-rows` from the same module's `kmeans-defaults`.
 - The decisions posted on #5 (comment 6245375667), each with the recommended
   answer:
   - **Q-A.** `cuml` exports the bare `fit`, `predict`, `transform`,

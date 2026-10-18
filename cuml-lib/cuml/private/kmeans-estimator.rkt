@@ -1,6 +1,8 @@
 #lang racket/base
 
 (require (only-in cuml/cluster/private/kmeans
+                  init-rows
+                  kmeans-defaults
                   kmeans-fit/who
                   kmeans-predict/who
                   kmeans-result-centroids
@@ -9,8 +11,8 @@
                   kmeans-transform/who)
          (only-in cuml/core exn:fail:cuml)
          (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
-         (only-in racket/match match)
-         (only-in raft current-device-resources device-matrix? shape))
+         (only-in racket/string string-append*)
+         (only-in raft current-device-resources))
 
 (provide kmeans
          kmeans?
@@ -26,6 +28,12 @@
          max-samples-per-batch
          resources))
 
+(define (name->keyword name)
+  (string->keyword (symbol->string name)))
+
+(define (default name)
+  (hash-ref kmeans-defaults name))
+
 (define (logic-error message . args)
   (raise (exn:fail:cuml (apply format message args) (current-continuation-marks) 'logic)))
 
@@ -34,18 +42,12 @@
 
 (define (fitted-model who e X sample-weight)
   (define params (kmeans-params e))
-  (kmeans-fit/who who
-                  X
-                  #:init (hash-ref params 'init)
-                  #:n-clusters (hash-ref params 'n-clusters)
-                  #:max-iter (hash-ref params 'max-iter)
-                  #:tol (hash-ref params 'tol)
-                  #:n-init (hash-ref params 'n-init)
-                  #:random-state (hash-ref params 'random-state)
-                  #:oversampling-factor (hash-ref params 'oversampling-factor)
-                  #:max-samples-per-batch (hash-ref params 'max-samples-per-batch)
-                  #:sample-weight sample-weight
-                  #:resources (resources-of params)))
+  (define arguments (hash-set* params 'resources (resources-of params) 'sample-weight sample-weight))
+  (define names (sort (hash-keys arguments) symbol<?))
+  (keyword-apply kmeans-fit/who
+                 (map name->keyword names)
+                 (map (lambda (name) (hash-ref arguments name)) names)
+                 (list who X)))
 
 (define (model-of who e)
   (or (kmeans-model e) (logic-error "~a: kmeans is not fitted" who)))
@@ -68,20 +70,23 @@
                     #:resources (resources-of params)))
 
 (define (updated params changes)
-  (for/fold ([updated params]) ([(key value) (in-hash changes)])
+  (for/fold ([merged params]) ([(key value) (in-hash changes)])
     (cond
-      [(hash-has-key? updated key) (hash-set updated key value)]
-      [else (logic-error "estimator-set-params: kmeans has no parameter ~a" key)])))
+      [(hash-has-key? merged key) (hash-set merged key value)]
+      [else (logic-error "estimator-set-params: kmeans has no parameter ~s" key)])))
 
 (define (kmeans->string e)
   (define params (kmeans-params e))
   (define defaults
-    (hash-set (kmeans-params (kmeans)) 'n-clusters (init-rows (hash-ref params 'init) 8)))
+    (hash-set (kmeans-params (kmeans))
+              'n-clusters
+              (init-rows (hash-ref params 'init) (default 'n-clusters))))
+  (define marker (if (kmeans-model e) " fitted" ""))
   (define shown
     (for/list ([name (in-list parameter-names)]
                #:unless (equal? (hash-ref params name) (hash-ref defaults name)))
       (format " #:~a ~v" name (hash-ref params name))))
-  (format "#<kmeans~a~a>" (if (kmeans-model e) " fitted" "") (apply string-append shown)))
+  (format "#<kmeans~a~a>" marker (string-append* shown)))
 
 (struct kmeans (params model)
   #:constructor-name kmeans*
@@ -124,28 +129,24 @@
   [(define (write-proc e port _mode)
      (write-string (kmeans->string e) port))])
 
-(define (init-rows init fallback)
-  (match (and (device-matrix? init) (shape init))
-    [(list rows _) rows]
-    [_ fallback]))
-
-(define (kmeans ;; noqa
-         #:init (init 'scalable-k-means++)
-         #:n-clusters [n-clusters (init-rows init 8)]
-         #:max-iter [max-iter 300]
-         #:tol [tol 1e-4]
-         #:n-init [n-init 'auto]
-         #:random-state [random-state 0]
-         #:oversampling-factor [oversampling-factor 2.0]
-         #:max-samples-per-batch [max-samples-per-batch 32768]
-         #:resources [resources #f])
-  (kmeans* (hasheq 'init init
-                   'n-clusters n-clusters
-                   'max-iter max-iter
-                   'tol tol
-                   'n-init n-init
-                   'random-state random-state
-                   'oversampling-factor oversampling-factor
-                   'max-samples-per-batch max-samples-per-batch
-                   'resources resources)
+(define (kmeans #:init (init (default 'init))
+                #:n-clusters [n-clusters (init-rows init (default 'n-clusters))]
+                #:max-iter [max-iter (default 'max-iter)]
+                #:tol [tol (default 'tol)]
+                #:n-init [n-init (default 'n-init)]
+                #:random-state [random-state (default 'random-state)]
+                #:oversampling-factor [oversampling-factor (default 'oversampling-factor)]
+                #:max-samples-per-batch [max-samples-per-batch (default 'max-samples-per-batch)]
+                #:resources [resources #f])
+  (kmeans* (for/hasheq ([name (in-list parameter-names)]
+                        [value (in-list (list init
+                                              n-clusters
+                                              max-iter
+                                              tol
+                                              n-init
+                                              random-state
+                                              oversampling-factor
+                                              max-samples-per-batch
+                                              resources))])
+             (values name value))
            #f))

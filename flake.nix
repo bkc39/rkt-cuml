@@ -613,6 +613,7 @@
         racket-version = racketVersion;
         no-syntax-rule = grepGate "no-syntax-rule" "no-syntax-rule.sh";
         no-raw-malloc = grepGate "no-raw-malloc" "no-raw-malloc.sh";
+        no-noqa = grepGate "no-noqa" "no-noqa.sh";
         gpu-suite-signals = grepGate "gpu-suite-signals" "gpu-suite-signals.sh";
       };
 

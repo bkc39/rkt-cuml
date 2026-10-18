@@ -5,6 +5,8 @@
 (require "cluster/private/kmeans.rkt")
 
 (provide (except-out (all-from-out "cluster/private/kmeans.rkt")
+                     init-rows
+                     kmeans-defaults
                      kmeans-fit/who
                      kmeans-predict/who
                      kmeans-score/who

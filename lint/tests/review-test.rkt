@@ -40,6 +40,80 @@
                                                           (define y 2)
                                                           y)))
 
+(define generics-with-optional-and-keyword-methods
+  '((require racket/generic) (provide gen:shape
+                                      shape?
+                                      area
+                                      scale)
+                             (define-generics shape
+                                              (area shape [units])
+                                              (scale shape factor #:origin [origin])
+                                              #:requires (area))))
+
+(define constructor-renamed-struct
+  '((provide point
+             point?
+             point-x
+             point-y)
+    (struct point (x y) #:constructor-name point* #:omit-define-syntaxes #:transparent)
+    (define (point #:x [x 0] #:y [y 0])
+      (point* x y))))
+
+(define constructor-renamed-struct-with-syntaxes
+  '((provide point
+             point?
+             point-x
+             point-y)
+    (struct point (x y) #:constructor-name point*)
+    (define (point x y)
+      (point* x y))))
+
+(define who-definitions
+  '((provide twice
+             twice/who)
+    (define-syntax-parse-rule (define/who . _)
+      (void))
+    (define/who (twice who x #:times [n 2]) (list who x n))))
+
+(define who-definition-with-unused-local
+  '((provide twice
+             twice/who)
+    (define-syntax-parse-rule (define/who . _)
+      (void))
+    (define/who (twice who x)
+      (define unused 1)
+      (list who x))))
+
+(define splicing-syntax-class-used-in-a-pattern
+  '((require (for-syntax racket/base
+                         syntax/parse/pre))
+    (provide m)
+    (begin-for-syntax
+      (define-splicing-syntax-class pair (pattern (~seq a b))))
+    (define-syntax (m stx)
+      (syntax-parse stx
+        [(_ p:pair) #'(list p.a p.b)]))))
+
+(test-case "a splicing syntax class is a syntax class: its uses are inside patterns"
+  (check-equal? (problems-in splicing-syntax-class-used-in-a-pattern) '()))
+
+(test-case "define-generics binds each method, whatever its arguments"
+  (check-equal? (problems-in generics-with-optional-and-keyword-methods) '()))
+
+(test-case "a struct whose syntaxes are omitted binds its constructor name, not its own"
+  (check-equal? (problems-in constructor-renamed-struct) '()))
+
+(test-case "a struct that keeps its syntaxes still binds its own name"
+  (check-equal? (problems-in constructor-renamed-struct-with-syntaxes)
+                '("identifier 'point' is already defined")))
+
+(test-case "define/who binds the name and its /who form"
+  (check-equal? (problems-in who-definitions) '()))
+
+(test-case "a define/who body is reviewed as the /who form's"
+  (check-equal? (problems-in who-definition-with-unused-local)
+                '("identifier 'unused' is never used")))
+
 (test-case "quoted data is not read as code"
   (check-equal? (problems-in quoted-data) '()))
 

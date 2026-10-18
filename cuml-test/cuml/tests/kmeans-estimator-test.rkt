@@ -28,6 +28,13 @@
                   kmeans-result?
                   kmeans-score
                   kmeans-transform)
+         (only-in cuml/cluster/private/kmeans
+                  kmeans-defaults
+                  kmeans-fit/who
+                  kmeans-predict/who
+                  kmeans-score/who
+                  kmeans-transform/who)
+         (only-in racket/dict in-dict)
          (only-in racket/list make-list)
          (only-in racket/match match match-define)
          (only-in rackunit
@@ -41,6 +48,7 @@
                   test-case)
          (only-in raft device-resources exn:fail:raft-kind exn:fail:raft? shape with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt"
                   blank-matrix
@@ -81,9 +89,6 @@
         (list '#:max-samples-per-batch 'max-samples-per-batch 64)
         (list '#:resources 'resources 'some-resources)))
 
-(define (capabilities v)
-  (map (lambda (p) (p v)) (list estimator? predictor? clusterer? transformer? scorer? kmeans?)))
-
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
@@ -102,28 +107,34 @@
                   value
                   (format "~a" kw))))
 
+(test-case "K1: the estimator's defaults are leg 1's"
+  (for ([(name value) (in-hash kmeans-defaults)])
+    (check-equal? (hash-ref (estimator-params (kmeans)) name) value (format "~a" name))))
+
 (test-case "K2: an unknown parameter is refused, and an update is the constructor's"
   (check-cuml-error 'logic
                     "estimator-set-params: kmeans has no parameter bogus"
                     (lambda () (estimator-set-params (kmeans) (hasheq 'bogus 1))))
+  (check-cuml-error 'logic
+                    "estimator-set-params: kmeans has no parameter \"n-clusters\""
+                    (lambda () (estimator-set-params (kmeans) (hash "n-clusters" 3))))
   (check-equal? (estimator-set-params (kmeans) (hasheq 'n-clusters 3)) (kmeans #:n-clusters 3)))
 
 (test-case "K3: an unfitted k-means estimator has every capability and no model"
-  (check-equal? (capabilities (kmeans)) '(#t #t #t #t #t #t))
+  (check-equal? (capabilities (kmeans) kmeans?) '(#t #t #t #t #t #t))
   (check-false (kmeans-model (kmeans)))
   (check-false (fitted? (kmeans))))
 
 (test-gpu "K3: a fitted k-means estimator has every capability and a model"
   (define f (grid8-fit))
-  (check-equal? (capabilities f) '(#t #t #t #t #t #t))
+  (check-equal? (capabilities f kmeans?) '(#t #t #t #t #t #t))
   (check-pred kmeans-result? (kmeans-model f))
   (check-true (fitted? f)))
 
 (test-case "K4: predict, transform and score refuse an unfitted estimator before reading X"
-  (for ([who (in-list '(predict transform score))]
-        [call (in-list (list (lambda () (predict (kmeans) #f))
-                             (lambda () (transform (kmeans) #f))
-                             (lambda () (score (kmeans) #f))))])
+  (for ([(who call) (in-dict (list (cons 'predict (lambda () (predict (kmeans) #f)))
+                                   (cons 'transform (lambda () (transform (kmeans) #f)))
+                                   (cons 'score (lambda () (score (kmeans) #f)))))])
     (check-cuml-error 'logic (format "~a: kmeans is not fitted" who) call)))
 
 (test-case "K5: an estimator prints the parameters that differ from the defaults"
@@ -153,6 +164,7 @@
 (test-gpu "K6: a fit is equal only to itself"
   (define e (kmeans #:n-clusters 2 #:random-state 1))
   (define f (fit e (mat grid8 'float64)))
+  (check-false (fitted? e))
   (check-equal? f f)
   (check-not-equal? e f)
   (check-not-equal? f (fit e (mat grid8 'float64)))
@@ -295,13 +307,23 @@
   (define f
     (with-device-resources ([r (device-resources)])
       (fit (kmeans #:n-clusters 2 #:resources r) X)))
-  (check-released "predict: the device resources on device 0 were released"
-                  (lambda () (predict f X))))
+  (for ([(who call) (in-dict (list (cons 'predict (lambda () (predict f X)))
+                                   (cons 'transform (lambda () (transform f X)))
+                                   (cons 'score (lambda () (score f X)))
+                                   (cons 'fit-predict (lambda () (fit-predict f X)))
+                                   (cons 'fit-transform (lambda () (fit-transform f X)))))])
+    (check-released (format "~a: the device resources on device 0 were released" who) call)))
 
 (define (keywords-of proc)
   (call-with-values (lambda () (procedure-keywords proc)) list))
 
-(test-case "K12: leg 1's procedures keep their keywords, and cuml/cluster exports no /who name"
+(define public+who
+  (list (cons kmeans-fit kmeans-fit/who)
+        (cons kmeans-predict kmeans-predict/who)
+        (cons kmeans-transform kmeans-transform/who)
+        (cons kmeans-score kmeans-score/who)))
+
+(test-case "K12: leg 1's procedures are their /who forms without the name"
   (check-equal? (keywords-of kmeans-fit)
                 '(() (#:init #:max-iter
                              #:max-samples-per-batch
@@ -312,20 +334,30 @@
                              #:resources
                              #:sample-weight
                              #:tol)))
-  (check-equal? (keywords-of kmeans-predict) '(() (#:max-samples-per-batch #:resources)))
-  (check-equal? (keywords-of kmeans-transform) '(() (#:max-samples-per-batch #:resources)))
-  (check-equal? (keywords-of kmeans-score)
-                '(() (#:max-samples-per-batch #:resources #:sample-weight)))
-  (check-equal? (map procedure-arity (list kmeans-fit kmeans-predict kmeans-transform kmeans-score))
-                '(1 2 2 2))
-  (check-equal? (map object-name (list kmeans-fit kmeans-predict kmeans-transform kmeans-score))
-                '(kmeans-fit kmeans-predict kmeans-transform kmeans-score))
-  (define-values (variables syntaxes) (module->exports 'cuml/cluster))
-  (check-equal? (for*/list ([phase+names (in-list (append variables syntaxes))]
-                            [entry (in-list (cdr phase+names))]
-                            #:when (regexp-match? #rx"/who$" (symbol->string (car entry))))
-                  (car entry))
-                '()))
+  (for ([pair (in-list public+who)])
+    (match-define (cons public who) pair)
+    (define name (object-name public))
+    (check-equal? (keywords-of public) (keywords-of who) (format "~a" name))
+    (check-equal? (procedure-arity-mask public)
+                  (arithmetic-shift (procedure-arity-mask who) -1)
+                  (format "~a" name))
+    (check-equal? (object-name who) (string->symbol (format "~a/who" name))))
+  (check-equal? (map object-name (map car public+who))
+                '(kmeans-fit kmeans-predict kmeans-transform kmeans-score)))
+
+(define (exported-names module)
+  (define-values (variables syntaxes) (module->exports module))
+  (for*/list ([phase+entries (in-list (append variables syntaxes))]
+              [entry (in-list (match phase+entries
+                                [(cons _phase entries) entries]))])
+    (match-define (cons name _origins) entry)
+    name))
+
+(define (private-name? name)
+  (or (regexp-match? #rx"/who$" (symbol->string name)) (memq name '(init-rows kmeans-defaults))))
+
+(test-case "K12: cuml/cluster exports no private name"
+  (check-equal? (filter private-name? (exported-names 'cuml/cluster)) '()))
 
 (test-gpu "K13: n-clusters is inferred from a matrix init when the estimator is built"
   (define m (mat start 'float64))

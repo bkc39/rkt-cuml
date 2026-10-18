@@ -23,6 +23,7 @@
          (only-in racket/generic exn:fail:support?)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
+         (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" raised))
 
 (define fit-calls (box '()))
@@ -86,9 +87,6 @@
      e)]
   #:methods gen:clusterer
   [])
-
-(define (capabilities v)
-  (map (lambda (p) (p v)) (list estimator? predictor? clusterer? transformer? scorer?)))
 
 (test-case "E1: requiring cuml/estimator loads neither raft nor the FFI"
   (parameterize ([current-namespace (make-base-namespace)])
@@ -182,7 +180,7 @@
     (check-true (exn:fail? e))
     (check-regexp-match prefix (exn-message e))))
 
-(test-case "E8: fit is functional"
+(test-case "E8: an implementer's example: fit is functional"
   (define e (threshold 1 #f))
   (define f (fit e '(1 2 3)))
   (check-equal? e (threshold 1 #f))
@@ -192,7 +190,7 @@
   (fit f '(10 20))
   (check-equal? f before))
 
-(test-case "E9: setting parameters gives an unfitted estimator with the merged parameters"
+(test-case "E9: an implementer's example: setting parameters gives an unfitted estimator"
   (define e (threshold 2 #f))
   (define f (fit e '(1 2 3)))
   (define cloned (estimator-set-params f (hasheq)))

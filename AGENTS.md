@@ -25,7 +25,7 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
-| `lint/` | cuml-lint | the `raco review` plugin for the test forms |
+| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define/who` and constructor-renamed structs |
 | `shim/` | | the C++ shims, one shared library per family |
 | `scripts/` | | the gate scripts, the binding census and its plan |
 
@@ -59,6 +59,10 @@ bite here:
    500 lines.
 6. **Test programs are quoted forms**, fixtures are files (`.py` twins).
 7. **Every review finding gets a regression test** that fails without its fix.
+8. **No lint suppressions** (`;; noqa`, `#|review: ignore|#`) in new code:
+   teach `lint/review.rkt` the form instead. `#|review: ignore|#` stays on
+   `info.rkt` files and pure re-export facades; the `no-noqa` gate allowlists
+   the rest.
 
 ## Architecture
 
@@ -189,7 +193,7 @@ wait below 30 GB available. Never two shim builds at once.
 
 ### Gates
 
-native, format, no-syntax-rule, no-raw-malloc, gpu-suite-signals, layout,
+native, format, no-syntax-rule, no-raw-malloc, no-noqa, gpu-suite-signals, layout,
 pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner

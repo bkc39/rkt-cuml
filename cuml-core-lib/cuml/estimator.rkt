@@ -4,23 +4,23 @@
 
 (provide gen:estimator
          estimator?
-         fit ;; noqa
-         fitted? ;; noqa
-         estimator-params ;; noqa
-         estimator-set-params ;; noqa
+         fit
+         fitted?
+         estimator-params
+         estimator-set-params
          gen:predictor
          predictor?
          predict
          gen:clusterer
          clusterer?
-         fit-predict ;; noqa
+         fit-predict
          gen:transformer
          transformer?
          transform
-         fit-transform ;; noqa
+         fit-transform
          gen:scorer
          scorer?
-         score) ;; noqa
+         score)
 
 (define-generics estimator
                  (fit estimator X [y] #:sample-weight [sample-weight])

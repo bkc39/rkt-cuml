@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/list append-map)
+         (only-in racket/syntax format-id)
          (only-in review/ext pop-scope push-scope recur track-binding)
          ;; whole-module: its syntax classes come with it
          syntax/parse/define
@@ -20,13 +21,20 @@
   (for-each recur leading)
   (with-scope (for-each recur body)))
 
+(define-syntax-class generic-method
+  (pattern (name:id . _)))
+
 (define-syntax-class reviewed-form
-  #:datum-literals (define-syntax-parse-rule quasiquote
-                     quote
-                     test-gpu
-                     test-twin
-                     test-unless-skipped
-                     test-without-gpu)
+  #:datum-literals (define-generics define-splicing-syntax-class
+                                    define-syntax-parse-rule
+                                    define/who
+                                    quasiquote
+                                    quote
+                                    struct
+                                    test-gpu
+                                    test-twin
+                                    test-unless-skipped
+                                    test-without-gpu)
   (pattern (quote (_ . _))
     #:attr review void)
   (pattern (quasiquote datum)
@@ -34,6 +42,26 @@
   (pattern (define-syntax-parse-rule (name:id . _)
              _ ...)
     #:attr review (lambda () (track-binding #'name)))
+  (pattern (define-splicing-syntax-class name:id . _)
+    #:attr review (lambda () (track-binding #'name #:check-usages? #f)))
+  (pattern (define-generics name:id method:generic-method ... . _)
+    #:attr review (lambda ()
+                    (track-binding #'name "gen:~a")
+                    (track-binding #'name "~a?")
+                    (for-each track-binding (attribute method.name))))
+  (pattern (struct name:id (~optional super:id)
+             fields
+             (~alt (~once (~seq #:constructor-name constructor:id))
+                   (~once #:omit-define-syntaxes)
+                   option) ...)
+    #:attr review (lambda () (recur #'(struct name (~? super) fields #:name constructor option ...))))
+  (pattern ((~and head define/who) (name:id . formals) body ...+)
+    #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
+    #:attr review (lambda ()
+                    (recur #'head)
+                    (track-binding #'name)
+                    (recur #'(define (name/who . formals)
+                               body ...))))
   (pattern (test-unless-skipped reason name body ...)
     #:attr review (lambda () (review-scoped-body (list #'reason #'name) (attribute body))))
   (pattern ((~or* test-gpu test-twin test-without-gpu) name body ...)
