@@ -45,8 +45,9 @@
   (list (host centroids) (host-vector labels) inertia n-iter))
 
 (define fit-grid
-  (make-keyword-procedure (lambda (kws vals rows first dt)
-                            (keyword-apply kmeans-fit kws vals (list (mat rows dt)) #:init (mat first dt)))))
+  (make-keyword-procedure
+   (lambda (kws vals rows first dt)
+     (keyword-apply kmeans-fit kws vals (list (mat rows dt)) #:init (mat first dt)))))
 
 (test-gpu "law A: every fit returns arrays of the documented shapes and dtypes"
   (for* ([dt (in-list dtypes)]
@@ -69,8 +70,7 @@
         (check-true (<= 0 n-iter 50))))))
 
 (define (norm2 v)
-  (for/sum ([a (in-list v)])
-    (* a a)))
+  (for/sum ([a (in-list v)]) (* a a)))
 
 (define (margin-ok? x row centroids tolerance)
   (match-define (list* best second _) (sort row <))
@@ -82,7 +82,10 @@
          [seed (in-range 1 9)])
     (test-case (format "~a, seed ~a" dt seed)
       (define X (blob-data 400 3 5 (+ seed 100) dt))
-      (define w (vec (for/list ([i (in-range 400)]) (add1 (modulo (* i 7) 5))) dt))
+      (define w
+        (vec (for/list ([i (in-range 400)])
+               (add1 (modulo (* i 7) 5)))
+             dt))
       (match-define (kmeans-result centroids labels inertia _)
         (kmeans-fit X #:n-clusters 5 #:random-state seed))
       (check-equal? (host-vector (kmeans-predict centroids X)) (host-vector labels))
@@ -154,32 +157,42 @@
      (check-equal? inertia 52.0)
      (check-equal? (kmeans-score centroids X #:sample-weight w) -52.0)
      (check-equal? (kmeans-score centroids X) -40.0)
-     (check-equal? (kmeans-score centroids X #:sample-weight (vec (map (lambda (v) (* 2 v)) grid-weights) dt))
-                   -52.0)
+     (check-equal?
+      (kmeans-score centroids X #:sample-weight (vec (map (lambda (v) (* 2 v)) grid-weights) dt))
+      -52.0)
      (match-define (kmeans-result stepped _ _ _)
-       (kmeans-fit X #:init (mat weighted-start dt) #:max-iter 1 #:sample-weight (vec step-weights dt)))
+       (kmeans-fit X
+                   #:init (mat weighted-start dt)
+                   #:max-iter 1
+                   #:sample-weight (vec step-weights dt)))
      (check-equal? (host stepped) '((1.0 1.5) (12.0 12.0)))
      (define unit (outcome (fit-grid grid8 start dt #:sample-weight (vec (make-list 8 1) dt))))
      (check-equal? unit (outcome (fit-grid grid8 start dt)))
-     (check-equal? (outcome (fit-grid grid8 start dt #:sample-weight (vec (make-list 8 2) dt)))
-                   unit)
+     (check-equal? (outcome (fit-grid grid8 start dt #:sample-weight (vec (make-list 8 2) dt))) unit)
      (list inertia (host stepped) unit))))
 
 (test-gpu "law D: translating and permuting the grid moves the fit with it"
   (same-for-both-dtypes
    (lambda (dt)
-     (match-define (list centroids labels _ _) (outcome (fit-grid grid64 grid64-start dt #:max-iter 1)))
+     (match-define (list centroids labels _ _)
+       (outcome (fit-grid grid64 grid64-start dt #:max-iter 1)))
      (define t '(5 -7))
      (match-define (list moved moved-labels _ _)
        (outcome (fit-grid (shift grid64 t) (shift grid64-start t) dt #:max-iter 1)))
      (check-equal? moved (shift centroids t))
      (check-equal? moved-labels labels)
-     (define order (for/list ([i (in-range 64)]) (modulo (* i 13) 64)))
-     (define permuted (for/list ([i (in-list order)]) (list-ref grid64 i)))
+     (define order
+       (for/list ([i (in-range 64)])
+         (modulo (* i 13) 64)))
+     (define permuted
+       (for/list ([i (in-list order)])
+         (list-ref grid64 i)))
      (match-define (list p-centroids p-labels _ _)
        (outcome (fit-grid permuted grid64-start dt #:max-iter 1)))
      (check-equal? p-centroids centroids)
-     (check-equal? p-labels (for/list ([i (in-list order)]) (list-ref labels i)))
+     (check-equal? p-labels
+                   (for/list ([i (in-list order)])
+                     (list-ref labels i)))
      (list centroids labels))))
 
 (test-gpu "law D: fits repeat for a seed, and an array init ignores n-init"

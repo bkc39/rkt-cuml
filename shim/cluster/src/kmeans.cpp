@@ -1,11 +1,12 @@
+#include <cuda_runtime_api.h>
+
 #include <cstddef>
 #include <cstdint>
-#include <cuda_runtime_api.h>
 #include <cuml/cluster/kmeans.hpp>
+#include <initializer_list>
 #include <raft/core/device_mdarray.hpp>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
-#include <initializer_list>
 #include <string>
 #include <utility>
 
@@ -96,8 +97,7 @@ Params::InitMethod init_method_of(const fit_arrays& arrays, int32_t code) {
   if (code == CUML_CLUSTER_KMEANS_INIT_RANDOM) {
     return Params::InitMethod::Random;
   }
-  return array ? Params::InitMethod::Array
-               : Params::InitMethod::KMeansPlusPlus;
+  return array ? Params::InitMethod::Array : Params::InitMethod::KMeansPlusPlus;
 }
 
 Params params_of(int32_t n_clusters, int32_t batch_samples) {
@@ -140,7 +140,8 @@ void fit(const raft::handle_t& handle, const fit_arrays& arrays,
   require_at_least("n-init", options.n_init, 1);
   require_at_least("max-samples-per-batch", options.batch_samples, 0);
   T* centroids = rows_of<T>(arrays.centroids, "centroids", k, x.d).data;
-  int* labels = raftrkt::vector_data<int32_t, int>(arrays.labels, "labels", x.n);
+  int* labels =
+      raftrkt::vector_data<int32_t, int>(arrays.labels, "labels", x.n);
 
   Params p = params_of(k, options.batch_samples);
   p.init = method;
@@ -203,13 +204,13 @@ void predict(const raft::handle_t& handle, const predict_arrays& arrays,
   T found = 0;
   if (arrays.labels == nullptr) {
     auto scratch = raft::make_device_vector<int32_t, int>(handle, in.x.n);
-    ML::kmeans::predict(handle, p, in.centroids.data, in.x.data, in.x.n,
-                        in.x.d, w, true, scratch.data_handle(), found);
+    ML::kmeans::predict(handle, p, in.centroids.data, in.x.data, in.x.n, in.x.d,
+                        w, true, scratch.data_handle(), found);
   } else {
     int* labels =
         raftrkt::vector_data<int32_t, int>(arrays.labels, "labels", in.x.n);
-    ML::kmeans::predict(handle, p, in.centroids.data, in.x.data, in.x.n,
-                        in.x.d, w, true, labels, found);
+    ML::kmeans::predict(handle, p, in.centroids.data, in.x.data, in.x.n, in.x.d,
+                        w, true, labels, found);
   }
   *inertia = static_cast<double>(found);
 }
@@ -222,15 +223,15 @@ void transform(const raft::handle_t& handle, const rr_view* centroids,
   require_at_least("max-samples-per-batch", batch_samples, 0);
   T* out = rows_of<T>(distances, "distances", in.x.n, in.centroids.n).data;
   const Params p = params_of(in.centroids.n, batch_samples);
-  ML::kmeans::transform(handle, p, in.centroids.data, in.x.data, in.x.n,
-                        in.x.d, out);
+  ML::kmeans::transform(handle, p, in.centroids.data, in.x.data, in.x.n, in.x.d,
+                        out);
 }
 
 template <typename Fn>
-void on_device(void* handle,
-               std::initializer_list<std::pair<const char*, const rr_view*>>
-                   views,
-               const rr_view* first, const char* first_name, Fn&& fn) {
+void on_device(
+    void* handle,
+    std::initializer_list<std::pair<const char*, const rr_view*>> views,
+    const rr_view* first, const char* first_name, Fn&& fn) {
   const raft::handle_t& h = raftrkt::handle_of(handle);
   const int device = raftrkt::device_of(h);
   const raftrkt::device_scope scope{device};
@@ -258,8 +259,8 @@ int cuml_cluster_kmeans_fit(void* handle, const rr_view* x,
     *results.inertia = 0;
     *results.n_iter = 0;
     const fit_arrays arrays{x, sample_weight, init, centroids, labels};
-    const fit_options options{n_clusters, init_method,         max_iter,
-                              tol,        n_init,              oversampling_factor,
+    const fit_options options{n_clusters,    init_method, max_iter,
+                              tol,           n_init,      oversampling_factor,
                               batch_samples, seed};
     on_device(handle,
               {{"X", x},
@@ -295,12 +296,11 @@ int cuml_cluster_kmeans_transform(void* handle, const rr_view* centroids,
                                   const rr_view* x, const rr_view* distances,
                                   int32_t batch_samples) {
   return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
-    on_device(handle,
-              {{"centroids", centroids}, {"X", x}, {"distances", distances}},
-              centroids, "centroids", [&](const raft::handle_t& h, auto tag) {
-                transform<decltype(tag)>(h, centroids, x, distances,
-                                         batch_samples);
-              });
+    on_device(
+        handle, {{"centroids", centroids}, {"X", x}, {"distances", distances}},
+        centroids, "centroids", [&](const raft::handle_t& h, auto tag) {
+          transform<decltype(tag)>(h, centroids, x, distances, batch_samples);
+        });
   });
 }
 

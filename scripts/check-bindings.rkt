@@ -93,28 +93,27 @@
   (define (findings kind names)
     (for/list ([n (in-list names)])
       (list kind n)))
-  (append
-   (findings 'UNBOUND
-             (for/list ([e (in-list exports)]
-                        #:unless (member e bindings)
-                        #:unless (member e bodies))
-               e))
-   (findings 'MISSING
-             (for/list ([b (in-list (sort (remove-duplicates bindings) string<?))]
-                        #:unless (member b exports))
-               b))
-   (findings 'TWICE
-             (for/list ([b (in-list (sort (remove-duplicates bindings) string<?))]
-                        #:when (< 1 (count (lambda (c) (equal? c b)) bindings)))
-               b))
-   (findings 'UNPLANNED
-             (for/list ([e (in-list exports)]
-                        #:unless (member e (map planned-name entries))
-                        #:unless (member (string-append e "_job") (map planned-name entries)))
-               e))
-   (findings 'DUE (with-status 'due #f))
-   (findings 'STALE-PLAN (with-status 'planned #t))
-   (findings 'PLANNED (with-status 'planned #f))))
+  (append (findings 'UNBOUND
+                    (for/list ([e (in-list exports)]
+                               #:unless (member e bindings)
+                               #:unless (member e bodies))
+                      e))
+          (findings 'MISSING
+                    (for/list ([b (in-list (sort (remove-duplicates bindings) string<?))]
+                               #:unless (member b exports))
+                      b))
+          (findings 'TWICE
+                    (for/list ([b (in-list (sort (remove-duplicates bindings) string<?))]
+                               #:when (< 1 (count (lambda (c) (equal? c b)) bindings)))
+                      b))
+          (findings 'UNPLANNED
+                    (for/list ([e (in-list exports)]
+                               #:unless (member e (map planned-name entries))
+                               #:unless (member (string-append e "_job") (map planned-name entries)))
+                      e))
+          (findings 'DUE (with-status 'due #f))
+          (findings 'STALE-PLAN (with-status 'planned #t))
+          (findings 'PLANNED (with-status 'planned #f))))
 
 (define (failed? findings)
   (for/or ([f (in-list findings)])
@@ -135,9 +134,9 @@
 
 (define (count-of kind findings)
   (for/sum ([f (in-list findings)])
-    (match f
-      [(list (== kind) _) 1]
-      [_ 0])))
+           (match f
+             [(list (== kind) _) 1]
+             [_ 0])))
 
 (module+ main
   (define (in-root . parts)
@@ -168,10 +167,9 @@
            (only-in rackunit check-equal? check-false check-true test-case))
 
   (define plan
-    '((common last_error)
-      (scaffold due make_blobs make_blobs_job)
-      (issue 6 due kmeans_fit_job)
-      (issue 8 planned dbscan_fit_job)))
+    '((common last_error) (scaffold due make_blobs make_blobs_job)
+                          (issue 6 due kmeans_fit_job)
+                          (issue 8 planned dbscan_fit_job)))
 
   (define clean-exports '("kmeans_fit" "kmeans_fit_job" "last_error" "make_blobs" "make_blobs_job"))
   (define clean-bindings '("make_blobs" "make_blobs_job" "kmeans_fit_job" "last_error"))
@@ -199,11 +197,11 @@
               (append plan '((issue 9 due single_linkage_job)))))
     (check-equal? (kinds findings)
                   '((UNBOUND "dbscan_fit_job") (UNBOUND "stray")
-                    (MISSING "gone")
-                    (TWICE "make_blobs")
-                    (UNPLANNED "stray")
-                    (DUE "single_linkage_job")
-                    (STALE-PLAN "dbscan_fit_job")))
+                                               (MISSING "gone")
+                                               (TWICE "make_blobs")
+                                               (UNPLANNED "stray")
+                                               (DUE "single_linkage_job")
+                                               (STALE-PLAN "dbscan_fit_job")))
     (check-true (and (failed? findings) #t)))
 
   (test-case "bindings come from define-cluster, its #:c-id and the define-job string"
@@ -212,19 +210,21 @@
      void
      (lambda ()
        (make-directory* (build-path dir "private"))
-       (with-output-to-file (build-path dir "private" "native.rkt")
-         (lambda ()
-           (write '(module native racket/base
-                     (define-cluster cuml-cluster-make-blobs (_fun -> _int))
-                     (define-cluster blobs-short (_fun -> _int) #:c-id cuml_cluster_short_blobs)
-                     (define-job cuml-cluster-fit-job library "cuml_cluster_kmeans_fit_job" (handle))
-                     (define-job other-job library "raft_elsewhere" (handle))))))
+       (with-output-to-file
+        (build-path dir "private" "native.rkt")
+        (lambda ()
+          (write '(module native racket/base
+                    (define-cluster cuml-cluster-make-blobs (_fun -> _int))
+                    (define-cluster blobs-short (_fun -> _int) #:c-id cuml_cluster_short_blobs)
+                    (define-job cuml-cluster-fit-job library "cuml_cluster_kmeans_fit_job" (handle))
+                    (define-job other-job library "raft_elsewhere" (handle))))))
        (check-equal? (tree-bindings dir) '("make_blobs" "short_blobs" "kmeans_fit_job")))
      (lambda () (delete-directory/files dir #:must-exist? #f))))
 
   (test-case "nm lines become unprefixed export names"
-    (check-equal? (exports-in "0000 T cuml_cluster_make_blobs\n0000 T rr_other\n         U cuml_cluster_x\n")
-                  '("make_blobs")))
+    (check-equal?
+     (exports-in "0000 T cuml_cluster_make_blobs\n0000 T rr_other\n         U cuml_cluster_x\n")
+     '("make_blobs")))
 
   (test-case "the summary names the planned issues"
     (check-equal? (issue-range plan) "issue 8")

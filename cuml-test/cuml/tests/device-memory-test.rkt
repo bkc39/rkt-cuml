@@ -1,6 +1,10 @@
 #lang racket/base
 
-(require (only-in racket/file delete-directory/files file->lines file->string make-temporary-directory)
+(require (only-in racket/file
+                  delete-directory/files
+                  file->lines
+                  file->string
+                  make-temporary-directory)
          (only-in racket/match match-define)
          (only-in racket/port read-line-evt with-output-to-string)
          ;; whole-module: define-runtime-path needs bindings only-in strips
@@ -99,7 +103,8 @@
     (regexp-match? (pregexp pattern) line)))
 
 (test-case "the gpu gate allows the MIG SKIP line and no other GPU or twin SKIP"
-  (check-true (allowed? (skip-line (no-process-memory-reason "MIG-0123abcd-0000-0000-0000-000000000000"))))
+  (check-true (allowed? (skip-line (no-process-memory-reason
+                                    "MIG-0123abcd-0000-0000-0000-000000000000"))))
   (check-true (allowed? (skip-line "a GPU is present")))
   (check-false (allowed? (skip-line "no GPU (the driver reports no CUDA device)")))
   (check-false (allowed? (skip-line "no Python twin (import cuml failed)"))))

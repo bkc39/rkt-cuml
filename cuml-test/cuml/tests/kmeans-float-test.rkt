@@ -1,32 +1,31 @@
 #lang racket/base
 
-(require (only-in cuml/cluster kmeans-fit kmeans-result kmeans-result-inertia kmeans-score kmeans-transform)
+(require (only-in cuml/cluster
+                  kmeans-fit
+                  kmeans-result
+                  kmeans-result-inertia
+                  kmeans-score
+                  kmeans-transform)
          (only-in racket/list make-list remove-duplicates)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/kmeans-data.rkt"
-                  blob-data
-                  dtypes
-                  first-rows
-                  host
-                  squared-distance
-                  vec))
+         (only-in "private/kmeans-data.rkt" blob-data dtypes first-rows host squared-distance vec))
 
 (define (tolerance dt)
   (if (eq? dt 'float32) 1e-5 1e-12))
 
 (define (norm2 v)
-  (for/sum ([a (in-list v)])
-    (* a a)))
+  (for/sum ([a (in-list v)]) (* a a)))
 
 (define (host-inertia rows centroids weights)
   (define total (for/sum ([w (in-list weights)]) w))
   (define scale (/ (length rows) total))
-  (for/sum ([x (in-list rows)]
-            [w (in-list weights)])
-    (* w scale (for/fold ([best +inf.0]) ([c (in-list centroids)])
-                 (min best (squared-distance x c))))))
+  (for/sum ([x (in-list rows)] [w (in-list weights)])
+           (* w
+              scale
+              (for/fold ([best +inf.0]) ([c (in-list centroids)])
+                (min best (squared-distance x c))))))
 
 (define (relatively-close? actual expected tol)
   (<= (abs (- actual expected)) (* tol (max 1.0 (abs expected)))))
@@ -36,7 +35,9 @@
          [seed (in-range 1 4)])
     (test-case (format "~a, seed ~a" dt seed)
       (define X (blob-data 300 3 4 (+ seed 100) dt))
-      (define weights (for/list ([i (in-range 300)]) (add1 (modulo (* i 7) 5))))
+      (define weights
+        (for/list ([i (in-range 300)])
+          (add1 (modulo (* i 7) 5))))
       (define w (vec weights dt))
       (match-define (kmeans-result centroids _ inertia _)
         (kmeans-fit X #:n-clusters 4 #:random-state seed #:sample-weight w))
@@ -47,8 +48,9 @@
                   (format "inertia ~a against the host's ~a" inertia expected))
       (define unweighted (- (kmeans-score centroids X)))
       (define expected-unweighted (host-inertia rows cs (make-list 300 1)))
-      (check-true (relatively-close? unweighted expected-unweighted (tolerance dt))
-                  (format "unweighted inertia ~a against the host's ~a" unweighted expected-unweighted)))))
+      (check-true
+       (relatively-close? unweighted expected-unweighted (tolerance dt))
+       (format "unweighted inertia ~a against the host's ~a" unweighted expected-unweighted)))))
 
 (test-gpu "law F: transform gives the squared Euclidean distances"
   (for* ([dt (in-list dtypes)]

@@ -1,11 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml/cluster
-                  kmeans-fit
-                  kmeans-predict
-                  kmeans-result
-                  kmeans-score
-                  kmeans-transform)
+(require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result kmeans-score kmeans-transform)
          (only-in cuml/cluster/private/blobs blobs)
          (only-in ffi/unsafe void/reference-sink)
          (only-in racket/format ~r)
@@ -73,7 +68,9 @@
         (refuse X))
       (define after-refusals (pool-sample))
       (define refused (- (settled-count buffer-drop-count) before))
-      (check-equal? (sample-used after-refusals) (sample-used sample) "a refused fit holds no pool memory")
+      (check-equal? (sample-used after-refusals)
+                    (sample-used sample)
+                    "a refused fit holds no pool memory")
       (values (cons sample samples) (cons refused refused-drops))))
   (define wanted (* buffers-per-round rounds))
   (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
@@ -100,14 +97,17 @@
    refused-drops
    (- (release-failure-count) failures))
   (check-equal? freed wanted)
-  (check-equal? refused-drops (make-list (length samples) 0) "refusals free nothing: they allocate nothing")
+  (check-equal? refused-drops
+                (make-list (length samples) 0)
+                "refusals free nothing: they allocate nothing")
   (check-equal? (- (release-failure-count) failures) 0)
   (check-true (collect-until (lambda () (= (jobs-live) live))))
   (check-true (<= (executor-threads) (add1 threads)))
   (for ([u (in-list used)])
     (check-equal? u base-used "pool use returns to the baseline after a collection"))
-  (check-true (<= growth device-slack)
-              (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))
+  (check-true
+   (<= growth device-slack)
+   (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))
 
 (test-gpu "a fit on its own device resources gives usable outputs"
   (with-device-resources ([r (device-resources)])

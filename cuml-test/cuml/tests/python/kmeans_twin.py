@@ -4,9 +4,10 @@ data and parameters the Racket side used, and scikit-learn scores the labels."""
 import json
 import sys
 
-import cuml
 import numpy as np
 from sklearn.metrics import adjusted_rand_score
+
+import cuml
 
 
 def host(a):

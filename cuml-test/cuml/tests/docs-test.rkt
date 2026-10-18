@@ -54,18 +54,21 @@
   (check-equal? (sort (device-matrix->list* centroids) < #:key car) '((1.0 1.0) (11.0 11.0))))
 
 (test-gpu "the manual: one step from a given start is the cell means, with n-clusters inferred"
-  (check-equal? (device-matrix->list* (kmeans-result-centroids (kmeans-fit (grid) #:init (start) #:max-iter 1)))
-                '((1.0 1.0) (11.0 11.0))))
+  (check-equal?
+   (device-matrix->list* (kmeans-result-centroids (kmeans-fit (grid) #:init (start) #:max-iter 1)))
+   '((1.0 1.0) (11.0 11.0))))
 
 (test-gpu "the manual: #:max-iter 0 returns the start"
-  (check-equal? (device-matrix->list* (kmeans-result-centroids (kmeans-fit (grid) #:init (start) #:max-iter 0)))
-                '((1.0 0.0) (11.0 11.0))))
+  (check-equal?
+   (device-matrix->list* (kmeans-result-centroids (kmeans-fit (grid) #:init (start) #:max-iter 0)))
+   '((1.0 0.0) (11.0 11.0))))
 
 (test-gpu "the manual: weights pull the centroids"
   (define w (list->device-vector '(1 3 1 3 1 1 1 1) #:dtype 'float64))
-  (check-equal? (device-matrix->list*
-                 (kmeans-result-centroids (kmeans-fit (grid) #:init (start) #:max-iter 1 #:sample-weight w)))
-                '((1.0 1.5) (11.0 11.0))))
+  (check-equal?
+   (device-matrix->list* (kmeans-result-centroids
+                          (kmeans-fit (grid) #:init (start) #:max-iter 1 #:sample-weight w)))
+   '((1.0 1.5) (11.0 11.0))))
 
 (test-gpu "the manual: more clusters than samples is refused"
   (check-cuml-error 'logic

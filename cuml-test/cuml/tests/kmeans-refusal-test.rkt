@@ -31,37 +31,40 @@
     (make-keyword-procedure (lambda (kws vals . args)
                               (lambda () (keyword-apply kmeans-fit kws vals args)))))
   (define fit3
-    (make-keyword-procedure (lambda (kws vals X)
-                              (lambda () (keyword-apply kmeans-fit kws vals (list X) #:n-clusters 3)))))
-  (list (row "F1" "X: expected float32 or float64, got int32" (fit3 (matrix 10 2 'int32)))
-        (row "F2" "X: expected rank 2, got rank 1" (fit3 (vec 10 dt)))
-        (row "F3" "X: expected row-major, got col-major 10x2" (fit3 (matrix 10 2 dt #:layout 'col-major)))
-        (row "F5" "X: expected at least 1 column, got 0" (fit3 (matrix 10 0 dt)))
-        (row "F6" "n-clusters: expected at least 1, got 0" (fit X #:n-clusters 0))
-        (row "F7" "X: 10 samples are fewer than the 11 clusters" (fit X #:n-clusters 11))
-        (row "F8"
-             (format "sample-weight: expected ~a, got ~a" dt u)
-             (fit3 X #:sample-weight (vec 10 u)))
-        (row "F9" "sample-weight: expected 10 elements, got 9" (fit3 X #:sample-weight (vec 9 dt)))
-        (row "F10"
-             "init: expected scalable-k-means++, k-means++, random or a centroids matrix"
-             (fit3 X #:init (string->symbol "k-means||")))
-        (row "F12" (format "init: expected ~a, got ~a" dt u) (fit X #:init (matrix 3 2 u)))
-        (row "F13" "init: expected 3 rows, got 2" (fit3 X #:init (matrix 2 2 dt)))
-        (row "F14" "init: expected 2 columns, got 3" (fit X #:init (matrix 3 3 dt)))
-        (row "F15"
-             "init: expected row-major, got col-major 3x2"
-             (fit X #:init (matrix 3 2 dt #:layout 'col-major)))
-        (row "F16" "max-iter: expected at least 0, got -1" (fit3 X #:max-iter -1))
-        (row "F17" "n-init: expected at least 1, got 0" (fit3 X #:n-init 0))
-        (row "F18" "max-samples-per-batch: expected at least 0, got -1" (fit3 X #:max-samples-per-batch -1))
-        (row "F21"
-             #px"RAFT failure at file=[^ ]+ line=[0-9]+: invalid parameter \\(tol<=0\\)"
-             (fit3 X #:tol 0))
-        (row "F22"
-             #px"RAFT failure at file=[^ ]+ line=[0-9]+: invalid parameter \\(oversampling_factor<0\\)"
-             (fit3 X #:oversampling-factor -1))
-        (row "F1 before F6" "X: expected float32 or float64, got int32" (fit (matrix 10 2 'int32) #:n-clusters 0))))
+    (make-keyword-procedure
+     (lambda (kws vals X) (lambda () (keyword-apply kmeans-fit kws vals (list X) #:n-clusters 3)))))
+  (list
+   (row "F1" "X: expected float32 or float64, got int32" (fit3 (matrix 10 2 'int32)))
+   (row "F2" "X: expected rank 2, got rank 1" (fit3 (vec 10 dt)))
+   (row "F3" "X: expected row-major, got col-major 10x2" (fit3 (matrix 10 2 dt #:layout 'col-major)))
+   (row "F5" "X: expected at least 1 column, got 0" (fit3 (matrix 10 0 dt)))
+   (row "F6" "n-clusters: expected at least 1, got 0" (fit X #:n-clusters 0))
+   (row "F7" "X: 10 samples are fewer than the 11 clusters" (fit X #:n-clusters 11))
+   (row "F8" (format "sample-weight: expected ~a, got ~a" dt u) (fit3 X #:sample-weight (vec 10 u)))
+   (row "F9" "sample-weight: expected 10 elements, got 9" (fit3 X #:sample-weight (vec 9 dt)))
+   (row "F10"
+        "init: expected scalable-k-means++, k-means++, random or a centroids matrix"
+        (fit3 X #:init (string->symbol "k-means||")))
+   (row "F12" (format "init: expected ~a, got ~a" dt u) (fit X #:init (matrix 3 2 u)))
+   (row "F13" "init: expected 3 rows, got 2" (fit3 X #:init (matrix 2 2 dt)))
+   (row "F14" "init: expected 2 columns, got 3" (fit X #:init (matrix 3 3 dt)))
+   (row "F15"
+        "init: expected row-major, got col-major 3x2"
+        (fit X #:init (matrix 3 2 dt #:layout 'col-major)))
+   (row "F16" "max-iter: expected at least 0, got -1" (fit3 X #:max-iter -1))
+   (row "F17" "n-init: expected at least 1, got 0" (fit3 X #:n-init 0))
+   (row "F18"
+        "max-samples-per-batch: expected at least 0, got -1"
+        (fit3 X #:max-samples-per-batch -1))
+   (row "F21"
+        #px"RAFT failure at file=[^ ]+ line=[0-9]+: invalid parameter \\(tol<=0\\)"
+        (fit3 X #:tol 0))
+   (row "F22"
+        #px"RAFT failure at file=[^ ]+ line=[0-9]+: invalid parameter \\(oversampling_factor<0\\)"
+        (fit3 X #:oversampling-factor -1))
+   (row "F1 before F6"
+        "X: expected float32 or float64, got int32"
+        (fit (matrix 10 2 'int32) #:n-clusters 0))))
 
 (define ((on centroids X) proc)
   (proc centroids X))
@@ -79,18 +82,28 @@
         (row "P3 columns" "centroids: expected at least 1 column, got 0" (on (matrix 3 0 dt) X))
         (row "P4" (format "X: expected ~a, got ~a" dt u) (on C (matrix 10 2 u)))
         (row "P5 columns" "X: expected 2 columns, got 3" (on C (matrix 10 3 dt)))
-        (row "P5 layout" "X: expected row-major, got col-major 10x2" (on C (matrix 10 2 dt #:layout 'col-major)))
+        (row "P5 layout"
+             "X: expected row-major, got col-major 10x2"
+             (on C (matrix 10 2 dt #:layout 'col-major)))
         (row "P5 rank" "X: expected rank 2, got rank 1" (on C (vec 10 dt)))
         (row "P6" "X: expected at least 1 row, got 0" (on C (matrix 0 2 dt)))
-        (row "F18" "max-samples-per-batch: expected at least 0, got -1" (lambda (proc) (proc C X #:max-samples-per-batch -1)))
-        (row "P1 before P4" "centroids: expected float32 or float64, got int32" (on (matrix 3 2 'int32) (matrix 10 2 u)))))
+        (row "F18"
+             "max-samples-per-batch: expected at least 0, got -1"
+             (lambda (proc) (proc C X #:max-samples-per-batch -1)))
+        (row "P1 before P4"
+             "centroids: expected float32 or float64, got int32"
+             (on (matrix 3 2 'int32) (matrix 10 2 u)))))
 
 (define (score-rows dt)
   (define u (other dt))
   (define X (grid dt))
   (define C (matrix 3 2 dt))
-  (list (row "P7 dtype" (format "sample-weight: expected ~a, got ~a" dt u) (lambda () (kmeans-score C X #:sample-weight (vec 10 u))))
-        (row "P7 length" "sample-weight: expected 10 elements, got 9" (lambda () (kmeans-score C X #:sample-weight (vec 9 dt))))))
+  (list (row "P7 dtype"
+             (format "sample-weight: expected ~a, got ~a" dt u)
+             (lambda () (kmeans-score C X #:sample-weight (vec 10 u))))
+        (row "P7 length"
+             "sample-weight: expected 10 elements, got 9"
+             (lambda () (kmeans-score C X #:sample-weight (vec 9 dt))))))
 
 (define (prefixed who message)
   (if (regexp? message)
@@ -101,7 +114,9 @@
   (check-cuml-error 'logic (prefixed who (row-message r)) thunk))
 
 (define appliers
-  (hasheq 'kmeans-predict kmeans-predict 'kmeans-transform kmeans-transform 'kmeans-score kmeans-score))
+  (hasheq 'kmeans-predict kmeans-predict
+          'kmeans-transform kmeans-transform
+          'kmeans-score kmeans-score))
 
 (test-gpu "kmeans-fit refuses each bad argument with its message, float32 and float64"
   (for* ([dt (in-list dtypes)]

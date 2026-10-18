@@ -83,9 +83,7 @@
   (mat (take (host X) k) dt))
 
 (define (squared-distance x c)
-  (for/sum ([a (in-list x)]
-            [b (in-list c)])
-    (* (- a b) (- a b))))
+  (for/sum ([a (in-list x)] [b (in-list c)]) (* (- a b) (- a b))))
 
 (define (argmin-row row)
   (for/fold ([best 0]

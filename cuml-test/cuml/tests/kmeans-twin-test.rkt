@@ -1,11 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml/cluster
-                  kmeans-fit
-                  kmeans-predict
-                  kmeans-result
-                  kmeans-score
-                  kmeans-transform)
+(require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result kmeans-score kmeans-transform)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list take)
@@ -19,14 +14,13 @@
 (define-runtime-path twin "python/kmeans_twin.py")
 
 (define separated
-  '((fit 300 2 3 float32 k-means++ 1)
-    (fit 500 5 4 float32 scalable-k-means++ 2)
-    (fit 400 3 5 float32 random 3)
-    (fit 300 4 3 float32 array 4)
-    (fit 300 2 3 float64 k-means++ 5)
-    (fit 500 8 6 float64 scalable-k-means++ 6)
-    (fit 1000 16 8 float32 k-means++ 7)
-    (fit 250 3 2 float64 random 8)))
+  '((fit 300 2 3 float32 k-means++ 1) (fit 500 5 4 float32 scalable-k-means++ 2)
+                                      (fit 400 3 5 float32 random 3)
+                                      (fit 300 4 3 float32 array 4)
+                                      (fit 300 2 3 float64 k-means++ 5)
+                                      (fit 500 8 6 float64 scalable-k-means++ 6)
+                                      (fit 1000 16 8 float32 k-means++ 7)
+                                      (fit 250 3 2 float64 random 8)))
 
 (define overlapping
   (for*/list ([init (in-list '(scalable-k-means++ k-means++ random))]
@@ -55,7 +49,8 @@
 (define (options->hash options)
   (match options
     ['() (hasheq)]
-    [(list* key value rest) (hash-set (options->hash rest) (string->symbol (keyword->string key)) value)]))
+    [(list* key value rest)
+     (hash-set (options->hash rest) (string->symbol (keyword->string key)) value)]))
 
 (struct spec (kind n d k dt init seed options))
 
@@ -95,7 +90,9 @@
   (define result
     (kmeans-fit X
                 #:n-clusters (spec-k s)
-                #:init (if init-rows (mat init-rows (spec-dt s)) (spec-init s))
+                #:init (if init-rows
+                           (mat init-rows (spec-dt s))
+                           (spec-init s))
                 #:random-state (spec-seed s)
                 #:max-iter (option s 'max-iter 300)
                 #:tol (option s 'tol 1e-4)
@@ -189,7 +186,10 @@
      (check-true (<= inertia-deviation 1e-9) "inertia within 1e-9")]
     [(list 'float32 'overlapping)
      (check-true (<= (abs (- n-iter their-iter)) 1) "n_iter within 1")
-     (check-true (if (= n-iter their-iter) (= ari 1.0) (>= ari 0.99)) (format "ARI ~a" ari))
+     (check-true (if (= n-iter their-iter)
+                     (= ari 1.0)
+                     (>= ari 0.99))
+                 (format "ARI ~a" ari))
      (check-true (<= inertia-deviation 1e-4) "inertia within 1e-4")]
     [(list 'float32 _)
      (check-equal? ours-labels (hash-ref theirs 'labels))
@@ -200,8 +200,7 @@
          (check-true (<= (abs (- n-iter their-iter)) 1) "n_iter within 1"))]))
 
 (define (norm2 v)
-  (for/sum ([a (in-list v)])
-    (* a a)))
+  (for/sum ([a (in-list v)]) (* a a)))
 
 (define (compare-apply a theirs)
   (match-define (applied s Y C _ labels transform score weighted-score) a)
@@ -247,9 +246,12 @@
         [theirs (in-list (list-tail results (length runs)))])
     (test-case (format "apply ~a" (spec-name (applied-spec a)))
       (compare-apply a theirs)))
-  (printf "twin summary: ~a fit and ~a apply cases; largest relative deviation float32 ~a, float64 ~a; n_iter off by one in ~a\n"
-          (length runs)
-          (length appliers)
-          (hash-ref deviations 'float32 0.0)
-          (hash-ref deviations 'float64 0.0)
-          (if (null? off-by-one) "none" (reverse off-by-one))))
+  (printf
+   "twin summary: ~a fit and ~a apply cases; largest relative deviation float32 ~a, float64 ~a; n_iter off by one in ~a\n"
+   (length runs)
+   (length appliers)
+   (hash-ref deviations 'float32 0.0)
+   (hash-ref deviations 'float64 0.0)
+   (if (null? off-by-one)
+       "none"
+       (reverse off-by-one))))

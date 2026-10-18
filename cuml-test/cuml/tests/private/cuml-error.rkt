@@ -18,5 +18,8 @@
   (check-pred exn:fail:raft? e)
   (check-equal? (and (exn:fail:raft? e) (exn:fail:raft-kind e)) kind)
   (if (regexp? message)
-      (check-regexp-match message (if (exn? e) (exn-message e) ""))
+      (check-regexp-match message
+                          (if (exn? e)
+                              (exn-message e)
+                              ""))
       (check-equal? (and (exn? e) (exn-message e)) message)))

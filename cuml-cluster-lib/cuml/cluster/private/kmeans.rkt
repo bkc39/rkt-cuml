@@ -55,7 +55,7 @@
     [(runs _) runs]))
 
 (define (kmeans-fit X
-                    #:init [init 'scalable-k-means++]
+                    #:init (init 'scalable-k-means++)
                     #:n-clusters [n-clusters (init-rows init 8)]
                     #:max-iter [max-iter 300]
                     #:tol [tol 1e-4]
@@ -87,7 +87,9 @@
 
 (define (sample-rows X)
   (match (matrix-shape X)
-    [(list n _) #:when (>= n 1) n]
+    [(list n _)
+     #:when (>= n 1)
+     n]
     [_ #f]))
 
 (define (kmeans-predict centroids

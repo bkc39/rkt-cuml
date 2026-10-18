@@ -28,10 +28,10 @@ constexpr int32_t float_dtype =
 
 template <typename T>
 inline std::unique_ptr<device_array> upload(const resources& res,
-                                     std::vector<int64_t> shape,
-                                     const values& host) {
-  auto a = std::make_unique<device_array>(res.r, float_dtype<T>,
-                                          std::move(shape));
+                                            std::vector<int64_t> shape,
+                                            const values& host) {
+  auto a =
+      std::make_unique<device_array>(res.r, float_dtype<T>, std::move(shape));
   a->write(std::vector<T>(host.begin(), host.end()));
   return a;
 }

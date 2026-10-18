@@ -256,7 +256,8 @@ void apply_refusals() {
             "sample-weight: expected " + t + ", got " + u);
   EXPECT_EQ(predict(res, &r.centroids, &r.x, &w_short, nullptr),
             "sample-weight: expected 10 elements, got 9");
-  const std::string batch = "max-samples-per-batch: expected at least 0, got -1";
+  const std::string batch =
+      "max-samples-per-batch: expected at least 0, got -1";
   EXPECT_EQ(predict(res, &r.centroids, &r.x, nullptr, &r.labels, -1), batch);
   EXPECT_EQ(transform(res, &r.centroids, &r.x, &r.distances, -1), batch);
   const rr_view labels_short = shaped(r.ints, {rows - 1});
