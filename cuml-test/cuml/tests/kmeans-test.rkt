@@ -44,8 +44,9 @@
   (match-define (kmeans-result centroids labels inertia n-iter) r)
   (list (host centroids) (host-vector labels) inertia n-iter))
 
-(define (fit-grid rows first dt . options)
-  (apply kmeans-fit (mat rows dt) #:init (mat first dt) options))
+(define fit-grid
+  (make-keyword-procedure (lambda (kws vals rows first dt)
+                            (keyword-apply kmeans-fit kws vals (list (mat rows dt)) #:init (mat first dt)))))
 
 (test-gpu "law A: every fit returns arrays of the documented shapes and dtypes"
   (for* ([dt (in-list dtypes)]

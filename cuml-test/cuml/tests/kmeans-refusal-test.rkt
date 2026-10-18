@@ -27,10 +27,12 @@
 (define (fit-rows dt)
   (define u (other dt))
   (define X (grid dt))
-  (define (fit . args)
-    (lambda () (apply kmeans-fit args)))
-  (define (fit3 X . args)
-    (lambda () (apply kmeans-fit X #:n-clusters 3 args)))
+  (define fit
+    (make-keyword-procedure (lambda (kws vals . args)
+                              (lambda () (keyword-apply kmeans-fit kws vals args)))))
+  (define fit3
+    (make-keyword-procedure (lambda (kws vals X)
+                              (lambda () (keyword-apply kmeans-fit kws vals (list X) #:n-clusters 3)))))
   (list (row "F1" "X: expected float32 or float64, got int32" (fit3 (matrix 10 2 'int32)))
         (row "F2" "X: expected rank 2, got rank 1" (fit3 (vec 10 dt)))
         (row "F3" "X: expected row-major, got col-major 10x2" (fit3 (matrix 10 2 dt #:layout 'col-major)))

@@ -7,6 +7,7 @@
                   kmeans-score
                   kmeans-transform)
          (only-in cuml/cluster/private/blobs blobs)
+         (only-in ffi/unsafe void/reference-sink)
          (only-in racket/format ~r)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
@@ -77,6 +78,7 @@
   (define wanted (* buffers-per-round rounds))
   (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
   (define freed (- (buffer-drop-count) drops))
+  (void/reference-sink X)
   (define used (map sample-used samples))
   (define growth (device-growth base-bytes samples))
   (printf

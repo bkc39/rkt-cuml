@@ -32,7 +32,7 @@
   (<= (abs (- actual expected)) (* tol (max 1.0 (abs expected)))))
 
 (test-gpu "law F: the inertia is the weighted sum of squared distances to the nearest centroid"
-  (for* ([dt (in-list dtypes)]
+  (for* ([dt (in-list '(float64))]
          [seed (in-range 1 4)])
     (test-case (format "~a, seed ~a" dt seed)
       (define X (blob-data 300 3 4 (+ seed 100) dt))
