@@ -178,7 +178,12 @@
           deviation
           ari)
   (define exact-iter? (and (eq? (spec-init s) 'array) (memv (option s 'max-iter 300) '(0 1))))
+  (define random-restarts? (and (eq? (spec-init s) 'random) (not (eqv? (option s 'n-init 'auto) 1))))
   (match (list (spec-dt s) (spec-kind s))
+    [(list 'float64 _)
+     #:when random-restarts?
+     (check-equal? ari 1.0)
+     (check-true (<= inertia-deviation 1e-9) "inertia within 1e-9")]
     [(list 'float64 _)
      (check-equal? ours-labels (hash-ref theirs 'labels))
      (check-equal? n-iter their-iter)
