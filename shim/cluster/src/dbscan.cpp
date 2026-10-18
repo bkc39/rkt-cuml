@@ -47,6 +47,7 @@ struct fit_options {
   double eps;
   int32_t min_samples;
   int32_t metric;
+  int32_t out_dtype;
   int64_t max_mbytes_per_batch;
 };
 
@@ -64,17 +65,22 @@ Distance distance_of(int32_t metric) {
 }
 
 template <typename Index>
-std::size_t cuml_batch_rows(std::size_t mbytes, std::size_t n) {
-  const std::size_t per_row = n * sizeof(bool) + (n + 2) * sizeof(Index);
-  const std::size_t fixed = n * (sizeof(Index) + sizeof(bool));
-  return (mbytes * megabyte - fixed) / per_row;
-}
+struct batch_bytes {
+  std::size_t per_row;
+  std::size_t fixed;
 
-template <typename Index>
-std::size_t least_mbytes(std::size_t n) {
-  const std::size_t bytes = n * (2 * sizeof(Index) + 2) + 2 * sizeof(Index);
-  return (bytes + megabyte - 1) / megabyte;
-}
+  explicit batch_bytes(std::size_t n)
+      : per_row((n * sizeof(bool)) + ((n + 2) * sizeof(Index))),
+        fixed(n * (sizeof(Index) + sizeof(bool))) {}
+
+  [[nodiscard]] std::size_t rows(std::size_t mbytes) const {
+    return ((mbytes * megabyte) - fixed) / per_row;
+  }
+
+  [[nodiscard]] std::size_t least_mbytes() const {
+    return (fixed + per_row + megabyte - 1) / megabyte;
+  }
+};
 
 template <typename T>
 std::size_t automatic_mbytes(std::size_t n, std::size_t d) {
@@ -83,9 +89,10 @@ std::size_t automatic_mbytes(std::size_t n, std::size_t d) {
   raftrkt::cuda_check(cudaMemGetInfo(&free_bytes, &total_bytes),
                       "cudaMemGetInfo");
   const std::size_t dataset = n * d * sizeof(T);
-  return static_cast<std::size_t>(
-      static_cast<double>(usable_percent * total_bytes / percent - dataset) /
-      static_cast<double>(megabyte));
+  const std::size_t usable =
+      ((usable_percent * total_bytes) / percent) - dataset;
+  return static_cast<std::size_t>(static_cast<double>(usable) /
+                                  static_cast<double>(megabyte));
 }
 
 template <typename T, typename Index>
@@ -96,14 +103,14 @@ void require_batch(int64_t mbytes, std::size_t n, std::size_t d) {
     throw logic_error("max-mbytes-per-batch: expected at most " +
                       std::to_string(most) + ", got " + std::to_string(mbytes));
   }
-  const std::size_t least = least_mbytes<Index>(n);
+  const batch_bytes<Index> batch(n);
+  const std::size_t least = batch.least_mbytes();
   if (mbytes > 0 && static_cast<std::size_t>(mbytes) < least) {
     throw logic_error("max-mbytes-per-batch: expected at least " +
                       std::to_string(least) + " for " + std::to_string(n) +
                       " rows, got " + std::to_string(mbytes));
   }
-  if (mbytes == 0 &&
-      cuml_batch_rows<Index>(automatic_mbytes<T>(n, d), n) == 0) {
+  if (mbytes == 0 && batch.rows(automatic_mbytes<T>(n, d)) == 0) {
     throw logic_error(
         "max-mbytes-per-batch: the automatic size holds no batch of " +
         std::to_string(n) + " rows; pass at least " + std::to_string(least));
@@ -199,10 +206,10 @@ void fit(const raft::handle_t& handle, const fit_arrays& arrays,
 
 template <typename T>
 void fit_labels(const raft::handle_t& handle, const fit_arrays& arrays,
-                const fit_options& options, int32_t out_dtype) {
-  if (out_dtype == RR_DTYPE_INT32) {
+                const fit_options& options) {
+  if (options.out_dtype == RR_DTYPE_INT32) {
     fit<T, int>(handle, arrays, options);
-  } else if (out_dtype == RR_DTYPE_INT64) {
+  } else if (options.out_dtype == RR_DTYPE_INT64) {
     fit<T, int64_t>(handle, arrays, options);
   } else {
     throw logic_error("out-dtype: expected int32 or int64");
@@ -219,12 +226,13 @@ int cuml_cluster_dbscan_fit(void* handle, const rr_view* x,
                             int32_t out_dtype, int64_t max_mbytes_per_batch) {
   return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
     const fit_arrays arrays{x, sample_weight, raftrkt::require(out, "out")};
-    const fit_options options{eps, min_samples, metric, max_mbytes_per_batch};
-    cumlrkt::cluster::on_device(
-        handle, {{"X", x}, {"sample-weight", sample_weight}}, x, "X",
-        [&](const raft::handle_t& h, auto tag) {
-          fit_labels<decltype(tag)>(h, arrays, options, out_dtype);
-        });
+    const fit_options options{eps, min_samples, metric, out_dtype,
+                              max_mbytes_per_batch};
+    cumlrkt::cluster::on_device(handle,
+                                {{"X", x}, {"sample-weight", sample_weight}}, x,
+                                "X", [&](const raft::handle_t& h, auto tag) {
+                                  fit_labels<decltype(tag)>(h, arrays, options);
+                                });
   });
 }
 

@@ -26,6 +26,7 @@ constexpr int64_t cloud_extent = 30;
 constexpr double cloud_eps = 1.5;
 constexpr int64_t small_rows = 40;
 constexpr int64_t small_cols = 3;
+constexpr double third = 1.0 / 3.0;
 constexpr uint64_t lcg_a = 6364136223846793005ULL;
 constexpr uint64_t lcg_c = 1442695040888963407ULL;
 constexpr int lcg_shift = 33;
@@ -46,11 +47,16 @@ values labels_of(const record& out, int32_t out_dtype, int32_t region) {
                                      : download<int64_t>(out, region);
 }
 
-values cloud(int64_t rows, int64_t cols, int64_t extent) {
+struct grid_shape {
+  int64_t rows;
+  int64_t cols;
+};
+
+values cloud(grid_shape shape, int64_t extent) {
   values host;
   uint64_t state = 1;
-  for (int64_t i = 0; i < rows * cols; ++i) {
-    state = state * lcg_a + lcg_c;
+  for (int64_t i = 0; i < shape.rows * shape.cols; ++i) {
+    state = (state * lcg_a) + lcg_c;
     host.push_back(static_cast<double>((state >> lcg_shift) %
                                        static_cast<uint64_t>(extent)));
   }
@@ -58,7 +64,9 @@ values cloud(int64_t rows, int64_t cols, int64_t extent) {
 }
 
 template <typename T>
-values distances(const values& x, int64_t rows, int64_t cols) {
+values distances(const values& x, grid_shape shape) {
+  const int64_t rows = shape.rows;
+  const int64_t cols = shape.cols;
   values d;
   for (int64_t i = 0; i < rows; ++i) {
     for (int64_t j = 0; j < rows; ++j) {
@@ -126,17 +134,17 @@ template <typename T>
 void leaves_x_unchanged() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const values host = cloud(small_rows, small_cols, cloud_extent);
+  const values host = cloud({small_rows, small_cols}, cloud_extent);
   const values shifted = [&] {
     values v = host;
     for (double& e : v) {
-      e += 1.0 / 3.0;
+      e += third;
     }
     return v;
   }();
   const auto x = upload<T>(res, {small_rows, small_cols}, shifted);
   const auto d = upload<T>(res, {small_rows, small_rows},
-                           distances<T>(shifted, small_rows, small_cols));
+                           distances<T>(shifted, {small_rows, small_cols}));
   const std::vector<T> x_before = x->template read<T>();
   const std::vector<T> d_before = d->template read<T>();
   for (const int32_t metric : {CUML_CLUSTER_DBSCAN_METRIC_EUCLIDEAN,
@@ -167,7 +175,7 @@ void int64_matches_int32() {
   SCOPED_TRACE(name<T>());
   const resources res;
   const auto x = upload<T>(res, {cloud_rows, cloud_cols},
-                           cloud(cloud_rows, cloud_cols, cloud_extent));
+                           cloud({cloud_rows, cloud_cols}, cloud_extent));
   const dbscan_call narrow{
       .x = &x->view, .eps = cloud_eps, .min_samples = grid_min_samples};
   dbscan_call wide = narrow;
@@ -191,10 +199,10 @@ template <typename T>
 void precomputed_partial_batch() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const values host = cloud(cloud_rows, cloud_cols, cloud_extent);
+  const values host = cloud({cloud_rows, cloud_cols}, cloud_extent);
   const auto x = upload<T>(res, {cloud_rows, cloud_cols}, host);
   const auto d = upload<T>(res, {cloud_rows, cloud_rows},
-                           distances<T>(host, cloud_rows, cloud_cols));
+                           distances<T>(host, {cloud_rows, cloud_cols}));
   for (const int64_t mbytes : {int64_t{0}, int64_t{1}}) {
     const labelling direct = fitted(res, {.x = &x->view,
                                           .eps = cloud_eps,

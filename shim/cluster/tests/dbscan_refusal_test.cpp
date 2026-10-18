@@ -20,6 +20,7 @@ namespace {
 
 constexpr int64_t rows = 10;
 constexpr int64_t cols = 2;
+constexpr int64_t zero_row = 2;
 constexpr std::size_t pool = 64;
 constexpr int64_t forged_square = 46341;
 constexpr int64_t crashing_rows = 150000;
@@ -27,7 +28,6 @@ constexpr int64_t automatic_rows = 69000;
 constexpr int32_t unknown_metric = 3;
 constexpr int64_t most_mbytes = 18446744073709;
 constexpr double tiny = 1e-50;
-constexpr std::size_t megabyte = 1000000;
 constexpr std::size_t usable_percent = 80;
 constexpr std::size_t percent = 100;
 constexpr std::size_t automatic_target = 1500000;
@@ -80,7 +80,7 @@ void fit_refusals(int32_t out_dtype) {
   record out(res);
   const allocation_meter meter;
   const auto refused = [&](const dbscan_call& c) {
-    const std::string status = dbscan(res, c);
+    std::string status = dbscan(res, c);
     EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << status;
     EXPECT_EQ(meter.peak(), 0) << status;
     expect_untouched(out);
@@ -234,8 +234,9 @@ void zero_cosine_row() {
   SCOPED_TRACE(name<T>());
   const resources res;
   values host(static_cast<std::size_t>(rows * cols), 1.0);
-  host[4] = 0;
-  host[5] = 0;
+  for (int64_t j = 0; j < cols; ++j) {
+    host[static_cast<std::size_t>((zero_row * cols) + j)] = 0;
+  }
   const auto x = upload<T>(res, {rows, cols}, host);
   record out(res);
   const allocation_meter meter;
@@ -246,7 +247,8 @@ void zero_cosine_row() {
   EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
   EXPECT_EQ(meter.current(), 0);
   expect_untouched(out);
-  host[4] = std::numeric_limits<double>::denorm_min();
+  host[static_cast<std::size_t>(zero_row * cols)] =
+      std::numeric_limits<double>::denorm_min();
   const auto subnormal = upload<T>(res, {rows, cols}, host);
   dbscan_call d = c;
   d.x = &subnormal->view;
