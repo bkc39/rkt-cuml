@@ -116,6 +116,44 @@
     when it does.
   - **Q-M.** `kmeans-result` is exported with `struct-out`.
 
+## Decisions recorded in leg 2 (estimators, #7)
+
+- `cuml/estimator` (cuml-core-lib) requires only `racket/base` and
+  `racket/generic`, so requiring it loads no native library. Five generics,
+  one per capability: `gen:estimator` (`fit`, `fitted?`,
+  `estimator-params`, `estimator-set-params`), `gen:predictor` (`predict`),
+  `gen:clusterer` (`fit-predict`, falling back to predict after fit for a
+  predictor and to `raise-support-error` otherwise), `gen:transformer`
+  (`transform`, `fit-transform` falling back to transform after fit) and
+  `gen:scorer` (`score`).
+- The `kmeans` estimator lives in `cuml-lib/cuml/private/kmeans-estimator.rkt`
+  over the `/who` forms of leg 1's procedures, which
+  `cuml/cluster/private/kmeans.rkt` provides and `cuml/cluster` does not
+  export; the public procedures are the `/who` forms with their own name.
+- The decisions posted on #5 (comment 6245375667), each with the recommended
+  answer:
+  - **Q-A.** `cuml` exports the bare `fit`, `predict`, `transform`,
+    `score`, `fit-predict`, `fit-transform` and `fitted?`, and
+    `gen:scorer`/`scorer?` keep that name. `(require cuml glmnet)` needs an
+    `except-in` for `predict` until glmnet implements `gen:predictor`.
+  - **Q-B.** `fit-predict` is on its own `gen:clusterer`, not on
+    `gen:predictor`.
+  - **Q-C.** `fit-predict` returns the labels only.
+  - **Q-D.** Errors name the generic that was called (`fit:`), through the
+    private `/who` procedures.
+  - **Q-E.** Every parameter update gives an unfitted estimator; an empty
+    update is a clone.
+  - **Q-F.** `#:resources` is a constructor keyword and parameter, `#f`
+    meaning the calling thread's `current-device-resources` at each call;
+    the estimator records no resources at fit.
+  - **Q-G.** The fitted state is `kmeans-model`, the `kmeans-result` or
+    `#f`.
+  - **Q-H.** `estimator-set-params` takes a hash.
+  - **Q-I.** `n-clusters` is resolved when the estimator is built.
+  - **Q-K.** `cuml/estimator` stays in cuml-core-lib; a `cuml-estimator-lib`
+    with deps `("base")` is a follow-up if glmnet adopts the interface.
+  - **Q-L.** k-means' `fit` and `score` ignore `y`.
+
 ## Owner decisions (2026-10-17)
 
 - The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require
