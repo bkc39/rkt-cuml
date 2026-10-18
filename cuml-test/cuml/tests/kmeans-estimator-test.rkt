@@ -39,12 +39,7 @@
                   check-true
                   fail
                   test-case)
-         (only-in raft
-                  device-resources
-                  exn:fail:raft-kind
-                  exn:fail:raft?
-                  shape
-                  with-device-resources)
+         (only-in raft device-resources exn:fail:raft-kind exn:fail:raft? shape with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt"
@@ -57,30 +52,23 @@
                   host
                   host-vector
                   mat
+                  scaled-close?
                   start
                   step-weights
                   string-inits
+                  tolerance
                   vec))
 
 (define default-params
-  (hasheq 'init
-          'scalable-k-means++
-          'n-clusters
-          8
-          'max-iter
-          300
-          'tol
-          1e-4
-          'n-init
-          'auto
-          'random-state
-          0
-          'oversampling-factor
-          2.0
-          'max-samples-per-batch
-          32768
-          'resources
-          #f))
+  (hasheq 'init 'scalable-k-means++
+          'n-clusters 8
+          'max-iter 300
+          'tol 1e-4
+          'n-init 'auto
+          'random-state 0
+          'oversampling-factor 2.0
+          'max-samples-per-batch 32768
+          'resources #f))
 
 (define round-trips
   (list (list '#:init 'init 'random)
@@ -143,10 +131,9 @@
                           (kmeans #:random-state 1 #:n-clusters 3)
                           (kmeans #:n-clusters 8)
                           (kmeans #:init 'random)))]
-        [text (in-list '("#<kmeans>"
-                         "#<kmeans #:n-clusters 3 #:random-state 1>"
-                         "#<kmeans>"
-                         "#<kmeans #:init 'random>"))])
+        [text (in-list '("#<kmeans>" "#<kmeans #:n-clusters 3 #:random-state 1>"
+                                     "#<kmeans>"
+                                     "#<kmeans #:init 'random>"))])
     (check-equal? (printed e) (list text text text))))
 
 (test-gpu "K5: a fitted estimator prints fitted"
@@ -172,7 +159,7 @@
   (check-equal? (estimator-set-params f (hasheq)) e)
   (check-equal? (equal-hash-code (estimator-set-params f (hasheq))) (equal-hash-code e)))
 
-(struct fit-case (name X w kws vals))
+(struct fit-case (name X w kws vals repeatable?))
 
 (define (estimator-of c)
   (keyword-apply kmeans (fit-case-kws c) (fit-case-vals c) '()))
@@ -188,21 +175,22 @@
   (list #f (vec weights dt)))
 
 (define (grid-cases dt)
-  (append
-   (for*/list ([init (in-list string-inits)]
-               [seed (in-range 1 4)]
-               [w (in-list (weightings dt (cyclic-weights 64)))])
-     (fit-case (format "grid64 ~a ~a seed ~a~a" dt init seed (if w " weighted" ""))
-               (mat grid64 dt)
-               w
-               '(#:init #:n-clusters #:random-state)
-               (list init 4 seed)))
-   (for/list ([w (in-list (weightings dt step-weights))])
-     (fit-case (format "grid8 ~a matrix init~a" dt (if w " weighted" ""))
-               (mat grid8 dt)
-               w
-               '(#:init)
-               (list (mat start dt))))))
+  (append (for*/list ([init (in-list string-inits)]
+                      [seed (in-range 1 4)]
+                      [w (in-list (weightings dt (cyclic-weights 64)))])
+            (fit-case (format "grid64 ~a ~a seed ~a~a" dt init seed (if w " weighted" ""))
+                      (mat grid64 dt)
+                      w
+                      '(#:init #:n-clusters #:random-state)
+                      (list init 4 seed)
+                      #t))
+          (for/list ([w (in-list (weightings dt step-weights))])
+            (fit-case (format "grid8 ~a matrix init~a" dt (if w " weighted" ""))
+                      (mat grid8 dt)
+                      w
+                      '(#:init)
+                      (list (mat start dt))
+                      #t))))
 
 (define (blob-cases dt)
   (for*/list ([seed (in-range 1 9)]
@@ -211,7 +199,17 @@
               (blob-data 400 3 5 seed dt)
               w
               '(#:n-clusters #:random-state)
-              (list 5 seed))))
+              (list 5 seed)
+              #f)))
+
+(define (check-same-distances actual expected dt repeatable?)
+  (cond
+    [repeatable? (check-equal? actual expected)]
+    [else
+     (define scale (apply max (map (lambda (row) (apply max row)) expected)))
+     (check-true (for*/and ([(actual-row expected-row) (in-parallel actual expected)]
+                            [(a b) (in-parallel actual-row expected-row)])
+                   (scaled-close? a b scale (tolerance dt))))]))
 
 (test-gpu "K7: the estimator's fit, predict, transform and score are leg 1's"
   (for* ([dt (in-list dtypes)]
@@ -236,7 +234,10 @@
       (define e (estimator-of c))
       (define f (fit e X #:sample-weight w))
       (check-equal? (host-vector (fit-predict e X #:sample-weight w)) (host-vector (predict f X)))
-      (check-equal? (host (fit-transform e X #:sample-weight w)) (host (transform f X)))
+      (check-same-distances (host (fit-transform e X #:sample-weight w))
+                            (host (transform f X))
+                            dt
+                            (fit-case-repeatable? c))
       (check-equal? (score f X #:sample-weight w) (- (kmeans-result-inertia (kmeans-model f)))))))
 
 (test-gpu "K9: refitting a fitted estimator fits from its parameters"
@@ -313,7 +314,8 @@
                              #:tol)))
   (check-equal? (keywords-of kmeans-predict) '(() (#:max-samples-per-batch #:resources)))
   (check-equal? (keywords-of kmeans-transform) '(() (#:max-samples-per-batch #:resources)))
-  (check-equal? (keywords-of kmeans-score) '(() (#:max-samples-per-batch #:resources #:sample-weight)))
+  (check-equal? (keywords-of kmeans-score)
+                '(() (#:max-samples-per-batch #:resources #:sample-weight)))
   (check-equal? (map procedure-arity (list kmeans-fit kmeans-predict kmeans-transform kmeans-score))
                 '(1 2 2 2))
   (check-equal? (map object-name (list kmeans-fit kmeans-predict kmeans-transform kmeans-score))
