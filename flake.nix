@@ -101,6 +101,27 @@
         '';
       };
 
+      sanitizerOptions = {
+        asan = "protect_shadow_gap=0:detect_leaks=1:detect_stack_use_after_return=1:abort_on_error=1";
+        ubsan = "print_stacktrace=1:halt_on_error=1";
+      };
+
+      shimSanitizers = shim.overrideAttrs (old: {
+        pname = "cumlrkt-sanitizers";
+        cmakeFlags = old.cmakeFlags ++ [ "-DCUMLRKT_SANITIZE=ON" ];
+        hardeningDisable = [
+          "fortify"
+          "fortify3"
+        ];
+        checkPhase = ''
+          runHook preCheck
+          export ASAN_OPTIONS=${sanitizerOptions.asan}
+          export UBSAN_OPTIONS=${sanitizerOptions.ubsan}
+          ctest -j1 --output-on-failure
+          runHook postCheck
+        '';
+      });
+
       # An in-place write rewrites pages a live process has mapped (rktorch
       # #72); rename leaves the old inode to whoever still runs it.
       stageNativeLibs = src: ''
@@ -180,7 +201,10 @@
         pname = "rkt-cuml";
         inherit version;
         src = lib.cleanSource ./.;
-        nativeBuildInputs = [ racket ];
+        nativeBuildInputs = [
+          racket
+          pkgs.binutils
+        ];
         buildInputs = [ shim ];
         buildPhase = ''
           runHook preBuild
@@ -204,6 +228,8 @@
           raco test --process --timeout 45 cuml-test
           raco make -v cuml-doc/cuml/scribblings/cuml.scrbl
           racket scripts/check-layout.rkt
+          raco test scripts/check-bindings.rkt
+          racket scripts/check-bindings.rkt
           runHook postCheck
         '';
         installPhase = "touch $out";
@@ -529,6 +555,9 @@
         export LD_LIBRARY_PATH="$_drv_farm''${_filtered:+:$_filtered}"
         export CUML_CUDA_DRIVER_PATH="$_drv_farm"
         export CUML_SHIM_TESTS="${shim.tests}/bin"
+        export CUML_SHIM_SANITIZED_TESTS="${shimSanitizers.tests}/bin"
+        export CUML_ASAN_OPTIONS="${sanitizerOptions.asan}"
+        export CUML_UBSAN_OPTIONS="${sanitizerOptions.ubsan}"
         export RAFT_SHIM_PROBE="${raft.shim.tests}/lib/libraftrkt_probe.so"
         export CUML_RAPIDS_PREFIX="${rapids}"
         export CMAKE_BUILD_PARALLEL_LEVEL=${toString buildJobs}
@@ -573,6 +602,7 @@
 
       checks.${system} = {
         inherit shim layout;
+        shim-sanitizers = shimSanitizers;
         racket-home-keys = racketHomeKeys;
         racket = racketPackage;
         racket-review = racketReview;

@@ -27,6 +27,7 @@ fi
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 : "${CUML_SHIM_TESTS:?run inside nix develop}"
+: "${CUML_SHIM_SANITIZED_TESTS:?run inside nix develop}"
 
 log=$(mktemp)
 racket_log=$(mktemp)
@@ -41,6 +42,12 @@ mapfile -t gtests < <(find "$CUML_SHIM_TESTS" -name 'cumlrkt_*_tests' | sort)
 echo "== shim gtests"
 for t in "${gtests[@]}"; do
   "$t" --gtest_brief=1 | tee -a "$log"
+done
+
+echo "== shim gtests under ASAN and UBSAN"
+for t in "${gtests[@]}"; do
+  ASAN_OPTIONS=$CUML_ASAN_OPTIONS UBSAN_OPTIONS=$CUML_UBSAN_OPTIONS \
+    "$CUML_SHIM_SANITIZED_TESTS/$(basename "$t")" --gtest_brief=1 | tee -a "$log"
 done
 
 echo "== shim gtests under compute-sanitizer memcheck"
@@ -71,10 +78,16 @@ raco test --process --timeout 45 cuml-test >"$racket_log" 2>&1 || {
 grep -E "^SKIP|^twin |^memory: |^device memory: |tests? passed|failure" "$racket_log"
 cat "$racket_log" >>"$log"
 
-unexpected=$(grep "^SKIP" "$log" | grep -v "^SKIP: a GPU is present" || true)
+echo "== binding census"
+racket scripts/check-bindings.rkt | tee -a "$log"
+
+mapfile -t allowed <scripts/allowed-skips.txt
+unexpected=$(grep "^SKIP" "$log" | grep -v -E -f scripts/allowed-skips.txt || true)
 if [ -n "$unexpected" ]; then
   echo "== cases that should have run here were skipped:" >&2
   echo "$unexpected" >&2
   exit 1
 fi
-echo "== SKIP lines: $(grep -c "^SKIP" "$log" || true), all of them cases that need no GPU"
+no_gpu=$(grep -c -E -e "${allowed[0]}" "$log" || true)
+mig=$(grep -c -E -e "${allowed[1]}" "$log" || true)
+echo "== SKIP lines: $(grep -c "^SKIP" "$log" || true) ($no_gpu need no GPU, $mig no per-process memory: a MIG instance)"

@@ -20,14 +20,14 @@ A multi-package repository in typed-racket's style: every package is
 | Path | Package | Holds |
 |---|---|---|
 | `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/core/private/` (the shared loader and staging) |
-| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (public, empty for now), `cuml/cluster/private/` (the loader of `libcumlrkt_cluster.so`) |
+| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`), `cuml/cluster/private/` (the bodies and the loader of `libcumlrkt_cluster.so`) |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core` and every family |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
 | `lint/` | cuml-lint | the `raco review` plugin for the test forms |
 | `shim/` | | the C++ shims, one shared library per family |
-| `scripts/` | | the gate scripts |
+| `scripts/` | | the gate scripts, the binding census and its plan |
 
 Why several packages: a user who needs clustering installs and loads only
 the clustering shim, and each family's native dependencies stay its own. A
@@ -137,15 +137,18 @@ the families will follow once it lands.
 ```bash
 nix develop                        # the GPU shell; first entry provisions
 nix flake check --max-jobs 1 --cores 4   # the CI-equivalent; GPU cases print SKIP
-scripts/gpu-suite.sh               # on the GPU host: gtests (+ memcheck), LD_BIND_NOW
-                                   #   load, raco tests with the twin; red on any SKIP
+scripts/gpu-suite.sh               # on the GPU host: gtests (+ ASAN/UBSAN, memcheck),
+                                   #   LD_BIND_NOW load, raco tests with the twin, the
+                                   #   census; red on a SKIP not in allowed-skips.txt
 raco test --process --timeout 45 cuml-test
 scripts/render-docs.sh <dir>       # the manual, red on any warning or broken link
 nix run --max-jobs 1 --cores 4 .#copy-native-libs   # restage the shims after a C++ change
 cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loop
 ```
 
-`nix develop` exports `CUML_SHIM_TESTS`, `CUML_CUDA_DRIVER_PATH`,
+`nix develop` exports `CUML_SHIM_TESTS`, `CUML_SHIM_SANITIZED_TESTS` (the
+gtests built with `-DCUMLRKT_SANITIZE=ON`), `CUML_ASAN_OPTIONS`,
+`CUML_UBSAN_OPTIONS`, `CUML_CUDA_DRIVER_PATH`,
 `CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH` and
 `RAFT_SHIM_PROBE` (rkt-raft's probe library, which the memory test reads the
 pool through). `PLTUSERHOME` is
@@ -180,10 +183,19 @@ wait below 30 GB available. Never two shim builds at once.
 ### Gates
 
 native, format, no-syntax-rule, no-raw-malloc, gpu-suite-signals, layout,
-pkg-deps, review, compile, test, gpu, resyntax, docs, check: `.racket-dev.rktd`
+pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
+check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
 (`racket <plugin>/hooks/gate.rkt . all`), and `push-gates` is the pre-push
-subset. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
+subset. `bindings` runs the census `scripts/check-bindings.rkt`: every
+`cuml_cluster_` export of the staged library is bound once (a `_job`'s body
+excepted), every binding is exported, and `scripts/cluster-bindings.rktd`,
+keyed by issue, plans each export; a leg flips its planned entries to due.
+`sanitizers` builds the `shim-sanitizers` flake check (ASAN and UBSAN; without
+a GPU only Abi and Version run, and the GPU suite runs the sanitized gtests
+on the device). An LSan leak rooted only in libcuml or libcuda frames goes in
+`shim/sanitizers/lsan.supp` with its reason in the commit; never a
+libcumlrkt frame. `.fmt.rkt` uses fmt's internal document model (`fmt/common`,
 `fmt/core`), which fmt documents as unstable: re-check `format-fun` and
 `format-hash-pairs` when `nix/racket-tools.nix` moves to a new fmt.
 `scripts/check-layout.rkt` uses `threading`; `nix/racket-tools.nix` pins
@@ -200,11 +212,26 @@ replace each when raft offers a public form:
 | Module | Bindings | Used by |
 |---|---|---|
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/python-env` |
-| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test` |
-| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test` |
-| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `memory-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `memory-test`, `private/python-env` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test`, `kmeans-memory-test` |
+| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `private/process-memory` |
+| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, the `kmeans-*` tests, `private/process-memory`, `private/python-env` |
+
+The repo's own test support, in `cuml-test/cuml/tests/private/`:
+
+| Module | Bindings |
+|---|---|
+| `cuml-error` | `check-cuml-error kind message-or-regexp thunk`, `raised` |
+| `process-memory` | `pool-sample`, `baseline-sample`, `test-process-memory`, `device-slack`, ... (the memory tests' sampling) |
+| `device-memory` | `process-device-bytes`, `no-process-memory-reason`, `process-memory-skip` |
+| `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions) |
+| `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `close?` |
+
+Every SKIP line the GPU suite allows matches one ERE in
+`scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there
+names it, and `device-memory-test` pins that the MIG line matches and the
+no-GPU and no-twin lines do not.
 
 The Python twins run with `LD_LIBRARY_PATH` set to the dev shell's driver
 farm only, so no host CUDA library shadows the ones the wheels were patched

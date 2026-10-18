@@ -34,7 +34,7 @@ done
 failed=0
 for sig in INT TERM HUP; do
   rm -f "$work/started"
-  CUML_SIGNAL_PROBE=$marker CUML_SHIM_TESTS=$stubs \
+  CUML_SIGNAL_PROBE=$marker CUML_SHIM_TESTS=$stubs CUML_SHIM_SANITIZED_TESTS=$stubs \
     env --default-signal=INT "$BASH" scripts/gpu-suite.sh >"$work/out-$sig" 2>&1 &
   outer=$!
   for _ in $(seq 50); do

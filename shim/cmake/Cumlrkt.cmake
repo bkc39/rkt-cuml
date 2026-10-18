@@ -48,7 +48,8 @@ function(cumlrkt_family family)
       ${CMAKE_CURRENT_SOURCE_DIR}/${family}/src
   )
   target_link_libraries(${lib} PRIVATE raftrkt::headers cuml_runtime)
-  target_link_options(${lib} PRIVATE "LINKER:--exclude-libs,ALL" "LINKER:--no-undefined")
+  target_link_options(${lib} PRIVATE "LINKER:--exclude-libs,ALL"
+    "$<$<NOT:$<BOOL:${CUMLRKT_SANITIZE}>>:LINKER:--no-undefined>")
   cumlrkt_enable_warnings(${lib})
   cumlrkt_apply_nix_cflags(${lib})
   install(TARGETS ${lib} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
