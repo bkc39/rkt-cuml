@@ -56,7 +56,8 @@ inline std::size_t itemsize(int32_t dtype) {
 }
 
 struct device_array {
-  device_array(rr_resources* r, int32_t dtype, std::vector<int64_t> shape) {
+  device_array(rr_resources* r, int32_t dtype, std::vector<int64_t> shape,
+               bool col_major = false) {
     std::size_t count = 1;
     for (const int64_t extent : shape) {
       count *= static_cast<std::size_t>(extent);
@@ -70,6 +71,9 @@ struct device_array {
     }
     if (shape.size() == 1) {
       view.strides[0] = 1;
+    } else if (col_major) {
+      view.strides[0] = 1;
+      view.strides[1] = shape[0];
     } else {
       view.strides[0] = shape[1];
       view.strides[1] = 1;
@@ -83,6 +87,12 @@ struct device_array {
   device_array& operator=(const device_array&) = delete;
   device_array(device_array&&) = delete;
   device_array& operator=(device_array&&) = delete;
+
+  template <typename T>
+  void write(const std::vector<T>& host) const {
+    EXPECT_EQ(rr_copy_h2d(buffer, host.data(), host.size() * sizeof(T)), RR_OK)
+        << rr_last_error();
+  }
 
   template <typename T>
   std::vector<T> read() const {

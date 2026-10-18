@@ -1,13 +1,16 @@
 #lang racket/base
 
-(require (only-in racket/file delete-directory/files file->string make-temporary-directory)
+(require (only-in racket/file delete-directory/files file->lines file->string make-temporary-directory)
          (only-in racket/match match-define)
-         (only-in racket/port read-line-evt)
-         (only-in rackunit check-equal? check-false check-regexp-match check-true)
+         (only-in racket/port read-line-evt with-output-to-string)
+         ;; whole-module: define-runtime-path needs bindings only-in strips
+         racket/runtime-path
+         (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu gpu-skip test-gpu test-unless-skipped)
          (only-in "private/device-memory.rkt"
                   call-with-device-allocation
+                  no-process-memory-reason
                   process-device-bytes
                   process-memory-skip)
          (only-in "private/holder.rkt" holder-program start-holder stop-holder))
@@ -83,3 +86,20 @@
     (subprocess-kill process #t)
     (check-true (gone-within? holder-pid 5)
                 (format "the holder (pid ~a) outlived its killed parent" holder-pid))))
+
+(define-runtime-path allowed-skips "../../../scripts/allowed-skips.txt")
+
+(define (skip-line reason)
+  (with-output-to-string (lambda ()
+                           (test-unless-skipped reason "x"
+                             (void)))))
+
+(define (allowed? line)
+  (for/or ([pattern (in-list (file->lines allowed-skips))])
+    (regexp-match? (pregexp pattern) line)))
+
+(test-case "the gpu gate allows the MIG SKIP line and no other GPU or twin SKIP"
+  (check-true (allowed? (skip-line (no-process-memory-reason "MIG-0123abcd-0000-0000-0000-000000000000"))))
+  (check-true (allowed? (skip-line "a GPU is present")))
+  (check-false (allowed? (skip-line "no GPU (the driver reports no CUDA device)")))
+  (check-false (allowed? (skip-line "no Python twin (import cuml failed)"))))
