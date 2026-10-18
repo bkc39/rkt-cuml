@@ -76,6 +76,16 @@ struct record {
   rr_deposit r{};
 };
 
+inline std::vector<int64_t> shapes(const record& d) {
+  std::vector<int64_t> found{d.r.count};
+  for (int32_t i = 0; i < d.r.count; ++i) {
+    const rr_view& v = d.r.regions[i];
+    found.push_back(v.dtype);
+    found.insert(found.end(), v.shape, v.shape + v.rank);
+  }
+  return found;
+}
+
 template <typename T>
 inline values download(const record& d, int32_t i) {
   const std::vector<T> host = d.template read<T>(i);

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "cluster_fixture.hpp"
@@ -65,11 +66,11 @@ void one_step_from_given_centroids() {
   c.max_iter = 1;
   const fit_outcome r = fit(res, c);
   ASSERT_EQ(r.status, "accepted");
-  EXPECT_EQ(out.r.count, 2);
-  EXPECT_EQ(out.r.regions[centroids_region].dtype, float_dtype<T>);
+  EXPECT_EQ(shapes(out),
+            (std::vector<int64_t>{2, float_dtype<T>, pair, grid_cols,
+                                  RR_DTYPE_INT32, grid_rows}));
   EXPECT_EQ(download<T>(out, centroids_region), cell_means);
-  EXPECT_EQ(r.n_iter, 1);
-  EXPECT_EQ(r.inertia, grid_inertia);
+  EXPECT_EQ(std::pair(r.n_iter, r.inertia), std::pair(1, grid_inertia));
   EXPECT_EQ(out.template read<int32_t>(labels_region), grid_labels);
 }
 
@@ -161,8 +162,7 @@ void predict_labels() {
   const auto c = upload<T>(res, {pair, grid_cols}, cell_means);
   record out(res);
   ASSERT_EQ(predict(res, &c->view, &x->view, &out.r), "accepted");
-  ASSERT_EQ(out.r.count, 1);
-  EXPECT_EQ(out.r.regions[0].dtype, RR_DTYPE_INT32);
+  EXPECT_EQ(shapes(out), (std::vector<int64_t>{1, RR_DTYPE_INT32, grid_rows}));
   EXPECT_EQ(out.read<int32_t>(0), grid_labels);
 }
 
@@ -188,14 +188,12 @@ void squared_distances() {
   const auto c = upload<T>(res, {pair, grid_cols}, cell_means);
   record out(res);
   ASSERT_EQ(transform(res, &c->view, &x->view, &out.r), "accepted");
-  ASSERT_EQ(out.r.count, 1);
-  EXPECT_EQ(out.r.regions[0].shape[0], grid_rows);
-  EXPECT_EQ(out.r.regions[0].shape[1], pair);
+  ASSERT_EQ(shapes(out),
+            (std::vector<int64_t>{1, float_dtype<T>, grid_rows, pair}));
   const values found = download<T>(out, 0);
-  EXPECT_EQ(found[0], near_corner);
-  EXPECT_EQ(found[1], far_corner);
-  EXPECT_EQ(found[far_row * pair], near_far_cell);
-  EXPECT_EQ(found[(far_row * pair) + 1], near_corner);
+  EXPECT_EQ((values{found[0], found[1], found[far_row * pair],
+                    found[(far_row * pair) + 1]}),
+            (values{near_corner, far_corner, near_far_cell, near_corner}));
 }
 
 TEST(Fit, OneStepFromGivenCentroidsIsTheCellMeans) {
