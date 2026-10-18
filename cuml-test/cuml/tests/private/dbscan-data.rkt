@@ -94,22 +94,21 @@
                 ([ns (in-vector neighbours)])
       (>= (for/sum ([j (in-list ns)]) (vector-ref weight j)) min-samples)))
   (define labels (make-vector n -1))
-  (for/fold ([next 0]) ([i (in-range n)])
-    (cond
-      [(and (vector-ref core? i) (= (vector-ref labels i) -1))
-       (let spread ([frontier (list i)])
-         (cond
-           [(null? frontier) (void)]
-           [else
-            (for ([j (in-list frontier)])
-              (vector-set! labels j next))
-            (spread (remove-duplicates (for*/list ([j (in-list frontier)]
-                                                   [m (in-list (vector-ref neighbours j))]
-                                                   #:when (vector-ref core? m)
-                                                   #:when (= (vector-ref labels m) -1))
-                                         m)))]))
-       (add1 next)]
-      [else next]))
+  (for/fold ([next 0])
+            ([i (in-range n)]
+             #:when (and (vector-ref core? i) (= (vector-ref labels i) -1)))
+    (let spread ([frontier (list i)])
+      (cond
+        [(null? frontier) (void)]
+        [else
+         (for ([j (in-list frontier)])
+           (vector-set! labels j next))
+         (spread (remove-duplicates (for*/list ([j (in-list frontier)]
+                                                [m (in-list (vector-ref neighbours j))]
+                                                #:when (vector-ref core? m)
+                                                #:when (= (vector-ref labels m) -1))
+                                      m)))]))
+    (add1 next))
   (define options
     (for/vector #:length n
                 ([i (in-range n)])

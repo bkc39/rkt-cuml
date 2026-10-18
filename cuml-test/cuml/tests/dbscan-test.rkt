@@ -122,8 +122,7 @@
 
 (define (precomputed-with rows k bad)
   (define D (distance-matrix rows))
-  (for/list ([row (in-list (insert-at D k (make-list (length rows) bad)))]
-             [i (in-naturals)])
+  (for/list ([row (in-list (insert-at D k (make-list (length rows) bad)))])
     (insert-at row k bad)))
 
 (define (check-isolated clean dirty k)
@@ -156,6 +155,6 @@
     (define X (mat (integer-grid 400 2 30 seed) 'float32))
     (for ([eps (in-list '(1 1.5 2.5))]
           [min-samples (in-list '(2 4 7))])
-      (match-define (list labels core) (fit-lists X #:eps eps #:min-samples min-samples))
+      (match-define (list labels _) (fit-lists X #:eps eps #:min-samples min-samples))
       (check-equal? (length labels) 400)
       (check-equal? (fitted X #:eps eps #:min-samples 401) (list (make-list 400 -1) '())))))
