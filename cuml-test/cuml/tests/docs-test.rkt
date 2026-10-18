@@ -72,11 +72,12 @@
                     "kmeans-fit: X: 8 samples are fewer than the 9 clusters"
                     (lambda () (kmeans-fit (grid) #:n-clusters 9))))
 
-(test-gpu "the manual: predict, transform and score on the chapter's centroids"
-  (match-define (kmeans-result centroids _ inertia _) (chapter-fit))
+(test-gpu "the manual: predict, transform and score on the cells of the grid"
+  (match-define (kmeans-result _ _ inertia _) (chapter-fit))
+  (define cells (kmeans-result-centroids (kmeans-fit (grid) #:init (start))))
   (check-equal? (device-vector->list
-                 (kmeans-predict centroids (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
+                 (kmeans-predict cells (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
                 '(0 1))
-  (match-define (list* first-row _) (device-matrix->list* (kmeans-transform centroids (grid))))
+  (match-define (list* first-row _) (device-matrix->list* (kmeans-transform cells (grid))))
   (check-equal? first-row '(2.0 242.0))
-  (check-equal? (list (kmeans-score centroids (grid)) (- inertia)) '(-16.0 -16.0)))
+  (check-equal? (list (kmeans-score cells (grid)) (- inertia)) '(-16.0 -16.0)))

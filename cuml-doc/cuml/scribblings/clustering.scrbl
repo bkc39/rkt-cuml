@@ -111,8 +111,9 @@ The nearest of the @racket[centroids] to each row of @racket[X], as an
 @racket['int32] vector of row indices of @racket[centroids].
 
 @examples[#:eval ev #:label #f
+(define cells (kmeans-result-centroids (kmeans-fit X #:init start)))
 (device-vector->list
- (kmeans-predict centroids (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
+ (kmeans-predict cells (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
 ]}
 
 @defproc[(kmeans-transform [centroids device-matrix?]
@@ -126,7 +127,7 @@ each row of @racket[X] to each centroid, as cuML computes them, in the
 centroids' dtype.
 
 @examples[#:eval ev #:label #f
-(car (device-matrix->list* (kmeans-transform centroids X)))
+(car (device-matrix->list* (kmeans-transform cells X)))
 ]}
 
 @defproc[(kmeans-score [centroids device-matrix?]
@@ -141,7 +142,7 @@ rescaled to sum to the number of samples. On the data a result @racket[r]
 was fitted on, it is @racket[(- (kmeans-result-inertia r))].
 
 @examples[#:eval ev #:label #f
-(list (kmeans-score centroids X) (- inertia))
+(list (kmeans-score cells X) (- inertia))
 ]}
 
 @bold{Errors.} Each procedure raises @racket[exn:fail:cuml] of kind @racket['logic], before
