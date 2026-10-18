@@ -100,12 +100,17 @@ Params::InitMethod init_method_of(const fit_arrays& arrays, int32_t code) {
   return array ? Params::InitMethod::Array : Params::InitMethod::KMeansPlusPlus;
 }
 
-Params params_of(int32_t n_clusters, int32_t batch_samples) {
+struct sizing {
+  int32_t n_clusters;
+  int32_t batch_samples;
+};
+
+Params params_of(const sizing& size) {
   Params p;
   p.verbosity = rapids_logger::level_enum::warn;
   p.metric = ML::distance::DistanceType::L2Expanded;
-  p.n_clusters = n_clusters;
-  p.batch_samples = batch_samples;
+  p.n_clusters = size.n_clusters;
+  p.batch_samples = size.batch_samples;
   p.init_size = 0;
   p.device_buffer_samples = 0;
   return p;
@@ -143,7 +148,7 @@ void fit(const raft::handle_t& handle, const fit_arrays& arrays,
   int* labels =
       raftrkt::vector_data<int32_t, int>(arrays.labels, "labels", x.n);
 
-  Params p = params_of(k, options.batch_samples);
+  Params p = params_of({k, options.batch_samples});
   p.init = method;
   p.max_iter = options.max_iter;
   p.tol = options.tol;
@@ -176,13 +181,13 @@ struct applied {
   matrix<T> x;
 };
 
-template <typename T>
-applied<T> apply_inputs(const rr_view* centroids, const rr_view* x) {
+template <typename T, typename Arrays>
+applied<T> apply_inputs(const Arrays& arrays) {
   const matrix<T> c =
-      rows_of<T>(centroids, "centroids", any_extent, any_extent);
+      rows_of<T>(arrays.centroids, "centroids", any_extent, any_extent);
   require_some("centroids", "row", c.n);
   require_some("centroids", "column", c.d);
-  const matrix<T> y = rows_of<T>(x, "X", any_extent, c.d);
+  const matrix<T> y = rows_of<T>(arrays.x, "X", any_extent, c.d);
   require_some("X", "row", y.n);
   return {c, y};
 }
@@ -197,10 +202,10 @@ struct predict_arrays {
 template <typename T>
 void predict(const raft::handle_t& handle, const predict_arrays& arrays,
              int32_t batch_samples, double* inertia) {
-  const applied<T> in = apply_inputs<T>(arrays.centroids, arrays.x);
+  const applied<T> in = apply_inputs<T>(arrays);
   const T* w = weights_of<T>(arrays.sample_weight, in.x.n);
   require_at_least("max-samples-per-batch", batch_samples, 0);
-  const Params p = params_of(in.centroids.n, batch_samples);
+  const Params p = params_of({in.centroids.n, batch_samples});
   T found = 0;
   if (arrays.labels == nullptr) {
     auto scratch = raft::make_device_vector<int32_t, int>(handle, in.x.n);
@@ -215,14 +220,20 @@ void predict(const raft::handle_t& handle, const predict_arrays& arrays,
   *inertia = static_cast<double>(found);
 }
 
+struct transform_arrays {
+  const rr_view* centroids;
+  const rr_view* x;
+  const rr_view* distances;
+};
+
 template <typename T>
-void transform(const raft::handle_t& handle, const rr_view* centroids,
-               const rr_view* x, const rr_view* distances,
+void transform(const raft::handle_t& handle, const transform_arrays& arrays,
                int32_t batch_samples) {
-  const applied<T> in = apply_inputs<T>(centroids, x);
+  const applied<T> in = apply_inputs<T>(arrays);
   require_at_least("max-samples-per-batch", batch_samples, 0);
-  T* out = rows_of<T>(distances, "distances", in.x.n, in.centroids.n).data;
-  const Params p = params_of(in.centroids.n, batch_samples);
+  T* out =
+      rows_of<T>(arrays.distances, "distances", in.x.n, in.centroids.n).data;
+  const Params p = params_of({in.centroids.n, batch_samples});
   ML::kmeans::transform(handle, p, in.centroids.data, in.x.data, in.x.n, in.x.d,
                         out);
 }
@@ -296,11 +307,12 @@ int cuml_cluster_kmeans_transform(void* handle, const rr_view* centroids,
                                   const rr_view* x, const rr_view* distances,
                                   int32_t batch_samples) {
   return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
-    on_device(
-        handle, {{"centroids", centroids}, {"X", x}, {"distances", distances}},
-        centroids, "centroids", [&](const raft::handle_t& h, auto tag) {
-          transform<decltype(tag)>(h, centroids, x, distances, batch_samples);
-        });
+    const transform_arrays arrays{centroids, x, distances};
+    on_device(handle,
+              {{"centroids", centroids}, {"X", x}, {"distances", distances}},
+              centroids, "centroids", [&](const raft::handle_t& h, auto tag) {
+                transform<decltype(tag)>(h, arrays, batch_samples);
+              });
   });
 }
 

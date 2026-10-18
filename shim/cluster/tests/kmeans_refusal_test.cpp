@@ -102,6 +102,8 @@ struct refusal_case {
   rr_view distances;
 };
 
+// NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
+// refusal row, each a branch to clang-tidy
 template <typename T>
 void fit_refusals() {
   SCOPED_TRACE(name<T>());
@@ -205,7 +207,10 @@ void fit_refusals() {
   c.oversampling_factor = -1;
   EXPECT_TRUE(cuvs_refused(refused(c), "oversampling_factor<0"));
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
+// NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
+// refusal row, each a branch to clang-tidy
 template <typename T>
 void apply_refusals() {
   SCOPED_TRACE(name<T>());
@@ -277,7 +282,10 @@ void apply_refusals() {
             RR_OK);
   EXPECT_EQ(inertia, 0);
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
+// NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
+// refusal row, each a branch to clang-tidy
 template <typename T>
 void first_in_order_wins() {
   SCOPED_TRACE(name<T>());
@@ -316,6 +324,7 @@ void first_in_order_wins() {
   EXPECT_EQ(predict(res, &c_int, &x_other, nullptr, nullptr),
             "centroids: expected float32 or float64, got int32");
 }
+// NOLINTEND(readability-function-cognitive-complexity)
 
 TEST(Refusals, NameTheArgument) {
   CUMLRKT_REQUIRE_GPU();
