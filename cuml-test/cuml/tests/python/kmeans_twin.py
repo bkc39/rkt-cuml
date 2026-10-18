@@ -61,10 +61,14 @@ def apply(case):
     }
 
 
+def params(case):
+    return cuml.KMeans().get_params()
+
+
 def main():
     with open(sys.argv[1]) as f:
         cases = json.load(f)["cases"]
-    ops = {"fit": fit, "apply": apply}
+    ops = {"fit": fit, "apply": apply, "params": params}
     results = [ops[case["op"]](case) for case in cases]
     with open(sys.argv[2], "w") as f:
         json.dump({"results": results, "version": cuml.__version__}, f)

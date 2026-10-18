@@ -17,9 +17,13 @@
 
 (provide (struct-out kmeans-result)
          kmeans-fit
+         kmeans-fit/who
          kmeans-predict
+         kmeans-predict/who
          kmeans-score
-         kmeans-transform)
+         kmeans-score/who
+         kmeans-transform
+         kmeans-transform/who)
 
 (struct kmeans-result (centroids labels inertia n-iter))
 
@@ -123,3 +127,8 @@
                                     X
                                     sample-weight
                                     max-samples-per-batch)))
+
+(define kmeans-fit/who (make-keyword-procedure (lambda _ (error 'unimplemented))))
+(define kmeans-predict/who (make-keyword-procedure (lambda _ (error 'unimplemented))))
+(define kmeans-transform/who (make-keyword-procedure (lambda _ (error 'unimplemented))))
+(define kmeans-score/who (make-keyword-procedure (lambda _ (error 'unimplemented))))

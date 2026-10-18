@@ -1,14 +1,25 @@
 #lang racket/base
 
 (require (only-in cuml
+                  estimator-params
+                  estimator-set-params
                   exn:fail:cuml
                   exn:fail:cuml?
+                  fit
+                  fit-predict
+                  fitted?
+                  gen:clusterer
+                  gen:estimator
+                  gen:predictor
+                  kmeans
                   kmeans-fit
                   kmeans-predict
                   kmeans-result
                   kmeans-result-centroids
                   kmeans-score
-                  kmeans-transform)
+                  kmeans-transform
+                  predict
+                  score)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn test-case)
          (only-in raft
@@ -91,3 +102,37 @@
 
 (test-gpu "the manual: an inexact number argument raises exn:fail:contract"
   (check-exn exn:fail:contract? (lambda () (kmeans-fit (grid) #:n-clusters 2 #:n-init 2.5))))
+
+(struct mean-split (cut)
+  #:methods gen:estimator
+  [(define (fit e X [y #f] #:sample-weight [w #f])
+     (mean-split (/ (apply + X) (length X))))
+   (define (fitted? e)
+     (and (mean-split-cut e) #t))
+   (define (estimator-params e)
+     (hasheq))
+   (define (estimator-set-params e params)
+     (mean-split #f))]
+  #:methods gen:predictor
+  [(define (predict e X)
+     (for/list ([x (in-list X)])
+       (if (< x (mean-split-cut e)) 0 1)))]
+  #:methods gen:clusterer
+  [])
+
+(test-case "the manual: mean-split clusters through the fit-predict fallback"
+  (check-equal? (fit-predict (mean-split #f) '(1 2 9 10)) '(0 0 1 1))
+  (check-equal? (fitted? (mean-split #f)) #f))
+
+(test-gpu "the manual: the k-means estimator on the grid"
+  (define km (kmeans #:n-clusters 2 #:random-state 1))
+  (check-equal? (format "~v" km) "#<kmeans #:n-clusters 2 #:random-state 1>")
+  (define fitted (fit km (grid)))
+  (check-equal? (list (fitted? km) (fitted? fitted)) '(#f #t))
+  (check-equal?
+   (device-vector->list (predict fitted (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
+   '(0 1))
+  (check-equal? (score fitted (grid)) -16.0)
+  (check-equal? (hash-ref (estimator-params km) 'n-clusters) 2)
+  (check-equal? (fitted? (estimator-set-params fitted (hasheq 'max-iter 10))) #f)
+  (check-cuml-error 'logic "predict: kmeans is not fitted" (lambda () (predict km (grid)))))

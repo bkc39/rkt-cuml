@@ -1,0 +1,334 @@
+#lang racket/base
+
+(require (only-in cuml
+                  clusterer?
+                  estimator-params
+                  estimator-set-params
+                  estimator?
+                  exn:fail:cuml?
+                  fit
+                  fit-predict
+                  fit-transform
+                  fitted?
+                  kmeans
+                  kmeans-model
+                  kmeans?
+                  predict
+                  predictor?
+                  score
+                  scorer?
+                  transform
+                  transformer?)
+         (only-in cuml/cluster
+                  kmeans-fit
+                  kmeans-predict
+                  kmeans-result
+                  kmeans-result-centroids
+                  kmeans-result-inertia
+                  kmeans-result?
+                  kmeans-score
+                  kmeans-transform)
+         (only-in racket/list make-list)
+         (only-in racket/match match match-define)
+         (only-in rackunit
+                  check-equal?
+                  check-false
+                  check-not-equal?
+                  check-pred
+                  check-regexp-match
+                  check-true
+                  fail
+                  test-case)
+         (only-in raft
+                  device-resources
+                  exn:fail:raft-kind
+                  exn:fail:raft?
+                  shape
+                  with-device-resources)
+         (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/kmeans-data.rkt"
+                  blank-matrix
+                  blob-data
+                  cyclic-weights
+                  dtypes
+                  grid64
+                  grid8
+                  host
+                  host-vector
+                  mat
+                  start
+                  step-weights
+                  string-inits
+                  vec))
+
+(define default-params
+  (hasheq 'init
+          'scalable-k-means++
+          'n-clusters
+          8
+          'max-iter
+          300
+          'tol
+          1e-4
+          'n-init
+          'auto
+          'random-state
+          0
+          'oversampling-factor
+          2.0
+          'max-samples-per-batch
+          32768
+          'resources
+          #f))
+
+(define round-trips
+  (list (list '#:init 'init 'random)
+        (list '#:n-clusters 'n-clusters 3)
+        (list '#:max-iter 'max-iter 10)
+        (list '#:tol 'tol 0.5)
+        (list '#:n-init 'n-init 2)
+        (list '#:random-state 'random-state 7)
+        (list '#:oversampling-factor 'oversampling-factor 1.5)
+        (list '#:max-samples-per-batch 'max-samples-per-batch 64)
+        (list '#:resources 'resources 'some-resources)))
+
+(define (capabilities v)
+  (map (lambda (p) (p v)) (list estimator? predictor? clusterer? transformer? scorer? kmeans?)))
+
+(define (printed v)
+  (list (format "~a" v) (format "~s" v) (format "~v" v)))
+
+(define (outcome r)
+  (match-define (kmeans-result centroids labels inertia n-iter) r)
+  (list (host centroids) (host-vector labels) inertia n-iter))
+
+(define (grid8-fit [dt 'float64])
+  (fit (kmeans #:n-clusters 2 #:random-state 1) (mat grid8 dt)))
+
+(test-case "K1: the default parameters, and every keyword round-trips"
+  (check-equal? (estimator-params (kmeans)) default-params)
+  (for ([r (in-list round-trips)])
+    (match-define (list kw key value) r)
+    (check-equal? (hash-ref (estimator-params (keyword-apply kmeans (list kw) (list value) '())) key)
+                  value
+                  (format "~a" kw))))
+
+(test-case "K2: an unknown parameter is refused, and an update is the constructor's"
+  (check-cuml-error 'logic
+                    "estimator-set-params: kmeans has no parameter bogus"
+                    (lambda () (estimator-set-params (kmeans) (hasheq 'bogus 1))))
+  (check-equal? (estimator-set-params (kmeans) (hasheq 'n-clusters 3)) (kmeans #:n-clusters 3)))
+
+(test-case "K3: an unfitted k-means estimator has every capability and no model"
+  (check-equal? (capabilities (kmeans)) '(#t #t #t #t #t #t))
+  (check-false (kmeans-model (kmeans)))
+  (check-false (fitted? (kmeans))))
+
+(test-gpu "K3: a fitted k-means estimator has every capability and a model"
+  (define f (grid8-fit))
+  (check-equal? (capabilities f) '(#t #t #t #t #t #t))
+  (check-pred kmeans-result? (kmeans-model f))
+  (check-true (fitted? f)))
+
+(test-case "K4: predict, transform and score refuse an unfitted estimator before reading X"
+  (for ([who (in-list '(predict transform score))]
+        [call (in-list (list (lambda () (predict (kmeans) #f))
+                             (lambda () (transform (kmeans) #f))
+                             (lambda () (score (kmeans) #f))))])
+    (check-cuml-error 'logic (format "~a: kmeans is not fitted" who) call)))
+
+(test-case "K5: an estimator prints the parameters that differ from the defaults"
+  (for ([e (in-list (list (kmeans)
+                          (kmeans #:random-state 1 #:n-clusters 3)
+                          (kmeans #:n-clusters 8)
+                          (kmeans #:init 'random)))]
+        [text (in-list '("#<kmeans>"
+                         "#<kmeans #:n-clusters 3 #:random-state 1>"
+                         "#<kmeans>"
+                         "#<kmeans #:init 'random>"))])
+    (check-equal? (printed e) (list text text text))))
+
+(test-gpu "K5: a fitted estimator prints fitted"
+  (define text "#<kmeans fitted #:n-clusters 2 #:random-state 1>")
+  (check-equal? (printed (grid8-fit)) (list text text text))
+  (define bare (fit (kmeans #:n-clusters 2) (mat grid8 'float64)))
+  (check-equal? (printed bare) (make-list 3 "#<kmeans fitted #:n-clusters 2>")))
+
+(test-case "K6: equal parameters are equal, with equal hash codes"
+  (check-equal? (kmeans #:n-clusters 3) (kmeans #:n-clusters 3))
+  (check-equal? (equal-hash-code (kmeans #:n-clusters 3)) (equal-hash-code (kmeans #:n-clusters 3)))
+  (check-equal? (equal-secondary-hash-code (kmeans #:n-clusters 3))
+                (equal-secondary-hash-code (kmeans #:n-clusters 3)))
+  (check-not-equal? (kmeans #:n-clusters 3) (kmeans #:n-clusters 4))
+  (check-not-equal? (kmeans) (kmeans #:resources 'other)))
+
+(test-gpu "K6: a fit is equal only to itself"
+  (define e (kmeans #:n-clusters 2 #:random-state 1))
+  (define f (fit e (mat grid8 'float64)))
+  (check-equal? f f)
+  (check-not-equal? e f)
+  (check-not-equal? f (fit e (mat grid8 'float64)))
+  (check-equal? (estimator-set-params f (hasheq)) e)
+  (check-equal? (equal-hash-code (estimator-set-params f (hasheq))) (equal-hash-code e)))
+
+(struct fit-case (name X w kws vals))
+
+(define (estimator-of c)
+  (keyword-apply kmeans (fit-case-kws c) (fit-case-vals c) '()))
+
+(define (reference-of c)
+  (keyword-apply kmeans-fit
+                 (fit-case-kws c)
+                 (fit-case-vals c)
+                 (list (fit-case-X c))
+                 #:sample-weight (fit-case-w c)))
+
+(define (weightings dt weights)
+  (list #f (vec weights dt)))
+
+(define (grid-cases dt)
+  (append
+   (for*/list ([init (in-list string-inits)]
+               [seed (in-range 1 4)]
+               [w (in-list (weightings dt (cyclic-weights 64)))])
+     (fit-case (format "grid64 ~a ~a seed ~a~a" dt init seed (if w " weighted" ""))
+               (mat grid64 dt)
+               w
+               '(#:init #:n-clusters #:random-state)
+               (list init 4 seed)))
+   (for/list ([w (in-list (weightings dt step-weights))])
+     (fit-case (format "grid8 ~a matrix init~a" dt (if w " weighted" ""))
+               (mat grid8 dt)
+               w
+               '(#:init)
+               (list (mat start dt))))))
+
+(define (blob-cases dt)
+  (for*/list ([seed (in-range 1 9)]
+              [w (in-list (weightings dt (cyclic-weights 400)))])
+    (fit-case (format "blobs ~a seed ~a~a" dt seed (if w " weighted" ""))
+              (blob-data 400 3 5 seed dt)
+              w
+              '(#:n-clusters #:random-state)
+              (list 5 seed))))
+
+(test-gpu "K7: the estimator's fit, predict, transform and score are leg 1's"
+  (for* ([dt (in-list dtypes)]
+         [c (in-list (grid-cases dt))])
+    (test-case (fit-case-name c)
+      (define X (fit-case-X c))
+      (define w (fit-case-w c))
+      (define f (fit (estimator-of c) X #:sample-weight w))
+      (check-equal? (outcome (kmeans-model f)) (outcome (reference-of c)))
+      (define C (kmeans-result-centroids (kmeans-model f)))
+      (check-equal? (host-vector (predict f X)) (host-vector (kmeans-predict C X)))
+      (check-equal? (host (transform f X)) (host (kmeans-transform C X)))
+      (check-equal? (score f X) (kmeans-score C X))
+      (check-equal? (score f X #:sample-weight w) (kmeans-score C X #:sample-weight w)))))
+
+(test-gpu "K8: fit-predict and fit-transform are predict and transform after fit"
+  (for* ([dt (in-list dtypes)]
+         [c (in-list (append (grid-cases dt) (blob-cases dt)))])
+    (test-case (fit-case-name c)
+      (define X (fit-case-X c))
+      (define w (fit-case-w c))
+      (define e (estimator-of c))
+      (define f (fit e X #:sample-weight w))
+      (check-equal? (host-vector (fit-predict e X #:sample-weight w)) (host-vector (predict f X)))
+      (check-equal? (host (fit-transform e X #:sample-weight w)) (host (transform f X)))
+      (check-equal? (score f X #:sample-weight w) (- (kmeans-result-inertia (kmeans-model f)))))))
+
+(test-gpu "K9: refitting a fitted estimator fits from its parameters"
+  (for* ([dt (in-list dtypes)]
+         [init (in-list string-inits)])
+    (test-case (format "~a ~a" dt init)
+      (define e (kmeans #:n-clusters 4 #:init init #:random-state 1))
+      (define B (mat grid64 dt))
+      (check-equal? (outcome (kmeans-model (fit (fit e (mat grid8 dt)) B)))
+                    (outcome (kmeans-model (fit e B)))))))
+
+(test-gpu "K10: errors name the generic that was called"
+  (define X (mat grid8 'float64))
+  (define f (grid8-fit))
+  (define int32 (blank-matrix 4 2 'int32))
+  (for ([message (in-list '("fit: X: 8 samples are fewer than the 9 clusters"
+                            "fit: n-clusters: expected at least 1, got 0"
+                            "fit: tol: expected greater than 0, got 0"
+                            "fit-predict: max-iter: expected at least 0, got -1"
+                            "fit: max-samples-per-batch: expected at least 0, got -1"
+                            "fit-transform: X: 8 samples are fewer than the 9 clusters"
+                            "predict: X: expected float64, got int32"
+                            "transform: X: expected float64, got int32"
+                            "score: X: expected float64, got int32"))]
+        [call (in-list (list (lambda () (fit (kmeans #:n-clusters 9) X))
+                             (lambda () (fit (kmeans #:n-clusters 0) X))
+                             (lambda () (fit (kmeans #:tol 0) X))
+                             (lambda () (fit-predict (kmeans #:max-iter -1) X))
+                             (lambda () (fit (kmeans #:max-samples-per-batch -1) X))
+                             (lambda () (fit-transform (kmeans #:n-clusters 9) X))
+                             (lambda () (predict f int32))
+                             (lambda () (transform f int32))
+                             (lambda () (score f int32))))])
+    (test-case message
+      (check-cuml-error 'logic message call)))
+  (test-case "an X that is not a device array"
+    (match (raised (lambda () (fit (kmeans) '((0 0)))))
+      [(? exn:fail:raft? e)
+       (check-false (exn:fail:cuml? e))
+       (check-regexp-match #rx"^fit:" (exn-message e))]
+      [other (fail (format "expected an exn:fail:raft, got ~e" other))])))
+
+(define (check-released message thunk)
+  (match (raised thunk)
+    [(? exn:fail:raft? e)
+     (check-equal? (exn:fail:raft-kind e) 'logic)
+     (check-equal? (exn-message e) message)]
+    [other (fail (format "expected an exn:fail:raft, got ~e" other))]))
+
+(test-gpu "K11: the resources parameter is forwarded"
+  (define X (mat grid8 'float64))
+  (define released (with-device-resources ([r (device-resources)]) r))
+  (check-released "fit: the device resources on device 0 were released"
+                  (lambda () (fit (kmeans #:n-clusters 2 #:resources released) X)))
+  (define f
+    (with-device-resources ([r (device-resources)])
+      (fit (kmeans #:n-clusters 2 #:resources r) X)))
+  (check-released "predict: the device resources on device 0 were released"
+                  (lambda () (predict f X))))
+
+(define (keywords-of proc)
+  (call-with-values (lambda () (procedure-keywords proc)) list))
+
+(test-case "K12: leg 1's procedures keep their keywords, and cuml/cluster exports no /who name"
+  (check-equal? (keywords-of kmeans-fit)
+                '(() (#:init #:max-iter
+                             #:max-samples-per-batch
+                             #:n-clusters
+                             #:n-init
+                             #:oversampling-factor
+                             #:random-state
+                             #:resources
+                             #:sample-weight
+                             #:tol)))
+  (check-equal? (keywords-of kmeans-predict) '(() (#:max-samples-per-batch #:resources)))
+  (check-equal? (keywords-of kmeans-transform) '(() (#:max-samples-per-batch #:resources)))
+  (check-equal? (keywords-of kmeans-score) '(() (#:max-samples-per-batch #:resources #:sample-weight)))
+  (check-equal? (map procedure-arity (list kmeans-fit kmeans-predict kmeans-transform kmeans-score))
+                '(1 2 2 2))
+  (check-equal? (map object-name (list kmeans-fit kmeans-predict kmeans-transform kmeans-score))
+                '(kmeans-fit kmeans-predict kmeans-transform kmeans-score))
+  (define-values (variables syntaxes) (module->exports 'cuml/cluster))
+  (check-equal? (for*/list ([phase+names (in-list (append variables syntaxes))]
+                            [entry (in-list (cdr phase+names))]
+                            #:when (regexp-match? #rx"/who$" (symbol->string (car entry))))
+                  (car entry))
+                '()))
+
+(test-gpu "K13: n-clusters is inferred from a matrix init when the estimator is built"
+  (define m (mat start 'float64))
+  (define e (kmeans #:init m))
+  (check-equal? (hash-ref (estimator-params e) 'n-clusters) (car (shape m)))
+  (check-equal? (hash-ref (estimator-params (estimator-set-params e (hasheq 'init 'random)))
+                          'n-clusters)
+                2))
