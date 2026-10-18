@@ -1,5 +1,6 @@
 #include <cuda_runtime_api.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cuml/cluster/kmeans.hpp>
@@ -76,17 +77,27 @@ void require_at_least(const std::string& what, int64_t got, int64_t least) {
   }
 }
 
+std::string printed(double got) {
+  if (std::isnan(got)) {
+    return "nan";
+  }
+  if (got == 0) {
+    return "0";
+  }
+  return std::format("{}", got);
+}
+
 void require_positive(const char* what, double got) {
   if (!(got > 0)) {
     throw logic_error(
-        std::format("{}: expected greater than 0, got {}", what, got));
+        std::format("{}: expected greater than 0, got {}", what, printed(got)));
   }
 }
 
 void require_non_negative(const char* what, double got) {
   if (!(got >= 0)) {
     throw logic_error(
-        std::format("{}: expected at least 0, got {}", what, got));
+        std::format("{}: expected at least 0, got {}", what, printed(got)));
   }
 }
 

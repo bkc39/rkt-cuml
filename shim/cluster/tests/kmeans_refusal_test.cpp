@@ -226,6 +226,10 @@ void fit_refusals() {
   EXPECT_EQ(refused(c), "tol: expected greater than 0, got 0");
   c.tol = std::numeric_limits<double>::quiet_NaN();
   EXPECT_EQ(refused(c), "tol: expected greater than 0, got nan");
+  c.tol = -std::numeric_limits<double>::quiet_NaN();
+  EXPECT_EQ(refused(c), "tol: expected greater than 0, got nan");
+  c.tol = -0.0;
+  EXPECT_EQ(refused(c), "tol: expected greater than 0, got 0");
   c = base;
   c.oversampling_factor = -1;
   EXPECT_EQ(refused(c), "oversampling-factor: expected at least 0, got -1");
@@ -357,14 +361,21 @@ void refused_parameters_allocate_nothing() {
   SCOPED_TRACE(name<T>());
   const resources res;
   const refusal_case<T> r(res);
+  record accepted(res);
+  ASSERT_EQ(fit(res, r.call(accepted)).status, "accepted");
   record out(res);
   fit_call tol = r.call(out);
   tol.tol = 0;
   fit_call oversampling = r.call(out);
   oversampling.oversampling_factor = -1;
+  const rr_view many_x = shaped(r.data, {forged_rows, cols});
+  const rr_view many_c = shaped(r.outs, {forged_clusters, cols});
   const allocation_meter meter;
-  EXPECT_NE(fit(res, tol).status, "accepted");
-  EXPECT_NE(fit(res, oversampling).status, "accepted");
+  EXPECT_EQ(fit(res, tol).status, "tol: expected greater than 0, got 0");
+  EXPECT_EQ(fit(res, oversampling).status,
+            "oversampling-factor: expected at least 0, got -1");
+  EXPECT_EQ(transform(res, &many_c, &many_x, &out.r),
+            "distances: 100000x50000 elements do not fit the index type");
   EXPECT_EQ(meter.peak(), 0);
   expect_untouched(out);
 }

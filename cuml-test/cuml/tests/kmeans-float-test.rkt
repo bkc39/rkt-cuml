@@ -95,3 +95,16 @@
       (for/list ([seed (in-range 1 4)])
         (kmeans-result-inertia (kmeans-fit X #:n-clusters 8 #:init init #:random-state seed))))
     (check-equal? (length (remove-duplicates inertias)) 3 (format "~a: ~a" init inertias))))
+
+(test-gpu "law F: scalable k-means++ with no oversampling seeds as k-means++"
+  (define X (blob-data 5000 3 6 3 'float64 #:std 4.0))
+  (define (inertia init factor)
+    (kmeans-result-inertia
+     (kmeans-fit X #:n-clusters 6 #:init init #:oversampling-factor factor #:random-state 3)))
+  (define sequential (inertia 'k-means++ 2.0))
+  (define unsampled (inertia 'scalable-k-means++ 0))
+  (define sampled (inertia 'scalable-k-means++ 2.0))
+  (check-true (<= (abs (- unsampled sequential)) (* 1e-9 sequential))
+              (format "factor 0: ~a against k-means++ ~a" unsampled sequential))
+  (check-true (> (abs (- sampled sequential)) (* 1e-9 sequential))
+              (format "factor 2: ~a against k-means++ ~a" sampled sequential)))

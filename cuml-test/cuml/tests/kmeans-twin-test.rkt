@@ -169,14 +169,18 @@
   (match-define (run _ _ _ _ (kmeans-result centroids labels inertia n-iter)) r)
   (fitted (host-vector labels) (host centroids) inertia n-iter))
 
-(define (matched-centroids labels their-labels their-centroids)
+(define (paired-deviation centroids labels their-labels their-centroids)
+  (define ours (list->vector centroids))
   (define theirs (list->vector their-centroids))
   (define pairing
-    (for/hash ([ours (in-list labels)]
+    (for/hash ([our (in-list labels)]
                [their (in-list their-labels)])
-      (values ours their)))
-  (for/list ([i (in-range (vector-length theirs))])
-    (vector-ref theirs (hash-ref pairing i i))))
+      (values our their)))
+  (for/fold ([m 0.0]) ([(our their) (in-hash pairing)])
+    (max m (max-deviation (list (vector-ref ours our)) (list (vector-ref theirs their))))))
+
+(test-case "a cluster without labels is not paired"
+  (check-equal? (paired-deviation '((0.0) (5.0) (9.0)) '(1 0 1) '(0 1 0) '((5.0) (0.0) (7.0))) 0.0))
 
 (struct comparison (dt deviation off-by-one? problems))
 
@@ -193,7 +197,7 @@
   (define ari (hash-ref theirs 'ari))
   (define inertia-deviation (relative-deviation inertia (hash-ref theirs 'inertia)))
   (define matched-deviation
-    (max-deviation centroids (matched-centroids labels (hash-ref theirs 'labels) their-centroids)))
+    (paired-deviation centroids labels (hash-ref theirs 'labels) their-centroids))
   (define exact-iter? (and (eq? (spec-init s) 'array) (memv (option s 'max-iter 300) '(0 1))))
   (define random-restarts? (and (eq? (spec-init s) 'random) (not (eqv? (option s 'n-init 'auto) 1))))
   (define problems

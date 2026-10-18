@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result? kmeans-score kmeans-transform)
+         (only-in racket/flonum fl-)
          (only-in racket/match match)
          (only-in rackunit check-equal? check-pred fail test-case)
          (only-in raft
@@ -64,6 +65,8 @@
         (fit3 X #:max-samples-per-batch -1))
    (row "F21" "tol: expected greater than 0, got 0" (fit3 X #:tol 0))
    (row "F21 nan" "tol: expected greater than 0, got nan" (fit3 X #:tol +nan.0))
+   (row "F21 -nan" "tol: expected greater than 0, got nan" (fit3 X #:tol (fl- +inf.0 +inf.0)))
+   (row "F21 -0" "tol: expected greater than 0, got 0" (fit3 X #:tol -0.0))
    (row "F22" "oversampling-factor: expected at least 0, got -1" (fit3 X #:oversampling-factor -1))
    (row "F22 nan"
         "oversampling-factor: expected at least 0, got nan"
@@ -138,7 +141,7 @@
     (check-pred kmeans-result?
                 (kmeans-fit (grid dt) #:n-clusters 3 #:init 'k-means++ #:oversampling-factor -1))))
 
-(test-gpu "kmeans-transform refuses distances past the index type, before allocating them"
+(test-gpu "kmeans-transform refuses distances past the index type"
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (check-cuml-error 'logic

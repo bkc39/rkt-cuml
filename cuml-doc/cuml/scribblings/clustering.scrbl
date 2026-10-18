@@ -63,8 +63,11 @@ move less than @racket[tol].
 The seeding is @racket[init]:
 @itemlist[
  @item{@racket['scalable-k-means++] seeds with k-means||, sampling
-       @racket[oversampling-factor] × @racket[n-clusters] points per round;}
- @item{@racket['k-means++] is its sequential form;}
+       @racket[oversampling-factor] × @racket[n-clusters] points per round,
+       and with an @racket[oversampling-factor] of 0 runs the sequential
+       k-means++;}
+ @item{@racket['k-means++] is its sequential form, and ignores
+       @racket[oversampling-factor];}
  @item{@racket['random] picks rows of @racket[X];}
  @item{a matrix of @racket[X]'s dtype gives the starting centroids, one per
        row, and is not modified.}]
