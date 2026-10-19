@@ -23,12 +23,12 @@
                   planted?
                   sparse-blocks))
 
-(struct planted (name rows truth k))
+(struct planted-dense (name rows truth k))
 
 (define (dense-planted)
   (define (blob name n-each k d gap seed)
     (define-values (rows truth) (blobs n-each k d gap seed))
-    (planted name rows truth k))
+    (planted-dense name rows truth k))
   (append (list (blob "blobs 3x100 at 50 sigma" 100 3 2 50.0 0))
           (for*/list ([n-each (in-list '(100 200))]
                       [seed (in-range 4)])
@@ -37,7 +37,7 @@
                 (blob "blobs 5x2000 at 5 sigma" 2000 5 8 5.0 7))
           (let-values ([(rows truth) (circles 1000 0.5 0.03 0)]
                        [(moon-rows moon-truth) (moons 1000 0.05 0)])
-            (list (planted "circles" rows truth 2) (planted "moons" moon-rows moon-truth 2)))))
+            (list (planted-dense "circles" rows truth 2) (planted-dense "moons" moon-rows moon-truth 2)))))
 
 (struct planted-graph (name graph truth k))
 
@@ -58,9 +58,9 @@
 
 (test-gpu "SC3: planted partitions are recovered, dense and as graphs"
   (for ([p (in-list (dense-planted))])
-    (test-case (planted-name p)
-      (check-true (planted? (labels (mat (planted-rows p) 'float32) #:n-clusters (planted-k p))
-                            (planted-truth p)))))
+    (test-case (planted-dense-name p)
+      (check-true (planted? (labels (mat (planted-dense-rows p) 'float32) #:n-clusters (planted-dense-k p))
+                            (planted-dense-truth p)))))
   (for ([p (in-list (graph-planted))])
     (test-case (planted-graph-name p)
       (check-true (planted? (graph-labels (planted-graph-graph p) #:n-clusters (planted-graph-k p))

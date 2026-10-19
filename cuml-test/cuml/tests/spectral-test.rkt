@@ -84,18 +84,18 @@
 
 (test-gpu "P1: an upper-triangle graph does not converge; a down-scaled one gives a wrong partition"
   (define-values (g truth) (blocks))
-  (check-cuml-error 'logic eigensolver (lambda () (graph-labels (graph-upper g) #:n-clusters 3)))
+  (check-cuml-error 'generic eigensolver (lambda () (graph-labels (graph-upper g) #:n-clusters 3)))
   (check-false (planted? (graph-labels (graph-scale-upper g 0.2) #:n-clusters 3) truth)))
 
 (test-gpu "P2: two disconnected cliques do not converge; three are recovered"
   (define-values (two _two-truth) (cliques '(10 10)))
-  (check-cuml-error 'logic eigensolver (lambda () (graph-labels two #:n-clusters 2)))
+  (check-cuml-error 'generic eigensolver (lambda () (graph-labels two #:n-clusters 2)))
   (define-values (three three-truth) (cliques '(10 10 10)))
   (check-true (planted? (graph-labels three #:n-clusters 3) three-truth)))
 
 (test-gpu "P3: rows repeated 20 times do not converge; repeated twice they are recovered"
   (define-values (rows truth) (blobs 40 3 2 50.0 0))
-  (check-cuml-error 'logic
+  (check-cuml-error 'generic
                     eigensolver
                     (lambda () (labels (mat (repeat-each rows 20) 'float32) #:n-clusters 3)))
   (check-true (planted? (labels (mat (repeat-each rows 2) 'float32) #:n-clusters 3)

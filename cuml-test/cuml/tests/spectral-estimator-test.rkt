@@ -59,7 +59,7 @@
   (check-equal? (printed (spectral-clustering #:n-clusters 3))
                 (make-list 3 "#<spectral-clustering #:n-clusters 3>"))
   (check-equal? (format "~v" (spectral-clustering #:eigen-tol 1e-5 #:n-clusters 3 #:n-components 2))
-                "#<spectral-clustering #:n-clusters 3 #:n-components 2 #:eigen-tol 1e-05>")
+                "#<spectral-clustering #:n-clusters 3 #:n-components 2 #:eigen-tol 1e-5>")
   (check-equal? (format "~v" (spectral-clustering #:affinity 'precomputed))
                 "#<spectral-clustering #:affinity 'precomputed>")
   (check-equal? (format "~v" (spectral-clustering #:n-clusters 8 #:eigen-tol 'auto))

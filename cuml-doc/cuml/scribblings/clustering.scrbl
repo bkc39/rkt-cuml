@@ -486,7 +486,8 @@ A self-loop is refused:
  (spectral-clustering-fit-graph (list->device-vector '(0 1 2) #:dtype 'int32)
                                 (list->device-vector '(1 1 0) #:dtype 'int32)
                                 (list->device-vector '(1.0 1.0 1.0) #:dtype 'float32)
-                                4))
+                                4
+                                #:n-clusters 2))
 ]}
 
 @bold{Errors.} @racket[spectral-clustering-fit] and
@@ -511,7 +512,7 @@ A self-loop is refused:
        entry is named;}
  @item{no weight is positive.}]
 cuML's own failures, such as an eigensolver that could not converge, raise
-@racket[exn:fail:cuml] naming the procedure, with nothing allocated, and
+@racket[exn:fail:cuml] of kind @racket['generic] naming the procedure, with nothing allocated, and
 running out of device memory has kind @racket['oom]. An argument that is not a
 device array, or @racket[resources] that were released, raises raft's
 @racket[exn:fail:raft] naming the procedure, and a number argument that does

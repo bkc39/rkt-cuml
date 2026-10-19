@@ -267,7 +267,8 @@
      (spectral-clustering-fit-graph (list->device-vector '(0 1 2) #:dtype 'int32)
                                     (list->device-vector '(1 1 0) #:dtype 'int32)
                                     (list->device-vector '(1.0 1.0 1.0) #:dtype 'float32)
-                                    4))))
+                                    4
+                                    #:n-clusters 2))))
 
 (test-gpu "the manual: the spectral clustering estimator on the three groups"
   (define sc (spectral-clustering #:n-clusters 3 #:n-neighbors 5))
