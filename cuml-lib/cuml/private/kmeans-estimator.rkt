@@ -15,7 +15,6 @@
                   define-constructor
                   define-estimator
                   logic-error
-                  params->string
                   resources-of))
 
 (provide kmeans
@@ -47,18 +46,15 @@
                     #:max-samples-per-batch (hash-ref params 'max-samples-per-batch)
                     #:resources (resources-of params)))
 
-(define (kmeans->string e)
-  (define params (kmeans-params e))
-  (define shown-defaults
-    (hash-set defaults
-              'n-clusters
-              (init-rows (hash-ref params 'init) (hash-ref defaults 'n-clusters))))
-  (params->string 'kmeans parameter-names params shown-defaults (and (kmeans-model e) #t)))
+(define (shown-defaults params)
+  (hash-set defaults 'n-clusters (init-rows (hash-ref params 'init) (hash-ref defaults 'n-clusters))))
 
 (define-estimator kmeans
                   #:fitted fitted-model
                   #:labels kmeans-result-labels
-                  #:string kmeans->string
+                  #:names parameter-names
+                  #:defaults defaults
+                  #:shown-defaults shown-defaults
                   #:methods gen:predictor
                   [(define (predict e X)
                      (on-centroids kmeans-predict/who 'predict e (model-of 'predict e) X))]

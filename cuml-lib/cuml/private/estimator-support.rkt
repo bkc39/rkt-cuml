@@ -8,6 +8,7 @@
                               ~optional
                               ~seq
                               define-splicing-syntax-class
+                              define-syntax-class
                               expr
                               id
                               keyword
@@ -22,7 +23,6 @@
          define-constructor
          define-estimator
          logic-error
-         params->string
          resources-of
          updated-params)
 
@@ -64,7 +64,11 @@
    parameter
    #:attributes (keyword name default)
    (pattern (~seq keyword:keyword (~optional (~and default:expr (~not _:keyword))))
-     #:with name (format-id #'keyword "~a" (keyword->string (syntax-e #'keyword))))))
+     #:with name (format-id #'keyword "~a" (keyword->string (syntax-e #'keyword)))))
+  (define-syntax-class method-table
+    #:description "a bracketed list of method definitions"
+    #:literals (define)
+    (pattern ((define . _) ...))))
 
 (define-syntax-parse-rule (define-constructor (constructor:id p:parameter ...)
                                               #:names names:id
@@ -78,12 +82,15 @@
 (define-syntax-parse-rule (define-estimator name:id
                                             #:fitted fitted:expr
                                             #:labels labels:expr
-                                            #:string ->string:expr
-                                            (~seq #:methods generic:id methods) ...)
+                                            #:names names:id
+                                            #:defaults defaults:expr
+                                            (~optional (~seq #:shown-defaults shown-defaults:expr))
+                                            (~seq #:methods generic:id methods:method-table) ...)
   #:with constructor (format-id #'name "~a*" #'name)
   #:with params (format-id #'name "~a-params" #'name)
   #:with model (format-id #'name "~a-model" #'name)
-  #:with (params-field model-field) (list (format-id #'name "params") (format-id #'name "model"))
+  #:with params-field (format-id #'name "params")
+  #:with model-field (format-id #'name "model")
   (struct name (params-field model-field)
     #:constructor-name constructor
     #:omit-define-syntaxes
@@ -109,4 +116,9 @@
        (recur (params e)))]
     #:methods gen:custom-write
     [(define (write-proc e port _mode)
-       (write-string (->string e) port))]))
+       (write-string (params->string 'name
+                                     names
+                                     (params e)
+                                     (~? (shown-defaults (params e)) defaults)
+                                     (and (model e) #t))
+                     port))]))

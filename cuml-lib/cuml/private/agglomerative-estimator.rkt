@@ -8,8 +8,7 @@
                   call-with-params
                   define-constructor
                   define-estimator
-                  logic-error
-                  params->string))
+                  logic-error))
 
 (provide agglomerative-clustering
          agglomerative-clustering?
@@ -25,17 +24,11 @@
     [sample-weight (logic-error "~a: agglomerative-clustering takes no sample-weight" who)]
     [else (call-with-params single-linkage-fit/who who X (hash-remove params 'linkage) (hasheq))]))
 
-(define (agglomerative-clustering->string e)
-  (params->string 'agglomerative-clustering
-                  parameter-names
-                  (agglomerative-clustering-params e)
-                  defaults
-                  (and (agglomerative-clustering-model e) #t)))
-
 (define-estimator agglomerative-clustering
                   #:fitted fitted-model
                   #:labels single-linkage-result-labels
-                  #:string agglomerative-clustering->string)
+                  #:names parameter-names
+                  #:defaults defaults)
 
 (define-constructor
  (agglomerative-clustering #:n-clusters #:metric #:linkage #:connectivity #:c #:resources)

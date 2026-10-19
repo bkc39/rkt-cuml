@@ -1,11 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/cluster/private/dbscan dbscan-defaults dbscan-fit/who dbscan-result-labels)
-         (only-in "estimator-support.rkt"
-                  call-with-params
-                  define-constructor
-                  define-estimator
-                  params->string))
+         (only-in "estimator-support.rkt" call-with-params define-constructor define-estimator))
 
 (provide dbscan
          dbscan?
@@ -16,10 +12,11 @@
 (define (fitted-model who e X sample-weight)
   (call-with-params dbscan-fit/who who X (dbscan-params e) (hasheq 'sample-weight sample-weight)))
 
-(define (dbscan->string e)
-  (params->string 'dbscan parameter-names (dbscan-params e) defaults (and (dbscan-model e) #t)))
-
-(define-estimator dbscan #:fitted fitted-model #:labels dbscan-result-labels #:string dbscan->string)
+(define-estimator dbscan
+                  #:fitted fitted-model
+                  #:labels dbscan-result-labels
+                  #:names parameter-names
+                  #:defaults defaults)
 
 (define-constructor
  (dbscan #:eps #:min-samples #:metric #:out-dtype #:max-mbytes-per-batch #:resources)

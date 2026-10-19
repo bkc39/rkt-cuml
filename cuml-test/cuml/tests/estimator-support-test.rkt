@@ -51,42 +51,79 @@
 (define (gadget-fitted who e X sample-weight)
   (list who (gadget-params e) X sample-weight))
 
+(define gadget-names '(size label))
+
+(define gadget-defaults (hasheq 'size 3 'label 'plain))
+
 (define-estimator gadget
                   #:fitted gadget-fitted
                   #:labels cddr
-                  #:string (lambda (e) (format "#<gadget ~a>" (hash-ref (gadget-params e) 'size)))
+                  #:names gadget-names
+                  #:defaults gadget-defaults
                   #:methods gen:predictor
                   [(define (predict e X)
                      (list 'predicted (gadget-model e) X))])
 
-(define plain (gadget* (hasheq 'size 3) #f))
+(define plain (gadget* gadget-defaults #f))
 
 (test-case "define-estimator: fit keeps the parameters and stores the fitted model"
   (define fitted (fit plain 'X #:sample-weight 'w))
-  (check-equal? (gadget-model fitted) (list 'fit (hasheq 'size 3) 'X 'w))
-  (check-equal? (gadget-params fitted) (hasheq 'size 3))
+  (check-equal? (gadget-model fitted) (list 'fit gadget-defaults 'X 'w))
+  (check-equal? (gadget-params fitted) gadget-defaults)
   (check-true (fitted? fitted))
   (check-false (fitted? plain))
-  (check-equal? (estimator-params fitted) (hasheq 'size 3)))
+  (check-equal? (estimator-params fitted) gadget-defaults))
 
 (test-case "define-estimator: fit-predict reads the labels of the fitted model"
   (check-equal? (fit-predict plain 'X) '(X #f)))
 
 (test-case "define-estimator: set-params merges known names and drops the model"
   (define fitted (fit plain 'X))
-  (check-equal? (estimator-set-params fitted (hasheq 'size 4)) (gadget* (hasheq 'size 4) #f))
+  (check-equal? (estimator-set-params fitted (hasheq 'size 4))
+                (gadget* (hasheq 'size 4 'label 'plain) #f))
   (check-cuml-error 'logic
                     "estimator-set-params: gadget has no parameter colour"
                     (lambda () (estimator-set-params plain (hasheq 'colour 'red)))))
 
-(test-case "define-estimator: equal on equal parameters and the same model, printed by its string"
+(test-case "define-estimator: equal on equal parameters and the same model"
   (define fitted (fit plain 'X))
-  (check-equal? (gadget* (hasheq 'size 3) #f) plain)
-  (check-equal? (equal-hash-code (gadget* (hasheq 'size 3) #f)) (equal-hash-code plain))
+  (check-equal? (gadget* (hasheq 'size 3 'label 'plain) #f) plain)
+  (check-equal? (equal-hash-code (gadget* (hasheq 'size 3 'label 'plain) #f)) (equal-hash-code plain))
   (check-not-equal? fitted (fit plain 'X))
-  (check-equal? fitted fitted)
-  (check-equal? (format "~a" plain) "#<gadget 3>"))
+  (check-equal? fitted fitted))
+
+(test-case "define-estimator: prints the fitted mark and the parameters off their defaults, in order"
+  (check-equal? (format "~a" plain) "#<gadget>")
+  (check-equal? (format "~a" (fit plain 'X)) "#<gadget fitted>")
+  (check-equal? (format "~a" (gadget* (hasheq 'size 4 'label 'bold) #f))
+                "#<gadget #:size 4 #:label 'bold>"))
+
+(define-estimator gizmo
+                  #:fitted gadget-fitted
+                  #:labels cddr
+                  #:names gadget-names
+                  #:defaults gadget-defaults
+                  #:shown-defaults
+                  (lambda (params) (hash-set gadget-defaults 'size (hash-ref params 'label))))
+
+(test-case "define-estimator: #:shown-defaults computes the defaults a print compares against"
+  (check-equal? (format "~a" (gizmo* (hasheq 'size 'plain 'label 'plain) #f)) "#<gizmo>")
+  (check-equal? (format "~a" (gizmo* gadget-defaults #f)) "#<gizmo #:size 3>"))
+
+(define-namespace-anchor anchor)
+
+(test-case "define-estimator: a #:methods table that is not a list of definitions is refused at the macro"
+  (check-exn #rx"define-estimator: expected a bracketed list of method definitions"
+             (lambda ()
+               (parameterize ([current-namespace (namespace-anchor->namespace anchor)])
+                 (expand '(define-estimator doohickey
+                                            #:fitted gadget-fitted
+                                            #:labels cddr
+                                            #:names gadget-names
+                                            #:defaults gadget-defaults
+                                            #:methods gen:predictor
+                                            (predict e X)))))))
 
 (test-case "define-estimator: the extra method tables are the estimator's"
   (check-true (predictor? plain))
-  (check-equal? (predict (fit plain 'X) 'Y) (list 'predicted (list 'fit (hasheq 'size 3) 'X #f) 'Y)))
+  (check-equal? (predict (fit plain 'X) 'Y) (list 'predicted (list 'fit gadget-defaults 'X #f) 'Y)))
