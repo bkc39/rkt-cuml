@@ -17,7 +17,13 @@
 (define defaults (hash-set* spectral-clustering-defaults 'affinity 'nearest-neighbors 'resources #f))
 
 (define (fitted-model who e X sample-weight)
-  (error 'unimplemented))
+  (define params (spectral-clustering-params e))
+  (define affinity (hash-ref params 'affinity))
+  (cond
+    [(not (eq? affinity 'nearest-neighbors))
+     (logic-error "~a: affinity: expected nearest-neighbors, got ~a" who affinity)]
+    [sample-weight (logic-error "~a: spectral-clustering takes no sample-weight" who)]
+    [else (call-with-params spectral-clustering-fit/who who X (hash-remove params 'affinity) (hasheq))]))
 
 (define-estimator spectral-clustering
                   #:fitted fitted-model
