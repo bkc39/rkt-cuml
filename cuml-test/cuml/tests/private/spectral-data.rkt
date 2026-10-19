@@ -172,7 +172,8 @@
 (define (graph-dense g)
   (define n (graph-n g))
   (define m
-    (for/vector ([_ (in-range n)])
+    (for/vector #:length n
+                ([_ (in-range n)])
       (make-vector n 0.0)))
   (for ([i (in-list (graph-rows g))]
         [j (in-list (graph-cols g))]

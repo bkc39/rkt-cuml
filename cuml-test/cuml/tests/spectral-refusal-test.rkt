@@ -108,8 +108,8 @@
 (define (edited #:rows [rows values] #:cols [cols values] #:vals [vals values])
   (graph (rows (graph-rows ring)) (cols (graph-cols ring)) (vals (graph-vals ring)) ring-n))
 
-(define (at i v)
-  (lambda (xs) (list-set xs i v)))
+(define ((at i v) xs)
+  (list-set xs i v))
 
 (define (vectors g)
   (list (list->device-vector (graph-rows g) #:dtype 'int32)
