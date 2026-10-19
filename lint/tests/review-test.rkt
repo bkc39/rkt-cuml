@@ -68,6 +68,24 @@
     (define (point x y)
       (point* x y))))
 
+(define estimator-and-its-constructor
+  '((provide widget
+             widget?
+             widget-model)
+    (define-syntax-parse-rule (define-estimator . _)
+      (void))
+    (define (fitted who e X weight)
+      (list who e X weight))
+    (define-estimator widget
+                      #:fitted fitted
+                      #:labels car
+                      #:string (lambda (e) (format "~a" (widget-params e)))
+                      #:methods gen:custom-write
+                      [(define (write-proc e port _mode)
+                         (write (widget-model e) port))])
+    (define (widget)
+      (widget* (hasheq) #f))))
+
 (define who-definitions
   '((provide twice
              twice/who)
@@ -106,6 +124,9 @@
 (test-case "a struct that keeps its syntaxes still binds its own name"
   (check-equal? (problems-in constructor-renamed-struct-with-syntaxes)
                 '("identifier 'point' is already defined")))
+
+(test-case "define-estimator binds the struct with its constructor name, and reads its options"
+  (check-equal? (problems-in estimator-and-its-constructor) '()))
 
 (test-case "define/who binds the name and its /who form"
   (check-equal? (problems-in who-definitions) '()))

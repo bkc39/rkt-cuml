@@ -9,14 +9,14 @@
                   kmeans-result-labels
                   kmeans-score/who
                   kmeans-transform/who)
-         (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
+         (only-in cuml/estimator gen:predictor gen:scorer gen:transformer)
          (only-in "estimator-support.rkt"
                   call-with-params
                   define-constructor
+                  define-estimator
                   logic-error
                   params->string
-                  resources-of
-                  updated-params))
+                  resources-of))
 
 (provide kmeans
          kmeans?
@@ -55,46 +55,25 @@
               (init-rows (hash-ref params 'init) (hash-ref defaults 'n-clusters))))
   (params->string 'kmeans parameter-names params shown-defaults (and (kmeans-model e) #t)))
 
-(struct kmeans (params model)
-  #:constructor-name kmeans*
-  #:omit-define-syntaxes
-  #:methods gen:estimator
-  [(define (fit e X [_y #f] #:sample-weight [sample-weight #f])
-     (kmeans* (kmeans-params e) (fitted-model 'fit e X sample-weight)))
-   (define (fitted? e)
-     (and (kmeans-model e) #t))
-   (define (estimator-params e)
-     (kmeans-params e))
-   (define (estimator-set-params e params)
-     (kmeans* (updated-params 'kmeans (kmeans-params e) params) #f))]
-  #:methods gen:predictor
-  [(define (predict e X)
-     (on-centroids kmeans-predict/who 'predict e (model-of 'predict e) X))]
-  #:methods gen:clusterer
-  [(define (fit-predict e X [_y #f] #:sample-weight [sample-weight #f])
-     (kmeans-result-labels (fitted-model 'fit-predict e X sample-weight)))]
-  #:methods gen:transformer
-  [(define (transform e X)
-     (on-centroids kmeans-transform/who 'transform e (model-of 'transform e) X))
-   (define (fit-transform e X [_y #f] #:sample-weight [sample-weight #f])
-     (on-centroids kmeans-transform/who
-                   'fit-transform
-                   e
-                   (fitted-model 'fit-transform e X sample-weight)
-                   X))]
-  #:methods gen:scorer
-  [(define (score e X [_y #f] #:sample-weight [sample-weight #f])
-     (scored 'score e X sample-weight))]
-  #:methods gen:equal+hash
-  [(define (equal-proc a b recur)
-     (and (recur (kmeans-params a) (kmeans-params b)) (eq? (kmeans-model a) (kmeans-model b))))
-   (define (hash-proc e recur)
-     (+ (recur (kmeans-params e)) (eq-hash-code (kmeans-model e))))
-   (define (hash2-proc e recur)
-     (recur (kmeans-params e)))]
-  #:methods gen:custom-write
-  [(define (write-proc e port _mode)
-     (write-string (kmeans->string e) port))])
+(define-estimator kmeans
+                  #:fitted fitted-model
+                  #:labels kmeans-result-labels
+                  #:string kmeans->string
+                  #:methods gen:predictor
+                  [(define (predict e X)
+                     (on-centroids kmeans-predict/who 'predict e (model-of 'predict e) X))]
+                  #:methods gen:transformer
+                  [(define (transform e X)
+                     (on-centroids kmeans-transform/who 'transform e (model-of 'transform e) X))
+                   (define (fit-transform e X [_y #f] #:sample-weight [sample-weight #f])
+                     (on-centroids kmeans-transform/who
+                                   'fit-transform
+                                   e
+                                   (fitted-model 'fit-transform e X sample-weight)
+                                   X))]
+                  #:methods gen:scorer
+                  [(define (score e X [_y #f] #:sample-weight [sample-weight #f])
+                     (scored 'score e X sample-weight))])
 
 (define-constructor (kmeans #:init
                             #:n-clusters (init-rows init (hash-ref defaults 'n-clusters))

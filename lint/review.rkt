@@ -25,16 +25,17 @@
   (pattern (name:id . _)))
 
 (define-syntax-class reviewed-form
-  #:datum-literals (define-generics define-splicing-syntax-class
-                                    define-syntax-parse-rule
-                                    define/who
-                                    quasiquote
-                                    quote
-                                    struct
-                                    test-gpu
-                                    test-twin
-                                    test-unless-skipped
-                                    test-without-gpu)
+  #:datum-literals (define-estimator define-generics
+                                     define-splicing-syntax-class
+                                     define-syntax-parse-rule
+                                     define/who
+                                     quasiquote
+                                     quote
+                                     struct
+                                     test-gpu
+                                     test-twin
+                                     test-unless-skipped
+                                     test-without-gpu)
   (pattern (quote (_ . _))
     #:attr review void)
   (pattern (quasiquote datum)
@@ -55,6 +56,16 @@
                    (~once #:omit-define-syntaxes)
                    option) ...)
     #:attr review (lambda () (recur #'(struct name (~? super) fields #:name constructor option ...))))
+  (pattern ((~and head define-estimator) name:id
+                                         (~alt (~seq #:methods generic:id methods)
+                                               (~seq option:keyword value)) ...)
+    #:with constructor (format-id #'name "~a*" #'name #:source #'name)
+    #:attr review (lambda ()
+                    (recur #'head)
+                    (for-each recur (attribute value))
+                    (recur #'(struct name (params model)
+                               #:name constructor
+                               (~@ #:methods generic methods) ...))))
   (pattern ((~and head define/who) (name:id . formals) body ...+)
     #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
     #:attr review (lambda ()

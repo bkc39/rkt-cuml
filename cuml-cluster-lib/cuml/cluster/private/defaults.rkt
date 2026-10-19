@@ -5,7 +5,8 @@
                      (only-in syntax/parse/pre define-syntax-class expr id pattern))
          (only-in syntax/parse/define define-syntax-parse-rule))
 
-(provide define-defaults)
+(provide define-codes
+         define-defaults)
 
 (begin-for-syntax
   (define-syntax-class entry
@@ -18,3 +19,7 @@
     (define table (hasheq (~@ 'e.name e.value) ...))
     (define (default key)
       (hash-ref table key))))
+
+(define-syntax-parse-rule (define-codes code:id e:entry ...)
+  (define code
+    (let ([table (hasheq (~@ 'e.name e.value) ...)]) (lambda (key) (hash-ref table key -1)))))

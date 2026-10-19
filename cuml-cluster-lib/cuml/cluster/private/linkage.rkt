@@ -1,9 +1,8 @@
 #lang racket/base
 
-(require (only-in racket/match match match-define)
-         (only-in raft current-device-resources)
+(require (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
-         (only-in "defaults.rkt" define-defaults)
+         (only-in "defaults.rkt" define-codes define-defaults)
          (only-in "define-who.rkt" define/who)
          (only-in "deposit.rkt" deposit-for)
          (only-in "native.rkt" cuml-cluster-single-linkage-fit-job))
@@ -21,16 +20,9 @@
                  [connectivity 'knn]
                  [c 15])
 
-(define (metric-code metric)
-  (match metric
-    ['euclidean 0]
-    [_ -1]))
+(define-codes metric-code [euclidean 0])
 
-(define (connectivity-code connectivity)
-  (match connectivity
-    ['pairwise 0]
-    ['knn 1]
-    [_ -1]))
+(define-codes connectivity-code [pairwise 0] [knn 1])
 
 (define/who (single-linkage-fit who
                                 X
@@ -48,5 +40,4 @@
                                        (metric-code metric)
                                        (connectivity-code connectivity)
                                        c)
-  (match-define (list labels children) (deposit->list out))
-  (single-linkage-result labels children))
+  (apply single-linkage-result (deposit->list out)))

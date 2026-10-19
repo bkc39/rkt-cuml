@@ -4,13 +4,12 @@
                   single-linkage-defaults
                   single-linkage-fit/who
                   single-linkage-result-labels)
-         (only-in cuml/estimator gen:clusterer gen:estimator)
          (only-in "estimator-support.rkt"
                   call-with-params
                   define-constructor
+                  define-estimator
                   logic-error
-                  params->string
-                  updated-params))
+                  params->string))
 
 (provide agglomerative-clustering
          agglomerative-clustering?
@@ -33,36 +32,10 @@
                   defaults
                   (and (agglomerative-clustering-model e) #t)))
 
-(struct agglomerative-clustering (params model)
-  #:constructor-name agglomerative-clustering*
-  #:omit-define-syntaxes
-  #:methods gen:estimator
-  [(define (fit e X [_y #f] #:sample-weight [sample-weight #f])
-     (agglomerative-clustering* (agglomerative-clustering-params e)
-                                (fitted-model 'fit e X sample-weight)))
-   (define (fitted? e)
-     (and (agglomerative-clustering-model e) #t))
-   (define (estimator-params e)
-     (agglomerative-clustering-params e))
-   (define (estimator-set-params e params)
-     (agglomerative-clustering*
-      (updated-params 'agglomerative-clustering (agglomerative-clustering-params e) params)
-      #f))]
-  #:methods gen:clusterer
-  [(define (fit-predict e X [_y #f] #:sample-weight [sample-weight #f])
-     (single-linkage-result-labels (fitted-model 'fit-predict e X sample-weight)))]
-  #:methods gen:equal+hash
-  [(define (equal-proc a b recur)
-     (and (recur (agglomerative-clustering-params a) (agglomerative-clustering-params b))
-          (eq? (agglomerative-clustering-model a) (agglomerative-clustering-model b))))
-   (define (hash-proc e recur)
-     (+ (recur (agglomerative-clustering-params e))
-        (eq-hash-code (agglomerative-clustering-model e))))
-   (define (hash2-proc e recur)
-     (recur (agglomerative-clustering-params e)))]
-  #:methods gen:custom-write
-  [(define (write-proc e port _mode)
-     (write-string (agglomerative-clustering->string e) port))])
+(define-estimator agglomerative-clustering
+                  #:fitted fitted-model
+                  #:labels single-linkage-result-labels
+                  #:string agglomerative-clustering->string)
 
 (define-constructor
  (agglomerative-clustering #:n-clusters #:metric #:linkage #:connectivity #:c #:resources)
