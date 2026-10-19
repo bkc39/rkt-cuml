@@ -10,8 +10,9 @@
 @author{bkc}
 
 This library binds @hyperlink["https://github.com/rapidsai/cuml"]{NVIDIA
-cuML}, the RAPIDS library of machine-learning algorithms on the GPU: k-means
-and DBSCAN clustering, with a scikit-learn-style estimator interface. It works
+cuML}, the RAPIDS library of machine-learning algorithms on the GPU: k-means,
+DBSCAN and single-linkage clustering, with a scikit-learn-style estimator
+interface. It works
 on the device arrays and device resources of @racketmodname[raft].
 
 @bold{License.} This package is distributed under @bold{Apache-2.0}.

@@ -256,5 +256,47 @@ Whether @racket[v] is a DBSCAN estimator.}
 The @racket[dbscan-result] of the fit that made @racket[estimator], or
 @racket[#f] when it is unfitted.}
 
+@section[#:tag "agglomerative-estimator"]{Agglomerative clustering estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(agglomerative-clustering
+          [#:n-clusters n-clusters exact-positive-integer? 2]
+          [#:metric metric 'euclidean 'euclidean]
+          [#:linkage linkage 'single 'single]
+          [#:connectivity connectivity (or/c 'knn 'pairwise) 'knn]
+          [#:c c (integer-in -2147483648 2147483617) 15]
+          [#:resources resources (or/c #f device-resources?) #f])
+         agglomerative-clustering?]{
+
+An unfitted agglomerative clustering estimator, with the parameters of
+@racket[single-linkage-fit] and the @racket[linkage], which is only
+@racket['single]. It is an estimator and a clusterer, and checks nothing
+until it is fitted. @racket[fit] is @racket[single-linkage-fit] with these
+parameters, and @racket[fit-predict] returns the fit's labels. @racket[y] is
+ignored, and a @racket[sample-weight] is refused. Each call runs on
+@racket[resources], or with @racket[#f] on the calling thread's
+@racket[(current-device-resources)]. Errors are @racket[single-linkage-fit]'s,
+named after the generic that was called. Printing and @racket[equal?] are as
+for @racket[kmeans].
+
+@examples[#:eval ev
+(define P (list*->device-matrix '((0) (1) (3) (7) (15)) #:dtype 'float32))
+(define ac (agglomerative-clustering #:n-clusters 3))
+ac
+(device-vector->list (fit-predict ac P))
+(eval:error (fit (agglomerative-clustering #:linkage 'ward) P))
+]}
+
+@defproc[(agglomerative-clustering? [v any/c]) boolean?]{
+
+Whether @racket[v] is an agglomerative clustering estimator.}
+
+@defproc[(agglomerative-clustering-model [estimator agglomerative-clustering?])
+         (or/c #f single-linkage-result?)]{
+
+The @racket[single-linkage-result] of the fit that made @racket[estimator], or
+@racket[#f] when it is unfitted.}
+
 @(close-eval host-ev)
 @(close-eval ev)

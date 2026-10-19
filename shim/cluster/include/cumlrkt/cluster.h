@@ -81,6 +81,20 @@ CUMLRKT_API int cuml_cluster_dbscan_fit(void* handle, const rr_view* x,
 CUMLRKT_API void cuml_cluster_dbscan_fit_job(void* args, size_t args_len,
                                              rr_job_outcome* outcome);
 
+#define CUML_CLUSTER_LINKAGE_METRIC_EUCLIDEAN 0
+#define CUML_CLUSTER_LINKAGE_CONNECTIVITY_PAIRWISE 0
+#define CUML_CLUSTER_LINKAGE_CONNECTIVITY_KNN 1
+
+/* Allocates its outputs after every check and deposits them in out: region 0
+   is the n int32 labels, region 1 the (n-1) x 2 int32 children, each row
+   ascending. c is used only by the knn connectivity. */
+CUMLRKT_API int cuml_cluster_single_linkage_fit(
+    void* handle, const rr_view* x, rr_deposit* out, int64_t n_clusters,
+    int32_t metric, int32_t connectivity, int32_t c);
+CUMLRKT_API void cuml_cluster_single_linkage_fit_job(void* args,
+                                                     size_t args_len,
+                                                     rr_job_outcome* outcome);
+
 #ifdef __cplusplus
 }
 #endif

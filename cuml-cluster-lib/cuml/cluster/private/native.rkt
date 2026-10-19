@@ -21,6 +21,7 @@
          cuml-cluster-kmeans-transform-job
          cuml-cluster-make-blobs
          cuml-cluster-make-blobs-job
+         cuml-cluster-single-linkage-fit-job
          libcuml-version)
 
 (define-runtime-path native-libs-dir "../native-libs")
@@ -83,4 +84,10 @@
             library
             "cuml_cluster_dbscan_fit_job"
             (handle view view deposit _double* _int32 _int32 _int32 _int64)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-single-linkage-fit-job
+            library
+            "cuml_cluster_single_linkage_fit_job"
+            (handle view deposit _int64 _int32 _int32 _int32)
             #:exn exn:fail:cuml)

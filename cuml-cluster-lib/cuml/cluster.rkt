@@ -3,7 +3,8 @@
 #|review: ignore|#
 
 (require "cluster/private/dbscan.rkt"
-         "cluster/private/kmeans.rkt")
+         "cluster/private/kmeans.rkt"
+         "cluster/private/linkage.rkt")
 
 (provide (except-out (all-from-out "cluster/private/dbscan.rkt") dbscan-defaults dbscan-fit/who)
          (except-out (all-from-out "cluster/private/kmeans.rkt")
@@ -12,4 +13,7 @@
                      kmeans-fit/who
                      kmeans-predict/who
                      kmeans-score/who
-                     kmeans-transform/who))
+                     kmeans-transform/who)
+         (except-out (all-from-out "cluster/private/linkage.rkt")
+                     single-linkage-defaults
+                     single-linkage-fit/who))

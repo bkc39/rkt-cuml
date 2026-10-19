@@ -197,6 +197,40 @@
 - A batch size that cuML would compute as 0, explicit or automatic, is
   refused, since cuML divides by it (SIGFPE).
 
+## Decisions recorded in leg 4 (single linkage, #9)
+
+- `single-linkage-fit` (`cuml/cluster/private/linkage.rkt`) binds
+  `ML::linkage::single_linkage` for float32 under the euclidean metric, at
+  both connectivities, through one job, `cuml_cluster_single_linkage_fit_job`.
+  It returns the labels and the children; the shim sorts each child pair
+  ascending on the device before the deposit.
+- The `agglomerative-clustering` estimator is an estimator and a clusterer;
+  its defaults are `single-linkage-defaults` plus `linkage`.
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** Euclidean only; other metrics are refused by name (#22).
+    cuVS 26.08 fails every other metric under pairwise and joins knn
+    components by L2 whatever the metric.
+  - **Q-B.** float64 is refused, not converted.
+  - **Q-C.** Each child pair is sorted ascending, as in scipy's `Z`.
+  - **Q-D.** cuML's label numbering is kept: the k cluster roots, by
+    descending node id.
+  - **Q-E.** A row with a NaN or an infinity, or a squared norm above
+    2^125, is refused with one scan of `X`, so every expanded distance
+    stays finite.
+  - **Q-F.** Merge distances and sizes are deferred (#23).
+  - **Q-G.** One row is accepted.
+  - **Q-H.** The default connectivity is `'knn`, as in Python.
+  - **Q-I.** The estimator is `agglomerative-clustering`;
+    `single-linkage` stays reserved.
+  - **Q-J.** The estimator has a `#:linkage` that accepts only `'single`.
+  - **Q-K.** cuVS's knn joining failure passes through, with a hint in the
+    manual; there is no silent retry under pairwise.
+  - **Q-L.** `c` takes any int32 up to 2147483617, as Python accepts any
+    int.
+- Pairwise is refused above 46340 rows, where cuVS's `int` count of n^2
+  entries overflows, and knn is refused when its graph of 2nk entries
+  passes 2^31-1. Precomputed distances are deferred (#24).
+
 ## Owner decisions (2026-10-17)
 
 - The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require
