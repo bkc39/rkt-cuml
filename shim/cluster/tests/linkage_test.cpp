@@ -12,6 +12,7 @@
 #include "kmeans_fixture.hpp"
 #include "linkage_fixture.hpp"
 #include "raftrkt/c_api.h"
+#include "refusal_fixture.hpp"
 
 namespace cumlrkt::test {
 namespace {
@@ -24,6 +25,9 @@ constexpr uint64_t lcg_a = 6364136223846793005ULL;
 constexpr uint64_t lcg_c = 1442695040888963407ULL;
 constexpr int lcg_shift = 33;
 constexpr double lcg_scale = 0x1p-31;
+constexpr int64_t clamped_rows = 4096;
+constexpr int32_t most_negative_c = -31;
+constexpr int64_t clamped_peak = 8 << 20;
 
 const values grid{0, 1, 3, 7, 15};
 const values permuted_grid{15, 3, 0, 7, 1};
@@ -190,7 +194,7 @@ TEST(Linkage, OneAndTwoRows) {
   }
 }
 
-TEST(Linkage, CompleteKnnGraphIsPairwise) {
+TEST(Linkage, PinCompleteKnnGraphMatchesPairwiseOnTheCloud) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const problem points{cloud(cloud_rows, cloud_cols), cloud_rows, cloud_cols};
@@ -205,6 +209,17 @@ TEST(Linkage, CompleteKnnGraphIsPairwise) {
               clusters_formed(p.children, cloud_rows));
     EXPECT_EQ(canonical(q.labels), canonical(p.labels));
   }
+}
+
+TEST(Linkage, VeryNegativeCKeepsTwoNeighbours) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const problem points{cloud(clamped_rows, cloud_cols), clamped_rows,
+                       cloud_cols};
+  const allocation_meter meter;
+  const fitted f = fit(res, points, {.c = most_negative_c});
+  EXPECT_LE(meter.peak(), clamped_peak);
+  EXPECT_EQ(dendrogram_problems(f.children, clamped_rows), "");
 }
 
 TEST(Linkage, TiesComeInCumlsOrder) {

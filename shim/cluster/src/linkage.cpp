@@ -94,9 +94,16 @@ void require_c(int32_t c) {
   }
 }
 
+int64_t log2_of(int64_t n) {
+  return std::bit_width(static_cast<uint64_t>(n)) - 1;
+}
+
+int32_t clamped_c(int64_t n, int32_t c) {
+  return static_cast<int32_t>(std::max<int64_t>(c, -log2_of(n)));
+}
+
 int64_t neighbours(int64_t n, int32_t c) {
-  const int64_t log2_rows = std::bit_width(static_cast<uint64_t>(n)) - 1;
-  return std::min(n, std::max(least_neighbours, log2_rows + c));
+  return std::min(n, std::max(least_neighbours, log2_of(n) + c));
 }
 
 void require_pairwise_rows(int64_t n) {
@@ -141,8 +148,9 @@ void fit(const raft::handle_t& handle, const rr_view* view, rr_deposit* out,
   const matrix<float, int64_t> x = checked_x(view);
   require_clusters(options.n_clusters, x.n);
   require_c(options.c);
+  const int32_t c = clamped_c(x.n, options.c);
   if (knn) {
-    require_knn_graph(x.n, options.c);
+    require_knn_graph(x.n, c);
   } else {
     require_pairwise_rows(x.n);
   }
@@ -156,7 +164,7 @@ void fit(const raft::handle_t& handle, const rr_view* view, rr_deposit* out,
       handle, x.data, static_cast<int>(x.n), static_cast<int>(x.d),
       static_cast<std::size_t>(options.n_clusters),
       ML::distance::DistanceType::L2SqrtExpanded, outputs->children.data(),
-      outputs->labels.data(), knn, options.c);
+      outputs->labels.data(), knn, c);
   ascending_pairs(outputs->children.data(), x.n - 1, stream);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(outputs->labels),

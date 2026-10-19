@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -22,7 +21,6 @@ constexpr int64_t rows = 10;
 constexpr int64_t cols = 2;
 constexpr int64_t bad_row = 2;
 constexpr int64_t later_bad_row = 5;
-constexpr std::size_t pool = 64;
 constexpr int64_t wide_rows = 65536;
 constexpr int64_t wide_cols = 32769;
 constexpr int64_t pairwise_most_rows = 46340;
@@ -32,27 +30,8 @@ constexpr int32_t unknown_code = 2;
 constexpr int64_t scratch_bytes = 1 << 20;
 constexpr double half_most = 0x1p62;
 constexpr double past_most = 0x1p63;
-constexpr double float_overflow = 1e20;
-
-struct refusal_case {
-  explicit refusal_case(const resources& res)
-      : data(res.r, RR_DTYPE_FLOAT32, {pool}),
-        wide(res.r, RR_DTYPE_FLOAT64, {pool}),
-        ints(res.r, RR_DTYPE_INT32, {pool}),
-        x(shaped(data, {rows, cols})) {
-    data.write(std::vector<float>(pool, 1));
-  }
-
-  device_array data;
-  device_array wide;
-  device_array ints;
-  rr_view x;
-};
-
-struct refusal {
-  linkage_call call;
-  std::string message;
-};
+constexpr int64_t capped_rows = 2048;
+constexpr std::size_t capped_bytes = 4 << 20;
 
 std::string norm_refusal(int64_t row, const std::string& got) {
   return "X: row " + std::to_string(row) +
@@ -63,12 +42,12 @@ std::string norm_refusal(int64_t row, const std::string& got) {
 TEST(LinkageRefusals, NameTheArgument) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const refusal_case r(res);
+  const refusal_case<float> r(res, rows, cols);
   record out(res);
   const allocation_meter meter;
   const rr_view* const x = &r.x;
   rr_deposit* const o = &out.r;
-  const rr_view x_double = shaped(r.wide, {rows, cols});
+  const rr_view x_double = shaped(r.other, {rows, cols});
   const rr_view x_int = shaped(r.ints, {rows, cols});
   const rr_view x_rank1 = shaped(r.data, {rows});
   const rr_view x_col = shaped(r.data, {rows, cols}, true);
@@ -89,7 +68,7 @@ TEST(LinkageRefusals, NameTheArgument) {
       "c: expected at most 2147483617, got 2147483618";
   const std::string pairwise_message =
       "X: pairwise connectivity holds at most 46340 rows, got 46341; use knn";
-  const std::vector<refusal> cases{
+  const std::vector<refusal<linkage_call>> cases{
       {{.x = &x_double, .out = o}, "X: expected float32, got float64"},
       {{.x = &x_int, .out = o}, not_float},
       {{.x = &x_elsewhere, .out = o},
@@ -134,20 +113,13 @@ TEST(LinkageRefusals, NameTheArgument) {
       {{.x = &x_knn, .out = o, .connectivity = pairwise},
        "X: pairwise connectivity holds at most 46340 rows, got 28000000; use "
        "knn"}};
-  for (const refusal& c : cases) {
+  for (const refusal<linkage_call>& c : cases) {
     const std::string status = linkage(res, c.call);
     EXPECT_EQ(status, c.message);
     EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << status;
     EXPECT_EQ(meter.peak(), 0) << status;
     expect_untouched(out);
   }
-}
-
-values with_row(const std::vector<double>& row, int64_t at) {
-  values host(static_cast<std::size_t>(rows * cols), 1.0);
-  std::copy(row.begin(), row.end(),
-            host.begin() + static_cast<std::ptrdiff_t>(at * cols));
-  return host;
 }
 
 struct norm_case {
@@ -157,7 +129,7 @@ struct norm_case {
 
 void expect_norm_refusal(const resources& res, int32_t connectivity,
                          const norm_case& c) {
-  values host = with_row(c.row, bad_row);
+  values host = with_row(c.row, bad_row, rows, cols);
   host[later_bad_row * cols] = std::numeric_limits<double>::quiet_NaN();
   const auto x = upload<float>(res, {rows, cols}, host);
   record out(res);
@@ -198,7 +170,7 @@ TEST(LinkageRefusals, BoundaryRowsFit) {
   const resources res;
   const float subnormal = std::numeric_limits<float>::denorm_min();
   for (const int32_t connectivity : {pairwise, knn}) {
-    values host = with_row({half_most, half_most}, bad_row);
+    values host = with_row({half_most, half_most}, bad_row, rows, cols);
     host[later_bad_row * cols] = -half_most;
     host[(later_bad_row * cols) + 1] = -half_most;
     host[(later_bad_row + 1) * cols] = subnormal;
@@ -245,6 +217,30 @@ TEST(LinkageRefusals, LargestCIsAccepted) {
     const linkage_call call{.x = &x->view, .out = &out.r, .c = c};
     EXPECT_EQ(linkage(res, call), "accepted") << c;
   }
+}
+
+TEST(LinkageRefusals, PairwiseOutOfMemoryIsOomAndFreesTheOutputs) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  values host;
+  for (int64_t i = 0; i < capped_rows; ++i) {
+    host.push_back(static_cast<double>(i % rows));
+    host.push_back(static_cast<double>(i / rows));
+  }
+  const auto x = upload<float>(res, {capped_rows, cols}, host);
+  record out(res);
+  const allocation_meter meter;
+  const pool_cap cap(capped_bytes);
+  const linkage_call call{
+      .x = &x->view, .out = &out.r, .connectivity = pairwise};
+  const std::string status = linkage(res, call);
+  EXPECT_NE(status.find("out_of_memory"), std::string::npos) << status;
+  EXPECT_NE(status.find("Requested bytes 16777216"), std::string::npos)
+      << status;
+  EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_OOM) << status;
+  EXPECT_GT(meter.peak(), 0);
+  EXPECT_EQ(meter.current(), 0);
+  expect_untouched(out);
 }
 
 TEST(LinkageRefusals, FilledOutIsRefused) {

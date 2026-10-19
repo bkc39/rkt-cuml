@@ -30,8 +30,8 @@ constexpr int32_t unknown_method = -1;
 constexpr int32_t too_many = 11;
 
 template <typename T>
-struct refusal_case {
-  explicit refusal_case(const resources& res)
+struct kmeans_case {
+  explicit kmeans_case(const resources& res)
       : data(res.r, float_dtype<T>, {pool}),
         other(res.r, float_dtype<other_t<T>>, {pool}),
         ints(res.r, RR_DTYPE_INT32, {pool}),
@@ -61,11 +61,6 @@ struct refusal_case {
   rr_view centroids;
 };
 
-struct refusal {
-  fit_call call;
-  std::string message;
-};
-
 struct status_check {
   std::string got;
   std::string want;
@@ -81,7 +76,7 @@ template <typename T>
 void fit_refusals() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const refusal_case<T> r(res);
+  const kmeans_case<T> r(res);
   record out(res);
   const std::string t = name<T>();
   const std::string u = name<other_t<T>>();
@@ -104,7 +99,7 @@ void fit_refusals() {
   const rr_view x_elsewhere = on_device(r.x, 1);
   const std::string tol_zero = "tol: expected greater than 0, got 0";
   const std::string tol_nan = "tol: expected greater than 0, got nan";
-  const std::vector<refusal> cases{
+  const std::vector<refusal<fit_call>> cases{
       {{.x = &x_int, .out = o, .n_clusters = k, .init_method = pp},
        "X: expected float32 or float64, got int32"},
       {{.x = &x_rank1, .out = o, .n_clusters = k, .init_method = pp},
@@ -190,7 +185,7 @@ void fit_refusals() {
         .init_method = pp,
         .oversampling_factor = -1},
        "oversampling-factor: expected at least 0, got -1"}};
-  for (const refusal& c : cases) {
+  for (const refusal<fit_call>& c : cases) {
     const fit_outcome got = fit(res, c.call);
     EXPECT_EQ(got.status, c.message);
     EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << got.status;
@@ -204,7 +199,7 @@ template <typename T>
 void filled_out_refusal() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const refusal_case<T> r(res);
+  const kmeans_case<T> r(res);
   record filled(res);
   ASSERT_EQ(fit(res, r.call(filled)).status, "accepted");
   const void* owner = filled.r.owner;
@@ -217,7 +212,7 @@ template <typename T>
 void apply_table_refusals() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const refusal_case<T> r(res);
+  const kmeans_case<T> r(res);
   const std::string t = name<T>();
   const std::string u = name<other_t<T>>();
   const rr_view c_int = shaped(r.ints, {k, cols});
@@ -263,7 +258,7 @@ template <typename T>
 void apply_argument_refusals() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const refusal_case<T> r(res);
+  const kmeans_case<T> r(res);
   const std::string t = name<T>();
   const std::string u = name<other_t<T>>();
   const rr_view c_int = shaped(r.ints, {k, cols});
@@ -301,7 +296,7 @@ template <typename T>
 void first_in_order_wins() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const refusal_case<T> r(res);
+  const kmeans_case<T> r(res);
   const rr_view x_int = shaped(r.ints, {rows, cols});
   const rr_view x_rank1 = shaped(r.data, {rows});
   const rr_view int_elsewhere = on_device(x_int, 1);
@@ -355,7 +350,7 @@ template <typename T>
 void refused_parameters_allocate_nothing() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const refusal_case<T> r(res);
+  const kmeans_case<T> r(res);
   record accepted(res);
   ASSERT_EQ(fit(res, r.call(accepted)).status, "accepted");
   record out(res);
