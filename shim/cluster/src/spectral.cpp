@@ -52,6 +52,7 @@ struct solver_options {
   int64_t n_clusters;
   int64_t n_components;
   int32_t auto_components;
+  int64_t n_neighbors;
   int32_t n_init;
   double eigen_tol;
   uint64_t seed;
@@ -154,13 +155,13 @@ void require_bounded_rows(const matrix<float, int64_t>& x,
 }
 
 void fit_dense(const raft::handle_t& handle, const rr_view* view,
-               rr_deposit* out, const solver_options& o, int64_t n_neighbors) {
+               rr_deposit* out, const solver_options& o) {
   const matrix<float, int64_t> x = checked_x(view);
   require_clusters(o.n_clusters, x.n, "X");
   const int64_t nc = components(o, x.n, "rows");
-  require_at_least("n-neighbors", n_neighbors, least_neighbours);
+  require_at_least("n-neighbors", o.n_neighbors, least_neighbours);
   require_solver(o);
-  const int64_t k = std::min(n_neighbors, x.n - 1);
+  const int64_t k = std::min(o.n_neighbors, x.n - 1);
   require_knn_graph(x.n, k);
   require_bounded_rows(x, raft::resource::get_cuda_stream(handle));
   const auto dataset =
@@ -270,10 +271,11 @@ int cuml_cluster_spectral_clustering_fit(void* handle, const rr_view* x,
                                          double eigen_tol, uint64_t seed) {
   return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
     rr_deposit* const into = raftrkt::require(out, "out");
-    const solver_options o{n_clusters, n_components, auto_components,
-                           n_init,     eigen_tol,    seed};
+    const solver_options o{n_clusters,  n_components, auto_components,
+                           n_neighbors, n_init,       eigen_tol,
+                           seed};
     on_float32_device(handle, {{"X", x}}, x, "X", [&](const raft::handle_t& h) {
-      fit_dense(h, x, into, o, n_neighbors);
+      fit_dense(h, x, into, o);
     });
   });
 }
@@ -291,8 +293,8 @@ int cuml_cluster_spectral_clustering_fit_graph(
     double eigen_tol, uint64_t seed) {
   return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
     rr_deposit* const into = raftrkt::require(out, "out");
-    const solver_options o{n_clusters, n_components, auto_components,
-                           n_init,     eigen_tol,    seed};
+    const solver_options o{n_clusters, n_components, auto_components, 0, n_init,
+                           eigen_tol,  seed};
     const graph_views g{rows, cols, vals};
     in_device_scope(
         handle, {{"rows", rows}, {"cols", cols}, {"vals", vals}},

@@ -32,9 +32,10 @@ values blobs() {
   values host;
   uint64_t state = 1;
   for (int64_t i = 0; i < blob_rows; ++i) {
+    const int64_t group = i / per_group;
     for (int64_t j = 0; j < blob_cols; ++j) {
       state = (state * lcg_a) + lcg_c;
-      host.push_back((gap * static_cast<double>(i / per_group)) +
+      host.push_back((gap * static_cast<double>(group)) +
                      (static_cast<double>(state >> lcg_shift) * lcg_scale));
     }
   }
@@ -44,7 +45,8 @@ values blobs() {
 values truth(int64_t n_groups, int64_t size) {
   values labels;
   for (int64_t i = 0; i < n_groups * size; ++i) {
-    labels.push_back(static_cast<double>(i / size));
+    const int64_t group = i / size;
+    labels.push_back(static_cast<double>(group));
   }
   return labels;
 }
@@ -70,7 +72,9 @@ double squared(const values& x, int64_t d, int64_t i, int64_t j) {
   return sum;
 }
 
-host_graph knn_graph(const values& x, int64_t n, int64_t d, int64_t k) {
+host_graph knn_graph(const values& x, int64_t k) {
+  const int64_t n = blob_rows;
+  const int64_t d = blob_cols;
   std::vector<double> a(static_cast<std::size_t>(n * n), 0);
   for (int64_t i = 0; i < n; ++i) {
     std::vector<int64_t> order(static_cast<std::size_t>(n));
@@ -147,9 +151,9 @@ fitted fit_graph(const resources& res, const host_graph& host, int64_t n,
   return {status, download<int32_t>(out, 0), shapes(out)};
 }
 
-void expect_labels_in_range(const fitted& f, int64_t n, int64_t k) {
+void expect_labels_in_range(const fitted& f, int64_t k) {
   EXPECT_EQ(f.status, "accepted");
-  EXPECT_EQ(f.shapes, (std::vector<int64_t>{1, RR_DTYPE_INT32, n}));
+  EXPECT_EQ(f.shapes, (std::vector<int64_t>{1, RR_DTYPE_INT32, blob_rows}));
   for (const double label : f.labels) {
     EXPECT_GE(label, 0);
     EXPECT_LT(label, static_cast<double>(k));
@@ -160,14 +164,12 @@ TEST(Spectral, LabelsAreInt32InRangeOnBothPaths) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const values x = blobs();
-  const host_graph g = knn_graph(x, blob_rows, blob_cols, default_neighbours);
+  const host_graph g = knn_graph(x, default_neighbours);
   for (const int64_t k : {2, 3, 5, 8}) {
     SCOPED_TRACE(k);
     expect_labels_in_range(
-        fit_dense(res, x, blob_rows, blob_cols, {.n_clusters = k}), blob_rows,
-        k);
-    expect_labels_in_range(fit_graph(res, g, blob_rows, {.n_clusters = k}),
-                           blob_rows, k);
+        fit_dense(res, x, blob_rows, blob_cols, {.n_clusters = k}), k);
+    expect_labels_in_range(fit_graph(res, g, blob_rows, {.n_clusters = k}), k);
   }
 }
 
@@ -178,7 +180,7 @@ TEST(Spectral, OneClusterIsAllZeros) {
   const values zeros(static_cast<std::size_t>(blob_rows), 0);
   EXPECT_EQ(fit_dense(res, x, blob_rows, blob_cols, {.n_clusters = 1}).labels,
             zeros);
-  const host_graph g = knn_graph(x, blob_rows, blob_cols, default_neighbours);
+  const host_graph g = knn_graph(x, default_neighbours);
   EXPECT_EQ(fit_graph(res, g, blob_rows, {.n_clusters = 1}).labels, zeros);
 }
 
@@ -186,7 +188,7 @@ TEST(Spectral, BlobsArePartitionedAndDenseEqualsItsGraph) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const values x = blobs();
-  const host_graph g = knn_graph(x, blob_rows, blob_cols, default_neighbours);
+  const host_graph g = knn_graph(x, default_neighbours);
   for (const uint64_t seed : {0ULL, 1ULL, 12345ULL}) {
     SCOPED_TRACE(seed);
     const fitted dense = fit_dense(res, x, blob_rows, blob_cols,

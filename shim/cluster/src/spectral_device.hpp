@@ -5,7 +5,7 @@
 
 namespace cumlrkt::cluster {
 
-enum class graph_fault_kind : int32_t {
+enum class graph_fault_kind : std::uint8_t {
   none = 0,
   row_index = 1,
   col_index = 2,

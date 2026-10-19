@@ -29,6 +29,7 @@ constexpr int64_t forged_samples = 1000;
 constexpr int64_t past_index = 2147483648;
 constexpr int64_t past_components = 4;
 constexpr int64_t scratch_bytes = 1 << 20;
+constexpr int64_t spread = 17;
 constexpr double half_most = 0x1p62;
 constexpr double past_most = 0x1p63;
 constexpr double past_float = 1e39;
@@ -154,7 +155,7 @@ TEST(SpectralRefusals, ExplicitComponentsAtTheBoundFit) {
   const resources res;
   values host;
   for (int64_t i = 0; i < rows * cols; ++i) {
-    host.push_back(static_cast<double>((i * i) % 17));
+    host.push_back(static_cast<double>((i * i) % spread));
   }
   const auto x = upload<float>(res, {rows, cols}, host);
   record out(res);
@@ -169,6 +170,21 @@ struct norm_case {
   std::string got;
 };
 
+void expect_norm_refusal(const resources& res, const norm_case& c) {
+  SCOPED_TRACE(c.got);
+  values host = with_row(c.row, bad_row, rows, cols);
+  host[later_bad_row * cols] = std::numeric_limits<double>::quiet_NaN();
+  const auto x = upload<float>(res, {rows, cols}, host);
+  record out(res);
+  const allocation_meter meter;
+  EXPECT_EQ(spectral(res, {.x = &x->view, .out = &out.r}),
+            norm_refusal(bad_row, c.got));
+  EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
+  EXPECT_LE(meter.peak(), scratch_bytes);
+  EXPECT_EQ(meter.current(), 0);
+  expect_untouched(out);
+}
+
 TEST(SpectralRefusals, LargeRowsAreRefusedBeforeAnyOutput) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -182,18 +198,7 @@ TEST(SpectralRefusals, LargeRowsAreRefusedBeforeAnyOutput) {
       {.row = {float_overflow, 0}, .got = "1.0000000400817551e+40"},
       {.row = {past_most, 0}, .got = "8.507059173023462e+37"}};
   for (const norm_case& c : cases) {
-    SCOPED_TRACE(c.got);
-    values host = with_row(c.row, bad_row, rows, cols);
-    host[later_bad_row * cols] = nan;
-    const auto x = upload<float>(res, {rows, cols}, host);
-    record out(res);
-    const allocation_meter meter;
-    EXPECT_EQ(spectral(res, {.x = &x->view, .out = &out.r}),
-              norm_refusal(bad_row, c.got));
-    EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
-    EXPECT_LE(meter.peak(), scratch_bytes);
-    EXPECT_EQ(meter.current(), 0);
-    expect_untouched(out);
+    expect_norm_refusal(res, c);
   }
 }
 

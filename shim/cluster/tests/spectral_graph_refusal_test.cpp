@@ -22,6 +22,12 @@ constexpr int64_t cols = 2;
 constexpr int64_t scratch_bytes = 1 << 20;
 constexpr double negative_weight = -5;
 constexpr int64_t ring = 10;
+constexpr std::size_t fault_entry = 7;
+constexpr std::size_t loop_entry = 12;
+constexpr std::size_t later_entry = 15;
+constexpr int32_t loop_sample = 5;
+constexpr int32_t far_index = 100000000;
+constexpr int64_t spread = 17;
 
 host_graph ring_graph() {
   host_graph g;
@@ -53,20 +59,20 @@ std::vector<graph_fault_case> graph_faults() {
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
   return {
-      faulted([](host_graph& g) { g.rows[7] = ring; },
+      faulted([](host_graph& g) { g.rows[fault_entry] = ring; },
               "rows: entry 7: expected an index in [0, 10), got 10"),
-      faulted([](host_graph& g) { g.rows[7] = -1; },
+      faulted([](host_graph& g) { g.rows[fault_entry] = -1; },
               "rows: entry 7: expected an index in [0, 10), got -1"),
-      faulted([](host_graph& g) { g.cols[7] = ring; },
+      faulted([](host_graph& g) { g.cols[fault_entry] = ring; },
               "cols: entry 7: expected an index in [0, 10), got 10"),
-      faulted([](host_graph& g) { g.cols[7] = -1; },
+      faulted([](host_graph& g) { g.cols[fault_entry] = -1; },
               "cols: entry 7: expected an index in [0, 10), got -1"),
-      faulted([](host_graph& g) { g.rows[7] = 100000000; },
+      faulted([](host_graph& g) { g.rows[fault_entry] = far_index; },
               "rows: entry 7: expected an index in [0, 10), got 100000000"),
       faulted(
           [](host_graph& g) {
-            g.rows[12] = 5;
-            g.cols[12] = 5;
+            g.rows[loop_entry] = loop_sample;
+            g.cols[loop_entry] = loop_sample;
           },
           "rows: entry 12: self-loop at sample 5; leave the diagonal out"),
       faulted([](host_graph& g) { g.vals[3] = negative_weight; },
@@ -87,65 +93,69 @@ std::vector<graph_fault_case> graph_faults() {
           "vals: expected at least one positive weight, got none"),
       faulted(
           [](host_graph& g) {
-            g.rows[7] = ring;
-            g.cols[7] = -1;
-            g.vals[7] = negative_weight;
+            g.rows[fault_entry] = ring;
+            g.cols[fault_entry] = -1;
+            g.vals[fault_entry] = negative_weight;
           },
           "rows: entry 7: expected an index in [0, 10), got 10"),
       faulted(
           [](host_graph& g) {
-            g.cols[7] = ring;
-            g.vals[7] = negative_weight;
+            g.cols[fault_entry] = ring;
+            g.vals[fault_entry] = negative_weight;
           },
           "cols: entry 7: expected an index in [0, 10), got 10"),
       faulted(
           [](host_graph& g) {
-            g.rows[7] = ring;
-            g.cols[7] = ring;
+            g.rows[fault_entry] = ring;
+            g.cols[fault_entry] = ring;
           },
           "rows: entry 7: expected an index in [0, 10), got 10"),
       faulted(
           [](host_graph& g) {
-            g.rows[7] = 4;
-            g.cols[7] = 4;
-            g.vals[7] = negative_weight;
+            g.rows[fault_entry] = 4;
+            g.cols[fault_entry] = 4;
+            g.vals[fault_entry] = negative_weight;
           },
           "rows: entry 7: self-loop at sample 4; leave the diagonal out"),
       faulted(
           [](host_graph& g) {
             g.vals[3] = negative_weight;
-            g.rows[7] = ring;
-            g.rows[12] = 5;
-            g.cols[12] = 5;
+            g.rows[fault_entry] = ring;
+            g.rows[loop_entry] = loop_sample;
+            g.cols[loop_entry] = loop_sample;
           },
           "vals: entry 3: expected a finite weight of at least 0, got -5"),
       faulted(
           [](host_graph& g) {
-            g.rows[12] = 5;
-            g.cols[12] = 5;
-            g.rows[15] = ring;
+            g.rows[loop_entry] = loop_sample;
+            g.cols[loop_entry] = loop_sample;
+            g.rows[later_entry] = ring;
           },
           "rows: entry 12: self-loop at sample 5; leave the diagonal out")};
+}
+
+void expect_scan_refusal(const resources& res, const graph_fault_case& f) {
+  SCOPED_TRACE(f.message);
+  const device_graph g(res, f.graph);
+  record out(res);
+  const allocation_meter meter;
+  const graph_call call{.rows = &g.rows.view,
+                        .cols = &g.cols.view,
+                        .vals = &g.vals->view,
+                        .n_samples = ring,
+                        .out = &out.r};
+  EXPECT_EQ(spectral_graph(res, call), f.message);
+  EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
+  EXPECT_LE(meter.peak(), scratch_bytes);
+  EXPECT_EQ(meter.current(), 0);
+  expect_untouched(out);
 }
 
 TEST(SpectralRefusals, GraphFaultsAreRefusedAtTheFirstEntry) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   for (const graph_fault_case& f : graph_faults()) {
-    SCOPED_TRACE(f.message);
-    const device_graph g(res, f.graph);
-    record out(res);
-    const allocation_meter meter;
-    const graph_call call{.rows = &g.rows.view,
-                          .cols = &g.cols.view,
-                          .vals = &g.vals->view,
-                          .n_samples = ring,
-                          .out = &out.r};
-    EXPECT_EQ(spectral_graph(res, call), f.message);
-    EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
-    EXPECT_LE(meter.peak(), scratch_bytes);
-    EXPECT_EQ(meter.current(), 0);
-    expect_untouched(out);
+    expect_scan_refusal(res, f);
   }
 }
 
@@ -153,7 +163,7 @@ TEST(SpectralRefusals, LengthsPrecedeTheGraphScan) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   host_graph bad = ring_graph();
-  bad.rows[7] = ring;
+  bad.rows[fault_entry] = ring;
   const device_graph g(res, bad);
   const rr_view short_vals = shaped(*g.vals, {ring});
   record out(res);
@@ -184,12 +194,24 @@ TEST(SpectralRefusals, AnEmptyGraphHasNoPositiveWeight) {
   expect_untouched(out);
 }
 
+void expect_graph_refuses_filled(const resources& res, record& filled,
+                                 const void* owner) {
+  const device_graph g(res, ring_graph());
+  const graph_call gc{.rows = &g.rows.view,
+                      .cols = &g.cols.view,
+                      .vals = &g.vals->view,
+                      .n_samples = ring,
+                      .out = &filled.r};
+  EXPECT_EQ(spectral_graph(res, gc), "out: already filled");
+  EXPECT_EQ(filled.r.owner, owner);
+}
+
 TEST(SpectralRefusals, FilledOutIsRefused) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   values host;
   for (int64_t i = 0; i < rows * cols; ++i) {
-    host.push_back(static_cast<double>((i * i) % 17));
+    host.push_back(static_cast<double>((i * i) % spread));
   }
   const auto x = upload<float>(res, {rows, cols}, host);
   record filled(res);
@@ -199,14 +221,7 @@ TEST(SpectralRefusals, FilledOutIsRefused) {
   EXPECT_EQ(spectral(res, c), "out: already filled");
   EXPECT_EQ(filled.r.owner, owner);
   EXPECT_EQ(filled.r.count, 1);
-  const device_graph g(res, ring_graph());
-  const graph_call gc{.rows = &g.rows.view,
-                      .cols = &g.cols.view,
-                      .vals = &g.vals->view,
-                      .n_samples = ring,
-                      .out = &filled.r};
-  EXPECT_EQ(spectral_graph(res, gc), "out: already filled");
-  EXPECT_EQ(filled.r.owner, owner);
+  expect_graph_refuses_filled(res, filled, owner);
 }
 
 }  // namespace
