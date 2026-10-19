@@ -96,6 +96,26 @@ CUMLRKT_API void cuml_cluster_single_linkage_fit_job(void* args,
                                                      size_t args_len,
                                                      rr_job_outcome* outcome);
 
+/* Each entry allocates its labels after every check and deposits them in out
+   as region 0, n int32 labels. auto_components nonzero takes
+   min(n_clusters, floor((n-1)/3)) components and ignores n_components;
+   n_neighbors above n-1 counts as n-1. The graph is rows, cols and vals, one
+   entry each, over n_samples samples. */
+CUMLRKT_API int cuml_cluster_spectral_clustering_fit(
+    void* handle, const rr_view* x, rr_deposit* out, int64_t n_clusters,
+    int64_t n_components, int32_t auto_components, int64_t n_neighbors,
+    int32_t n_init, double eigen_tol, uint64_t seed);
+CUMLRKT_API void cuml_cluster_spectral_clustering_fit_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
+CUMLRKT_API int cuml_cluster_spectral_clustering_fit_graph(
+    void* handle, const rr_view* rows, const rr_view* cols, const rr_view* vals,
+    int64_t n_samples, rr_deposit* out, int64_t n_clusters,
+    int64_t n_components, int32_t auto_components, int32_t n_init,
+    double eigen_tol, uint64_t seed);
+CUMLRKT_API void cuml_cluster_spectral_clustering_fit_graph_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
 #ifdef __cplusplus
 }
 #endif

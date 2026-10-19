@@ -28,9 +28,13 @@
                   score
                   single-linkage-fit
                   single-linkage-result
-                  single-linkage-result-labels)
+                  single-linkage-result-labels
+                  spectral-clustering
+                  spectral-clustering-fit
+                  spectral-clustering-fit-graph
+                  spectral-clustering-result-labels)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-exn test-case)
+         (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft
                   device-matrix->list*
                   device-vector->list
@@ -44,7 +48,8 @@
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/dbscan-data.rkt" mat)
-         (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows))
+         (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows)
+         (only-in "private/spectral-data.rkt" planted? truth-of))
 
 (test-case "the manual: a raft handler catches exn:fail:cuml and reads its kind"
   (check-equal? (with-handlers ([exn:fail:raft? exn:fail:raft-kind])
@@ -226,3 +231,48 @@
   (check-cuml-error 'logic
                     "fit: linkage: expected single, got ward"
                     (lambda () (fit (agglomerative-clustering #:linkage 'ward) (hand)))))
+
+(define (three-groups)
+  (list*->device-matrix (for*/list ([centre (in-list '(0 10 20))]
+                                    [i (in-range 8)])
+                          (list (+ centre (* 0.5 (quotient i 4))) (* 0.5 (remainder i 4))))
+                        #:dtype 'float32))
+
+(define group-truth (truth-of '(8 8 8)))
+
+(test-gpu "the manual: spectral clustering finds the three groups, dense and as a graph"
+  (check-true (planted? (~> (spectral-clustering-fit (three-groups) #:n-clusters 3 #:n-neighbors 5)
+                            spectral-clustering-result-labels
+                            device-vector->list)
+                        group-truth))
+  (define-values (rows cols)
+    (for*/lists (rows cols)
+                ([i (in-range 24)]
+                 [j (in-range 24)]
+                 #:when (and (not (= i j)) (= (quotient i 8) (quotient j 8)) (<= (abs (- i j)) 2)))
+                (values i j)))
+  (check-true (planted? (~> (spectral-clustering-fit-graph
+                             (list->device-vector rows #:dtype 'int32)
+                             (list->device-vector cols #:dtype 'int32)
+                             (list->device-vector (map (lambda (_) 1.0) rows) #:dtype 'float32)
+                             24
+                             #:n-clusters 3)
+                            spectral-clustering-result-labels
+                            device-vector->list)
+                        group-truth))
+  (check-cuml-error
+   'logic
+   "spectral-clustering-fit-graph: rows: entry 1: self-loop at sample 1; leave the diagonal out"
+   (lambda ()
+     (spectral-clustering-fit-graph (list->device-vector '(0 1 2) #:dtype 'int32)
+                                    (list->device-vector '(1 1 0) #:dtype 'int32)
+                                    (list->device-vector '(1.0 1.0 1.0) #:dtype 'float32)
+                                    4))))
+
+(test-gpu "the manual: the spectral clustering estimator on the three groups"
+  (define sc (spectral-clustering #:n-clusters 3 #:n-neighbors 5))
+  (check-equal? (format "~v" sc) "#<spectral-clustering #:n-clusters 3 #:n-neighbors 5>")
+  (check-true (planted? (device-vector->list (fit-predict sc (three-groups))) group-truth))
+  (check-cuml-error 'logic
+                    "fit: affinity: expected nearest-neighbors, got precomputed"
+                    (lambda () (fit (spectral-clustering #:affinity 'precomputed) (three-groups)))))

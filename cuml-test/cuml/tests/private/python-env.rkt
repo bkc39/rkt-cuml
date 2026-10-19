@@ -73,7 +73,7 @@
 (define (twin-value value)
   (match value
     [(== (json-null)) #f]
-    [(? string?) (string->symbol value)]
+    [(? string?) (~> value (regexp-replace* #rx"_" _ "-") string->symbol)]
     [_ value]))
 
 (define (twin-params theirs unbound)

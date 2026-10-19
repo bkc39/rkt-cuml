@@ -22,6 +22,8 @@
          cuml-cluster-make-blobs
          cuml-cluster-make-blobs-job
          cuml-cluster-single-linkage-fit-job
+         cuml-cluster-spectral-clustering-fit-graph-job
+         cuml-cluster-spectral-clustering-fit-job
          libcuml-version)
 
 (define-runtime-path native-libs-dir "../native-libs")
@@ -90,4 +92,16 @@
             library
             "cuml_cluster_single_linkage_fit_job"
             (handle view deposit _int64 _int32 _int32 _int32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-spectral-clustering-fit-job
+            library
+            "cuml_cluster_spectral_clustering_fit_job"
+            (handle view deposit _int64 _int64 _int32 _int64 _int32 _double* _uint64)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-spectral-clustering-fit-graph-job
+            library
+            "cuml_cluster_spectral_clustering_fit_graph_job"
+            (handle view view view _int64 deposit _int64 _int64 _int32 _int32 _double* _uint64)
             #:exn exn:fail:cuml)

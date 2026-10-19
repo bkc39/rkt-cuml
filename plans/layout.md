@@ -231,6 +231,39 @@
   entries overflows, and knn is refused when its graph of 2nk entries
   passes 2^31-1. Precomputed distances are deferred (#24).
 
+## Decisions recorded in leg 5 (spectral clustering, #10)
+
+- `spectral-clustering-fit` and `spectral-clustering-fit-graph`
+  (`cuml/cluster/private/spectral.rkt`) bind the dense and the
+  rows/cols/vals overloads of `ML::SpectralClustering::fit_predict` for
+  float32, through `cuml_cluster_spectral_clustering_fit_job` and
+  `cuml_cluster_spectral_clustering_fit_graph_job`. Both return a
+  `spectral-clustering-result` of the labels. The `coo_matrix_view`
+  overload is not bound.
+- The `spectral-clustering` estimator is an estimator and a clusterer; its
+  defaults are `spectral-clustering-defaults` plus `affinity`.
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** The precomputed affinity is a separate procedure over three
+    vectors and `n-samples`; a dense precomputed matrix is deferred (#28).
+  - **Q-B.** The estimator's `#:affinity` accepts only
+    `'nearest-neighbors` and refuses `'precomputed` by name (#28).
+  - **Q-C.** Self-loops in the graph are refused, with one scan and no
+    allocation: cuVS sizes its Laplacian by the diagonal entries, and
+    duplicates corrupt it.
+  - **Q-D.** Non-symmetric graphs are documented and pinned, not
+    symmetrized (#28).
+  - **Q-E.** Python's clamps are mirrored: `n-neighbors` to n−1, auto
+    `n-components` to min(k, ⌊(n−1)/3⌋); an explicit `n-components` above
+    ⌊(n−1)/3⌋ is refused.
+  - **Q-F.** Fewer than 4 samples are refused; cuVS segfaults at 2 and 3.
+  - **Q-G.** The default `eigen-tol` is `'auto` (0, as in Python), with the
+    run-to-run drift on overlapping data documented.
+  - **Q-H.** The result is a one-field struct, with room for the embedding
+    (#27).
+  - **Q-I.** Negative and non-finite weights are refused.
+- The graph is refused when its entries and samples pass 2^31-1, and the
+  dense path when its kNN graph's n(2k+1) entries would.
+
 ## Owner decisions (2026-10-17)
 
 - The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require
