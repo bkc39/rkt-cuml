@@ -42,7 +42,9 @@
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/cuml-error.rkt" check-cuml-error raised))
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/dbscan-data.rkt" mat)
+         (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows))
 
 (test-case "the manual: a raft handler catches exn:fail:cuml and reads its kind"
   (check-equal? (with-handlers ([exn:fail:raft? exn:fail:raft-kind])
@@ -194,21 +196,24 @@
                     (lambda () (fit (dbscan #:eps 0) (points)))))
 
 (define (hand)
-  (list*->device-matrix '((0) (1) (3) (7) (15)) #:dtype 'float32))
+  (mat hand-rows 'float32))
+
+(define (hand-labels-at k)
+  (list-ref hand-labels (sub1 k)))
 
 (test-gpu "the manual: single linkage cuts the hand grid into three clusters"
   (match-define (single-linkage-result labels children) (single-linkage-fit (hand) #:n-clusters 3))
-  (check-equal? (device-vector->list labels) '(0 0 0 2 1))
-  (check-equal? (device-matrix->list* children) '((0 1) (2 5) (3 6) (4 7))))
+  (check-equal? (device-vector->list labels) (hand-labels-at 3))
+  (check-equal? (device-matrix->list* children) hand-children))
 
 (test-gpu "the manual: both connectivities, one cluster per sample, and float64 refused"
   (check-equal? (~> (single-linkage-fit (hand) #:n-clusters 3 #:connectivity 'pairwise)
                     single-linkage-result-labels
                     device-vector->list)
-                '(0 0 0 2 1))
+                (hand-labels-at 3))
   (check-equal?
    (~> (single-linkage-fit (hand) #:n-clusters 5) single-linkage-result-labels device-vector->list)
-   '(4 3 2 1 0))
+   (hand-labels-at 5))
   (check-cuml-error 'logic
                     "single-linkage-fit: X: expected float32, got float64"
                     (lambda ()
@@ -217,7 +222,7 @@
 (test-gpu "the manual: the agglomerative clustering estimator on the hand grid"
   (define ac (agglomerative-clustering #:n-clusters 3))
   (check-equal? (format "~v" ac) "#<agglomerative-clustering #:n-clusters 3>")
-  (check-equal? (device-vector->list (fit-predict ac (hand))) '(0 0 0 2 1))
+  (check-equal? (device-vector->list (fit-predict ac (hand))) (hand-labels-at 3))
   (check-cuml-error 'logic
                     "fit: linkage: expected single, got ward"
                     (lambda () (fit (agglomerative-clustering #:linkage 'ward) (hand)))))

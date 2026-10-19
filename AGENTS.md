@@ -138,9 +138,11 @@ the families will follow once it lands.
       so errors name the generic), re-exported from `cuml/main.rkt`, its
       bare name in `reserved-names` in `scripts/check-layout.rkt`. Each
       algorithm's defaults are one `define-defaults` table (from
-      `cuml/cluster/private/defaults.rkt`), and the estimator's
-      constructor is a `define-constructor` (`private/estimator-support.rkt`),
-      whose keyword signature gives the parameter names and their order.
+      `cuml/cluster/private/defaults.rkt`, beside `define-codes` for the
+      symbol-to-code tables, -1 for an unknown name), the estimator's
+      struct is a `define-estimator` and its constructor a
+      `define-constructor` (both `private/estimator-support.rkt`), whose
+      keyword signature gives the parameter names and their order.
 - [ ] The family's package in the `pkg-deps` gate (`.racket-dev.rktd`).
 - [ ] A chapter in `cuml-doc` and its examples.
 - [ ] Tests in `cuml-test/cuml/tests/` (GPU smoke, memory, a Python twin in
@@ -244,9 +246,9 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `device-memory` | `process-device-bytes`, `no-process-memory-reason`, `process-memory-skip` |
 | `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions, weights, blank arrays) and tolerances (`tolerance`, `close?`, `scaled-close?`) |
 | `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical`, `same-partition?`, `pick` (the elements at a list of indices) and `fitted-lists` (`dbscan-fit` composed with `result->lists`) |
-| `linkage-data` | the single-linkage fixtures (the hand grids, the tie line, `group-rows`, `two-far`), the host oracles (`linkage-oracle`: a Prim minimum spanning tree, the minimax cophenetic matrix, `oracle-bounds` and `oracle-partition` for the cuts), `children->labels`, `children-heights`, `children-cophenetic`, `valid-dendrogram-problems`, `partition-refines?` and `linked-lists` (`single-linkage-fit` composed with `result->lists`) |
+| `linkage-data` | `connectivities`, the single-linkage fixtures (the hand grids, the tie line, `group-rows`, `two-far`), the host oracles (`linkage-oracle`: a Prim minimum spanning tree, the minimax cophenetic matrix, `oracle-bounds` and `oracle-partition` for the cuts), `children->labels`, `children-heights`, `children-cophenetic`, `valid-dendrogram-problems`, `partition-refines?` and `linked-lists` (`single-linkage-fit` composed with `result->lists`) |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
-| `python-env` | `run-twin script input` (in.json to out.json), `test-twin` |
+| `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 Every SKIP line the GPU suite allows matches one ERE in
 `scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there

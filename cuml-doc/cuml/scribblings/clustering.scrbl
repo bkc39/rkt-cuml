@@ -310,18 +310,15 @@ such as @racket[#:min-samples 2.5], raises @racket[exn:fail:contract].
 (device-matrix->list* children)
 ]
 
-Samples 0 and 1 merge first, into node 5; sample 2 joins them as node 6,
-sample 3 as node 7, and sample 4 last. Undoing the last two merges leaves
-three clusters.
-
 @defstruct*[single-linkage-result ([labels device-vector?] [children device-matrix?])]{
 
 The result of @racket[single-linkage-fit], both @racket['int32].
 @racket[children] is the dendrogram, an (n−1)×2 matrix: row @racket[i] is the
-@racket[i]th merge, in non-decreasing merge distance, and names the two nodes
-it joins, the smaller first. Node @racket[j] below n is sample @racket[j], and
-node n+@racket[i] is the cluster that row @racket[i] forms. Merges at equal
-distances come in an order cuML chooses.
+@racket[i]th merge, in non-decreasing weight as cuML computes it in
+@racket['float32], and names the two nodes it joins, the smaller first. Node
+@racket[j] below n is sample @racket[j], and node n+@racket[i] is the cluster
+that row @racket[i] forms. Merges at equal distances come in an order cuML
+chooses.
 
 @racket[labels] gives each sample its cluster when the dendrogram is cut into
 @racket[n-clusters] clusters: their roots, in descending order of node, are
@@ -342,18 +339,18 @@ clusters, the distance between two clusters being that of their closest
 samples.
 
 With @racket['pairwise], every pairwise distance is held on the device, so
-@racket[X] can have at most 46340 rows. With @racket['knn], each sample keeps
-its k = min(n, max(2, ⌊log₂ n⌋ + @racket[c])) nearest samples, itself
-included, and the components of that graph are joined by their nearest pairs.
-Its hierarchy is the @racket['pairwise] one when k is n or 2; otherwise it is
-that of the sparser graph. Many well-separated groups can leave the graph
-unjoined, and the fit fails; raise @racket[c].
+@racket[X] can have at most 46340 rows, and the hierarchy is exact.
 
-The distances are computed in @racket['float32] as ‖x‖²+‖y‖²−2x·y, which
-loses precision far from the origin: centre @racket[X] first. The outputs
-live on @racket[resources].
+@racket['knn] is approximate, the hierarchy of a sparse graph in which each
+sample keeps its k = min(n, max(2, ⌊log₂ n⌋ + @racket[c])) nearest samples,
+its components joined; at k = n it is @racket['pairwise]'s graph, but merges
+at nearly equal distances can pair or order differently, since the two compute
+distances differently in @racket['float32].
 
-Both connectivities give the same labels:
+The distances are ‖x‖²+‖y‖²−2x·y in @racket['float32]: centre @racket[X] if
+it lies far from the origin. The outputs live on @racket[resources].
+
+@racket[P]'s cut is the same under @racket['pairwise]:
 
 @examples[#:eval ev #:label #f
 (~> (single-linkage-fit P #:n-clusters 3 #:connectivity 'pairwise)
@@ -377,24 +374,17 @@ With one cluster per sample, sample @racket[i] has label n−1−@racket[i]:
 kind @racket['logic], leaving nothing allocated, when:
 @itemlist[
  @item{@racket[X] is not a row-major @racket['float32] matrix with a row and
-       a column: @tt{X: expected float32, got float64};}
+       a column;}
  @item{@racket[connectivity] or @racket[metric] is not one of its names;}
- @item{@racket[X] has more than 2^31-1 elements: @tt{X: 65536x32769 elements
-       do not fit the index type};}
- @item{@racket[n-clusters] is less than 1 or more than the number of rows:
-       @tt{X: 5 samples are fewer than the 6 clusters};}
+ @item{@racket[X] has more than 2^31-1 elements;}
+ @item{@racket[n-clusters] is less than 1 or more than the number of rows;}
  @item{@racket[c] is more than 2147483617;}
- @item{with @racket['pairwise], @racket[X] has more than 46340 rows: @tt{X:
-       pairwise connectivity holds at most 46340 rows, got 46341; use knn};}
- @item{with @racket['knn], the graph's 2nk entries would pass 2^31-1:
-       @tt{X: 28000000 rows with 39 neighbours need 2184000000 knn graph
-       entries, more than 2147483647};}
- @item{a row holds a NaN or an infinity, or its squared norm passes 2^125:
-       @tt{X: row 2: expected a squared norm of at most 4.253529586511731e+37,
-       got nan}.}]
-cuML's own failures, such as a @racket['knn] graph it could not join or a
-@racket['pairwise] fit that runs out of device memory, raise
-@racket[exn:fail:cuml] naming the procedure, with nothing allocated. An
+ @item{with @racket['pairwise], @racket[X] has more than 46340 rows;}
+ @item{with @racket['knn], the graph's 2nk entries would pass 2^31-1;}
+ @item{a row holds a NaN or an infinity, or its squared norm passes 2^125.}]
+cuML's own failures, such as a @racket['knn] graph it could not join (raise
+@racket[c]), raise @racket[exn:fail:cuml] naming the procedure, with nothing
+allocated, and running out of device memory has kind @racket['oom]. An
 @racket[X] that is not a device array, or @racket[resources] that were
 released, raises raft's @racket[exn:fail:raft] naming the procedure, and a
 number argument that does not fit the native type, such as

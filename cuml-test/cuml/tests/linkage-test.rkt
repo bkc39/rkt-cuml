@@ -1,6 +1,9 @@
 #lang racket/base
 
-(require (only-in cuml/cluster single-linkage-fit single-linkage-result)
+(require (only-in cuml/cluster
+                  single-linkage-fit
+                  single-linkage-result-children
+                  single-linkage-result-labels)
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
@@ -10,13 +13,17 @@
          (only-in "private/dbscan-data.rkt" integer-grid mat same-partition?)
          (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
+                  connectivities
                   group-rows
                   hand-children
                   hand-labels
                   hand-rows
+                  linkage-oracle
                   linked-lists
                   permuted-children
                   permuted-labels
+                  oracle-cophenetic
+                  oracle-weights
                   permuted-rows
                   result->lists
                   tie-children
@@ -24,7 +31,17 @@
                   tie-rows
                   valid-dendrogram-problems))
 
-(define connectivities '(pairwise knn))
+(test-case "the host oracle: the hand grid's tree, and each dendrogram problem named"
+  (define o (linkage-oracle hand-rows))
+  (check-equal? (oracle-weights o) '(64 16 4 1))
+  (check-equal? (vector-ref (oracle-cophenetic o) 0) #(0 1 4 16 64))
+  (check-equal? (valid-dendrogram-problems hand-children 5) '())
+  (check-equal? (valid-dendrogram-problems '((1 0) (2 5) (3 6) (4 7)) 5)
+                '("each row ascending with distinct entries"))
+  (check-equal? (valid-dendrogram-problems '((0 1) (2 6) (3 5) (4 7)) 5)
+                '("row i's entries below n+i"))
+  (check-equal? (valid-dendrogram-problems '((0 1) (0 5) (3 6) (4 7)) 5)
+                '("every id 0..2n-3 exactly once")))
 
 (test-gpu "S1: the hand grid's children and labels at every k, as given and permuted"
   (for ([connectivity (in-list connectivities)])
@@ -32,12 +49,12 @@
       (for ([k (in-range 1 6)]
             [labels (in-list hand-labels)]
             [permuted (in-list permuted-labels)])
-        (match-define (single-linkage-result found children)
+        (define r
           (single-linkage-fit (mat hand-rows 'float32) #:n-clusters k #:connectivity connectivity))
-        (check-equal? (result->lists (single-linkage-result found children))
-                      (list labels hand-children))
-        (check-equal? (list (shape found) (dtype found) (shape children) (dtype children))
-                      '((5) int32 (4 2) int32))
+        (check-equal? (result->lists r) (list labels hand-children))
+        (check-equal? (map (lambda (m) (list (shape m) (dtype m)))
+                           (list (single-linkage-result-labels r) (single-linkage-result-children r)))
+                      '(((5) int32) ((4 2) int32)))
         (check-equal?
          (linked-lists (mat permuted-rows 'float32) #:n-clusters k #:connectivity connectivity)
          (list permuted permuted-children))))))
@@ -63,10 +80,10 @@
         labels)
       (check-equal? (labels-at 1) (make-list 50 0))
       (check-equal? (labels-at 50) (reverse (range 50)))
-      (match-define (single-linkage-result one one-children)
+      (define one
         (single-linkage-fit (mat '((3 4)) 'float32) #:n-clusters 1 #:connectivity connectivity))
-      (check-equal? (result->lists (single-linkage-result one one-children)) '((0) ()))
-      (check-equal? (shape one-children) '(0 2))
+      (check-equal? (result->lists one) '((0) ()))
+      (check-equal? (shape (single-linkage-result-children one)) '(0 2))
       (define two (mat '((1 2) (5 3)) 'float32))
       (check-equal? (linked-lists two #:n-clusters 1 #:connectivity connectivity) '((0 0) ((0 1))))
       (check-equal? (linked-lists two #:n-clusters 2 #:connectivity connectivity) '((1 0) ((0 1)))))))

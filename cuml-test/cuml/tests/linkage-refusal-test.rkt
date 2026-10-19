@@ -14,11 +14,9 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/linkage-data.rkt" linked-lists))
+         (only-in "private/linkage-data.rkt" connectivities linked-lists))
 
 (struct row (id message call))
-
-(define connectivities '(knn pairwise))
 
 (define (grid dt)
   (list*->device-matrix (for/list ([i (in-range 10)])

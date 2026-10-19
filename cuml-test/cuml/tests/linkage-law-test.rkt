@@ -2,21 +2,22 @@
 
 (require (only-in racket/list first range remove-duplicates rest second shuffle)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-true test-case)
+         (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
+         (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/dbscan-data.rkt" integer-grid mat pick same-partition? seeded)
+         (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
                   children->labels
                   children-cophenetic
                   children-heights
+                  connectivities
                   linkage-oracle
                   linked-lists
                   oracle-bounds
                   oracle-cophenetic
                   oracle-partition
                   partition-refines?))
-
-(define connectivities '(pairwise knn))
 
 (define (fit-lists rows k connectivity #:c [c 15])
   (linked-lists (mat rows 'float32) #:n-clusters k #:connectivity connectivity #:c c))
@@ -101,19 +102,18 @@
             [fine (in-list (rest fits))])
         (check-true (partition-refines? (first fine) (first coarse)))))))
 
-(test-gpu "S9: knn with the complete graph, and with 2 neighbours, is pairwise"
+(test-gpu "S9: on integer grids, knn with the complete graph has pairwise's cophenetic matrix"
   (for ([rows (in-list (list (integer-grid 200 2 15 9) (integer-grid 150 3 6 10)))])
     (define n (length rows))
     (define o (linkage-oracle rows))
-    (define base (children-cophenetic rows (children-of rows 'pairwise)))
-    (for ([c (in-list (list n -31))])
-      (test-case (format "~a rows, c ~a" n c)
-        (check-equal? (children-cophenetic rows (children-of rows 'knn #:c c)) base)
-        (for ([k (in-list '(2 3 4 6 9 14))]
-              #:when (oracle-partition o k))
-          (check-equal? (labels-of rows k 'knn #:c c)
-                        (labels-of rows k 'pairwise)
-                        (format "k ~a" k)))))))
+    (test-case (format "~a rows" n)
+      (check-equal? (children-cophenetic rows (children-of rows 'knn #:c n))
+                    (children-cophenetic rows (children-of rows 'pairwise)))
+      (for ([k (in-list '(2 3 4 6 9 14))]
+            #:when (oracle-partition o k))
+        (check-equal? (labels-of rows k 'knn #:c n)
+                      (labels-of rows k 'pairwise)
+                      (format "k ~a" k))))))
 
 (test-gpu "S10: every cut lies between the minimum spanning tree's components at its height"
   (define rows (integer-grid 120 2 18 11))
@@ -153,3 +153,21 @@
                 [j (in-range 200)])
       (max worst (abs (- (sqrt (vector-ref row j)) (sqrt (vector-ref (vector-ref expected i) j)))))))
   (check-true (> worst 1) (format "the largest cophenetic error is ~a" worst)))
+
+(test-gpu "P4: on float data, knn with the complete graph can cut apart from pairwise"
+  (define X (blob-data 500 3 1 0 'float32 #:std 1.0))
+  (define unique (oracle-partition (linkage-oracle (device-matrix->list* X)) 393))
+  (define all (range 500))
+  (define (cut connectivity)
+    (first (linked-lists X #:n-clusters 393 #:connectivity connectivity #:c 500)))
+  (check-true (same-partition? (cut 'pairwise) all unique all))
+  (check-false (same-partition? (cut 'knn) all unique all)))
+
+(test-gpu "P5: a c below -7 fits 200 rows as -7, and 2 neighbours are not the exact tree"
+  (define X (blob-data 200 2 1 0 'float32 #:std 1.0))
+  (define least (linked-lists X #:connectivity 'knn #:c -7))
+  (for ([c (in-list '(-8 -31 -2147483648))])
+    (check-equal? (linked-lists X #:connectivity 'knn #:c c) least (format "c ~a" c)))
+  (define rows (integer-grid 200 2 15 9))
+  (check-not-equal? (children-cophenetic rows (children-of rows 'knn #:c -7))
+                    (oracle-cophenetic (linkage-oracle rows))))

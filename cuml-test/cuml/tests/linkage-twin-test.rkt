@@ -3,10 +3,9 @@
 (require (only-in cuml agglomerative-clustering estimator-params)
          (only-in cuml/cluster single-linkage-fit single-linkage-result-labels)
          (only-in cuml/cluster/private/native libcuml-version)
-         (only-in json json-null)
          (only-in racket/flonum flsingle)
-         (only-in racket/list range split-at)
-         (only-in racket/match == match match* match-define)
+         (only-in racket/list count range split-at)
+         (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* dtype)
@@ -20,7 +19,7 @@
                   permuted-rows
                   result->lists
                   two-far)
-         (only-in "private/python-env.rkt" run-twin test-twin))
+         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
 
 (define-runtime-path twin "python/linkage_twin.py")
 
@@ -42,6 +41,8 @@
         (spec "k 1 and k n" (integer-grid 30 2 100 4) '(1 30) #t)))
 
 (struct run (spec connectivity k labels children labels-dtype))
+
+(struct outcome (same? exact? relative cut? agree?))
 
 (define (racket-fit s connectivity k)
   (define r
@@ -82,16 +83,10 @@
                                      (map (lambda (r) (case-of "sklearn" r)) all)))))
   (check-equal? version "26.08.00")
   (check-equal? version libcuml-version)
-  (define count (length all))
-  (define-values (cuml-results rest) (split-at results count))
-  (define-values (scipy-results sklearn-results) (split-at rest count))
-  (define-values (equal-count exact-count worst agree-count cut-count)
-    (for/fold ([equal-count 0]
-               [exact-count 0]
-               [worst 0.0]
-               [agree-count 0]
-               [cut-count 0])
-              ([r (in-list all)]
+  (define-values (cuml-results rest) (split-at results (length all)))
+  (define-values (scipy-results sklearn-results) (split-at rest (length all)))
+  (define outcomes
+    (for/list ([r (in-list all)]
                [theirs (in-list cuml-results)]
                [scipy (in-list scipy-results)]
                [sk (in-list sklearn-results)])
@@ -104,8 +99,6 @@
       (define cut (unique-cut r))
       (define n (length labels))
       (define agree? (and cut (same-partition? labels (range n) (hash-ref sk 'labels) (range n))))
-      (define same?
-        (equal? (list labels children) (list (hash-ref theirs 'labels) (hash-ref theirs 'children))))
       (test-case (run-name r)
         (check-equal? labels (hash-ref theirs 'labels) "T1 labels")
         (check-equal? children (hash-ref theirs 'children) "T1 children")
@@ -118,39 +111,27 @@
           (check-equal? children pairs "T2 children are scipy's pairs"))
         (when cut
           (check-true agree? "T3 sklearn's partition")))
-      (values (+ equal-count (if same? 1 0))
-              (+ exact-count (if (zero? error) 1 0))
-              (max worst relative)
-              (+ agree-count (if agree? 1 0))
-              (+ cut-count (if cut 1 0)))))
+      (outcome (equal? (list labels children)
+                       (list (hash-ref theirs 'labels) (hash-ref theirs 'children)))
+               (zero? error)
+               relative
+               (and cut #t)
+               agree?)))
   (printf "twin summary: ~a single-linkage cases; labels and children equal cuML's in ~a\n"
-          count
-          equal-count)
+          (length outcomes)
+          (count outcome-same? outcomes))
   (printf "twin scipy: ~a cases; cophenetic exact in ~a, worst relative error ~a\n"
-          count
-          exact-count
-          worst)
-  (printf "twin sklearn: ~a unique cuts; partitions agree in ~a\n" cut-count agree-count))
-
-(define unbound-twin-params '(verbose output-type handle))
-
-(define (twin-key key)
-  (~> key symbol->string (regexp-replace* #rx"_" _ "-") string->symbol))
-
-(define (twin-value key value)
-  (match* (key value)
-    [(_ (== (json-null))) #f]
-    [(_ (? string?)) (string->symbol value)]
-    [(_ _) value]))
+          (length outcomes)
+          (count outcome-exact? outcomes)
+          (apply max 0.0 (map outcome-relative outcomes)))
+  (printf "twin sklearn: ~a unique cuts; partitions agree in ~a\n"
+          (count outcome-cut? outcomes)
+          (count outcome-agree? outcomes)))
 
 (test-twin "T4: cuml.AgglomerativeClustering's default parameters are the estimator's"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped
-    (for*/hasheq ([(key value) (in-hash theirs)]
-                  [name (in-value (twin-key key))]
-                  #:unless (memq name unbound-twin-params))
-      (values name (twin-value name value))))
+  (define mapped (twin-params theirs '(handle)))
   (define ours (~> (agglomerative-clustering) estimator-params (hash-remove 'resources)))
   (printf "twin params: ~s\n" theirs)
   (check-equal? mapped ours))

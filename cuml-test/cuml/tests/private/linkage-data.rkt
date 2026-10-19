@@ -4,8 +4,8 @@
                   single-linkage-fit
                   single-linkage-result-children
                   single-linkage-result-labels)
-         (only-in racket/list argmin first remove-duplicates)
-         (only-in racket/match == match match-define)
+         (only-in racket/list append* argmin filter-map first range remove-duplicates)
+         (only-in racket/match == match match-define match-lambda)
          (only-in racket/math sqr)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "dbscan-data.rkt" seeded))
@@ -14,6 +14,7 @@
          children->labels
          children-cophenetic
          children-heights
+         connectivities
          group-rows
          hand-children
          hand-labels
@@ -33,6 +34,8 @@
          tie-rows
          two-far
          valid-dendrogram-problems)
+
+(define connectivities '(pairwise knn))
 
 (define hand-rows '((0) (1) (3) (7) (15)))
 (define hand-children '((0 1) (2 5) (3 6) (4 7)))
@@ -77,36 +80,22 @@
 
 (define (prim-edges points)
   (define n (vector-length points))
-  (define best (make-vector n +inf.0))
-  (define from (make-vector n #f))
-  (define in-tree (make-vector n #f))
-  (vector-set! best 0 0)
-  (for/fold ([edges '()]
+  (define (relaxed best from)
+    (for/hash ([(j entry) (in-hash best)])
+      (define d (squared-distance (vector-ref points from) (vector-ref points j)))
+      (values j
+              (if (< d (car entry))
+                  (cons d from)
+                  entry))))
+  (for/fold ([best (relaxed (for/hash ([j (in-range 1 n)])
+                              (values j (cons +inf.0 #f)))
+                            0)]
+             [edges '()]
              #:result (reverse edges))
-            ([_ (in-range n)])
-    (define next
-      (argmin (lambda (i) (vector-ref best i))
-              (for/list ([i (in-range n)]
-                         #:unless (vector-ref in-tree i))
-                i)))
-    (vector-set! in-tree next #t)
-    (for ([j (in-range n)]
-          #:unless (vector-ref in-tree j))
-      (define d (squared-distance (vector-ref points next) (vector-ref points j)))
-      (define closer? (< d (vector-ref best j)))
-      (vector-set! best
-                   j
-                   (if closer?
-                       d
-                       (vector-ref best j)))
-      (vector-set! from
-                   j
-                   (if closer?
-                       next
-                       (vector-ref from j))))
-    (match (vector-ref from next)
-      [#f edges]
-      [parent (cons (list (vector-ref best next) parent next) edges)])))
+            ([_ (in-range 1 n)])
+    (define next (argmin (lambda (j) (car (hash-ref best j))) (sort (hash-keys best) <)))
+    (match-define (cons d parent) (hash-ref best next))
+    (values (relaxed (hash-remove best next) next) (cons (list d parent next) edges))))
 
 (define (union-find n)
   (define parent (build-vector n values))
@@ -212,15 +201,15 @@
   (merge-heights (length rows) (children-heights rows children)))
 
 (define (valid-dendrogram-problems children n)
-  (define ids (apply append children))
-  (append (if (andmap (lambda (pair) (apply < pair)) children)
-              '()
-              '("each row ascending with distinct entries"))
-          (if (for/and ([pair (in-list children)]
-                        [i (in-naturals)])
-                (< (apply max pair) (+ n i)))
-              '()
-              '("row i's entries below n+i"))
-          (if (equal? (sort ids <) (build-list (max 0 (- (+ n n) 2)) values))
-              '()
-              '("every id 0..2n-3 exactly once"))))
+  (define checks
+    (list (cons "each row ascending with distinct entries"
+                (andmap (lambda (pair) (apply < pair)) children))
+          (cons "row i's entries below n+i"
+                (for/and ([pair (in-list children)]
+                          [i (in-naturals)])
+                  (< (apply max pair) (+ n i))))
+          (cons "every id 0..2n-3 exactly once"
+                (equal? (sort (append* children) <) (range (max 0 (- (+ n n) 2)))))))
+  (filter-map (match-lambda
+                [(cons problem holds?) (and (not holds?) problem)])
+              checks))
