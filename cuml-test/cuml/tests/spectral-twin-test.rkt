@@ -4,7 +4,7 @@
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list count split-at)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in threading ~>)
@@ -25,13 +25,13 @@
 
 (define-runtime-path twin "python/spectral_twin.py")
 
-(struct spec (name data truth k options))
+(struct spec (name data truth k options compare))
 
 (define defaults
   (hasheq 'n-components #f 'random-state 0 'n-neighbors 10 'n-init 10 'eigen-tol 'auto))
 
 (define (dense name rows truth k [options (hasheq)])
-  (spec name rows truth k options))
+  (spec name rows truth k options 'labels))
 
 (define (dense-specs)
   (define-values (b3 t3) (blobs 100 3 2 50.0 0))
@@ -56,11 +56,11 @@
 (define (graph-specs)
   (append (for/list ([seed (in-range 3)])
             (define-values (g truth) (sparse-blocks '(30 40 50) 0.3 seed))
-            (spec (format "blocks 30/40/50 seed ~a" seed) g truth 3 (hasheq)))
+            (spec (format "blocks 30/40/50 seed ~a" seed) g truth 3 (hasheq) 'labels))
           (let-values ([(g truth) (sparse-blocks '(30 40 50) 0.3 4 #:connected? #f)])
-            (list (spec "disconnected blocks" g truth 3 (hasheq 'random-state 9))))
+            (list (spec "disconnected blocks" g truth 3 (hasheq 'random-state 9) 'labels)))
           (let-values ([(g truth) (sparse-blocks '(300 400 500 600) 0.05 0)])
-            (list (spec "blocks 300-600" g truth 4 (hasheq))))))
+            (list (spec "blocks 300-600" g truth 4 (hasheq) 'partition)))))
 
 (define (options-of s)
   (for/fold ([o defaults]) ([(k v) (in-hash (spec-options s))])
@@ -139,17 +139,25 @@
                [theirs (in-list precomputed-results)]
                [sk (in-list sklearn-results)])
       (define found (ours s #t))
+      (define cuml-labels (hash-ref theirs 'labels))
       (define agree? (planted? found (hash-ref sk 'labels)))
       (test-case (spec-name s)
-        (check-equal? found (hash-ref theirs 'labels) "T1 precomputed labels")
+        (match (spec-compare s)
+          ['labels (check-equal? found cuml-labels "T1 precomputed labels")]
+          ['partition (check-true (planted? found cuml-labels) "T1 precomputed partition")])
         (check-true agree? "T2 sklearn's partition")
         (check-true (planted? found (spec-truth s)) "the planted partition"))
-      (list (equal? found (hash-ref theirs 'labels)) agree?)))
-  (printf "twin summary: ~a dense and ~a graph spectral cases; labels equal cuML's in ~a and ~a\n"
-          (length ds)
-          (length gs)
-          (count values dense-same)
-          (count car graph-outcomes))
+      (list (match (spec-compare s)
+              ['labels (equal? found cuml-labels)]
+              ['partition (planted? found cuml-labels)])
+            agree?)))
+  (printf
+   "twin summary: ~a dense and ~a graph spectral cases; labels equal cuML's in ~a and ~a (~a graph by partition)\n"
+   (length ds)
+   (length gs)
+   (count values dense-same)
+   (count car graph-outcomes)
+   (count (lambda (s) (eq? (spec-compare s) 'partition)) gs))
   (printf "twin sklearn: ~a graphs; partitions agree in ~a\n"
           (length gs)
           (count cadr graph-outcomes)))

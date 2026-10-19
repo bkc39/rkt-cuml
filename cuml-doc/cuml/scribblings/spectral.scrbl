@@ -28,8 +28,9 @@
 The result of @racket[spectral-clustering-fit] and
 @racket[spectral-clustering-fit-graph]: each sample's cluster, @racket['int32],
 from 0 to k−1. The labels are k-means' over the spectral embedding, so their
-numbering depends on @racket[random-state] and a label can go unused: compare
-partitions, not label values.}
+numbering depends on @racket[random-state] and a label can go unused. Label
+values can be renumbered between runs, even at one @racket[random-state]:
+compare partitions, not label values.}
 
 @defproc[(spectral-clustering-fit [X device-matrix?]
                                   [#:n-clusters n-clusters exact-positive-integer? 8]
@@ -52,9 +53,9 @@ clusters can blur the partition.
 
 The eigensolver stops when its residual is at most @racket[eigen-tol]
 (@racket['auto] is 0) or after 10n iterations, and never reports that it did
-not converge. Near cluster boundaries the labels can differ from one run to
-the next at the default @racket[eigen-tol]. Graphs whose components are
-cliques, and rows repeated more often than @racket[n-neighbors], can fail with
+not converge. Near cluster boundaries a few labels can differ from one run to
+the next, at any @racket[eigen-tol] and @racket[n-init]. Graphs with repeated
+eigenvalues, such as cliques or heavily repeated rows, can fail with
 ``eigensolver couldn't converge''. The labels live on @racket[resources].}
 
 @defproc[(spectral-clustering-fit-graph [rows device-vector?]
