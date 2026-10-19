@@ -39,14 +39,14 @@ struct unit_row {
     for (int64_t j = 0; j < d; ++j) {
       largest = fmax(largest, fabs(row[j]));
     }
-    T squares{0};
+    double squares{0};
     for (int64_t j = 0; j < d; ++j) {
       row[j] /= largest;
-      squares += row[j] * row[j];
+      squares += static_cast<double>(row[j]) * static_cast<double>(row[j]);
     }
-    const T norm = sqrt(squares);
+    const double norm = sqrt(squares);
     for (int64_t j = 0; j < d; ++j) {
-      row[j] /= norm;
+      row[j] = static_cast<T>(row[j] / norm);
     }
   }
 };

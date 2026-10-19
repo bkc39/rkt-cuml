@@ -10,6 +10,7 @@
 (provide (struct-out expected)
          canonical
          cosine-cloud
+         cosine-distance
          cosine-within
          dbscan-oracle
          distance-matrix

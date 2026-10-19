@@ -1,11 +1,13 @@
 #lang racket/base
 
-(require (only-in racket/list range shuffle)
+(require (only-in racket/flonum flsingle)
+         (only-in racket/list make-list range shuffle)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/dbscan-data.rkt"
                   cosine-cloud
+                  cosine-distance
                   cosine-within
                   dbscan-oracle
                   distance-matrix
@@ -30,6 +32,18 @@
                  (euclidean-within (list->vector rows) eps)
                  min-samples
                  #:weights weights))
+
+(define (wide-pair d)
+  (define tenth (flsingle 0.1))
+  (define half (quotient d 2))
+  (list (cons 1.0 (make-list (- d 1) tenth))
+        (cons 1.0 (append (make-list half (- tenth)) (make-list (- d 1 half) tenth)))))
+
+(define (wide-pair-fit d factor)
+  (match-define (list a b) (wide-pair d))
+  (define eps (* factor (cosine-distance a b)))
+  (values (fitted-lists (mat (list a b) 'float32) #:eps eps #:min-samples 2 #:metric 'cosine)
+          (dbscan-oracle 2 (cosine-within (vector a b) eps) 2)))
 
 (define (noise labels)
   (for/list ([l (in-list labels)]
@@ -224,6 +238,17 @@
     (test-case (format "~a ~a" dt rows)
       (check-equal? (fitted-lists (mat rows dt) #:eps 2 #:min-samples 2 #:metric 'cosine)
                     '((0 0) (0 1))))))
+
+(test-gpu "L8: float32 cosine labels match the oracle at eps 1e-3 either side of a wide pair's distance"
+  (for* ([d (in-list '(1024 4096))]
+         [factor (in-list '(0.999 1.001))])
+    (test-case (format "d ~a eps ~a t" d factor)
+      (define-values (found e) (wide-pair-fit d factor))
+      (check-equal? found (list (expected-labels e) (expected-core e))))))
+
+(test-gpu "L8 characterisation pin: float32 cosine at 4096 columns includes a pair 3e-5 below eps"
+  (define-values (found _) (wide-pair-fit 4096 (+ 1 3e-5)))
+  (check-equal? found '((0 0) (0 1))))
 
 (test-gpu "L8: a subnormal eps under cosine returns"
   (check-equal?

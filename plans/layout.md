@@ -182,8 +182,10 @@
     2 eps, or 8 when eps is 2 or more, so that every pair is a neighbour
     pair there, as in sklearn, which clips cosine distances to [0, 2]. A
     pair at cosine distance exactly eps is a neighbour pair when the unit
-    rows are exact in the dtype, as one-hot rows are; otherwise rounding of
-    the unit rows decides pairs within a few rounding steps of eps.
+    rows are exact in the dtype, as one-hot rows are. Otherwise, as with any
+    floating-point DBSCAN, pairs whose distance is close to eps may fall on
+    either side; the tolerance is relative and grows with the number of
+    columns, about 1e-5 at 1024 float32 columns.
   - **Q-E.** Non-finite `X` is passed through, and its rows are noise.
   - **Q-F.** `eps` must be finite and positive, so `+inf.0` is refused, as
     are `min-samples` below 1.
