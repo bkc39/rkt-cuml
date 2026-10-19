@@ -59,7 +59,9 @@ function(cumlrkt_family family)
   if(BUILD_TESTING AND arg_TESTS)
     set(tests ${lib}_tests)
     add_executable(${tests} ${arg_TESTS})
-    target_include_directories(${tests} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${family}/tests)
+    target_include_directories(${tests} PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/${family}/tests
+      ${CMAKE_CURRENT_SOURCE_DIR}/${family}/src)
     target_link_libraries(${tests}
       PRIVATE ${lib} raftrkt::headers "${RAFTRKT_LIBRARY}" GTest::gtest_main)
     cumlrkt_enable_warnings(${tests})

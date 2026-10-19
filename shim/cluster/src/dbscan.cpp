@@ -1,7 +1,5 @@
 #include <cuda_runtime_api.h>
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cuml/cluster/dbscan.hpp>
@@ -17,6 +15,7 @@
 #include <string>
 #include <utility>
 
+#include "cosine_eps.hpp"
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
 #include "dbscan_device.hpp"
@@ -38,13 +37,13 @@ using cumlrkt::cluster::require_some;
 using cumlrkt::cluster::rows_of;
 using cumlrkt::cluster::settle;
 using cumlrkt::cluster::unit_rows;
+using cumlrkt::cluster::detail::cosine_eps;
 using raftrkt::any_extent;
 using Distance = ML::distance::DistanceType;
 
 constexpr std::size_t megabyte = 1000000;
 constexpr std::size_t percent = 100;
 constexpr std::size_t usable_percent = 80;
-constexpr double widest_cosine = 4;
 
 struct fit_arrays {
   const rr_view* x;
@@ -178,11 +177,6 @@ T eps_of(double eps) {
   const auto narrowed = static_cast<T>(eps);
   require_positive("eps", eps, narrowed > 0);
   return narrowed;
-}
-
-template <typename T>
-T cosine_eps(double eps) {
-  return static_cast<T>(std::sqrt(2 * std::min(eps, widest_cosine)));
 }
 
 template <typename T>

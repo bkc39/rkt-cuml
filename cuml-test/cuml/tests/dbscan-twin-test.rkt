@@ -1,13 +1,13 @@
 #lang racket/base
 
 (require (only-in cuml dbscan estimator-params)
-         (only-in cuml/cluster dbscan-fit)
+         (only-in cuml/cluster dbscan-fit dbscan-result-labels)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/match == match match* match-define)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* dtype)
          (only-in threading ~>)
          (only-in "private/dbscan-data.rkt"
                   cosine-cloud
@@ -26,13 +26,16 @@
 
 (define specs
   (for*/list ([dt (in-list '(float32 float64))]
-              [s (in-list '((blob 0.5 5 euclidean int32 #f) (grid 1.5 4 euclidean int32 #f)
-                                                            (weighted 1.5 6 euclidean int32 #f)
-                                                            (precomputed 1.5 4 precomputed int32 #f)
-                                                            (cosine 0.001953125 4 cosine int32 #f)
-                                                            (batched 1.5 4 euclidean int32 1)
-                                                            (grid 1.5 4 euclidean int64 #f)
-                                                            (batched 1.5 4 euclidean int64 2)))])
+              [s (in-list '((blob 0.5 5 euclidean int32 #f)
+                            (grid 1.5 4 euclidean int32 #f)
+                            (weighted 1.5 6 euclidean int32 #f)
+                            (precomputed 1.5 4 precomputed int32 #f)
+                            (cosine 0.001953125 4 cosine int32 #f)
+                            (onehot 1.0 10 cosine int32 #f)
+                            (weighted-cosine 0.001953125 8 cosine int32 #f)
+                            (batched 1.5 4 euclidean int32 1)
+                            (grid 1.5 4 euclidean int64 #f)
+                            (batched 1.5 4 euclidean int64 2)))])
     (match-define (list kind eps min-samples metric out-dtype mbytes) s)
     (spec kind dt eps min-samples metric out-dtype mbytes)))
 
@@ -52,33 +55,39 @@
     ['grid (integer-grid 500 2 25 1)]
     ['weighted (integer-grid 400 2 20 2)]
     ['precomputed (distance-matrix (integer-grid 300 2 30 3))]
-    ['cosine (cosine-cloud 300 3 (spec-eps s) 4)]
+    [(or 'cosine 'weighted-cosine) (cosine-cloud 300 3 (spec-eps s) 4)]
+    ['onehot
+     (seeded 11
+             (lambda ()
+               (for/list ([_ (in-range 40)])
+                 (define hot (random 8))
+                 (for/list ([j (in-range 8)])
+                   (if (= j hot) 1 0)))))]
     ['batched (integer-grid 2001 2 60 5)]))
 
 (define (weights-of s n)
   (match (spec-kind s)
-    ['weighted
+    [(or 'weighted 'weighted-cosine)
      (seeded 6
              (lambda ()
                (for/list ([_ (in-range n)])
                  (add1 (random 3)))))]
     [_ #f]))
 
-(struct run (spec rows weights found))
+(struct run (spec rows weights found labels-dtype))
 
 (define (racket-fit s)
   (define rows (rows-of s))
   (define w (weights-of s (length rows)))
-  (run s
-       rows
-       w
-       (result->lists (dbscan-fit (mat rows (spec-dt s))
-                                  #:eps (spec-eps s)
-                                  #:min-samples (spec-min-samples s)
-                                  #:metric (spec-metric s)
-                                  #:out-dtype (spec-out-dtype s)
-                                  #:max-mbytes-per-batch (spec-mbytes s)
-                                  #:sample-weight (and w (vec w (spec-dt s)))))))
+  (define r
+    (dbscan-fit (mat rows (spec-dt s))
+                #:eps (spec-eps s)
+                #:min-samples (spec-min-samples s)
+                #:metric (spec-metric s)
+                #:out-dtype (spec-out-dtype s)
+                #:max-mbytes-per-batch (spec-mbytes s)
+                #:sample-weight (and w (vec w (spec-dt s)))))
+  (run s rows w (result->lists r) (dtype (dbscan-result-labels r))))
 
 (define (or-null v)
   (or v (json-null)))
@@ -87,7 +96,7 @@
   (eq? (spec-metric s) 'cosine))
 
 (define (fit-case r)
-  (match-define (run s rows w _) r)
+  (match-define (run s rows w _ _) r)
   (hasheq 'op (if (sklearn? s) "sklearn_fit" "fit")
           'dtype (symbol->string (spec-dt s))
           'X (map (lambda (row) (map exact->inexact row)) rows)
@@ -106,7 +115,7 @@
   (check-equal? version libcuml-version)
   (define equal-count
     (for/sum ([r (in-list runs)] [theirs (in-list results)])
-             (match-define (run s _ _ (list labels core)) r)
+             (match-define (run s _ _ (list labels core) labels-dtype) r)
              (define out (symbol->string (spec-out-dtype s)))
              (define same?
                (equal? (list labels core) (list (hash-ref theirs 'labels) (hash-ref theirs 'core))))
@@ -119,10 +128,9 @@
              (test-case (spec-name s)
                (check-equal? labels (hash-ref theirs 'labels) "labels")
                (check-equal? core (hash-ref theirs 'core) "core samples")
-               (check-equal? (hash-ref theirs 'dtypes)
-                             (if (sklearn? s)
-                                 '("int64" "int64")
-                                 (list out out))))
+               (check-equal? (symbol->string labels-dtype) out "labels dtype")
+               (unless (sklearn? s)
+                 (check-equal? (hash-ref theirs 'dtypes) (list out out))))
              (if same? 1 0)))
   (printf "twin summary: ~a DBSCAN cases; labels and core samples equal in ~a\n"
           (length runs)

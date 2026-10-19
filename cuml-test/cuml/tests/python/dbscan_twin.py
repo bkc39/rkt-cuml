@@ -40,10 +40,16 @@ def fit(case):
 
 
 def sklearn_fit(case):
-    X = np.asarray(case["X"], dtype=np.dtype(case["dtype"]))
+    if case["max_mbytes_per_batch"] is not None:
+        raise ValueError("sklearn_fit: max_mbytes_per_batch must be null")
+    if case["out_dtype"] != "int32":
+        raise ValueError("sklearn_fit: out_dtype must be int32")
+    dtype = np.dtype(case["dtype"])
+    X = np.asarray(case["X"], dtype=dtype)
+    w = case["sample_weight"]
     db = DBSCAN(
         eps=case["eps"], min_samples=case["min_samples"], metric=case["metric"]
-    ).fit(X)
+    ).fit(X, sample_weight=None if w is None else np.asarray(w, dtype=dtype))
     labels = db.labels_
     return {
         "labels": labels.astype(np.int64).tolist(),

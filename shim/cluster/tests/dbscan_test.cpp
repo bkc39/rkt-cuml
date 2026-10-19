@@ -3,12 +3,14 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <string>
 #include <type_traits>
 #include <vector>
 
 #include "cluster_fixture.hpp"
+#include "cosine_eps.hpp"
 #include "cumlrkt/cluster.h"
 #include "dbscan_fixture.hpp"
 #include "kmeans_fixture.hpp"
@@ -33,6 +35,11 @@ constexpr int lcg_shift = 33;
 constexpr int64_t wide_cols = 8;
 constexpr double wide_eps = 1e-3;
 constexpr double wide_scale = 3;
+constexpr int sweep_steps = 5000;
+constexpr double sweep_step = 1e-3;
+constexpr double tiny_eps = 1e-30;
+constexpr double small_eps = 1e-6;
+constexpr double wide_cosine_eps = 9;
 
 const values grid{0, 1, 2, 4, 6, 7, 8, 20};
 const values grid_weights{4, 1, 1, 1, 1, 1, 1, 1};
@@ -248,6 +255,27 @@ TEST(Dbscan, CosineWiderThanTall) {
   EXPECT_EQ(found.status, "accepted");
   EXPECT_EQ(found.labels, (values{0, 0}));
   EXPECT_EQ(found.core, (values{0, 1}));
+}
+
+template <typename T>
+void cosine_eps_is_tight(double eps) {
+  const T target = cluster::detail::cosine_target<T>(eps);
+  const T e = cluster::detail::cosine_eps<T>(eps);
+  const T prev = std::nextafter(e, T{0});
+  EXPECT_GE(e * e, target) << "eps " << eps;
+  EXPECT_LT(prev * prev, target) << "eps " << eps;
+}
+
+TEST(Dbscan, CosineEpsIsTheSmallestWhoseSquareReachesTwiceEps) {
+  std::vector<double> sweep{tiny_eps, small_eps, wide_cosine_eps,
+                            std::numeric_limits<double>::max()};
+  for (int k = 1; k <= sweep_steps; ++k) {
+    sweep.push_back(k * sweep_step);
+  }
+  for (const double eps : sweep) {
+    cosine_eps_is_tight<float>(eps);
+    cosine_eps_is_tight<double>(eps);
+  }
 }
 
 }  // namespace

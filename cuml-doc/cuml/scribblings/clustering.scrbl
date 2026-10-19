@@ -221,7 +221,9 @@ With @racket['precomputed], @racket[X] is a square matrix of distances, row
 @racket[i] from sample @racket[i]. @racket['cosine] distance is one minus the
 cosine similarity, and @racket[X] is not modified: the fit runs as euclidean
 DBSCAN on a copy of @racket[X] scaled to unit rows in @racket[X]'s dtype. A
-row with a NaN or an infinity is noise.
+pair at cosine distance exactly @racket[eps] is included, and a pair beyond it
+by at most one rounding step of the dtype may be. A row with a NaN or an
+infinity is noise.
 @racket[max-mbytes-per-batch] bounds, in units of 10^6
 bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[0] sizes the batch from the device's memory. The outputs live on

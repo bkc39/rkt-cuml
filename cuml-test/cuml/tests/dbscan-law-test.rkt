@@ -207,3 +207,13 @@
     (test-case (format "~a eps ~a" dt eps)
       (check-equal? (fitted-lists (mat '((1 0) (2 0)) dt) #:eps eps #:min-samples 2 #:metric 'cosine)
                     '((0 0) (0 1))))))
+
+(test-gpu "L8: a pair at cosine distance exactly eps is a neighbour pair"
+  (for* ([dt (in-list dtypes)]
+         [c (in-list '((((1 0) (0 1)) 1) (((1 1 1 1) (1 -1 -1 -1)) 1.5)
+                                         (((1 1 1 1) (1 1 1 -1)) 0.5)
+                                         (((1 0) (-1 0)) 2)))])
+    (match-define (list rows eps) c)
+    (test-case (format "~a ~a eps ~a" dt rows eps)
+      (check-equal? (fitted-lists (mat rows dt) #:eps eps #:min-samples 2 #:metric 'cosine)
+                    '((0 0) (0 1))))))

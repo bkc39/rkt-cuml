@@ -177,12 +177,14 @@
     cuML 26.08's cosine branch normalises by column
     (`vertexdeg/algo.cuh:173-184`), so rkt-cuml does not use it: the scratch
     copy is scaled to unit rows in `X`'s dtype (by the largest magnitude,
-    then the 2-norm), and cuML runs euclidean on it with eps' = sqrt(2 eps).
+    then the 2-norm), and cuML runs euclidean on it with eps' the smallest
+    value in `X`'s dtype whose square, rounded in that dtype, reaches
+    2 min(eps, 4). A pair at cosine distance exactly eps is a neighbour pair.
   - **Q-E.** Non-finite `X` is passed through, and its rows are noise.
   - **Q-F.** `eps` must be finite and positive, so `+inf.0` is refused, as
     are `min-samples` below 1.
   - **Q-G.** `eps` is the exact double for float64; under `'cosine` the
-    unit rows and sqrt(2 eps) are in `X`'s dtype.
+    unit rows and eps' are in `X`'s dtype.
   - **Q-H.** Core-sample indices are always computed.
   - **Q-I.** `'rbc` is deferred to #17.
   - **Q-J.** `dbscan-result` has no cluster count.
