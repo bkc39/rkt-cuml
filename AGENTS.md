@@ -230,7 +230,7 @@ replace each when raft offers a public form:
 
 | Module | Bindings | Used by |
 |---|---|---|
-| `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `dbscan-refusal-test`, `private/device-memory`, `private/python-env` |
+| `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
 | `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
 | `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
@@ -250,6 +250,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `spectral-data` | the spectral fixtures (`blobs`, `circles`, `moons` in float32, `sparse-blocks`, `cliques`, `repeat-each`, and the shared `three-blobs`, `three-blobs-matrix` and `three-blocks`), the `fit-case` struct (a named fixture with its truth, k, options and comparison), the `graph` struct and its transforms (`knn-graph`, the host kNN connectivity graph; `permute-graph`, `graph-shuffle`, `graph-map-vals`, `graph-edit` with `set-entry`, `graph-upper`, `graph-scale-upper`, `graph-dense`), `graph->vectors`, `planted?`, and `labels` and `graph-labels` (the two fits composed with the labels' host list) |
 | `refusal-rows` | the refusal tables' `row` struct (id, message, call), `check-row who row`, and the squared-norm cases' `with-row` and `norm-message` |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
+| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`) |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 Every SKIP line the GPU suite allows matches one ERE in
