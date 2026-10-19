@@ -122,6 +122,8 @@ A self-loop is refused:
  @item{@racket[n-clusters] is less than 1 or more than the number of samples;}
  @item{the eigensolver's basis of n × min(n − c, max(2c + 1, 20)) elements,
        for c components, would pass 2^31-1;}
+ @item{the k-means++ buffer of (2 + ⌈ln k⌉) × n elements, for k clusters,
+       would pass 2^31-1;}
  @item{@racket[n-components] is outside [1, ⌊(n−1)/3⌋], @racket[n-neighbors]
        is less than 2, @racket[n-init] is less than 1, or @racket[eigen-tol] is
        negative, NaN or past the largest @racket['float32];}

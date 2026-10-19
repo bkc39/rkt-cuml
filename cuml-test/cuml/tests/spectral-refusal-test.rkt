@@ -115,6 +115,10 @@
 
 (define basis-samples 107374183)
 
+(define trial-samples 102261127)
+
+(define trial-clusters 65659970)
+
 (define four-entries (graph '(0 1 2 3) '(1 0 3 2) '(1.0 1.0 1.0 1.0) basis-samples))
 
 (define (graph-rows-of)
@@ -192,6 +196,20 @@
         "eigen-tol: expected at least 0, got -1"
         (lambda ()
           (graph-labels (struct-copy graph four-entries [n (sub1 basis-samples)]) #:eigen-tol -1)))
+   (row "G15"
+        (string-append "n-samples: 102261127 samples and 65659970 clusters need a 21x102261127"
+                       " k-means++ buffer, more than 2147483647 elements")
+        (lambda ()
+          (graph-labels (struct-copy graph four-entries [n trial-samples])
+                        #:n-clusters trial-clusters
+                        #:n-components 1)))
+   (row "G15 most"
+        "eigen-tol: expected at least 0, got -1"
+        (lambda ()
+          (graph-labels (struct-copy graph four-entries [n (sub1 trial-samples)])
+                        #:n-clusters trial-clusters
+                        #:n-components 1
+                        #:eigen-tol -1)))
    (row "G12 zeros"
         "vals: expected at least one positive weight, got none"
         (fault (graph-map-vals ring (lambda (_) 0.0))))
