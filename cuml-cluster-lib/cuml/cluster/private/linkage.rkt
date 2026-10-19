@@ -39,4 +39,14 @@
                                 #:connectivity [connectivity (default 'connectivity)]
                                 #:c [c (default 'c)]
                                 #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define out (deposit-for who resources))
+  (cuml-cluster-single-linkage-fit-job who
+                                       resources
+                                       X
+                                       out
+                                       n-clusters
+                                       (metric-code metric)
+                                       (connectivity-code connectivity)
+                                       c)
+  (match-define (list labels children) (deposit->list out))
+  (single-linkage-result labels children))
