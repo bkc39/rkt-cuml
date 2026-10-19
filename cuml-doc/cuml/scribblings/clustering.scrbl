@@ -386,11 +386,11 @@ kind @racket['logic], leaving nothing allocated, when:
  @item{a row holds a NaN or an infinity, or its squared norm passes 2^125.}]
 cuML's own failures, such as a @racket['knn] graph it could not join (raise
 @racket[c]), raise @racket[exn:fail:cuml] naming the procedure, with nothing
-allocated, and running out of device memory has kind @racket['oom]. An
-@racket[X] that is not a device array, or @racket[resources] that were
-released, raises raft's @racket[exn:fail:raft] naming the procedure, and a
-number argument that does not fit the native type, such as
-@racket[#:n-clusters 2.5], raises @racket[exn:fail:contract].
+allocated, and running out of device memory has kind
+@racket['out-of-memory]. An @racket[X] that is not a device array, or
+@racket[resources] that were released, raises raft's @racket[exn:fail:raft]
+naming the procedure, and a number argument that does not fit the native type,
+such as @racket[#:n-clusters 2.5], raises @racket[exn:fail:contract].
 
 @include-section["spectral.scrbl"]
 

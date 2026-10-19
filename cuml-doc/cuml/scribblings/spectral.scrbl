@@ -27,10 +27,8 @@
 
 The result of @racket[spectral-clustering-fit] and
 @racket[spectral-clustering-fit-graph]: each sample's cluster, @racket['int32],
-from 0 to k−1. The labels are k-means' over the spectral embedding, so their
-numbering depends on @racket[random-state] and a label can go unused. Label
-values can be renumbered between runs, even at one @racket[random-state]:
-compare partitions, not label values.}
+from 0 to k−1, numbered by k-means, so a label can go unused. Runs can
+renumber the labels: compare partitions, not label values.}
 
 @defproc[(spectral-clustering-fit [X device-matrix?]
                                   [#:n-clusters n-clusters exact-positive-integer? 8]
@@ -49,14 +47,15 @@ included. The first @racket[n-components] eigenvectors, by default
 min(@racket[n-clusters], ⌊(n−1)/3⌋), are clustered by k-means with
 @racket[n-init] runs, seeded by @racket[random-state]. An explicit
 @racket[n-components] must lie in [1, ⌊(n−1)/3⌋], and more components than
-clusters can blur the partition.
+clusters can blur the partition. Below 7 samples the automatic embedding has
+one component, which separates only groups the graph leaves disconnected.
 
-The eigensolver stops when its residual is at most @racket[eigen-tol]
-(@racket['auto] is 0) or after 10n iterations, and never reports that it did
-not converge. Near cluster boundaries a few labels can differ from one run to
-the next, at any @racket[eigen-tol] and @racket[n-init]. Graphs with repeated
-eigenvalues, such as cliques or heavily repeated rows, can fail with
-``eigensolver couldn't converge''. The labels live on @racket[resources].}
+The eigensolver stops at a residual of at most @racket[eigen-tol]
+(@racket['auto] is 0) or after 10n iterations, without reporting that it did
+not converge, so labels near cluster boundaries can vary between runs. Graphs
+with repeated eigenvalues, such as cliques, heavily repeated rows or many
+isolated samples, can fail with ``eigensolver couldn't converge''. The labels
+live on @racket[resources].}
 
 @defproc[(spectral-clustering-fit-graph [rows device-vector?]
                                         [cols device-vector?]
@@ -121,21 +120,25 @@ A self-loop is refused:
        2^31-1;}
  @item{@racket[n-samples] is less than 4 or more than 2^31-1;}
  @item{@racket[n-clusters] is less than 1 or more than the number of samples;}
+ @item{the eigensolver's basis of n × min(n − c, max(2c + 1, 20)) elements,
+       for c components, would pass 2^31-1;}
  @item{@racket[n-components] is outside [1, ⌊(n−1)/3⌋], @racket[n-neighbors]
        is less than 2, @racket[n-init] is less than 1, or @racket[eigen-tol] is
        negative, NaN or past the largest @racket['float32];}
  @item{a row of @racket[X] holds a NaN or an infinity, or its squared norm
        passes 2^125;}
  @item{an entry's index is outside [0, @racket[n-samples]), the entry is a
-       self-loop, or its weight is negative or not finite: the first such
-       entry is named;}
- @item{no weight is positive.}]
+       self-loop, or its weight is negative, not finite or subnormal: the
+       first such entry is named;}
+ @item{the weights sum past the largest @racket['float32], or none is
+       positive.}]
+
 cuML's own failures, such as an eigensolver that could not converge, raise
-@racket[exn:fail:cuml] of kind @racket['generic] naming the procedure, with nothing allocated, and
-running out of device memory has kind @racket['oom]. An argument that is not a
-device array, or @racket[resources] that were released, raises raft's
-@racket[exn:fail:raft] naming the procedure, and a number argument that does
-not fit the native type, such as @racket[#:n-init 2.5], raises
-@racket[exn:fail:contract].
+@racket[exn:fail:cuml] of kind @racket['generic] naming the procedure, with
+nothing allocated, and running out of device memory has kind
+@racket['out-of-memory]. An argument that is not a device array, or
+@racket[resources] that were released, raises raft's @racket[exn:fail:raft]
+naming the procedure, and a number argument that does not fit the native type,
+such as @racket[#:n-init 2.5], raises @racket[exn:fail:contract].
 
 @(close-eval ev)

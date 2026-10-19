@@ -325,15 +325,13 @@ on @racket[resources], or with @racket[#f] on the calling thread's
 Printing and @racket[equal?] are as for @racket[kmeans].
 
 @examples[#:eval ev
-(define G
-  (list*->device-matrix (for*/list ([centre (in-list '(0 10 20))]
-                                    [i (in-range 8)])
-                          (list (+ centre (* 0.5 (quotient i 4))) (* 0.5 (remainder i 4))))
+(define S
+  (list*->device-matrix '((0 0) (0 1) (0 2) (1 0) (1 1) (1 2) (10 0) (10 1) (10 2) (11 0) (11 1) (11 2))
                         #:dtype 'float32))
-(define sc (spectral-clustering #:n-clusters 3 #:n-neighbors 5))
+(define sc (spectral-clustering #:n-clusters 2 #:n-neighbors 4))
 sc
-(device-vector->list (fit-predict sc G))
-(eval:error (fit (spectral-clustering #:affinity 'precomputed) G))
+(device-vector->list (fit-predict sc S))
+(eval:error (fit (spectral-clustering #:affinity 'precomputed) S))
 ]}
 
 @defproc[(spectral-clustering? [v any/c]) boolean?]{
