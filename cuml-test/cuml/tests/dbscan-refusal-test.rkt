@@ -17,11 +17,10 @@
                   with-device-resources)
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/cuml-error.rkt" raised)
          (only-in "private/dbscan-data.rkt" fitted-lists)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes))
-
-(struct row (id message call))
+         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes)
+         (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define out-dtypes '(int32 int64))
 
@@ -119,7 +118,7 @@
          [out (in-list out-dtypes)]
          [r (in-list (fit-rows dt out))])
     (test-case (format "~a (~a, ~a)" (row-id r) dt out)
-      (check-cuml-error 'logic (format "dbscan-fit: ~a" (row-message r)) (row-call r)))))
+      (check-row 'dbscan-fit r))))
 
 (define (with-extreme-row edge dt)
   (list*->device-matrix (append '((1 1) (1 1)) (list edge '(2 0)) (make-list 6 '(1 1))) #:dtype dt))

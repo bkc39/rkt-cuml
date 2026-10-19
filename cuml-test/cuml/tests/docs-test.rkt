@@ -270,10 +270,14 @@
                                     4
                                     #:n-clusters 2))))
 
-(test-gpu "the manual: the spectral clustering estimator on the three groups"
-  (define sc (spectral-clustering #:n-clusters 3 #:n-neighbors 5))
-  (check-equal? (format "~v" sc) "#<spectral-clustering #:n-clusters 3 #:n-neighbors 5>")
-  (check-true (planted? (device-vector->list (fit-predict sc (three-groups))) group-truth))
+(test-gpu "the manual: the spectral clustering estimator on two groups"
+  (define S
+    (list*->device-matrix
+     '((0 0) (0 1) (0 2) (1 0) (1 1) (1 2) (10 0) (10 1) (10 2) (11 0) (11 1) (11 2))
+     #:dtype 'float32))
+  (define sc (spectral-clustering #:n-clusters 2 #:n-neighbors 4))
+  (check-equal? (format "~v" sc) "#<spectral-clustering #:n-clusters 2 #:n-neighbors 4>")
+  (check-true (planted? (device-vector->list (fit-predict sc S)) (truth-of '(6 6))))
   (check-cuml-error 'logic
                     "fit: affinity: expected nearest-neighbors, got precomputed"
-                    (lambda () (fit (spectral-clustering #:affinity 'precomputed) (three-groups)))))
+                    (lambda () (fit (spectral-clustering #:affinity 'precomputed) S))))

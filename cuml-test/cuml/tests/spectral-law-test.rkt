@@ -1,13 +1,22 @@
 #lang racket/base
 
-(require (only-in racket/list range shuffle take)
-         (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-true test-case)
+(require (only-in compiler/find-exe find-exe)
+         (only-in racket/file delete-directory/files make-temporary-directory)
+         (only-in racket/list count range shuffle take)
+         (only-in racket/match match match-define)
+         (only-in racket/port port->string)
+         (only-in rackunit check-equal? check-true fail test-case)
+         (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/dbscan-data.rkt" mat pick same-partition? seeded)
          (only-in "private/spectral-data.rkt"
                   blobs
                   circles
+                  fit-case
+                  fit-case-data
+                  fit-case-k
+                  fit-case-name
+                  fit-case-truth
                   graph
                   graph-cols
                   graph-labels
@@ -22,14 +31,17 @@
                   permute-graph
                   permute-rows
                   planted?
-                  sparse-blocks))
+                  sparse-blocks
+                  three-blobs
+                  three-blocks))
 
-(struct planted-dense (name rows truth k))
+(define (planted name data truth k)
+  (fit-case name data truth k (hasheq) 'labels))
 
 (define (dense-planted)
   (define (blob name n-each k d gap seed)
     (define-values (rows truth) (blobs n-each k d gap seed))
-    (planted-dense name rows truth k))
+    (planted name rows truth k))
   (append (list (blob "blobs 3x100 at 50 sigma" 100 3 2 50.0 0))
           (for*/list ([n-each (in-list '(100 200))]
                       [seed (in-range 4)])
@@ -38,15 +50,12 @@
                 (blob "blobs 5x2000 at 5 sigma" 2000 5 8 5.0 7))
           (let-values ([(rows truth) (circles 1000 0.5 0.03 0)]
                        [(moon-rows moon-truth) (moons 1000 0.05 0)])
-            (list (planted-dense "circles" rows truth 2)
-                  (planted-dense "moons" moon-rows moon-truth 2)))))
-
-(struct planted-graph (name graph truth k))
+            (list (planted "circles" rows truth 2) (planted "moons" moon-rows moon-truth 2)))))
 
 (define (graph-planted)
   (define (blocks name sizes p seed #:connected? [connected? #t])
     (define-values (g truth) (sparse-blocks sizes p seed #:connected? connected?))
-    (planted-graph name g truth (length sizes)))
+    (planted name g truth (length sizes)))
   (append
    (for*/list ([connected? (in-list '(#t #f))]
                [seed (in-range 6)])
@@ -60,26 +69,17 @@
 
 (test-gpu "SC3: planted partitions are recovered, dense and as graphs"
   (for ([p (in-list (dense-planted))])
-    (test-case (planted-dense-name p)
-      (check-true (planted? (labels (mat (planted-dense-rows p) 'float32)
-                                    #:n-clusters (planted-dense-k p))
-                            (planted-dense-truth p)))))
+    (test-case (fit-case-name p)
+      (check-true (planted? (labels (mat (fit-case-data p) 'float32) #:n-clusters (fit-case-k p))
+                            (fit-case-truth p)))))
   (for ([p (in-list (graph-planted))])
-    (test-case (planted-graph-name p)
-      (check-true (planted? (graph-labels (planted-graph-graph p) #:n-clusters (planted-graph-k p))
-                            (planted-graph-truth p))))))
-
-(define (small-blobs)
-  (define-values (rows truth) (blobs 100 3 2 50.0 0))
-  (values rows truth))
-
-(define (blocks0)
-  (define-values (g truth) (sparse-blocks '(30 40 50) 0.3 0))
-  (values g truth))
+    (test-case (fit-case-name p)
+      (check-true (planted? (graph-labels (fit-case-data p) #:n-clusters (fit-case-k p))
+                            (fit-case-truth p))))))
 
 (test-gpu "SC4: permuting rows or nodes permutes the partition; entry order changes nothing"
-  (define-values (rows _truth) (small-blobs))
-  (define-values (g _gtruth) (blocks0))
+  (define-values (rows _truth) (three-blobs))
+  (define-values (g _gtruth) (three-blocks))
   (define base (labels (mat rows 'float32) #:n-clusters 3))
   (define graph-base (graph-labels g #:n-clusters 3))
   (for ([seed (in-range 3)])
@@ -96,7 +96,7 @@
       (check-equal? (graph-labels (graph-shuffle g seed) #:n-clusters 3) graph-base "entry order"))))
 
 (test-gpu "SC5: weights scaled by powers of 4 give the same labels, by 1000 the same partition"
-  (define-values (g _truth) (blocks0))
+  (define-values (g _truth) (three-blocks))
   (define base (graph-labels g #:n-clusters 3))
   (for ([factor (in-list '(4 16 0.25))])
     (check-equal? (graph-labels (graph-map-vals g (lambda (w) (* w factor))) #:n-clusters 3)
@@ -117,34 +117,36 @@
       (check-true (planted? dense truth)))))
 
 (test-gpu "SC7, SC8: halved entries and added zero weights change nothing"
-  (define-values (g _truth) (blocks0))
+  (define-values (g _truth) (three-blocks))
   (define base (graph-labels g #:n-clusters 3))
   (define halves
-    (graph (append (graph-rows g) (graph-rows g))
-           (append (graph-cols g) (graph-cols g))
-           (let ([half (map (lambda (w) (/ w 2)) (graph-vals g))]) (append half half))
-           (graph-n g)))
+    (struct-copy graph
+                 g
+                 [rows (append (graph-rows g) (graph-rows g))]
+                 [cols (append (graph-cols g) (graph-cols g))]
+                 [vals (let ([half (map (lambda (w) (/ w 2)) (graph-vals g))]) (append half half))]))
   (check-equal? (graph-labels halves #:n-clusters 3) base "halves")
   (define zeros
-    (graph (append (graph-rows g) '(0 5 7 119))
-           (append (graph-cols g) '(5 0 119 7))
-           (append (graph-vals g) '(0.0 0.0 0.0 0.0))
-           (graph-n g)))
+    (struct-copy graph
+                 g
+                 [rows (append (graph-rows g) '(0 5 7 119))]
+                 [cols (append (graph-cols g) '(5 0 119 7))]
+                 [vals (append (graph-vals g) '(0.0 0.0 0.0 0.0))]))
   (check-equal? (graph-labels zeros #:n-clusters 3) base "zeros"))
 
 (test-gpu "SC9: isolated samples past the graph leave its partition unchanged"
-  (define-values (g truth) (blocks0))
-  (define wider (graph (graph-rows g) (graph-cols g) (graph-vals g) (+ (graph-n g) 10)))
+  (define-values (g truth) (three-blocks))
+  (define wider (struct-copy graph g [n (+ (graph-n g) 10)]))
   (define found (graph-labels wider #:n-clusters 3))
   (check-equal? (length found) 130)
   (check-true (planted? (take found 120) truth)))
 
 (define (changed a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (if (= x y) 0 1)))
+  (count (lambda (x y) (not (= x y))) a b))
 
-(test-gpu "SC10: one seed gives identical labels in five fits, or all but 0.1% on overlapping data; other seeds the same partition"
-  (define-values (rows truth) (small-blobs))
-  (define-values (g gtruth) (blocks0))
+(test-gpu "SC10: one seed repeats its labels; other seeds give the same partition"
+  (define-values (rows truth) (three-blobs))
+  (define-values (g gtruth) (three-blocks))
   (define-values (overlapping _otruth) (blobs 2000 5 8 3.0 7))
   (define X (mat rows 'float32))
   (define O (mat overlapping 'float32))
@@ -167,3 +169,50 @@
     (test-case (format "seed ~a" seed)
       (check-true (planted? (labels X #:n-clusters 3 #:random-state seed) truth))
       (check-true (planted? (graph-labels g #:n-clusters 3 #:random-state seed) gtruth)))))
+
+(define cross-process-program
+  `(module cross-process racket/base
+     (require (only-in cuml/cluster
+                       spectral-clustering-fit
+                       spectral-clustering-fit-graph
+                       spectral-clustering-result-labels)
+              (only-in cuml/tests/private/dbscan-data mat)
+              (only-in cuml/tests/private/spectral-data
+                       graph->vectors
+                       graph-n
+                       three-blobs
+                       three-blocks)
+              (only-in raft device-vector->list))
+     (define-values (rows _truth) (three-blobs))
+     (define-values (g _gtruth) (three-blocks))
+     (define (labels-of r)
+       (device-vector->list (spectral-clustering-result-labels r)))
+     (write
+      (list (labels-of (spectral-clustering-fit (mat rows 'float32) #:n-clusters 3 #:random-state 5))
+            (labels-of (apply spectral-clustering-fit-graph
+                              (append (graph->vectors g) (list (graph-n g)))
+                              #:n-clusters 3
+                              #:random-state 5))))))
+
+(define (run-cross-process-program)
+  (with-release ([dir
+                  (make-temporary-directory "cuml-spectral-~a")
+                  (lambda (dir) (delete-directory/files dir #:must-exist? #f))])
+    (define path (build-path dir "cross-process.rkt"))
+    (call-with-output-file path (lambda (out) (write cross-process-program out)))
+    (define-values (process stdout stdin stderr) (subprocess #f #f #f (find-exe) path))
+    (close-output-port stdin)
+    (define output (port->string stdout))
+    (define errors (port->string stderr))
+    (subprocess-wait process)
+    (list (subprocess-status process) output errors)))
+
+(test-gpu "SC10: one seed gives the same labels in another process"
+  (define-values (rows _truth) (three-blobs))
+  (define-values (g _gtruth) (three-blocks))
+  (match (run-cross-process-program)
+    [(list 0 output _)
+     (check-equal? (read (open-input-string output))
+                   (list (labels (mat rows 'float32) #:n-clusters 3 #:random-state 5)
+                         (graph-labels g #:n-clusters 3 #:random-state 5)))]
+    [(list status _ errors) (fail (format "the fit's process exited with ~a:\n~a" status errors))]))

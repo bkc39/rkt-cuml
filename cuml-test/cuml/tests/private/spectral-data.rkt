@@ -5,20 +5,23 @@
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
          (only-in racket/flonum flsingle)
-         (only-in racket/list append* make-list range take)
+         (only-in racket/list append* list-set make-list range take)
          (only-in racket/match match-lambda)
-         (only-in racket/math pi sqr)
+         (only-in racket/math pi)
          (only-in raft device-vector->list list->device-vector)
          (only-in threading ~>)
-         (only-in "dbscan-data.rkt" same-partition? seeded))
+         (only-in "dbscan-data.rkt" mat same-partition? seeded)
+         (only-in "linkage-data.rkt" squared-distance))
 
-(provide (struct-out graph)
+(provide (struct-out fit-case)
+         (struct-out graph)
          blobs
          circles
          cliques
          float32-rows
          graph->vectors
          graph-dense
+         graph-edit
          graph-labels
          graph-map-vals
          graph-n
@@ -32,10 +35,16 @@
          permute-rows
          planted?
          repeat-each
+         set-entry
          sparse-blocks
+         three-blobs
+         three-blobs-matrix
+         three-blocks
          truth-of)
 
 (struct graph (rows cols vals n) #:transparent)
+
+(struct fit-case (name data truth k options compare))
 
 (define (float32-rows rows)
   (for/list ([r (in-list rows)])
@@ -107,13 +116,15 @@
   (hash-set! edges (cons i j) w)
   (hash-set! edges (cons j i) w))
 
+(define (block-starts sizes)
+  (for/fold ([at 0]
+             [starts '()]
+             #:result (reverse starts))
+            ([s (in-list sizes)])
+    (values (+ at s) (cons at starts))))
+
 (define (sparse-blocks sizes p seed #:between [between 2] #:connected? [connected? #t])
-  (define starts
-    (for/fold ([at 0]
-               [starts '()]
-               #:result (reverse starts))
-              ([s (in-list sizes)])
-      (values (+ at s) (cons at starts))))
+  (define starts (block-starts sizes))
   (define edges (make-hash))
   (seeded seed
           (lambda ()
@@ -137,9 +148,6 @@
                   (set-edge! edges (+ oa (random a)) (+ ob (random b)) 0.05))))))
   (values (edges->graph edges (apply + sizes)) (truth-of sizes)))
 
-(define (squared-distance a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (sqr (- x y))))
-
 (define (knn-graph rows k)
   (define points (list->vector rows))
   (define n (vector-length points))
@@ -157,13 +165,7 @@
 
 (define (cliques sizes)
   (define edges (make-hash))
-  (define starts
-    (for/fold ([at 0]
-               [starts '()]
-               #:result (reverse starts))
-              ([s (in-list sizes)])
-      (values (+ at s) (cons at starts))))
-  (for* ([(s o) (in-parallel (in-list sizes) (in-list starts))]
+  (for* ([(s o) (in-parallel (in-list sizes) (in-list (block-starts sizes)))]
          [i (in-range s)]
          [j (in-range (add1 i) s)])
     (set-edge! edges (+ o i) (+ o j) 1.0))
@@ -188,10 +190,7 @@
         (list->device-vector (graph-vals g) #:dtype 'float32)))
 
 (define labels
-  (make-keyword-procedure (lambda (kws kw-args X)
-                            (~> (keyword-apply spectral-clustering-fit kws kw-args (list X))
-                                spectral-clustering-result-labels
-                                device-vector->list))))
+  (compose1 device-vector->list spectral-clustering-result-labels spectral-clustering-fit))
 
 (define graph-labels
   (make-keyword-procedure (lambda (kws kw-args g)
@@ -228,6 +227,26 @@
 
 (define (graph-map-vals g f)
   (struct-copy graph g [vals (map f (graph-vals g))]))
+
+(define (graph-edit g #:rows [rows values] #:cols [cols values] #:vals [vals values])
+  (struct-copy graph
+               g
+               [rows (rows (graph-rows g))]
+               [cols (cols (graph-cols g))]
+               [vals (vals (graph-vals g))]))
+
+(define ((set-entry i v) xs)
+  (list-set xs i v))
+
+(define (three-blobs #:n-each [n-each 100])
+  (blobs n-each 3 2 50.0 0))
+
+(define (three-blobs-matrix #:n-each [n-each 100])
+  (define-values (rows _truth) (three-blobs #:n-each n-each))
+  (mat rows 'float32))
+
+(define (three-blocks)
+  (sparse-blocks '(30 40 50) 0.3 0))
 
 (define (entries g)
   (map list (graph-rows g) (graph-cols g) (graph-vals g)))

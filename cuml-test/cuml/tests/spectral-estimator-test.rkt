@@ -20,10 +20,9 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options round-trips)
          (only-in "private/kmeans-data.rkt" blank-vector)
-         (only-in "private/spectral-data.rkt" blobs labels))
+         (only-in "private/spectral-data.rkt" labels three-blobs-matrix))
 
 (define changed
   (hasheq 'n-clusters 3
@@ -37,10 +36,6 @@
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
-
-(define (three-blobs)
-  (define-values (rows _truth) (blobs 30 3 2 50.0 0))
-  (mat rows 'float32))
 
 (test-case "the default parameters, and every keyword round-trips"
   (check-equal? spectral-clustering-defaults
@@ -82,7 +77,7 @@
   (check-false (spectral-clustering-model (spectral-clustering))))
 
 (test-gpu "fit and fit-predict are spectral-clustering-fit's, y is ignored and the argument stays unfitted"
-  (define X (three-blobs))
+  (define X (three-blobs-matrix #:n-each 30))
   (define e (spectral-clustering #:n-clusters 3))
   (define fitted-e (fit e X '(ignored)))
   (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
@@ -102,7 +97,7 @@
                                       (apply-options spectral-clustering-fit options X)))))
 
 (test-gpu "errors are named after the generic that was called"
-  (define X (three-blobs))
+  (define X (three-blobs-matrix #:n-each 30))
   (check-cuml-error 'logic
                     "fit: n-clusters: expected at least 1, got 0"
                     (lambda () (fit (spectral-clustering #:n-clusters 0) X)))

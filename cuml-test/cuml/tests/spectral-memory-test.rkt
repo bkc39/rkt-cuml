@@ -4,7 +4,7 @@
          (only-in cuml/cluster spectral-clustering-fit spectral-clustering-fit-graph)
          (only-in ffi/unsafe void/reference-sink)
          (only-in racket/format ~r)
-         (only-in racket/list list-set make-list)
+         (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
@@ -24,13 +24,14 @@
          (only-in "private/spectral-data.rkt"
                   blobs
                   cliques
-                  graph
                   graph->vectors
-                  graph-cols
+                  graph-edit
+                  graph-map-vals
                   graph-n
                   graph-rows
-                  graph-vals
-                  sparse-blocks))
+                  set-entry
+                  three-blobs
+                  three-blocks))
 
 (define rounds 120)
 (define sample-every 40)
@@ -39,9 +40,9 @@
 (define buffers-per-fit 1)
 
 (define (data)
-  (define-values (rows _truth) (blobs 100 3 2 50.0 0))
+  (define-values (rows _truth) (three-blobs))
   (define-values (small _small-truth) (blobs 5 2 2 50.0 1))
-  (define-values (g _gtruth) (sparse-blocks '(30 40 50) 0.3 0))
+  (define-values (g _gtruth) (three-blocks))
   (define-values (uneven _uneven-truth) (cliques '(5 17 30)))
   (list (mat rows 'float32) (mat small 'float32) g uneven))
 
@@ -57,21 +58,16 @@
   (spectral-clustering-fit small #:n-clusters 2 #:n-neighbors 50)
   (fit-predict e X))
 
-(define (edited g #:rows [rows values] #:cols [cols values] #:vals [vals values])
-  (graph->vectors
-   (graph (rows (graph-rows g)) (cols (graph-cols g)) (vals (graph-vals g)) (graph-n g))))
-
 (define (refusals X g)
   (define wide (blank-matrix 300 2 'float64))
   (define three (blank-matrix 3 2 'float32))
   (define nan-row (mat '((1 1) (2 2) (+nan.0 0) (4 4) (5 5)) 'float32))
   (match-define (list rows _ vals) (graph->vectors g))
   (define short-cols (blank-vector (sub1 (length (graph-rows g))) 'int32))
-  (define out-of-range (edited g #:rows (lambda (xs) (list-set xs 7 120))))
-  (define self-loop
-    (edited g #:rows (lambda (xs) (list-set xs 7 5)) #:cols (lambda (xs) (list-set xs 7 5))))
-  (define negative (edited g #:vals (lambda (xs) (list-set xs 3 -1.0))))
-  (define zeros (edited g #:vals (lambda (xs) (map (lambda (_) 0.0) xs))))
+  (define out-of-range (graph->vectors (graph-edit g #:rows (set-entry 7 120))))
+  (define self-loop (graph->vectors (graph-edit g #:rows (set-entry 7 5) #:cols (set-entry 7 5))))
+  (define negative (graph->vectors (graph-edit g #:vals (set-entry 3 -1.0))))
+  (define zeros (graph->vectors (graph-map-vals g (lambda (_) 0.0))))
   (define (on vs)
     (fit-graph vs (graph-n g) 3))
   (list (lambda () (spectral-clustering-fit wide))

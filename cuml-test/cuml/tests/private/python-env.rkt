@@ -5,6 +5,7 @@
          (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/match == match)
          (only-in racket/port open-output-nowhere)
+         (only-in racket/string string-replace)
          (only-in racket/system system*)
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu gpu-skip test-unless-skipped)
@@ -73,7 +74,7 @@
 (define (twin-value value)
   (match value
     [(== (json-null)) #f]
-    [(? string?) (~> value (regexp-replace* #rx"_" _ "-") string->symbol)]
+    [(? string?) (string->symbol (string-replace value "_" "-"))]
     [_ value]))
 
 (define (twin-params theirs unbound)

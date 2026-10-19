@@ -7,12 +7,20 @@
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in threading ~>)
+         (only-in threading cond~> ~>)
          (only-in "private/dbscan-data.rkt" mat)
+         (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
          (only-in "private/spectral-data.rkt"
                   blobs
                   circles
+                  fit-case
+                  fit-case-compare
+                  fit-case-data
+                  fit-case-k
+                  fit-case-name
+                  fit-case-options
+                  fit-case-truth
                   graph-cols
                   graph-labels
                   graph-n
@@ -25,13 +33,11 @@
 
 (define-runtime-path twin "python/spectral_twin.py")
 
-(struct spec (name data truth k options compare))
-
 (define defaults
   (hasheq 'n-components #f 'random-state 0 'n-neighbors 10 'n-init 10 'eigen-tol 'auto))
 
 (define (dense name rows truth k [options (hasheq)])
-  (spec name rows truth k options 'labels))
+  (fit-case name rows truth k options 'labels))
 
 (define (dense-specs)
   (define-values (b3 t3) (blobs 100 3 2 50.0 0))
@@ -51,42 +57,31 @@
                t3
                3
                (hasheq 'n-components 2 'random-state 5 'n-neighbors 15 'n-init 3 'eigen-tol 1e-5))
-        (dense "blobs 4x100, 8 clusters" b4 #f 8)))
+        (dense "blobs 4x100, 8 clusters, one init" b4 #f 8 (hasheq 'n-init 1))))
 
 (define (graph-specs)
   (append (for/list ([seed (in-range 3)])
             (define-values (g truth) (sparse-blocks '(30 40 50) 0.3 seed))
-            (spec (format "blocks 30/40/50 seed ~a" seed) g truth 3 (hasheq) 'labels))
+            (fit-case (format "blocks 30/40/50 seed ~a" seed) g truth 3 (hasheq) 'labels))
           (let-values ([(g truth) (sparse-blocks '(30 40 50) 0.3 4 #:connected? #f)])
-            (list (spec "disconnected blocks" g truth 3 (hasheq 'random-state 9) 'labels)))
+            (list (fit-case "disconnected blocks" g truth 3 (hasheq 'random-state 9) 'labels)))
           (let-values ([(g truth) (sparse-blocks '(300 400 500 600) 0.05 0)])
-            (list (spec "blocks 300-600" g truth 4 (hasheq) 'partition)))))
+            (list (fit-case "blocks 300-600" g truth 4 (hasheq) 'partition)))))
 
 (define (options-of s)
-  (for/fold ([o defaults]) ([(k v) (in-hash (spec-options s))])
-    (hash-set o k v)))
-
-(define (keywords-of s graph?)
-  (define o
-    (~> (options-of s)
-        (hash-set 'n-clusters (spec-k s))
-        ((lambda (options)
-           (if graph?
-               (hash-remove options 'n-neighbors)
-               options)))))
-  (define names (sort (hash-keys o) symbol<?))
-  (values (map (lambda (n) (string->keyword (symbol->string n))) names)
-          (map (lambda (n) (hash-ref o n)) names)))
+  (for/fold ([options defaults]) ([(k v) (in-hash (fit-case-options s))])
+    (hash-set options k v)))
 
 (define (ours s graph?)
-  (define-values (kws vs) (keywords-of s graph?))
+  (define options
+    (cond~> (hash-set (options-of s) 'n-clusters (fit-case-k s)) [graph? (hash-remove 'n-neighbors)]))
   (if graph?
-      (keyword-apply graph-labels kws vs (list (spec-data s)))
-      (keyword-apply labels kws vs (list (mat (spec-data s) 'float32)))))
+      (apply-options graph-labels options (fit-case-data s))
+      (apply-options labels options (mat (fit-case-data s) 'float32))))
 
 (define (python-params s)
   (define o (options-of s))
-  (hasheq 'n_clusters (spec-k s)
+  (hasheq 'n_clusters (fit-case-k s)
           'n_components (or (hash-ref o 'n-components) (json-null))
           'random_state (hash-ref o 'random-state)
           'n_neighbors (hash-ref o 'n-neighbors)
@@ -96,10 +91,10 @@
                          (hash-ref o 'eigen-tol))))
 
 (define (dense-case s)
-  (hash-set* (python-params s) 'op "fit" 'X (spec-data s)))
+  (hash-set* (python-params s) 'op "fit" 'X (fit-case-data s)))
 
 (define (graph-case op s)
-  (define g (spec-data s))
+  (define g (fit-case-data s))
   (hash-set* (python-params s)
              'op
              op
@@ -128,11 +123,11 @@
     (for/list ([s (in-list ds)]
                [theirs (in-list dense-results)])
       (define found (ours s #f))
-      (test-case (spec-name s)
+      (test-case (fit-case-name s)
         (check-equal? found (hash-ref theirs 'labels) "T1 labels")
         (check-equal? (hash-ref theirs 'dtype) "int32")
-        (when (spec-truth s)
-          (check-true (planted? found (spec-truth s)) "the planted partition")))
+        (when (fit-case-truth s)
+          (check-true (planted? found (fit-case-truth s)) "the planted partition")))
       (equal? found (hash-ref theirs 'labels))))
   (define graph-outcomes
     (for/list ([s (in-list gs)]
@@ -141,13 +136,13 @@
       (define found (ours s #t))
       (define cuml-labels (hash-ref theirs 'labels))
       (define agree? (planted? found (hash-ref sk 'labels)))
-      (test-case (spec-name s)
-        (match (spec-compare s)
+      (test-case (fit-case-name s)
+        (match (fit-case-compare s)
           ['labels (check-equal? found cuml-labels "T1 precomputed labels")]
           ['partition (check-true (planted? found cuml-labels) "T1 precomputed partition")])
         (check-true agree? "T2 sklearn's partition")
-        (check-true (planted? found (spec-truth s)) "the planted partition"))
-      (list (match (spec-compare s)
+        (check-true (planted? found (fit-case-truth s)) "the planted partition"))
+      (list (match (fit-case-compare s)
               ['labels (equal? found cuml-labels)]
               ['partition (planted? found cuml-labels)])
             agree?)))
@@ -157,7 +152,7 @@
    (length gs)
    (count values dense-same)
    (count car graph-outcomes)
-   (count (lambda (s) (eq? (spec-compare s) 'partition)) gs))
+   (count (lambda (s) (eq? (fit-case-compare s) 'partition)) gs))
   (printf "twin sklearn: ~a graphs; partitions agree in ~a\n"
           (length gs)
           (count cadr graph-outcomes)))
