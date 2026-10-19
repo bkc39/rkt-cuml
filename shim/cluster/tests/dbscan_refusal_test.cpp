@@ -33,6 +33,11 @@ constexpr int32_t unknown_metric = 3;
 constexpr int64_t most_mbytes = 18446744073709;
 constexpr double tiny = 1e-50;
 constexpr double huge = 1e300;
+constexpr double float_overflow = 1e20;
+constexpr double float_large = 1e19;
+constexpr double float_small = 1e-20;
+constexpr double double_underflow = 1e-160;
+constexpr double double_overflow = 1e200;
 constexpr std::size_t usable_percent = 80;
 constexpr std::size_t percent = 100;
 constexpr std::size_t automatic_target = 1500000;
@@ -275,11 +280,11 @@ void unnormable_cosine_rows() {
       {0, 0},
       {-0.0, -0.0},
       {std::numeric_limits<T>::denorm_min(), 0},
-      {1e20, 0},
-      {-1e20, 1}};
+      {float_overflow, 0},
+      {-float_overflow, 1}};
   if (std::is_same_v<T, double>) {
-    refused_rows.push_back({1e-160, 1e-160});
-    refused_rows.push_back({1e200, 0});
+    refused_rows.push_back({double_underflow, double_underflow});
+    refused_rows.push_back({double_overflow, 0});
   }
   for (const std::vector<double>& bad : refused_rows) {
     SCOPED_TRACE(std::to_string(bad[0]));
@@ -306,8 +311,8 @@ void normable_cosine_rows() {
   SCOPED_TRACE(name<T>());
   const resources res;
   const std::vector<std::vector<double>> accepted_rows{
-      {1e19, 0},
-      {1e-20, 0},
+      {float_large, 0},
+      {float_small, 0},
       {std::numeric_limits<double>::quiet_NaN(), 1},
       {std::numeric_limits<double>::infinity(), 0}};
   for (const std::vector<double>& edge : accepted_rows) {
