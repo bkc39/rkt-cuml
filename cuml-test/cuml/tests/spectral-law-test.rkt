@@ -194,23 +194,49 @@
                               #:n-clusters 3
                               #:random-state 5))))))
 
-(define (run-cross-process-program)
+(define (run-program program)
   (with-release ([dir
                   (make-temporary-directory "cuml-spectral-~a")
                   (lambda (dir) (delete-directory/files dir #:must-exist? #f))])
-    (define path (build-path dir "cross-process.rkt"))
-    (call-with-output-file path (lambda (out) (write cross-process-program out)))
+    (define path (build-path dir "program.rkt"))
+    (call-with-output-file path (lambda (out) (write program out)))
     (define-values (process stdout stdin stderr) (subprocess #f #f #f (find-exe) path))
     (close-output-port stdin)
+    (define errors (box ""))
+    (define drain (thread (lambda () (set-box! errors (port->string stderr)))))
     (define output (port->string stdout))
-    (define errors (port->string stderr))
+    (thread-wait drain)
     (subprocess-wait process)
-    (list (subprocess-status process) output errors)))
+    (list (subprocess-status process) output (unbox errors))))
+
+(define (run-program/timeout program seconds)
+  (define custodian (make-custodian))
+  (define done (make-channel))
+  (parameterize ([current-custodian custodian]
+                 [current-subprocess-custodian-mode 'kill])
+    (thread (lambda () (channel-put done (run-program program)))))
+  (begin0 (sync/timeout seconds done)
+    (custodian-shutdown-all custodian)))
+
+(define stderr-bytes (* 256 1024))
+
+(test-case "SC10's runner returns when the child writes more than a pipe holds to stderr"
+  (match (run-program/timeout `(module noisy racket/base
+                                 (void (write-bytes (make-bytes ,stderr-bytes 120)
+                                                    (current-error-port))))
+                              20)
+    [(list 0 "" errors) (check-equal? (string-length errors) stderr-bytes)]
+    [#f (fail "the runner did not return within 20 s")]
+    [(list status output errors)
+     (fail (format "the child exited with ~a, ~a bytes out, ~a bytes err"
+                   status
+                   (string-length output)
+                   (string-length errors)))]))
 
 (test-gpu "SC10: one seed gives the same labels in another process"
   (define-values (rows _truth) (three-blobs))
   (define-values (g _gtruth) (three-blocks))
-  (match (run-cross-process-program)
+  (match (run-program cross-process-program)
     [(list 0 output _)
      (check-equal? (read (open-input-string output))
                    (list (labels (mat rows 'float32) #:n-clusters 3 #:random-state 5)
