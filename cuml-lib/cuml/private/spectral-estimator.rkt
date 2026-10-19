@@ -23,7 +23,8 @@
     [(not (eq? affinity 'nearest-neighbors))
      (logic-error "~a: affinity: expected nearest-neighbors, got ~a" who affinity)]
     [sample-weight (logic-error "~a: spectral-clustering takes no sample-weight" who)]
-    [else (call-with-params spectral-clustering-fit/who who X (hash-remove params 'affinity) (hasheq))]))
+    [else
+     (call-with-params spectral-clustering-fit/who who X (hash-remove params 'affinity) (hasheq))]))
 
 (define-estimator spectral-clustering
                   #:fitted fitted-model

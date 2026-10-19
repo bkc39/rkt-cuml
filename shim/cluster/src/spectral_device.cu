@@ -30,8 +30,8 @@ struct entry_scan {
     const int64_t r = rows[i];
     const int64_t c = cols[i];
     const float w = vals[i];
-    const bool faulty = r < 0 || r >= n || c < 0 || c >= n || r == c ||
-                        !(w >= 0) || isinf(w);
+    const bool faulty =
+        r < 0 || r >= n || c < 0 || c >= n || r == c || !(w >= 0) || isinf(w);
     return {faulty ? i : nnz, w > 0 ? 1 : 0};
   }
 };

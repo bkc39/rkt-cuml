@@ -60,8 +60,9 @@ struct solver_options {
 void require_clusters(int64_t n_clusters, int64_t n, const char* subject) {
   require_at_least("n-clusters", n_clusters, 1);
   if (n_clusters > n) {
-    throw logic_error(std::format("{}: {} samples are fewer than the {} clusters",
-                                  subject, n, n_clusters));
+    throw logic_error(
+        std::format("{}: {} samples are fewer than the {} clusters", subject, n,
+                    n_clusters));
   }
 }
 
@@ -126,8 +127,8 @@ matrix<float, int64_t> checked_x(const rr_view* view) {
   }
   require_some("X", "column", x.d);
   if (x.n > most_index / x.d) {
-    throw logic_error(std::format(
-        "X: {}x{} elements do not fit the index type", x.n, x.d));
+    throw logic_error(
+        std::format("X: {}x{} elements do not fit the index type", x.n, x.d));
   }
   return x;
 }
@@ -162,8 +163,9 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
   const int64_t k = std::min(n_neighbors, x.n - 1);
   require_knn_graph(x.n, k);
   require_bounded_rows(x, raft::resource::get_cuda_stream(handle));
-  const auto dataset = raft::make_device_matrix_view<float, int, raft::row_major>(
-      x.data, static_cast<int>(x.n), static_cast<int>(x.d));
+  const auto dataset =
+      raft::make_device_matrix_view<float, int, raft::row_major>(
+          x.data, static_cast<int>(x.n), static_cast<int>(x.d));
   fit_into(handle, out, x.n, [&](raft::device_vector_view<int, int> labels) {
     ML::SpectralClustering::fit_predict(handle, params_of(o, nc, k), dataset,
                                         labels);
@@ -185,8 +187,8 @@ struct coo {
 
 void require_entries(const char* name, int64_t got, int64_t nnz) {
   if (got != nnz) {
-    throw logic_error(std::format("{}: expected {} entries, as rows has, got {}",
-                                  name, nnz, got));
+    throw logic_error(std::format(
+        "{}: expected {} entries, as rows has, got {}", name, nnz, got));
   }
 }
 
@@ -202,8 +204,8 @@ coo checked_graph(const graph_views& g) {
 void require_samples(int64_t n, int64_t nnz) {
   require_at_least("n-samples", n, least_samples);
   if (n > most_index) {
-    throw logic_error(std::format("n-samples: expected at most {}, got {}",
-                                  most_index, n));
+    throw logic_error(
+        std::format("n-samples: expected at most {}, got {}", most_index, n));
   }
   if (nnz > most_index - n) {
     throw logic_error(std::format(
@@ -218,10 +220,10 @@ void require_sound_graph(const coo& c, int64_t n,
   switch (f.kind) {
     case graph_fault_kind::row_index:
     case graph_fault_kind::col_index:
-      throw logic_error(std::format(
-          "{}: entry {}: expected an index in [0, {}), got {}",
-          f.kind == graph_fault_kind::row_index ? "rows" : "cols", f.entry, n,
-          static_cast<int64_t>(f.value)));
+      throw logic_error(
+          std::format("{}: entry {}: expected an index in [0, {}), got {}",
+                      f.kind == graph_fault_kind::row_index ? "rows" : "cols",
+                      f.entry, n, static_cast<int64_t>(f.value)));
     case graph_fault_kind::self_loop:
       throw logic_error(std::format(
           "rows: entry {}: self-loop at sample {}; leave the diagonal out",
@@ -283,24 +285,22 @@ void cuml_cluster_spectral_clustering_fit_job(void* args, size_t args_len,
 }
 
 int cuml_cluster_spectral_clustering_fit_graph(
-    void* handle, const rr_view* rows, const rr_view* cols,
-    const rr_view* vals, int64_t n_samples, rr_deposit* out,
-    int64_t n_clusters, int64_t n_components, int32_t auto_components,
-    int32_t n_init, double eigen_tol, uint64_t seed) {
+    void* handle, const rr_view* rows, const rr_view* cols, const rr_view* vals,
+    int64_t n_samples, rr_deposit* out, int64_t n_clusters,
+    int64_t n_components, int32_t auto_components, int32_t n_init,
+    double eigen_tol, uint64_t seed) {
   return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
     rr_deposit* const into = raftrkt::require(out, "out");
     const solver_options o{n_clusters, n_components, auto_components,
                            n_init,     eigen_tol,    seed};
     const graph_views g{rows, cols, vals};
-    in_device_scope(handle, {{"rows", rows}, {"cols", cols}, {"vals", vals}},
-                    [&](const raft::handle_t& h) {
-                      fit_graph(h, g, n_samples, into, o);
-                    });
+    in_device_scope(
+        handle, {{"rows", rows}, {"cols", cols}, {"vals", vals}},
+        [&](const raft::handle_t& h) { fit_graph(h, g, n_samples, into, o); });
   });
 }
 
-void cuml_cluster_spectral_clustering_fit_graph_job(void* args,
-                                                    size_t args_len,
+void cuml_cluster_spectral_clustering_fit_graph_job(void* args, size_t args_len,
                                                     rr_job_outcome* outcome) {
   raftrkt::run_job<&cuml_cluster_spectral_clustering_fit_graph>(
       args, args_len, outcome, cumlrkt::last_error_slot());
