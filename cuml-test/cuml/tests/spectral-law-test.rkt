@@ -37,7 +37,8 @@
                 (blob "blobs 5x2000 at 5 sigma" 2000 5 8 5.0 7))
           (let-values ([(rows truth) (circles 1000 0.5 0.03 0)]
                        [(moon-rows moon-truth) (moons 1000 0.05 0)])
-            (list (planted-dense "circles" rows truth 2) (planted-dense "moons" moon-rows moon-truth 2)))))
+            (list (planted-dense "circles" rows truth 2)
+                  (planted-dense "moons" moon-rows moon-truth 2)))))
 
 (struct planted-graph (name graph truth k))
 
@@ -59,7 +60,8 @@
 (test-gpu "SC3: planted partitions are recovered, dense and as graphs"
   (for ([p (in-list (dense-planted))])
     (test-case (planted-dense-name p)
-      (check-true (planted? (labels (mat (planted-dense-rows p) 'float32) #:n-clusters (planted-dense-k p))
+      (check-true (planted? (labels (mat (planted-dense-rows p) 'float32)
+                                    #:n-clusters (planted-dense-k p))
                             (planted-dense-truth p)))))
   (for ([p (in-list (graph-planted))])
     (test-case (planted-graph-name p)

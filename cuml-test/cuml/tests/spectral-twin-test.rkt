@@ -70,10 +70,10 @@
   (define o
     (~> (options-of s)
         (hash-set 'n-clusters (spec-k s))
-        ((lambda (o)
+        ((lambda (options)
            (if graph?
-               (hash-remove o 'n-neighbors)
-               o)))))
+               (hash-remove options 'n-neighbors)
+               options)))))
   (define names (sort (hash-keys o) symbol<?))
   (values (map (lambda (n) (string->keyword (symbol->string n))) names)
           (map (lambda (n) (hash-ref o n)) names)))

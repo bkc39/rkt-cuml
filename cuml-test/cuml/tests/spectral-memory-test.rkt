@@ -65,7 +65,7 @@
   (define wide (blank-matrix 300 2 'float64))
   (define three (blank-matrix 3 2 'float32))
   (define nan-row (mat '((1 1) (2 2) (+nan.0 0) (4 4) (5 5)) 'float32))
-  (match-define (list rows cols vals) (graph->vectors g))
+  (match-define (list rows _ vals) (graph->vectors g))
   (define short-cols (blank-vector (sub1 (length (graph-rows g))) 'int32))
   (define out-of-range (edited g #:rows (lambda (xs) (list-set xs 7 120))))
   (define self-loop

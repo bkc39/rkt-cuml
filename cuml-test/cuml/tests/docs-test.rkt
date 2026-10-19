@@ -246,7 +246,7 @@
                             device-vector->list)
                         group-truth))
   (define-values (rows cols)
-    (for*/lists (rows cols)
+    (for*/lists (_rows _cols)
                 ([i (in-range 24)]
                  [j (in-range 24)]
                  #:when (and (not (= i j)) (= (quotient i 8) (quotient j 8)) (<= (abs (- i j)) 2)))
