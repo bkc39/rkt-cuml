@@ -31,6 +31,7 @@ constexpr int64_t scratch_bytes = 1 << 20;
 constexpr double half_most = 0x1p62;
 constexpr double past_most = 0x1p63;
 constexpr int64_t capped_rows = 2048;
+constexpr int64_t capped_side = 64;
 constexpr std::size_t capped_bytes = 4 << 20;
 
 std::string norm_refusal(int64_t row, const std::string& got) {
@@ -219,15 +220,21 @@ TEST(LinkageRefusals, LargestCIsAccepted) {
   }
 }
 
+values capped_grid() {
+  values host;
+  for (int64_t a = 0; a < capped_side; ++a) {
+    for (int64_t b = 0; b < capped_rows / capped_side; ++b) {
+      host.push_back(static_cast<double>(a));
+      host.push_back(static_cast<double>(b));
+    }
+  }
+  return host;
+}
+
 TEST(LinkageRefusals, PairwiseOutOfMemoryIsOomAndFreesTheOutputs) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  values host;
-  for (int64_t i = 0; i < capped_rows; ++i) {
-    host.push_back(static_cast<double>(i % rows));
-    host.push_back(static_cast<double>(i / rows));
-  }
-  const auto x = upload<float>(res, {capped_rows, cols}, host);
+  const auto x = upload<float>(res, {capped_rows, cols}, capped_grid());
   record out(res);
   const allocation_meter meter;
   const pool_cap cap(capped_bytes);
