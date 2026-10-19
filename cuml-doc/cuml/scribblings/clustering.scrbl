@@ -339,13 +339,15 @@ clusters, the distance between two clusters being that of their closest
 samples.
 
 With @racket['pairwise], every pairwise distance is held on the device, so
-@racket[X] can have at most 46340 rows, and the hierarchy is exact.
+@racket[X] can have at most 46340 rows, and the hierarchy is exact in the
+@racket['float32] distances below.
 
 @racket['knn] is approximate, the hierarchy of a sparse graph in which each
 sample keeps its k = min(n, max(2, ⌊log₂ n⌋ + @racket[c])) nearest samples,
 its components joined; at k = n it is @racket['pairwise]'s graph, but merges
 at nearly equal distances can pair or order differently, since the two compute
-distances differently in @racket['float32].
+distances differently in @racket['float32]. When distances tie,
+@racket['knn] can give a different hierarchy from one run to the next.
 
 The distances are ‖x‖²+‖y‖²−2x·y in @racket['float32]: centre @racket[X] if
 it lies far from the origin. The outputs live on @racket[resources].
