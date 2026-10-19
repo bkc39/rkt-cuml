@@ -1,13 +1,10 @@
 #lang racket/base
 
-(require (only-in compiler/find-exe find-exe)
-         (only-in cuml/cluster dbscan-fit)
-         (only-in racket/file delete-directory/files make-temporary-directory)
+(require (only-in cuml/cluster dbscan-fit)
          (only-in racket/flonum fl-)
          (only-in racket/function curry)
          (only-in racket/list make-list)
          (only-in racket/match match match-define)
-         (only-in racket/port port->string)
          (only-in rackunit check-equal? check-exn fail test-case)
          (only-in raft
                   device-resources
@@ -15,11 +12,11 @@
                   exn:fail:raft?
                   list*->device-matrix
                   with-device-resources)
-         (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/dbscan-data.rkt" fitted-lists)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes)
+         (only-in "private/program.rkt" run-program)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define out-dtypes '(int32 int64))
@@ -176,21 +173,8 @@
                         [out (in-list '(int32 int64))])
               (refusal dt out)))))
 
-(define (run-crash-program)
-  (with-release ([dir
-                  (make-temporary-directory "cuml-dbscan-~a")
-                  (lambda (dir) (delete-directory/files dir #:must-exist? #f))])
-    (define path (build-path dir "crash.rkt"))
-    (call-with-output-file path (lambda (out) (write crash-program out)))
-    (define-values (process stdout stdin stderr) (subprocess #f #f #f (find-exe) path))
-    (close-output-port stdin)
-    (define output (port->string stdout))
-    (define errors (port->string stderr))
-    (subprocess-wait process)
-    (list (subprocess-status process) output errors)))
-
 (test-gpu "a batch too small for cuML is refused, where cuML would die of SIGFPE"
-  (match (run-crash-program)
+  (match (run-program crash-program)
     [(list 0 output _)
      (check-equal?
       (read (open-input-string output))
