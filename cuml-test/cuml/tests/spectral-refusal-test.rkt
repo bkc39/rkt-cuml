@@ -210,6 +210,13 @@
                         #:n-clusters trial-clusters
                         #:n-components 1
                         #:eigen-tol -1)))
+   (row "G15 k most"
+        "eigen-tol: expected at least 0, got -1"
+        (lambda ()
+          (graph-labels (struct-copy graph four-entries [n trial-samples])
+                        #:n-clusters (sub1 trial-clusters)
+                        #:n-components 1
+                        #:eigen-tol -1)))
    (row "G12 zeros"
         "vals: expected at least one positive weight, got none"
         (fault (graph-map-vals ring (lambda (_) 0.0))))

@@ -371,6 +371,15 @@ TEST(SpectralRefusals, GraphNameTheArgument) {
                 c.eigen_tol = -1;
               }),
        "eigen-tol: expected at least 0, got -1"},
+      {edited(ok,
+              [](graph_call& c) {
+                c.n_samples = graph_rows;
+                c.n_clusters = trial_clusters - 1;
+                c.auto_components = 0;
+                c.n_components = 1;
+                c.eigen_tol = -1;
+              }),
+       "eigen-tol: expected at least 0, got -1"},
       {edited(ok, [](graph_call& c) { c.n_samples = basis_rows; }),
        "n-samples: 107374183 samples and 2 components need a 107374183x20 "
        "eigensolver basis, more than 2147483647 elements"},
