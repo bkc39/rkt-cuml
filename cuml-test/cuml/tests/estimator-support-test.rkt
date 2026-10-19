@@ -53,13 +53,15 @@
 
 (define gadget-names '(size label))
 
-(define gadget-defaults (hasheq 'size 3 'label 'plain))
+(define gadget-defaults (hasheq 'size 3 'label 3))
 
 (define-estimator gadget
                   #:fitted gadget-fitted
                   #:labels cddr
                   #:names gadget-names
                   #:defaults gadget-defaults
+                  #:shown-defaults
+                  (lambda (params) (hash-set gadget-defaults 'size (hash-ref params 'label)))
                   #:methods gen:predictor
                   [(define (predict e X)
                      (list 'predicted (gadget-model e) X))])
@@ -79,36 +81,24 @@
 
 (test-case "define-estimator: set-params merges known names and drops the model"
   (define fitted (fit plain 'X))
-  (check-equal? (estimator-set-params fitted (hasheq 'size 4))
-                (gadget* (hasheq 'size 4 'label 'plain) #f))
+  (check-equal? (estimator-set-params fitted (hasheq 'size 4)) (gadget* (hasheq 'size 4 'label 3) #f))
   (check-cuml-error 'logic
                     "estimator-set-params: gadget has no parameter colour"
                     (lambda () (estimator-set-params plain (hasheq 'colour 'red)))))
 
 (test-case "define-estimator: equal on equal parameters and the same model"
   (define fitted (fit plain 'X))
-  (check-equal? (gadget* (hasheq 'size 3 'label 'plain) #f) plain)
-  (check-equal? (equal-hash-code (gadget* (hasheq 'size 3 'label 'plain) #f)) (equal-hash-code plain))
+  (check-equal? (gadget* (hasheq 'size 3 'label 3) #f) plain)
+  (check-equal? (equal-hash-code (gadget* (hasheq 'size 3 'label 3) #f)) (equal-hash-code plain))
   (check-not-equal? fitted (fit plain 'X))
   (check-equal? fitted fitted))
 
-(test-case "define-estimator: prints the fitted mark and the parameters off their defaults, in order"
+(test-case "define-estimator: prints the fitted mark and the parameters off their shown defaults, in order"
   (check-equal? (format "~a" plain) "#<gadget>")
   (check-equal? (format "~a" (fit plain 'X)) "#<gadget fitted>")
+  (check-equal? (format "~a" (gadget* (hasheq 'size 5 'label 5) #f)) "#<gadget #:label 5>")
   (check-equal? (format "~a" (gadget* (hasheq 'size 4 'label 'bold) #f))
                 "#<gadget #:size 4 #:label 'bold>"))
-
-(define-estimator gizmo
-                  #:fitted gadget-fitted
-                  #:labels cddr
-                  #:names gadget-names
-                  #:defaults gadget-defaults
-                  #:shown-defaults
-                  (lambda (params) (hash-set gadget-defaults 'size (hash-ref params 'label))))
-
-(test-case "define-estimator: #:shown-defaults computes the defaults a print compares against"
-  (check-equal? (format "~a" (gizmo* (hasheq 'size 'plain 'label 'plain) #f)) "#<gizmo>")
-  (check-equal? (format "~a" (gizmo* gadget-defaults #f)) "#<gizmo #:size 3>"))
 
 (define-namespace-anchor anchor)
 

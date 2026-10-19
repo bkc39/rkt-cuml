@@ -23,6 +23,7 @@
          define-constructor
          define-estimator
          logic-error
+         params->string
          resources-of
          updated-params)
 
