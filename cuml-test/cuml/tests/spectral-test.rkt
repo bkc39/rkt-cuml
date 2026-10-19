@@ -85,7 +85,15 @@
          [seed (in-range 3)])
     (test-case (format "~a samples, k ~a, seed ~a" (graph-n g) k seed)
       (check-equal? (graph-labels g #:n-clusters k #:random-state seed)
-                    (graph-labels g #:n-clusters k #:random-state seed #:n-components 1)))))
+                    (graph-labels g #:n-clusters k #:random-state seed #:n-components 1))))
+  (define-values (triangle-and-point truth) (cliques '(3 1)))
+  (define-values (separate-triangles _truth) (cliques '(3 3)))
+  (for ([seed (in-range 5)])
+    (test-case (format "disconnected groups, seed ~a" seed)
+      (check-true (planted? (graph-labels triangle-and-point #:n-clusters 2 #:random-state seed)
+                            truth))
+      (check-equal? (graph-labels separate-triangles #:n-clusters 2 #:random-state seed)
+                    (make-list 6 0)))))
 
 (test-gpu "SC14: weights whose sum passes the largest float32, or subnormal weights, are refused"
   (define-values (g truth) (three-blocks))
