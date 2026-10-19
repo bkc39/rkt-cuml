@@ -19,6 +19,7 @@ namespace {
 constexpr int64_t entries = 12;
 constexpr int64_t graph_rows = 102261127;
 constexpr int64_t basis_rows = 107374183;
+constexpr int64_t trial_clusters = 65659970;
 constexpr int64_t forged_entries = 2147483000;
 constexpr int64_t forged_samples = 1000;
 constexpr int64_t past_index = 2147483648;
@@ -54,6 +55,7 @@ TEST(SpectralRefusals, DenseNameTheArgument) {
   const rr_view x_graph = shaped(r.data, {graph_rows, 1});
   const rr_view x_basis = shaped(r.data, {basis_rows, 1});
   const rr_view x_basis_most = shaped(r.data, {basis_rows - 1, 1});
+  const rr_view x_trials_most = shaped(r.data, {graph_rows - 1, 1});
   const rr_view x_elsewhere = on_device(r.x, 1);
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
@@ -107,6 +109,20 @@ TEST(SpectralRefusals, DenseNameTheArgument) {
       {{.x = &x_basis, .out = o, .n_neighbors = 2},
        "X: 107374183 rows and 2 components need a 107374183x20 eigensolver "
        "basis, more than 2147483647 elements"},
+      {{.x = &x_graph,
+        .out = o,
+        .n_clusters = trial_clusters,
+        .n_components = 1,
+        .auto_components = 0},
+       "X: 102261127 samples and 65659970 clusters need a 21x102261127 "
+       "k-means++ buffer, more than 2147483647 elements"},
+      {{.x = &x_trials_most,
+        .out = o,
+        .n_clusters = trial_clusters,
+        .n_components = 1,
+        .auto_components = 0,
+        .n_neighbors = 1},
+       "n-neighbors: expected at least 2, got 1"},
       {{.x = &x_basis_most, .out = o, .n_neighbors = 1},
        "n-neighbors: expected at least 2, got 1"},
       {{.x = &x_three_double, .out = o}, "X: expected float32, got float64"},
@@ -337,6 +353,24 @@ TEST(SpectralRefusals, GraphNameTheArgument) {
                 c.n_components = past_components;
               }),
        components},
+      {edited(ok,
+              [](graph_call& c) {
+                c.n_samples = graph_rows;
+                c.n_clusters = trial_clusters;
+                c.auto_components = 0;
+                c.n_components = 1;
+              }),
+       "n-samples: 102261127 samples and 65659970 clusters need a "
+       "21x102261127 k-means++ buffer, more than 2147483647 elements"},
+      {edited(ok,
+              [](graph_call& c) {
+                c.n_samples = graph_rows - 1;
+                c.n_clusters = trial_clusters;
+                c.auto_components = 0;
+                c.n_components = 1;
+                c.eigen_tol = -1;
+              }),
+       "eigen-tol: expected at least 0, got -1"},
       {edited(ok, [](graph_call& c) { c.n_samples = basis_rows; }),
        "n-samples: 107374183 samples and 2 components need a 107374183x20 "
        "eigensolver basis, more than 2147483647 elements"},

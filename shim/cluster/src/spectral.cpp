@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cuml/cluster/spectral_clustering.hpp>
@@ -46,6 +47,7 @@ constexpr int64_t least_samples = 4;
 constexpr int64_t least_neighbours = 2;
 constexpr int64_t components_per_sample = 3;
 constexpr int64_t least_basis = 20;
+constexpr int64_t least_trials = 2;
 constexpr double most_squared_norm = 0x1p125;
 constexpr double most_tol = FLT_MAX;
 
@@ -65,6 +67,15 @@ void require_clusters(int64_t n_clusters, int64_t n, const char* subject) {
     throw logic_error(
         std::format("{}: {} samples are fewer than the {} clusters", subject, n,
                     n_clusters));
+  }
+  const int64_t trials =
+      least_trials + static_cast<int64_t>(
+                         std::ceil(std::log(static_cast<double>(n_clusters))));
+  if (n * trials > most_index) {
+    throw logic_error(std::format(
+        "{}: {} samples and {} clusters need a {}x{} k-means++ buffer, more "
+        "than {} elements",
+        subject, n, n_clusters, trials, n, most_index));
   }
 }
 
