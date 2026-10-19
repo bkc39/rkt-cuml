@@ -27,6 +27,7 @@ constexpr int lcg_shift = 33;
 constexpr double lcg_scale = 0x1p-31;
 constexpr int64_t clamped_rows = 4096;
 constexpr int32_t most_negative_c = -31;
+constexpr int32_t clamped_c = -12;
 constexpr int64_t clamped_peak = 8 << 20;
 
 const values grid{0, 1, 3, 7, 15};
@@ -220,6 +221,7 @@ TEST(Linkage, VeryNegativeCKeepsTwoNeighbours) {
   const fitted f = fit(res, points, {.c = most_negative_c});
   EXPECT_LE(meter.peak(), clamped_peak);
   EXPECT_EQ(dendrogram_problems(f.children, clamped_rows), "");
+  EXPECT_EQ(f.children, fit(res, points, {.c = clamped_c}).children);
 }
 
 TEST(Linkage, TiesComeInCumlsOrder) {
