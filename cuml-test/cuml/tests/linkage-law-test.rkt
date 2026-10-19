@@ -172,10 +172,10 @@
   (check-not-equal? (children-cophenetic rows (children-of rows 'knn #:c -7))
                     (oracle-cophenetic (linkage-oracle rows))))
 
-(test-gpu "P6: on tied distances, knn with 2 neighbours gives more than one tree in 10 fits"
+(test-gpu "P6: on tied distances, knn with 2 neighbours gives more than one hierarchy in 20 fits"
   (define rows (integer-grid 200 2 15 9))
-  (define trees
-    (for/list ([_ (in-range 10)])
-      (children-of rows 'knn #:c -7)))
-  (define distinct (length (remove-duplicates trees)))
-  (check-true (> distinct 1) (format "~a distinct trees" distinct)))
+  (define hierarchies
+    (for/list ([_ (in-range 20)])
+      (children-cophenetic rows (children-of rows 'knn #:c -7))))
+  (define distinct (length (remove-duplicates hierarchies)))
+  (check-true (> distinct 1) (format "~a distinct hierarchies" distinct)))
