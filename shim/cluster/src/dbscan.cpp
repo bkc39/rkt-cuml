@@ -1,9 +1,11 @@
 #include <cuda_runtime_api.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cuml/cluster/dbscan.hpp>
 #include <cuml/common/distance_type.hpp>
+#include <format>
 #include <initializer_list>
 #include <limits>
 #include <memory>
@@ -24,9 +26,13 @@
 namespace {
 
 using cumlrkt::logic_error;
+using cumlrkt::cluster::core_count;
+using cumlrkt::cluster::first_unnormable_row;
 using cumlrkt::cluster::matrix;
+using cumlrkt::cluster::on_device;
 using cumlrkt::cluster::printed;
 using cumlrkt::cluster::require_at_least;
+using cumlrkt::cluster::require_positive;
 using cumlrkt::cluster::require_some;
 using cumlrkt::cluster::rows_of;
 using cumlrkt::cluster::settle;
@@ -117,6 +123,30 @@ void require_batch(int64_t mbytes, std::size_t n, std::size_t d) {
   }
 }
 
+template <typename Index>
+constexpr int64_t most_rows() {
+  constexpr std::size_t label = sizeof(Index);
+  constexpr std::size_t batch_rows =
+      (std::numeric_limits<std::size_t>::max() - (2 * label)) /
+      ((2 * label) + 2);
+  return static_cast<int64_t>(std::min<std::size_t>(
+      static_cast<std::size_t>(std::numeric_limits<Index>::max()) - 2,
+      batch_rows));
+}
+
+template <typename Index>
+void require_rows(int64_t n) {
+  if (n <= most_rows<Index>()) {
+    return;
+  }
+  if (sizeof(Index) == sizeof(int32_t)) {
+    throw logic_error("X: " + std::to_string(n) +
+                      " rows do not fit int32 labels; use int64");
+  }
+  throw logic_error("X: " + std::to_string(n) +
+                    " rows overflow cuML's batch size arithmetic");
+}
+
 template <typename T, typename Index>
 matrix<T, Index> checked_x(const rr_view* view, Distance metric) {
   const matrix<T, int64_t> x =
@@ -132,6 +162,7 @@ matrix<T, Index> checked_x(const rr_view* view, Distance metric) {
     throw logic_error("X: " + std::to_string(x.n) + "x" + std::to_string(x.d) +
                       " elements do not fit int32 labels; use int64");
   }
+  require_rows<Index>(x.n);
   return {x.data, static_cast<Index>(x.n), static_cast<Index>(x.d)};
 }
 
@@ -144,17 +175,29 @@ T* weights_of(const rr_view* sample_weight, int64_t n) {
 }
 
 template <typename T>
-std::optional<rmm::device_uvector<T>> cosine_copy(
-    const T* x, int64_t n, int64_t d, rmm::cuda_stream_view stream) {
+T eps_of(double eps) {
+  require_positive("eps", eps);
+  const double most = std::numeric_limits<T>::max();
+  if (eps > most) {
+    throw logic_error(std::format("eps: expected at most {}, got {}",
+                                  printed(most), printed(eps)));
+  }
+  const auto narrowed = static_cast<T>(eps);
+  require_positive("eps", eps, narrowed > 0);
+  return narrowed;
+}
+
+template <typename T>
+rmm::device_uvector<T> cosine_copy(const T* x, int64_t n, int64_t d,
+                                   rmm::cuda_stream_view stream) {
   rmm::device_uvector<T> copy(static_cast<std::size_t>(n * d), stream);
   raftrkt::cuda_check(cudaMemcpyAsync(copy.data(), x, sizeof(T) * copy.size(),
                                       cudaMemcpyDeviceToDevice, stream.value()),
                       "cudaMemcpyAsync");
-  const int64_t zero =
-      cumlrkt::cluster::first_zero_row(copy.data(), n, d, stream);
-  if (zero >= 0) {
-    throw logic_error("X: row " + std::to_string(zero) +
-                      " has norm 0, so no cosine distance");
+  const int64_t row = first_unnormable_row(copy.data(), n, d, stream);
+  if (row >= 0) {
+    throw logic_error("X: row " + std::to_string(row) +
+                      " has a norm outside float range, so no cosine distance");
   }
   return copy;
 }
@@ -171,11 +214,7 @@ void fit(const raft::handle_t& handle, const fit_arrays& arrays,
   const Distance metric = distance_of(options.metric);
   const matrix<T, Index> x = checked_x<T, Index>(arrays.x, metric);
   T* w = weights_of<T>(arrays.sample_weight, x.n);
-  const auto eps = static_cast<T>(options.eps);
-  if (!(eps > 0)) {
-    throw logic_error("eps: expected greater than 0, got " +
-                      printed(options.eps));
-  }
+  const T eps = eps_of<T>(options.eps);
   require_at_least("min-samples", options.min_samples, 1);
   const auto n = static_cast<std::size_t>(x.n);
   require_batch<T, Index>(options.max_mbytes_per_batch, n,
@@ -194,8 +233,7 @@ void fit(const raft::handle_t& handle, const fit_arrays& arrays,
                   static_cast<std::size_t>(options.max_mbytes_per_batch),
                   ML::Dbscan::BRUTE_FORCE, rapids_logger::level_enum::warn,
                   false);
-  const int64_t cores =
-      cumlrkt::cluster::core_count(outputs->core.data(), x.n, stream);
+  const int64_t cores = core_count(outputs->core.data(), x.n, stream);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(outputs->labels),
       raftrkt::region(outputs->core.data(), cores)};
@@ -208,7 +246,7 @@ template <typename T>
 void fit_labels(const raft::handle_t& handle, const fit_arrays& arrays,
                 const fit_options& options) {
   if (options.out_dtype == RR_DTYPE_INT32) {
-    fit<T, int>(handle, arrays, options);
+    fit<T, int32_t>(handle, arrays, options);
   } else if (options.out_dtype == RR_DTYPE_INT64) {
     fit<T, int64_t>(handle, arrays, options);
   } else {
@@ -228,11 +266,10 @@ int cuml_cluster_dbscan_fit(void* handle, const rr_view* x,
     const fit_arrays arrays{x, sample_weight, raftrkt::require(out, "out")};
     const fit_options options{eps, min_samples, metric, out_dtype,
                               max_mbytes_per_batch};
-    cumlrkt::cluster::on_device(handle,
-                                {{"X", x}, {"sample-weight", sample_weight}}, x,
-                                "X", [&](const raft::handle_t& h, auto tag) {
-                                  fit_labels<decltype(tag)>(h, arrays, options);
-                                });
+    on_device(handle, {{"X", x}, {"sample-weight", sample_weight}}, x, "X",
+              [&](const raft::handle_t& h, auto tag) {
+                fit_labels<decltype(tag)>(h, arrays, options);
+              });
   });
 }
 

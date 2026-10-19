@@ -1,6 +1,7 @@
 #include <cuda_runtime_api.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -23,11 +24,15 @@ constexpr int64_t cols = 2;
 constexpr int64_t zero_row = 2;
 constexpr std::size_t pool = 64;
 constexpr int64_t forged_square = 46341;
+constexpr int64_t int32_most_rows = 2147483645;
+constexpr int64_t int64_most_rows = 1024819115206086199;
+constexpr int64_t forged_mbytes = 30000;
 constexpr int64_t crashing_rows = 150000;
 constexpr int64_t automatic_rows = 69000;
 constexpr int32_t unknown_metric = 3;
 constexpr int64_t most_mbytes = 18446744073709;
 constexpr double tiny = 1e-50;
+constexpr double huge = 1e300;
 constexpr std::size_t usable_percent = 80;
 constexpr std::size_t percent = 100;
 constexpr std::size_t automatic_target = 1500000;
@@ -70,8 +75,6 @@ int64_t automatic_columns() {
   return static_cast<int64_t>((usable - automatic_target) / row_bytes);
 }
 
-// NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
-// refusal row, each a branch to clang-tidy
 template <typename T>
 void fit_refusals(int32_t out_dtype) {
   SCOPED_TRACE(name<T>() + " " + out_name(out_dtype));
@@ -96,6 +99,10 @@ void fit_refusals(int32_t out_dtype) {
   const rr_view x_no_cols = shaped(r.data, {rows, 0});
   const rr_view x_square = shaped(r.data, {forged_square, forged_square});
   const rr_view x_crashing = shaped(r.data, {crashing_rows, cols});
+  const rr_view x_int32_most = shaped(r.data, {int32_most_rows, 1});
+  const rr_view x_int32_over = shaped(r.data, {int32_most_rows + 1, 1});
+  const rr_view x_int64_most = shaped(r.data, {int64_most_rows, 1});
+  const rr_view x_int64_over = shaped(r.data, {int64_most_rows + 1, 1});
   const rr_view x_elsewhere = on_device(r.x, 1);
   const rr_view w_other = shaped(r.other, {rows});
   const rr_view w_short = shaped(r.data, {rows - 1});
@@ -140,6 +147,29 @@ void fit_refusals(int32_t out_dtype) {
                      "int64"
                    : "eps: expected greater than 0, got 0");
   c = base;
+  c.x = &x_int32_over;
+  c.max_mbytes_per_batch = forged_mbytes;
+  EXPECT_EQ(refused(c),
+            narrow ? "X: 2147483646 rows do not fit int32 labels; use int64"
+                   : "max-mbytes-per-batch: expected at least 38655 for "
+                     "2147483646 rows, got 30000");
+  c.x = &x_int32_most;
+  c.eps = 0;
+  EXPECT_EQ(refused(c), "eps: expected greater than 0, got 0");
+  c = base;
+  c.x = &x_int64_over;
+  EXPECT_EQ(refused(c),
+            narrow ? "X: 1024819115206086200x1 elements do not fit int32 "
+                     "labels; use int64"
+                   : "X: 1024819115206086200 rows overflow cuML's batch size "
+                     "arithmetic");
+  c.x = &x_int64_most;
+  c.eps = 0;
+  EXPECT_EQ(refused(c),
+            narrow ? "X: 1024819115206086199x1 elements do not fit int32 "
+                     "labels; use int64"
+                   : "eps: expected greater than 0, got 0");
+  c = base;
   c.sample_weight = &w_other;
   EXPECT_EQ(refused(c), "sample-weight: expected " + t + ", got " + u);
   c.sample_weight = &w_short;
@@ -158,9 +188,18 @@ void fit_refusals(int32_t out_dtype) {
   EXPECT_EQ(refused(c), "eps: expected greater than 0, got -1");
   c.eps = std::numeric_limits<double>::quiet_NaN();
   EXPECT_EQ(refused(c), "eps: expected greater than 0, got nan");
+  c.eps = std::numeric_limits<double>::infinity();
+  EXPECT_EQ(refused(c),
+            std::string("eps: expected at most ") +
+                (std::is_same_v<T, float> ? "3.4028234663852886e+38"
+                                          : "1.7976931348623157e+308") +
+                ", got inf");
   c.eps = tiny;
   if (std::is_same_v<T, float>) {
     EXPECT_EQ(refused(c), "eps: expected greater than 0, got 1e-50");
+    c.eps = huge;
+    EXPECT_EQ(refused(c),
+              "eps: expected at most 3.4028234663852886e+38, got 1e+300");
   }
   c = base;
   c.min_samples = 0;
@@ -203,7 +242,6 @@ void fit_refusals(int32_t out_dtype) {
   c.max_mbytes_per_batch = -1;
   EXPECT_EQ(refused(c), "min-samples: expected at least 1, got 0");
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
 template <typename T>
 void automatic_batch_refusal() {
@@ -230,29 +268,60 @@ void automatic_batch_refusal() {
 }
 
 template <typename T>
-void zero_cosine_row() {
+void unnormable_cosine_rows() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  values host(static_cast<std::size_t>(rows * cols), 1.0);
-  for (int64_t j = 0; j < cols; ++j) {
-    host[static_cast<std::size_t>((zero_row * cols) + j)] = 0;
+  std::vector<std::vector<double>> refused_rows{
+      {0, 0},
+      {-0.0, -0.0},
+      {std::numeric_limits<T>::denorm_min(), 0},
+      {1e20, 0},
+      {-1e20, 1}};
+  if (std::is_same_v<T, double>) {
+    refused_rows.push_back({1e-160, 1e-160});
+    refused_rows.push_back({1e200, 0});
   }
-  const auto x = upload<T>(res, {rows, cols}, host);
-  record out(res);
-  const allocation_meter meter;
-  const dbscan_call c{.x = &x->view,
-                      .out = &out.r,
-                      .metric = CUML_CLUSTER_DBSCAN_METRIC_COSINE};
-  EXPECT_EQ(dbscan(res, c), "X: row 2 has norm 0, so no cosine distance");
-  EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
-  EXPECT_EQ(meter.current(), 0);
-  expect_untouched(out);
-  host[static_cast<std::size_t>(zero_row * cols)] =
-      std::numeric_limits<double>::denorm_min();
-  const auto subnormal = upload<T>(res, {rows, cols}, host);
-  dbscan_call d = c;
-  d.x = &subnormal->view;
-  EXPECT_EQ(dbscan(res, d), "X: row 2 has norm 0, so no cosine distance");
+  for (const std::vector<double>& bad : refused_rows) {
+    SCOPED_TRACE(std::to_string(bad[0]));
+    values host(static_cast<std::size_t>(rows * cols), 1.0);
+    std::copy(bad.begin(), bad.end(),
+              host.begin() + static_cast<std::ptrdiff_t>(zero_row * cols));
+    const auto x = upload<T>(res, {rows, cols}, host);
+    record out(res);
+    const allocation_meter meter;
+    const dbscan_call c{.x = &x->view,
+                        .out = &out.r,
+                        .metric = CUML_CLUSTER_DBSCAN_METRIC_COSINE};
+    EXPECT_EQ(dbscan(res, c),
+              "X: row 2 has a norm outside float range, so no cosine "
+              "distance");
+    EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC);
+    EXPECT_EQ(meter.current(), 0);
+    expect_untouched(out);
+  }
+}
+
+template <typename T>
+void normable_cosine_rows() {
+  SCOPED_TRACE(name<T>());
+  const resources res;
+  const std::vector<std::vector<double>> accepted_rows{
+      {1e19, 0},
+      {1e-20, 0},
+      {std::numeric_limits<double>::quiet_NaN(), 1},
+      {std::numeric_limits<double>::infinity(), 0}};
+  for (const std::vector<double>& edge : accepted_rows) {
+    SCOPED_TRACE(std::to_string(edge[0]));
+    values host(static_cast<std::size_t>(rows * cols), 1.0);
+    std::copy(edge.begin(), edge.end(),
+              host.begin() + static_cast<std::ptrdiff_t>(zero_row * cols));
+    const auto x = upload<T>(res, {rows, cols}, host);
+    record out(res);
+    const dbscan_call c{.x = &x->view,
+                        .out = &out.r,
+                        .metric = CUML_CLUSTER_DBSCAN_METRIC_COSINE};
+    EXPECT_EQ(dbscan(res, c), "accepted");
+  }
 }
 
 TEST(DbscanRefusals, NameTheArgument) {
@@ -269,10 +338,16 @@ TEST(DbscanRefusals, AutomaticBatchSize) {
   automatic_batch_refusal<double>();
 }
 
-TEST(DbscanRefusals, ZeroCosineRow) {
+TEST(DbscanRefusals, UnnormableCosineRow) {
   CUMLRKT_REQUIRE_GPU();
-  zero_cosine_row<float>();
-  zero_cosine_row<double>();
+  unnormable_cosine_rows<float>();
+  unnormable_cosine_rows<double>();
+}
+
+TEST(DbscanRefusals, NormableCosineRowsPass) {
+  CUMLRKT_REQUIRE_GPU();
+  normable_cosine_rows<float>();
+  normable_cosine_rows<double>();
 }
 
 TEST(DbscanRefusals, FilledOutIsRefused) {

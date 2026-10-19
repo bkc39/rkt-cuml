@@ -61,8 +61,6 @@ struct refusal_case {
   rr_view centroids;
 };
 
-// NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
-// refusal row, each a branch to clang-tidy
 template <typename T>
 void fit_refusals() {
   SCOPED_TRACE(name<T>());
@@ -173,10 +171,7 @@ void fit_refusals() {
   EXPECT_EQ(filled.r.owner, owner);
   EXPECT_EQ(filled.r.count, 2);
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
-// NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
-// refusal row, each a branch to clang-tidy
 template <typename T>
 void apply_refusals() {
   SCOPED_TRACE(name<T>());
@@ -245,10 +240,7 @@ void apply_refusals() {
             RR_OK);
   EXPECT_EQ(inertia, 0);
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
-// NOLINTBEGIN(readability-function-cognitive-complexity) -- one EXPECT per
-// refusal row, each a branch to clang-tidy
 template <typename T>
 void first_in_order_wins() {
   SCOPED_TRACE(name<T>());
@@ -287,7 +279,6 @@ void first_in_order_wins() {
   EXPECT_EQ(predict(res, &c_int, &x_other, &out.r),
             "centroids: expected float32 or float64, got int32");
 }
-// NOLINTEND(readability-function-cognitive-complexity)
 
 template <typename T>
 void refused_parameters_allocate_nothing() {

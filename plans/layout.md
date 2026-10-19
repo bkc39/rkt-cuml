@@ -172,10 +172,12 @@
   - **Q-B.** int32 labels over more than 2^31-1 elements are refused, not
     switched to int64.
   - **Q-C.** `'cosine` runs on an n×d scratch copy, so `X` is not modified.
-  - **Q-D.** A row of norm 0 under `'cosine` is refused.
+  - **Q-D.** A finite row whose norm is 0 or infinite in float precision,
+    where cuML computes it, is refused under `'cosine`.
   - **Q-E.** Non-finite `X` is passed through, and its rows are noise.
   - **Q-F.** `eps` not greater than 0 and `min-samples` below 1 are refused.
-  - **Q-G.** `eps` is the exact double for float64.
+  - **Q-G.** `eps` is the exact double for float64; under `'cosine` the
+    norms are float-precise.
   - **Q-H.** Core-sample indices are always computed.
   - **Q-I.** `'rbc` is deferred to #17.
   - **Q-J.** `dbscan-result` has no cluster count.

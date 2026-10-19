@@ -219,8 +219,9 @@ noise.
 
 With @racket['precomputed], @racket[X] is a square matrix of distances, row
 @racket[i] from sample @racket[i]. @racket['cosine] distance is one minus the
-cosine similarity, and @racket[X] is not modified. A row with a NaN or an
-infinity is noise. @racket[max-mbytes-per-batch] bounds, in units of 10^6
+cosine similarity, and @racket[X] is not modified. Under @racket['cosine]
+cuML computes the norms in float precision, so @racket['float64] cosine
+distances are only float-precise. A row with a NaN or an infinity is noise. @racket[max-mbytes-per-batch] bounds, in units of 10^6
 bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[0] sizes the batch from the device's memory. The outputs live on
 @racket[resources].
@@ -269,12 +270,16 @@ The labels and indices take the @racket[out-dtype]:
  @item{@racket[out-dtype] is not @racket['int32] or @racket['int64], or
        @racket[metric] is not one of the three names;}
  @item{@racket['int32] labels cannot index @racket[X]'s elements, past
-       2^31-1 of them: @tt{X: 46341x46341 elements do not fit int32 labels;
-       use int64};}
+       2^31-1 of them, or its rows, past 2^31-3: @tt{X: 46341x46341 elements
+       do not fit int32 labels; use int64}, @tt{X: 2147483646 rows do not fit
+       int32 labels; use int64};}
  @item{@racket[sample-weight] is not a vector of @racket[X]'s dtype with one
        element per row;}
  @item{@racket[eps] is not greater than 0 in @racket[X]'s dtype, NaN
-       included, or @racket[min-samples] is less than 1;}
+       included, or is more than the dtype's largest value, @racket[+inf.0]
+       included: @tt{eps: expected at most 3.4028234663852886e+38, got
+       1e+300} for @racket['float32];}
+ @item{@racket[min-samples] is less than 1;}
  @item{@racket[max-mbytes-per-batch] is negative, or more than
        18446744073709, past which its bytes overflow;}
  @item{the batch holds no row, where cuML would kill the process with a
@@ -287,8 +292,10 @@ The labels and indices take the @racket[out-dtype]:
        of @racket[X], which a large enough @racket[X] leaves too small:
        @tt{max-mbytes-per-batch: the automatic size holds no batch of 69000
        rows; pass at least 2};}
- @item{with @racket['cosine], a row of @racket[X] has norm 0 in its dtype:
-       @tt{X: row 2 has norm 0, so no cosine distance}.}]
+ @item{with @racket['cosine], a row of @racket[X] with only finite elements
+       has a norm that is 0 or infinite in float precision, where cuML
+       computes it at both dtypes: @tt{X: row 2 has a norm outside float
+       range, so no cosine distance}.}]
 An @racket[X] or @racket[sample-weight] that is not a device array, or
 @racket[resources] that were released, raises raft's @racket[exn:fail:raft]
 naming the procedure, and a number argument that does not fit the native type,

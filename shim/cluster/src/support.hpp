@@ -56,11 +56,15 @@ inline std::string printed(double got) {
   return std::format("{}", got);
 }
 
-inline void require_positive(const char* what, double got) {
-  if (!(got > 0)) {
+inline void require_positive(const char* what, double got, bool positive) {
+  if (!positive) {
     throw logic_error(
         std::format("{}: expected greater than 0, got {}", what, printed(got)));
   }
+}
+
+inline void require_positive(const char* what, double got) {
+  require_positive(what, got, got > 0);
 }
 
 inline void require_non_negative(const char* what, double got) {
