@@ -220,7 +220,7 @@ The @racket[kmeans-result] of the fit that made @racket[estimator], or
 
 @declare-exporting[cuml]
 
-@defproc[(dbscan [#:eps eps (and/c real? (>/c 0)) 0.5]
+@defproc[(dbscan [#:eps eps (and/c real? (>/c 0) (</c +inf.0)) 0.5]
                  [#:min-samples min-samples exact-positive-integer? 5]
                  [#:metric metric (or/c 'euclidean 'cosine 'precomputed) 'euclidean]
                  [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]

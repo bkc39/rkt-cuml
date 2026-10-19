@@ -1,3 +1,0 @@
-InheritParentConfig: true
-CheckOptions:
-  readability-function-cognitive-complexity.IgnoreMacros: true

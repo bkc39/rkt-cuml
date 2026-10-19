@@ -18,8 +18,8 @@
                   first-copies
                   fitted-lists
                   integer-grid
-                  labels-at
                   mat
+                  pick
                   repeat-rows
                   same-partition?
                   seeded
@@ -64,7 +64,7 @@
   (match-define (expected want-labels want-core _) e)
   (check-equal? (structure-problems labels core) '())
   (check-equal? core want-core "core samples")
-  (check-equal? (labels-at labels core) (labels-at want-labels want-core) "core labels")
+  (check-equal? (pick labels core) (pick want-labels want-core) "core labels")
   (check-equal? (noise labels) (noise want-labels) "noise")
   (check-true (adjacent? labels core e) "border labels are a core neighbour's"))
 
@@ -97,18 +97,22 @@
 (test-gpu "L4: permuting the rows permutes the core samples and the noise"
   (define rows (integer-grid 300 2 20 8))
   (define p (seeded 3 (lambda () (shuffle (range 300)))))
-  (define permuted (map (lambda (i) (list-ref rows i)) p))
+  (define permuted (pick rows p))
+  (define at (list->vector p))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (match-define (list labels core) (fitted-lists (mat rows dt) #:eps 1.5 #:min-samples 4))
       (match-define (list p-labels p-core) (fitted-lists (mat permuted dt) #:eps 1.5 #:min-samples 4))
       (define (mapped indices)
+        (define chosen (make-vector 300 #f))
+        (for ([i (in-list indices)])
+          (vector-set! chosen i #t))
         (for/list ([j (in-range 300)]
-                   #:when (memv (list-ref p j) indices))
+                   #:when (vector-ref chosen (vector-ref at j)))
           j))
       (check-equal? p-core (mapped core))
       (check-equal? (noise p-labels) (mapped (noise labels)))
-      (define p-mapped (labels-at labels p))
+      (define p-mapped (pick labels p))
       (check-true (same-partition? p-labels p-core p-mapped p-core))
       (check-true (adjacent? p-labels p-core (oracle-of permuted 3/2 4))))))
 
@@ -134,7 +138,7 @@
       (match-define (list labels core)
         (fitted-lists (mat rows dt) #:eps 1.5 #:min-samples 7 #:sample-weight (vec weights dt)))
       (match-define (list r-labels r-core) (fitted-lists (mat repeated dt) #:eps 1.5 #:min-samples 7))
-      (check-equal? labels (labels-at r-labels firsts))
+      (check-equal? labels (pick r-labels firsts))
       (check-equal? core
                     (for/list ([f (in-list firsts)]
                                [i (in-naturals)]
@@ -239,14 +243,18 @@
       (check-equal? (fitted-lists (mat rows dt) #:eps 2 #:min-samples 2 #:metric 'cosine)
                     '((0 0) (0 1))))))
 
-(test-gpu "L8: float32 cosine labels match the oracle at eps 1e-3 either side of a wide pair's distance"
-  (for* ([d (in-list '(1024 4096))]
-         [factor (in-list '(0.999 1.001))])
+(test-gpu "L8: float32 cosine labels match the oracle at eps 1e-3, and at 1024 columns 1e-5, either side of a wide pair's distance"
+  (for ([c (in-list `((1024 0.999) (1024 1.001)
+                                   (1024 ,(- 1 1e-5))
+                                   (1024 ,(+ 1 1e-5))
+                                   (4096 0.999)
+                                   (4096 1.001)))])
+    (match-define (list d factor) c)
     (test-case (format "d ~a eps ~a t" d factor)
       (define-values (found e) (wide-pair-fit d factor))
       (check-equal? found (list (expected-labels e) (expected-core e))))))
 
-(test-gpu "L8 characterisation pin: float32 cosine at 4096 columns includes a pair 3e-5 below eps"
+(test-gpu "L8: float32 cosine at 4096 columns stays within 3e-5 of eps (double row sums)"
   (define-values (found _) (wide-pair-fit 4096 (+ 1 3e-5)))
   (check-equal? found '((0 0) (0 1))))
 

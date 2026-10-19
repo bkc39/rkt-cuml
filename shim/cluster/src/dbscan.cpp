@@ -27,6 +27,7 @@ namespace {
 
 using cumlrkt::logic_error;
 using cumlrkt::cluster::core_count;
+using cumlrkt::cluster::cosine_eps;
 using cumlrkt::cluster::first_zero_row;
 using cumlrkt::cluster::matrix;
 using cumlrkt::cluster::on_device;
@@ -37,7 +38,6 @@ using cumlrkt::cluster::require_some;
 using cumlrkt::cluster::rows_of;
 using cumlrkt::cluster::settle;
 using cumlrkt::cluster::unit_rows;
-using cumlrkt::cluster::detail::cosine_eps;
 using raftrkt::any_extent;
 using Distance = ML::distance::DistanceType;
 
@@ -168,15 +168,13 @@ T* weights_of(const rr_view* sample_weight, int64_t n) {
 
 template <typename T>
 T eps_of(double eps) {
-  require_positive("eps", eps);
   const double most = std::numeric_limits<T>::max();
   if (eps > most) {
     throw logic_error(std::format("eps: expected at most {}, got {}",
                                   printed(most), printed(eps)));
   }
-  const auto narrowed = static_cast<T>(eps);
-  require_positive("eps", eps, narrowed > 0);
-  return narrowed;
+  require_positive<T>("eps", eps);
+  return static_cast<T>(eps);
 }
 
 template <typename T>

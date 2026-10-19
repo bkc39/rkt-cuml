@@ -16,7 +16,6 @@
 (struct dbscan-result (labels core-sample-indices))
 
 (define-defaults dbscan-defaults
-                 default
                  [eps 0.5]
                  [min-samples 5]
                  [metric 'euclidean]

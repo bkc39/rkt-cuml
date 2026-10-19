@@ -2,6 +2,7 @@
 
 (require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result? kmeans-score kmeans-transform)
          (only-in racket/flonum fl-)
+         (only-in racket/function curry)
          (only-in racket/match match)
          (only-in rackunit check-equal? check-pred fail test-case)
          (only-in raft
@@ -12,7 +13,6 @@
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/fitted.rkt" fitted)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes))
 
 (struct row (id message call))
@@ -28,48 +28,58 @@
 (define (fit-rows dt)
   (define u (other dt))
   (define X (grid dt))
-  (define fit (fitted kmeans-fit values))
-  (define fit3 (fitted kmeans-fit values #:n-clusters 3))
-  (list
-   (row "F1" "X: expected float32 or float64, got int32" (fit3 (blank-matrix 10 2 'int32)))
-   (row "F2" "X: expected rank 2, got rank 1" (fit3 (blank-vector 10 dt)))
-   (row "F3"
-        "X: expected row-major, got col-major 10x2"
-        (fit3 (blank-matrix 10 2 dt #:layout 'col-major)))
-   (row "F5" "X: expected at least 1 column, got 0" (fit3 (blank-matrix 10 0 dt)))
-   (row "F6" "n-clusters: expected at least 1, got 0" (fit X #:n-clusters 0))
-   (row "F7" "X: 10 samples are fewer than the 11 clusters" (fit X #:n-clusters 11))
-   (row "F8"
-        (format "sample-weight: expected ~a, got ~a" dt u)
-        (fit3 X #:sample-weight (blank-vector 10 u)))
-   (row "F9"
-        "sample-weight: expected 10 elements, got 9"
-        (fit3 X #:sample-weight (blank-vector 9 dt)))
-   (row "F10"
-        "init: expected scalable-k-means++, k-means++, random or a centroids matrix"
-        (fit3 X #:init (string->symbol "k-means||")))
-   (row "F12" (format "init: expected ~a, got ~a" dt u) (fit X #:init (blank-matrix 3 2 u)))
-   (row "F13" "init: expected 3 rows, got 2" (fit3 X #:init (blank-matrix 2 2 dt)))
-   (row "F14" "init: expected 2 columns, got 3" (fit X #:init (blank-matrix 3 3 dt)))
-   (row "F15"
-        "init: expected row-major, got col-major 3x2"
-        (fit X #:init (blank-matrix 3 2 dt #:layout 'col-major)))
-   (row "F16" "max-iter: expected at least 0, got -1" (fit3 X #:max-iter -1))
-   (row "F17" "n-init: expected at least 1, got 0" (fit3 X #:n-init 0))
-   (row "F18"
-        "max-samples-per-batch: expected at least 0, got -1"
-        (fit3 X #:max-samples-per-batch -1))
-   (row "F21" "tol: expected greater than 0, got 0" (fit3 X #:tol 0))
-   (row "F21 nan" "tol: expected greater than 0, got nan" (fit3 X #:tol +nan.0))
-   (row "F21 -nan" "tol: expected greater than 0, got nan" (fit3 X #:tol (fl- +inf.0 +inf.0)))
-   (row "F21 -0" "tol: expected greater than 0, got 0" (fit3 X #:tol -0.0))
-   (row "F22" "oversampling-factor: expected at least 0, got -1" (fit3 X #:oversampling-factor -1))
-   (row "F22 nan"
-        "oversampling-factor: expected at least 0, got nan"
-        (fit3 X #:oversampling-factor +nan.0))
-   (row "F1 before F6"
-        "X: expected float32 or float64, got int32"
-        (fit (blank-matrix 10 2 'int32) #:n-clusters 0))))
+  (define fit3 (curry kmeans-fit #:n-clusters 3))
+  (list (row "F1"
+             "X: expected float32 or float64, got int32"
+             (lambda () (fit3 (blank-matrix 10 2 'int32))))
+        (row "F2" "X: expected rank 2, got rank 1" (lambda () (fit3 (blank-vector 10 dt))))
+        (row "F3"
+             "X: expected row-major, got col-major 10x2"
+             (lambda () (fit3 (blank-matrix 10 2 dt #:layout 'col-major))))
+        (row "F5" "X: expected at least 1 column, got 0" (lambda () (fit3 (blank-matrix 10 0 dt))))
+        (row "F6" "n-clusters: expected at least 1, got 0" (lambda () (kmeans-fit X #:n-clusters 0)))
+        (row "F7"
+             "X: 10 samples are fewer than the 11 clusters"
+             (lambda () (kmeans-fit X #:n-clusters 11)))
+        (row "F8"
+             (format "sample-weight: expected ~a, got ~a" dt u)
+             (lambda () (fit3 X #:sample-weight (blank-vector 10 u))))
+        (row "F9"
+             "sample-weight: expected 10 elements, got 9"
+             (lambda () (fit3 X #:sample-weight (blank-vector 9 dt))))
+        (row "F10"
+             "init: expected scalable-k-means++, k-means++, random or a centroids matrix"
+             (lambda () (fit3 X #:init (string->symbol "k-means||"))))
+        (row "F12"
+             (format "init: expected ~a, got ~a" dt u)
+             (lambda () (kmeans-fit X #:init (blank-matrix 3 2 u))))
+        (row "F13" "init: expected 3 rows, got 2" (lambda () (fit3 X #:init (blank-matrix 2 2 dt))))
+        (row "F14"
+             "init: expected 2 columns, got 3"
+             (lambda () (kmeans-fit X #:init (blank-matrix 3 3 dt))))
+        (row "F15"
+             "init: expected row-major, got col-major 3x2"
+             (lambda () (kmeans-fit X #:init (blank-matrix 3 2 dt #:layout 'col-major))))
+        (row "F16" "max-iter: expected at least 0, got -1" (lambda () (fit3 X #:max-iter -1)))
+        (row "F17" "n-init: expected at least 1, got 0" (lambda () (fit3 X #:n-init 0)))
+        (row "F18"
+             "max-samples-per-batch: expected at least 0, got -1"
+             (lambda () (fit3 X #:max-samples-per-batch -1)))
+        (row "F21" "tol: expected greater than 0, got 0" (lambda () (fit3 X #:tol 0)))
+        (row "F21 nan" "tol: expected greater than 0, got nan" (lambda () (fit3 X #:tol +nan.0)))
+        (row "F21 -nan"
+             "tol: expected greater than 0, got nan"
+             (lambda () (fit3 X #:tol (fl- +inf.0 +inf.0))))
+        (row "F21 -0" "tol: expected greater than 0, got 0" (lambda () (fit3 X #:tol -0.0)))
+        (row "F22"
+             "oversampling-factor: expected at least 0, got -1"
+             (lambda () (fit3 X #:oversampling-factor -1)))
+        (row "F22 nan"
+             "oversampling-factor: expected at least 0, got nan"
+             (lambda () (fit3 X #:oversampling-factor +nan.0)))
+        (row "F1 before F6"
+             "X: expected float32 or float64, got int32"
+             (lambda () (kmeans-fit (blank-matrix 10 2 'int32) #:n-clusters 0)))))
 
 (define ((on centroids X) proc)
   (proc centroids X))

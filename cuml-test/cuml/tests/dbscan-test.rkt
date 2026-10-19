@@ -16,6 +16,7 @@
                   grid-weights
                   integer-grid
                   mat
+                  pick
                   result->lists
                   seeded
                   structure-problems
@@ -126,7 +127,7 @@
 
 (define (check-isolated clean dirty k)
   (match-define (list labels core) dirty)
-  (check-equal? (list-ref labels k) -1)
+  (check-equal? (pick labels (list k)) '(-1))
   (check-equal? (without labels core k) clean))
 
 (test-gpu "L13: a NaN or infinite row is noise and leaves the other labels alone"

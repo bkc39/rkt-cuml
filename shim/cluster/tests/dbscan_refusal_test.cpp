@@ -81,6 +81,17 @@ int64_t automatic_columns() {
   return static_cast<int64_t>((usable - automatic_target) / row_bytes);
 }
 
+struct refusal {
+  dbscan_call call;
+  std::string message;
+};
+
+template <typename T>
+std::string most_text() {
+  return std::is_same_v<T, float> ? "3.4028234663852886e+38"
+                                  : "1.7976931348623157e+308";
+}
+
 template <typename T>
 void fit_refusals(int32_t out_dtype) {
   SCOPED_TRACE(name<T>() + " " + out_name(out_dtype));
@@ -88,16 +99,15 @@ void fit_refusals(int32_t out_dtype) {
   const refusal_case<T> r(res);
   record out(res);
   const allocation_meter meter;
-  const auto refused = [&](const dbscan_call& c) {
-    std::string status = dbscan(res, c);
-    EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << status;
-    EXPECT_EQ(meter.peak(), 0) << status;
-    expect_untouched(out);
-    return status;
-  };
   const std::string t = name<T>();
   const std::string u = name<other_t<T>>();
   const bool narrow = out_dtype == RR_DTYPE_INT32;
+  const double nan = std::numeric_limits<double>::quiet_NaN();
+  const double inf = std::numeric_limits<double>::infinity();
+  const int32_t d = out_dtype;
+  const int32_t precomputed = CUML_CLUSTER_DBSCAN_METRIC_PRECOMPUTED;
+  const rr_view* const x = &r.x;
+  rr_deposit* const o = &out.r;
   const rr_view x_int = shaped(r.ints, {rows, cols});
   const rr_view x_rank1 = shaped(r.data, {rows});
   const rr_view x_col = shaped(r.data, {rows, cols}, true);
@@ -114,134 +124,122 @@ void fit_refusals(int32_t out_dtype) {
   const rr_view w_short = shaped(r.data, {rows - 1});
   const rr_view w_rank2 = shaped(r.data, {rows, 1});
   const rr_view w_strided = strided(shaped(r.data, {rows}), 2);
-  const dbscan_call base = r.call(out, out_dtype);
-  dbscan_call c = base;
-
-  c.x = &x_int;
-  EXPECT_EQ(refused(c), "X: expected float32 or float64, got int32");
-  c.x = &x_elsewhere;
-  EXPECT_EQ(refused(c), "X: on device 1, but the resources are on device 0");
-  c = base;
-  c.out = nullptr;
-  EXPECT_EQ(refused(c), "out is NULL");
-  c = base;
-  c.out_dtype = RR_DTYPE_FLOAT32;
-  EXPECT_EQ(refused(c), "out-dtype: expected int32 or int64");
-  c = base;
-  c.metric = unknown_metric;
-  EXPECT_EQ(refused(c), "metric: expected euclidean, cosine or precomputed");
-  c.metric = -1;
-  EXPECT_EQ(refused(c), "metric: expected euclidean, cosine or precomputed");
-  c = base;
-  c.x = &x_rank1;
-  EXPECT_EQ(refused(c), "X: expected rank 2, got rank 1");
-  c.x = &x_col;
-  EXPECT_EQ(refused(c), "X: expected row-major, got col-major 10x2");
-  c.x = &x_no_rows;
-  EXPECT_EQ(refused(c), "X: expected at least 1 row, got 0");
-  c.x = &x_no_cols;
-  EXPECT_EQ(refused(c), "X: expected at least 1 column, got 0");
-  c = base;
-  c.metric = CUML_CLUSTER_DBSCAN_METRIC_PRECOMPUTED;
-  EXPECT_EQ(refused(c), "X: expected a square distance matrix, got 10x2");
-  c = base;
-  c.x = &x_square;
-  c.metric = CUML_CLUSTER_DBSCAN_METRIC_PRECOMPUTED;
-  c.eps = 0;
-  EXPECT_EQ(refused(c),
-            narrow ? "X: 46341x46341 elements do not fit int32 labels; use "
-                     "int64"
-                   : "eps: expected greater than 0, got 0");
-  c = base;
-  c.x = &x_int32_over;
-  c.max_mbytes_per_batch = forged_mbytes;
-  EXPECT_EQ(refused(c),
-            narrow ? "X: 2147483646 rows do not fit int32 labels; use int64"
-                   : "max-mbytes-per-batch: expected at least 38655 for "
-                     "2147483646 rows, got 30000");
-  c.x = &x_int32_most;
-  c.eps = 0;
-  EXPECT_EQ(refused(c), "eps: expected greater than 0, got 0");
-  c = base;
-  c.x = &x_over;
-  c.eps = 0;
-  EXPECT_EQ(refused(c), "X: expected at most 2147483647 rows, got 2147483648");
-  c.x = &x_most;
-  EXPECT_EQ(refused(c),
-            narrow ? "X: 2147483647 rows do not fit int32 labels; use int64"
-                   : "eps: expected greater than 0, got 0");
-  c = base;
-  c.sample_weight = &w_other;
-  EXPECT_EQ(refused(c), "sample-weight: expected " + t + ", got " + u);
-  c.sample_weight = &w_short;
-  EXPECT_EQ(refused(c), "sample-weight: expected 10 elements, got 9");
-  c.sample_weight = &w_rank2;
-  EXPECT_EQ(refused(c), "sample-weight: expected rank 1, got rank 2");
-  c.sample_weight = &w_strided;
-  EXPECT_EQ(refused(c),
-            "sample-weight: expected contiguous elements, got stride 2");
-  c = base;
-  c.eps = 0;
-  EXPECT_EQ(refused(c), "eps: expected greater than 0, got 0");
-  c.eps = -0.0;
-  EXPECT_EQ(refused(c), "eps: expected greater than 0, got 0");
-  c.eps = -1;
-  EXPECT_EQ(refused(c), "eps: expected greater than 0, got -1");
-  c.eps = std::numeric_limits<double>::quiet_NaN();
-  EXPECT_EQ(refused(c), "eps: expected greater than 0, got nan");
-  c.eps = std::numeric_limits<double>::infinity();
-  EXPECT_EQ(refused(c),
-            std::string("eps: expected at most ") +
-                (std::is_same_v<T, float> ? "3.4028234663852886e+38"
-                                          : "1.7976931348623157e+308") +
-                ", got inf");
-  c.eps = tiny;
+  const std::string eps_zero = "eps: expected greater than 0, got 0";
+  const std::string metric_message =
+      "metric: expected euclidean, cosine or precomputed";
+  const std::string out_dtype_message = "out-dtype: expected int32 or int64";
+  const std::string not_float = "X: expected float32 or float64, got int32";
+  const std::string w_short_message =
+      "sample-weight: expected 10 elements, got 9";
+  const std::string min_samples_message =
+      "min-samples: expected at least 1, got 0";
+  std::vector<refusal> cases{
+      {{.x = &x_int, .out = o, .out_dtype = d}, not_float},
+      {{.x = &x_elsewhere, .out = o, .out_dtype = d},
+       "X: on device 1, but the resources are on device 0"},
+      {{.x = x, .out = nullptr, .out_dtype = d}, "out is NULL"},
+      {{.x = x, .out = o, .out_dtype = RR_DTYPE_FLOAT32}, out_dtype_message},
+      {{.x = x, .out = o, .metric = unknown_metric, .out_dtype = d},
+       metric_message},
+      {{.x = x, .out = o, .metric = -1, .out_dtype = d}, metric_message},
+      {{.x = &x_rank1, .out = o, .out_dtype = d},
+       "X: expected rank 2, got rank 1"},
+      {{.x = &x_col, .out = o, .out_dtype = d},
+       "X: expected row-major, got col-major 10x2"},
+      {{.x = &x_no_rows, .out = o, .out_dtype = d},
+       "X: expected at least 1 row, got 0"},
+      {{.x = &x_no_cols, .out = o, .out_dtype = d},
+       "X: expected at least 1 column, got 0"},
+      {{.x = x, .out = o, .metric = precomputed, .out_dtype = d},
+       "X: expected a square distance matrix, got 10x2"},
+      {{.x = &x_square,
+        .out = o,
+        .eps = 0,
+        .metric = precomputed,
+        .out_dtype = d},
+       narrow ? "X: 46341x46341 elements do not fit int32 labels; use int64"
+              : eps_zero},
+      {{.x = &x_int32_over,
+        .out = o,
+        .out_dtype = d,
+        .max_mbytes_per_batch = forged_mbytes},
+       narrow ? "X: 2147483646 rows do not fit int32 labels; use int64"
+              : "max-mbytes-per-batch: expected at least 38655 for "
+                "2147483646 rows, got 30000"},
+      {{.x = &x_int32_most,
+        .out = o,
+        .eps = 0,
+        .out_dtype = d,
+        .max_mbytes_per_batch = forged_mbytes},
+       eps_zero},
+      {{.x = &x_over, .out = o, .eps = 0, .out_dtype = d},
+       "X: expected at most 2147483647 rows, got 2147483648"},
+      {{.x = &x_most, .out = o, .eps = 0, .out_dtype = d},
+       narrow ? "X: 2147483647 rows do not fit int32 labels; use int64"
+              : eps_zero},
+      {{.x = x, .sample_weight = &w_other, .out = o, .out_dtype = d},
+       "sample-weight: expected " + t + ", got " + u},
+      {{.x = x, .sample_weight = &w_short, .out = o, .out_dtype = d},
+       w_short_message},
+      {{.x = x, .sample_weight = &w_rank2, .out = o, .out_dtype = d},
+       "sample-weight: expected rank 1, got rank 2"},
+      {{.x = x, .sample_weight = &w_strided, .out = o, .out_dtype = d},
+       "sample-weight: expected contiguous elements, got stride 2"},
+      {{.x = x, .out = o, .eps = 0, .out_dtype = d}, eps_zero},
+      {{.x = x, .out = o, .eps = -0.0, .out_dtype = d}, eps_zero},
+      {{.x = x, .out = o, .eps = -1, .out_dtype = d},
+       "eps: expected greater than 0, got -1"},
+      {{.x = x, .out = o, .eps = -huge, .out_dtype = d},
+       "eps: expected greater than 0, got -1e+300"},
+      {{.x = x, .out = o, .eps = nan, .out_dtype = d},
+       "eps: expected greater than 0, got nan"},
+      {{.x = x, .out = o, .eps = inf, .out_dtype = d},
+       "eps: expected at most " + most_text<T>() + ", got inf"},
+      {{.x = x, .out = o, .min_samples = 0, .out_dtype = d},
+       min_samples_message},
+      {{.x = x, .out = o, .out_dtype = d, .max_mbytes_per_batch = -1},
+       "max-mbytes-per-batch: expected at least 0, got -1"},
+      {{.x = x,
+        .out = o,
+        .out_dtype = d,
+        .max_mbytes_per_batch = most_mbytes + 1},
+       "max-mbytes-per-batch: expected at most 18446744073709, got "
+       "18446744073710"},
+      {{.x = &x_crashing, .out = o, .out_dtype = d, .max_mbytes_per_batch = 1},
+       std::string("max-mbytes-per-batch: expected at least ") +
+           (narrow ? "2" : "3") + " for 150000 rows, got 1"},
+      {{.x = x, .out = o, .eps = 0, .min_samples = 0, .out_dtype = d},
+       eps_zero},
+      {{.x = &x_int, .out = o, .out_dtype = RR_DTYPE_FLOAT32}, not_float},
+      {{.x = x,
+        .out = o,
+        .metric = unknown_metric,
+        .out_dtype = RR_DTYPE_FLOAT32},
+       out_dtype_message},
+      {{.x = &x_rank1, .out = o, .metric = unknown_metric, .out_dtype = d},
+       metric_message},
+      {{.x = x, .sample_weight = &w_short, .out = o, .eps = 0, .out_dtype = d},
+       w_short_message},
+      {{.x = x,
+        .out = o,
+        .min_samples = 0,
+        .out_dtype = d,
+        .max_mbytes_per_batch = -1},
+       min_samples_message}};
   if (std::is_same_v<T, float>) {
-    EXPECT_EQ(refused(c), "eps: expected greater than 0, got 1e-50");
-    c.eps = huge;
-    EXPECT_EQ(refused(c),
-              "eps: expected at most 3.4028234663852886e+38, got 1e+300");
+    cases.push_back({{.x = x, .out = o, .eps = tiny, .out_dtype = d},
+                     "eps: expected greater than 0, got 1e-50"});
+    cases.push_back(
+        {{.x = x, .out = o, .eps = huge, .out_dtype = d},
+         "eps: expected at most " + most_text<T>() + ", got 1e+300"});
   }
-  c = base;
-  c.min_samples = 0;
-  EXPECT_EQ(refused(c), "min-samples: expected at least 1, got 0");
-  c = base;
-  c.max_mbytes_per_batch = -1;
-  EXPECT_EQ(refused(c), "max-mbytes-per-batch: expected at least 0, got -1");
-  c.max_mbytes_per_batch = most_mbytes + 1;
-  EXPECT_EQ(refused(c),
-            "max-mbytes-per-batch: expected at most 18446744073709, got "
-            "18446744073710");
-  c = base;
-  c.x = &x_crashing;
-  c.max_mbytes_per_batch = 1;
-  EXPECT_EQ(refused(c),
-            std::string("max-mbytes-per-batch: expected at least ") +
-                (narrow ? "2" : "3") + " for 150000 rows, got 1");
-  c = base;
-  c.min_samples = 0;
-  c.eps = 0;
-  EXPECT_EQ(refused(c), "eps: expected greater than 0, got 0");
-  c = base;
-  c.x = &x_int;
-  c.out_dtype = RR_DTYPE_FLOAT32;
-  EXPECT_EQ(refused(c), "X: expected float32 or float64, got int32");
-  c = base;
-  c.out_dtype = RR_DTYPE_FLOAT32;
-  c.metric = unknown_metric;
-  EXPECT_EQ(refused(c), "out-dtype: expected int32 or int64");
-  c = base;
-  c.metric = unknown_metric;
-  c.x = &x_rank1;
-  EXPECT_EQ(refused(c), "metric: expected euclidean, cosine or precomputed");
-  c = base;
-  c.sample_weight = &w_short;
-  c.eps = 0;
-  EXPECT_EQ(refused(c), "sample-weight: expected 10 elements, got 9");
-  c = base;
-  c.min_samples = 0;
-  c.max_mbytes_per_batch = -1;
-  EXPECT_EQ(refused(c), "min-samples: expected at least 1, got 0");
+  for (const refusal& c : cases) {
+    const std::string status = dbscan(res, c.call);
+    EXPECT_EQ(status, c.message);
+    EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << status;
+    EXPECT_EQ(meter.peak(), 0) << status;
+    expect_untouched(out);
+  }
 }
 
 template <typename T>

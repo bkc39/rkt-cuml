@@ -9,15 +9,15 @@
 
 namespace cumlrkt::test {
 
-constexpr double call_eps = 0.5;
-constexpr int32_t call_min_samples = 5;
+constexpr double baseline_eps = 1.25;
+constexpr int32_t baseline_min_samples = 3;
 
 struct dbscan_call {
   const rr_view* x = nullptr;
   const rr_view* sample_weight = nullptr;
   rr_deposit* out = nullptr;
-  double eps = call_eps;
-  int32_t min_samples = call_min_samples;
+  double eps = baseline_eps;
+  int32_t min_samples = baseline_min_samples;
   int32_t metric = CUML_CLUSTER_DBSCAN_METRIC_EUCLIDEAN;
   int32_t out_dtype = RR_DTYPE_INT32;
   int64_t max_mbytes_per_batch = 0;

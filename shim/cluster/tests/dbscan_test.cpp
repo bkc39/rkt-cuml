@@ -264,8 +264,8 @@ TEST(Dbscan, CosineWiderThanTall) {
 
 template <typename T>
 bool check_cosine_eps(double eps) {
-  const T target = cluster::detail::cosine_target<T>(eps);
-  const T e = cluster::detail::cosine_eps<T>(eps);
+  const T target = cluster::cosine_target<T>(eps);
+  const T e = cluster::cosine_eps<T>(eps);
   const T prev = std::nextafter(e, T{0});
   const T inf = std::numeric_limits<T>::infinity();
   const T one_step = std::nextafter(target, inf);

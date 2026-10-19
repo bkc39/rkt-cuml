@@ -50,4 +50,4 @@
  (dbscan #:eps #:min-samples #:metric #:out-dtype #:max-mbytes-per-batch #:resources)
  #:names parameter-names
  #:defaults defaults
- (lambda (params) (dbscan* params #f)))
+ dbscan*)

@@ -2,8 +2,13 @@
 
 (require (for-syntax racket/base
                      (only-in racket/syntax format-id)
-                     ;; whole-module: its syntax classes come with it
-                     syntax/parse/pre)
+                     (only-in syntax/parse/pre ...+
+                              ~seq
+                              define-splicing-syntax-class
+                              expr
+                              id
+                              keyword
+                              pattern))
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide define/who)

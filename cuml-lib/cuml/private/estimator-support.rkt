@@ -2,8 +2,16 @@
 
 (require (for-syntax racket/base
                      (only-in racket/syntax format-id)
-                     ;; whole-module: its syntax classes come with it
-                     syntax/parse/pre)
+                     (only-in syntax/parse/pre
+                              ~and
+                              ~not
+                              ~optional
+                              ~seq
+                              define-splicing-syntax-class
+                              expr
+                              id
+                              keyword
+                              pattern))
          (only-in cuml/core exn:fail:cuml)
          (only-in racket/string string-append*)
          (only-in raft current-device-resources)
@@ -59,8 +67,8 @@
 (define-syntax-parse-rule (define-constructor (constructor:id p:parameter ...)
                                               #:names names:id
                                               #:defaults defaults:expr
-                                              make:expr)
+                                              struct-constructor:id)
   (begin
     (define names '(p.name ...))
     (define (constructor (~@ p.keyword [p.name (~? p.default (hash-ref defaults 'p.name))]) ...)
-      (make (hasheq (~@ 'p.name p.name) ...)))))
+      (struct-constructor (hasheq (~@ 'p.name p.name) ...) #f))))

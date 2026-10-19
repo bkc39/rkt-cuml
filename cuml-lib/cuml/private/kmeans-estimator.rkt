@@ -107,4 +107,4 @@
                             #:resources)
                     #:names parameter-names
                     #:defaults defaults
-                    (lambda (params) (kmeans* params #f)))
+                    kmeans*)

@@ -197,7 +197,7 @@ each cluster's smallest core sample; and the indices of the core samples in
 ascending order. Both are of the @racket[out-dtype].}
 
 @defproc[(dbscan-fit [X device-matrix?]
-                     [#:eps eps (and/c real? (>/c 0)) 0.5]
+                     [#:eps eps (and/c real? (>/c 0) (</c +inf.0)) 0.5]
                      [#:min-samples min-samples exact-positive-integer? 5]
                      [#:metric metric (or/c 'euclidean 'cosine 'precomputed) 'euclidean]
                      [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]
@@ -219,18 +219,18 @@ noise.
 
 With @racket['precomputed], @racket[X] is a square matrix of distances, row
 @racket[i] from sample @racket[i]. @racket['cosine] distance is one minus the
-cosine similarity, and @racket[X] is not modified: the fit runs as euclidean
-DBSCAN on a copy of @racket[X] scaled to unit rows in @racket[X]'s dtype.
-A pair at cosine distance exactly @racket[eps] is included when the unit rows
-are exact in the dtype, as one-hot rows are. At @racket[eps] 2 or more every
-pair is included. Otherwise, as with any floating-point DBSCAN, pairs whose
-distance is close to @racket[eps] may fall on either side; the tolerance is
-relative and grows with the number of columns, about 10^-5 at 1024
-@racket['float32] columns. A row with a NaN or an infinity is noise.
+cosine similarity. A row with a NaN or an infinity is noise.
 @racket[max-mbytes-per-batch] bounds, in units of 10^6
 bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[0] sizes the batch from the device's memory. The outputs live on
 @racket[resources].
+
+@bold{Cosine boundary.} The fit runs on a unit-row copy of @racket[X] in its
+dtype. A pair at distance exactly @racket[eps] is included when those rows are
+exact, as one-hot rows are, and every pair is included at @racket[eps] 2 or
+more. Otherwise a pair within a relative 10^-5 of @racket[eps], at 1024
+@racket['float32] columns, may fall on either side, and the tolerance grows
+with the number of columns.
 
 Weights count towards @racket[min-samples]:
 
@@ -271,38 +271,31 @@ The labels and indices take the @racket[out-dtype]:
 @racket['logic], leaving nothing allocated, when:
 @itemlist[
  @item{@racket[X] is not a row-major @racket['float32] or @racket['float64]
-       matrix with at least one row and one column, or with
-       @racket['precomputed] is not square;}
- @item{@racket[out-dtype] is not @racket['int32] or @racket['int64], or
-       @racket[metric] is not one of the three names;}
- @item{@racket[X] has more than 2^31-1 rows, at either @racket[out-dtype],
-       or @racket['int32] labels cannot index @racket[X]'s elements, past
-       2^31-1 of them, or its rows, past 2^31-3: @tt{X: expected at most
-       2147483647 rows, got 2147483648}, @tt{X: 46341x46341 elements do not
-       fit int32 labels; use int64}, @tt{X: 2147483646 rows do not fit int32
-       labels; use int64};}
+       matrix with a row and a column, or with @racket['precomputed] is not
+       square;}
+ @item{@racket[out-dtype] or @racket[metric] is not one of its names;}
+ @item{@racket[X] has more than 2^31-1 rows, or too many elements or rows
+       for @racket['int32] labels: @tt{X: expected at most 2147483647 rows,
+       got 2147483648}, @tt{X: 46341x46341 elements do not fit int32 labels;
+       use int64}, @tt{X: 2147483646 rows do not fit int32 labels; use
+       int64};}
  @item{@racket[sample-weight] is not a vector of @racket[X]'s dtype with one
        element per row;}
- @item{@racket[eps] is not greater than 0 in @racket[X]'s dtype, NaN
-       included, or is more than the dtype's largest value, @racket[+inf.0]
-       included: @tt{eps: expected at most 3.4028234663852886e+38, got
-       1e+300} for @racket['float32];}
+ @item{@racket[eps] is NaN, not greater than 0 in @racket[X]'s dtype, or
+       past its largest value: @tt{eps: expected at most
+       3.4028234663852886e+38, got 1e+300};}
  @item{@racket[min-samples] is less than 1;}
- @item{@racket[max-mbytes-per-batch] is negative, or more than
-       18446744073709, past which its bytes overflow;}
- @item{the batch holds no row, where cuML would kill the process with a
-       division by zero. A batch over @racket[n] rows with labels of
-       @racket[s] bytes needs at least
-       ⌈(@racket[n](2@racket[s]+2)+2@racket[s])/10^6⌉, so 150000 rows with
-       @racket['int32] labels need 2: @tt{max-mbytes-per-batch: expected at
-       least 2 for 150000 rows, got 1}. With @racket[#f] or @racket[0], cuML
-       sizes the batch from 80% of the device's total memory less the size
-       of @racket[X], which a large enough @racket[X] leaves too small:
+ @item{@racket[max-mbytes-per-batch] is negative or more than
+       18446744073709;}
+ @item{a batch would hold no row, where cuML divides by zero: @racket[n]
+       rows with @racket[s]-byte labels need
+       ⌈(@racket[n](2@racket[s]+2)+2@racket[s])/10^6⌉, @tt{max-mbytes-per-batch:
+       expected at least 2 for 150000 rows, got 1}, and with @racket[#f] or
+       @racket[0] a large @racket[X] can leave the automatic size too small,
        @tt{max-mbytes-per-batch: the automatic size holds no batch of 69000
        rows; pass at least 2};}
- @item{with @racket['cosine], a row of @racket[X] is all zeros,
-       @racket[-0.0] included: @tt{X: row 2 is zero, so no cosine
-       distance}.}]
+ @item{with @racket['cosine], a row of @racket[X] is all zeros:
+       @tt{X: row 2 is zero, so no cosine distance}.}]
 An @racket[X] or @racket[sample-weight] that is not a device array, or
 @racket[resources] that were released, raises raft's @racket[exn:fail:raft]
 naming the procedure, and a number argument that does not fit the native type,

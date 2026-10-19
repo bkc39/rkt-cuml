@@ -4,8 +4,7 @@
          (only-in racket/list remove-duplicates)
          (only-in racket/match match)
          (only-in racket/math sqr)
-         (only-in raft device-vector->list list*->device-matrix list->device-vector)
-         (only-in "fitted.rkt" fitted))
+         (only-in raft device-vector->list list*->device-matrix list->device-vector))
 
 (provide (struct-out expected)
          canonical
@@ -23,8 +22,8 @@
          grid-weights
          grid-weighted-core
          integer-grid
-         labels-at
          mat
+         pick
          repeat-rows
          result->lists
          same-partition?
@@ -50,10 +49,10 @@
   (list (device-vector->list (dbscan-result-labels r))
         (device-vector->list (dbscan-result-core-sample-indices r))))
 
-(define fitted-lists (fitted dbscan-fit (lambda (run) (result->lists (run)))))
+(define fitted-lists (compose1 result->lists dbscan-fit))
 
-(define (labels-at labels indices)
-  (define at (list->vector labels))
+(define (pick xs indices)
+  (define at (list->vector xs))
   (for/list ([i (in-list indices)])
     (vector-ref at i)))
 
@@ -143,7 +142,7 @@
             options))
 
 (define (canonical labels indices)
-  (define picked (labels-at labels indices))
+  (define picked (pick labels indices))
   (define names
     (for/hash ([l (in-list (remove-duplicates picked))]
                [k (in-naturals)])
@@ -167,7 +166,7 @@
 
 (define (structure-problems labels core)
   (define k (add1 (apply max -1 labels)))
-  (define core-labels (labels-at labels core))
+  (define core-labels (pick labels core))
   (define first-core
     (for/list ([c (in-range k)])
       (for/first ([i (in-list core)]

@@ -243,9 +243,8 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `process-memory` | `pool-sample`, `baseline-sample`, `test-process-memory`, `device-slack`, ... (the memory tests' sampling) |
 | `device-memory` | `process-device-bytes`, `no-process-memory-reason`, `process-memory-skip` |
 | `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions, weights, blank arrays) and tolerances (`tolerance`, `close?`, `scaled-close?`) |
-| `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical`, `same-partition?`, `labels-at` and `fitted-lists` |
-| `fitted` | `fitted proc finish #:kw v ...`: a keyword procedure that calls `proc` with the fixed and the given keywords and hands `finish` the call as a thunk (`values` keeps it deferred) |
-| `estimator-data` | `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
+| `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical`, `same-partition?`, `pick` (the elements at a list of indices) and `fitted-lists` (`dbscan-fit` composed with `result->lists`) |
+| `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin` |
 
 Every SKIP line the GPU suite allows matches one ERE in

@@ -1,14 +1,20 @@
 #lang racket/base
 
 (require (for-syntax racket/base
-                     ;; whole-module: its syntax classes come with it
-                     syntax/parse/pre)
+                     (only-in racket/syntax format-id)
+                     (only-in syntax/parse/pre define-syntax-class expr id pattern))
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide define-defaults)
 
-(define-syntax-parse-rule (define-defaults table:id accessor:id [name:id value:expr] ...)
+(begin-for-syntax
+  (define-syntax-class entry
+    #:attributes (name value)
+    (pattern [name:id value:expr])))
+
+(define-syntax-parse-rule (define-defaults table:id e:entry ...)
+  #:with default (format-id #'table "default")
   (begin
-    (define table (hasheq (~@ 'name value) ...))
-    (define (accessor key)
+    (define table (hasheq (~@ 'e.name e.value) ...))
+    (define (default key)
       (hash-ref table key))))

@@ -27,7 +27,6 @@
 (struct kmeans-result (centroids labels inertia n-iter))
 
 (define-defaults kmeans-defaults
-                 default
                  (init 'scalable-k-means++)
                  [n-clusters 8]
                  [max-iter 300]

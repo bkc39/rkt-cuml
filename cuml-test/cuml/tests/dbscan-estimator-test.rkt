@@ -27,7 +27,7 @@
                   mat
                   result->lists
                   vec)
-         (only-in "private/estimator-data.rkt" round-trips)
+         (only-in "private/estimator-data.rkt" apply-options round-trips)
          (only-in "private/kmeans-data.rkt" dtypes))
 
 (define changed
@@ -92,11 +92,10 @@
         (result->lists (dbscan-model (fit e X #:sample-weight (vec grid-weights dt)))))
       (check-equal? weighted-core grid-weighted-core)
       (define Y (mat (integer-grid 300 2 20 3) dt))
-      (define kws '(#:eps #:max-mbytes-per-batch #:min-samples #:out-dtype))
-      (define vals '(1.5 1 4 int64))
-      (check-equal? (device-vector->list (fit-predict (keyword-apply dbscan kws vals '()) Y))
+      (define options (hasheq 'eps 1.5 'max-mbytes-per-batch 1 'min-samples 4 'out-dtype 'int64))
+      (check-equal? (device-vector->list (fit-predict (apply-options dbscan options) Y))
                     (device-vector->list (dbscan-result-labels
-                                          (keyword-apply dbscan-fit kws vals (list Y))))))))
+                                          (apply-options dbscan-fit options Y)))))))
 
 (test-gpu "L19: errors are named after the generic that was called"
   (define X (mat grid-rows 'float64))
