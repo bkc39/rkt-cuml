@@ -5,7 +5,6 @@
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/match == match match* match-define)
-         ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list*)

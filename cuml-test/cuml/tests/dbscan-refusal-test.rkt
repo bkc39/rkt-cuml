@@ -4,7 +4,7 @@
          (only-in cuml/cluster dbscan-fit)
          (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/flonum fl-)
-         (only-in racket/match match)
+         (only-in racket/match match match-define)
          (only-in racket/port port->string)
          (only-in rackunit check-equal? check-exn fail test-case)
          (only-in raft
@@ -16,6 +16,7 @@
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/fitted.rkt" fitted)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes))
 
 (struct row (id message call))
@@ -30,13 +31,19 @@
                           (list (add1 i) (* 2 i)))
                         #:dtype dt))
 
+(define (unnormable row dt)
+  (list*->device-matrix (list '(1 1) '(2 2) row '(3 3)) #:dtype dt))
+
+(define unnormable-message "X: row 2 has a norm outside float range, so no cosine distance")
+
 (define (fit-rows dt out)
   (define u (other dt))
   (define X (grid dt))
-  (define fit
-    (make-keyword-procedure (lambda (kws vals samples)
-                              (lambda ()
-                                (keyword-apply dbscan-fit kws vals (list samples) #:out-dtype out)))))
+  (define fit (fitted dbscan-fit values #:out-dtype out))
+  (match-define (list most past past-text)
+    (match dt
+      ['float32 (list "3.4028234663852886e+38" 1e300 "1e+300")]
+      ['float64 (list "1.7976931348623157e+308" +inf.0 "inf")]))
   (list
    (row "D0" "X: expected float32 or float64, got int32" (fit (blank-matrix 10 2 'int32)))
    (row "D1" "out-dtype: expected int32 or int64" (lambda () (dbscan-fit X #:out-dtype 'float32)))
@@ -62,15 +69,20 @@
    (row "D9 -0" "eps: expected greater than 0, got 0" (fit X #:eps -0.0))
    (row "D9 nan" "eps: expected greater than 0, got nan" (fit X #:eps +nan.0))
    (row "D9 -nan" "eps: expected greater than 0, got nan" (fit X #:eps (fl- +inf.0 +inf.0)))
+   (row "D9 inf" (format "eps: expected at most ~a, got inf" most) (fit X #:eps +inf.0))
+   (row "D9 past the dtype's largest"
+        (format "eps: expected at most ~a, got ~a" most past-text)
+        (fit X #:eps past))
    (row "D10" "min-samples: expected at least 1, got 0" (fit X #:min-samples 0))
    (row "D10 negative" "min-samples: expected at least 1, got -3" (fit X #:min-samples -3))
    (row "D11" "max-mbytes-per-batch: expected at least 0, got -1" (fit X #:max-mbytes-per-batch -1))
    (row "D12"
         "max-mbytes-per-batch: expected at most 18446744073709, got 18446744073710"
         (fit X #:max-mbytes-per-batch 18446744073710))
-   (row "D14"
-        "X: row 2 has norm 0, so no cosine distance"
-        (fit (list*->device-matrix '((1 1) (2 2) (0 0) (3 3)) #:dtype dt) #:metric 'cosine))
+   (row "D14" unnormable-message (fit (unnormable '(0 0) dt) #:metric 'cosine))
+   (row "D14 -0" unnormable-message (fit (unnormable '(-0.0 -0.0) dt) #:metric 'cosine))
+   (row "D14 overflow" unnormable-message (fit (unnormable '(1e20 0) dt) #:metric 'cosine))
+   (row "D14 underflow" unnormable-message (fit (unnormable '(1e-160 1e-160) dt) #:metric 'cosine))
    (row "D0 before D1"
         "X: expected float32 or float64, got int32"
         (lambda () (dbscan-fit (blank-matrix 10 2 'int32) #:out-dtype 'float32)))
@@ -89,9 +101,7 @@
         (fit X #:min-samples 0 #:max-mbytes-per-batch -1))
    (row "D12 before D14"
         "max-mbytes-per-batch: expected at most 18446744073709, got 18446744073710"
-        (fit (list*->device-matrix '((1 1) (2 2) (0 0) (3 3)) #:dtype dt)
-             #:metric 'cosine
-             #:max-mbytes-per-batch 18446744073710))))
+        (fit (unnormable '(0 0) dt) #:metric 'cosine #:max-mbytes-per-batch 18446744073710))))
 
 (test-gpu "dbscan-fit refuses each bad argument with its message, at both dtypes and both out-dtypes"
   (for* ([dt (in-list dtypes)]

@@ -12,6 +12,7 @@
          (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
          (only-in "estimator-support.rkt"
                   call-with-params
+                  define-constructor
                   logic-error
                   params->string
                   resources-of
@@ -21,18 +22,7 @@
          kmeans?
          kmeans-model)
 
-(define parameter-names
-  '(init n-clusters
-         max-iter
-         tol
-         n-init
-         random-state
-         oversampling-factor
-         max-samples-per-batch
-         resources))
-
-(define (default name)
-  (hash-ref kmeans-defaults name))
+(define defaults (hash-set kmeans-defaults 'resources #f))
 
 (define (fitted-model who e X sample-weight)
   (call-with-params kmeans-fit/who who X (kmeans-params e) (hasheq 'sample-weight sample-weight)))
@@ -59,11 +49,11 @@
 
 (define (kmeans->string e)
   (define params (kmeans-params e))
-  (define defaults
-    (hash-set (kmeans-params (kmeans))
+  (define shown-defaults
+    (hash-set defaults
               'n-clusters
-              (init-rows (hash-ref params 'init) (default 'n-clusters))))
-  (params->string 'kmeans parameter-names params defaults (and (kmeans-model e) #t)))
+              (init-rows (hash-ref params 'init) (hash-ref defaults 'n-clusters))))
+  (params->string 'kmeans parameter-names params shown-defaults (and (kmeans-model e) #t)))
 
 (struct kmeans (params model)
   #:constructor-name kmeans*
@@ -106,24 +96,15 @@
   [(define (write-proc e port _mode)
      (write-string (kmeans->string e) port))])
 
-(define (kmeans #:init (init (default 'init))
-                #:n-clusters [n-clusters (init-rows init (default 'n-clusters))]
-                #:max-iter [max-iter (default 'max-iter)]
-                #:tol [tol (default 'tol)]
-                #:n-init [n-init (default 'n-init)]
-                #:random-state [random-state (default 'random-state)]
-                #:oversampling-factor [oversampling-factor (default 'oversampling-factor)]
-                #:max-samples-per-batch [max-samples-per-batch (default 'max-samples-per-batch)]
-                #:resources [resources #f])
-  (kmeans* (for/hasheq ([name (in-list parameter-names)]
-                        [value (in-list (list init
-                                              n-clusters
-                                              max-iter
-                                              tol
-                                              n-init
-                                              random-state
-                                              oversampling-factor
-                                              max-samples-per-batch
-                                              resources))])
-             (values name value))
-           #f))
+(define-constructor (kmeans #:init init
+                            #:n-clusters [n-clusters (init-rows init (hash-ref defaults 'n-clusters))]
+                            #:max-iter max-iter
+                            #:tol tol
+                            #:n-init n-init
+                            #:random-state random-state
+                            #:oversampling-factor oversampling-factor
+                            #:max-samples-per-batch max-samples-per-batch
+                            #:resources resources)
+                    #:names parameter-names
+                    #:defaults defaults
+                    (lambda (params) (kmeans* params #f)))

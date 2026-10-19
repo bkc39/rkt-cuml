@@ -1,10 +1,15 @@
 #lang racket/base
 
-(require (only-in cuml/core exn:fail:cuml)
+(require (for-syntax racket/base
+                     ;; whole-module: its syntax classes come with it
+                     syntax/parse/pre)
+         (only-in cuml/core exn:fail:cuml)
          (only-in racket/string string-append*)
-         (only-in raft current-device-resources))
+         (only-in raft current-device-resources)
+         (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide call-with-params
+         define-constructor
          logic-error
          params->string
          resources-of
@@ -42,3 +47,21 @@
                  (map name->keyword names)
                  (map (lambda (name) (hash-ref arguments name)) names)
                  (list who X)))
+
+(begin-for-syntax
+  (define-splicing-syntax-class parameter
+                                #:attributes (keyword name default)
+                                (pattern (~seq keyword:keyword (~or* name:id [name:id default:expr]))
+                                  #:fail-unless
+                                  (equal? (keyword->string (syntax-e #'keyword))
+                                          (symbol->string (syntax-e #'name)))
+                                  "expected the parameter to be named after its keyword")))
+
+(define-syntax-parse-rule (define-constructor (constructor:id p:parameter ...)
+                                              #:names names:id
+                                              #:defaults defaults:expr
+                                              make:expr)
+  (begin
+    (define names '(p.name ...))
+    (define (constructor (~@ p.keyword [p.name (~? p.default (hash-ref defaults 'p.name))]) ...)
+      (make (hasheq (~@ 'p.name p.name) ...)))))

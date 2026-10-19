@@ -50,6 +50,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/estimator-data.rkt" round-trips)
          (only-in "private/kmeans-data.rkt"
                   blank-matrix
                   blob-data
@@ -67,27 +68,16 @@
                   tolerance
                   vec))
 
-(define default-params
-  (hasheq 'init 'scalable-k-means++
-          'n-clusters 8
-          'max-iter 300
-          'tol 1e-4
-          'n-init 'auto
-          'random-state 0
-          'oversampling-factor 2.0
-          'max-samples-per-batch 32768
-          'resources #f))
-
-(define round-trips
-  (list (list '#:init 'init 'random)
-        (list '#:n-clusters 'n-clusters 3)
-        (list '#:max-iter 'max-iter 10)
-        (list '#:tol 'tol 0.5)
-        (list '#:n-init 'n-init 2)
-        (list '#:random-state 'random-state 7)
-        (list '#:oversampling-factor 'oversampling-factor 1.5)
-        (list '#:max-samples-per-batch 'max-samples-per-batch 64)
-        (list '#:resources 'resources 'some-resources)))
+(define changed
+  (hasheq 'init 'random
+          'n-clusters 3
+          'max-iter 10
+          'tol 0.5
+          'n-init 2
+          'random-state 7
+          'oversampling-factor 1.5
+          'max-samples-per-batch 64
+          'resources 'some-resources))
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
@@ -99,17 +89,9 @@
 (define (grid8-fit [dt 'float64])
   (fit (kmeans #:n-clusters 2 #:random-state 1) (mat grid8 dt)))
 
-(test-case "K1: the default parameters, and every keyword round-trips"
-  (check-equal? (estimator-params (kmeans)) default-params)
-  (for ([r (in-list round-trips)])
-    (match-define (list kw key value) r)
-    (check-equal? (hash-ref (estimator-params (keyword-apply kmeans (list kw) (list value) '())) key)
-                  value
-                  (format "~a" kw))))
-
-(test-case "K1: the estimator's defaults are leg 1's"
-  (for ([(name value) (in-hash kmeans-defaults)])
-    (check-equal? (hash-ref (estimator-params (kmeans)) name) value (format "~a" name))))
+(test-case "K1: the defaults are leg 1's, and every keyword round-trips"
+  (check-equal? (estimator-params (kmeans)) (hash-set kmeans-defaults 'resources #f))
+  (check-equal? (round-trips kmeans changed) changed))
 
 (test-case "K2: an unknown parameter is refused, and an update is the constructor's"
   (check-cuml-error 'logic

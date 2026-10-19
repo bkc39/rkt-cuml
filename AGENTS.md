@@ -136,7 +136,11 @@ the families will follow once it lands.
 - [ ] The estimator wrapper in `cuml-lib/cuml/private/<algorithm>-estimator.rkt`
       (the `cuml/estimator` generics over the family's `/who` procedures,
       so errors name the generic), re-exported from `cuml/main.rkt`, its
-      bare name in `reserved-names` in `scripts/check-layout.rkt`.
+      bare name in `reserved-names` in `scripts/check-layout.rkt`. Each
+      algorithm's defaults are one `define-defaults` table (from
+      `cuml/cluster/private/defaults.rkt`), and the estimator's
+      constructor is a `define-constructor` (`private/estimator-support.rkt`),
+      whose keyword signature gives the parameter names and their order.
 - [ ] The family's package in the `pkg-deps` gate (`.racket-dev.rktd`).
 - [ ] A chapter in `cuml-doc` and its examples.
 - [ ] Tests in `cuml-test/cuml/tests/` (GPU smoke, memory, a Python twin in
@@ -239,7 +243,9 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `process-memory` | `pool-sample`, `baseline-sample`, `test-process-memory`, `device-slack`, ... (the memory tests' sampling) |
 | `device-memory` | `process-device-bytes`, `no-process-memory-reason`, `process-memory-skip` |
 | `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions, weights, blank arrays) and tolerances (`tolerance`, `close?`, `scaled-close?`) |
-| `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical` and `same-partition?` |
+| `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical`, `same-partition?`, `labels-at` and `fitted-lists` |
+| `fitted` | `fitted proc finish #:kw v ...`: a keyword procedure that calls `proc` with the fixed and the given keywords and hands `finish` the call as a thunk (`values` keeps it deferred) |
+| `estimator-data` | `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin` |
 
 Every SKIP line the GPU suite allows matches one ERE in

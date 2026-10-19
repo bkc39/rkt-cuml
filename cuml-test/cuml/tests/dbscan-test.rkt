@@ -8,6 +8,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/dbscan-data.rkt"
                   distance-matrix
+                  fitted-lists
                   grid-core
                   grid-labels
                   grid-rows
@@ -22,10 +23,6 @@
          (only-in "private/kmeans-data.rkt" dtypes))
 
 (define out-dtypes '(int32 int64))
-
-(define fitted
-  (make-keyword-procedure (lambda (kws vals X)
-                            (result->lists (keyword-apply dbscan-fit kws vals (list X))))))
 
 (define (fit-lists X #:eps eps #:min-samples min-samples #:metric [metric 'euclidean])
   (define lists (result->lists (dbscan-fit X #:eps eps #:min-samples min-samples #:metric metric)))
@@ -42,12 +39,13 @@
       (check-equal? (result->lists (dbscan-result labels core)) (list grid-labels grid-core))
       (check-equal? (list (shape labels) (dtype labels) (shape core) (dtype core))
                     (list '(8) out '(2) out))
-      (check-equal? (cadr (result->lists (dbscan-fit X
-                                                     #:eps 2
-                                                     #:min-samples 4
-                                                     #:out-dtype out
-                                                     #:sample-weight (vec grid-weights dt))))
-                    grid-weighted-core)
+      (match-define (list _ weighted-core)
+        (fitted-lists X
+                      #:eps 2
+                      #:min-samples 4
+                      #:out-dtype out
+                      #:sample-weight (vec grid-weights dt)))
+      (check-equal? weighted-core grid-weighted-core)
       (check-equal?
        (fit-lists (mat (distance-matrix grid-rows) dt) #:eps 2 #:min-samples 4 #:metric 'precomputed)
        (list grid-labels grid-core)))))
@@ -95,10 +93,11 @@
   (for* ([dt (in-list dtypes)]
          [out (in-list out-dtypes)])
     (test-case (format "~a ~a" dt out)
-      (check-equal? (fitted (mat '((0) (1) (5) (6) (10)) dt) #:eps 1 #:min-samples 1 #:out-dtype out)
-                    '((0 0 1 1 2) (0 1 2 3 4)))
+      (check-equal?
+       (fitted-lists (mat '((0) (1) (5) (6) (10)) dt) #:eps 1 #:min-samples 1 #:out-dtype out)
+       '((0 0 1 1 2) (0 1 2 3 4)))
       (define one (mat '((3)) dt))
-      (check-equal? (fitted one #:min-samples 1 #:out-dtype out) '((0) (0)))
+      (check-equal? (fitted-lists one #:min-samples 1 #:out-dtype out) '((0) (0)))
       (match-define (dbscan-result labels core) (dbscan-fit one #:min-samples 2 #:out-dtype out))
       (check-equal? (result->lists (dbscan-result labels core)) '((-1) ()))
       (check-equal? (list (shape core) (dtype core)) (list '(0) out)))))
@@ -138,16 +137,21 @@
          [bad (in-list '(+nan.0 +inf.0 -inf.0))])
     (test-case (format "~a ~a ~a" dt metric bad)
       (define eps (if (eq? metric 'cosine) 0.001 1.5))
-      (check-isolated
-       (fit-lists (mat rows dt) #:eps eps #:min-samples 3 #:metric metric)
-       (fitted (mat (insert-at rows k (list bad 1)) dt) #:eps eps #:min-samples 3 #:metric metric)
-       k)))
+      (check-isolated (fit-lists (mat rows dt) #:eps eps #:min-samples 3 #:metric metric)
+                      (fitted-lists (mat (insert-at rows k (list bad 1)) dt)
+                                    #:eps eps
+                                    #:min-samples 3
+                                    #:metric metric)
+                      k)))
   (for* ([dt (in-list dtypes)]
          [bad (in-list '(+nan.0 +inf.0))])
     (test-case (format "~a precomputed ~a" dt bad)
       (check-isolated
        (fit-lists (mat (distance-matrix rows) dt) #:eps 1.5 #:min-samples 3 #:metric 'precomputed)
-       (fitted (mat (precomputed-with rows k bad) dt) #:eps 1.5 #:min-samples 3 #:metric 'precomputed)
+       (fitted-lists (mat (precomputed-with rows k bad) dt)
+                     #:eps 1.5
+                     #:min-samples 3
+                     #:metric 'precomputed)
        k))))
 
 (test-gpu "L14: core indices ascend, labels run from -1 to k - 1, numbered by smallest core index"
@@ -157,4 +161,4 @@
           [min-samples (in-list '(2 4 7))])
       (match-define (list labels _) (fit-lists X #:eps eps #:min-samples min-samples))
       (check-equal? (length labels) 400)
-      (check-equal? (fitted X #:eps eps #:min-samples 401) (list (make-list 400 -1) '())))))
+      (check-equal? (fitted-lists X #:eps eps #:min-samples 401) (list (make-list 400 -1) '())))))

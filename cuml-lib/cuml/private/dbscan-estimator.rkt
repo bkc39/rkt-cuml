@@ -2,16 +2,15 @@
 
 (require (only-in cuml/cluster/private/dbscan dbscan-defaults dbscan-fit/who dbscan-result-labels)
          (only-in cuml/estimator gen:clusterer gen:estimator)
-         (only-in "estimator-support.rkt" call-with-params params->string updated-params))
+         (only-in "estimator-support.rkt"
+                  call-with-params
+                  define-constructor
+                  params->string
+                  updated-params))
 
 (provide dbscan
          dbscan?
          dbscan-model)
-
-(define parameter-names '(eps min-samples metric out-dtype max-mbytes-per-batch resources))
-
-(define (default name)
-  (hash-ref dbscan-defaults name))
 
 (define defaults (hash-set dbscan-defaults 'resources #f))
 
@@ -47,16 +46,12 @@
   [(define (write-proc e port _mode)
      (write-string (dbscan->string e) port))])
 
-(define (dbscan #:eps [eps (default 'eps)]
-                #:min-samples [min-samples (default 'min-samples)]
-                #:metric [metric (default 'metric)]
-                #:out-dtype [out-dtype (default 'out-dtype)]
-                #:max-mbytes-per-batch [max-mbytes-per-batch (default 'max-mbytes-per-batch)]
-                #:resources [resources #f])
-  (dbscan* (hasheq 'eps eps
-                   'min-samples min-samples
-                   'metric metric
-                   'out-dtype out-dtype
-                   'max-mbytes-per-batch max-mbytes-per-batch
-                   'resources resources)
-           #f))
+(define-constructor (dbscan #:eps eps
+                            #:min-samples min-samples
+                            #:metric metric
+                            #:out-dtype out-dtype
+                            #:max-mbytes-per-batch max-mbytes-per-batch
+                            #:resources resources)
+                    #:names parameter-names
+                    #:defaults defaults
+                    (lambda (params) (dbscan* params #f)))

@@ -4,6 +4,7 @@
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "define-who.rkt" define/who)
+         (only-in "defaults.rkt" define-defaults)
          (only-in "deposit.rkt" deposit-for)
          (only-in "native.rkt" cuml-cluster-dbscan-fit-job))
 
@@ -14,11 +15,13 @@
 
 (struct dbscan-result (labels core-sample-indices))
 
-(define dbscan-defaults
-  (hasheq 'eps 0.5 'min-samples 5 'metric 'euclidean 'out-dtype 'int32 'max-mbytes-per-batch #f))
-
-(define (default name)
-  (hash-ref dbscan-defaults name))
+(define-defaults dbscan-defaults
+                 default
+                 [eps 0.5]
+                 [min-samples 5]
+                 [metric 'euclidean]
+                 [out-dtype 'int32]
+                 [max-mbytes-per-batch #f])
 
 (define (metric-code metric)
   (match metric

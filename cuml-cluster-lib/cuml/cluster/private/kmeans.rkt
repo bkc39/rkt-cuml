@@ -4,6 +4,7 @@
          (only-in raft current-device-resources device-matrix? shape)
          (only-in raft/unsafe deposit->list)
          (only-in "define-who.rkt" define/who)
+         (only-in "defaults.rkt" define-defaults)
          (only-in "deposit.rkt" deposit-for)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job
@@ -25,18 +26,16 @@
 
 (struct kmeans-result (centroids labels inertia n-iter))
 
-(define kmeans-defaults
-  (hasheq 'init 'scalable-k-means++
-          'n-clusters 8
-          'max-iter 300
-          'tol 1e-4
-          'n-init 'auto
-          'random-state 0
-          'oversampling-factor 2.0
-          'max-samples-per-batch 32768))
-
-(define (default name)
-  (hash-ref kmeans-defaults name))
+(define-defaults kmeans-defaults
+                 default
+                 (init 'scalable-k-means++)
+                 [n-clusters 8]
+                 [max-iter 300]
+                 [tol 1e-4]
+                 [n-init 'auto]
+                 [random-state 0]
+                 [oversampling-factor 2.0]
+                 [max-samples-per-batch 32768])
 
 (define (init-rows init fallback)
   (cond

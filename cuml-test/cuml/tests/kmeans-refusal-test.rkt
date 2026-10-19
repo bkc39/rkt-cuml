@@ -12,6 +12,7 @@
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/fitted.rkt" fitted)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes))
 
 (struct row (id message call))
@@ -27,13 +28,8 @@
 (define (fit-rows dt)
   (define u (other dt))
   (define X (grid dt))
-  (define fit
-    (make-keyword-procedure (lambda (kws vals . args)
-                              (lambda () (keyword-apply kmeans-fit kws vals args)))))
-  (define fit3
-    (make-keyword-procedure (lambda (kws vals samples)
-                              (lambda ()
-                                (keyword-apply kmeans-fit kws vals (list samples) #:n-clusters 3)))))
+  (define fit (fitted kmeans-fit values))
+  (define fit3 (fitted kmeans-fit values #:n-clusters 3))
   (list
    (row "F1" "X: expected float32 or float64, got int32" (fit3 (blank-matrix 10 2 'int32)))
    (row "F2" "X: expected rank 2, got rank 1" (fit3 (blank-vector 10 dt)))

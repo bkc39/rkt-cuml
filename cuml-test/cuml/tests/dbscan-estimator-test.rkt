@@ -27,36 +27,23 @@
                   mat
                   result->lists
                   vec)
+         (only-in "private/estimator-data.rkt" round-trips)
          (only-in "private/kmeans-data.rkt" dtypes))
 
-(define default-params
-  (hasheq 'eps 0.5
-          'min-samples 5
-          'metric 'euclidean
-          'out-dtype 'int32
-          'max-mbytes-per-batch #f
-          'resources #f))
-
-(define round-trips
-  (list (list '#:eps 'eps 0.3)
-        (list '#:min-samples 'min-samples 10)
-        (list '#:metric 'metric 'cosine)
-        (list '#:out-dtype 'out-dtype 'int64)
-        (list '#:max-mbytes-per-batch 'max-mbytes-per-batch 4)
-        (list '#:resources 'resources 'some-resources)))
+(define changed
+  (hasheq 'eps 0.3
+          'min-samples 10
+          'metric 'cosine
+          'out-dtype 'int64
+          'max-mbytes-per-batch 4
+          'resources 'some-resources))
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "L19: the default parameters, and every keyword round-trips"
-  (check-equal? (estimator-params (dbscan)) default-params)
-  (for ([(name value) (in-hash dbscan-defaults)])
-    (check-equal? (hash-ref (estimator-params (dbscan)) name) value (format "~a" name)))
-  (for ([r (in-list round-trips)])
-    (match-define (list kw key value) r)
-    (check-equal? (hash-ref (estimator-params (keyword-apply dbscan (list kw) (list value) '())) key)
-                  value
-                  (format "~a" kw))))
+  (check-equal? (estimator-params (dbscan)) (hash-set dbscan-defaults 'resources #f))
+  (check-equal? (round-trips dbscan changed) changed))
 
 (test-case "L19: printing shows the parameters that differ from the defaults"
   (check-equal? (printed (dbscan)) (make-list 3 "#<dbscan>"))
@@ -98,18 +85,15 @@
       (check-equal? fitted-e fitted-e)
       (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
       (check-equal? (device-vector->list (fit-predict e X)) grid-labels)
-      (check-equal?
-       (cadr (result->lists (dbscan-model (fit e X #:sample-weight (vec grid-weights dt)))))
-       grid-weighted-core)
-      (define rows (integer-grid 300 2 20 3))
-      (define options (dbscan #:eps 1.5 #:min-samples 4 #:out-dtype 'int64 #:max-mbytes-per-batch 1))
-      (check-equal? (device-vector->list (fit-predict options (mat rows dt)))
-                    (device-vector->list (dbscan-result-labels (dbscan-fit (mat rows dt)
-                                                                           #:eps 1.5
-                                                                           #:min-samples 4
-                                                                           #:out-dtype 'int64
-                                                                           #:max-mbytes-per-batch
-                                                                           1)))))))
+      (match-define (list _ weighted-core)
+        (result->lists (dbscan-model (fit e X #:sample-weight (vec grid-weights dt)))))
+      (check-equal? weighted-core grid-weighted-core)
+      (define Y (mat (integer-grid 300 2 20 3) dt))
+      (define kws '(#:eps #:max-mbytes-per-batch #:min-samples #:out-dtype))
+      (define vals '(1.5 1 4 int64))
+      (check-equal? (device-vector->list (fit-predict (keyword-apply dbscan kws vals '()) Y))
+                    (device-vector->list (dbscan-result-labels
+                                          (keyword-apply dbscan-fit kws vals (list Y))))))))
 
 (test-gpu "L19: errors are named after the generic that was called"
   (define X (mat grid-rows 'float64))

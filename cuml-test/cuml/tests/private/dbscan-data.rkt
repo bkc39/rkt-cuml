@@ -1,9 +1,11 @@
 #lang racket/base
 
-(require (only-in cuml/cluster dbscan-result-core-sample-indices dbscan-result-labels)
+(require (only-in cuml/cluster dbscan-fit dbscan-result-core-sample-indices dbscan-result-labels)
          (only-in racket/list remove-duplicates)
+         (only-in racket/match match)
          (only-in racket/math sqr)
-         (only-in raft device-vector->list list*->device-matrix list->device-vector))
+         (only-in raft device-vector->list list*->device-matrix list->device-vector)
+         (only-in "fitted.rkt" fitted))
 
 (provide (struct-out expected)
          canonical
@@ -13,12 +15,14 @@
          distance-matrix
          euclidean-within
          first-copies
+         fitted-lists
          grid-labels
          grid-core
          grid-rows
          grid-weights
          grid-weighted-core
          integer-grid
+         labels-at
          mat
          repeat-rows
          result->lists
@@ -44,6 +48,13 @@
 (define (result->lists r)
   (list (device-vector->list (dbscan-result-labels r))
         (device-vector->list (dbscan-result-core-sample-indices r))))
+
+(define fitted-lists (fitted dbscan-fit (lambda (run) (result->lists (run)))))
+
+(define (labels-at labels indices)
+  (define at (list->vector labels))
+  (for/list ([i (in-list indices)])
+    (vector-ref at i)))
 
 (define (seeded seed thunk)
   (parameterize ([current-pseudo-random-generator
@@ -119,10 +130,11 @@
                                              #:when (vector-ref core? j))
                                     (vector-ref labels j)))
                <)])))
-  (for ([i (in-range n)]
-        #:unless (vector-ref core? i)
-        #:unless (null? (vector-ref options i)))
-    (vector-set! labels i (car (vector-ref options i))))
+  (for ([i (in-naturals)]
+        [choices (in-vector options)])
+    (match choices
+      [(cons smallest _) (vector-set! labels i smallest)]
+      ['() (void)]))
   (expected (vector->list labels)
             (for/list ([i (in-range n)]
                        #:when (vector-ref core? i))
@@ -130,14 +142,13 @@
             options))
 
 (define (canonical labels indices)
+  (define picked (labels-at labels indices))
   (define names
-    (for/fold ([names (hash)]) ([i (in-list indices)])
-      (define l (list-ref labels i))
+    (for/fold ([names (hash)]) ([l (in-list picked)])
       (if (hash-has-key? names l)
           names
           (hash-set names l (hash-count names)))))
-  (for/list ([i (in-list indices)])
-    (hash-ref names (list-ref labels i))))
+  (map (lambda (l) (hash-ref names l)) picked))
 
 (define (same-partition? a a-indices b b-indices)
   (equal? (canonical a a-indices) (canonical b b-indices)))
@@ -156,11 +167,12 @@
 
 (define (structure-problems labels core)
   (define k (add1 (apply max -1 labels)))
-  (define core-labels (map (lambda (i) (list-ref labels i)) core))
+  (define core-labels (labels-at labels core))
   (define first-core
     (for/list ([c (in-range k)])
       (for/first ([i (in-list core)]
-                  #:when (= (list-ref labels i) c))
+                  [l (in-list core-labels)]
+                  #:when (= l c))
         i)))
   (append (if (equal? core (sort (remove-duplicates core) <))
               '()
