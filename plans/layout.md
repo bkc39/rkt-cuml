@@ -179,7 +179,11 @@
     copy is scaled to unit rows in `X`'s dtype (by the largest magnitude,
     then the 2-norm), and cuML runs euclidean on it with eps' the smallest
     value in `X`'s dtype whose square, rounded in that dtype, reaches
-    2 min(eps, 4). A pair at cosine distance exactly eps is a neighbour pair.
+    2 eps, or 8 when eps is 2 or more, so that every pair is a neighbour
+    pair there, as in sklearn, which clips cosine distances to [0, 2]. A
+    pair at cosine distance exactly eps is a neighbour pair when the unit
+    rows are exact in the dtype, as one-hot rows are; otherwise rounding of
+    the unit rows decides pairs within a few rounding steps of eps.
   - **Q-E.** Non-finite `X` is passed through, and its rows are noise.
   - **Q-F.** `eps` must be finite and positive, so `+inf.0` is refused, as
     are `min-samples` below 1.

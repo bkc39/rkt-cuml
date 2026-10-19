@@ -40,6 +40,11 @@ constexpr double sweep_step = 1e-3;
 constexpr double tiny_eps = 1e-30;
 constexpr double small_eps = 1e-6;
 constexpr double wide_cosine_eps = 9;
+constexpr double float_second_step_eps = 0x1.062566p-11;
+constexpr double subnormal_eps = 1e-318;
+constexpr double deep_subnormal_eps = 1e-320;
+constexpr double float_min_eps = 7.1e-46;
+constexpr double float_subnormal_eps = 1e-40;
 
 const values grid{0, 1, 2, 4, 6, 7, 8, 20};
 const values grid_weights{4, 1, 1, 1, 1, 1, 1, 1};
@@ -258,24 +263,41 @@ TEST(Dbscan, CosineWiderThanTall) {
 }
 
 template <typename T>
-void cosine_eps_is_tight(double eps) {
+bool check_cosine_eps(double eps) {
   const T target = cluster::detail::cosine_target<T>(eps);
   const T e = cluster::detail::cosine_eps<T>(eps);
   const T prev = std::nextafter(e, T{0});
+  const T inf = std::numeric_limits<T>::infinity();
+  const T one_step = std::nextafter(target, inf);
   EXPECT_GE(e * e, target) << "eps " << eps;
   EXPECT_LT(prev * prev, target) << "eps " << eps;
+  EXPECT_LE(e * e, std::nextafter(one_step, inf)) << "eps " << eps;
+  return e * e > one_step;
 }
 
 TEST(Dbscan, CosineEpsIsTheSmallestWhoseSquareReachesTwiceEps) {
   std::vector<double> sweep{tiny_eps, small_eps, wide_cosine_eps,
-                            std::numeric_limits<double>::max()};
+                            std::numeric_limits<double>::max(),
+                            float_second_step_eps};
   for (int k = 1; k <= sweep_steps; ++k) {
     sweep.push_back(k * sweep_step);
   }
+  const std::vector<double> double_only{
+      std::numeric_limits<double>::denorm_min(), subnormal_eps,
+      deep_subnormal_eps, std::numeric_limits<double>::min() / 2};
+  const std::vector<double> float_only{float_min_eps, float_subnormal_eps};
+  int float_second_steps = 0;
   for (const double eps : sweep) {
-    cosine_eps_is_tight<float>(eps);
-    cosine_eps_is_tight<double>(eps);
+    float_second_steps += check_cosine_eps<float>(eps) ? 1 : 0;
+    check_cosine_eps<double>(eps);
   }
+  for (const double eps : double_only) {
+    check_cosine_eps<double>(eps);
+  }
+  for (const double eps : float_only) {
+    check_cosine_eps<float>(eps);
+  }
+  EXPECT_GE(float_second_steps, 1);
 }
 
 }  // namespace

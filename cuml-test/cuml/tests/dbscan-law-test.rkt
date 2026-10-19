@@ -217,3 +217,15 @@
     (test-case (format "~a ~a eps ~a" dt rows eps)
       (check-equal? (fitted-lists (mat rows dt) #:eps eps #:min-samples 2 #:metric 'cosine)
                     '((0 0) (0 1))))))
+
+(test-gpu "L8: at eps 2 every pair is a neighbour pair"
+  (for* ([dt (in-list dtypes)]
+         [rows (in-list '(((8 6) (-8 -6)) ((24 10) (-24 -10))))])
+    (test-case (format "~a ~a" dt rows)
+      (check-equal? (fitted-lists (mat rows dt) #:eps 2 #:min-samples 2 #:metric 'cosine)
+                    '((0 0) (0 1))))))
+
+(test-gpu "L8: a subnormal eps under cosine returns"
+  (check-equal?
+   (fitted-lists (mat '((1 0) (0 1)) 'float64) #:eps 5e-324 #:min-samples 2 #:metric 'cosine)
+   '((-1 -1) ())))

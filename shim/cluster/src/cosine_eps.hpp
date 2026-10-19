@@ -1,30 +1,38 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
-#include <limits>
+#include <bit>
+#include <cstdint>
+#include <type_traits>
 
 namespace cumlrkt::cluster::detail {
 
-constexpr double widest_cosine = 4;
+constexpr double widest_cosine = 2;
+constexpr double widest_target = 8;
+constexpr double eps_ceiling = 3;
+static_assert(eps_ceiling * eps_ceiling >= widest_target);
 
 template <typename T>
 T cosine_target(double eps) {
-  return static_cast<T>(2 * std::min(eps, widest_cosine));
+  return static_cast<T>(eps >= widest_cosine ? widest_target : 2 * eps);
 }
 
 template <typename T>
 T cosine_eps(double eps) {
+  using U = std::conditional_t<sizeof(T) == sizeof(std::uint32_t),
+                               std::uint32_t, std::uint64_t>;
   const T target = cosine_target<T>(eps);
-  T e = static_cast<T>(std::sqrt(static_cast<double>(target)));
-  while (e * e < target) {
-    e = std::nextafter(e, std::numeric_limits<T>::infinity());
+  U lo = 0;
+  U hi = std::bit_cast<U>(static_cast<T>(eps_ceiling));
+  while (lo < hi) {
+    const U mid = lo + (hi - lo) / 2;
+    const T m = std::bit_cast<T>(mid);
+    if (m * m >= target) {
+      hi = mid;
+    } else {
+      lo = mid + 1;
+    }
   }
-  for (T p = std::nextafter(e, T{0}); p * p >= target;
-       p = std::nextafter(p, T{0})) {
-    e = p;
-  }
-  return e;
+  return std::bit_cast<T>(lo);
 }
 
 }  // namespace cumlrkt::cluster::detail
