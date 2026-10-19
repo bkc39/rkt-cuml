@@ -205,6 +205,5 @@
   (for* ([dt (in-list dtypes)]
          [eps (in-list '(1e-30 1e-6 0.49))])
     (test-case (format "~a eps ~a" dt eps)
-      (check-equal?
-       (fitted-lists (mat '((1 0) (2 0)) dt) #:eps eps #:min-samples 2 #:metric 'cosine)
-       '((0 0) (0 1))))))
+      (check-equal? (fitted-lists (mat '((1 0) (2 0)) dt) #:eps eps #:min-samples 2 #:metric 'cosine)
+                    '((0 0) (0 1))))))

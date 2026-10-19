@@ -120,7 +120,9 @@
                (check-equal? labels (hash-ref theirs 'labels) "labels")
                (check-equal? core (hash-ref theirs 'core) "core samples")
                (check-equal? (hash-ref theirs 'dtypes)
-                             (if (sklearn? s) '("int64" "int64") (list out out))))
+                             (if (sklearn? s)
+                                 '("int64" "int64")
+                                 (list out out))))
              (if same? 1 0)))
   (printf "twin summary: ~a DBSCAN cases; labels and core samples equal in ~a\n"
           (length runs)

@@ -118,18 +118,17 @@
 (define noise '(0 0 -1 -1 0 0 0 0 0 0))
 
 (define (extreme-rows dt)
-  (append (list (list '(1e20 0) paired)
-                (list '(1e19 0) paired)
-                (list '(1e20 1e20) joined)
-                (list '(+nan.0 1) noise)
-                (list '(+inf.0 0) noise)
-                (list '(-inf.0 +nan.0) noise))
-          (match dt
-            ['float32 (list (list '(1e-45 0) paired))]
-            ['float64
-             (list (list '(5e-324 0) paired)
-                   (list '(1e-160 1e-160) joined)
-                   (list '(1e200 0) paired))])))
+  (append
+   (list (list '(1e20 0) paired)
+         (list '(1e19 0) paired)
+         (list '(1e20 1e20) joined)
+         (list '(+nan.0 1) noise)
+         (list '(+inf.0 0) noise)
+         (list '(-inf.0 +nan.0) noise))
+   (match dt
+     ['float32 (list (list '(1e-45 0) paired))]
+     ['float64
+      (list (list '(5e-324 0) paired) (list '(1e-160 1e-160) joined) (list '(1e200 0) paired))])))
 
 (test-gpu "D14: a cosine row past float range, or with a NaN or an infinity, is not refused"
   (for* ([dt (in-list dtypes)]

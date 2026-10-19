@@ -317,7 +317,8 @@ void extreme_cosine_rows() {
       {.row = {-inf, inf}, .labels = noise},
       {.row = {nan, nan}, .labels = noise}};
   if (std::is_same_v<T, double>) {
-    cases.push_back({.row = {double_underflow, double_underflow}, .labels = joined});
+    cases.push_back(
+        {.row = {double_underflow, double_underflow}, .labels = joined});
     cases.push_back({.row = {double_overflow, 0}, .labels = paired});
   }
   for (const cosine_row& edge : cases) {

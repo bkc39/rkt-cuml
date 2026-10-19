@@ -42,12 +42,9 @@
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "L19: the default parameters, and every keyword round-trips"
-  (check-equal? dbscan-defaults
-                (hasheq 'eps 0.5
-                        'min-samples 5
-                        'metric 'euclidean
-                        'out-dtype 'int32
-                        'max-mbytes-per-batch #f))
+  (check-equal?
+   dbscan-defaults
+   (hasheq 'eps 0.5 'min-samples 5 'metric 'euclidean 'out-dtype 'int32 'max-mbytes-per-batch #f))
   (check-equal? (estimator-params (dbscan)) (hash-set dbscan-defaults 'resources #f))
   (check-equal? (round-trips dbscan changed) changed))
 

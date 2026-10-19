@@ -6,9 +6,9 @@ import json
 import sys
 
 import numpy as np
+from sklearn.cluster import DBSCAN
 
 import cuml
-from sklearn.cluster import DBSCAN
 
 
 def host(a):

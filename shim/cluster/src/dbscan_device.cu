@@ -78,8 +78,7 @@ template int64_t first_zero_row<float>(const float*, int64_t, int64_t,
                                        rmm::cuda_stream_view);
 template int64_t first_zero_row<double>(const double*, int64_t, int64_t,
                                         rmm::cuda_stream_view);
-template void unit_rows<float>(float*, int64_t, int64_t,
-                               rmm::cuda_stream_view);
+template void unit_rows<float>(float*, int64_t, int64_t, rmm::cuda_stream_view);
 template void unit_rows<double>(double*, int64_t, int64_t,
                                 rmm::cuda_stream_view);
 template int64_t core_count<int32_t>(const int32_t*, int64_t,

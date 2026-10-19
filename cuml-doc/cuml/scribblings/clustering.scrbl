@@ -270,12 +270,12 @@ The labels and indices take the @racket[out-dtype]:
        @racket['precomputed] is not square;}
  @item{@racket[out-dtype] is not @racket['int32] or @racket['int64], or
        @racket[metric] is not one of the three names;}
- @item{@racket[X] has more than 2^31-1 rows, at either @racket[out-dtype]:
-       @tt{X: expected at most 2147483647 rows, got 2147483648};}
- @item{@racket['int32] labels cannot index @racket[X]'s elements, past
-       2^31-1 of them, or its rows, past 2^31-3: @tt{X: 46341x46341 elements
-       do not fit int32 labels; use int64}, @tt{X: 2147483646 rows do not fit
-       int32 labels; use int64};}
+ @item{@racket[X] has more than 2^31-1 rows, at either @racket[out-dtype],
+       or @racket['int32] labels cannot index @racket[X]'s elements, past
+       2^31-1 of them, or its rows, past 2^31-3: @tt{X: expected at most
+       2147483647 rows, got 2147483648}, @tt{X: 46341x46341 elements do not
+       fit int32 labels; use int64}, @tt{X: 2147483646 rows do not fit int32
+       labels; use int64};}
  @item{@racket[sample-weight] is not a vector of @racket[X]'s dtype with one
        element per row;}
  @item{@racket[eps] is not greater than 0 in @racket[X]'s dtype, NaN
