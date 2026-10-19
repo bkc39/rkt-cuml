@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (for-syntax racket/base
+                     (only-in racket/syntax format-id)
                      ;; whole-module: its syntax classes come with it
                      syntax/parse/pre)
          (only-in cuml/core exn:fail:cuml)
@@ -49,13 +50,11 @@
                  (list who X)))
 
 (begin-for-syntax
-  (define-splicing-syntax-class parameter
-                                #:attributes (keyword name default)
-                                (pattern (~seq keyword:keyword (~or* name:id [name:id default:expr]))
-                                  #:fail-unless
-                                  (equal? (keyword->string (syntax-e #'keyword))
-                                          (symbol->string (syntax-e #'name)))
-                                  "expected the parameter to be named after its keyword")))
+  (define-splicing-syntax-class
+   parameter
+   #:attributes (keyword name default)
+   (pattern (~seq keyword:keyword (~optional (~and default:expr (~not _:keyword))))
+     #:with name (format-id #'keyword "~a" (keyword->string (syntax-e #'keyword))))))
 
 (define-syntax-parse-rule (define-constructor (constructor:id p:parameter ...)
                                               #:names names:id

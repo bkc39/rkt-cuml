@@ -96,15 +96,15 @@
   [(define (write-proc e port _mode)
      (write-string (kmeans->string e) port))])
 
-(define-constructor (kmeans #:init init
-                            #:n-clusters [n-clusters (init-rows init (hash-ref defaults 'n-clusters))]
-                            #:max-iter max-iter
-                            #:tol tol
-                            #:n-init n-init
-                            #:random-state random-state
-                            #:oversampling-factor oversampling-factor
-                            #:max-samples-per-batch max-samples-per-batch
-                            #:resources resources)
+(define-constructor (kmeans #:init
+                            #:n-clusters (init-rows init (hash-ref defaults 'n-clusters))
+                            #:max-iter
+                            #:tol
+                            #:n-init
+                            #:random-state
+                            #:oversampling-factor
+                            #:max-samples-per-batch
+                            #:resources)
                     #:names parameter-names
                     #:defaults defaults
                     (lambda (params) (kmeans* params #f)))

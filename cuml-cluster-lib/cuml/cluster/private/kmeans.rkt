@@ -3,8 +3,8 @@
 (require (only-in racket/match match match* match-define)
          (only-in raft current-device-resources device-matrix? shape)
          (only-in raft/unsafe deposit->list)
-         (only-in "define-who.rkt" define/who)
          (only-in "defaults.rkt" define-defaults)
+         (only-in "define-who.rkt" define/who)
          (only-in "deposit.rkt" deposit-for)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job

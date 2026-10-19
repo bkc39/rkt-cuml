@@ -144,10 +144,10 @@
 (define (canonical labels indices)
   (define picked (labels-at labels indices))
   (define names
-    (for/fold ([names (hash)]) ([l (in-list picked)])
-      (if (hash-has-key? names l)
-          names
-          (hash-set names l (hash-count names)))))
+    (for/fold ([names (hash)])
+              ([l (in-list picked)]
+               #:unless (hash-has-key? names l))
+      (hash-set names l (hash-count names))))
   (map (lambda (l) (hash-ref names l)) picked))
 
 (define (same-partition? a a-indices b b-indices)

@@ -46,12 +46,8 @@
   [(define (write-proc e port _mode)
      (write-string (dbscan->string e) port))])
 
-(define-constructor (dbscan #:eps eps
-                            #:min-samples min-samples
-                            #:metric metric
-                            #:out-dtype out-dtype
-                            #:max-mbytes-per-batch max-mbytes-per-batch
-                            #:resources resources)
-                    #:names parameter-names
-                    #:defaults defaults
-                    (lambda (params) (dbscan* params #f)))
+(define-constructor
+ (dbscan #:eps #:min-samples #:metric #:out-dtype #:max-mbytes-per-batch #:resources)
+ #:names parameter-names
+ #:defaults defaults
+ (lambda (params) (dbscan* params #f)))

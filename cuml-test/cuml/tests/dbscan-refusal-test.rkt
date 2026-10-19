@@ -31,8 +31,8 @@
                           (list (add1 i) (* 2 i)))
                         #:dtype dt))
 
-(define (unnormable row dt)
-  (list*->device-matrix (list '(1 1) '(2 2) row '(3 3)) #:dtype dt))
+(define (unnormable bad dt)
+  (list*->device-matrix (list '(1 1) '(2 2) bad '(3 3)) #:dtype dt))
 
 (define unnormable-message "X: row 2 has a norm outside float range, so no cosine distance")
 
