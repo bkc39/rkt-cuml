@@ -174,3 +174,37 @@
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (check-one-batch (fitted-lists (mat rows dt) #:eps eps #:min-samples 4 #:metric 'cosine) e))))
+
+(test-gpu "L8: scaling each row by a factor in [0.1, 10] leaves the cosine labels and the oracle's"
+  (define eps 0.02)
+  (define rows (cosine-cloud 300 3 eps 4))
+  (define scaled
+    (seeded 9
+            (lambda ()
+              (for/list ([row (in-list rows)])
+                (define factor (/ (+ 10 (random 991)) 100))
+                (for/list ([x (in-list row)])
+                  (* factor x))))))
+  (define e (dbscan-oracle 300 (cosine-within (list->vector scaled) eps) 4))
+  (for ([dt (in-list dtypes)])
+    (test-case (symbol->string dt)
+      (define found (fitted-lists (mat scaled dt) #:eps eps #:min-samples 4 #:metric 'cosine))
+      (check-one-batch found e)
+      (check-equal? found (fitted-lists (mat rows dt) #:eps eps #:min-samples 4 #:metric 'cosine)))))
+
+(test-gpu "L8: cosine labels do not depend on the order or the scale of the rows"
+  (for* ([dt (in-list dtypes)]
+         [c (in-list '((((2 0) (0 1) (4 0)) (0 -1 0)) (((0 1) (2 0) (4 0)) (-1 0 0))))])
+    (match-define (list rows labels) c)
+    (test-case (format "~a ~a" dt rows)
+      (match-define (list found _)
+        (fitted-lists (mat rows dt) #:eps 0.49 #:min-samples 2 #:metric 'cosine))
+      (check-equal? found labels))))
+
+(test-gpu "L8: rows along one direction are cosine neighbours at any eps"
+  (for* ([dt (in-list dtypes)]
+         [eps (in-list '(1e-30 1e-6 0.49))])
+    (test-case (format "~a eps ~a" dt eps)
+      (check-equal?
+       (fitted-lists (mat '((1 0) (2 0)) dt) #:eps eps #:min-samples 2 #:metric 'cosine)
+       '((0 0) (0 1))))))

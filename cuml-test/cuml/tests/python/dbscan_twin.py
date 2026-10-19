@@ -1,5 +1,6 @@
 """Twin of cuml/tests/dbscan-twin-test.rkt: cuml.DBSCAN fits the data and
-parameters the Racket side used."""
+parameters the Racket side used; sklearn.cluster.DBSCAN fits the cosine
+cases, since cuml 26.08 normalises cosine input by column."""
 
 import json
 import sys
@@ -7,6 +8,7 @@ import sys
 import numpy as np
 
 import cuml
+from sklearn.cluster import DBSCAN
 
 
 def host(a):
@@ -37,6 +39,19 @@ def fit(case):
     }
 
 
+def sklearn_fit(case):
+    X = np.asarray(case["X"], dtype=np.dtype(case["dtype"]))
+    db = DBSCAN(
+        eps=case["eps"], min_samples=case["min_samples"], metric=case["metric"]
+    ).fit(X)
+    labels = db.labels_
+    return {
+        "labels": labels.astype(np.int64).tolist(),
+        "core": db.core_sample_indices_.astype(np.int64).tolist(),
+        "dtypes": [str(labels.dtype), str(db.core_sample_indices_.dtype)],
+    }
+
+
 def params(case):
     return cuml.DBSCAN().get_params()
 
@@ -44,7 +59,7 @@ def params(case):
 def main():
     with open(sys.argv[1]) as f:
         cases = json.load(f)["cases"]
-    ops = {"fit": fit, "params": params}
+    ops = {"fit": fit, "sklearn_fit": sklearn_fit, "params": params}
     results = [ops[case["op"]](case) for case in cases]
     with open(sys.argv[2], "w") as f:
         json.dump({"results": results, "version": cuml.__version__}, f)

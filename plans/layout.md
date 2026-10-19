@@ -170,14 +170,19 @@
   - **Q-A.** `#:out-dtype`, Python's name, on `dbscan-fit` and as an
     estimator parameter.
   - **Q-B.** int32 labels over more than 2^31-1 elements are refused, not
-    switched to int64.
+    switched to int64. More than 2^31-1 rows are refused at either
+    out-dtype, since raft's `make_monotonic` indexes rows with an `int`.
   - **Q-C.** `'cosine` runs on an n×d scratch copy, so `X` is not modified.
-  - **Q-D.** A finite row whose norm is 0 or infinite in float precision,
-    where cuML computes it, is refused under `'cosine`.
+  - **Q-D.** Under `'cosine`, a row whose elements are all zero is refused.
+    cuML 26.08's cosine branch normalises by column
+    (`vertexdeg/algo.cuh:173-184`), so rkt-cuml does not use it: the scratch
+    copy is scaled to unit rows in `X`'s dtype (by the largest magnitude,
+    then the 2-norm), and cuML runs euclidean on it with eps' = sqrt(2 eps).
   - **Q-E.** Non-finite `X` is passed through, and its rows are noise.
-  - **Q-F.** `eps` not greater than 0 and `min-samples` below 1 are refused.
+  - **Q-F.** `eps` must be finite and positive, so `+inf.0` is refused, as
+    are `min-samples` below 1.
   - **Q-G.** `eps` is the exact double for float64; under `'cosine` the
-    norms are float-precise.
+    unit rows and sqrt(2 eps) are in `X`'s dtype.
   - **Q-H.** Core-sample indices are always computed.
   - **Q-I.** `'rbc` is deferred to #17.
   - **Q-J.** `dbscan-result` has no cluster count.

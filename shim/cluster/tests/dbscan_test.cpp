@@ -30,6 +30,9 @@ constexpr double third = 1.0 / 3.0;
 constexpr uint64_t lcg_a = 6364136223846793005ULL;
 constexpr uint64_t lcg_c = 1442695040888963407ULL;
 constexpr int lcg_shift = 33;
+constexpr int64_t wide_cols = 8;
+constexpr double wide_eps = 1e-3;
+constexpr double wide_scale = 3;
 
 const values grid{0, 1, 2, 4, 6, 7, 8, 20};
 const values grid_weights{4, 1, 1, 1, 1, 1, 1, 1};
@@ -225,6 +228,26 @@ TEST(Dbscan, PrecomputedPartialBatch) {
   CUMLRKT_REQUIRE_GPU();
   precomputed_partial_batch<float>();
   precomputed_partial_batch<double>();
+}
+
+TEST(Dbscan, CosineWiderThanTall) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  values host;
+  for (const double scale : {1.0, wide_scale}) {
+    for (int64_t j = 1; j <= wide_cols; ++j) {
+      host.push_back(scale * static_cast<double>(j));
+    }
+  }
+  const auto x = upload<float>(res, {2, wide_cols}, host);
+  const labelling found =
+      fitted(res, {.x = &x->view,
+                   .eps = wide_eps,
+                   .min_samples = 2,
+                   .metric = CUML_CLUSTER_DBSCAN_METRIC_COSINE});
+  EXPECT_EQ(found.status, "accepted");
+  EXPECT_EQ(found.labels, (values{0, 0}));
+  EXPECT_EQ(found.core, (values{0, 1}));
 }
 
 }  // namespace

@@ -4,6 +4,7 @@
          (only-in cuml/cluster dbscan-fit)
          (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/flonum fl-)
+         (only-in racket/list make-list)
          (only-in racket/match match match-define)
          (only-in racket/port port->string)
          (only-in rackunit check-equal? check-exn fail test-case)
@@ -16,6 +17,7 @@
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/dbscan-data.rkt" fitted-lists)
          (only-in "private/fitted.rkt" fitted)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes))
 
@@ -31,10 +33,10 @@
                           (list (add1 i) (* 2 i)))
                         #:dtype dt))
 
-(define (unnormable bad dt)
+(define (with-zero-row bad dt)
   (list*->device-matrix (list '(1 1) '(2 2) bad '(3 3)) #:dtype dt))
 
-(define unnormable-message "X: row 2 has a norm outside float range, so no cosine distance")
+(define zero-row-message "X: row 2 is zero, so no cosine distance")
 
 (define (fit-rows dt out)
   (define u (other dt))
@@ -79,10 +81,8 @@
    (row "D12"
         "max-mbytes-per-batch: expected at most 18446744073709, got 18446744073710"
         (fit X #:max-mbytes-per-batch 18446744073710))
-   (row "D14" unnormable-message (fit (unnormable '(0 0) dt) #:metric 'cosine))
-   (row "D14 -0" unnormable-message (fit (unnormable '(-0.0 -0.0) dt) #:metric 'cosine))
-   (row "D14 overflow" unnormable-message (fit (unnormable '(1e20 0) dt) #:metric 'cosine))
-   (row "D14 underflow" unnormable-message (fit (unnormable '(1e-160 1e-160) dt) #:metric 'cosine))
+   (row "D14" zero-row-message (fit (with-zero-row '(0 0) dt) #:metric 'cosine))
+   (row "D14 -0" zero-row-message (fit (with-zero-row '(-0.0 -0.0) dt) #:metric 'cosine))
    (row "D0 before D1"
         "X: expected float32 or float64, got int32"
         (lambda () (dbscan-fit (blank-matrix 10 2 'int32) #:out-dtype 'float32)))
@@ -101,7 +101,7 @@
         (fit X #:min-samples 0 #:max-mbytes-per-batch -1))
    (row "D12 before D14"
         "max-mbytes-per-batch: expected at most 18446744073709, got 18446744073710"
-        (fit (unnormable '(0 0) dt) #:metric 'cosine #:max-mbytes-per-batch 18446744073710))))
+        (fit (with-zero-row '(0 0) dt) #:metric 'cosine #:max-mbytes-per-batch 18446744073710))))
 
 (test-gpu "dbscan-fit refuses each bad argument with its message, at both dtypes and both out-dtypes"
   (for* ([dt (in-list dtypes)]
@@ -109,6 +109,36 @@
          [r (in-list (fit-rows dt out))])
     (test-case (format "~a (~a, ~a)" (row-id r) dt out)
       (check-cuml-error 'logic (format "dbscan-fit: ~a" (row-message r)) (row-call r)))))
+
+(define (with-extreme-row edge dt)
+  (list*->device-matrix (append '((1 1) (1 1)) (list edge '(2 0)) (make-list 6 '(1 1))) #:dtype dt))
+
+(define paired '(0 0 1 1 0 0 0 0 0 0))
+(define joined '(0 0 0 -1 0 0 0 0 0 0))
+(define noise '(0 0 -1 -1 0 0 0 0 0 0))
+
+(define (extreme-rows dt)
+  (append (list (list '(1e20 0) paired)
+                (list '(1e19 0) paired)
+                (list '(1e20 1e20) joined)
+                (list '(+nan.0 1) noise)
+                (list '(+inf.0 0) noise)
+                (list '(-inf.0 +nan.0) noise))
+          (match dt
+            ['float32 (list (list '(1e-45 0) paired))]
+            ['float64
+             (list (list '(5e-324 0) paired)
+                   (list '(1e-160 1e-160) joined)
+                   (list '(1e200 0) paired))])))
+
+(test-gpu "D14: a cosine row past float range, or with a NaN or an infinity, is not refused"
+  (for* ([dt (in-list dtypes)]
+         [c (in-list (extreme-rows dt))])
+    (match-define (list edge labels) c)
+    (test-case (format "~a ~a" dt edge)
+      (match-define (list found _)
+        (fitted-lists (with-extreme-row edge dt) #:eps 0.1 #:min-samples 2 #:metric 'cosine))
+      (check-equal? found labels))))
 
 (test-gpu "values that do not fit the native types raise exn:fail:contract"
   (define X (grid 'float64))

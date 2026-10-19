@@ -83,9 +83,12 @@
 (define (or-null v)
   (or v (json-null)))
 
+(define (sklearn? s)
+  (eq? (spec-metric s) 'cosine))
+
 (define (fit-case r)
   (match-define (run s rows w _) r)
-  (hasheq 'op "fit"
+  (hasheq 'op (if (sklearn? s) "sklearn_fit" "fit")
           'dtype (symbol->string (spec-dt s))
           'X (map (lambda (row) (map exact->inexact row)) rows)
           'eps (spec-eps s)
@@ -95,7 +98,7 @@
           'max_mbytes_per_batch (or-null (spec-mbytes s))
           'sample_weight (or-null w)))
 
-(test-twin "dbscan-fit's labels and core samples equal cuml.DBSCAN's on the same data"
+(test-twin "dbscan-fit's labels and core samples equal cuml.DBSCAN's, and sklearn's under cosine"
   (define runs (map racket-fit specs))
   (match-define (hash-table ('results results) ('version version))
     (run-twin twin (hasheq 'cases (map fit-case runs))))
@@ -116,7 +119,8 @@
              (test-case (spec-name s)
                (check-equal? labels (hash-ref theirs 'labels) "labels")
                (check-equal? core (hash-ref theirs 'core) "core samples")
-               (check-equal? (hash-ref theirs 'dtypes) (list out out)))
+               (check-equal? (hash-ref theirs 'dtypes)
+                             (if (sklearn? s) '("int64" "int64") (list out out))))
              (if same? 1 0)))
   (printf "twin summary: ~a DBSCAN cases; labels and core samples equal in ~a\n"
           (length runs)

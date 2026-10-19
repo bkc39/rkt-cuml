@@ -219,9 +219,10 @@ noise.
 
 With @racket['precomputed], @racket[X] is a square matrix of distances, row
 @racket[i] from sample @racket[i]. @racket['cosine] distance is one minus the
-cosine similarity, and @racket[X] is not modified. Under @racket['cosine]
-cuML computes the norms in float precision, so @racket['float64] cosine
-distances are only float-precise. A row with a NaN or an infinity is noise. @racket[max-mbytes-per-batch] bounds, in units of 10^6
+cosine similarity, and @racket[X] is not modified: the fit runs as euclidean
+DBSCAN on a copy of @racket[X] scaled to unit rows in @racket[X]'s dtype. A
+row with a NaN or an infinity is noise.
+@racket[max-mbytes-per-batch] bounds, in units of 10^6
 bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[0] sizes the batch from the device's memory. The outputs live on
 @racket[resources].
@@ -255,7 +256,7 @@ The labels and indices take the @racket[out-dtype]:
 (dtype (dbscan-result-labels (dbscan-fit P #:eps 2 #:min-samples 4 #:out-dtype 'int64)))
 ]
 
-@racket[eps] must be greater than 0:
+@racket[eps] must be finite and greater than 0:
 
 @examples[#:eval ev #:label #f
 (eval:error (dbscan-fit P #:eps 0))
@@ -269,6 +270,8 @@ The labels and indices take the @racket[out-dtype]:
        @racket['precomputed] is not square;}
  @item{@racket[out-dtype] is not @racket['int32] or @racket['int64], or
        @racket[metric] is not one of the three names;}
+ @item{@racket[X] has more than 2^31-1 rows, at either @racket[out-dtype]:
+       @tt{X: expected at most 2147483647 rows, got 2147483648};}
  @item{@racket['int32] labels cannot index @racket[X]'s elements, past
        2^31-1 of them, or its rows, past 2^31-3: @tt{X: 46341x46341 elements
        do not fit int32 labels; use int64}, @tt{X: 2147483646 rows do not fit
@@ -292,10 +295,9 @@ The labels and indices take the @racket[out-dtype]:
        of @racket[X], which a large enough @racket[X] leaves too small:
        @tt{max-mbytes-per-batch: the automatic size holds no batch of 69000
        rows; pass at least 2};}
- @item{with @racket['cosine], a row of @racket[X] with only finite elements
-       has a norm that is 0 or infinite in float precision, where cuML
-       computes it at both dtypes: @tt{X: row 2 has a norm outside float
-       range, so no cosine distance}.}]
+ @item{with @racket['cosine], a row of @racket[X] is all zeros,
+       @racket[-0.0] included: @tt{X: row 2 is zero, so no cosine
+       distance}.}]
 An @racket[X] or @racket[sample-weight] that is not a device array, or
 @racket[resources] that were released, raises raft's @racket[exn:fail:raft]
 naming the procedure, and a number argument that does not fit the native type,
