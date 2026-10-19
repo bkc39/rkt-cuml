@@ -59,7 +59,8 @@ cumlrkt_family(cluster
   TESTS cluster/tests/cluster_test.cpp cluster/tests/dbscan_refusal_test.cpp
         cluster/tests/dbscan_test.cpp cluster/tests/kmeans_test.cpp
         cluster/tests/kmeans_refusal_test.cpp cluster/tests/linkage_refusal_test.cpp
-        cluster/tests/linkage_test.cpp cluster/tests/spectral_refusal_test.cpp
+        cluster/tests/linkage_test.cpp cluster/tests/spectral_graph_refusal_test.cpp
+        cluster/tests/spectral_refusal_test.cpp
         cluster/tests/spectral_test.cpp
 )
 
