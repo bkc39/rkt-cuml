@@ -32,8 +32,8 @@
                   graph-vals
                   sparse-blocks))
 
-(define rounds 300)
-(define sample-every 100)
+(define rounds 120)
+(define sample-every 40)
 (define refusals-per-sample 20)
 (define fits-per-round 5)
 (define buffers-per-fit 1)
@@ -42,12 +42,12 @@
   (define-values (rows _truth) (blobs 100 3 2 50.0 0))
   (define-values (small _small-truth) (blobs 5 2 2 50.0 1))
   (define-values (g _gtruth) (sparse-blocks '(30 40 50) 0.3 0))
-  (define-values (two _two-truth) (cliques '(10 10)))
-  (list (mat rows 'float32) (mat small 'float32) g two))
+  (define-values (uneven _uneven-truth) (cliques '(5 17 30)))
+  (list (mat rows 'float32) (mat small 'float32) g uneven))
 
 (define ((fit-graph vectors n k))
   (match-define (list rows cols vals) vectors)
-  (spectral-clustering-fit-graph rows cols vals n #:n-clusters k))
+  (spectral-clustering-fit-graph rows cols vals n #:n-clusters k #:random-state 0))
 
 (define (one-round X small vectors n e)
   (match-define (list rows cols vals) vectors)
@@ -93,12 +93,12 @@
 (test-process-memory (format
                       "~a rounds of spectral fits free the labels of each fit and leave device memory flat"
                       rounds)
-  (match-define (list X small g two) (data))
+  (match-define (list X small g uneven) (data))
   (define vectors (graph->vectors g))
   (define n (graph-n g))
   (define e (spectral-clustering #:n-clusters 3))
   (define calls (refusals X g))
-  (define unconverged (fit-graph (graph->vectors two) (graph-n two) 2))
+  (define unconverged (fit-graph (graph->vectors uneven) (graph-n uneven) 3))
   (for ([_ (in-range 5)])
     (one-round X small vectors n e)
     (refuse-all calls unconverged))

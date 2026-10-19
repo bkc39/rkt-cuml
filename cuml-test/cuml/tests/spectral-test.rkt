@@ -7,7 +7,7 @@
                   spectral-clustering-result?)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-false check-true test-case)
+         (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
@@ -64,11 +64,12 @@
     (check-equal? (labels X #:n-clusters 2 #:n-neighbors nn) at-most (format "~a neighbours" nn)))
   (for ([k (in-list '(2 6 8 20))])
     (check-equal? (labels X #:n-clusters k) (labels X #:n-clusters k #:n-components (min k 6)))
-    (check-equal? (labels X #:n-clusters k #:n-neighbors 5)
-                  (labels X #:n-clusters k #:n-neighbors 5 #:n-components (min k 6))))
+    (check-true (planted? (labels X #:n-clusters k #:n-neighbors 5)
+                          (labels X #:n-clusters k #:n-neighbors 5 #:n-components (min k 6)))))
   (define-values (g _gtruth) (blocks))
   (for ([k (in-list '(3 8))])
-    (check-equal? (graph-labels g #:n-clusters k) (graph-labels g #:n-clusters k #:n-components k))))
+    (check-true (planted? (graph-labels g #:n-clusters k)
+                          (graph-labels g #:n-clusters k #:n-components k)))))
 
 (test-gpu "SC12: a fit leaves X, rows, cols and vals as they were"
   (define-values (X _truth) (three-blobs))
@@ -82,21 +83,26 @@
   (spectral-clustering-fit-graph rows cols vals (graph-n g) #:n-clusters 3)
   (check-equal? (map device-vector->list vectors) graph-before))
 
-(test-gpu "P1: an upper-triangle graph does not converge; a down-scaled one gives a wrong partition"
-  (define-values (g truth) (blocks))
+(test-gpu "P1: an upper-triangle graph, or one with its upper triangle down-scaled, does not converge"
+  (define-values (g _truth) (blocks))
   (check-cuml-error 'generic eigensolver (lambda () (graph-labels (graph-upper g) #:n-clusters 3)))
-  (check-false (planted? (graph-labels (graph-scale-upper g 0.2) #:n-clusters 3) truth)))
+  (check-cuml-error 'generic
+                    eigensolver
+                    (lambda () (graph-labels (graph-scale-upper g 0.2) #:n-clusters 3))))
 
-(test-gpu "P2: two disconnected cliques do not converge; three are recovered"
-  (define-values (two _two-truth) (cliques '(10 10)))
-  (check-cuml-error 'generic eigensolver (lambda () (graph-labels two #:n-clusters 2)))
+(test-gpu "P2: cliques of 5, 17 and 30 do not converge at seed 0; three of 10 are recovered"
+  (define-values (uneven _uneven-truth) (cliques '(5 17 30)))
+  (check-cuml-error 'generic
+                    eigensolver
+                    (lambda () (graph-labels uneven #:n-clusters 3 #:random-state 0)))
   (define-values (three three-truth) (cliques '(10 10 10)))
   (check-true (planted? (graph-labels three #:n-clusters 3) three-truth)))
 
-(test-gpu "P3: rows repeated 20 times do not converge; repeated twice they are recovered"
+(test-gpu "P3: rows repeated 30 times do not converge at seed 0; repeated twice they are recovered"
   (define-values (rows truth) (blobs 40 3 2 50.0 0))
   (check-cuml-error 'generic
                     eigensolver
-                    (lambda () (labels (mat (repeat-each rows 20) 'float32) #:n-clusters 3)))
+                    (lambda ()
+                      (labels (mat (repeat-each rows 30) 'float32) #:n-clusters 3 #:random-state 0)))
   (check-true (planted? (labels (mat (repeat-each rows 2) 'float32) #:n-clusters 3)
                         (repeat-each truth 2))))

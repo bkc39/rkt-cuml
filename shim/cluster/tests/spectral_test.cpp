@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <map>
@@ -23,6 +24,7 @@ constexpr int64_t blob_rows = groups * per_group;
 constexpr int64_t blob_cols = 2;
 constexpr double gap = 50;
 constexpr int64_t clique = 10;
+constexpr std::array<int64_t, 3> uneven_cliques = {5, 17, 30};
 constexpr uint64_t lcg_a = 6364136223846793005ULL;
 constexpr uint64_t lcg_c = 1442695040888963407ULL;
 constexpr int lcg_shift = 33;
@@ -102,16 +104,21 @@ host_graph knn_graph(const values& x, int64_t k) {
   return g;
 }
 
-host_graph cliques(int64_t count) {
+template <std::size_t N>
+host_graph cliques(const std::array<int64_t, N>& sizes) {
   host_graph g;
-  for (int64_t i = 0; i < count * clique; ++i) {
-    for (int64_t j = 0; j < count * clique; ++j) {
-      if (i != j && i / clique == j / clique) {
-        g.rows.push_back(static_cast<int32_t>(i));
-        g.cols.push_back(static_cast<int32_t>(j));
-        g.vals.push_back(1);
+  int64_t start = 0;
+  for (const int64_t size : sizes) {
+    for (int64_t i = start; i < start + size; ++i) {
+      for (int64_t j = start; j < start + size; ++j) {
+        if (i != j) {
+          g.rows.push_back(static_cast<int32_t>(i));
+          g.cols.push_back(static_cast<int32_t>(j));
+          g.vals.push_back(1);
+        }
       }
     }
+    start += size;
   }
   return g;
 }
@@ -200,14 +207,20 @@ TEST(Spectral, BlobsArePartitionedAndDenseEqualsItsGraph) {
   }
 }
 
-TEST(Spectral, PinDisconnectedCliquesDoNotConverge) {
+TEST(Spectral, PinUnevenCliquesDoNotConvergeAtSeedZero) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const fitted two = fit_graph(res, cliques(2), 2 * clique, {.n_clusters = 2});
-  EXPECT_NE(two.status.find("eigensolver couldn't converge"), std::string::npos)
-      << two.status;
+  const int64_t uneven_n =
+      std::accumulate(uneven_cliques.begin(), uneven_cliques.end(), int64_t{0});
+  const fitted uneven = fit_graph(
+      res, cliques(uneven_cliques), uneven_n,
+      {.n_clusters = static_cast<int64_t>(uneven_cliques.size()), .seed = 0});
+  EXPECT_NE(uneven.status.find("eigensolver couldn't converge"),
+            std::string::npos)
+      << uneven.status;
   const fitted three =
-      fit_graph(res, cliques(3), 3 * clique, {.n_clusters = 3});
+      fit_graph(res, cliques(std::array<int64_t, 3>{clique, clique, clique}),
+                3 * clique, {.n_clusters = 3, .seed = 0});
   EXPECT_EQ(three.status, "accepted");
   EXPECT_EQ(canonical(three.labels), truth(3, clique));
 }
