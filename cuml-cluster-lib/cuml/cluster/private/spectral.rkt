@@ -26,13 +26,8 @@
                  [n-init 10]
                  [eigen-tol 'auto])
 
-(define (components n-components)
-  (if n-components
-      (values n-components 0)
-      (values 0 1)))
-
-(define (tolerance eigen-tol)
-  (if (eq? eigen-tol 'auto) 0.0 eigen-tol))
+(define (native-solver-options n-components eigen-tol)
+  (values (or n-components 0) (if n-components 0 1) (if (eq? eigen-tol 'auto) 0.0 eigen-tol)))
 
 (define/who (spectral-clustering-fit who
                                      X
@@ -44,17 +39,18 @@
                                      #:eigen-tol [eigen-tol (default 'eigen-tol)]
                                      #:resources [resources (current-device-resources)])
   (define out (deposit-for who resources))
-  (define-values (nc auto) (components n-components))
+  (define-values (fixed-components auto-components tolerance)
+    (native-solver-options n-components eigen-tol))
   (cuml-cluster-spectral-clustering-fit-job who
                                             resources
                                             X
                                             out
                                             n-clusters
-                                            nc
-                                            auto
+                                            fixed-components
+                                            auto-components
                                             n-neighbors
                                             n-init
-                                            (tolerance eigen-tol)
+                                            tolerance
                                             random-state)
   (apply spectral-clustering-result (deposit->list out)))
 
@@ -70,7 +66,8 @@
                                            #:eigen-tol [eigen-tol (default 'eigen-tol)]
                                            #:resources [resources (current-device-resources)])
   (define out (deposit-for who resources))
-  (define-values (nc auto) (components n-components))
+  (define-values (fixed-components auto-components tolerance)
+    (native-solver-options n-components eigen-tol))
   (cuml-cluster-spectral-clustering-fit-graph-job who
                                                   resources
                                                   rows
@@ -79,9 +76,9 @@
                                                   n-samples
                                                   out
                                                   n-clusters
-                                                  nc
-                                                  auto
+                                                  fixed-components
+                                                  auto-components
                                                   n-init
-                                                  (tolerance eigen-tol)
+                                                  tolerance
                                                   random-state)
   (apply spectral-clustering-result (deposit->list out)))

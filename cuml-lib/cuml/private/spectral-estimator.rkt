@@ -4,11 +4,7 @@
                   spectral-clustering-defaults
                   spectral-clustering-fit/who
                   spectral-clustering-result-labels)
-         (only-in "estimator-support.rkt"
-                  call-with-params
-                  define-constructor
-                  define-estimator
-                  logic-error))
+         (only-in "estimator-support.rkt" call-with-fixed-option define-constructor define-estimator))
 
 (provide spectral-clustering
          spectral-clustering?
@@ -17,14 +13,14 @@
 (define defaults (hash-set* spectral-clustering-defaults 'affinity 'nearest-neighbors 'resources #f))
 
 (define (fitted-model who e X sample-weight)
-  (define params (spectral-clustering-params e))
-  (define affinity (hash-ref params 'affinity))
-  (cond
-    [(not (eq? affinity 'nearest-neighbors))
-     (logic-error "~a: affinity: expected nearest-neighbors, got ~a" who affinity)]
-    [sample-weight (logic-error "~a: spectral-clustering takes no sample-weight" who)]
-    [else
-     (call-with-params spectral-clustering-fit/who who X (hash-remove params 'affinity) (hasheq))]))
+  (call-with-fixed-option spectral-clustering-fit/who
+                          who
+                          X
+                          (spectral-clustering-params e)
+                          #:option 'affinity
+                          #:only 'nearest-neighbors
+                          #:estimator 'spectral-clustering
+                          #:sample-weight sample-weight))
 
 (define-estimator spectral-clustering
                   #:fitted fitted-model

@@ -4,11 +4,7 @@
                   single-linkage-defaults
                   single-linkage-fit/who
                   single-linkage-result-labels)
-         (only-in "estimator-support.rkt"
-                  call-with-params
-                  define-constructor
-                  define-estimator
-                  logic-error))
+         (only-in "estimator-support.rkt" call-with-fixed-option define-constructor define-estimator))
 
 (provide agglomerative-clustering
          agglomerative-clustering?
@@ -17,12 +13,14 @@
 (define defaults (hash-set* single-linkage-defaults 'linkage 'single 'resources #f))
 
 (define (fitted-model who e X sample-weight)
-  (define params (agglomerative-clustering-params e))
-  (define linkage (hash-ref params 'linkage))
-  (cond
-    [(not (eq? linkage 'single)) (logic-error "~a: linkage: expected single, got ~a" who linkage)]
-    [sample-weight (logic-error "~a: agglomerative-clustering takes no sample-weight" who)]
-    [else (call-with-params single-linkage-fit/who who X (hash-remove params 'linkage) (hasheq))]))
+  (call-with-fixed-option single-linkage-fit/who
+                          who
+                          X
+                          (agglomerative-clustering-params e)
+                          #:option 'linkage
+                          #:only 'single
+                          #:estimator 'agglomerative-clustering
+                          #:sample-weight sample-weight))
 
 (define-estimator agglomerative-clustering
                   #:fitted fitted-model

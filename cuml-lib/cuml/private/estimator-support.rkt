@@ -19,7 +19,8 @@
          (only-in raft current-device-resources)
          (only-in syntax/parse/define define-syntax-parse-rule))
 
-(provide call-with-params
+(provide call-with-fixed-option
+         call-with-params
          define-constructor
          define-estimator
          logic-error
@@ -59,6 +60,20 @@
                  (map name->keyword names)
                  (map (lambda (name) (hash-ref arguments name)) names)
                  (list who X)))
+
+(define (call-with-fixed-option proc
+                                who
+                                X
+                                params
+                                #:option option
+                                #:only only
+                                #:estimator estimator
+                                #:sample-weight sample-weight)
+  (define value (hash-ref params option))
+  (cond
+    [(not (eq? value only)) (logic-error "~a: ~a: expected ~a, got ~a" who option only value)]
+    [sample-weight (logic-error "~a: ~a takes no sample-weight" who estimator)]
+    [else (call-with-params proc who X (hash-remove params option) (hasheq))]))
 
 (begin-for-syntax
   (define-splicing-syntax-class
