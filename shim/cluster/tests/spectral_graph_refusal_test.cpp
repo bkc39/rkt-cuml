@@ -17,9 +17,6 @@
 namespace cumlrkt::test {
 namespace {
 
-constexpr int64_t rows = 10;
-constexpr int64_t cols = 2;
-constexpr int64_t scratch_bytes = 1 << 20;
 constexpr double negative_weight = -5;
 constexpr int64_t ring = 10;
 constexpr std::size_t fault_entry = 7;
@@ -27,7 +24,7 @@ constexpr std::size_t loop_entry = 12;
 constexpr std::size_t later_entry = 15;
 constexpr int32_t loop_sample = 5;
 constexpr int32_t far_index = 100000000;
-constexpr int64_t spread = 17;
+constexpr double past_sum_weight = 0x1p125;
 
 host_graph ring_graph() {
   host_graph g;
@@ -84,6 +81,28 @@ std::vector<graph_fault_case> graph_faults() {
       faulted([inf](host_graph& g) { g.vals[3] = -inf; },
               "vals: entry 3: expected a finite weight of at least 0, got "
               "-inf"),
+      faulted(
+          [](host_graph& g) {
+            g.vals[3] = std::numeric_limits<float>::denorm_min();
+          },
+          "vals: entry 3: expected 0 or a weight of at least "
+          "1.1754943508222875e-38, got 1.401298464324817e-45"),
+      faulted(
+          [](host_graph& g) {
+            for (double& v : g.vals) {
+              v = past_sum_weight;
+            }
+          },
+          "vals: the weights sum to 8.507059173023462e+38, more than "
+          "3.4028234663852886e+38"),
+      faulted(
+          [](host_graph& g) {
+            for (double& v : g.vals) {
+              v = past_sum_weight;
+            }
+            g.rows[later_entry] = ring;
+          },
+          "rows: entry 15: expected an index in [0, 10), got 10"),
       faulted(
           [](host_graph& g) {
             for (double& v : g.vals) {

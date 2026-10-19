@@ -18,8 +18,6 @@
 namespace cumlrkt::test {
 namespace {
 
-constexpr int64_t rows = 10;
-constexpr int64_t cols = 2;
 constexpr int64_t zero_row = 2;
 constexpr int64_t forged_square = 46341;
 constexpr int64_t int32_most_rows = 2147483645;

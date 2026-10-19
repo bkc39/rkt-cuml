@@ -26,18 +26,18 @@
 namespace {
 
 using cumlrkt::logic_error;
-using cumlrkt::cluster::first_graph_fault;
 using cumlrkt::cluster::first_large_row;
-using cumlrkt::cluster::graph_fault;
-using cumlrkt::cluster::graph_fault_kind;
+using cumlrkt::cluster::graph_scan;
 using cumlrkt::cluster::in_device_scope;
 using cumlrkt::cluster::matrix;
 using cumlrkt::cluster::on_float32_device;
 using cumlrkt::cluster::printed;
+using cumlrkt::cluster::read_one;
 using cumlrkt::cluster::require_at_least;
 using cumlrkt::cluster::require_non_negative;
 using cumlrkt::cluster::require_some;
 using cumlrkt::cluster::rows_of;
+using cumlrkt::cluster::scan_graph;
 using cumlrkt::cluster::settle;
 using raftrkt::any_extent;
 
@@ -45,6 +45,7 @@ constexpr int64_t most_index = std::numeric_limits<int32_t>::max();
 constexpr int64_t least_samples = 4;
 constexpr int64_t least_neighbours = 2;
 constexpr int64_t components_per_sample = 3;
+constexpr int64_t least_basis = 20;
 constexpr double most_squared_norm = 0x1p125;
 constexpr double most_tol = FLT_MAX;
 
@@ -79,6 +80,17 @@ int64_t components(const solver_options& o, int64_t n, const char* unit) {
                     n, unit, o.n_components));
   }
   return o.n_components;
+}
+
+void require_basis(int64_t n, int64_t nc, const char* subject,
+                   const char* unit) {
+  const int64_t ncv = std::min(n - nc, std::max((2 * nc) + 1, least_basis));
+  if (n * ncv > most_index) {
+    throw logic_error(std::format(
+        "{}: {} {} and {} components need a {}x{} eigensolver basis, more "
+        "than {} elements",
+        subject, n, unit, nc, n, ncv, most_index));
+  }
 }
 
 void require_solver(const solver_options& o) {
@@ -159,6 +171,7 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
   const matrix<float, int64_t> x = checked_x(view);
   require_clusters(o.n_clusters, x.n, "X");
   const int64_t nc = components(o, x.n, "rows");
+  require_basis(x.n, nc, "X", "rows");
   require_at_least("n-neighbors", o.n_neighbors, least_neighbours);
   require_solver(o);
   const int64_t k = std::min(o.n_neighbors, x.n - 1);
@@ -214,29 +227,41 @@ void require_samples(int64_t n, int64_t nnz) {
   }
 }
 
+std::string fault_message(const coo& c, int64_t i, int64_t n,
+                          rmm::cuda_stream_view stream) {
+  const int64_t r = read_one(c.rows, i, stream);
+  const int64_t col = read_one(c.cols, i, stream);
+  const double w = read_one(c.vals, i, stream);
+  if (r < 0 || r >= n || col < 0 || col >= n) {
+    const bool row = r < 0 || r >= n;
+    return std::format("{}: entry {}: expected an index in [0, {}), got {}",
+                       row ? "rows" : "cols", i, n, row ? r : col);
+  }
+  if (r == col) {
+    return std::format(
+        "rows: entry {}: self-loop at sample {}; leave the diagonal out", i, r);
+  }
+  if (w > 0 && w < FLT_MIN) {
+    return std::format(
+        "vals: entry {}: expected 0 or a weight of at least {}, got {}", i,
+        printed(FLT_MIN), printed(w));
+  }
+  return std::format(
+      "vals: entry {}: expected a finite weight of at least 0, got {}", i,
+      printed(w));
+}
+
 void require_sound_graph(const coo& c, int64_t n,
                          rmm::cuda_stream_view stream) {
-  const graph_fault f =
-      first_graph_fault(c.rows, c.cols, c.vals, c.nnz, n, stream);
-  switch (f.kind) {
-    case graph_fault_kind::row_index:
-    case graph_fault_kind::col_index:
-      throw logic_error(
-          std::format("{}: entry {}: expected an index in [0, {}), got {}",
-                      f.kind == graph_fault_kind::row_index ? "rows" : "cols",
-                      f.entry, n, static_cast<int64_t>(f.value)));
-    case graph_fault_kind::self_loop:
-      throw logic_error(std::format(
-          "rows: entry {}: self-loop at sample {}; leave the diagonal out",
-          f.entry, static_cast<int64_t>(f.value)));
-    case graph_fault_kind::weight:
-      throw logic_error(std::format(
-          "vals: entry {}: expected a finite weight of at least 0, got {}",
-          f.entry, printed(f.value)));
-    case graph_fault_kind::none:
-      break;
+  const graph_scan s = scan_graph(c.rows, c.cols, c.vals, c.nnz, n, stream);
+  if (s.first_fault >= 0) {
+    throw logic_error(fault_message(c, s.first_fault, n, stream));
   }
-  if (!f.any_positive) {
+  if (s.total > FLT_MAX) {
+    throw logic_error(std::format("vals: the weights sum to {}, more than {}",
+                                  printed(s.total), printed(FLT_MAX)));
+  }
+  if (!s.any_positive) {
     throw logic_error("vals: expected at least one positive weight, got none");
   }
 }
@@ -247,6 +272,7 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
   require_samples(n, c.nnz);
   require_clusters(o.n_clusters, n, "n-samples");
   const int64_t nc = components(o, n, "samples");
+  require_basis(n, nc, "n-samples", "samples");
   require_solver(o);
   require_sound_graph(c, n, raft::resource::get_cuda_stream(handle));
   const auto nnz = static_cast<int>(c.nnz);

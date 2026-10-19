@@ -16,29 +16,14 @@
 namespace cumlrkt::test {
 namespace {
 
-constexpr int64_t rows = 10;
-constexpr int64_t cols = 2;
 constexpr int64_t entries = 12;
-constexpr int64_t bad_row = 2;
-constexpr int64_t later_bad_row = 5;
-constexpr int64_t wide_rows = 65536;
-constexpr int64_t wide_cols = 32769;
 constexpr int64_t graph_rows = 102261127;
+constexpr int64_t basis_rows = 107374183;
 constexpr int64_t forged_entries = 2147483000;
 constexpr int64_t forged_samples = 1000;
 constexpr int64_t past_index = 2147483648;
 constexpr int64_t past_components = 4;
-constexpr int64_t scratch_bytes = 1 << 20;
-constexpr int64_t spread = 17;
-constexpr double half_most = 0x1p62;
-constexpr double past_most = 0x1p63;
 constexpr double past_float = 1e39;
-
-std::string norm_refusal(int64_t row, const std::string& got) {
-  return "X: row " + std::to_string(row) +
-         ": expected a squared norm of at most 4.253529586511731e+37, got " +
-         got;
-}
 
 void expect_refused(const allocation_meter& meter, const record& out,
                     const std::string& status, const std::string& message) {
@@ -67,6 +52,8 @@ TEST(SpectralRefusals, DenseNameTheArgument) {
   const rr_view x_three_no_cols = shaped(r.data, {3, 0});
   const rr_view x_wide = shaped(r.data, {wide_rows, wide_cols});
   const rr_view x_graph = shaped(r.data, {graph_rows, 1});
+  const rr_view x_basis = shaped(r.data, {basis_rows, 1});
+  const rr_view x_basis_most = shaped(r.data, {basis_rows - 1, 1});
   const rr_view x_elsewhere = on_device(r.x, 1);
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
@@ -117,6 +104,11 @@ TEST(SpectralRefusals, DenseNameTheArgument) {
       {{.x = &x_graph, .out = o},
        "X: 102261127 rows with 10 neighbours need 2147483667 graph entries, "
        "more than 2147483647"},
+      {{.x = &x_basis, .out = o, .n_neighbors = 2},
+       "X: 107374183 rows and 2 components need a 107374183x20 eigensolver "
+       "basis, more than 2147483647 elements"},
+      {{.x = &x_basis_most, .out = o, .n_neighbors = 1},
+       "n-neighbors: expected at least 2, got 1"},
       {{.x = &x_three_double, .out = o}, "X: expected float32, got float64"},
       {{.x = &x_three_no_cols, .out = o}, "X: expected at least 4 rows, got 3"},
       {{.x = &x_wide, .out = o, .n_clusters = 0},
@@ -345,6 +337,15 @@ TEST(SpectralRefusals, GraphNameTheArgument) {
                 c.n_components = past_components;
               }),
        components},
+      {edited(ok, [](graph_call& c) { c.n_samples = basis_rows; }),
+       "n-samples: 107374183 samples and 2 components need a 107374183x20 "
+       "eigensolver basis, more than 2147483647 elements"},
+      {edited(ok,
+              [](graph_call& c) {
+                c.n_samples = basis_rows - 1;
+                c.eigen_tol = -1;
+              }),
+       "eigen-tol: expected at least 0, got -1"},
       {edited(ok, [](graph_call& c) { c.n_init = 0; }),
        "n-init: expected at least 1, got 0"},
       {edited(ok, [](graph_call& c) { c.eigen_tol = -1; }),

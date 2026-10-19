@@ -17,28 +17,13 @@
 namespace cumlrkt::test {
 namespace {
 
-constexpr int64_t rows = 10;
-constexpr int64_t cols = 2;
-constexpr int64_t bad_row = 2;
-constexpr int64_t later_bad_row = 5;
-constexpr int64_t wide_rows = 65536;
-constexpr int64_t wide_cols = 32769;
 constexpr int64_t pairwise_most_rows = 46340;
 constexpr int64_t knn_rows = 28000000;
 constexpr int32_t most_c = 2147483617;
 constexpr int32_t unknown_code = 2;
-constexpr int64_t scratch_bytes = 1 << 20;
-constexpr double half_most = 0x1p62;
-constexpr double past_most = 0x1p63;
 constexpr int64_t capped_rows = 2048;
 constexpr int64_t capped_side = 64;
 constexpr std::size_t capped_bytes = 4 << 20;
-
-std::string norm_refusal(int64_t row, const std::string& got) {
-  return "X: row " + std::to_string(row) +
-         ": expected a squared norm of at most 4.253529586511731e+37, got " +
-         got;
-}
 
 TEST(LinkageRefusals, NameTheArgument) {
   CUMLRKT_REQUIRE_GPU();
