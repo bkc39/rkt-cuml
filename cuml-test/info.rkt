@@ -8,6 +8,8 @@
 (define build-deps
   '("cuml-cluster-lib" "cuml-core-lib"
                        "cuml-lib"
+                       "datasets"
+                       "datasets-core"
                        ("raft" #:version "0.2")
                        "rackunit-lib"
                        "threading-lib"))
