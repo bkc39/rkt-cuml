@@ -33,6 +33,7 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
+         (only-in racket/function const)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft
@@ -251,12 +252,12 @@
                  [j (in-range 24)]
                  #:when (and (not (= i j)) (= (quotient i 8) (quotient j 8)) (<= (abs (- i j)) 2)))
                 (values i j)))
-  (check-true (planted? (~> (spectral-clustering-fit-graph
-                             (list->device-vector rows #:dtype 'int32)
-                             (list->device-vector cols #:dtype 'int32)
-                             (list->device-vector (map (lambda (_) 1.0) rows) #:dtype 'float32)
-                             24
-                             #:n-clusters 3)
+  (check-true (planted? (~> (spectral-clustering-fit-graph (list->device-vector rows #:dtype 'int32)
+                                                           (list->device-vector cols #:dtype 'int32)
+                                                           (list->device-vector (map (const 1.0) rows)
+                                                                                #:dtype 'float32)
+                                                           24
+                                                           #:n-clusters 3)
                             spectral-clustering-result-labels
                             device-vector->list)
                         group-truth))

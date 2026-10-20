@@ -14,7 +14,6 @@
          (only-in "private/spectral-data.rkt"
                   blobs
                   circles
-                  fit-case
                   fit-case-compare
                   fit-case-data
                   fit-case-k
@@ -28,6 +27,7 @@
                   graph-vals
                   labels
                   moons
+                  planted
                   planted?
                   sparse-blocks))
 
@@ -36,9 +36,6 @@
 (define defaults
   (hasheq 'n-components #f 'random-state 0 'n-neighbors 10 'n-init 10 'eigen-tol 'auto))
 
-(define (dense name rows truth k [options (hasheq)])
-  (fit-case name rows truth k options 'labels))
-
 (define (dense-specs)
   (define-values (b3 t3) (blobs 100 3 2 50.0 0))
   (define-values (b4 t4) (blobs 100 4 3 20.0 1))
@@ -46,27 +43,28 @@
   (define-values (b5 t5) (blobs 2000 5 8 5.0 7))
   (define-values (c tc) (circles 1000 0.5 0.03 0))
   (define-values (m tm) (moons 1000 0.05 0))
-  (list (dense "blobs 3x100" b3 t3 3)
-        (dense "blobs 4x100" b4 t4 4)
-        (dense "blobs 5x2000 at 8 sigma" b8 t8 5)
-        (dense "blobs 5x2000 at 5 sigma" b5 t5 5)
-        (dense "circles" c tc 2)
-        (dense "moons" m tm 2)
-        (dense "blobs 3x100, every parameter"
-               b3
-               t3
-               3
-               (hasheq 'n-components 2 'random-state 5 'n-neighbors 15 'n-init 3 'eigen-tol 1e-5))
-        (dense "blobs 4x100, 8 clusters, one init" b4 #f 8 (hasheq 'n-init 1))))
+  (list (planted "blobs 3x100" b3 t3 3)
+        (planted "blobs 4x100" b4 t4 4)
+        (planted "blobs 5x2000 at 8 sigma" b8 t8 5)
+        (planted "blobs 5x2000 at 5 sigma" b5 t5 5)
+        (planted "circles" c tc 2)
+        (planted "moons" m tm 2)
+        (planted "blobs 3x100, every parameter"
+                 b3
+                 t3
+                 3
+                 #:options
+                 (hasheq 'n-components 2 'random-state 5 'n-neighbors 15 'n-init 3 'eigen-tol 1e-5))
+        (planted "blobs 4x100, 8 clusters, one init" b4 #f 8 #:options (hasheq 'n-init 1))))
 
 (define (graph-specs)
   (append (for/list ([seed (in-range 3)])
             (define-values (g truth) (sparse-blocks '(30 40 50) 0.3 seed))
-            (fit-case (format "blocks 30/40/50 seed ~a" seed) g truth 3 (hasheq) 'labels))
+            (planted (format "blocks 30/40/50 seed ~a" seed) g truth 3))
           (let-values ([(g truth) (sparse-blocks '(30 40 50) 0.3 4 #:connected? #f)])
-            (list (fit-case "disconnected blocks" g truth 3 (hasheq 'random-state 9) 'labels)))
+            (list (planted "disconnected blocks" g truth 3 #:options (hasheq 'random-state 9))))
           (let-values ([(g truth) (sparse-blocks '(300 400 500 600) 0.05 0)])
-            (list (fit-case "blocks 300-600" g truth 4 (hasheq) 'partition)))))
+            (list (planted "blocks 300-600" g truth 4 #:compare 'partition)))))
 
 (define (options-of s)
   (for/fold ([options defaults]) ([(k v) (in-hash (fit-case-options s))])

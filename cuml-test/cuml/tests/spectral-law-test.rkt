@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/list count range shuffle take)
+(require (only-in racket/function curry curryr)
+         (only-in racket/list count range shuffle take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true fail test-case)
          (only-in raft/tests/private/gpu test-gpu)
@@ -9,31 +10,26 @@
          (only-in "private/spectral-data.rkt"
                   blobs
                   circles
-                  fit-case
                   fit-case-data
                   fit-case-k
                   fit-case-name
                   fit-case-truth
                   graph
-                  graph-cols
+                  graph-edit
                   graph-labels
                   graph-map-vals
                   graph-n
-                  graph-rows
                   graph-shuffle
-                  graph-vals
                   knn-graph
                   labels
                   moons
                   permute-graph
                   permute-rows
+                  planted
                   planted?
                   sparse-blocks
                   three-blobs
                   three-blocks))
-
-(define (planted name data truth k)
-  (fit-case name data truth k (hasheq) 'labels))
 
 (define (dense-planted)
   (define (blob name n-each k d gap seed)
@@ -96,11 +92,10 @@
   (define-values (g _truth) (three-blocks))
   (define base (graph-labels g #:n-clusters 3))
   (for ([factor (in-list '(4 16 0.25))])
-    (check-equal? (graph-labels (graph-map-vals g (lambda (w) (* w factor))) #:n-clusters 3)
+    (check-equal? (graph-labels (graph-map-vals g (curry * factor)) #:n-clusters 3)
                   base
                   (format "x ~a" factor)))
-  (check-true (same-partition? (graph-labels (graph-map-vals g (lambda (w) (* w 1000)))
-                                             #:n-clusters 3)
+  (check-true (same-partition? (graph-labels (graph-map-vals g (curry * 1000)) #:n-clusters 3)
                                (range 120)
                                base
                                (range 120))))
@@ -116,19 +111,16 @@
 (test-gpu "SC7, SC8: halved entries and added zero weights change nothing"
   (define-values (g _truth) (three-blocks))
   (define base (graph-labels g #:n-clusters 3))
+  (define (twice xs)
+    (append xs xs))
   (define halves
-    (struct-copy graph
-                 g
-                 [rows (append (graph-rows g) (graph-rows g))]
-                 [cols (append (graph-cols g) (graph-cols g))]
-                 [vals (let ([half (map (lambda (w) (/ w 2)) (graph-vals g))]) (append half half))]))
+    (graph-edit g #:rows twice #:cols twice #:vals (compose1 twice (curry map (curryr / 2)))))
   (check-equal? (graph-labels halves #:n-clusters 3) base "halves")
   (define zeros
-    (struct-copy graph
-                 g
-                 [rows (append (graph-rows g) '(0 5 7 119))]
-                 [cols (append (graph-cols g) '(5 0 119 7))]
-                 [vals (append (graph-vals g) '(0.0 0.0 0.0 0.0))]))
+    (graph-edit g
+                #:rows (curryr append '(0 5 7 119))
+                #:cols (curryr append '(5 0 119 7))
+                #:vals (curryr append '(0.0 0.0 0.0 0.0))))
   (check-equal? (graph-labels zeros #:n-clusters 3) base "zeros"))
 
 (test-gpu "SC9: isolated samples past the graph leave its partition unchanged"

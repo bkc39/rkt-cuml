@@ -19,6 +19,7 @@
          circles
          cliques
          float32-rows
+         edited-vectors
          graph->vectors
          graph-dense
          graph-edit
@@ -33,6 +34,7 @@
          moons
          permute-graph
          permute-rows
+         planted
          planted?
          repeat-each
          set-entry
@@ -45,6 +47,9 @@
 (struct graph (rows cols vals n) #:transparent)
 
 (struct fit-case (name data truth k options compare))
+
+(define (planted name data truth k #:options [options (hasheq)] #:compare [compare 'labels])
+  (fit-case name data truth k options compare))
 
 (define (float32-rows rows)
   (for/list ([r (in-list rows)])
@@ -234,6 +239,8 @@
                [rows (rows (graph-rows g))]
                [cols (cols (graph-cols g))]
                [vals (vals (graph-vals g))]))
+
+(define edited-vectors (compose1 graph->vectors graph-edit))
 
 (define ((set-entry i v) xs)
   (list-set xs i v))

@@ -4,6 +4,7 @@
          (only-in cuml/cluster spectral-clustering-fit spectral-clustering-fit-graph)
          (only-in ffi/unsafe void/reference-sink)
          (only-in racket/format ~r)
+         (only-in racket/function const)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
@@ -24,8 +25,8 @@
          (only-in "private/spectral-data.rkt"
                   blobs
                   cliques
+                  edited-vectors
                   graph->vectors
-                  graph-edit
                   graph-map-vals
                   graph-n
                   graph-rows
@@ -64,10 +65,10 @@
   (define nan-row (mat '((1 1) (2 2) (+nan.0 0) (4 4) (5 5)) 'float32))
   (match-define (list rows _ vals) (graph->vectors g))
   (define short-cols (blank-vector (sub1 (length (graph-rows g))) 'int32))
-  (define out-of-range (graph->vectors (graph-edit g #:rows (set-entry 7 120))))
-  (define self-loop (graph->vectors (graph-edit g #:rows (set-entry 7 5) #:cols (set-entry 7 5))))
-  (define negative (graph->vectors (graph-edit g #:vals (set-entry 3 -1.0))))
-  (define zeros (graph->vectors (graph-map-vals g (lambda (_) 0.0))))
+  (define out-of-range (edited-vectors g #:rows (set-entry 7 120)))
+  (define self-loop (edited-vectors g #:rows (set-entry 7 5) #:cols (set-entry 7 5)))
+  (define negative (edited-vectors g #:vals (set-entry 3 -1.0)))
+  (define zeros (graph->vectors (graph-map-vals g (const 0.0))))
   (define (on vs)
     (fit-graph vs (graph-n g) 3))
   (list (lambda () (spectral-clustering-fit wide))

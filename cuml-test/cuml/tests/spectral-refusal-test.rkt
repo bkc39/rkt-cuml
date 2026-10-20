@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/cluster spectral-clustering-fit spectral-clustering-fit-graph)
-         (only-in racket/function curry)
+         (only-in racket/function const curry)
          (only-in racket/list make-list)
          (only-in racket/match match)
          (only-in rackunit check-equal? check-exn fail test-case)
@@ -16,6 +16,7 @@
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/refusal-rows.rkt" check-row norm-message row row-id with-row)
          (only-in "private/spectral-data.rkt"
+                  edited-vectors
                   graph
                   graph->vectors
                   graph-edit
@@ -119,7 +120,10 @@
 
 (define trial-clusters 65659970)
 
-(define four-entries (graph '(0 1 2 3) '(1 0 3 2) '(1.0 1.0 1.0 1.0) basis-samples))
+(define (four-entries n)
+  (graph '(0 1 2 3) '(1 0 3 2) '(1.0 1.0 1.0 1.0) n))
+
+(define past-sum (const (exact->inexact (expt 2 125))))
 
 (define (graph-rows-of)
   (define (fault g)
@@ -187,39 +191,36 @@
    (row "G11 subnormal" subnormal-message (fault (graph-edit ring #:vals (set-entry 3 1e-44))))
    (row "G13 sum"
         "vals: the weights sum to 8.507059173023462e+38, more than 3.4028234663852886e+38"
-        (fault (graph-map-vals ring (lambda (_) (exact->inexact (expt 2 125))))))
+        (fault (graph-map-vals ring past-sum)))
    (row "G14"
         (string-append "n-samples: 107374183 samples and 8 components need a 107374183x20"
                        " eigensolver basis, more than 2147483647 elements")
-        (lambda () (graph-labels four-entries)))
+        (lambda () (graph-labels (four-entries basis-samples))))
    (row "G14 most"
         "eigen-tol: expected at least 0, got -1"
-        (lambda ()
-          (graph-labels (struct-copy graph four-entries [n (sub1 basis-samples)]) #:eigen-tol -1)))
+        (lambda () (graph-labels (four-entries (sub1 basis-samples)) #:eigen-tol -1)))
    (row "G15"
         (string-append "n-samples: 102261127 samples and 65659970 clusters need a 21x102261127"
                        " k-means++ buffer, more than 2147483647 elements")
         (lambda ()
-          (graph-labels (struct-copy graph four-entries [n trial-samples])
-                        #:n-clusters trial-clusters
-                        #:n-components 1)))
+          (graph-labels (four-entries trial-samples) #:n-clusters trial-clusters #:n-components 1)))
    (row "G15 most"
         "eigen-tol: expected at least 0, got -1"
         (lambda ()
-          (graph-labels (struct-copy graph four-entries [n (sub1 trial-samples)])
+          (graph-labels (four-entries (sub1 trial-samples))
                         #:n-clusters trial-clusters
                         #:n-components 1
                         #:eigen-tol -1)))
    (row "G15 k most"
         "eigen-tol: expected at least 0, got -1"
         (lambda ()
-          (graph-labels (struct-copy graph four-entries [n trial-samples])
+          (graph-labels (four-entries trial-samples)
                         #:n-clusters (sub1 trial-clusters)
                         #:n-components 1
                         #:eigen-tol -1)))
    (row "G12 zeros"
         "vals: expected at least one positive weight, got none"
-        (fault (graph-map-vals ring (lambda (_) 0.0))))
+        (fault (graph-map-vals ring (const 0.0))))
    (row "G12 empty"
         "vals: expected at least one positive weight, got none"
         (lambda ()
@@ -227,7 +228,7 @@
    (row "G2 before G9"
         "vals: expected 20 entries, as rows has, got 19"
         (lambda ()
-          (match (graph->vectors (graph-edit ring #:rows (set-entry 7 10)))
+          (match (edited-vectors ring #:rows (set-entry 7 10))
             [(list rows cols _) (fit-vectors rows cols (blank-vector 19 'float32))])))
    (row "G9 before G10 at one entry"
         (index-message "rows" 7 10)
@@ -244,8 +245,7 @@
         (fault (graph-edit ring #:rows (set-entry 7 10) #:vals (set-entry 3 -5.0))))
    (row "G9 before G13"
         (index-message "rows" 7 10)
-        (fault (graph-edit (graph-map-vals ring (lambda (_) (exact->inexact (expt 2 125))))
-                           #:rows (set-entry 7 10))))))
+        (fault (graph-edit (graph-map-vals ring past-sum) #:rows (set-entry 7 10))))))
 
 (test-gpu "spectral-clustering-fit refuses each bad argument with its message"
   (for ([r (in-list (dense-rows))])
