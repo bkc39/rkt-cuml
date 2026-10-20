@@ -326,7 +326,8 @@ Printing and @racket[equal?] are as for @racket[kmeans].
 
 @examples[#:eval ev
 (define S
-  (list*->device-matrix '((0 0) (0 1) (0 2) (1 0) (1 1) (1 2) (10 0) (10 1) (10 2) (11 0) (11 1) (11 2))
+  (list*->device-matrix '((0 0) (0 1) (0 2) (1 0) (1 1) (1 2)
+                          (10 0) (10 1) (10 2) (11 0) (11 1) (11 2))
                         #:dtype 'float32))
 (define sc (spectral-clustering #:n-clusters 2 #:n-neighbors 4))
 sc
