@@ -26,6 +26,7 @@
 
 (define-syntax-class reviewed-form
   #:datum-literals (define-estimator define-generics
+                                     define-page-helpers
                                      define-splicing-syntax-class
                                      define-syntax-parse-rule
                                      define/who
@@ -66,6 +67,11 @@
                     (recur #'(struct name (params model)
                                #:name constructor
                                (~@ #:methods generic methods) ...))))
+  (pattern ((~and head define-page-helpers) forms:id block:id _ ...)
+    #:attr review (lambda ()
+                    (recur #'head)
+                    (track-binding #'forms)
+                    (track-binding #'block)))
   (pattern ((~and head define/who) (name:id . formals) body ...+)
     #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
     #:attr review (lambda ()
