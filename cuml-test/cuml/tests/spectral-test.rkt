@@ -5,7 +5,8 @@
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels
                   spectral-clustering-result?)
-         (only-in racket/list make-list)
+         (only-in racket/function curry)
+         (only-in racket/list append-map make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype shape)
@@ -77,7 +78,14 @@
          '(1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 0.01 0.01)
          6))
 
-(define four-path (graph '(0 1 1 2 2 3) '(1 0 2 1 3 2) '(1.0 1.0 1.0 1.0 1.0 1.0) 4))
+(define (path n)
+  (define starts (range (sub1 n)))
+  (graph (append-map (lambda (i) (list i (add1 i))) starts)
+         (append-map (lambda (i) (list (add1 i) i)) starts)
+         (make-list (* 2 (sub1 n)) 1.0)
+         n))
+
+(define four-path (path 4))
 
 (test-gpu "SC13: below 7 samples the automatic embedding has one component"
   (for* ([g (in-list (list two-triangles four-path))]
@@ -86,8 +94,10 @@
     (test-case (format "~a samples, k ~a, seed ~a" (graph-n g) k seed)
       (check-equal? (graph-labels g #:n-clusters k #:random-state seed)
                     (graph-labels g #:n-clusters k #:random-state seed #:n-components 1))))
-  (test-case "a connected graph, split"
-    (check-equal? (graph-labels four-path #:n-clusters 2 #:random-state 1) '(0 0 1 1)))
+  (test-case "a connected graph, split into pieces that are not connected"
+    (check-equal? (graph-labels (path 5) #:n-clusters 2 #:random-state 0) '(1 1 1 0 1)))
+  (test-case "a connected graph, fewer clusters than asked"
+    (check-equal? (graph-labels four-path #:n-clusters 2 #:random-state 0) '(0 0 0 0)))
   (define-values (triangle-and-point truth) (cliques '(3 1)))
   (define-values (separate-triangles _truth) (cliques '(3 3)))
   (for ([seed (in-range 5)])
@@ -100,7 +110,7 @@
 (test-gpu "SC14: weights whose sum passes the largest float32, or subnormal weights, are refused"
   (define-values (g truth) (three-blocks))
   (define (scaled factor)
-    (graph-map-vals g (lambda (w) (* w factor))))
+    (graph-map-vals g (curry * factor)))
   (check-cuml-error
    'logic
    #rx"^spectral-clustering-fit-graph: vals: the weights sum to .*, more than 3.4028234663852886e\\+38$"

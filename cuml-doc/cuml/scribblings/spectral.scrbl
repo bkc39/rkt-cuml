@@ -49,7 +49,8 @@ min(@racket[n-clusters], ⌊(n−1)/3⌋), are clustered by k-means with
 @racket[n-components] must lie in [1, ⌊(n−1)/3⌋], and more components than
 clusters can blur the partition. Below 7 samples the automatic embedding has
 one component, and the labels need not follow the graph: they can split a
-connected graph, and merge disconnected groups into fewer clusters than asked.
+connected graph into pieces that are not themselves connected, and return
+fewer clusters than asked.
 
 The eigensolver stops at a residual of at most @racket[eigen-tol]
 (@racket['auto] is 0) or after 10n iterations, without reporting that it did
