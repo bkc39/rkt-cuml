@@ -26,6 +26,14 @@ constexpr int64_t past_index = 2147483648;
 constexpr int64_t past_components = 4;
 constexpr double past_float = 1e39;
 
+template <typename Call>
+Call many_clusters(Call c, int64_t clusters = trial_clusters) {
+  c.n_clusters = clusters;
+  c.n_components = 1;
+  c.auto_components = 0;
+  return c;
+}
+
 void expect_refused(const allocation_meter& meter, const record& out,
                     const std::string& status, const std::string& message) {
   EXPECT_EQ(status, message);
@@ -109,19 +117,11 @@ TEST(SpectralRefusals, DenseNameTheArgument) {
       {{.x = &x_basis, .out = o, .n_neighbors = 2},
        "X: 107374183 rows and 2 components need a 107374183x20 eigensolver "
        "basis, more than 2147483647 elements"},
-      {{.x = &x_graph,
-        .out = o,
-        .n_clusters = trial_clusters,
-        .n_components = 1,
-        .auto_components = 0},
+      {many_clusters(spectral_call{.x = &x_graph, .out = o}),
        "X: 102261127 samples and 65659970 clusters need a 21x102261127 "
        "k-means++ buffer, more than 2147483647 elements"},
-      {{.x = &x_trials_most,
-        .out = o,
-        .n_clusters = trial_clusters,
-        .n_components = 1,
-        .auto_components = 0,
-        .n_neighbors = 1},
+      {many_clusters(
+           spectral_call{.x = &x_trials_most, .out = o, .n_neighbors = 1}),
        "n-neighbors: expected at least 2, got 1"},
       {{.x = &x_basis_most, .out = o, .n_neighbors = 1},
        "n-neighbors: expected at least 2, got 1"},
@@ -353,30 +353,19 @@ TEST(SpectralRefusals, GraphNameTheArgument) {
                 c.n_components = past_components;
               }),
        components},
-      {edited(ok,
-              [](graph_call& c) {
-                c.n_samples = graph_rows;
-                c.n_clusters = trial_clusters;
-                c.auto_components = 0;
-                c.n_components = 1;
-              }),
+      {edited(many_clusters(ok),
+              [](graph_call& c) { c.n_samples = graph_rows; }),
        "n-samples: 102261127 samples and 65659970 clusters need a "
        "21x102261127 k-means++ buffer, more than 2147483647 elements"},
-      {edited(ok,
+      {edited(many_clusters(ok),
               [](graph_call& c) {
                 c.n_samples = graph_rows - 1;
-                c.n_clusters = trial_clusters;
-                c.auto_components = 0;
-                c.n_components = 1;
                 c.eigen_tol = -1;
               }),
        "eigen-tol: expected at least 0, got -1"},
-      {edited(ok,
+      {edited(many_clusters(ok, trial_clusters - 1),
               [](graph_call& c) {
                 c.n_samples = graph_rows;
-                c.n_clusters = trial_clusters - 1;
-                c.auto_components = 0;
-                c.n_components = 1;
                 c.eigen_tol = -1;
               }),
        "eigen-tol: expected at least 0, got -1"},

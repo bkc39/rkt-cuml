@@ -93,14 +93,15 @@ int64_t components(const solver_options& o, int64_t n, const char* unit) {
   return o.n_components;
 }
 
-void require_basis(int64_t n, int64_t nc, const char* subject,
+void require_basis(int64_t n, int64_t n_components, const char* subject,
                    const char* unit) {
-  const int64_t ncv = std::min(n - nc, std::max((2 * nc) + 1, least_basis));
+  const int64_t ncv =
+      std::min(n - n_components, std::max((2 * n_components) + 1, least_basis));
   if (n * ncv > most_index) {
     throw logic_error(std::format(
         "{}: {} {} and {} components need a {}x{} eigensolver basis, more "
         "than {} elements",
-        subject, n, unit, nc, n, ncv, most_index));
+        subject, n, unit, n_components, n, ncv, most_index));
   }
 }
 
@@ -181,8 +182,8 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
                rr_deposit* out, const solver_options& o) {
   const matrix<float, int64_t> x = checked_x(view);
   require_clusters(o.n_clusters, x.n, "X");
-  const int64_t nc = components(o, x.n, "rows");
-  require_basis(x.n, nc, "X", "rows");
+  const int64_t n_components = components(o, x.n, "rows");
+  require_basis(x.n, n_components, "X", "rows");
   require_at_least("n-neighbors", o.n_neighbors, least_neighbours);
   require_solver(o);
   const int64_t k = std::min(o.n_neighbors, x.n - 1);
@@ -192,8 +193,8 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
       raft::make_device_matrix_view<float, int, raft::row_major>(
           x.data, static_cast<int>(x.n), static_cast<int>(x.d));
   fit_into(handle, out, x.n, [&](raft::device_vector_view<int, int> labels) {
-    ML::SpectralClustering::fit_predict(handle, params_of(o, nc, k), dataset,
-                                        labels);
+    ML::SpectralClustering::fit_predict(handle, params_of(o, n_components, k),
+                                        dataset, labels);
   });
 }
 
@@ -282,14 +283,14 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
   const coo c = checked_graph(g);
   require_samples(n, c.nnz);
   require_clusters(o.n_clusters, n, "n-samples");
-  const int64_t nc = components(o, n, "samples");
-  require_basis(n, nc, "n-samples", "samples");
+  const int64_t n_components = components(o, n, "samples");
+  require_basis(n, n_components, "n-samples", "samples");
   require_solver(o);
   require_sound_graph(c, n, raft::resource::get_cuda_stream(handle));
   const auto nnz = static_cast<int>(c.nnz);
   fit_into(handle, out, n, [&](raft::device_vector_view<int, int> labels) {
     ML::SpectralClustering::fit_predict(
-        handle, params_of(o, nc, 0),
+        handle, params_of(o, n_components, 0),
         raft::make_device_vector_view<int, int>(c.rows, nnz),
         raft::make_device_vector_view<int, int>(c.cols, nnz),
         raft::make_device_vector_view<float, int>(c.vals, nnz), labels);
