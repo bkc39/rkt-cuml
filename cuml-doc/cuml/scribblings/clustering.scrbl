@@ -225,12 +225,8 @@ bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[0] sizes the batch from the device's memory. The outputs live on
 @racket[resources].
 
-@bold{Cosine boundary.} The fit runs on a unit-row copy of @racket[X] in its
-dtype. A pair at distance exactly @racket[eps] is included when those rows are
-exact, as one-hot rows are, and every pair is included at @racket[eps] 2 or
-more. Otherwise a pair within a relative 10^-5 of @racket[eps], at 1024
-@racket['float32] columns, may fall on either side, and the tolerance grows
-with the number of columns.
+Cosine distances are computed in @racket[X]'s dtype, so a pair within rounding
+of @racket[eps] may fall on either side.
 
 Weights count towards @racket[min-samples]:
 
