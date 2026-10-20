@@ -4,7 +4,8 @@
 
 Every binding below is provided by @racketmodname[cuml], and also by the
 module its section names. The examples run on small synthetic data whose
-answer is known in advance.
+answer is known in advance; @secref["concepts"] explains how the pieces fit
+together.
 
 @local-table-of-contents[]
 

@@ -235,7 +235,7 @@ replace each when raft offers a public form:
 | `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -283,9 +283,15 @@ kills the test outright.
 - The landing page: what the library binds, then the bold License,
   Acknowledgements and AI Disclosure paragraphs, the install line, the table
   of contents. No empty chapters.
+- Two parts, after glmnet's: the guide (`guide.scrbl`, `guide/`: Getting
+  started, Concepts with every `deftech`, and one `ex-*` chapter per
+  algorithm on real `datasets` data) and the reference (`reference.scrbl`,
+  `reference/`: the entries, on small synthetic data). `datasets` is a
+  build-dep of cuml-doc and cuml-test only.
 - Every exported name gets a Scribble entry with live examples
   (`scribble/example`, never pasted output), each pinned in
-  `cuml-test/cuml/tests/docs-test.rkt`.
+  `cuml-test/cuml/tests/docs-test.rkt` (the reference) or
+  `guide-docs-test.rkt` (the guide).
 
 ## CI
 
