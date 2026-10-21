@@ -65,8 +65,8 @@
 (define (features name . excluded)
   (~> (load-dataset-table name) dataset-table-names (remove* excluded _)))
 
-(define (dataset-matrix name columns #:dtype [dtype 'float32])
-  (~> (dataset-columns name columns) rows (list*->device-matrix #:dtype dtype)))
+(define (dataset-matrix name columns #:dtype [type 'float32])
+  (~> (dataset-columns name columns) rows (list*->device-matrix #:dtype type)))
 
 (define (standardized-matrix name columns)
   (~> (dataset-columns name columns) standardized rows (list*->device-matrix #:dtype 'float32)))

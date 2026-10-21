@@ -27,7 +27,7 @@ if grep -rl 'class="badlink"' "$dest/cuml"; then
   status=1
 fi
 if ! racket scripts/check-doc-links.rkt "$dest/cuml"; then
-  echo "render-docs: missing links in the pages above" >&2
+  echo "render-docs: missing or wrong links in the pages above" >&2
   status=1
 fi
 printf '<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=cuml/index.html"><a href="cuml/index.html">cuML: GPU machine learning for Racket</a>\n' \
