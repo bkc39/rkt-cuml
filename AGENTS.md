@@ -243,7 +243,7 @@ replace each when raft offers a public form:
 | `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -301,6 +301,10 @@ kills the test outright.
   shows its `require`, Examples its definitions, every guide sandbox
   evaluates both (`utils.rkt` reads them from the file), and
   `guide-docs-test.rkt` requires the module.
+- The guide's figures are picts from those helpers (`plot/no-gui`'s
+  `plot-pict`), drawn live by the examples: no committed images.
+  `guide-plots-test.rkt` pins the colours by label id, the sizes, and every
+  count a figure's prose names.
 - Every exported name gets a Scribble entry with live examples
   (`scribble/example`, never pasted output), each pinned in
   `cuml-test/cuml/tests/docs-test.rkt` (the reference) or

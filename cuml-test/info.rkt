@@ -9,6 +9,7 @@
   '("cuml-cluster-lib" "cuml-core-lib"
                        "cuml-doc"
                        "cuml-lib"
+                       "pict-lib"
                        ("raft" #:version "0.2")
                        "rackunit-lib"
                        "threading-lib"))
