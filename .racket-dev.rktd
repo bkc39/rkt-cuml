@@ -21,7 +21,7 @@
   (pkg-deps       "scripts/pkg-deps.sh cuml-core-lib cuml-cluster-lib cuml-lib cuml-doc cuml-test cuml")
   (review         "scripts/review.sh")
   (compile        "raco make -v cuml-lib/cuml/main.rkt cuml-doc/cuml/scribblings/cuml.scrbl scripts/check-layout.rkt scripts/check-bindings.rkt scripts/check-doc-links.rkt")
-  (test           "raco test --process --timeout 45 cuml-test lint scripts/check-layout.rkt scripts/check-bindings.rkt")
+  (test           "raco test --process --timeout 45 cuml-test lint scripts/check-layout.rkt scripts/check-bindings.rkt scripts/check-doc-links.rkt")
   (bindings       "racket scripts/check-bindings.rkt")
   (sanitizers     "nix build --max-jobs 1 --cores 4 --no-link .#checks.x86_64-linux.shim-sanitizers")
   (gpu            "scripts/gpu-suite.sh")
