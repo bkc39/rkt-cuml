@@ -66,6 +66,26 @@ scaled-table
 170 of 178 now agree. Scale the features before k-means unless their units
 are comparable.
 
+Proline against flavanoids, in their own units, with each cluster in the colour
+of the cultivar it shares the most wines with:
+
+@examples[#:eval ev #:label #f
+(define proline (dataset-column 'wine "proline"))
+(define flavanoids (dataset-column 'wine "flavanoids"))
+(define (wine-plot labels title)
+  (cluster-plot proline flavanoids labels #:title title #:x-label "proline" #:y-label "flavanoids"))
+(define (clusters-of wines)
+  (matched-labels (labels-of (kmeans #:n-clusters 3) wines) cultivar))
+(panels (list (wine-plot (clusters-of (dataset-matrix 'wine measurements)) "raw")
+              (wine-plot (clusters-of scaled) "standardized"))
+        (list (wine-plot (renumbered cultivar) "cultivar"))
+        (list (cluster-legend (renumbered cultivar)
+                              #:names (map (curry format "cultivar ~a") (remove-duplicates cultivar)))))
+]
+
+On raw measurements the clusters are bands of proline, whatever the
+flavanoids; standardized, they follow the cultivars.
+
 @section[#:tag "ex-kmeans-k"]{Choosing the number of clusters}
 
 k-means needs @racket[n-clusters]. @racket[score] is the negated inertia, the
@@ -74,12 +94,15 @@ every added cluster; where its gains shrink is a hint. Ten seedings per fit
 keep a poor local optimum from hiding the trend:
 
 @examples[#:eval ev #:label #f
-(for/list ([k (in-range 1 7)])
-  (define fitted (fit (kmeans #:n-clusters k #:n-init 10) scaled))
-  (list k (exact-round (score fitted scaled))))
+(define scores
+  (for/list ([k (in-range 1 7)])
+    (define fitted (fit (kmeans #:n-clusters k #:n-init 10) scaled))
+    (list k (exact-round (score fitted scaled)))))
+scores
+(line-plot (map first scores) (map second scores) #:x-label "clusters" #:y-label "score")
 ]
 
 The score gains 655 and 381 from the second and third clusters, and only 102
-from the fourth: three is where the gains shrink, as the cultivars say.
+from the fourth: three is where the line bends, as the cultivars say.
 
 @(close-eval ev)

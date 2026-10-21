@@ -44,6 +44,28 @@ spread class: it puts 36 malignant tumours in the benign cluster and 18 benign
 ones in the malignant cluster. Following the neighbour graph, spectral
 clustering misplaces 30 and 6.
 
+Two of the 30 measurements, in their own units, with each cluster in the
+colour of the diagnosis it shares the most tumours with:
+
+@examples[#:eval ev #:label #f
+(define radius (dataset-column 'breast-cancer "radius-worst"))
+(define concave-points (dataset-column 'breast-cancer "concave-points-worst"))
+(define (tumour-plot labels title)
+  (cluster-plot radius concave-points labels
+                #:title title
+                #:x-label "worst radius"
+                #:y-label "worst concave points"))
+(define (clusters-of estimator)
+  (matched-labels (labels-of estimator tumours) diagnosis))
+(panels (list (tumour-plot (clusters-of (kmeans #:n-clusters 2)) "k-means")
+              (tumour-plot (clusters-of (spectral-clustering #:n-clusters 2)) "spectral"))
+        (list (tumour-plot (renumbered diagnosis) "diagnosis"))
+        (list (cluster-legend (renumbered diagnosis) #:names '("malignant" "benign"))))
+]
+
+Most misplaced tumours lie where the two diagnoses overlap. k-means also
+colours malignant some benign tumours of small radius.
+
 @section[#:tag "ex-spectral-neighbours"]{The neighbour graph}
 
 @racket[n-neighbors] sets the graph. Three neighbours are too few; from five

@@ -64,4 +64,39 @@ large, and the eruptions between the groups join them into one:
 252 of the 272 eruptions are core samples, 8 are noise, and the other 12
 join a cluster as border samples.
 
+As in scikit-learn's DBSCAN demo, core samples are filled, border samples
+hollow and noise small gray circles. The eruptions are drawn in minutes, and
+@racket[matched-labels] numbers each fit's clusters after those at 0.3, so a
+group keeps its colour across the radii:
+
+@examples[#:eval ev #:label #f
+(define lengths (dataset-column 'faithful "eruptions"))
+(define waits (dataset-column 'faithful "waiting"))
+(define radii '(0.1 0.2 0.3 0.5))
+(define fits
+  (for/list ([eps (in-list radii)])
+    (dbscan-fit eruptions #:eps eps #:min-samples 5)))
+(define (labels-in result)
+  (device-vector->list (dbscan-result-labels result)))
+(define groups (labels-in (list-ref fits 2)))
+(define matched
+  (for/list ([result (in-list fits)])
+    (matched-labels (labels-in result) groups)))
+(define plots
+  (for/list ([eps (in-list radii)]
+             [result (in-list fits)]
+             [labels (in-list matched)])
+    (cluster-plot lengths waits labels
+                  #:core (device-vector->list (dbscan-result-core-sample-indices result))
+                  #:title (format "eps ~a" eps)
+                  #:x-label "eruption (min)"
+                  #:y-label "wait (min)"
+                  #:height 260)))
+(panels (take plots 2) (drop plots 2) (list (cluster-legend (append* matched))))
+]
+
+At 0.1, 126 eruptions are noise and the groups break into fragments; at 0.2
+and 0.3 the two groups stand out; at 0.5 the eruptions between them join them
+into one cluster.
+
 @(close-eval ev)

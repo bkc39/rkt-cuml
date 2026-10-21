@@ -48,6 +48,29 @@ outliers, and at six the touching pair is still one cluster:
 (single-linkage-table 6)
 ]
 
+The cuts by petal length and width, each cluster in the colour of the species
+it shares the most flowers with:
+
+@examples[#:eval ev #:label #f
+(define petal-length (dataset-column 'iris "petal-length"))
+(define petal-width (dataset-column 'iris "petal-width"))
+(define cuts
+  (for/list ([k (in-list '(2 3 4 6))])
+    (matched-labels (labels-of (agglomerative-clustering #:n-clusters k) flowers) species)))
+(define plots
+  (for/list ([k (in-list '(2 3 4 6))]
+             [labels (in-list cuts)])
+    (cluster-plot petal-length petal-width labels
+                  #:title (format "~a clusters" k)
+                  #:x-label "petal length (cm)"
+                  #:y-label "petal width (cm)"
+                  #:height 260)))
+(panels (take plots 2) (drop plots 2) (list (cluster-legend (append* cuts))))
+]
+
+At every cut, 92 or more of the 100 versicolor and virginica flowers stay one
+orange cluster; each further cluster is a few flowers at its edge.
+
 Use single linkage when the clusters are separated by gaps, whatever their
 shape, and expect outliers as clusters of their own; for touching clusters
 use k-means or spectral clustering.
