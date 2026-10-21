@@ -1,11 +1,18 @@
 #lang racket/base
 
-(require (for-label cuml
-                    raft
-                    raft/compat
+(require (for-syntax racket/base
+                     (only-in compiler/cm-accomplice register-external-module)
+                     (only-in syntax/strip-context replace-context)
+                     (only-in "guide/source.rkt" page-helpers-path page-helpers-source))
+         (for-label cuml
+                    datasets/core
                     racket/base
+                    racket/function
                     racket/list
-                    racket/math)
+                    racket/match
+                    racket/math
+                    raft
+                    threading)
          (only-in racket/sandbox
                   sandbox-error-output
                   sandbox-eval-limits
@@ -19,34 +26,34 @@
 
 (provide (all-from-out scribble/example)
          (all-from-out scribble/manual)
-         (for-label (all-from-out cuml raft raft/compat racket/base racket/list racket/math))
+         (for-label (all-from-out cuml
+                                  datasets/core
+                                  racket/base
+                                  racket/function
+                                  racket/list
+                                  racket/match
+                                  racket/math
+                                  raft
+                                  threading))
          make-cuml-eval
-         page-helpers-block)
+         page-helpers-block
+         page-require-block)
 
-(define-syntax-parse-rule (define-page-helpers forms:id block:id form:expr ...)
+(define-syntax-parse-rule (define-page-helpers require-form:id
+                                               require-block:id
+                                               helper-forms:id
+                                               helpers-block:id)
+  #:do [(register-external-module page-helpers-path)
+        (define-values (shown-require shown-helpers) (page-helpers-source))]
+  #:with shown (replace-context #'require-form shown-require)
+  #:with (form ...) (map (lambda (helper) (replace-context #'require-form helper)) shown-helpers)
   (begin
-    (define forms '(form ...))
-    (define block (racketblock form ...))))
+    (define require-form 'shown)
+    (define require-block (racketblock shown))
+    (define helper-forms '(form ...))
+    (define helpers-block (racketblock form ...))))
 
-(define-page-helpers page-helpers page-helpers-block
-  (define (crosstab labels classes)
-    (define names (remove-duplicates classes))
-    (~> (for/list ([cluster (in-list (group-by car (map cons labels classes)))])
-          (for/list ([name (in-list names)])
-            (count (lambda (sample) (equal? (cdr sample) name)) cluster)))
-        (sort < #:key (lambda (row) (index-of row (apply max row))))))
-  (define (agreement table)
-    (for/sum ([row (in-list table)]) (apply max row)))
-  (define (sizes labels)
-    (sort (map length (group-by values labels)) >))
-  (define (standardized-rows table)
-    (~> (for/list ([column (in-vector (dataset-table-columns table))])
-          (define n (vector-length column))
-          (define mean (/ (for/sum ([v (in-vector column)]) v) n))
-          (define sd (sqrt (/ (for/sum ([v (in-vector column)]) (sqr (- v mean))) n)))
-          (for/list ([v (in-vector column)])
-            (exact->inexact (/ (- v mean) sd))))
-        (apply map list _))))
+(define-page-helpers page-require page-require-block page-helpers page-helpers-block)
 
 (define (make-cuml-eval)
   (parameterize ([sandbox-output 'string]
@@ -55,13 +62,4 @@
                  [sandbox-eval-limits #f]
                  [sandbox-security-guard current-security-guard]
                  [sandbox-path-permissions '((exists "/"))])
-    (apply make-base-eval
-           #:lang 'racket/base
-           '(require cuml
-                     datasets
-                     raft
-                     raft/compat
-                     racket/list
-                     racket/math
-                     threading)
-           page-helpers)))
+    (apply make-base-eval #:lang 'racket/base page-require page-helpers)))

@@ -7,8 +7,8 @@
 (define deps '("base"))
 (define build-deps
   '("cuml-cluster-lib" "cuml-core-lib"
+                       "cuml-doc"
                        "cuml-lib"
-                       "datasets"
                        "datasets-core"
                        ("raft" #:version "0.2")
                        "rackunit-lib"

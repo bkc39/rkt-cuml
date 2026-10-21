@@ -285,9 +285,13 @@ kills the test outright.
   of contents. No empty chapters.
 - Two parts, after glmnet's: the guide (`guide.scrbl`, `guide/`: Getting
   started, Concepts with every `deftech`, and one `ex-*` chapter per
-  algorithm on real `datasets` data) and the reference (`reference.scrbl`,
-  `reference/`: the entries, on small synthetic data). `datasets` is a
-  build-dep of cuml-doc and cuml-test only.
+  algorithm on real `datasets-core` data) and the reference
+  (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
+  `datasets-core` is a build-dep of cuml-doc and cuml-test only.
+- The guide's helpers are one module, `guide/helpers.rkt`: Getting started
+  shows its `require`, Examples its definitions, every guide sandbox
+  evaluates both (`utils.rkt` reads them from the file), and
+  `guide-docs-test.rkt` requires the module.
 - Every exported name gets a Scribble entry with live examples
   (`scribble/example`, never pasted output), each pinned in
   `cuml-test/cuml/tests/docs-test.rkt` (the reference) or
