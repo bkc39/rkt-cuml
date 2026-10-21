@@ -102,5 +102,5 @@
                     "with-device-resources")
      (format-body-form 1)]
     [("with-array-views" "with-release") format-with-release]
-    [("define-page-helpers" "test-unless-skipped") (format-body-form 2)]
+    [("test-unless-skipped") (format-body-form 2)]
     [else #f]))

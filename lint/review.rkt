@@ -67,11 +67,10 @@
                     (recur #'(struct name (params model)
                                #:name constructor
                                (~@ #:methods generic methods) ...))))
-  (pattern ((~and head define-page-helpers) forms:id block:id _ ...)
+  (pattern ((~and head define-page-helpers) name:id ...)
     #:attr review (lambda ()
                     (recur #'head)
-                    (track-binding #'forms)
-                    (track-binding #'block)))
+                    (for-each track-binding (attribute name))))
   (pattern ((~and head define/who) (name:id . formals) body ...+)
     #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
     #:attr review (lambda ()

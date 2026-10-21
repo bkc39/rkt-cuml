@@ -102,14 +102,14 @@
       (define unused 1)
       (list who x))))
 
-(define page-helpers-and-their-block
-  '((provide helpers-block
-             helpers)
-    (define-syntax-parse-rule (define-page-helpers forms block form ...)
+(define page-helpers-and-their-blocks
+  '((provide helpers
+             helpers-block
+             require-block
+             required)
+    (define-syntax-parse-rule (define-page-helpers name ...)
       (void))
-    (define-page-helpers helpers helpers-block
-      (define (twice x)
-        (* 2 x)))))
+    (define-page-helpers required require-block helpers helpers-block)))
 
 (define splicing-syntax-class-used-in-a-pattern
   '((require (for-syntax racket/base
@@ -137,8 +137,8 @@
 (test-case "define-estimator binds the struct with its constructor name, and reads its options"
   (check-equal? (problems-in estimator-and-its-constructor) '()))
 
-(test-case "define-page-helpers binds its two names, and its forms are data"
-  (check-equal? (problems-in page-helpers-and-their-block) '()))
+(test-case "define-page-helpers binds each of its names"
+  (check-equal? (problems-in page-helpers-and-their-blocks) '()))
 
 (test-case "define/who binds the name and its /who form"
   (check-equal? (problems-in who-definitions) '()))
