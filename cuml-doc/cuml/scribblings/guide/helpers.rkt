@@ -4,6 +4,7 @@
          datasets/core
          pict
          plot/no-gui
+         racket/format
          racket/function
          racket/list
          racket/match
@@ -144,11 +145,11 @@
         '(fulltriangleright triangleright)
         '(full4star 4star)))
 
-(define (cluster-style label)
+(define (cluster-style label [who 'cluster-style])
   (cond
-    [(< label (length cluster-colors))
+    [(and (exact-nonnegative-integer? label) (< label (length cluster-colors)))
      (cons (list-ref cluster-colors label) (list-ref cluster-shapes label))]
-    [else (raise-arguments-error 'cluster-plot "label ids run from 0 to 7" "label" label)]))
+    [else (raise-arguments-error who "label ids run from 0 to 7" "label" label)]))
 
 (define noise-color (rgb "#898781"))
 
@@ -161,8 +162,8 @@
 (define (cluster-ids labels)
   (sort (distinct-clusters labels) <))
 
-(define (cluster-points vs label #:core? [core? #t] #:label [name #f])
-  (match-define (list color filled hollow) (cluster-style label))
+(define (cluster-points vs label who #:core? [core? #t] #:label [name #f])
+  (match-define (list color filled hollow) (cluster-style label who))
   (points vs
           #:sym (if core? filled hollow)
           #:color color
@@ -222,10 +223,11 @@
                [index (in-naturals)]
                #:when (and (= sample-label label) (keep? index)))
       (vector x y)))
-  (append (append-map (lambda (label)
-                        (list (cluster-points (vectors label core?) label)
-                              (cluster-points (vectors label (negate core?)) label #:core? #f)))
-                      (cluster-ids labels))
+  (append (append-map
+           (lambda (label)
+             (list (cluster-points (vectors label core?) label 'cluster-plot)
+                   (cluster-points (vectors label (negate core?)) label 'cluster-plot #:core? #f)))
+           (cluster-ids labels))
           (list (noise-points (vectors -1 (const #t)))
                 (centroid-points (map list->vector centroids)))))
 
@@ -262,11 +264,11 @@
   (define away (list (vector 2 2)))
   (define (name-of label)
     (cond
-      [(< label (length names)) (list-ref names label)]
+      [(and (exact-nonnegative-integer? label) (< label (length names))) (list-ref names label)]
       [else (format "cluster ~a" label)]))
   (define cluster-entries
     (for/list ([label (in-list (cluster-ids labels))])
-      (cluster-points away label #:label (name-of label))))
+      (cluster-points away label 'cluster-legend #:label (name-of label))))
   (define noise-entry (and (memv -1 labels) (noise-points away #:label "noise")))
   (define centroid-entry (and centroids? (centroid-points away #:label "centroid")))
   (define entries (append cluster-entries (filter values (list noise-entry centroid-entry))))
@@ -306,7 +308,7 @@
                       clusterings
                       classes
                       #:class-title class-title
-                      #:names [names (remove-duplicates classes)]
+                      #:names [names (map ~a (distinct-clusters classes))]
                       #:x-label [x-label #f]
                       #:y-label [y-label #f])
   (define truth (renumbered classes))
@@ -321,7 +323,10 @@
                     #:x-label x-label
                     #:y-label y-label)))
   (define centroids? (ormap pair? (map centroids-of clusterings)))
-  (figure plots (cluster-legend truth #:names names #:centroids? centroids?)))
+  (figure plots
+          (cluster-legend (append truth (append-map second clusterings))
+                          #:names names
+                          #:centroids? centroids?)))
 
 (define (sweep-figure xs
                       ys
@@ -331,19 +336,24 @@
                       #:names [names '()]
                       #:x-label [x-label #f]
                       #:y-label [y-label #f])
-  (define plots
-    (for/list ([title (in-list titles)]
-               [labels (in-list clusterings)]
-               [core (in-list cores)])
-      (cluster-plot xs
-                    ys
-                    labels
-                    #:core core
-                    #:title title
-                    #:x-label x-label
-                    #:y-label y-label
-                    #:height 260)))
-  (figure plots (cluster-legend (append* clusterings) #:names names)))
+  (define (panel title labels core)
+    (cluster-plot xs
+                  ys
+                  labels
+                  #:core core
+                  #:title title
+                  #:x-label x-label
+                  #:y-label y-label
+                  #:height 260))
+  (match (remove-duplicates (map length (list titles clusterings cores)))
+    [(list _)
+     (figure (map panel titles clusterings cores)
+             (cluster-legend (append* clusterings) #:names names))]
+    [lengths
+     (raise-arguments-error 'sweep-figure
+                            "titles, clusterings and cores differ in length"
+                            "lengths"
+                            lengths)]))
 
 (define (line-plot xs
                    ys

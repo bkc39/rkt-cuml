@@ -26,7 +26,7 @@
                   sizes
                   standardized-matrix
                   sweep-figure)
-         (only-in pict pict->bitmap pict-height pict-width)
+         (only-in pict pict->bitmap pict-height pict-width pict?)
          (only-in racket/class send)
          (only-in racket/function curry)
          (only-in racket/list count first make-list range remove-duplicates second third)
@@ -36,6 +36,7 @@
                   check-equal?
                   check-exn
                   check-false
+                  check-not-equal?
                   check-not-false
                   check-true
                   test-case)
@@ -88,6 +89,16 @@
   (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: 8"
              (lambda () (cluster-plot '(0 1) '(0 1) '(0 8)))))
 
+(test-case "a negative label other than -1, or a non-integer one, is refused in the caller's name"
+  (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: -2"
+             (lambda () (cluster-plot '(0) '(0) '(-2))))
+  (check-exn #rx"^cluster-legend: label ids run from 0 to 7\n  label: -2"
+             (lambda () (cluster-legend '(-2))))
+  (check-exn #rx"^cluster-legend: label ids run from 0 to 7\n  label: 1.0"
+             (lambda () (cluster-legend '(1.0) #:names '("a" "b"))))
+  (check-exn #rx"^cluster-style: label ids run from 0 to 7\n  label: 1.0"
+             (lambda () (cluster-style 1.0))))
+
 (test-case "a label keeps its colour whatever other labels a panel holds"
   (check-not-false (drawn? one-sample (blended orange)))
   (check-false (drawn? one-sample (blended blue)))
@@ -119,6 +130,45 @@
   (check-equal? (pict-width (cluster-legend '(0) #:width 400)) 400)
   (check-equal? (size (cluster-legend '(0 1 2) #:width 100)) '(100 82))
   (check-equal? (size (cluster-legend '(0 1 2 3) #:names '("a" "b"))) '(652 38)))
+
+(define four-xs '(0.0 1.0 2.0 3.0))
+
+(define four-classes '("p" "q" "r" "s"))
+
+(define (four-figure clusterings)
+  (class-figure four-xs four-xs clusterings four-classes #:class-title "x"))
+
+(test-case "class-figure names numeric classes"
+  (check-true
+   (pict?
+    (class-figure '(0.0 1.0) '(0.0 1.0) (list (list "a" '(0 1))) '(0.0 1.0) #:class-title "x"))))
+
+(test-case "class-figure's legend keys every label a panel draws, leftover clusters and noise"
+  (define matched (pict-height (four-figure (list (list "a" '(0 1 2 3))))))
+  (check-equal? (pict-height (four-figure (list (list "a" '(0 1 2 4))))) (+ matched 22))
+  (check-equal? (pict-height (four-figure (list (list "a" '(0 1 2 -1))))) (+ matched 22)))
+
+(test-case "class-figure's default names skip noise among the classes"
+  (define (noisy draw)
+    (pixels (draw '(0.0 1.0 2.0) '(0.0 1.0 2.0) (list (list "a" '(0 1 1))) '(-1 5 7))))
+  (define ((named names) . arguments)
+    (apply class-figure arguments #:class-title "x" #:names names))
+  (define default (noisy (lambda arguments (apply class-figure arguments #:class-title "x"))))
+  (check-equal? default (noisy (named '("5" "7"))))
+  (check-not-equal? default (noisy (named '("-1" "5")))))
+
+(test-case "class-figure draws a clustering's centroids and keys them"
+  (define plain (four-figure (list (list "a" '(0 1 2 3)))))
+  (define crossed (four-figure (list (list "a" '(0 1 2 3) '((1.5 1.5))))))
+  (check-false (drawn? plain ink))
+  (check > (painted crossed ink) (painted (cluster-legend '(0 1 2 3) #:centroids? #t) ink))
+  (check-equal? (pict-height crossed) (+ (pict-height plain) 22)))
+
+(test-case "sweep-figure refuses titles, clusterings and cores of different lengths"
+  (check-exn #rx"^sweep-figure: titles, clusterings and cores differ in length\n  lengths: '[(]2 1[)]"
+             (lambda () (sweep-figure '(0.0) '(0.0) '("a" "b") (list '(0)))))
+  (check-exn #rx"^sweep-figure: titles, clusterings and cores differ in length\n  lengths: '[(]1 2[)]"
+             (lambda () (sweep-figure '(0.0) '(0.0) '("a") (list '(0)) #:cores '(#f #f)))))
 
 (test-case "all noise, one cluster, and mismatched lengths"
   (define noise (cluster-plot '(1 2 3) '(1 2 3) '(-1 -1 -1)))
@@ -154,11 +204,15 @@
 
 (define species (dataset-column 'iris "species"))
 
-(define flowers (dataset-matrix 'iris (features 'iris "species")))
+(define (flowers)
+  (dataset-matrix 'iris (features 'iris "species")))
 
 (test-gpu "the figures: k-means on iris differs from the species on 16 flowers of shared petal lengths"
   (define labels
-    (~> (fit (kmeans #:n-clusters 3) flowers) kmeans-model kmeans-result-labels device-vector->list))
+    (~> (fit (kmeans #:n-clusters 3) (flowers))
+        kmeans-model
+        kmeans-result-labels
+        device-vector->list))
   (define matched (matched-labels labels species))
   (define truth (renumbered species))
   (define petal-length (dataset-column 'iris "petal-length"))
@@ -211,9 +265,10 @@
                 12))
 
 (test-gpu "the figures: single linkage keeps versicolor and virginica in one orange cluster"
+  (define samples (flowers))
   (define cuts
     (for/list ([k (in-list '(2 3 4 6))])
-      (clusters-of (agglomerative-clustering #:n-clusters k) flowers species)))
+      (clusters-of (agglomerative-clustering #:n-clusters k) samples species)))
   (check-equal? (map sizes cuts) '((100 50) (98 50 2) (97 50 2 1) (92 50 4 2 1 1)))
   (check-equal? (map (lambda (cut) (count (curry = 1) cut)) cuts) '(100 98 97 92))
   (check-equal? (map (lambda (cut) (sort (remove-duplicates cut) <)) cuts)
