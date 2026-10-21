@@ -156,6 +156,8 @@
 
 (define ink (rgb "#0b0b0b"))
 
+(define line-ink (first cluster-colors))
+
 (define (cluster-ids labels)
   (sort (distinct-clusters labels) <))
 
@@ -291,8 +293,8 @@
 (define (figure plots legend)
   (~> (paired plots)
       (map (curry apply hc-append 12) _)
-      (append (list legend))
-      (apply vc-append 12 _)))
+      (apply vc-append 12 _)
+      (vc-append 12 _ legend)))
 
 (define (centroids-of clustering)
   (match clustering
@@ -351,10 +353,9 @@
                    #:width [width 320]
                    #:height [height 240])
   (define vs (map vector xs ys))
-  (define color (first cluster-colors))
   (parameterize ([plot-x-ticks (ticks-add (plot-x-ticks) xs)])
-    (styled-plot (list (lines vs #:color color #:width 2)
-                       (points vs #:sym 'fullcircle #:color color #:fill-color color #:size 7))
+    (styled-plot (list (lines vs #:color line-ink #:width 2)
+                       (points vs #:sym 'fullcircle #:color line-ink #:size 7))
                  xs
                  ys
                  #:title title
