@@ -1,14 +1,17 @@
 #lang racket/base
 
 (require (only-in cuml/scribblings/guide/source page-helpers-path page-helpers-source)
-         (only-in racket/file file->string)
          (only-in racket/list append* append-map remove-duplicates)
          (only-in racket/match == match)
          (only-in racket/string string-replace)
-         (only-in syntax/parse ~or* attribute id kernel-literals syntax-parse)
+         (only-in syntax/parse/pre ~or* attribute id kernel-literals syntax-parse)
          (only-in threading ~>))
 
 (define helpers-page "examples.html")
+
+(define linked-name #rx"<a [^>]*class=\"Rkt[A-Za-z]*Link\"[^>]*>([^<]*)</a>")
+
+(define unlinked-name #rx"<span class=\"RktSym\">([^<]*)</span>")
 
 (define (exported-names module-path)
   (module-declared? module-path #t)
@@ -32,16 +35,20 @@
     [(name:id ...) (attribute name)]
     [(name:id ... . rest:id) (cons #'rest (attribute name))]))
 
+(define (clause-identifiers clause)
+  (syntax-parse clause
+    [(formals body ...)
+     (append (formal-identifiers #'formals) (append-map bound-identifiers (attribute body)))]))
+
 (define (bound-identifiers form)
   (syntax-parse form
     #:literal-sets (kernel-literals)
     [((~or* quote quote-syntax) . _) '()]
     [(define-values (name ...) rhs) (append (attribute name) (bound-identifiers #'rhs))]
-    [(#%plain-lambda formals body ...)
-     (append (formal-identifiers #'formals) (append-map bound-identifiers (attribute body)))]
-    [(case-lambda [formals body ...] ...)
-     (append (append-map formal-identifiers (attribute formals))
-             (append-map bound-identifiers (append* (attribute body))))]
+    [(#%plain-lambda . clause) (clause-identifiers #'clause)]
+    [(case-lambda
+       clause ...)
+     (append-map clause-identifiers (attribute clause))]
     [((~or* let-values letrec-values) ([(name ...) rhs] ...) body ...)
      (append (append* (attribute name))
              (append-map bound-identifiers (attribute rhs))
@@ -74,15 +81,16 @@
     (match page
       [(== helpers-page) bindings]
       [_ '()]))
-  (append
-   (for/list ([name (in-list (rendered-names #rx"<a [^>]*class=\"Rkt[A-Za-z]*Link\"[^>]*>([^<]*)</a>" html))]
-              #:when (member name shown-bindings))
-     (format "~a: ~a, which a helper binds, links" page name))
-   (for/list ([name (in-list (rendered-names #rx"<span class=\"RktSym\">([^<]*)</span>" html))]
-              #:when (hash-ref labelled name #f))
-     (format "~a: ~a, which the examples can use, has no link" page name))))
+  (append (for/list ([name (in-list (rendered-names linked-name html))]
+                     #:when (member name shown-bindings))
+            (format "~a: ~a, which a helper binds, links" page name))
+          (for/list ([name (in-list (rendered-names unlinked-name html))]
+                     #:when (hash-ref labelled name #f))
+            (format "~a: ~a, which the examples can use, has no link" page name))))
 
 (module+ main
+  (require (only-in racket/file file->string))
+
   (define dir
     (match (current-command-line-arguments)
       [(vector dir) dir]
