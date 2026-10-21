@@ -1,10 +1,6 @@
 #lang racket/base
 
-(require (for-syntax racket/base
-                     (only-in compiler/cm-accomplice register-external-module)
-                     (only-in syntax/strip-context replace-context)
-                     (only-in "guide/source.rkt" page-helpers-path page-helpers-source))
-         (for-label cuml
+(require (for-label cuml
                     datasets/core
                     racket/base
                     racket/function
@@ -12,7 +8,12 @@
                     racket/match
                     racket/math
                     raft
-                    threading)
+                    threading))
+
+(require (for-syntax racket/base
+                     (only-in compiler/cm-accomplice register-external-module)
+                     (only-in syntax/strip-context replace-context)
+                     (only-in "guide/source.rkt" page-helpers-path page-helpers-source))
          (only-in racket/sandbox
                   sandbox-error-output
                   sandbox-eval-limits
