@@ -31,9 +31,13 @@
                   standardized
                   standardized-matrix)
          (only-in cuml/scribblings/guide/source page-helpers-source)
+         (only-in pkg/lib pkg-directory)
+         (only-in racket/file file->string)
          (only-in racket/function curry)
          (only-in racket/list argmax count first group-by remove-duplicates)
+         (only-in racket/match match-define)
          (only-in racket/math exact-round)
+         (only-in racket/string string-contains?)
          (only-in rackunit
                   check-equal?
                   check-exn
@@ -54,14 +58,59 @@
 
 (define-namespace-anchor anchor)
 
-(test-case "the page's require alone, in racket/base, runs the page's helpers and a threaded example"
+(test-case "the page's require alone, in a racket/base module, expands the page's helpers and runs a threaded example"
   (define-values (shown-require shown-helpers) (page-helpers-source))
   (parameterize ([current-namespace (namespace-anchor->empty-namespace anchor)])
     (namespace-require 'racket/base)
-    (eval (syntax->datum shown-require))
-    (for ([helper (in-list shown-helpers)])
-      (eval (syntax->datum helper)))
-    (check-equal? (eval '(~> '(0 0 1) (crosstab '(a a b)) agreement)) 3)))
+    (eval `(module page racket/base
+             ,(syntax->datum shown-require)
+             ,@(map syntax->datum shown-helpers)))
+    (dynamic-require ''page #f)
+    (check-equal? (eval '(~> '(0 0 1) (crosstab '(a a b)) agreement) (module->namespace ''page)) 3)))
+
+(define guide-chapters
+  '("getting-started.scrbl" "concepts.scrbl"
+                            "examples.scrbl"
+                            "examples/kmeans.scrbl"
+                            "examples/dbscan.scrbl"
+                            "examples/single-linkage.scrbl"
+                            "examples/spectral.scrbl"))
+
+(define dataset-citations
+  '((iris ("doi:10.24432/C56C76" "CC BY 4.0") "doi:10.24432/C56C76. CC BY 4.0")
+    (wine ("doi:10.24432/C5PC7J" "CC BY 4.0") "doi:10.24432/C5PC7J. CC BY 4.0")
+    (faithful ("R 4.3.3" "GPL-2 or GPL-3") "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
+    (breast-cancer ("doi:10.24432/C5DW2B" "CC BY 4.0") "doi:10.24432/C5DW2B. CC BY 4.0")))
+
+(define (flattened-text path)
+  (regexp-replace* #px"\\s+" (file->string path) " "))
+
+(define (chapter-text chapter)
+  (~> (collection-file-path chapter "cuml" "scribblings" "guide") flattened-text))
+
+(define (chapter-datasets chapter)
+  (~> (regexp-match*
+       #px"\\((?:load-dataset-table|dataset-matrix|dataset-columns?|standardized-matrix|features) '([a-z-]+)"
+       (chapter-text chapter)
+       #:match-select cadr)
+      (map string->symbol _)))
+
+(test-case "the guide chapter that introduces a dataset cites its DOI or licence, as datasets-core's NOTICE gives them"
+  (define notice (flattened-text (build-path (pkg-directory "datasets-core") "NOTICE")))
+  (define introductions
+    (for*/fold ([introductions '()]
+                #:result (reverse introductions))
+               ([chapter (in-list guide-chapters)]
+                [dataset (in-list (remove-duplicates (chapter-datasets chapter)))]
+                #:unless (assq dataset introductions))
+      (cons (cons dataset chapter) introductions)))
+  (check-equal? (map car introductions) (map car dataset-citations))
+  (for ([citation (in-list dataset-citations)])
+    (match-define (list dataset cited notice-text) citation)
+    (define chapter (cdr (assq dataset introductions)))
+    (check-not-false (string-contains? notice notice-text) (format "NOTICE: ~a" notice-text))
+    (for ([text (in-list cited)])
+      (check-not-false (string-contains? (chapter-text chapter) text) (format "~a: ~a" chapter text)))))
 
 (test-case "the helpers leave out noise, label -1"
   (define labels '(0 0 -1 1 1 -1))
@@ -185,12 +234,7 @@
   (define scores
     (for/list ([k (in-range 1 7)])
       (exact-round (score (fit (kmeans #:n-clusters k #:n-init 10) scaled) scaled))))
-  (check-equal? scores '(-2314 -1659 -1278 -1176 -1102 -1053))
-  (define gains
-    (for/list ([a (in-list scores)]
-               [b (in-list (cdr scores))])
-      (- b a)))
-  (check-equal? gains (sort gains >)))
+  (check-equal? scores '(-2314 -1659 -1278 -1176 -1102 -1053)))
 
 (define (eruptions)
   (standardized-matrix 'faithful '("eruptions" "waiting")))
