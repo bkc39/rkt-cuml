@@ -4,7 +4,8 @@
                      racket/base
                      racket/contract/base
                      racket/match
-                     raft))
+                     raft
+                     threading))
 
 @(define ev (make-base-eval #:lang 'racket/base '(require cuml raft racket/match threading)))
 
