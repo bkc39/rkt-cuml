@@ -7,40 +7,42 @@
 
 Every algorithm in @racketmodname[cuml] takes its data the same way, comes in
 two forms, and refuses bad arguments the same way. This chapter covers those
-shared pieces on the iris data of @secref["getting-started"]:
-
-@examples[#:eval ev #:label #f
-(define measurements '("sepal-length" "sepal-width" "petal-length" "petal-width"))
-(define X
-  (~> (load-dataset 'iris #:format 'matrix #:columns measurements)
-      (matrix->device-matrix #:dtype 'float32)))
-(define species
-  (~> (load-dataset 'iris #:format 'table) (dataset-table-column "species") vector->list))
-]
+shared pieces on the iris data of @secref["getting-started"].
 
 @local-table-of-contents[]
+
+The data comes from the helpers of @secref["examples"], and
+@racket[kmeans-labels] copies a k-means result's labels to the host:
+
+@examples[#:eval ev #:label #f
+(define measurements (features 'iris "species"))
+(define flowers (dataset-matrix 'iris measurements))
+(define species (dataset-column 'iris "species"))
+(define (kmeans-labels result)
+  (device-vector->list (kmeans-result-labels result)))
+]
 
 @section[#:tag "concepts-data"]{Device data}
 
 A @deftech{sample matrix} is a raft @racket[device-matrix], row-major, one
 sample per row and one feature per column. k-means and DBSCAN take
 @racket['float32] or @racket['float64]; single linkage and spectral clustering
-take only @racket['float32]. @racket[matrix->device-matrix] infers
-@racket['float64] from the iris measurements:
+take only @racket['float32]:
 
 @examples[#:eval ev #:label #f
-(define X64 (matrix->device-matrix (load-dataset 'iris #:format 'matrix #:columns measurements)))
-(dtype X64)
-(~> (kmeans-fit X64 #:n-clusters 3) kmeans-result-labels device-vector->list (crosstab species))
-(eval:error (single-linkage-fit X64 #:n-clusters 3))
+(define flowers64 (dataset-matrix 'iris measurements #:dtype 'float64))
+(dtype flowers64)
+(~> (kmeans-fit flowers64 #:n-clusters 3) kmeans-labels (crosstab species))
+(eval:error (single-linkage-fit flowers64 #:n-clusters 3))
 ]
 
 A column-major matrix is refused, not transposed:
 
 @examples[#:eval ev #:label #f
 (eval:error
- (~> (load-dataset 'iris #:format 'matrix #:columns measurements)
-     (matrix->device-matrix #:dtype 'float32 #:layout 'col-major)
+ (~> (dataset-columns 'iris measurements)
+     rows
+     (list*->device-matrix #:dtype 'float32 #:layout 'col-major)
      (kmeans-fit #:n-clusters 3)))
 ]
 
@@ -57,9 +59,8 @@ thread's at each call. @racket[with-device-resources] scopes a fresh set:
 
 @examples[#:eval ev #:label #f
 (with-device-resources ([r (device-resources)])
-  (~> (kmeans-fit X #:n-clusters 3 #:resources r)
-      kmeans-result-labels
-      device-vector->list
+  (~> (kmeans-fit flowers #:n-clusters 3 #:resources r)
+      kmeans-labels
       (crosstab species)
       agreement))
 ]
@@ -73,12 +74,12 @@ until @racket[fit] returns a fitted copy, in the style of scikit-learn;
 @racket[fit-predict] fits and returns the labels:
 
 @examples[#:eval ev #:label #f
-(define km (kmeans #:n-clusters 3))
-(equal? (device-vector->list (fit-predict km X))
-        (~> (kmeans-fit X #:n-clusters 3) kmeans-result-labels device-vector->list))
-(hash-ref (estimator-params km) 'n-clusters)
-(estimator-set-params km (hasheq 'n-clusters 2))
-(kmeans-model (fit km X))
+(define estimator (kmeans #:n-clusters 3))
+(equal? (device-vector->list (fit-predict estimator flowers))
+        (kmeans-labels (kmeans-fit flowers #:n-clusters 3)))
+(hash-ref (estimator-params estimator) 'n-clusters)
+(estimator-set-params estimator (hasheq 'n-clusters 2))
+(kmeans-model (fit estimator flowers))
 ]
 
 An estimator checks nothing until it is fitted. @racket[kmeans-model] and its
@@ -95,7 +96,7 @@ Two seeds can find the same partition under different numbers:
 
 @examples[#:eval ev #:label #f
 (define (labels-at seed)
-  (~> (kmeans-fit X #:n-clusters 3 #:random-state seed) kmeans-result-labels device-vector->list))
+  (kmeans-labels (kmeans-fit flowers #:n-clusters 3 #:random-state seed)))
 (equal? (labels-at 0) (labels-at 1))
 (equal? (crosstab (labels-at 0) species) (crosstab (labels-at 1) species))
 ]
@@ -109,14 +110,14 @@ raised before the GPU is touched and leaving nothing allocated. Its message
 names the procedure that was called, which for an estimator is the generic:
 
 @examples[#:eval ev #:label #f
-(eval:error (kmeans-fit X #:n-clusters 151))
-(eval:error (fit (kmeans #:n-clusters 151) X))
+(eval:error (kmeans-fit flowers #:n-clusters 151))
+(eval:error (fit (kmeans #:n-clusters 151) flowers))
 ]
 
 A number that does not fit the native type is a contract error instead:
 
 @examples[#:eval ev #:label #f
-(eval:error (kmeans-fit X #:n-clusters 3 #:n-init 2.5))
+(eval:error (kmeans-fit flowers #:n-clusters 3 #:n-init 2.5))
 ]
 
 Each procedure's entry in the @secref["reference"] lists its refusals.

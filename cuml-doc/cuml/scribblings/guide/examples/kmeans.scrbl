@@ -11,13 +11,14 @@ similar spread whose number is known. Every feature counts in its own units.
 
 @section[#:tag "ex-kmeans-data"]{The data}
 
-The wine data holds 13 chemical measurements of 178 wines from three
+The wine data (S. Aeberhard and M. Forina, 1991, from the UCI Machine Learning
+Repository, @hyperlink["https://doi.org/10.24432/C5PC7J"]{doi:10.24432/C5PC7J},
+under CC BY 4.0) holds 13 chemical measurements of 178 wines from three
 cultivars:
 
 @examples[#:eval ev #:label #f
-(define wine (load-dataset 'wine #:format 'table))
-(define features (remove "cultivar" (dataset-table-names wine)))
-(define cultivar (vector->list (dataset-table-column wine "cultivar")))
+(define measurements (features 'wine "cultivar"))
+(define cultivar (dataset-column 'wine "cultivar"))
 (sizes cultivar)
 ]
 
@@ -25,18 +26,19 @@ The measurements have very different ranges:
 
 @examples[#:eval ev #:label #f
 (for/list ([name (in-list '("proline" "magnesium" "hue"))])
-  (define column (vector->list (dataset-table-column wine name)))
+  (define column (dataset-column 'wine name))
   (list name (apply min column) (apply max column)))
 ]
 
 @section[#:tag "ex-kmeans-raw"]{Raw measurements}
 
+@racket[table-of] clusters wines into three and counts each cluster's
+cultivars:
+
 @examples[#:eval ev #:label #f
-(define raw
-  (~> (load-dataset 'wine #:format 'matrix #:columns features)
-      (matrix->device-matrix #:dtype 'float32)))
-(define raw-table
-  (~> (fit-predict (kmeans #:n-clusters 3) raw) device-vector->list (crosstab cultivar)))
+(define (table-of wines)
+  (crosstab (labels-of (kmeans #:n-clusters 3) wines) cultivar))
+(define raw-table (table-of (dataset-matrix 'wine measurements)))
 raw-table
 (agreement raw-table)
 ]
@@ -46,11 +48,7 @@ Proline, in the hundreds, decides the distances: on proline alone, k-means
 finds the same clusters.
 
 @examples[#:eval ev #:label #f
-(define proline
-  (~> (load-dataset 'wine #:format 'matrix #:columns '("proline"))
-      (matrix->device-matrix #:dtype 'float32)))
-(equal? raw-table
-        (~> (fit-predict (kmeans #:n-clusters 3) proline) device-vector->list (crosstab cultivar)))
+(equal? raw-table (table-of (dataset-matrix 'wine '("proline"))))
 ]
 
 @section[#:tag "ex-kmeans-standardized"]{Standardized measurements}
@@ -59,12 +57,8 @@ With each column rescaled to standard deviation 1, every measurement counts
 alike:
 
 @examples[#:eval ev #:label #f
-(define scaled
-  (~> (load-dataset 'wine #:format 'table #:columns features)
-      standardized-rows
-      (list*->device-matrix #:dtype 'float32)))
-(define scaled-table
-  (~> (fit-predict (kmeans #:n-clusters 3) scaled) device-vector->list (crosstab cultivar)))
+(define scaled (standardized-matrix 'wine measurements))
+(define scaled-table (table-of scaled))
 scaled-table
 (agreement scaled-table)
 ]
@@ -76,15 +70,16 @@ are comparable.
 
 k-means needs @racket[n-clusters]. @racket[score] is the negated inertia, the
 sum of squared distances to the nearest centroid, which grows towards 0 with
-every added cluster; where its gains shrink is a hint:
+every added cluster; where its gains shrink is a hint. Ten seedings per fit
+keep a poor local optimum from hiding the trend:
 
 @examples[#:eval ev #:label #f
 (for/list ([k (in-range 1 7)])
-  (define fitted (fit (kmeans #:n-clusters k) scaled))
+  (define fitted (fit (kmeans #:n-clusters k #:n-init 10) scaled))
   (list k (exact-round (score fitted scaled))))
 ]
 
-The score gains 654 and 380 from the second and third clusters, and only 68
+The score gains 655 and 381 from the second and third clusters, and only 102
 from the fourth: three is where the gains shrink, as the cultivars say.
 
 @(close-eval ev)

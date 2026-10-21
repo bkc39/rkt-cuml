@@ -15,21 +15,15 @@ groups joined by a run of close samples merge into one.
 The iris measurements of @secref["getting-started"]:
 
 @examples[#:eval ev #:label #f
-(define measurements '("sepal-length" "sepal-width" "petal-length" "petal-width"))
-(define X
-  (~> (load-dataset 'iris #:format 'matrix #:columns measurements)
-      (matrix->device-matrix #:dtype 'float32)))
-(define species
-  (~> (load-dataset 'iris #:format 'table) (dataset-table-column "species") vector->list))
+(define flowers (dataset-matrix 'iris (features 'iris "species")))
+(define species (dataset-column 'iris "species"))
 ]
 
 @section[#:tag "ex-single-linkage-two"]{Two clusters}
 
 @examples[#:eval ev #:label #f
 (define (single-linkage-table k)
-  (~> (fit-predict (agglomerative-clustering #:n-clusters k) X)
-      device-vector->list
-      (crosstab species)))
+  (crosstab (labels-of (agglomerative-clustering #:n-clusters k) flowers) species))
 (single-linkage-table 2)
 ]
 

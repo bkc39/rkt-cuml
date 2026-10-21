@@ -13,26 +13,24 @@ spread, and costs an eigensolve.
 
 @section[#:tag "ex-spectral-data"]{The data}
 
-The breast-cancer data describes 569 tumours, malignant or benign, by 30
-measurements of their cell nuclei. Leave out the diagnosis and the
-identifier, and standardize the rest:
+The breast-cancer data (W. Wolberg, O. Mangasarian, N. Street and W. Street,
+1993, from the UCI Machine Learning Repository,
+@hyperlink["https://doi.org/10.24432/C5DW2B"]{doi:10.24432/C5DW2B}, under
+CC BY 4.0) describes 569 tumours, malignant or benign, by 30 measurements of
+their cell nuclei. Leave out the diagnosis and the identifier, and standardize
+the rest:
 
 @examples[#:eval ev #:label #f
-(define tumours (load-dataset 'breast-cancer #:format 'table))
-(define features (remove* '("diagnosis" "id") (dataset-table-names tumours)))
-(define diagnosis (vector->list (dataset-table-column tumours "diagnosis")))
+(define diagnosis (dataset-column 'breast-cancer "diagnosis"))
 (sizes diagnosis)
-(define X
-  (~> (load-dataset 'breast-cancer #:format 'table #:columns features)
-      standardized-rows
-      (list*->device-matrix #:dtype 'float32)))
+(define tumours (standardized-matrix 'breast-cancer (features 'breast-cancer "diagnosis" "id")))
 ]
 
 @section[#:tag "ex-spectral-fit"]{Against k-means}
 
 @examples[#:eval ev #:label #f
 (define (table-of estimator)
-  (~> (fit-predict estimator X) device-vector->list (crosstab diagnosis)))
+  (crosstab (labels-of estimator tumours) diagnosis))
 (define kmeans-table (table-of (kmeans #:n-clusters 2)))
 (define spectral-table (table-of (spectral-clustering #:n-clusters 2)))
 kmeans-table
@@ -53,7 +51,7 @@ on, the agreement changes little:
 
 @examples[#:eval ev #:label #f
 (for/list ([k (in-list '(3 5 10 30))])
-  (list k (agreement (table-of (spectral-clustering #:n-clusters 2 #:n-neighbors k)))))
+  (list k (~> (spectral-clustering #:n-clusters 2 #:n-neighbors k) table-of agreement)))
 ]
 
 Spectral clustering differs most from k-means on clusters that are not
