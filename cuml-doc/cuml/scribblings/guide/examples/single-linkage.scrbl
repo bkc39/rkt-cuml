@@ -48,24 +48,23 @@ outliers, and at six the touching pair is still one cluster:
 (single-linkage-table 6)
 ]
 
-The cuts by petal length and width, each cluster in the colour of the species
-it shares the most flowers with:
+The cuts by petal length and width. A cluster takes the colour of the species
+it shares the most flowers with; the clusters left over take colours of their
+own:
 
 @examples[#:eval ev #:label #f
 (define petal-length (dataset-column 'iris "petal-length"))
 (define petal-width (dataset-column 'iris "petal-width"))
+(define cluster-counts '(2 3 4 6))
 (define cuts
-  (for/list ([k (in-list '(2 3 4 6))])
-    (matched-labels (labels-of (agglomerative-clustering #:n-clusters k) flowers) species)))
-(define plots
-  (for/list ([k (in-list '(2 3 4 6))]
-             [labels (in-list cuts)])
-    (cluster-plot petal-length petal-width labels
-                  #:title (format "~a clusters" k)
-                  #:x-label "petal length (cm)"
-                  #:y-label "petal width (cm)"
-                  #:height 260)))
-(panels (take plots 2) (drop plots 2) (list (cluster-legend (append* cuts))))
+  (for/list ([k (in-list cluster-counts)])
+    (clusters-of (agglomerative-clustering #:n-clusters k) flowers species)))
+(sweep-figure petal-length petal-width
+              (map (curry format "~a clusters") cluster-counts)
+              cuts
+              #:names (remove-duplicates species)
+              #:x-label "petal length (cm)"
+              #:y-label "petal width (cm)")
 ]
 
 At every cut, 92 or more of the 100 versicolor and virginica flowers stay one

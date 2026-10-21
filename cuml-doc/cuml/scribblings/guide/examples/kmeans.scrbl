@@ -72,15 +72,15 @@ of the cultivar it shares the most wines with:
 @examples[#:eval ev #:label #f
 (define proline (dataset-column 'wine "proline"))
 (define flavanoids (dataset-column 'wine "flavanoids"))
-(define (wine-plot labels title)
-  (cluster-plot proline flavanoids labels #:title title #:x-label "proline" #:y-label "flavanoids"))
-(define (clusters-of wines)
-  (matched-labels (labels-of (kmeans #:n-clusters 3) wines) cultivar))
-(panels (list (wine-plot (clusters-of (dataset-matrix 'wine measurements)) "raw")
-              (wine-plot (clusters-of scaled) "standardized"))
-        (list (wine-plot (renumbered cultivar) "cultivar"))
-        (list (cluster-legend (renumbered cultivar)
-                              #:names (map (curry format "cultivar ~a") (remove-duplicates cultivar)))))
+(define raw (dataset-matrix 'wine measurements))
+(class-figure proline flavanoids
+              (list (list "raw" (clusters-of (kmeans #:n-clusters 3) raw cultivar))
+                    (list "standardized" (clusters-of (kmeans #:n-clusters 3) scaled cultivar)))
+              cultivar
+              #:class-title "cultivar"
+              #:names (map (curry format "cultivar ~a") (remove-duplicates cultivar))
+              #:x-label "proline"
+              #:y-label "flavanoids")
 ]
 
 On raw measurements the clusters are bands of proline, whatever the

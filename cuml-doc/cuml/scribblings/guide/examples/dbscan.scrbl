@@ -78,21 +78,13 @@ group keeps its colour across the radii:
     (dbscan-fit eruptions #:eps eps #:min-samples 5)))
 (define (labels-in result)
   (device-vector->list (dbscan-result-labels result)))
-(define groups (labels-in (list-ref fits 2)))
-(define matched
-  (for/list ([result (in-list fits)])
-    (matched-labels (labels-in result) groups)))
-(define plots
-  (for/list ([eps (in-list radii)]
-             [result (in-list fits)]
-             [labels (in-list matched)])
-    (cluster-plot lengths waits labels
-                  #:core (device-vector->list (dbscan-result-core-sample-indices result))
-                  #:title (format "eps ~a" eps)
-                  #:x-label "eruption (min)"
-                  #:y-label "wait (min)"
-                  #:height 260)))
-(panels (take plots 2) (drop plots 2) (list (cluster-legend (append* matched))))
+(define groups (labels-in (third fits)))
+(sweep-figure lengths waits
+              (map (curry format "eps ~a") radii)
+              (map (lambda (result) (matched-labels (labels-in result) groups)) fits)
+              #:cores (map (compose device-vector->list dbscan-result-core-sample-indices) fits)
+              #:x-label "eruption (min)"
+              #:y-label "wait (min)")
 ]
 
 At 0.1, 126 eruptions are noise and the groups break into fragments; at 0.2
