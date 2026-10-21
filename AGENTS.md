@@ -206,7 +206,13 @@ pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
 (`racket <plugin>/hooks/gate.rkt . all`), and `push-gates` is the pre-push
-subset. `bindings` runs the census `scripts/check-bindings.rkt`: every
+subset. The manual's link check (`scripts/check-doc-links.rkt`) runs only
+in `docs`, which is not in `push-gates` and runs on CI only on the GPU
+runner: run `docs` before any push that touches the scribblings.
+`pkg-deps` skips cuml-doc's `racket-doc` and `threading-doc` (`doc_only`:
+under `--no-docs` setup cannot see the manual's links), so it never
+reports either as unused; drop one by hand when the manual stops linking
+into it. `bindings` runs the census `scripts/check-bindings.rkt`: every
 `cuml_cluster_` export of the staged library is bound once (a `_job`'s body
 excepted), every binding is exported, and `scripts/cluster-bindings.rktd`,
 keyed by issue, plans each export; a leg flips its planned entries to due.
