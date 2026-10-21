@@ -8,7 +8,7 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-doc_only=(cuml-doc:racket-doc cuml-doc:threading-doc)
+doc_only=(cuml-doc:pict-doc cuml-doc:plot-doc cuml-doc:plot-gui-lib cuml-doc:racket-doc cuml-doc:threading-doc)
 
 [ "$#" -gt 0 ] || {
   echo "usage: scripts/pkg-deps.sh <pkg> ..." >&2

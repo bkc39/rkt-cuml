@@ -13,11 +13,11 @@ clusters.
 
 @section[#:tag "gs-installing"]{Installing}
 
-@commandline{raco pkg install --auto cuml datasets-core threading}
+@commandline{raco pkg install --auto cuml datasets-core plot-lib threading}
 
 The packages require Racket 9.3 or later, and cuML an NVIDIA GPU.
-@tt{datasets-core} supplies this guide's data and @tt{threading} its
-@racket[~>]. Every example in the guide starts from this require and the
+@tt{datasets-core} supplies this guide's data, @tt{plot-lib} its figures and
+@tt{threading} its @racket[~>]. Every example in the guide starts from this require and the
 helpers in @secref["examples"]:
 
 @page-require-block
@@ -79,6 +79,33 @@ Setosa is a cluster of its own. Versicolor and virginica overlap in these
 measurements: 14 virginica flowers share the versicolor cluster, and 2
 versicolor the virginica one, so 134 of the 150 flowers are in a cluster
 whose majority is their species.
+
+@racket[cluster-plot] draws the flowers by petal length and width.
+@racket[matched-labels] gives each cluster the colour and marker of the species
+it shares the most flowers with, so a flower drawn differently in the two
+panels is one of the 16 in another species' cluster. The crosses are the
+centroids.
+
+@examples[#:eval ev #:label #f
+(define petal-length (dataset-column 'iris "petal-length"))
+(define petal-width (dataset-column 'iris "petal-width"))
+(define centroids
+  (~> fitted kmeans-model kmeans-result-centroids device-matrix->list* (map (curryr drop 2) _)))
+(define (petals labels title [marks '()])
+  (cluster-plot petal-length petal-width labels
+                #:centroids marks
+                #:title title
+                #:x-label "petal length (cm)"
+                #:y-label "petal width (cm)"))
+(panels (list (petals (matched-labels labels species) "k-means" centroids)
+              (petals (renumbered species) "species"))
+        (list (cluster-legend (renumbered species)
+                              #:names (remove-duplicates species)
+                              #:centroids? #t)))
+]
+
+Setosa stands apart. The 16 sit where versicolor and virginica meet, between
+the two centroids.
 
 @section[#:tag "gs-predict"]{New flowers}
 

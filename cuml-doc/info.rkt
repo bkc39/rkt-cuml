@@ -8,6 +8,11 @@
 (define build-deps
   '("cuml-lib" "datasets-core"
                ("raft" #:version "0.2")
+               "pict-doc"
+               "pict-lib"
+               "plot-doc"
+               "plot-gui-lib"
+               "plot-lib"
                "racket-doc"
                "sandbox-lib"
                "scribble-lib"

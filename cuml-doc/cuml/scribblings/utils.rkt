@@ -2,6 +2,8 @@
 
 (require (for-label cuml
                     datasets/core
+                    pict
+                    plot
                     racket/base
                     racket/function
                     racket/list
@@ -29,6 +31,8 @@
          (all-from-out scribble/manual)
          (for-label (all-from-out cuml
                                   datasets/core
+                                  pict
+                                  plot
                                   racket/base
                                   racket/function
                                   racket/list
