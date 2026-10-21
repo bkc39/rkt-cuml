@@ -2,8 +2,8 @@
 #
 # raco setup's dependency check over the given packages, red on an unused
 # dependency too: setup prints that one to stderr and still exits 0. With
-# --no-docs, setup cannot see the packages a manual links into, so those are
-# listed in doc_only.
+# --no-docs, setup neither compiles the manual, so it is made first, nor sees
+# the packages the manual links into, so those are listed in doc_only.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -17,6 +17,7 @@ doc_only=(cuml-doc:racket-doc cuml-doc:threading-doc)
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 
+raco make cuml-doc/cuml/scribblings/cuml.scrbl
 raco setup -j 4 --no-docs --check-pkg-deps --unused-pkg-deps --pkgs "$@" 2>&1 | tee "$log"
 
 mapfile -t unused < <(awk '
