@@ -26,15 +26,13 @@
        (values name #t))]))
 
 (define (unescaped html)
-  (for/fold ([text html])
-            ([entity (in-list '(("&lt;" . "<") ("&gt;" . ">") ("&amp;" . "&")))])
+  (for/fold ([text html]) ([entity (in-list '(("&lt;" . "<") ("&gt;" . ">") ("&amp;" . "&")))])
     (string-replace text (car entity) (cdr entity))))
 
 (define (unlinked-names html)
-  (remove-duplicates (map unescaped
-                          (regexp-match* #rx"<span class=\"RktSym\">([^<]*)</span>"
-                                         html
-                                         #:match-select cadr))))
+  (remove-duplicates
+   (map unescaped
+        (regexp-match* #rx"<span class=\"RktSym\">([^<]*)</span>" html #:match-select cadr))))
 
 (define (page-findings labelled dir page)
   (define html (file->string (build-path dir page)))

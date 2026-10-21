@@ -10,7 +10,10 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 doc_only=(cuml-doc:racket-doc cuml-doc:threading-doc)
 
-[ "$#" -gt 0 ] || { echo "usage: scripts/pkg-deps.sh <pkg> ..." >&2; exit 2; }
+[ "$#" -gt 0 ] || {
+  echo "usage: scripts/pkg-deps.sh <pkg> ..." >&2
+  exit 2
+}
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
 

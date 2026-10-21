@@ -88,12 +88,11 @@
 (define (chapter-text chapter)
   (~> (collection-file-path chapter "cuml" "scribblings" "guide") flattened-text))
 
+(define dataset-use
+  #px"\\((?:load-dataset-table|dataset-matrix|dataset-columns?|standardized-matrix|features) '([a-z-]+)")
+
 (define (chapter-datasets chapter)
-  (~> (regexp-match*
-       #px"\\((?:load-dataset-table|dataset-matrix|dataset-columns?|standardized-matrix|features) '([a-z-]+)"
-       (chapter-text chapter)
-       #:match-select cadr)
-      (map string->symbol _)))
+  (map string->symbol (regexp-match* dataset-use (chapter-text chapter) #:match-select cadr)))
 
 (test-case "the guide chapter that introduces a dataset cites its DOI or licence, as datasets-core's NOTICE gives them"
   (define notice (flattened-text (build-path (pkg-directory "datasets-core") "NOTICE")))
@@ -110,7 +109,8 @@
     (define chapter (cdr (assq dataset introductions)))
     (check-not-false (string-contains? notice notice-text) (format "NOTICE: ~a" notice-text))
     (for ([text (in-list cited)])
-      (check-not-false (string-contains? (chapter-text chapter) text) (format "~a: ~a" chapter text)))))
+      (check-not-false (string-contains? (chapter-text chapter) text)
+                       (format "~a: ~a" chapter text)))))
 
 (test-case "the helpers leave out noise, label -1"
   (define labels '(0 0 -1 1 1 -1))
