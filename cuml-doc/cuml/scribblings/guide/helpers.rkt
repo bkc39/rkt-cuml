@@ -107,13 +107,12 @@
         (sort > #:key first)))
   (define matches
     (for/fold ([matches (hash)]) ([pair (in-list pairs)])
-      (match pair
-        [(list n cluster class)
-         (cond
-           [(zero? n) matches]
-           [(hash-has-key? matches cluster) matches]
-           [(member class (hash-values matches)) matches]
-           [else (hash-set matches cluster class)])])))
+      (match-define (list n cluster class) pair)
+      (cond
+        [(zero? n) matches]
+        [(hash-has-key? matches cluster) matches]
+        [(member class (hash-values matches)) matches]
+        [else (hash-set matches cluster class)])))
   (define ids
     (for/fold ([ids matches])
               ([cluster (in-list (filter-not (curry hash-has-key? matches) clusters))]
@@ -151,15 +150,14 @@
   (sort (remove* '(-1) (remove-duplicates labels)) <))
 
 (define (cluster-points vs label #:core? [core? #t] #:label [name #f])
-  (match (cluster-style label)
-    [(list color filled hollow)
-     (points vs
-             #:sym (if core? filled hollow)
-             #:color color
-             #:fill-color color
-             #:size (if core? 7 5)
-             #:alpha 0.8
-             #:label name)]))
+  (match-define (list color filled hollow) (cluster-style label))
+  (points vs
+          #:sym (if core? filled hollow)
+          #:color color
+          #:fill-color color
+          #:size (if core? 7 5)
+          #:alpha 0.8
+          #:label name))
 
 (define (noise-points vs #:label [name #f])
   (points vs #:sym 'circle #:color noise-color #:size 4 #:label name))
@@ -194,17 +192,17 @@
                #:height height)))
 
 (define (cluster-renderers xs ys labels core centroids)
-  (define samples (map list xs ys labels (range (length labels))))
   (define core?
     (if core
         (lambda (index) (memv index core))
         (const #t)))
   (define (vectors label keep?)
-    (for/list ([sample (in-list samples)]
-               #:when (match sample
-                        [(list _ _ sample-label index) (and (= sample-label label) (keep? index))]))
-      (match sample
-        [(list x y _ _) (vector x y)])))
+    (for/list ([x (in-list xs)]
+               [y (in-list ys)]
+               [sample-label (in-list labels)]
+               [index (in-naturals)]
+               #:when (and (= sample-label label) (keep? index)))
+      (vector x y)))
   (append (append-map (lambda (label)
                         (list (cluster-points (vectors label core?) label)
                               (cluster-points (vectors label (negate core?)) label #:core? #f)))
@@ -250,11 +248,11 @@
             (if centroids?
                 (list (centroid-points away #:label "centroid"))
                 '())))
-  (define rows (ceiling (/ (length entries) (quotient width 160))))
+  (define legend-rows (ceiling (/ (length entries) (quotient width 160))))
   (parameterize ([plot-decorations? #f]
                  [plot-foreground (rgb "#5f5e5a")]
                  [plot-legend-anchor 'top]
-                 [plot-legend-layout (list 'rows rows 'compact)]
+                 [plot-legend-layout (list 'rows legend-rows 'compact)]
                  [plot-legend-font-size 9])
     (plot-pict entries
                #:x-min 0
@@ -262,7 +260,7 @@
                #:y-min 0
                #:y-max 1
                #:width width
-               #:height (+ 16 (* 22 rows)))))
+               #:height (+ 16 (* 22 legend-rows)))))
 
 (define (line-plot xs
                    ys
@@ -272,7 +270,7 @@
                    #:width [width 320]
                    #:height [height 240])
   (define vs (map vector xs ys))
-  (define color (first cluster-colors))
+  (match-define (cons color _) cluster-colors)
   (parameterize ([plot-x-ticks (ticks-add (plot-x-ticks) xs)])
     (styled-plot (list (lines vs #:color color #:width 2)
                        (points vs #:sym 'fullcircle #:color color #:fill-color color #:size 7))
@@ -284,5 +282,5 @@
                  width
                  height)))
 
-(define (panels . rows)
-  (~> (map (curry apply hc-append 12) rows) (apply vc-append 12 _)))
+(define (panels . panel-rows)
+  (~> (map (curry apply hc-append 12) panel-rows) (apply vc-append 12 _)))
