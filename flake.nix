@@ -220,7 +220,7 @@
           ${installRaft "$TMPDIR/rkt-raft" ""}
           ${installCuml ""}
           raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft
-          raco setup -j 4 --no-docs --check-pkg-deps --unused-pkg-deps --pkgs ${cumlPackageNames}
+          bash scripts/pkg-deps.sh ${cumlPackageNames}
           runHook postBuild
         '';
         doCheck = true;

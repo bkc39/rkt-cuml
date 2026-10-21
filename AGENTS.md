@@ -33,7 +33,8 @@ Why several packages: a user who needs clustering installs and loads only
 the clustering shim, and each family's native dependencies stay its own. A
 family package depends only on base, raft and cuml-core-lib (and what it
 truly needs), never on cuml-lib or another family; `scripts/check-layout.rkt`
-and `raco setup --check-pkg-deps --unused-pkg-deps` gate it. Family packages
+and `scripts/pkg-deps.sh` (`raco setup --check-pkg-deps --unused-pkg-deps`,
+red on an unused dependency too) gate it. Family packages
 export algorithm-specific procedures (`kmeans-fit`); bare algorithm names
 (`kmeans`) are reserved for cuml-lib's estimator wrappers, and
 `check-layout.rkt` holds the reserved list and checks the public modules of
@@ -158,7 +159,8 @@ scripts/gpu-suite.sh               # on the GPU host: gtests (+ ASAN/UBSAN, memc
                                    #   LD_BIND_NOW load, raco tests with the twin, the
                                    #   census; red on a SKIP not in allowed-skips.txt
 raco test --process --timeout 45 cuml-test
-scripts/render-docs.sh <dir>       # the manual, red on any warning or broken link
+scripts/render-docs.sh <dir>       # the manual, red on any warning, broken or missing link
+scripts/pkg-deps.sh <pkg> ...      # raco setup's dependency check, red on an unused one too
 nix run --max-jobs 1 --cores 4 .#copy-native-libs   # restage the shims after a C++ change
 cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loop
 ```
