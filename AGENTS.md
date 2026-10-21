@@ -287,7 +287,8 @@ kills the test outright.
   started, Concepts with every `deftech`, and one `ex-*` chapter per
   algorithm on real `datasets-core` data) and the reference
   (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
-  `datasets-core` is a build-dep of cuml-doc and cuml-test only.
+  `datasets-core` is a build-dep of cuml-doc only; cuml-test gets it through
+  cuml-doc.
 - The guide's helpers are one module, `guide/helpers.rkt`: Getting started
   shows its `require`, Examples its definitions, every guide sandbox
   evaluates both (`utils.rkt` reads them from the file), and
