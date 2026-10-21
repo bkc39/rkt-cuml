@@ -34,8 +34,8 @@
          (only-in pkg/lib pkg-directory)
          (only-in racket/file file->string)
          (only-in racket/function curry)
-         (only-in racket/list argmax count first group-by remove-duplicates)
-         (only-in racket/match match-define)
+         (only-in racket/list append-map argmax count first group-by remove-duplicates)
+         (only-in racket/match match match-define)
          (only-in racket/math exact-round)
          (only-in racket/string string-contains?)
          (only-in rackunit
@@ -53,6 +53,7 @@
                   shape
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in syntax/modread with-module-reading-parameterization)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error))
 
@@ -68,13 +69,22 @@
     (dynamic-require ''page #f)
     (check-equal? (eval '(~> '(0 0 1) (crosstab '(a a b)) agreement) (module->namespace ''page)) 3)))
 
-(define guide-chapters
-  '("getting-started.scrbl" "concepts.scrbl"
-                            "examples.scrbl"
-                            "examples/kmeans.scrbl"
-                            "examples/dbscan.scrbl"
-                            "examples/single-linkage.scrbl"
-                            "examples/spectral.scrbl"))
+(define (included-sections datum)
+  (match datum
+    [(list 'include-section (? string? section)) (list section)]
+    [(cons head tail) (append (included-sections head) (included-sections tail))]
+    [_ '()]))
+
+(define (read-document file)
+  (call-with-input-file file
+                        (lambda (in) (with-module-reading-parameterization (lambda () (read in))))))
+
+(define (guide-chapters [file (collection-file-path "guide.scrbl" "cuml" "scribblings")])
+  (define-values (dir _name _directory?) (split-path file))
+  (append-map (lambda (section)
+                (define chapter (build-path dir section))
+                (cons chapter (guide-chapters chapter)))
+              (~> file read-document included-sections)))
 
 (define dataset-citations
   '((iris ("doi:10.24432/C56C76" "CC BY 4.0") "doi:10.24432/C56C76. CC BY 4.0")
@@ -85,21 +95,20 @@
 (define (flattened-text path)
   (regexp-replace* #px"\\s+" (file->string path) " "))
 
-(define (chapter-text chapter)
-  (~> (collection-file-path chapter "cuml" "scribblings" "guide") flattened-text))
-
 (define dataset-use
   #px"\\((?:load-dataset-table|dataset-matrix|dataset-columns?|standardized-matrix|features) '([a-z-]+)")
 
 (define (chapter-datasets chapter)
-  (map string->symbol (regexp-match* dataset-use (chapter-text chapter) #:match-select cadr)))
+  (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))
 
 (test-case "the guide chapter that introduces a dataset cites its DOI or licence, as datasets-core's NOTICE gives them"
-  (define notice (flattened-text (build-path (pkg-directory "datasets-core") "NOTICE")))
+  (define datasets-core (pkg-directory "datasets-core"))
+  (check-not-false datasets-core "pkg-directory: datasets-core is not installed")
+  (define notice (flattened-text (build-path datasets-core "NOTICE")))
   (define introductions
     (for*/fold ([introductions '()]
                 #:result (reverse introductions))
-               ([chapter (in-list guide-chapters)]
+               ([chapter (in-list (guide-chapters))]
                 [dataset (in-list (remove-duplicates (chapter-datasets chapter)))]
                 #:unless (assq dataset introductions))
       (cons (cons dataset chapter) introductions)))
@@ -109,7 +118,7 @@
     (define chapter (cdr (assq dataset introductions)))
     (check-not-false (string-contains? notice notice-text) (format "NOTICE: ~a" notice-text))
     (for ([text (in-list cited)])
-      (check-not-false (string-contains? (chapter-text chapter) text)
+      (check-not-false (string-contains? (flattened-text chapter) text)
                        (format "~a: ~a" chapter text)))))
 
 (test-case "the helpers leave out noise, label -1"
