@@ -9,7 +9,6 @@
   '("cuml-cluster-lib" "cuml-core-lib"
                        "cuml-doc"
                        "cuml-lib"
-                       "datasets-core"
                        ("raft" #:version "0.2")
                        "rackunit-lib"
                        "threading-lib"))
