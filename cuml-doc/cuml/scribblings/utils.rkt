@@ -2,9 +2,10 @@
 
 (require (for-label cuml
                     datasets/core
-                    pict
+                    (except-in pict pict)
                     plot
                     racket/base
+                    racket/format
                     racket/function
                     racket/list
                     racket/match
@@ -34,6 +35,7 @@
                                   pict
                                   plot
                                   racket/base
+                                  racket/format
                                   racket/function
                                   racket/list
                                   racket/match
