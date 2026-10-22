@@ -13,7 +13,7 @@
          (only-in racket/list combinations make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-vector->list)
+         (only-in raft device-vector->list dtype)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
@@ -143,17 +143,31 @@
               (mat (cosine-cloud 300 3 0.02 4) dt)
               (hasheq 'metric 'cosine 'eps 0.02 'min-samples 4))))
 
+(define identity-base (dbscan-params #:eps 2 #:min-samples 7 #:out-dtype 'int64))
+
+(define (typed-lists r)
+  (cons (dtype (dbscan-result-labels r)) (result->lists r)))
+
 (define (ways X options)
-  (define base (dbscan-params #:min-samples 7 #:out-dtype 'int64))
   (define (estimated e)
-    (result->lists (dbscan-model (fit e X))))
-  (list (result->lists (apply-options dbscan-fit options X))
-        (result->lists (dbscan-fit X #:params (apply-options dbscan-params options)))
-        (result->lists (apply-options dbscan-fit (hash-set options 'params base) X))
-        (result->lists (dbscan-fit X #:params (apply-options dbscan-params options base)))
-        (estimated (apply-options dbscan options))
-        (estimated (dbscan (apply-options dbscan-params options)))
-        (estimated (apply-options estimator-set-params options (dbscan)))))
+    (dbscan-model (fit e X)))
+  (map typed-lists
+       (list (apply-options dbscan-fit options X)
+             (dbscan-fit X #:params (apply-options dbscan-params options))
+             (apply-options dbscan-fit (hash-set options 'params identity-base) X)
+             (dbscan-fit X #:params (apply-options dbscan-params options identity-base))
+             (estimated (apply-options dbscan options))
+             (estimated (dbscan (apply-options dbscan-params options)))
+             (estimated (apply-options estimator-set-params options (dbscan))))))
+
+(test-gpu "L19: the identity fixture has core points at the base, and every way takes out-dtype"
+  (for ([dt (in-list dtypes)])
+    (match-define (list (list _ X _) _ _) (identity-fixtures dt))
+    (match-define (list _ core) (result->lists (dbscan-fit X #:params identity-base)))
+    (check-true (pair? core) (symbol->string dt))
+    (check-equal? (map car (ways X (hasheq 'out-dtype 'int64)))
+                  (make-list 7 'int64)
+                  (symbol->string dt))))
 
 (test-gpu "L19: a keyword is the same as a set with that keyword, through dbscan-fit and the estimator"
   (for* ([dt (in-list dtypes)]
