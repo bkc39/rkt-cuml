@@ -81,7 +81,7 @@ vector of @racket[X]'s dtype, weighs each sample; zero, negative and NaN
 weights are passed to cuML as they are. @racket[max-samples-per-batch] bounds
 the samples processed at once. The outputs live on @racket[resources].
 @racket[params], from @racket[kmeans-params], gives every hyperparameter a keyword omits.
-The inertia and centroids can differ in their last digits across batch sizes; the labels do not.
+The batch size changes results no more than repeating the call does.
 
 @examples[#:eval ev #:label #f
 (define start (list*->device-matrix '((1 0) (11 11)) #:dtype 'float64))
@@ -139,7 +139,8 @@ key, or without one, raises @racket[exn:fail:cuml] of kind @racket['logic]; valu
 
 The samples k-means processes at once, read when @racket[kmeans-fit], @racket[kmeans-predict],
 @racket[kmeans-transform] and @racket[kmeans-score] are called without @racket[#:max-samples-per-batch],
-and by a @racket[kmeans] estimator built without it. It changes no label.
+and by a @racket[kmeans] estimator built without it. It changes results no more than repeating the call
+does.
 
 @examples[#:eval ev #:label #f
 (equal? (~> (parameterize ([current-batch-samples 3]) (kmeans-fit X #:n-clusters 2 #:random-state 1))

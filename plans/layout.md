@@ -191,8 +191,14 @@
   deviation was 8.1e-6 (float32), the same order as run to run. In one of
   four test runs, float32 random n-init 1 weighted at batch 100 departed in
   3 of 3 reruns while 3 default refits agreed; 100 consecutive calls of
-  that case at each batch then gave identical labels. The fallback (the
-  batch size back in `kmeans-params`) was not applied.
+  that case at each batch then gave identical labels. A rerun of 5 calls
+  per batch found 5 of the 32 blob cases changing labels or n-iter, each
+  as much at a repeated batch 32768 as at 7, 100, 4095 or 4096. Decided
+  on #16: keep `current-batch-samples` with the relaxed H13; the fallback
+  (the batch size back in `kmeans-params`) was not applied.
+  - Upstream: cuML 26.08 k-means is not reproducible run to run on one
+    input, batch size and `random_state` (the k-means++ n-init 3 winner,
+    1-row flips with float32 random init); logged, not filed.
 
 ## Owner decisions (2026-10-17)
 
