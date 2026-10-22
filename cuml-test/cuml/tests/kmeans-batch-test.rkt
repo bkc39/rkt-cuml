@@ -10,8 +10,17 @@
                   kmeans-result-inertia
                   kmeans-score
                   kmeans-transform)
-         (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-exn check-regexp-match check-true test-case)
+         (only-in racket/list append* first second third)
+         (only-in racket/match match match-define)
+         (only-in rackunit
+                  check-equal?
+                  check-exn
+                  check-false
+                  check-not-eq?
+                  check-regexp-match
+                  check-true
+                  exn:test:check?
+                  test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/kmeans-data.rkt"
@@ -35,21 +44,18 @@
 (define (deviation a b)
   (/ (abs (- a b)) (max 1.0 (abs b))))
 
-(struct tally (largest bit-identical?) #:mutable)
+(define (spread actual expected)
+  (for/list ([a (in-list actual)]
+             [b (in-list expected)])
+    (list (deviation a b) (equal? a b))))
 
-(define (tallied! t actual expected)
-  (define d (deviation actual expected))
-  (set-tally-largest! t (max (tally-largest t) d))
-  (set-tally-bit-identical?! t (and (tally-bit-identical? t) (equal? actual expected))))
-
-(define (check-close! t actual expected tol name)
-  (tallied! t actual expected)
-  (check-true (close? actual expected tol) (format "~a: ~a against ~a" name actual expected)))
-
-(define (check-rows! t actual expected tol name)
-  (for* ([(actual-row expected-row) (in-parallel actual expected)]
-         [(a b) (in-parallel actual-row expected-row)])
-    (check-close! t a b tol name)))
+(define (check-close-all! name actual expected tol)
+  (define far
+    (for/first ([a (in-list actual)]
+                [b (in-list expected)]
+                #:unless (close? a b tol))
+      (list a b)))
+  (check-false far (format "~a: ~a" name far)))
 
 (define (fitted X dt init n-init w batch)
   (define start (and (eq? init 'matrix) (first-rows X 16 dt)))
@@ -65,94 +71,115 @@
   (match-define (kmeans-result C labels inertia n-iter) r)
   (list (host C) (host-vector labels) inertia n-iter))
 
+(define (numbers r)
+  (match-define (kmeans-result C _ inertia _) r)
+  (cons inertia (append* (host C))))
+
 (define (partition r)
   (match-define (kmeans-result _ labels _ n-iter) r)
   (list (host-vector labels) n-iter))
 
-(define (check-same-fit! t name dt actual expected)
-  (match-define (kmeans-result C labels inertia n-iter) actual)
-  (match-define (kmeans-result C0 labels0 inertia0 n-iter0) expected)
-  (check-equal? (host-vector labels) (host-vector labels0) (format "~a: labels" name))
-  (check-equal? n-iter n-iter0 (format "~a: n-iter" name))
-  (check-rows! t (host C) (host C0) (tolerance dt) (format "~a: centroids" name))
-  (check-close! t inertia inertia0 (tolerance dt) (format "~a: inertia" name)))
-
-(define (agrees? actual expected dt)
-  (match-define (kmeans-result C _ inertia _) actual)
-  (match-define (kmeans-result C0 _ inertia0 _) expected)
+(define (same-fit? actual expected dt)
   (and (equal? (partition actual) (partition expected))
-       (close? inertia inertia0 (tolerance dt))
-       (for*/and ([(row row0) (in-parallel (host C) (host C0))]
-                  [(a b) (in-parallel row row0)])
+       (for/and ([a (in-list (numbers actual))]
+                 [b (in-list (numbers expected))])
          (close? a b (tolerance dt)))))
 
-(define (record! box name)
-  (set-box! box (cons name (unbox box))))
+(define escalation 10)
 
-(define (check-batch-fit! t unstable departed name dt refit rerun expected)
-  (define actual (rerun))
+(define (batch-verdict agrees? first rerun refit)
+  (define (misses thunk)
+    (for/sum ([_ (in-range escalation)]) (if (agrees? (thunk)) 0 1)))
   (cond
-    [(agrees? actual expected dt) (check-same-fit! t name dt actual expected)]
-    [(for/or ([_ (in-range 3)])
-       (or (not (agrees? (refit) expected dt)) (agrees? (rerun) expected dt)))
-     (record! unstable name)]
-    [else (record! departed name)]))
+    [(agrees? first) 'agrees]
+    [(and (>= (misses rerun) 8) (<= (misses refit) 1)) 'departed]
+    [else 'unstable]))
 
-(define (check-same-apply! t name dt C X w batch)
+(define (check-batch-fit! name agrees? first rerun refit)
+  (define verdict (batch-verdict agrees? first rerun refit))
+  (check-not-eq? verdict
+                 'departed
+                 (format "~a: the batch disagreed in 8 or more of ~a reruns, the default in at most 1"
+                         name
+                         escalation))
+  verdict)
+
+(define (check-same-apply name dt C X w batch)
   (define (applied b)
     (parameterize ([current-batch-samples b])
       (list (host-vector (kmeans-predict C X))
-            (host (kmeans-transform C X))
-            (kmeans-score C X #:sample-weight w))))
-  (match-define (list labels distances score) (applied batch))
-  (match-define (list labels0 distances0 score0) (applied 32768))
+            (cons (kmeans-score C X #:sample-weight w) (append* (host (kmeans-transform C X)))))))
+  (match-define (list labels measured) (applied batch))
+  (match-define (list labels0 measured0) (applied 32768))
   (check-equal? labels labels0 (format "~a: predict" name))
-  (check-rows! t distances distances0 (tolerance dt) (format "~a: transform" name))
-  (check-close! t score score0 (tolerance dt) (format "~a: score" name)))
+  (check-close-all! (format "~a: score or transform" name) measured measured0 (tolerance dt))
+  (spread measured measured0))
+
+(define (replaying outcomes)
+  (define-values (_more? next) (sequence-generate (in-cycle outcomes)))
+  next)
+
+(test-case "H13: the escalation fails a batch that departs and passes a nondeterministic fit"
+  (define (verdict first rerun refit)
+    (with-handlers ([exn:test:check? (lambda (_) 'failed)])
+      (check-batch-fit! "stub" values first rerun refit)))
+  (check-equal? (verdict #t (replaying '(#f)) (replaying '(#t))) 'agrees)
+  (check-equal? (verdict #f (replaying '(#f)) (replaying '(#t))) 'failed)
+  (check-equal?
+   (verdict #f (replaying '(#f #f #f #f #t)) (replaying '(#t #t #t #t #t #t #t #t #t #f)))
+   'failed)
+  (check-equal? (verdict #f (replaying '(#t #f)) (replaying '(#t #f))) 'unstable)
+  (check-equal? (verdict #f (replaying '(#f #f #t)) (replaying '(#t))) 'unstable)
+  (check-equal? (verdict #f (replaying '(#f)) (replaying '(#t #t #t #t #f))) 'unstable))
 
 (test-gpu "H13: the batch size changes no label and no n-iter"
-  (define t (tally 0.0 #t))
-  (define unstable (box '()))
-  (define departed (box '()))
-  (for* ([dt (in-list dtypes)]
-         [X (in-value (blob-data rows 4 16 11 dt))]
-         [init (in-list inits)]
-         [n-init (in-list '(1 3))]
-         [w (in-list (list #f (vec (cyclic-weights rows) dt)))])
-    (define reference (fitted X dt init n-init w 32768))
-    (define C (kmeans-result-centroids reference))
-    (for ([batch (in-list (list 7 100 (sub1 rows) rows))])
+  (define fits
+    (for*/list ([dt (in-list dtypes)]
+                [X (in-value (blob-data rows 4 16 11 dt))]
+                [init (in-list inits)]
+                [n-init (in-list '(1 3))]
+                [w (in-list (list #f (vec (cyclic-weights rows) dt)))]
+                [reference (in-value (fitted X dt init n-init w 32768))]
+                [batch (in-list (list 7 100 (sub1 rows) rows))])
       (define name (format "~a ~a n-init ~a~a batch ~a" dt init n-init (if w " weighted" "") batch))
-      (check-batch-fit! t
-                        unstable
-                        departed
-                        name
-                        dt
-                        (lambda () (fitted X dt init n-init w 32768))
-                        (lambda () (fitted X dt init n-init w batch))
-                        reference)
-      (check-same-apply! t name dt C X w batch)))
-  (for* ([dt (in-list dtypes)]
-         [batch (in-list '(1 7 63 64))])
-    (define X (mat grid64 dt))
-    (define name (format "grid64 ~a batch ~a" dt batch))
-    (define reference (fitted X dt 'random 1 #f 32768))
-    (define (started)
-      (outcome (kmeans-fit X #:init (mat grid64-start dt))))
-    (check-equal? (outcome (fitted X dt 'random 1 #f batch)) (outcome reference) name)
-    (check-equal? (parameterize ([current-batch-samples batch])
-                    (started))
-                  (started)
-                  (format "~a, start" name))
-    (check-same-apply! t name dt (kmeans-result-centroids reference) X #f batch))
+      (define actual (fitted X dt init n-init w batch))
+      (define verdict
+        (check-batch-fit! name
+                          (lambda (r) (same-fit? r reference dt))
+                          actual
+                          (lambda () (fitted X dt init n-init w batch))
+                          (lambda () (fitted X dt init n-init w 32768))))
+      (define applied (check-same-apply name dt (kmeans-result-centroids reference) X w batch))
+      (list name
+            verdict
+            (match verdict
+              ['agrees (append (spread (numbers actual) (numbers reference)) applied)]
+              [_ applied]))))
+  (define grids
+    (for*/list ([dt (in-list dtypes)]
+                [batch (in-list '(1 7 63 64))])
+      (define X (mat grid64 dt))
+      (define name (format "grid64 ~a batch ~a" dt batch))
+      (define reference (fitted X dt 'random 1 #f 32768))
+      (define (started)
+        (outcome (kmeans-fit X #:init (mat grid64-start dt))))
+      (check-equal? (outcome (fitted X dt 'random 1 #f batch)) (outcome reference) name)
+      (check-equal? (parameterize ([current-batch-samples batch])
+                      (started))
+                    (started)
+                    (format "~a, start" name))
+      (check-same-apply name dt (kmeans-result-centroids reference) X #f batch)))
+  (define spreads (append* (append (map third fits) grids)))
+  (define (named verdict)
+    (for/list ([fit (in-list fits)]
+               #:when (eq? (second fit) verdict))
+      (first fit)))
   (printf
    "H13: largest relative centroid, inertia, distance or score deviation ~a; bit-identical: ~a\n"
-   (tally-largest t)
-   (tally-bit-identical? t))
-  (printf "H13: fits that also change between runs at the default batch: ~a\n"
-          (reverse (unbox unstable)))
-  (printf "H13: fits that departed at the batch size in 4 runs while 3 at the default agreed: ~a\n"
-          (reverse (unbox departed))))
+   (apply max 0.0 (map first spreads))
+   (andmap second spreads))
+  (printf "H13: fits that also change between runs at the default batch: ~a\n" (named 'unstable))
+  (check-equal? (named 'departed) '()))
 
 (test-gpu "H13: a parameterize, the keyword and the estimator's setting choose the same batch"
   (for ([dt (in-list dtypes)])
@@ -175,7 +202,7 @@
       (define start (current-inexact-milliseconds))
       (thunk)
       (- (current-inexact-milliseconds) start)))
-  (list-ref (sort times <) 1))
+  (second (sort times <)))
 
 (test-gpu "H14: the batch size is read when the procedure or the estimator is called"
   (define X (blob-data 65536 8 64 7 'float32))
@@ -198,7 +225,11 @@
     (parameterize ([current-batch-samples 1])
       (median-time (lambda () (transform fitted-outside X)))))
   (check-true (< (* 20 outside-call) inside-call)
-              (format "built inside ~a ms, called inside ~a ms" outside-call inside-call)))
+              (format "built inside ~a ms, called inside ~a ms" outside-call inside-call))
+  (define fitted-with-setting (fit (kmeans #:init C #:max-samples-per-batch 1) C))
+  (define setting-call (median-time (lambda () (transform fitted-with-setting X))))
+  (check-true (< (* 20 outside-call) setting-call)
+              (format "default ~a ms, the setting at batch 1 ~a ms" outside-call setting-call)))
 
 (test-case "H15: current-batch-samples takes a 32-bit sample count"
   (check-equal? (current-batch-samples) 32768)
