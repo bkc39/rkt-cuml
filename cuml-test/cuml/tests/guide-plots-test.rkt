@@ -29,7 +29,7 @@
          (only-in pict pict->bitmap pict-height pict-width pict?)
          (only-in racket/class send)
          (only-in racket/function curry)
-         (only-in racket/list count first make-list range remove-duplicates second third)
+         (only-in racket/list count first make-list range remove-duplicates rest second third)
          (only-in racket/match match-define)
          (only-in rackunit
                   check
@@ -246,14 +246,28 @@
   (check-equal? (map span (list (of-species 1) (of-species 2))) '((3.0 5.1) (4.5 6.9)))
   (check-equal? (span (petal-lengths (lambda (cluster class) (not (= cluster class))))) '(4.5 5.1)))
 
-(test-gpu "the figures: wine clusters match the cultivars but for 53 raw and 8 standardized wines"
+(test-gpu "the figures: wine clusters match the cultivars but for 53 raw and 8 standardized wines, raw ones in bands of proline"
   (define cultivar (dataset-column 'wine "cultivar"))
   (define measurements (features 'wine "cultivar"))
   (define (misplaced wines)
     (mismatches (clusters-of (kmeans #:n-clusters 3) wines cultivar) cultivar))
   (check-equal? (remove-duplicates cultivar) '("1" "2" "3"))
   (check-equal? (misplaced (dataset-matrix 'wine measurements)) 53)
-  (check-equal? (misplaced (standardized-matrix 'wine measurements)) 8))
+  (check-equal? (misplaced (standardized-matrix 'wine measurements)) 8)
+  (define raw (clusters-of (kmeans #:n-clusters 3) (dataset-matrix 'wine measurements) cultivar))
+  (define proline (dataset-column 'wine "proline"))
+  (define bands
+    (sort (for/list ([cluster (in-list (remove-duplicates raw))])
+            (span (for/list ([value (in-list proline)]
+                             [label (in-list raw)]
+                             #:when (= label cluster))
+                    value)))
+          <
+          #:key first))
+  (check-equal? (length bands) 3)
+  (check-true (for/and ([band (in-list bands)]
+                        [next (in-list (rest bands))])
+                (< (second band) (first next)))))
 
 (test-gpu "the figures: DBSCAN's groups keep their numbers across the radii"
   (define eruptions (standardized-matrix 'faithful '("eruptions" "waiting")))
