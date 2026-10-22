@@ -78,7 +78,7 @@
         "c: expected at most 2147483617, got 2147483618"
         (lambda () (fit (with-row '(+nan.0 1)) #:c 2147483618)))))
 
-(test-case "a linkage other than single in params is refused before the GPU is touched"
+(test-case "a linkage other than single in params is refused before X is read"
   (check-cuml-error
    'logic
    "single-linkage-fit: linkage: expected single, got ward"

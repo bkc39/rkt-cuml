@@ -250,7 +250,7 @@
         (index-message "rows" 7 10)
         (fault (graph-edit (graph-map-vals ring past-sum) #:rows (set-entry 7 10))))))
 
-(test-case "an affinity other than nearest-neighbors in params is refused before the GPU is touched"
+(test-case "an affinity other than nearest-neighbors in params is refused before X is read"
   (for ([affinity (in-list '(precomputed rbf))])
     (check-cuml-error
      'logic
