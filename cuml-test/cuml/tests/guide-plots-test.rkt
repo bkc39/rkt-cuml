@@ -196,6 +196,23 @@
   (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: 8"
              (lambda () (cluster-plot (range 10) (range 10) labels))))
 
+(define past-seven-classes '(a a b c a a a a a a))
+
+(define past-seven (matched-labels '(0 0 0 0 1 2 3 4 5 6) past-seven-classes))
+
+(test-case "class-figure refuses a label past 7 as itself"
+  (check-exn #rx"^class-figure: label ids run from 0 to 7\n  label: 8"
+             (lambda ()
+               (class-figure (range 10)
+                             (range 10)
+                             (list (list "k" past-seven))
+                             past-seven-classes
+                             #:class-title "x"))))
+
+(test-case "sweep-figure refuses a label past 7 as itself"
+  (check-exn #rx"^sweep-figure: label ids run from 0 to 7\n  label: 8"
+             (lambda () (sweep-figure (range 10) (range 10) '("k") (list past-seven)))))
+
 (define (mismatches labels classes)
   (count (lambda (cluster class) (not (= cluster class))) labels (renumbered classes)))
 

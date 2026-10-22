@@ -211,7 +211,7 @@
                #:width width
                #:height height)))
 
-(define (cluster-renderers xs ys labels #:core core #:centroids centroids)
+(define (cluster-renderers xs ys labels #:core core #:centroids centroids #:who who)
   (define core?
     (if core
         (lambda (index) (memv index core))
@@ -223,11 +223,10 @@
                [index (in-naturals)]
                #:when (and (= sample-label label) (keep? index)))
       (vector x y)))
-  (append (append-map
-           (lambda (label)
-             (list (cluster-points (vectors label core?) label 'cluster-plot)
-                   (cluster-points (vectors label (negate core?)) label 'cluster-plot #:core? #f)))
-           (cluster-ids labels))
+  (append (append-map (lambda (label)
+                        (list (cluster-points (vectors label core?) label who)
+                              (cluster-points (vectors label (negate core?)) label who #:core? #f)))
+                      (cluster-ids labels))
           (list (noise-points (vectors -1 (const #t)))
                 (centroid-points (map list->vector centroids)))))
 
@@ -240,10 +239,11 @@
                       #:x-label [x-label #f]
                       #:y-label [y-label #f]
                       #:width [width 320]
-                      #:height [height 280])
+                      #:height [height 280]
+                      #:who [who 'cluster-plot])
   (match (remove-duplicates (map length (list xs ys labels)))
     [(list _)
-     (styled-plot (cluster-renderers xs ys labels #:core core #:centroids centroids)
+     (styled-plot (cluster-renderers xs ys labels #:core core #:centroids centroids #:who who)
                   (append xs (map first centroids))
                   (append ys (map second centroids))
                   #:title title
@@ -251,8 +251,7 @@
                   #:y-label y-label
                   #:width width
                   #:height height)]
-    [lengths
-     (raise-arguments-error 'cluster-plot "xs, ys and labels differ in length" "lengths" lengths)]))
+    [lengths (raise-arguments-error who "xs, ys and labels differ in length" "lengths" lengths)]))
 
 (define legend-entry-width 160)
 
@@ -321,7 +320,8 @@
                     #:centroids (centroids-of clustering)
                     #:title title
                     #:x-label x-label
-                    #:y-label y-label)))
+                    #:y-label y-label
+                    #:who 'class-figure)))
   (define centroids? (ormap pair? (map centroids-of clusterings)))
   (figure plots
           (cluster-legend (append truth (append-map second clusterings))
@@ -344,7 +344,8 @@
                   #:title title
                   #:x-label x-label
                   #:y-label y-label
-                  #:height 260))
+                  #:height 260
+                  #:who 'sweep-figure))
   (match (remove-duplicates (map length (list titles clusterings cores)))
     [(list _)
      (figure (map panel titles clusterings cores)
