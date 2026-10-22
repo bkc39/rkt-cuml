@@ -244,6 +244,18 @@
                          [label `(1 `(2 ,,size))]
                          [size 1])
                       #rx"later key")
+  (check-syntax-error '(define-hyperparameters q-params
+                         [a `#hash((k . ,b))]
+                         [b 1])
+                      #rx"later key")
+  (check-syntax-error '(define-hyperparameters q-params
+                         [a `#& ,b]
+                         [b 1])
+                      #rx"later key")
+  (check-syntax-error '(define-hyperparameters q-params
+                         [a `#s(p ,b)]
+                         [b 1])
+                      #rx"later key")
   (check-syntax-error
    '(define/who (f who X #:hyperparameters widget-params #:extra [extra (let ([size 1]) size)]) extra)
    #rx"refers to a hyperparameter"))
