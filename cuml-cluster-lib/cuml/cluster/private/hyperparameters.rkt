@@ -142,11 +142,8 @@
 
   (define (forward-reference keys defaults)
     (for/or ([default (in-list defaults)]
-             [later (in-list (let suffixes ([keys keys])
-                               (cond
-                                 [(null? keys) '()]
-                                 [else (cons keys (suffixes (cdr keys)))])))])
-      (mention default later))))
+             [position (in-naturals)])
+      (mention default (list-tail keys position)))))
 
 (define-syntax-parse-rule (define-hyperparameters table:params-name
                             entry:hyperparameter ...+)
