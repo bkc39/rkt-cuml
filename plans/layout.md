@@ -252,7 +252,7 @@
 - The hyperparameters are `single-linkage-params`, whose `linkage` is
   `#:fixed` at `'single`. `single-linkage-fit` is a `define/who` with
   `#:hyperparameters single-linkage-params`, so it takes no `#:linkage` and
-  refuses another `linkage` in `#:params` before the GPU is touched. The
+  refuses another `linkage` in `#:params` before `X` is read. The
   `agglomerative-clustering` estimator, an estimator and a clusterer, is a
   `define-estimator` over it with the setting `resources` and
   `#:no-sample-weight`; its constructor keeps `#:linkage`, and the fit
