@@ -384,13 +384,19 @@
               [n-init (in-range 1 4)]
               [seed (in-range 0 4)]
               #:when (= (modulo (+ k max-iter n-init seed (string-length (format "~a" init))) 7) 0))
-    (append (list (cons '#:n-clusters k) (cons '#:max-iter max-iter) (cons '#:n-init n-init) (cons '#:random-state seed))
+    (append (list (cons '#:n-clusters k)
+                  (cons '#:max-iter max-iter)
+                  (cons '#:n-init n-init)
+                  (cons '#:random-state seed))
             (match init
               ['matrix (list (cons '#:init (first-rows-of rows k)))]
               [name (list (cons '#:init name))]))))
 
 (define (first-rows-of rows k)
-  (mat (for/list ([row (in-list rows)] [_ (in-range k)]) row) 'float64))
+  (mat (for/list ([row (in-list rows)]
+                  [_ (in-range k)])
+         row)
+       'float64))
 
 (define (kw-call proc options positional)
   (define sorted (sort options keyword<? #:key car))

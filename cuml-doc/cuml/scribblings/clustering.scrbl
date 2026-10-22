@@ -81,6 +81,7 @@ vector of @racket[X]'s dtype, weighs each sample; zero, negative and NaN
 weights are passed to cuML as they are. @racket[max-samples-per-batch] bounds
 the samples processed at once. The outputs live on @racket[resources].
 @racket[params], from @racket[kmeans-params], gives every hyperparameter a keyword omits.
+The inertia and centroids can differ in their last digits across batch sizes; the labels do not.
 
 @examples[#:eval ev #:label #f
 (define start (list*->device-matrix '((1 0) (11 11)) #:dtype 'float64))

@@ -74,10 +74,11 @@
         [(head . arguments)
          (match (unknown-keyword (syntax->list #'arguments) (keyword-checked-keywords checked))
            [#f (datum->syntax stx (cons procedure #'arguments) stx stx)]
-           [kw (raise-syntax-error (syntax-e #'head)
-                                   (format "does not take the keyword ~a" (syntax-e kw))
-                                   stx
-                                   kw)])])))
+           [kw
+            (raise-syntax-error (syntax-e #'head)
+                                (format "does not take the keyword ~a" (syntax-e kw))
+                                stx
+                                kw)])])))
 
   (define (unknown-keyword arguments keywords)
     (match arguments
@@ -112,8 +113,9 @@
   (define-syntax-class params-name
     #:description "a table name ending in -params"
     (pattern name:id
-      #:fail-unless (regexp-match? #rx".-params$" (symbol->string (syntax-e #'name)))
-                    "expected a table name ending in -params"))
+      #:fail-unless
+      (regexp-match? #rx".-params$" (symbol->string (syntax-e #'name)))
+      "expected a table name ending in -params"))
 
   (define-syntax-class hyperparameter
     #:description "a hyperparameter [key default] or [key default #:fixed]"
@@ -131,7 +133,10 @@
     (syntax-parse stx
       #:literals (quote)
       [(quote _) #f]
-      [x:id (for/first ([id (in-list ids)] #:when (bound-identifier=? #'x id)) #'x)]
+      [x:id
+       (for/first ([id (in-list ids)]
+                   #:when (bound-identifier=? #'x id))
+         #'x)]
       [(a . d) (or (mention #'a ids) (mention #'d ids))]
       [_ #f]))
 
@@ -143,10 +148,12 @@
                                  [else (cons keys (suffixes (cdr keys)))])))])
       (mention default later))))
 
-(define-syntax-parse-rule (define-hyperparameters table:params-name entry:hyperparameter ...+)
+(define-syntax-parse-rule (define-hyperparameters table:params-name
+                            entry:hyperparameter ...+)
   #:fail-when (check-duplicate-identifier (attribute entry.key)) "duplicate hyperparameter"
-  #:fail-when (forward-reference (attribute entry.key) (attribute entry.default))
-              "a default refers to its own or a later key"
+  #:fail-when
+  (forward-reference (attribute entry.key) (attribute entry.default))
+  "a default refers to its own or a later key"
   #:with proc (format-id #'table "~a/proc" #'table)
   #:with owner (owner-of #'table)
   #:with (fixed-key ...) (for/list ([key (in-list (attribute entry.key))]
@@ -160,7 +167,9 @@
       (let* ([entry.key (hash-ref given 'entry.key (lambda () entry.default))] ...)
         (hasheq (~@ 'entry.key entry.key) ...)))
     (define (defaults-for set)
-      (let* ((~@ [default-value entry.default] [entry.key (hash-ref set 'entry.key)]) ...)
+      (let* ([~@
+              [default-value entry.default]
+              [entry.key (hash-ref set 'entry.key)]] ...)
         (hasheq (~@ 'entry.key default-value) ...)))
     (define (resolve who base given)
       (resolve-set who 'owner keys fill base given))

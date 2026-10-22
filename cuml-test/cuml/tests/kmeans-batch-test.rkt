@@ -145,9 +145,10 @@
                   (started)
                   (format "~a, start" name))
     (check-same-apply! t name dt (kmeans-result-centroids reference) X #f batch))
-  (printf "H13: largest relative centroid, inertia, distance or score deviation ~a; bit-identical: ~a\n"
-          (tally-largest t)
-          (tally-bit-identical? t))
+  (printf
+   "H13: largest relative centroid, inertia, distance or score deviation ~a; bit-identical: ~a\n"
+   (tally-largest t)
+   (tally-bit-identical? t))
   (printf "H13: fits that also change between runs at the default batch: ~a\n"
           (reverse (unbox unstable)))
   (printf "H13: fits that departed at the batch size in 4 runs while 3 at the default agreed: ~a\n"
@@ -159,9 +160,11 @@
     (define by-parameter
       (parameterize ([current-batch-samples 7])
         (kmeans-fit X #:n-clusters 4 #:init 'random #:random-state 2)))
-    (define by-keyword (kmeans-fit X #:n-clusters 4 #:init 'random #:random-state 2 #:max-samples-per-batch 7))
+    (define by-keyword
+      (kmeans-fit X #:n-clusters 4 #:init 'random #:random-state 2 #:max-samples-per-batch 7))
     (define by-setting
-      (kmeans-model (fit (kmeans #:n-clusters 4 #:init 'random #:random-state 2 #:max-samples-per-batch 7) X)))
+      (kmeans-model
+       (fit (kmeans #:n-clusters 4 #:init 'random #:random-state 2 #:max-samples-per-batch 7) X)))
     (check-equal? (outcome by-keyword) (outcome by-parameter))
     (check-equal? (outcome by-setting) (outcome by-parameter))))
 
@@ -202,8 +205,16 @@
   (for ([v (in-list (list -1 2.5 (expt 2 31) 'x))])
     (define e (raised (lambda () (current-batch-samples v))))
     (check-true (exn:fail:contract? e) (format "~v" v))
-    (check-regexp-match #rx"^current-batch-samples: contract violation\n  expected: \\(integer-in 0 2147483647\\)"
-                        (exn-message e)))
-  (check-equal? (parameterize ([current-batch-samples 0]) (current-batch-samples)) 0)
-  (check-equal? (parameterize ([current-batch-samples 2147483647]) (current-batch-samples)) 2147483647)
-  (check-exn exn:fail:contract? (lambda () (parameterize ([current-batch-samples -1]) 0))))
+    (check-regexp-match
+     #rx"^current-batch-samples: contract violation\n  expected: \\(integer-in 0 2147483647\\)"
+     (exn-message e)))
+  (check-equal? (parameterize ([current-batch-samples 0])
+                  (current-batch-samples))
+                0)
+  (check-equal? (parameterize ([current-batch-samples 2147483647])
+                  (current-batch-samples))
+                2147483647)
+  (check-exn exn:fail:contract?
+             (lambda ()
+               (parameterize ([current-batch-samples -1])
+                 0))))

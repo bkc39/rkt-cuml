@@ -131,7 +131,8 @@
   `cuml/cluster/private/kmeans.rkt` provides and `cuml/cluster` does not
   export; `define/who` (`cuml/cluster/private/define-who.rkt`) defines each
   public procedure and its `/who` form from one header, and the estimator
-  takes its defaults and `init-rows` from the same module's `kmeans-defaults`.
+  takes its hyperparameters from the same module's `kmeans-params` table
+  (`define-hyperparameters`, see "Hyperparameter tables" below).
 - The decisions posted on #5 (comment 6245375667), each with the recommended
   answer:
   - **Q-A.** `cuml` exports the bare `fit`, `predict`, `transform`,
@@ -145,16 +146,53 @@
     private `/who` procedures.
   - **Q-E.** Every parameter update gives an unfitted estimator; an empty
     update is a clone.
-  - **Q-F.** `#:resources` is a constructor keyword and parameter, `#f`
-    meaning the calling thread's `current-device-resources` at each call;
-    the estimator records no resources at fit.
+  - **Q-F.** `#:resources` is a constructor keyword, `#f` meaning the
+    calling thread's `current-device-resources` at each call; the estimator
+    records no resources at fit. Revised by the hyperparameter tables' Q-A:
+    it is a setting, kept outside `estimator-params`.
   - **Q-G.** The fitted state is `kmeans-model`, the `kmeans-result` or
     `#f`.
-  - **Q-H.** `estimator-set-params` takes a hash.
+  - **Q-H.** `estimator-set-params` takes a hash. Revised by the
+    hyperparameter tables: it also takes each parameter as a keyword, which
+    wins over the same key in the hash.
   - **Q-I.** `n-clusters` is resolved when the estimator is built.
   - **Q-K.** `cuml/estimator` stays in cuml-core-lib; a `cuml-estimator-lib`
     with deps `("base")` is a follow-up if glmnet adopts the interface.
   - **Q-L.** k-means' `fit` and `score` ignore `y`.
+
+## Hyperparameter tables (#7, PR #16)
+
+- `define-hyperparameters` (`cuml/cluster/private/hyperparameters.rkt`)
+  defines a family's `<algorithm>-params` once: its keys in order, each
+  default (which may read earlier keys) and its `#:fixed` keys. `define/who`
+  takes the table as `#:hyperparameters`, and `define-estimator`
+  (`cuml/private/estimator-support.rkt`) builds the estimator wrapper over
+  it; the keywords, defaults, printer and `estimator-set-params` come from
+  the one table.
+- The owner's answers, each the recommended one:
+  - **Q-A.** Execution settings (`#:resources`, k-means'
+    `#:max-samples-per-batch`) stay constructor keywords, stored outside
+    `estimator-params`; `#f` reads the current value at each call.
+  - **Q-B.** The linkage table is `single-linkage-params`.
+  - **Q-C.** A misspelt keyword at a static call of a `-params` procedure, a
+    `define/who` name with a table or an estimator constructor is a syntax
+    error; as values they stay procedures with Racket's runtime keyword
+    error.
+  - **Q-D.** Nothing is recomputed on a base: `(kmeans-params base #:init M)`
+    keeps `base`'s `n-clusters`.
+- **H13** (batch invariance, the go/no-go for `current-batch-samples`):
+  go. On the integer grids every batch size (1, 7, 63, 64) gives
+  bit-identical fits, labels, distances and scores. On 4096-row float32 and
+  float64 blobs (four inits, n-init 1 and 3, with and without weights,
+  batches 7, 100, 4095, 4096 against 32768) no label or n-iter changed at a
+  batch size beyond what repeated calls at the default batch show: cuML's
+  k-means is not reproducible run to run on these blobs (float atomics).
+  Centroids and inertia are not bit-identical; the largest relative
+  deviation was 8.1e-6 (float32), the same order as run to run. In one of
+  four test runs, float32 random n-init 1 weighted at batch 100 departed in
+  3 of 3 reruns while 3 default refits agreed; 100 consecutive calls of
+  that case at each batch then gave identical labels. The fallback (the
+  batch size back in `kmeans-params`) was not applied.
 
 ## Owner decisions (2026-10-17)
 

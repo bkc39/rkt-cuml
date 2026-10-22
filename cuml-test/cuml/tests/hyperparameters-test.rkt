@@ -31,7 +31,10 @@
 
 (define (call-with proc keys table positional)
   (define sorted (sort keys keyword<? #:key keyword-of))
-  (keyword-apply proc (map keyword-of sorted) (map (lambda (k) (hash-ref table k)) sorted) positional))
+  (keyword-apply proc
+                 (map keyword-of sorted)
+                 (map (lambda (k) (hash-ref table k)) sorted)
+                 positional))
 
 (define (subsets keys n)
   (for*/list ([k (in-range (add1 n))]
@@ -60,10 +63,12 @@
   (for* ([first (in-list (subsets '(size scale shade label) 2))]
          [second (in-list (subsets '(size scale shade label) 2))])
     (define base (call-with widget-params first changed '()))
-    (define over (call-with widget-params second (hasheq 'size 11 'scale 13 'shade 'x 'label "y") (list base)))
-    (check-equal? over
-                  (for/fold ([set base]) ([key (in-list second)])
-                    (hash-set set key (hash-ref (hasheq 'size 11 'scale 13 'shade 'x 'label "y") key)))))
+    (define over
+      (call-with widget-params second (hasheq 'size 11 'scale 13 'shade 'x 'label "y") (list base)))
+    (check-equal?
+     over
+     (for/fold ([set base]) ([key (in-list second)])
+       (hash-set set key (hash-ref (hasheq 'size 11 'scale 13 'shade 'x 'label "y") key)))))
   (check-equal? (hash-ref (widget-params (widget-params) #:size 10) 'scale) 6))
 
 (test-case "H4: a set resolves to itself, and #f to the defaults"
@@ -84,7 +89,8 @@
                     (lambda () (widget-params (hash-set literal "size" 1))))
   (define e (raised (lambda () (widget-params 7))))
   (check-pred exn:fail:contract? e)
-  (check-regexp-match #rx"^widget-params: contract violation\n  expected: \\(or/c #f hash\\?\\)" (exn-message e)))
+  (check-regexp-match #rx"^widget-params: contract violation\n  expected: \\(or/c #f hash\\?\\)"
+                      (exn-message e)))
 
 (test-case "H6: a keyword is the same as a set with that keyword, with or without a base"
   (for* ([keys (in-list (subsets entry-keys 2))]
@@ -127,10 +133,17 @@
 
 (test-case "H8: the definitions refuse malformed tables and entry points"
   (check-syntax-error '(define-hyperparameters widget-table [size 1]) #rx"ending in -params")
-  (check-syntax-error '(define-hyperparameters pair-params [size 1] [size 2]) #rx"duplicate")
-  (check-syntax-error '(define-hyperparameters later-params [scale (twice size)] [size 1])
+  (check-syntax-error '(define-hyperparameters pair-params
+                         [size 1]
+                         [size 2])
+                      #rx"duplicate")
+  (check-syntax-error '(define-hyperparameters later-params
+                         [scale (twice size)]
+                         [size 1])
                       #rx"later key")
-  (check-syntax-error '(define-hyperparameters fixed-params [size 1] [shade #:fixed])
+  (check-syntax-error '(define-hyperparameters fixed-params
+                         [size 1]
+                         [shade #:fixed])
                       #rx"#:fixed key needs a default")
   (check-syntax-error '(define/who (f who X #:hyperparameters widget-params #:ignoring (colour)) X)
                       #rx"widget-params has no key colour")
@@ -141,6 +154,7 @@
   (check-syntax-error '(spy 'X #:colour 1) #rx"#:colour")
   (define e (raised (lambda () (keyword-apply widget-params '(#:colour) '(1) '()))))
   (check-pred exn:fail:contract? e)
-  (check-regexp-match #rx"^application: procedure does not expect an argument with given keyword\n  procedure: widget-params\n  given keyword: #:colour"
-                      (exn-message e))
+  (check-regexp-match
+   #rx"^application: procedure does not expect an argument with given keyword\n  procedure: widget-params\n  given keyword: #:colour"
+   (exn-message e))
   (check-exn exn:fail:contract? (lambda () ((values spy) 'X #:colour 1))))

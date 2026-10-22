@@ -62,27 +62,30 @@
     #:datum-literals (predict score transform)
     (pattern [predict proc:expr]
       #:with generic #'gen:predictor
-      #:with (method ...) #'((define (predict e X)
-                               (call-applied proc 'predict (applied-to 'predict e) X (settings-of e)))))
+      #:with (method ...) #'
+                          ((define (predict e X)
+                             (call-applied proc 'predict (applied-to 'predict e) X (settings-of e)))))
     (pattern [transform proc:expr]
       #:with generic #'gen:transformer
-      #:with (method ...) #'((define (transform e X)
-                               (call-applied proc 'transform (applied-to 'transform e) X (settings-of e)))
-                             (define (fit-transform e X [_y #f] #:sample-weight [w #f])
-                               (call-applied proc
-                                             'fit-transform
-                                             (argument-of (fitted 'fit-transform e X w))
-                                             X
-                                             (settings-of e)))))
+      #:with (method
+              ...) #'((define (transform e X)
+                        (call-applied proc 'transform (applied-to 'transform e) X (settings-of e)))
+                      (define (fit-transform e X [_y #f] #:sample-weight [w #f])
+                        (call-applied proc
+                                      'fit-transform
+                                      (argument-of (fitted 'fit-transform e X w))
+                                      X
+                                      (settings-of e)))))
     (pattern [score proc:expr (~optional (~and weighted #:sample-weight))]
       #:with generic #'gen:scorer
-      #:with (method ...) (cond
-                            [(attribute weighted)
-                             #'((define (score e X [_y #f] #:sample-weight [w #f])
-                                  (call-applied proc 'score (applied-to 'score e) X (settings-of e) w)))]
-                            [else
-                             #'((define (score e X [_y #f] #:sample-weight [_w #f])
-                                  (call-applied proc 'score (applied-to 'score e) X (settings-of e))))]))))
+      #:with (method
+              ...) (cond
+                     [(attribute weighted)
+                      #'((define (score e X [_y #f] #:sample-weight [w #f])
+                           (call-applied proc 'score (applied-to 'score e) X (settings-of e) w)))]
+                     [else
+                      #'((define (score e X [_y #f] #:sample-weight [_w #f])
+                           (call-applied proc 'score (applied-to 'score e) X (settings-of e))))]))))
 
 (define-syntax-parse-rule (define-estimator name:id
                             #:hyperparameters table:table-id
@@ -101,7 +104,8 @@
   #:with model (format-id #'name "~a-model" #'name)
   #:with (key ...) (generate-temporaries (attribute table.keys))
   #:with (key-name ...) (attribute table.keys)
-  #:with (keyword ...) (map (lambda (key) (string->keyword (symbol->string key))) (attribute table.keys))
+  #:with (keyword ...) (map (lambda (key) (string->keyword (symbol->string key)))
+                            (attribute table.keys))
   #:with (setting-keyword ...) (map (lambda (setting)
                                       (string->keyword (symbol->string (syntax-e setting))))
                                     (attribute setting))
@@ -154,13 +158,12 @@
                                        (settings-of e)
                                        (model e))
                        port))])
-    (define-checked #t
-                    name
-                    name/proc
-                    (keyword ... setting-keyword ...)
-                    (define (name [params #f]
-                                  (~@ keyword [key absent]) ...
-                                  (~@ setting-keyword [setting #f]) ...)
-                      (name* (table.resolve 'name params (given-hash '(key-name ...) (list key ...)))
-                             (hasheq (~@ 'setting setting) ...)
-                             #f)))))
+    (define-checked
+     #t
+     name
+     name/proc
+     (keyword ... setting-keyword ...)
+     (define (name [params #f] (~@ keyword [key absent]) ... (~@ setting-keyword [setting #f]) ...)
+       (name* (table.resolve 'name params (given-hash '(key-name ...) (list key ...)))
+              (hasheq (~@ 'setting setting) ...)
+              #f)))))
