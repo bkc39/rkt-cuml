@@ -32,6 +32,7 @@
                   predict
                   score
                   single-linkage-fit
+                  single-linkage-params
                   single-linkage-result
                   single-linkage-result-labels)
          (only-in racket/match match-define)
@@ -263,6 +264,25 @@
   (define ac (agglomerative-clustering #:n-clusters 3))
   (check-equal? (format "~v" ac) "#<agglomerative-clustering #:n-clusters 3>")
   (check-equal? (device-vector->list (fit-predict ac (hand))) (hand-labels-at 3))
+  (check-equal? (format "~v" (estimator-set-params ac #:connectivity 'pairwise))
+                "#<agglomerative-clustering #:n-clusters 3 #:connectivity 'pairwise>")
   (check-cuml-error 'logic
                     "fit: linkage: expected single, got ward"
                     (lambda () (fit (agglomerative-clustering #:linkage 'ward) (hand)))))
+
+(test-case "the manual: single-linkage-params overrides a base, and a linkage but single is refused"
+  (define coarse (single-linkage-params #:n-clusters 2 #:connectivity 'pairwise))
+  (check-equal? (hash-ref (single-linkage-params coarse #:n-clusters 3) 'connectivity) 'pairwise)
+  (check-cuml-error
+   'logic
+   "single-linkage-fit: linkage: expected single, got ward"
+   (lambda ()
+     (single-linkage-fit 'P #:params (single-linkage-params #:linkage 'ward) #:resources 'unused))))
+
+(test-gpu "the manual: single-linkage-fit from a set"
+  (check-equal? (~> (single-linkage-fit (hand)
+                                        #:params (single-linkage-params #:n-clusters 2
+                                                                        #:connectivity 'pairwise))
+                    single-linkage-result-labels
+                    device-vector->list)
+                (hand-labels-at 2)))

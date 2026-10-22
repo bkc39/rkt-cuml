@@ -2,23 +2,24 @@
 
 (require (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
-         (only-in "defaults.rkt" define-codes define-defaults)
          (only-in "define-who.rkt" define/who)
-         (only-in "deposit.rkt" deposit-for)
+         (only-in "deposit.rkt" deposit-for/who)
+         (only-in "hyperparameters.rkt" define-codes define-hyperparameters)
          (only-in "native.rkt" cuml-cluster-single-linkage-fit-job))
 
 (provide (struct-out single-linkage-result)
-         single-linkage-defaults
          single-linkage-fit
-         single-linkage-fit/who)
+         single-linkage-fit/who
+         single-linkage-params)
 
 (struct single-linkage-result (labels children))
 
-(define-defaults single-linkage-defaults
-                 [n-clusters 2]
-                 [metric 'euclidean]
-                 [connectivity 'knn]
-                 [c 15])
+(define-hyperparameters single-linkage-params
+  [n-clusters 2]
+  [metric 'euclidean]
+  [linkage 'single #:fixed]
+  [connectivity 'knn]
+  [c 15])
 
 (define-codes metric-code [euclidean 0])
 
@@ -26,12 +27,9 @@
 
 (define/who (single-linkage-fit who
                                 X
-                                #:n-clusters [n-clusters (default 'n-clusters)]
-                                #:metric [metric (default 'metric)]
-                                #:connectivity [connectivity (default 'connectivity)]
-                                #:c [c (default 'c)]
+                                #:hyperparameters single-linkage-params
                                 #:resources [resources (current-device-resources)])
-  (define out (deposit-for who resources))
+  (define out (deposit-for/who who resources))
   (cuml-cluster-single-linkage-fit-job who
                                        resources
                                        X

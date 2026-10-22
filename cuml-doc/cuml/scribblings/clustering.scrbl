@@ -397,6 +397,7 @@ highest labels.}
                              [#:metric metric 'euclidean 'euclidean]
                              [#:connectivity connectivity (or/c 'knn 'pairwise) 'knn]
                              [#:c c (integer-in -2147483648 2147483617) 15]
+                             [#:params params (or/c #f hash?) #f]
                              [#:resources resources device-resources? (current-device-resources)])
          single-linkage-result?]{
 
@@ -418,6 +419,9 @@ distances differently in @racket['float32]. When distances tie,
 
 The distances are ‖x‖²+‖y‖²−2x·y in @racket['float32]: centre @racket[X] if
 it lies far from the origin. The outputs live on @racket[resources].
+@racket[params], from @racket[single-linkage-params], gives every
+hyperparameter a keyword omits. @racket[params]'s @racket[linkage] must be
+@racket['single].
 
 @racket[P]'s cut is the same under @racket['pairwise]:
 
@@ -439,9 +443,30 @@ With one cluster per sample, sample @racket[i] has label n−1−@racket[i]:
 (eval:error (single-linkage-fit (list*->device-matrix '((0) (1)) #:dtype 'float64)))
 ]}
 
+@defproc[(single-linkage-params [base (or/c #f hash?) #f]
+                                [#:n-clusters n-clusters exact-positive-integer? 2]
+                                [#:metric metric 'euclidean 'euclidean]
+                                [#:linkage linkage 'single 'single]
+                                [#:connectivity connectivity (or/c 'knn 'pairwise) 'knn]
+                                [#:c c (integer-in -2147483648 2147483617) 15])
+         (and/c hash? hash-eq? immutable?)]{
+
+The hyperparameters of @racket[single-linkage-fit] and
+@racket[agglomerative-clustering], as @racket[kmeans-params] gives k-means'.
+@racket[linkage] is cuML's name for the merge rule; only @racket['single] fits.
+
+@examples[#:eval ev #:label #f
+(define coarse (single-linkage-params #:n-clusters 2 #:connectivity 'pairwise))
+(hash-ref (single-linkage-params coarse #:n-clusters 3) 'connectivity)
+(~> (single-linkage-fit P #:params coarse) single-linkage-result-labels device-vector->list)
+(eval:error (single-linkage-fit P #:params (single-linkage-params #:linkage 'ward)))
+]}
+
 @bold{Errors.} @racket[single-linkage-fit] raises @racket[exn:fail:cuml] of
 kind @racket['logic], leaving nothing allocated, when:
 @itemlist[
+ @item{@racket[params]'s @racket[linkage] is not @racket['single]:
+       @tt{linkage: expected single, got ward}, before @racket[X] is read;}
  @item{@racket[X] is not a row-major @racket['float32] matrix with a row and
        a column;}
  @item{@racket[connectivity] or @racket[metric] is not one of its names;}

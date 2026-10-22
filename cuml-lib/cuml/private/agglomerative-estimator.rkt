@@ -1,37 +1,18 @@
 #lang racket/base
 
 (require (only-in cuml/cluster/private/linkage
-                  single-linkage-defaults
                   single-linkage-fit/who
+                  single-linkage-params
                   single-linkage-result-labels)
-         (only-in "estimator-support.rkt"
-                  call-with-params
-                  define-constructor
-                  define-estimator
-                  logic-error))
+         (only-in "estimator-support.rkt" define-estimator))
 
 (provide agglomerative-clustering
          agglomerative-clustering?
          agglomerative-clustering-model)
 
-(define defaults (hash-set* single-linkage-defaults 'linkage 'single 'resources #f))
-
-(define (fitted-model who e X sample-weight)
-  (define params (agglomerative-clustering-params e))
-  (define linkage (hash-ref params 'linkage))
-  (cond
-    [(not (eq? linkage 'single)) (logic-error "~a: linkage: expected single, got ~a" who linkage)]
-    [sample-weight (logic-error "~a: agglomerative-clustering takes no sample-weight" who)]
-    [else (call-with-params single-linkage-fit/who who X (hash-remove params 'linkage) (hasheq))]))
-
 (define-estimator agglomerative-clustering
-                  #:fitted fitted-model
-                  #:labels single-linkage-result-labels
-                  #:names parameter-names
-                  #:defaults defaults)
-
-(define-constructor
- (agglomerative-clustering #:n-clusters #:metric #:linkage #:connectivity #:c #:resources)
- #:names parameter-names
- #:defaults defaults
- agglomerative-clustering*)
+  #:hyperparameters single-linkage-params
+  #:fit single-linkage-fit/who
+  #:labels single-linkage-result-labels
+  #:settings (resources)
+  #:no-sample-weight)

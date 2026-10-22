@@ -13,6 +13,4 @@
                      kmeans-predict/who
                      kmeans-score/who
                      kmeans-transform/who)
-         (except-out (all-from-out "cluster/private/linkage.rkt")
-                     single-linkage-defaults
-                     single-linkage-fit/who))
+         (except-out (all-from-out "cluster/private/linkage.rkt") single-linkage-fit/who))

@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml/cluster single-linkage-fit)
+(require (only-in cuml/cluster single-linkage-fit single-linkage-params)
          (only-in racket/function curry)
          (only-in racket/list make-list)
          (only-in racket/match match)
@@ -85,6 +85,31 @@
    (row "L8 before L11"
         "c: expected at most 2147483617, got 2147483618"
         (lambda () (fit (with-row '(+nan.0 1)) #:c 2147483618)))))
+
+(test-case "a linkage other than single in params is refused before the GPU is touched"
+  (check-cuml-error
+   'logic
+   "single-linkage-fit: linkage: expected single, got ward"
+   (lambda ()
+     (single-linkage-fit 'X #:params (single-linkage-params #:linkage 'ward) #:resources 'unused)))
+  (check-cuml-error 'logic
+                    "single-linkage-fit: linkage: expected single, got complete"
+                    (lambda ()
+                      (single-linkage-fit 'X
+                                          #:params (single-linkage-params #:linkage 'complete)
+                                          #:n-clusters 0
+                                          #:resources 'unused)))
+  (check-cuml-error 'logic
+                    "single-linkage-fit: expected every single-linkage parameter, missing linkage"
+                    (lambda ()
+                      (single-linkage-fit 'X
+                                          #:params (hash-remove (single-linkage-params) 'linkage)
+                                          #:resources 'unused))))
+
+(test-case "single-linkage-fit takes the table's keywords but linkage"
+  (define-values (required accepted) (procedure-keywords single-linkage-fit))
+  (check-equal? required '())
+  (check-equal? accepted '(#:c #:connectivity #:metric #:n-clusters #:params #:resources)))
 
 (test-gpu "single-linkage-fit refuses each bad argument with its message, under both connectivities"
   (for* ([connectivity (in-list connectivities)]

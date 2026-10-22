@@ -205,7 +205,7 @@
 - `dbscan-fit` (`cuml/cluster/private/dbscan.rkt`) binds cuML's brute-force
   `ML::Dbscan::fit` for float32 and float64 with int32 or int64 labels,
   through one job, `cuml_cluster_dbscan_fit_job`. The deposit helper
-  (`deposit-for`, `cuml/cluster/private/deposit.rkt`) and the shim's argument
+  (`deposit-for/who`, `cuml/cluster/private/deposit.rkt`) and the shim's argument
   checks (`shim/cluster/src/support.hpp`) are shared with k-means.
 - The hyperparameters are `dbscan-params`; `dbscan-fit` is a `define/who`
   with `#:hyperparameters dbscan-params`, and the `dbscan` estimator, an
@@ -249,8 +249,14 @@
   both connectivities, through one job, `cuml_cluster_single_linkage_fit_job`.
   It returns the labels and the children; the shim sorts each child pair
   ascending on the device before the deposit.
-- The `agglomerative-clustering` estimator is an estimator and a clusterer;
-  its defaults are `single-linkage-defaults` plus `linkage`.
+- The hyperparameters are `single-linkage-params`, whose `linkage` is
+  `#:fixed` at `'single`. `single-linkage-fit` is a `define/who` with
+  `#:hyperparameters single-linkage-params`, so it takes no `#:linkage` and
+  refuses another `linkage` in `#:params` before the GPU is touched. The
+  `agglomerative-clustering` estimator, an estimator and a clusterer, is a
+  `define-estimator` over it with the setting `resources` and
+  `#:no-sample-weight`; its constructor keeps `#:linkage`, and the fit
+  raises the refusal under the generic's name.
 - The spec's decisions, each with the recommended answer:
   - **Q-A.** Euclidean only; other metrics are refused by name (#22).
     cuVS 26.08 fails every other metric under pairwise and joins knn
@@ -267,7 +273,8 @@
   - **Q-H.** The default connectivity is `'knn`, as in Python.
   - **Q-I.** The estimator is `agglomerative-clustering`;
     `single-linkage` stays reserved.
-  - **Q-J.** The estimator has a `#:linkage` that accepts only `'single`.
+  - **Q-J.** The estimator has a `#:linkage` that accepts only `'single`;
+    since #7 the check is `single-linkage-fit`'s, over the fixed key.
   - **Q-K.** cuVS's knn joining failure passes through, with a hint in the
     manual; there is no silent retry under pairwise.
   - **Q-L.** `c` takes any int32 up to 2147483617, as Python accepts any
