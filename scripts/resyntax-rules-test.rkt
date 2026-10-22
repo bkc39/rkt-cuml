@@ -16,13 +16,25 @@
     (check-equal? (map relayed '((x) (#:k [k 1]) (x #:k [k 1]) ([y 2]) (#:k k) (#:k)))
                   '(#t #t #t #f #f #f)))
 
+  (define stub
+    '(module define-who racket/base
+       (require (for-syntax racket/base
+                            syntax/parse/pre)
+                (only-in syntax/parse/define define-syntax-parse-rule))
+       (provide define/who)
+       (define-syntax-parse-rule (define/who (name:id who:id . formals)
+                                   body ...+)
+         (define (name . formals)
+           (let ([who 'name])
+             body ...)))))
+
   (define (program . forms)
-    (code-block (call-with-output-string
-                 (lambda (out)
-                   (displayln "#lang racket/base" out)
-                   (writeln '(require (only-in cuml/cluster/private/define-who define/who)) out)
-                   (for ([form (in-list forms)])
-                     (writeln form out))))))
+    (code-block (call-with-output-string (lambda (out)
+                                           (displayln "#lang racket/base" out)
+                                           (writeln stub out)
+                                           (writeln '(require 'define-who) out)
+                                           (for ([form (in-list forms)])
+                                             (writeln form out))))))
 
   (define relay
     '(define (twice/who who x #:times [n 2])
