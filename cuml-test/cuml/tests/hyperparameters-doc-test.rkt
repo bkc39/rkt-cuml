@@ -10,7 +10,7 @@
 (define (manual-forms file)
   (call-with-input-file (collection-file-path file "cuml" "scribblings")
                         (lambda (in)
-                          (read-line in)
+                          (read-line in 'any)
                           (read-inside in))))
 
 (define (defprocs datum)
