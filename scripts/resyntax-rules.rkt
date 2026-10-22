@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml/cluster/private/define-who define/who)
-         (only-in resyntax/base
+(require (only-in resyntax/base
                   define-definition-context-refactoring-rule
                   define-refactoring-suite
                   ~focus-replacement-on
@@ -47,10 +46,10 @@
  #:when (eq? (syntax-e #'quoted) (syntax-e #'name))
  #:when (equal? (syntax->datum #'(wrapper-formal ...)) (syntax->datum #'formals))
  #:when (equal? (syntax->datum #'(argument ...)) (syntax->datum #'(formal.argument ... ...)))
+ #:with define-who
+ (syntax-property #'define/who 'skip-incorrect-binding-check? #t)
  #:with replacement
- #'(~replacement (define/who (name who . formals)
-                   relay-body ...)
-                 #:original-splice (relay wrapper))
+ #'(~replacement (define-who (name who . formals) relay-body ...) #:original-splice (relay wrapper))
  (body-before ... (~focus-replacement-on replacement) body-after ...))
 
 (define-refactoring-suite cuml-rules #:rules (who-pair-to-define/who))
