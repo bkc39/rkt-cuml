@@ -29,12 +29,13 @@
   (pattern [key:id (~optional default:expr) (~optional #:fixed)]))
 
 (define-splicing-syntax-class formal
-  #:attributes ([kept 1] table)
-  (pattern (~seq #:hyperparameters table:id (~optional (~seq #:ignoring (_:id ...))))
-    #:with (kept ...) #'())
-  (pattern one
-    #:with (kept ...) #'(one)
-    #:attr table #f))
+                              #:attributes ([kept 1] table)
+                              (pattern (~seq #:hyperparameters table:id
+                                             (~optional (~seq #:ignoring (_:id ...))))
+                                #:with (kept ...) #'())
+                              (pattern one
+                                #:with (kept ...) #'(one)
+                                #:attr table #f))
 
 (define-syntax-class formal-list
   #:attributes ([kept 1] [table 1])
@@ -42,25 +43,33 @@
     #:with (kept ...) #'(f.kept ... ...)
     #:with (table ...) (filter values (attribute f.table))))
 
+(define-syntax-class who-wrapper
+  (pattern ((~datum define) (name:id . formals) (~and call (relay:id ((~datum quote) quoted:id) . _)))
+    #:when (eq? (syntax-e #'quoted) (syntax-e #'name))
+    #:when (equal? (format "~a/who" (syntax-e #'name)) (symbol->string (syntax-e #'relay)))
+    #:with procedure #'(lambda formals call)))
+
 (define-syntax-class who-relay
   (pattern ((~datum define) (name:id (~and who (~datum who)) . rest) body ...+)
     #:with procedure #'(lambda (who . rest)
                          body ...)))
 
 (define-syntax-class reviewed-form
-  #:datum-literals (define-estimator define-generics
-                                    define-hyperparameters
-                                    define-splicing-syntax-class
-                                    define-syntax-class
-                                    define-syntax-parse-rule
-                                    define/who
-                                    quasiquote
-                                    quote
-                                    struct
-                                    test-gpu
-                                    test-twin
-                                    test-unless-skipped
-                                    test-without-gpu)
+  #:datum-literals (define-definition-context-refactoring-rule define-estimator
+                                                               define-generics
+                                                               define-refactoring-rule
+                                                               define-hyperparameters
+                                                               define-splicing-syntax-class
+                                                               define-syntax-class
+                                                               define-syntax-parse-rule
+                                                               define/who
+                                                               quasiquote
+                                                               quote
+                                                               struct
+                                                               test-gpu
+                                                               test-twin
+                                                               test-unless-skipped
+                                                               test-without-gpu)
   (pattern (quote (_ . _))
     #:attr review void)
   (pattern (quasiquote datum)
@@ -74,11 +83,17 @@
     #:attr review (lambda ()
                     (track-binding #'name #:check-usages? #f)
                     (mark-uses #'body)))
-  (pattern (define-hyperparameters name:id entry:hyperparameter ...)
+  (pattern ((~or* define-definition-context-refactoring-rule define-refactoring-rule) name:id . body)
+    #:attr review (lambda ()
+                    (track-binding #'name)
+                    (mark-uses #'body)))
+  (pattern (define-hyperparameters name:id
+             entry:hyperparameter ...)
     #:attr review (lambda ()
                     (track-binding #'name)
                     (for-each recur (filter values (attribute entry.default)))))
-  (pattern (define-estimator name:id . options)
+  (pattern (define-estimator name:id
+             . options)
     #:attr review (lambda ()
                     (track-binding #'name)
                     (track-binding #'name "~a?" #:check-usages? #f)
@@ -113,6 +128,7 @@
 (define (should-review? stx)
   (syntax-parse stx
     [relay:who-relay (exported? #'relay.name)]
+    [_:who-wrapper #t]
     [_:reviewed-form #t]
     [_ #f]))
 
@@ -124,6 +140,13 @@
                           (syntax-e #'relay.name)))
      (track-binding #'relay.name)
      (recur #'relay.procedure)]
+    [wrapper:who-wrapper
+     (track-error #'wrapper.name
+                  (format "~a only relays to ~a: define both with define/who"
+                          (syntax-e #'wrapper.name)
+                          (syntax-e #'wrapper.relay)))
+     (track-binding #'wrapper.name)
+     (recur #'wrapper.procedure)]
     [form:reviewed-form ((attribute form.review))]))
 
 (define (mark-uses stx)
@@ -139,7 +162,10 @@
 
 (define (exported? name)
   (and (not (regexp-match? #rx"/who$" (symbol->string (syntax-e name))))
-       (memq (syntax-e name) (hash-ref! provides-by-file (syntax-source name) (lambda () (provided-names (syntax-source name)))))
+       (memq (syntax-e name)
+             (hash-ref! provides-by-file
+                        (syntax-source name)
+                        (lambda () (provided-names (syntax-source name)))))
        #t))
 
 (define (provided-names source)

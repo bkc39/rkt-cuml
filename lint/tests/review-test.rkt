@@ -127,33 +127,33 @@
   (check-equal? (problems-in test-forms-with-same-names) '()))
 
 (define exported-who-procedure
-  '((provide twice)
-    (define (twice who x)
-      (list who x))))
+  '((provide twice) (define (twice who x)
+                      (list who x))))
 
 (define renamed-exported-who-procedure
-  '((provide (rename-out [twice double]))
-    (define (twice who x)
-      (list who x))))
+  '((provide (rename-out [twice double])) (define (twice who x)
+                                            (list who x))))
 
 (define private-relay
-  '((provide twice)
-    (define (helper who x)
-      (list who x))
-    (define (twice x)
-      (helper 'twice x))))
+  '((provide twice) (define (helper who x)
+                      (list who x))
+                    (define (twice x)
+                      (helper 'twice x))))
 
 (define hyperparameter-table
-  '((provide widget-params)
-    (define (base-size)
-      3)
-    (define-hyperparameters widget-params [size (base-size)] [scale (* 2 size)] [shade 'plain #:fixed])))
+  '((provide widget-params) (define (base-size)
+                              3)
+                            (define-hyperparameters widget-params
+                              [size (base-size)]
+                              [scale (* 2 size)]
+                              [shade 'plain #:fixed])))
 
 (define who-definition-with-a-table
-  '((provide paint)
-    (define-hyperparameters widget-params [size 3] [shade 'plain])
-    (define/who (paint who X #:hyperparameters widget-params #:ignoring (shade))
-      (list who X size))))
+  '((provide paint) (define-hyperparameters widget-params
+                      [size 3]
+                      [shade 'plain])
+                    (define/who (paint who X #:hyperparameters widget-params #:ignoring (shade))
+                      (list who X size))))
 
 (define estimator-definition
   '((provide widget
@@ -161,16 +161,19 @@
              widget-model)
     (define (widget-fit/who who X)
       (list who X))
-    (define-estimator widget #:hyperparameters widget-params #:fit widget-fit/who #:labels values #:settings ())))
+    (define-estimator widget
+      #:hyperparameters widget-params
+      #:fit widget-fit/who
+      #:labels values
+      #:settings ())))
 
 (define helper-used-in-a-template
-  '((require (for-syntax racket/base))
-    (provide m)
-    (define (helper x)
-      x)
-    (define-syntax-parse-rule (m x:expr)
-      #:with y #'x
-      (helper y))))
+  '((require (for-syntax racket/base)) (provide m)
+                                       (define (helper x)
+                                         x)
+                                       (define-syntax-parse-rule (m x:expr)
+                                         #:with y #'x
+                                         (helper y))))
 
 (test-case "an exported procedure that takes who first is defined with define/who"
   (check-equal? (problems-in exported-who-procedure)
@@ -192,3 +195,13 @@
 
 (test-case "a binding used only in a macro's template is used"
   (check-equal? (problems-in helper-used-in-a-template) '()))
+
+(define hand-written-who-pair
+  '((provide twice) (define (twice/who who x)
+                      (list who x))
+                    (define (twice x)
+                      (twice/who 'twice x))))
+
+(test-case "a procedure that only relays to its /who form is a define/who"
+  (check-equal? (problems-in hand-written-who-pair)
+                '("twice only relays to twice/who: define both with define/who")))
