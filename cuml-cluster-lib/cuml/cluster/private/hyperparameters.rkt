@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (for-syntax racket/base
-                     (only-in racket/match match)
+                     (only-in racket/match match match-define)
                      (only-in racket/syntax format-id)
                      syntax/parse/pre)
          (only-in cuml/core exn:fail:cuml)
@@ -145,14 +145,48 @@
 
   (define (mention stx ids)
     (syntax-parse stx
-      #:literals (quote)
-      [(quote _) #f]
+      #:literals (quasiquote quasisyntax quote syntax)
+      [((~or* quote syntax) _) #f]
+      [(quasiquote template) (template-mention #'template ids 1 quasiquote-escapes)]
+      [(quasisyntax template) (template-mention #'template ids 1 quasisyntax-escapes)]
       [x:id
        (for/first ([id (in-list ids)]
                    #:when (bound-identifier=? #'x id))
          #'x)]
       [(a . d) (or (mention #'a ids) (mention #'d ids))]
       [_ #f]))
+
+  (define quasiquote-escapes (list #'quasiquote #'unquote #'unquote-splicing))
+
+  (define quasisyntax-escapes (list #'quasisyntax #'unsyntax #'unsyntax-splicing))
+
+  (define (head-is? stx id)
+    (and (identifier? stx) (free-identifier=? stx id)))
+
+  (define (template-mention stx ids depth escapes)
+    (match-define (list open escape splice) escapes)
+    (syntax-parse stx
+      [(head e)
+       #:when (and (= depth 1) (or (head-is? #'head escape) (head-is? #'head splice)))
+       (mention #'e ids)]
+      [(head e)
+       #:when (or (head-is? #'head escape) (head-is? #'head splice))
+       (template-mention #'e ids (sub1 depth) escapes)]
+      [(head e)
+       #:when (head-is? #'head open)
+       (template-mention #'e ids (add1 depth) escapes)]
+      [(a . d) (or (template-mention #'a ids depth escapes) (template-mention #'d ids depth escapes))]
+      [#(e ...) (template-mention #'(e ...) ids depth escapes)]
+      [_
+       (for/or ([part (in-list (template-parts (syntax-e stx)))])
+         (template-mention part ids depth escapes))]))
+
+  (define (template-parts datum)
+    (cond
+      [(box? datum) (list (unbox datum))]
+      [(hash? datum) (hash-values datum)]
+      [(prefab-struct-key datum) (cdr (vector->list (struct->vector datum)))]
+      [else '()]))
 
   (define (forward-reference keys defaults)
     (for/or ([default (in-list defaults)]
@@ -167,6 +201,11 @@
      #:fail-when
      (forward-reference (attribute entry.key) (attribute entry.default))
      "a default refers to its own or a later key"
+     #:attr fixed-reference (for/or ([default (in-list (attribute entry.default))]
+                                     [fixed? (in-list (attribute entry.fixed?))])
+                              (and fixed? (mention default (attribute entry.key))))
+     #:fail-when (attribute fixed-reference) (format "a #:fixed default refers to the key ~a"
+                                                     (syntax-e (attribute fixed-reference)))
      #:with (key ...) #'(entry.key ...)
      #:with (default ...) #'(entry.default ...)
      #:with (keyword ...) #'(entry.keyword ...)

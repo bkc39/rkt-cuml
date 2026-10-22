@@ -208,3 +208,40 @@
   (check-syntax-error
    '(define/who (f who X #:hyperparameters widget-params #:hyperparameters widget-params) X)
    #rx"takes one #:hyperparameters"))
+
+(test-case "L-2: a quoted or quasiquoted key name is no reference; an unquoted one is"
+  (check-equal? (raised (lambda ()
+                          (expanded '(define/who (f who
+                                                    X
+                                                    #:hyperparameters widget-params
+                                                    #:extra [extra (list `(size) #'scale #`(label))])
+                                       extra))))
+                #f)
+  (check-equal? (raised (lambda ()
+                          (expanded '(define-hyperparameters quasi-params
+                                       [label `(size ``(,,scale))]
+                                       [size 1]
+                                       [scale 2]))))
+                #f)
+  (check-syntax-error
+   '(define/who (f who X #:hyperparameters widget-params #:extra [extra `(1 ,size)]) extra)
+   #rx"refers to a hyperparameter")
+  (check-syntax-error
+   '(define/who (f who X #:hyperparameters widget-params #:extra [extra `#(1 ,@(list scale))]) extra)
+   #rx"refers to a hyperparameter")
+  (check-syntax-error
+   '(define/who (f who X #:hyperparameters widget-params #:extra [extra #`(1 #,label)]) extra)
+   #rx"refers to a hyperparameter")
+  (check-syntax-error '(define-hyperparameters nested-params
+                         [label `(1 `(2 ,,size))]
+                         [size 1])
+                      #rx"later key")
+  (check-syntax-error
+   '(define/who (f who X #:hyperparameters widget-params #:extra [extra (let ([size 1]) size)]) extra)
+   #rx"refers to a hyperparameter"))
+
+(test-case "L-3: a #:fixed default that names another key is refused"
+  (check-syntax-error '(define-hyperparameters fixed-earlier-params
+                         [size 1]
+                         [shade (list size) #:fixed])
+                      #rx"#:fixed default refers to the key size"))
