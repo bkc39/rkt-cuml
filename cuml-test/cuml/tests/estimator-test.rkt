@@ -199,3 +199,30 @@
   (define updated (estimator-set-params f (hasheq 'shift 5)))
   (check-false (fitted? updated))
   (check-equal? (estimator-params updated) (hash-set (estimator-params f) 'shift 5)))
+
+(struct mean-split (shift cut)
+  #:transparent
+  #:methods gen:estimator
+  [(define (fit e X [_y #f] #:sample-weight [_w #f])
+     (mean-split (mean-split-shift e) (+ (mean-split-shift e) (/ (apply + X) (length X)))))
+   (define (fitted? e)
+     (and (mean-split-cut e) #t))
+   (define (estimator-params e)
+     (hasheq 'shift (mean-split-shift e)))
+   (define (estimator-set-params e params)
+     (mean-split (hash-ref params 'shift (mean-split-shift e)) #f))]
+  #:methods gen:predictor
+  [(define (predict e X)
+     (for/list ([x (in-list X)])
+       (if (< x (mean-split-cut e)) 0 1)))])
+
+(test-case "G1: estimator-set-params takes keywords as a host implementation's hash"
+  (define e (fit (mean-split 1 #f) '(1 2 9 10)))
+  (check-equal? (estimator-set-params e #:shift 5) (estimator-set-params e (hasheq 'shift 5)))
+  (check-equal? (estimator-set-params e #:shift 5) (mean-split 5 #f))
+  (check-equal? (estimator-set-params e (hasheq 'shift 2) #:shift 5) (mean-split 5 #f))
+  (check-equal? (estimator-set-params e) (mean-split 1 #f))
+  (check-false (fitted? (estimator-set-params e)))
+  (check-equal? (object-name estimator-set-params) 'estimator-set-params)
+  (check-regexp-match #rx"^estimator-set-params: contract violation"
+                      (exn-message (raised (lambda () (estimator-set-params 3 #:shift 1))))))

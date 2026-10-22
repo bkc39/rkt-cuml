@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml
+                  current-batch-samples
                   estimator-params
                   estimator-set-params
                   exn:fail:cuml
@@ -13,9 +14,12 @@
                   gen:predictor
                   kmeans
                   kmeans-fit
+                  kmeans-params
                   kmeans-predict
                   kmeans-result
                   kmeans-result-centroids
+                  kmeans-result-inertia
+                  kmeans-result-labels
                   kmeans-score
                   kmeans-transform
                   predict
@@ -135,4 +139,26 @@
   (check-equal? (score fitted (grid)) -16.0)
   (check-equal? (hash-ref (estimator-params km) 'n-clusters) 2)
   (check-equal? (fitted? (estimator-set-params fitted (hasheq 'max-iter 10))) #f)
+  (check-equal? (format "~v" (estimator-set-params km #:max-iter 10))
+                "#<kmeans #:n-clusters 2 #:max-iter 10 #:random-state 1>")
   (check-cuml-error 'logic "predict: kmeans is not fitted" (lambda () (predict km (grid)))))
+
+(test-case "the manual: kmeans-params overrides a base and refuses an unknown key"
+  (define tight (kmeans-params #:tol 1e-6 #:n-init 3))
+  (check-equal? (hash-ref (kmeans-params tight #:n-init 5) 'n-init) 5)
+  (check-cuml-error 'logic
+                    "kmeans-params: kmeans has no parameter colour"
+                    (lambda () (kmeans-params (hasheq 'colour 'red)))))
+
+(test-gpu "the manual: a sweep over n-clusters from one set"
+  (define tight (kmeans-params #:tol 1e-6 #:n-init 3))
+  (check-equal? (for/list ([k (in-range 1 4)])
+                  (kmeans-result-inertia (kmeans-fit (grid) #:params tight #:n-clusters k)))
+                '(416.0 16.0 13.333333333333332)))
+
+(test-gpu "the manual: current-batch-samples changes no label"
+  (define (labels)
+    (device-vector->list (kmeans-result-labels (kmeans-fit (grid) #:n-clusters 2 #:random-state 1))))
+  (check-equal? (parameterize ([current-batch-samples 3])
+                  (labels))
+                (labels)))

@@ -20,16 +20,18 @@
                   transform
                   transformer?)
          (only-in cuml/cluster
+                  current-batch-samples
                   kmeans-fit
+                  kmeans-params
                   kmeans-predict
                   kmeans-result
                   kmeans-result-centroids
                   kmeans-result-inertia
+                  kmeans-result-n-iter
                   kmeans-result?
                   kmeans-score
                   kmeans-transform)
          (only-in cuml/cluster/private/kmeans
-                  kmeans-defaults
                   kmeans-fit/who
                   kmeans-predict/who
                   kmeans-score/who
@@ -74,9 +76,7 @@
           'tol 1e-4
           'n-init 'auto
           'random-state 0
-          'oversampling-factor 2.0
-          'max-samples-per-batch 32768
-          'resources #f))
+          'oversampling-factor 2.0))
 
 (define round-trips
   (list (list '#:init 'init 'random)
@@ -85,9 +85,7 @@
         (list '#:tol 'tol 0.5)
         (list '#:n-init 'n-init 2)
         (list '#:random-state 'random-state 7)
-        (list '#:oversampling-factor 'oversampling-factor 1.5)
-        (list '#:max-samples-per-batch 'max-samples-per-batch 64)
-        (list '#:resources 'resources 'some-resources)))
+        (list '#:oversampling-factor 'oversampling-factor 1.5)))
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
@@ -107,9 +105,15 @@
                   value
                   (format "~a" kw))))
 
-(test-case "K1: the estimator's defaults are leg 1's"
-  (for ([(name value) (in-hash kmeans-defaults)])
-    (check-equal? (hash-ref (estimator-params (kmeans)) name) value (format "~a" name))))
+(test-case "K1: the estimator's parameters are the table's, without the settings"
+  (check-equal? (kmeans-params) default-params)
+  (check-equal? (estimator-params (kmeans)) (kmeans-params))
+  (check-equal? (estimator-params (kmeans #:max-samples-per-batch 64 #:resources 'r)) (kmeans-params))
+  (for ([r (in-list round-trips)])
+    (match-define (list kw key value) r)
+    (check-equal? (estimator-params (keyword-apply kmeans (list kw) (list value) '()))
+                  (keyword-apply kmeans-params (list kw) (list value) '())
+                  (format "~a" kw))))
 
 (test-case "K2: an unknown parameter is refused, and an update is the constructor's"
   (check-cuml-error 'logic
@@ -141,10 +145,12 @@
   (for ([e (in-list (list (kmeans)
                           (kmeans #:random-state 1 #:n-clusters 3)
                           (kmeans #:n-clusters 8)
-                          (kmeans #:init 'random)))]
+                          (kmeans #:init 'random)
+                          (kmeans #:max-samples-per-batch 64)))]
         [text (in-list '("#<kmeans>" "#<kmeans #:n-clusters 3 #:random-state 1>"
                                      "#<kmeans>"
-                                     "#<kmeans #:init 'random>"))])
+                                     "#<kmeans #:init 'random>"
+                                     "#<kmeans #:max-samples-per-batch 64>"))])
     (check-equal? (printed e) (list text text text))))
 
 (test-gpu "K5: a fitted estimator prints fitted"
@@ -330,6 +336,7 @@
                              #:n-clusters
                              #:n-init
                              #:oversampling-factor
+                             #:params
                              #:random-state
                              #:resources
                              #:sample-weight
@@ -354,10 +361,13 @@
     name))
 
 (define (private-name? name)
-  (or (regexp-match? #rx"/who$" (symbol->string name)) (memq name '(init-rows kmeans-defaults))))
+  (or (regexp-match? #rx"/(who|proc)$" (symbol->string name))
+      (memq name '(init-rows absent fill defaults-for resolve update keys))))
 
-(test-case "K12: cuml/cluster exports no private name"
-  (check-equal? (filter private-name? (exported-names 'cuml/cluster)) '()))
+(test-case "K12: cuml/cluster exports no private name, and the table and the batch parameter"
+  (define names (exported-names 'cuml/cluster))
+  (check-equal? (filter private-name? names) '())
+  (check-true (and (memq 'kmeans-params names) (memq 'current-batch-samples names) #t)))
 
 (test-gpu "K13: n-clusters is inferred from a matrix init when the estimator is built"
   (define m (mat start 'float64))
@@ -366,3 +376,54 @@
   (check-equal? (hash-ref (estimator-params (estimator-set-params e (hasheq 'init 'random)))
                           'n-clusters)
                 2))
+
+(define (option-cases rows)
+  (for*/list ([k (in-range 1 5)]
+              [max-iter (in-range 0 6)]
+              [init (in-list (list 'scalable-k-means++ 'k-means++ 'random 'matrix))]
+              [n-init (in-range 1 4)]
+              [seed (in-range 0 4)]
+              #:when (= (modulo (+ k max-iter n-init seed (string-length (format "~a" init))) 7) 0))
+    (append (list (cons '#:n-clusters k) (cons '#:max-iter max-iter) (cons '#:n-init n-init) (cons '#:random-state seed))
+            (match init
+              ['matrix (list (cons '#:init (first-rows-of rows k)))]
+              [name (list (cons '#:init name))]))))
+
+(define (first-rows-of rows k)
+  (mat (for/list ([row (in-list rows)] [_ (in-range k)]) row) 'float64))
+
+(define (kw-call proc options positional)
+  (define sorted (sort options keyword<? #:key car))
+  (keyword-apply proc (map car sorted) (map cdr sorted) positional))
+
+(define (five-ways X w options)
+  (define set (kw-call kmeans-params options '()))
+  (list (kw-call kmeans-fit (cons (cons '#:sample-weight w) options) (list X))
+        (kmeans-fit X #:params set #:sample-weight w)
+        (kmeans-model (fit (kw-call kmeans options '()) X #:sample-weight w))
+        (kmeans-model (fit (kmeans set) X #:sample-weight w))
+        (kmeans-model (fit (kw-call estimator-set-params options (list (kmeans))) X #:sample-weight w))))
+
+(define (check-five-ways name X w options)
+  (match-define (cons reference others) (map outcome (five-ways X w options)))
+  (for ([other (in-list others)]
+        [way (in-list '(params constructor constructor-set set-params))])
+    (check-equal? other reference (format "~a: ~a" name way))))
+
+(test-gpu "K14: five ways of giving the parameters fit the same"
+  (for* ([dt (in-list dtypes)]
+         [c (in-list (grid-cases dt))])
+    (check-five-ways (fit-case-name c)
+                     (fit-case-X c)
+                     (fit-case-w c)
+                     (map cons (fit-case-kws c) (fit-case-vals c))))
+  (for ([options (in-list (option-cases grid64))])
+    (check-five-ways (format "~a" options) (mat grid64 'float64) #f options)))
+
+(test-gpu "K15: a set's n-clusters stays when only init is given"
+  (define X (mat grid8 'float64))
+  (define M (mat start 'float64))
+  (check-cuml-error 'logic
+                    "kmeans-fit: init: expected 8 rows, got 2"
+                    (lambda () (kmeans-fit X #:params (kmeans-params) #:init M)))
+  (check-equal? (kmeans-result-n-iter (kmeans-fit X #:init M #:max-iter 0)) 0))

@@ -10,6 +10,7 @@
                   shape)
          (only-in raft/unsafe deposit deposit->list)
          (only-in "define-who.rkt" define/who)
+         (only-in "hyperparameters.rkt" define-hyperparameters)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job
                   cuml-cluster-kmeans-predict-job
@@ -17,10 +18,12 @@
                   cuml-cluster-kmeans-transform-job))
 
 (provide (struct-out kmeans-result)
+         current-batch-samples
          init-rows
          kmeans-defaults
          kmeans-fit
          kmeans-fit/who
+         kmeans-params
          kmeans-predict
          kmeans-predict/who
          kmeans-score
@@ -39,6 +42,20 @@
           'random-state 0
           'oversampling-factor 2.0
           'max-samples-per-batch 32768))
+
+(define-hyperparameters kmeans-params
+  [init 'scalable-k-means++]
+  [n-clusters (init-rows init 8)]
+  [max-iter 300]
+  [tol 1e-4]
+  [n-init 'auto]
+  [random-state 0]
+  [oversampling-factor 2.0])
+
+(define (batch-samples v)
+  (error 'current-batch-samples "unimplemented"))
+
+(define current-batch-samples (make-parameter 32768 batch-samples 'current-batch-samples))
 
 (define (default name)
   (hash-ref kmeans-defaults name))

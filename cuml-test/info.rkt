@@ -6,7 +6,8 @@
 (define version "0.1")
 (define deps '("base"))
 (define build-deps
-  '("cuml-cluster-lib" "cuml-core-lib"
+  '("at-exp-lib" "cuml-cluster-lib"
+                 "cuml-core-lib"
                        "cuml-lib"
                        ("raft" #:version "0.2")
                        "rackunit-lib"
