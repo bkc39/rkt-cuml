@@ -214,10 +214,14 @@
 
 (define (spec-names spec defined)
   (syntax-parse spec
-    #:datum-literals (all-defined-out prefix-out rename-out)
+    #:datum-literals (all-defined-out combine-out except-out prefix-out rename-out)
     [name:id (list (syntax-e #'name))]
     [(rename-out [inner:id _] ...) (map syntax-e (attribute inner))]
     [(prefix-out _ inner ...) (append-map (lambda (one) (spec-names one defined)) (attribute inner))]
+    [(combine-out inner ...) (append-map (lambda (one) (spec-names one defined)) (attribute inner))]
+    [(except-out inner removed ...)
+     (remq* (append-map (lambda (one) (spec-names one defined)) (attribute removed))
+            (spec-names #'inner defined))]
     [(all-defined-out) defined]
     [_ '()]))
 

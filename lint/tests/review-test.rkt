@@ -226,6 +226,18 @@
     (define (thrice x)
       (twice 'thrice x))))
 
+(define who-procedure-under-except-out
+  '((provide (except-out (all-defined-out) thrice)) (define (twice who x)
+                                                      (list who x))
+                                                    (define (thrice who x)
+                                                      (twice who x))
+                                                    (thrice 'thrice 1)))
+
+(define who-procedure-under-combine-out
+  '((provide (combine-out twice)) (define (twice who x)
+                                    (list who x))
+                                  (twice 'twice 1)))
+
 (test-case "L7: a wrapper that passes other arguments than its formals is not a relay"
   (check-equal? (problems-in wrapper-that-prepares) '()))
 
@@ -251,3 +263,11 @@
 
 (test-case "a splicing syntax class with parameters is bound like one without"
   (check-equal? (problems-in parameterized-syntax-class) '()))
+
+(test-case "L-5: except-out exports its first spec's names less the rest's"
+  (check-equal? (problems-in who-procedure-under-except-out)
+                '("twice takes who first and is exported: define it with define/who")))
+
+(test-case "L-5: combine-out exports every spec's names"
+  (check-equal? (problems-in who-procedure-under-combine-out)
+                '("twice takes who first and is exported: define it with define/who")))
