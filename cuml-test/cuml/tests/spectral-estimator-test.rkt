@@ -22,9 +22,11 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options round-trips)
          (only-in "private/kmeans-data.rkt" blank-vector)
          (only-in "private/spectral-data.rkt"
+                  blobs
                   graph-labels
                   labels
                   planted?
@@ -154,7 +156,11 @@
                 (device-vector->list (spectral-clustering-result-labels
                                       (apply-options spectral-clustering-fit options X)))))
 
-(define identity-changes (hasheq 'n-components 2 'random-state 3 'n-neighbors 6 'n-init 3))
+(define identity-changes (hasheq 'n-components 2 'random-state 4 'n-neighbors 6 'n-init 3))
+
+(define (close-blobs-matrix)
+  (define-values (rows _truth) (blobs 30 3 2 2.0 0))
+  (mat rows 'float32))
 
 (define (ways X options)
   (define base (spectral-clustering-params #:n-init 2 #:random-state 1))
@@ -173,8 +179,17 @@
 (define (result-labels result)
   (device-vector->list (spectral-clustering-result-labels result)))
 
+(test-gpu "each identity change alone moves the partition from the default fit's"
+  (define X (close-blobs-matrix))
+  (define default (result-labels (spectral-clustering-fit X #:n-clusters 3)))
+  (for ([key (in-list '(n-components random-state n-neighbors n-init))])
+    (test-case (symbol->string key)
+      (define options (hasheq 'n-clusters 3 key (hash-ref identity-changes key)))
+      (check-false (planted? (result-labels (apply-options spectral-clustering-fit options X))
+                             default)))))
+
 (test-gpu "a keyword is the same as a set with that keyword, through spectral-clustering-fit and the estimator"
-  (define X (three-blobs-matrix #:n-each 30))
+  (define X (close-blobs-matrix))
   (for* ([k (in-range 3)]
          [keys (in-list (combinations '(n-components random-state n-neighbors n-init) k))])
     (define options
@@ -214,6 +229,9 @@
                     "fit: spectral-clustering takes no sample-weight"
                     (lambda ()
                       (fit (spectral-clustering) X #:sample-weight (blank-vector 90 'float32))))
+  (check-cuml-error 'logic
+                    "fit: spectral-clustering takes no sample-weight"
+                    (lambda () (fit (spectral-clustering #:affinity 'rbf) 'X #:sample-weight 'w)))
   (check-cuml-error 'logic
                     "fit-predict: spectral-clustering takes no sample-weight"
                     (lambda ()
