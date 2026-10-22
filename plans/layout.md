@@ -164,11 +164,11 @@
 
 - `define-hyperparameters` (`cuml/cluster/private/hyperparameters.rkt`)
   defines a family's `<algorithm>-params` once: its keys in order, each
-  default (which may read earlier keys) and its `#:fixed` keys. `define/who`
-  takes the table as `#:hyperparameters`, and `define-estimator`
-  (`cuml/private/estimator-support.rkt`) builds the estimator wrapper over
-  it; the keywords, defaults, printer and `estimator-set-params` come from
-  the one table.
+  default (which may read earlier keys, unless it is `#:fixed`) and its
+  `#:fixed` keys. `define/who` takes the table as `#:hyperparameters`, and
+  `define-estimator` (`cuml/private/estimator-support.rkt`) builds the
+  estimator wrapper over it; the keywords, defaults, printer and
+  `estimator-set-params` come from the one table.
 - The owner's answers, each the recommended one:
   - **Q-A.** Execution settings (`#:resources`, k-means'
     `#:max-samples-per-batch`) stay constructor keywords, stored outside
