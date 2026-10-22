@@ -45,4 +45,20 @@
                                                  ,relay
                                                  (define (twice x #:times [n 2])
                                                    (twice/who 'twice x #:times 3))
-                                                 (twice 1)))))))
+                                                 (twice 1)))))
+
+    (test-case "a relay with an optional positional argument stays"
+      (check-suite-does-not-refactor (program '(define (run)
+                                                 (define (twice/who who x [y 2])
+                                                   (list who x y))
+                                                 (define (twice x [y 2])
+                                                   (twice/who 'twice x y))
+                                                 (twice 1)))))
+
+    (test-case "a relay with a required keyword argument stays"
+      (check-suite-does-not-refactor (program '(define (run)
+                                                 (define (twice/who who x #:times n)
+                                                   (list who x n))
+                                                 (define (twice x #:times n)
+                                                   (twice/who 'twice x #:times n))
+                                                 (twice 1 #:times 2)))))))

@@ -8,7 +8,10 @@ suite=(--refactoring-suite "(file \"$PWD/scripts/resyntax-rules.rkt\")" cuml-rec
 
 pr_base() {
   if [ -n "${RESYNTAX_BASE:-}" ]; then
-    git merge-base HEAD "$RESYNTAX_BASE"
+    git merge-base HEAD "$RESYNTAX_BASE" || {
+      echo "resyntax: HEAD and RESYNTAX_BASE=$RESYNTAX_BASE have no merge base" >&2
+      return 1
+    }
     return
   fi
   if ! git remote get-url origin >/dev/null 2>&1; then
