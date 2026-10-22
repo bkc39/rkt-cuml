@@ -60,7 +60,14 @@
 
   (define-splicing-syntax-class
    (formal who-id)
-   #:attributes ([spec 1] [argument 1] [binding 1] [key 1] default name table-name)
+   #:attributes ([spec 1] [argument 1]
+                          [binding 1]
+                          [key 1]
+                          [table-keyword 1]
+                          default
+                          formal-keyword
+                          name
+                          table-name)
    (pattern (~seq #:hyperparameters table:table-id
                   (~optional (~seq #:ignoring ~!
                                    ((~var ignored (table-key #'table (attribute table.keys))) ...))
@@ -83,7 +90,9 @@
          (table.resolve who 'table.owner params (given-hash '(given-key ...) (list given-value ...)))]
         (~? check)
         [key (hash-ref set 'key)] ...)
+     #:with (table-keyword ...) #'(keyword ... #:params)
      #:attr default #f
+     #:attr formal-keyword #f
      #:attr name #f
      #:attr table-name #'table)
    (pattern id:id
@@ -91,7 +100,9 @@
      #:with (argument ...) #'(id)
      #:with (binding ...) #'()
      #:with (key ...) #'()
+     #:with (table-keyword ...) #'()
      #:attr default #f
+     #:attr formal-keyword #f
      #:attr name #'id
      #:attr table-name #f)
    (pattern (~seq kw:keyword [id:id default:expr])
@@ -99,6 +110,8 @@
      #:with (argument ...) #'(kw id)
      #:with (binding ...) #'()
      #:with (key ...) #'()
+     #:with (table-keyword ...) #'()
+     #:attr formal-keyword #'kw
      #:attr name #'id
      #:attr table-name #f)))
 
@@ -121,6 +134,10 @@
   #:fail-when (attribute clash) (format "~a is both a formal and a key of ~a"
                                         (syntax-e (attribute clash))
                                         (syntax-e (findf values (attribute f.table-name))))
+  #:attr keyword-clash (key-clash (attribute f.formal-keyword) (append* (attribute f.table-keyword)))
+  #:fail-when (attribute keyword-clash) (format "~a is both a keyword formal and a keyword of ~a"
+                                                (syntax-e (attribute keyword-clash))
+                                                (syntax-e (findf values (attribute f.table-name))))
   #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
   #:with (kw ...) (filter (lambda (spec) (keyword? (syntax-e spec)))
                           (syntax->list #'(f.spec ... ...)))

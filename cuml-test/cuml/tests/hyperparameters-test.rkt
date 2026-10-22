@@ -211,6 +211,12 @@
    '(define/who (f who X #:hyperparameters widget-params #:hyperparameters widget-params) X)
    #rx"takes one #:hyperparameters"))
 
+(test-case "L-a: a keyword formal that reuses a keyword of the table is refused"
+  (check-syntax-error '(define/who (f who X #:hyperparameters widget-params #:size [sz 0]) sz)
+                      #rx"#:size is both a keyword formal and a keyword of widget-params")
+  (check-syntax-error '(define/who (f who X #:hyperparameters widget-params #:params [p 0]) p)
+                      #rx"#:params is both a keyword formal and a keyword of widget-params"))
+
 (test-case "L-2: a quoted or quasiquoted key name is no reference; an unquoted one is"
   (check-equal? (raised (lambda ()
                           (expanded '(define/who (f who
