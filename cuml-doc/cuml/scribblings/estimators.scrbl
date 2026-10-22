@@ -86,8 +86,7 @@ Whether @racket[estimator] was returned by a @racket[fit].}
 
 @defproc[(estimator-params [estimator estimator?]) (and/c hash? hash-eq? immutable?)]{
 
-The parameters of @racket[estimator], keyed by its constructor's keywords as
-symbols.}
+The parameters of @racket[estimator]: its hyperparameters, keyed by name.}
 
 @defproc[(estimator-set-params [estimator estimator?] [changes hash? (hasheq)]) estimator?]{
 

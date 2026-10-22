@@ -2,9 +2,10 @@
 
 (require (only-in cuml kmeans)
          (only-in cuml/cluster kmeans-fit kmeans-params)
+         (only-in racket/dict dict-ref)
          (only-in racket/list append-map)
          (only-in racket/match match match-define)
-         (only-in rackunit check-equal? check-true test-case)
+         (only-in rackunit check-equal? check-not-false test-case)
          (only-in scribble/reader read-inside))
 
 (define (manual-forms file)
@@ -15,8 +16,8 @@
 
 (define (defprocs datum)
   (match datum
-    [(cons 'defproc (cons (cons (? symbol? name) arguments) _)) (list (cons name arguments))]
-    [(? pair?) (append (defprocs (car datum)) (defprocs (cdr datum)))]
+    [(list* 'defproc (cons (? symbol? name) arguments) _) (list (cons name arguments))]
+    [(cons head tail) (append (defprocs head) (defprocs tail))]
     [_ '()]))
 
 (define documented
@@ -25,7 +26,7 @@
 (struct argument (keyword name default) #:transparent)
 
 (define (arguments-of name)
-  (for/list ([spec (in-list (cdr (assq name documented)))])
+  (for/list ([spec (in-list (dict-ref documented name))])
     (match spec
       [(list (? keyword? kw) id _contract default) (argument kw id default)]
       [(list (? keyword? kw) id _contract) (argument kw id 'none)]
@@ -114,4 +115,4 @@
                   positional
                   (format "~a" name))
     (for ([other (in-list others)])
-      (check-true (and (member other documented-arguments) #t) (format "~a ~a" name other)))))
+      (check-not-false (member other documented-arguments) (format "~a ~a" name other)))))

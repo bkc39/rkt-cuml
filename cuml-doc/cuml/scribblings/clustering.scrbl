@@ -78,10 +78,9 @@ The fit runs @racket[n-init] times from different seedings and keeps the run
 of lowest inertia; @racket['auto] is 1 for the k-means++ seedings and 10
 otherwise. @racket[random-state] seeds the seeding. @racket[sample-weight], a
 vector of @racket[X]'s dtype, weighs each sample; zero, negative and NaN
-weights are passed to cuML as they are. @racket[max-samples-per-batch] bounds
-the samples processed at once. The outputs live on @racket[resources].
+weights are passed to cuML as they are. @racket[max-samples-per-batch] is the batch
+size; see @racket[current-batch-samples]. The outputs live on @racket[resources].
 @racket[params], from @racket[kmeans-params], gives every hyperparameter a keyword omits.
-The batch size changes results no more than repeating the call does.
 
 @examples[#:eval ev #:label #f
 (define start (list*->device-matrix '((1 0) (11 11)) #:dtype 'float64))
