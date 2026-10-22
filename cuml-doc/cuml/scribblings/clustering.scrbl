@@ -52,8 +52,10 @@ and @racket[n-iter], the Lloyd iterations run.}
                      [#:n-init n-init (or/c 'auto exact-positive-integer?) 'auto]
                      [#:random-state random-state exact-nonnegative-integer? 0]
                      [#:oversampling-factor oversampling-factor (and/c real? (>=/c 0)) 2.0]
-                     [#:max-samples-per-batch max-samples-per-batch exact-nonnegative-integer? 32768]
+                     [#:params params (or/c #f hash?) #f]
                      [#:sample-weight sample-weight (or/c #f device-vector?) #f]
+                     [#:max-samples-per-batch max-samples-per-batch (integer-in 0 2147483647)
+                      (current-batch-samples)]
                      [#:resources resources device-resources? (current-device-resources)])
          kmeans-result?]{
 
@@ -78,8 +80,9 @@ The fit runs @racket[n-init] times from different seedings and keeps the run
 of lowest inertia; @racket['auto] is 1 for the k-means++ seedings and 10
 otherwise. @racket[random-state] seeds the seeding. @racket[sample-weight], a
 vector of @racket[X]'s dtype, weighs each sample; zero, negative and NaN
-weights are passed to cuML as they are. @racket[max-samples-per-batch] bounds
-the samples processed at once. The outputs live on @racket[resources].
+weights are passed to cuML as they are. @racket[max-samples-per-batch] is the batch
+size; see @racket[current-batch-samples]. The outputs live on @racket[resources].
+@racket[params], from @racket[kmeans-params], gives every hyperparameter a keyword omits.
 
 @examples[#:eval ev #:label #f
 (define start (list*->device-matrix '((1 0) (11 11)) #:dtype 'float64))
@@ -107,9 +110,50 @@ There must be at least as many samples as clusters:
 (eval:error (kmeans-fit X #:n-clusters 9))
 ]}
 
+@defproc[(kmeans-params [base (or/c #f hash?) #f]
+                        [#:init init
+                         (or/c 'scalable-k-means++ 'k-means++ 'random device-matrix?)
+                         'scalable-k-means++]
+                        [#:n-clusters n-clusters exact-positive-integer?
+                         (if (device-matrix? init) (car (shape init)) 8)]
+                        [#:max-iter max-iter exact-nonnegative-integer? 300]
+                        [#:tol tol (and/c real? (>/c 0)) 1e-4]
+                        [#:n-init n-init (or/c 'auto exact-positive-integer?) 'auto]
+                        [#:random-state random-state exact-nonnegative-integer? 0]
+                        [#:oversampling-factor oversampling-factor (and/c real? (>=/c 0)) 2.0])
+         (and/c hash? hash-eq? immutable?)]{
+
+The hyperparameters of @racket[kmeans-fit] and @racket[kmeans], every key present: @racket[base], or with
+@racket[#f] the defaults, with each given keyword's value. From a @racket[base] nothing is recomputed, so
+an omitted @racket[n-clusters] keeps @racket[base]'s. Only keys are checked: a @racket[base] with another
+key, or without one, raises @racket[exn:fail:cuml] of kind @racket['logic]; values are checked by the fit.
+
+@examples[#:eval ev #:label #f
+(define tight (kmeans-params #:tol 1e-6 #:n-init 3))
+(hash-ref (kmeans-params tight #:n-init 5) 'n-init)
+(for/list ([k (in-range 1 4)])
+  (kmeans-result-inertia (kmeans-fit X #:params tight #:n-clusters k)))
+(eval:error (kmeans-params (hasheq 'colour 'red)))
+]}
+
+@defparam[current-batch-samples samples (integer-in 0 2147483647) #:value 32768]{
+
+The samples k-means processes at once, read when @racket[kmeans-fit], @racket[kmeans-predict],
+@racket[kmeans-transform] and @racket[kmeans-score] are called without @racket[#:max-samples-per-batch],
+and by a @racket[kmeans] estimator built without it. It changes results no more than repeating the call
+does.
+
+@examples[#:eval ev #:label #f
+(equal? (~> (parameterize ([current-batch-samples 3]) (kmeans-fit X #:n-clusters 2 #:random-state 1))
+            kmeans-result-labels
+            device-vector->list)
+        (~> (kmeans-fit X #:n-clusters 2 #:random-state 1) kmeans-result-labels device-vector->list))
+]}
+
 @defproc[(kmeans-predict [centroids device-matrix?]
                          [X device-matrix?]
-                         [#:max-samples-per-batch max-samples-per-batch exact-nonnegative-integer? 32768]
+                         [#:max-samples-per-batch max-samples-per-batch (integer-in 0 2147483647)
+                          (current-batch-samples)]
                          [#:resources resources device-resources? (current-device-resources)])
          device-vector?]{
 
@@ -124,7 +168,8 @@ The nearest of the @racket[centroids] to each row of @racket[X], as an
 
 @defproc[(kmeans-transform [centroids device-matrix?]
                            [X device-matrix?]
-                           [#:max-samples-per-batch max-samples-per-batch exact-nonnegative-integer? 32768]
+                           [#:max-samples-per-batch max-samples-per-batch (integer-in 0 2147483647)
+                          (current-batch-samples)]
                            [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
 
@@ -139,7 +184,8 @@ centroids' dtype.
 @defproc[(kmeans-score [centroids device-matrix?]
                        [X device-matrix?]
                        [#:sample-weight sample-weight (or/c #f device-vector?) #f]
-                       [#:max-samples-per-batch max-samples-per-batch exact-nonnegative-integer? 32768]
+                       [#:max-samples-per-batch max-samples-per-batch (integer-in 0 2147483647)
+                          (current-batch-samples)]
                        [#:resources resources device-resources? (current-device-resources)])
          flonum?]{
 
@@ -203,6 +249,7 @@ ascending order. Both are of the @racket[out-dtype].}
                      [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]
                      [#:max-mbytes-per-batch max-mbytes-per-batch
                       (or/c #f exact-nonnegative-integer?) #f]
+                     [#:params params (or/c #f hash?) #f]
                      [#:sample-weight sample-weight (or/c #f device-vector?) #f]
                      [#:resources resources device-resources? (current-device-resources)])
          dbscan-result?]{
@@ -223,7 +270,8 @@ cosine similarity. A row with a NaN or an infinity is noise.
 @racket[max-mbytes-per-batch] bounds, in units of 10^6
 bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[0] sizes the batch from the device's memory. The outputs live on
-@racket[resources].
+@racket[resources]. @racket[params], from @racket[dbscan-params], gives every
+hyperparameter a keyword omits.
 
 @bold{Cosine boundary.} The fit runs on a unit-row copy of @racket[X] in its
 dtype. A pair at distance exactly @racket[eps] is included when those rows are
@@ -265,6 +313,25 @@ The labels and indices take the @racket[out-dtype]:
 
 @examples[#:eval ev #:label #f
 (eval:error (dbscan-fit P #:eps 0))
+]}
+
+@defproc[(dbscan-params [base (or/c #f hash?) #f]
+                        [#:eps eps (and/c real? (>/c 0) (</c +inf.0)) 0.5]
+                        [#:min-samples min-samples exact-positive-integer? 5]
+                        [#:metric metric (or/c 'euclidean 'cosine 'precomputed) 'euclidean]
+                        [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]
+                        [#:max-mbytes-per-batch max-mbytes-per-batch
+                         (or/c #f exact-nonnegative-integer?) #f])
+         (and/c hash? hash-eq? immutable?)]{
+
+The hyperparameters of @racket[dbscan-fit] and @racket[dbscan], as @racket[kmeans-params] gives
+k-means'.
+
+@examples[#:eval ev #:label #f
+(define dense (dbscan-params #:eps 2 #:min-samples 4))
+(hash-ref (dbscan-params dense #:eps 3) 'min-samples)
+(~> (dbscan-fit P #:params dense) dbscan-result-labels device-vector->list)
+(eval:error (dbscan-params (hasheq 'colour 'red)))
 ]}
 
 @bold{Errors.} @racket[dbscan-fit] raises @racket[exn:fail:cuml] of kind

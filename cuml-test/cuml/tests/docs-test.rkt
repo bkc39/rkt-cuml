@@ -2,8 +2,10 @@
 
 (require (only-in cuml
                   agglomerative-clustering
+                  current-batch-samples
                   dbscan
                   dbscan-fit
+                  dbscan-params
                   dbscan-result
                   dbscan-result-core-sample-indices
                   dbscan-result-labels
@@ -19,9 +21,12 @@
                   gen:predictor
                   kmeans
                   kmeans-fit
+                  kmeans-params
                   kmeans-predict
                   kmeans-result
                   kmeans-result-centroids
+                  kmeans-result-inertia
+                  kmeans-result-labels
                   kmeans-score
                   kmeans-transform
                   predict
@@ -148,7 +153,29 @@
   (check-equal? (score fitted (grid)) -16.0)
   (check-equal? (hash-ref (estimator-params km) 'n-clusters) 2)
   (check-equal? (fitted? (estimator-set-params fitted (hasheq 'max-iter 10))) #f)
+  (check-equal? (format "~v" (estimator-set-params km #:max-iter 10))
+                "#<kmeans #:n-clusters 2 #:max-iter 10 #:random-state 1>")
   (check-cuml-error 'logic "predict: kmeans is not fitted" (lambda () (predict km (grid)))))
+
+(test-case "the manual: kmeans-params overrides a base and refuses an unknown key"
+  (define tight (kmeans-params #:tol 1e-6 #:n-init 3))
+  (check-equal? (hash-ref (kmeans-params tight #:n-init 5) 'n-init) 5)
+  (check-cuml-error 'logic
+                    "kmeans-params: kmeans has no parameter colour"
+                    (lambda () (kmeans-params (hasheq 'colour 'red)))))
+
+(test-gpu "the manual: a sweep over n-clusters from one set"
+  (define tight (kmeans-params #:tol 1e-6 #:n-init 3))
+  (check-equal? (for/list ([k (in-range 1 4)])
+                  (kmeans-result-inertia (kmeans-fit (grid) #:params tight #:n-clusters k)))
+                '(416.0 16.0 13.333333333333332)))
+
+(test-gpu "the manual: current-batch-samples changes no label"
+  (define (labels)
+    (device-vector->list (kmeans-result-labels (kmeans-fit (grid) #:n-clusters 2 #:random-state 1))))
+  (check-equal? (parameterize ([current-batch-samples 3])
+                  (labels))
+                (labels)))
 
 (define (points)
   (list*->device-matrix '((0) (1) (2) (4) (6) (7) (8) (20)) #:dtype 'float64))
@@ -189,11 +216,24 @@
   (define db (dbscan #:eps 2 #:min-samples 4))
   (check-equal? (format "~v" db) "#<dbscan #:eps 2 #:min-samples 4>")
   (check-equal? (device-vector->list (fit-predict db (points))) '(0 0 0 0 1 1 1 -1))
-  (check-equal? (format "~v" (estimator-set-params db (hasheq 'metric 'cosine)))
+  (check-equal? (format "~v" (estimator-set-params db #:metric 'cosine))
                 "#<dbscan #:eps 2 #:min-samples 4 #:metric 'cosine>")
   (check-cuml-error 'logic
                     "fit: eps: expected greater than 0, got 0"
                     (lambda () (fit (dbscan #:eps 0) (points)))))
+
+(test-case "the manual: dbscan-params overrides a base and refuses an unknown key"
+  (define dense (dbscan-params #:eps 2 #:min-samples 4))
+  (check-equal? (hash-ref (dbscan-params dense #:eps 3) 'min-samples) 4)
+  (check-cuml-error 'logic
+                    "dbscan-params: dbscan has no parameter colour"
+                    (lambda () (dbscan-params (hasheq 'colour 'red)))))
+
+(test-gpu "the manual: dbscan-fit from a set"
+  (check-equal? (~> (dbscan-fit (points) #:params (dbscan-params #:eps 2 #:min-samples 4))
+                    dbscan-result-labels
+                    device-vector->list)
+                '(0 0 0 0 1 1 1 -1)))
 
 (define (hand)
   (mat hand-rows 'float32))
