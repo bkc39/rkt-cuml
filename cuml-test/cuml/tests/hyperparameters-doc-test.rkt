@@ -1,13 +1,16 @@
 #lang racket/base
 
-(require (only-in cuml agglomerative-clustering dbscan kmeans)
+(require (only-in cuml agglomerative-clustering dbscan kmeans spectral-clustering)
          (only-in cuml/cluster
                   dbscan-fit
                   dbscan-params
                   kmeans-fit
                   kmeans-params
                   single-linkage-fit
-                  single-linkage-params)
+                  single-linkage-params
+                  spectral-clustering-fit
+                  spectral-clustering-fit-graph
+                  spectral-clustering-params)
          (only-in racket/dict dict-ref)
          (only-in racket/list append-map takef)
          (only-in racket/match match match-define)
@@ -27,7 +30,8 @@
     [_ '()]))
 
 (define documented
-  (append-map defprocs (append (manual-forms "clustering.scrbl") (manual-forms "estimators.scrbl"))))
+  (append-map defprocs
+              (append-map manual-forms '("clustering.scrbl" "spectral.scrbl" "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -61,6 +65,9 @@
 (define dbscan-keys '(eps min-samples metric out-dtype max-mbytes-per-batch))
 
 (define single-linkage-keys '(n-clusters metric linkage connectivity c))
+
+(define spectral-clustering-keys
+  '(n-clusters n-components random-state n-neighbors n-init eigen-tol affinity))
 
 (define bindings
   (append
@@ -117,7 +124,38 @@
            '(#:resources)
            (list (argument #f 'params #f))
            (list (argument '#:resources 'resources #f))
-           '())))))
+           '())))
+   (table-bindings spectral-clustering-params
+                   spectral-clustering-keys
+                   (list (list 'spectral-clustering-params
+                               spectral-clustering-params
+                               '()
+                               (list (argument #f 'base #f))
+                               '()
+                               '())
+                         (list 'spectral-clustering-fit
+                               spectral-clustering-fit
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '(affinity))
+                         (list 'spectral-clustering-fit-graph
+                               spectral-clustering-fit-graph
+                               '(#:params #:resources)
+                               (list (argument #f 'rows 'none)
+                                     (argument #f 'cols 'none)
+                                     (argument #f 'vals 'none)
+                                     (argument #f 'n-samples 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '(n-neighbors affinity))
+                         (list 'spectral-clustering
+                               spectral-clustering
+                               '(#:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:resources 'resources #f))
+                               '())))))
 
 (define-namespace-anchor anchor)
 

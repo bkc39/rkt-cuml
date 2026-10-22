@@ -11,10 +11,12 @@
                   spectral-clustering?)
          (only-in cuml/cluster
                   spectral-clustering-fit
+                  spectral-clustering-fit-graph
+                  spectral-clustering-params
                   spectral-clustering-result-labels
                   spectral-clustering-result?)
-         (only-in cuml/cluster/private/spectral spectral-clustering-defaults)
-         (only-in racket/list make-list)
+         (only-in racket/list combinations make-list)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
@@ -22,7 +24,12 @@
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options round-trips)
          (only-in "private/kmeans-data.rkt" blank-vector)
-         (only-in "private/spectral-data.rkt" labels three-blobs-matrix))
+         (only-in "private/spectral-data.rkt"
+                  graph-labels
+                  labels
+                  planted?
+                  three-blobs-matrix
+                  three-blocks))
 
 (define changed
   (hasheq 'n-clusters 3
@@ -31,23 +38,71 @@
           'n-neighbors 15
           'n-init 4
           'eigen-tol 1e-5
-          'affinity 'precomputed
-          'resources 'some-resources))
+          'affinity 'precomputed))
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "the default parameters, and every keyword round-trips"
-  (check-equal? spectral-clustering-defaults
+  (check-equal? (spectral-clustering-params)
                 (hasheq 'n-clusters 8
                         'n-components #f
                         'random-state 0
                         'n-neighbors 10
                         'n-init 10
-                        'eigen-tol 'auto))
-  (check-equal? (estimator-params (spectral-clustering))
-                (hash-set* spectral-clustering-defaults 'affinity 'nearest-neighbors 'resources #f))
-  (check-equal? (round-trips spectral-clustering changed) changed))
+                        'eigen-tol 'auto
+                        'affinity 'nearest-neighbors))
+  (check-equal? (estimator-params (spectral-clustering)) (spectral-clustering-params))
+  (check-equal? (round-trips spectral-clustering changed) changed)
+  (check-equal? (estimator-params (spectral-clustering (spectral-clustering-params #:n-init 4)
+                                                       #:n-clusters 3))
+                (spectral-clustering-params #:n-init 4 #:n-clusters 3)))
+
+(test-case "resources is a setting, outside the parameters"
+  (check-equal? (estimator-params (spectral-clustering #:resources 'some-resources))
+                (spectral-clustering-params))
+  (check-equal? (format "~v" (spectral-clustering #:n-init 4 #:resources 'some-resources))
+                "#<spectral-clustering #:n-init 4 #:resources 'some-resources>")
+  (check-not-equal? (spectral-clustering #:resources 'some-resources) (spectral-clustering))
+  (check-equal? (estimator-set-params (spectral-clustering #:resources 'some-resources)
+                                      #:affinity 'precomputed)
+                (spectral-clustering #:affinity 'precomputed #:resources 'some-resources)))
+
+(test-case "a base with another key, or without one, is refused under the caller's name"
+  (check-cuml-error 'logic
+                    "spectral-clustering-params: spectral-clustering has no parameter colour"
+                    (lambda () (spectral-clustering-params (hasheq 'colour 'red))))
+  (check-cuml-error 'logic
+                    "spectral-clustering: spectral-clustering has no parameter colour"
+                    (lambda ()
+                      (spectral-clustering (hash-set (spectral-clustering-params) 'colour 1))))
+  (check-cuml-error 'logic
+                    "estimator-set-params: spectral-clustering has no parameter colour"
+                    (lambda () (estimator-set-params (spectral-clustering) #:colour 1)))
+  (check-cuml-error
+   'logic
+   "spectral-clustering-fit: expected every spectral-clustering parameter, missing n-components"
+   (lambda () (spectral-clustering-fit 'X #:params (hasheq 'n-clusters 3) #:resources 'unused)))
+  (check-cuml-error
+   'logic
+   "spectral-clustering-fit-graph: expected every spectral-clustering parameter, missing affinity"
+   (lambda ()
+     (spectral-clustering-fit-graph 'rows
+                                    'cols
+                                    'vals
+                                    3
+                                    #:params (hash-remove (spectral-clustering-params) 'affinity)
+                                    #:resources 'unused))))
+
+(define solver-keywords '(#:eigen-tol #:n-clusters #:n-components #:n-init))
+
+(test-case "the fits take the table's keywords but affinity, and the graph fit no n-neighbors"
+  (define-values (required accepted) (procedure-keywords spectral-clustering-fit))
+  (define-values (graph-required graph-accepted) (procedure-keywords spectral-clustering-fit-graph))
+  (check-equal? (list required graph-required) '(() ()))
+  (check-equal? accepted
+                (append solver-keywords '(#:n-neighbors #:params #:random-state #:resources)))
+  (check-equal? graph-accepted (append solver-keywords '(#:params #:random-state #:resources))))
 
 (test-case "printing shows the parameters that differ from the defaults"
   (check-equal? (printed (spectral-clustering)) (make-list 3 "#<spectral-clustering>"))
@@ -69,6 +124,9 @@
                 (spectral-clustering #:n-init 3))
   (check-equal? (estimator-set-params (spectral-clustering) (hasheq 'n-clusters 3 'n-neighbors 5))
                 (spectral-clustering #:n-clusters 3 #:n-neighbors 5))
+  (check-equal?
+   (estimator-set-params (spectral-clustering) (hasheq 'n-clusters 4) #:n-clusters 3 #:n-neighbors 5)
+   (spectral-clustering #:n-clusters 3 #:n-neighbors 5))
   (check-cuml-error 'logic
                     "estimator-set-params: spectral-clustering has no parameter bogus"
                     (lambda () (estimator-set-params (spectral-clustering) (hasheq 'bogus 1))))
@@ -95,6 +153,48 @@
   (check-equal? (device-vector->list (fit-predict (apply-options spectral-clustering options) X))
                 (device-vector->list (spectral-clustering-result-labels
                                       (apply-options spectral-clustering-fit options X)))))
+
+(define identity-changes (hasheq 'n-components 2 'random-state 3 'n-neighbors 6 'n-init 3))
+
+(define (ways X options)
+  (define base (spectral-clustering-params #:n-init 2 #:random-state 1))
+  (define (estimated e)
+    (result-labels (spectral-clustering-model (fit e X))))
+  (list (result-labels (apply-options spectral-clustering-fit options X))
+        (result-labels
+         (spectral-clustering-fit X #:params (apply-options spectral-clustering-params options)))
+        (result-labels (apply-options spectral-clustering-fit (hash-set options 'params base) X))
+        (result-labels
+         (spectral-clustering-fit X #:params (apply-options spectral-clustering-params options base)))
+        (estimated (apply-options spectral-clustering options))
+        (estimated (spectral-clustering (apply-options spectral-clustering-params options)))
+        (estimated (apply-options estimator-set-params options (spectral-clustering)))))
+
+(define (result-labels result)
+  (device-vector->list (spectral-clustering-result-labels result)))
+
+(test-gpu "a keyword is the same as a set with that keyword, through spectral-clustering-fit and the estimator"
+  (define X (three-blobs-matrix #:n-each 30))
+  (for* ([k (in-range 3)]
+         [keys (in-list (combinations '(n-components random-state n-neighbors n-init) k))])
+    (define options
+      (for/fold ([options (hasheq 'n-clusters 3)]) ([key (in-list keys)])
+        (hash-set options key (hash-ref identity-changes key))))
+    (match-define (list keyword set on-base set-on-base by-keyword by-set by-update) (ways X options))
+    (define label (format "~a" keys))
+    (check-true (planted? set keyword) label)
+    (check-true (planted? set-on-base on-base) label)
+    (for ([estimated (in-list (list by-keyword by-set by-update))])
+      (check-true (planted? estimated keyword) label))))
+
+(test-gpu "the graph fit ignores the set's n-neighbors and affinity"
+  (define-values (g _truth) (three-blocks))
+  (check-true (planted? (graph-labels g
+                                      #:params (spectral-clustering-params #:n-clusters 3
+                                                                           #:affinity 'precomputed
+                                                                           #:n-neighbors 3
+                                                                           #:random-state 1))
+                        (graph-labels g #:n-clusters 3 #:random-state 1))))
 
 (test-gpu "errors are named after the generic that was called"
   (define X (three-blobs-matrix #:n-each 30))

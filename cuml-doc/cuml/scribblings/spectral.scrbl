@@ -37,6 +37,7 @@ renumber the labels: compare partitions, not label values.}
                                   [#:n-neighbors n-neighbors (and/c exact-integer? (>=/c 2)) 10]
                                   [#:n-init n-init (integer-in 1 2147483647) 10]
                                   [#:eigen-tol eigen-tol (or/c 'auto (and/c real? (>=/c 0))) 'auto]
+                                  [#:params params (or/c #f hash?) #f]
                                   [#:resources resources device-resources? (current-device-resources)])
          spectral-clustering-result?]{
 
@@ -57,7 +58,9 @@ The eigensolver stops at a residual of at most @racket[eigen-tol]
 not converge, so labels near cluster boundaries can vary between runs. Graphs
 with repeated eigenvalues, such as cliques, heavily repeated rows or many
 isolated samples, can fail with ``eigensolver couldn't converge''. The labels
-live on @racket[resources].}
+live on @racket[resources]. @racket[params], from
+@racket[spectral-clustering-params], gives every hyperparameter a keyword
+omits. @racket[params]'s @racket[affinity] must be @racket['nearest-neighbors].}
 
 @defproc[(spectral-clustering-fit-graph [rows device-vector?]
                                         [cols device-vector?]
@@ -68,6 +71,7 @@ live on @racket[resources].}
                                         [#:random-state random-state (integer-in 0 18446744073709551615) 0]
                                         [#:n-init n-init (integer-in 1 2147483647) 10]
                                         [#:eigen-tol eigen-tol (or/c 'auto (and/c real? (>=/c 0))) 'auto]
+                                        [#:params params (or/c #f hash?) #f]
                                         [#:resources resources device-resources? (current-device-resources)])
          spectral-clustering-result?]{
 
@@ -77,7 +81,8 @@ coordinates: entry @racket[i] joins sample @racket[(rows i)] to sample
 @racket[cols] are @racket['int32] and @racket[vals] is @racket['float32], all
 of one length. The graph must be symmetric, without self-loops, with finite
 weights of at least 0. Duplicate entries add, and a sample with no edges gets
-some label. Otherwise as @racket[spectral-clustering-fit].
+some label. Otherwise as @racket[spectral-clustering-fit], except that
+@racket[params]'s @racket[n-neighbors] and @racket[affinity] are ignored.
 
 @racket[G]'s groups, joined within each group to the samples at most two away:
 
@@ -110,10 +115,36 @@ A self-loop is refused:
                                 #:n-clusters 2))
 ]}
 
+@defproc[(spectral-clustering-params [base (or/c #f hash?) #f]
+                                     [#:n-clusters n-clusters exact-positive-integer? 8]
+                                     [#:n-components n-components (or/c #f exact-positive-integer?) #f]
+                                     [#:random-state random-state (integer-in 0 18446744073709551615) 0]
+                                     [#:n-neighbors n-neighbors (and/c exact-integer? (>=/c 2)) 10]
+                                     [#:n-init n-init (integer-in 1 2147483647) 10]
+                                     [#:eigen-tol eigen-tol (or/c 'auto (and/c real? (>=/c 0))) 'auto]
+                                     [#:affinity affinity 'nearest-neighbors 'nearest-neighbors])
+         (and/c hash? hash-eq? immutable?)]{
+
+The hyperparameters of @racket[spectral-clustering-fit],
+@racket[spectral-clustering-fit-graph] and @racket[spectral-clustering], as
+@racket[kmeans-params] gives k-means'. @racket[affinity] is cuML's name for
+the graph built from @racket[X]; only @racket['nearest-neighbors] fits.
+
+@examples[#:eval ev #:label #f
+(define near (spectral-clustering-params #:n-clusters 3 #:n-neighbors 5))
+(hash-ref (spectral-clustering-params near #:n-init 3) 'n-neighbors)
+(~> (spectral-clustering-fit G #:params near) spectral-clustering-result-labels device-vector->list)
+(eval:error (spectral-clustering-fit G #:params (spectral-clustering-params #:affinity 'rbf)))
+]}
+
 @bold{Errors.} @racket[spectral-clustering-fit] and
 @racket[spectral-clustering-fit-graph] raise @racket[exn:fail:cuml] of kind
 @racket['logic], leaving nothing allocated, when:
 @itemlist[
+ @item{@racket[spectral-clustering-fit]'s @racket[params] has an
+       @racket[affinity] other than @racket['nearest-neighbors]:
+       @tt{affinity: expected nearest-neighbors, got rbf}, before @racket[X]
+       is read;}
  @item{@racket[X] is not a row-major @racket['float32] matrix with at least 4
        rows and a column, or @racket[rows], @racket[cols] and @racket[vals] are
        not vectors of their dtypes and of one length;}

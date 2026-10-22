@@ -1,13 +1,14 @@
 #lang racket/base
 
 (require (only-in cuml estimator-params spectral-clustering)
+         (only-in cuml/cluster spectral-clustering-params)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list count split-at)
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in threading cond~> ~>)
+         (only-in threading cond~>)
          (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
@@ -155,11 +156,12 @@
           (length gs)
           (count cadr graph-outcomes)))
 
-(test-twin "T3: cuml's SpectralClustering default parameters are the estimator's"
+(test-twin "T3: cuml's SpectralClustering default parameters are spectral-clustering-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
   (define mapped (hash-update (twin-params theirs '()) 'random-state (lambda (seed) (or seed 0))))
-  (define ours-params (~> (spectral-clustering) estimator-params (hash-remove 'resources)))
+  (define ours-params (spectral-clustering-params))
   (printf "twin params: ~s\n" theirs)
   (check-equal? (sort (hash-keys mapped) symbol<?) (sort (hash-keys ours-params) symbol<?))
-  (check-equal? mapped ours-params))
+  (check-equal? mapped ours-params)
+  (check-equal? (estimator-params (spectral-clustering)) ours-params))

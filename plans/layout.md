@@ -198,7 +198,8 @@
   (the batch size back in `kmeans-params`) was not applied.
   - Upstream: cuML 26.08 k-means is not reproducible run to run on one
     input, batch size and `random_state` (the k-means++ n-init 3 winner,
-    1-row flips with float32 random init); logged, not filed.
+    1-row flips with float32 random init); logged in `plans/upstream-bugs.md`,
+    not filed.
 
 ## Decisions recorded in leg 3 (DBSCAN, #8)
 
@@ -292,8 +293,15 @@
   `cuml_cluster_spectral_clustering_fit_graph_job`. Both return a
   `spectral-clustering-result` of the labels. The `coo_matrix_view`
   overload is not bound.
-- The `spectral-clustering` estimator is an estimator and a clusterer; its
-  defaults are `spectral-clustering-defaults` plus `affinity`.
+- The hyperparameters are `spectral-clustering-params`, whose `affinity` is
+  `#:fixed` at `'nearest-neighbors`. `spectral-clustering-fit` is a
+  `define/who` with `#:hyperparameters spectral-clustering-params`, so it
+  takes no `#:affinity` and refuses another `affinity` in `#:params` before
+  the GPU is touched; `spectral-clustering-fit-graph` adds
+  `#:ignoring (n-neighbors affinity)`. The `spectral-clustering` estimator, an
+  estimator and a clusterer, is a `define-estimator` over the dense fit with
+  the setting `resources` and `#:no-sample-weight`; its constructor keeps
+  `#:affinity`, and the fit raises the refusal under the generic's name.
 - The spec's decisions, each with the recommended answer:
   - **Q-A.** The precomputed affinity is a separate procedure over three
     vectors and `n-samples`; a dense precomputed matrix is deferred (#28).

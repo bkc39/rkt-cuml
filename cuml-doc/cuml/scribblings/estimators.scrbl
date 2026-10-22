@@ -312,6 +312,7 @@ The @racket[single-linkage-result] of the fit that made @racket[estimator], or
 @declare-exporting[cuml]
 
 @defproc[(spectral-clustering
+          [params (or/c #f hash?) #f]
           [#:n-clusters n-clusters exact-positive-integer? 8]
           [#:n-components n-components (or/c #f exact-positive-integer?) #f]
           [#:random-state random-state (integer-in 0 18446744073709551615) 0]
@@ -322,14 +323,15 @@ The @racket[single-linkage-result] of the fit that made @racket[estimator], or
           [#:resources resources (or/c #f device-resources?) #f])
          spectral-clustering?]{
 
-An unfitted spectral clustering estimator, with the parameters of
-@racket[spectral-clustering-fit] and the @racket[affinity], which is only
-@racket['nearest-neighbors]. It is an estimator and a clusterer, and checks
-nothing until it is fitted. @racket[fit] is @racket[spectral-clustering-fit]
-with these parameters, and @racket[fit-predict] returns the fit's labels.
-@racket[y] is ignored, and a @racket[sample-weight] is refused. Each call runs
-on @racket[resources], or with @racket[#f] on the calling thread's
-@racket[(current-device-resources)]. Errors are
+An unfitted spectral clustering estimator with the hyperparameters
+@racket[(spectral-clustering-params params ...)], whose @racket[affinity] is
+only @racket['nearest-neighbors]. It is an estimator and a clusterer, and
+checks nothing until it is fitted. @racket[fit] is
+@racket[spectral-clustering-fit] with these parameters, and
+@racket[fit-predict] returns the fit's labels. @racket[y] is ignored, and a
+@racket[sample-weight] is refused. @racket[resources] is a setting, as for
+@racket[kmeans]: each call runs on it, or with @racket[#f] on the calling
+thread's @racket[(current-device-resources)]. Errors are
 @racket[spectral-clustering-fit]'s, named after the generic that was called.
 Printing and @racket[equal?] are as for @racket[kmeans].
 
@@ -341,6 +343,7 @@ Printing and @racket[equal?] are as for @racket[kmeans].
 (define sc (spectral-clustering #:n-clusters 2 #:n-neighbors 4))
 sc
 (device-vector->list (fit-predict sc S))
+(estimator-set-params sc #:n-init 3)
 (eval:error (fit (spectral-clustering #:affinity 'precomputed) S))
 ]}
 

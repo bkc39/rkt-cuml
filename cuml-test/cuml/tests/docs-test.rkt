@@ -38,6 +38,7 @@
                   spectral-clustering
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
+                  spectral-clustering-params
                   spectral-clustering-result-labels)
          (only-in racket/function const)
          (only-in racket/match match-define)
@@ -339,6 +340,26 @@
   (define sc (spectral-clustering #:n-clusters 2 #:n-neighbors 4))
   (check-equal? (format "~v" sc) "#<spectral-clustering #:n-clusters 2 #:n-neighbors 4>")
   (check-true (planted? (device-vector->list (fit-predict sc S)) (truth-of '(6 6))))
+  (check-equal? (format "~v" (estimator-set-params sc #:n-init 3))
+                "#<spectral-clustering #:n-clusters 2 #:n-neighbors 4 #:n-init 3>")
   (check-cuml-error 'logic
                     "fit: affinity: expected nearest-neighbors, got precomputed"
                     (lambda () (fit (spectral-clustering #:affinity 'precomputed) S))))
+
+(test-case "the manual: spectral-clustering-params overrides a base, and an affinity but nearest-neighbors is refused"
+  (define near (spectral-clustering-params #:n-clusters 3 #:n-neighbors 5))
+  (check-equal? (hash-ref (spectral-clustering-params near #:n-init 3) 'n-neighbors) 5)
+  (check-cuml-error 'logic
+                    "spectral-clustering-fit: affinity: expected nearest-neighbors, got rbf"
+                    (lambda ()
+                      (spectral-clustering-fit 'G
+                                               #:params (spectral-clustering-params #:affinity 'rbf)
+                                               #:resources 'unused))))
+
+(test-gpu "the manual: spectral-clustering-fit from a set"
+  (check-true (planted? (~> (spectral-clustering-fit
+                             (three-groups)
+                             #:params (spectral-clustering-params #:n-clusters 3 #:n-neighbors 5))
+                            spectral-clustering-result-labels
+                            device-vector->list)
+                        group-truth)))
