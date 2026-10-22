@@ -11,7 +11,7 @@
                   kmeans-score
                   kmeans-transform)
          (only-in racket/list append* first second third)
-         (only-in racket/match match match-define)
+         (only-in racket/match == match match-define)
          (only-in rackunit
                   check-equal?
                   check-exn
@@ -87,21 +87,30 @@
 
 (define escalation 10)
 
+(define (miss agrees? thunk)
+  (if (agrees? (thunk)) 0 1))
+
+(define (interleaved-misses agrees? rerun refit)
+  (for/fold ([rerun-misses 0]
+             [refit-misses 0]
+             #:result (list rerun-misses refit-misses))
+            ([_ (in-range escalation)])
+    (values (+ rerun-misses (miss agrees? rerun)) (+ refit-misses (miss agrees? refit)))))
+
 (define (batch-verdict agrees? first rerun refit)
-  (define (misses thunk)
-    (for/sum ([_ (in-range escalation)]) (if (agrees? (thunk)) 0 1)))
-  (cond
-    [(agrees? first) 'agrees]
-    [(and (>= (misses rerun) 8) (<= (misses refit) 1)) 'departed]
-    [else 'unstable]))
+  (match (and (not (agrees? first)) (interleaved-misses agrees? rerun refit))
+    [#f 'agrees]
+    [(list (== escalation) (or 0 1)) 'departed]
+    [_ 'unstable]))
 
 (define (check-batch-fit! name agrees? first rerun refit)
   (define verdict (batch-verdict agrees? first rerun refit))
-  (check-not-eq? verdict
-                 'departed
-                 (format "~a: the batch disagreed in 8 or more of ~a reruns, the default in at most 1"
-                         name
-                         escalation))
+  (check-not-eq?
+   verdict
+   'departed
+   (format "~a: the batch disagreed in all ~a reruns, the default in at most 1 refit between them"
+           name
+           escalation))
   verdict)
 
 (define (check-same-apply name dt C X w batch)
@@ -125,12 +134,21 @@
       (check-batch-fit! "stub" values first rerun refit)))
   (check-equal? (verdict #t (replaying '(#f)) (replaying '(#t))) 'agrees)
   (check-equal? (verdict #f (replaying '(#f)) (replaying '(#t))) 'failed)
-  (check-equal?
-   (verdict #f (replaying '(#f #f #f #f #t)) (replaying '(#t #t #t #t #t #t #t #t #t #f)))
-   'failed)
+  (check-equal? (verdict #f (replaying '(#f)) (replaying '(#t #t #t #t #t #t #t #t #t #f))) 'failed)
+  (check-equal? (verdict #f (replaying '(#f #f #f #f #f #f #f #f #f #t)) (replaying '(#t))) 'unstable)
   (check-equal? (verdict #f (replaying '(#t #f)) (replaying '(#t #f))) 'unstable)
   (check-equal? (verdict #f (replaying '(#f #f #t)) (replaying '(#t))) 'unstable)
   (check-equal? (verdict #f (replaying '(#f)) (replaying '(#t #t #t #t #f))) 'unstable))
+
+(define (burst calls)
+  (define count 0)
+  (lambda ()
+    (set! count (add1 count))
+    (> count calls)))
+
+(test-case "M-2: a burst of disagreement across the reruns and the refits is no departure"
+  (define calls (burst escalation))
+  (check-equal? (batch-verdict values #f calls calls) 'unstable))
 
 (test-gpu "H13: the batch size changes no label and no n-iter"
   (define fits
