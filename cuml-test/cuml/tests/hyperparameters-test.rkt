@@ -141,6 +141,6 @@
   (check-syntax-error '(spy 'X #:colour 1) #rx"#:colour")
   (define e (raised (lambda () (keyword-apply widget-params '(#:colour) '(1) '()))))
   (check-pred exn:fail:contract? e)
-  (check-regexp-match #rx"^widget-params: application: procedure does not expect an argument with given keyword"
+  (check-regexp-match #rx"^application: procedure does not expect an argument with given keyword\n  procedure: widget-params\n  given keyword: #:colour"
                       (exn-message e))
   (check-exn exn:fail:contract? (lambda () ((values spy) 'X #:colour 1))))

@@ -4,6 +4,7 @@
                      (only-in racket/syntax format-id)
                      ;; whole-module: its syntax classes come with it
                      syntax/parse/pre)
+         (only-in cuml/cluster/private/define-who define-checked)
          (only-in cuml/cluster/private/hyperparameters absent given-hash logic-error table-id)
          (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
          (only-in racket/string string-append*)
@@ -93,6 +94,7 @@
                             (~optional (~seq #:apply model->argument:expr entry:applied ...+))
                             (~seq #:methods generic:id methods) ...)
   #:with name* (format-id #'name "~a*" #'name)
+  #:with name/proc (format-id #'name "~a/proc" #'name)
   #:with (field ...) (for/list ([field (in-list '(hyperparameters settings model))])
                        (datum->syntax #'name field #'name))
   #:with hyperparameters-of (format-id #'name "~a-hyperparameters" #'name)
@@ -153,7 +155,13 @@
                                        (settings-of e)
                                        (model e))
                        port))])
-    (define (name [params #f] (~@ keyword [key absent]) ... (~@ setting-keyword [setting #f]) ...)
-      (name* (table.resolve 'name params (given-hash '(key-name ...) (list key ...)))
-             (hasheq (~@ 'setting setting) ...)
-             #f))))
+    (define-checked #t
+                    name
+                    name/proc
+                    (keyword ... setting-keyword ...)
+                    (define (name [params #f]
+                                  (~@ keyword [key absent]) ...
+                                  (~@ setting-keyword [setting #f]) ...)
+                      (name* (table.resolve 'name params (given-hash '(key-name ...) (list key ...)))
+                             (hasheq (~@ 'setting setting) ...)
+                             #f)))))

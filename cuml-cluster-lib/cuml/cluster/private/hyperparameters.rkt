@@ -6,6 +6,7 @@
                      syntax/parse/pre)
          (only-in cuml/core exn:fail:cuml)
          (only-in racket/match match)
+         (for-syntax (only-in racket/match match))
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide (for-syntax keyword-checked
@@ -78,7 +79,22 @@
       (define procedure (keyword-checked-procedure checked))
       (syntax-parse stx
         [_:id procedure]
-        [(_ . arguments) (datum->syntax stx (cons procedure #'arguments) stx stx)])))
+        [(head . arguments)
+         (match (unknown-keyword (syntax->list #'arguments) (keyword-checked-keywords checked))
+           [#f (datum->syntax stx (cons procedure #'arguments) stx stx)]
+           [kw (raise-syntax-error (syntax-e #'head)
+                                   (format "does not take the keyword ~a" (syntax-e kw))
+                                   stx
+                                   kw)])])))
+
+  (define (unknown-keyword arguments keywords)
+    (match arguments
+      [(list* (app syntax-e (? keyword? kw)) _ rest)
+       (cond
+         [(memq kw keywords) (unknown-keyword rest keywords)]
+         [else (car arguments)])]
+      [(cons _ rest) (unknown-keyword rest keywords)]
+      [_ #f]))
 
   (struct hyperparameter-table keyword-checked (keys fixed resolve defaults update))
 

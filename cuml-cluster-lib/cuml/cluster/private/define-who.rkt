@@ -5,9 +5,10 @@
                      ;; whole-module: its syntax classes come with it
                      syntax/parse/pre)
          (only-in syntax/parse/define define-syntax-parse-rule)
-         (only-in "hyperparameters.rkt" absent check-fixed given-hash table-id))
+         (only-in "hyperparameters.rkt" absent check-fixed given-hash keyword-checked table-id))
 
-(provide define/who)
+(provide define-checked
+         define/who)
 
 (begin-for-syntax
   (define (key->keyword key)
@@ -71,6 +72,13 @@
 (define-syntax-parse-rule (define/who (name:id who:id f:formal ...)
                             body:expr ...+)
   #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
+  #:with name/proc (format-id #'name "~a/proc" #'name #:source #'name)
+  #:with (kw ...) (for*/list ([spec (in-list (syntax->list #'(f.spec ... ...)))]
+                              #:when (keyword? (syntax-e spec)))
+                    spec)
+  #:with checked? (cond
+                    [(ormap values (attribute f.wrap)) #'#t]
+                    [else #'#f])
   #:with wrapped (for/fold ([body #'(let ()
                                       body ...)])
                            ([wrap (in-list (attribute f.wrap))]
@@ -79,5 +87,21 @@
   (begin
     (define (name/who who f.spec ... ...)
       wrapped)
-    (define (name f.spec ... ...)
-      (name/who 'name f.argument ... ...))))
+    (define-checked checked?
+                    name
+                    name/proc
+                    (kw ...)
+                    (define (name f.spec ... ...)
+                      (name/who 'name f.argument ... ...)))))
+
+(define-syntax (define-checked stx)
+  (syntax-parse stx
+    [(_ #f _ _ _ definition) #'definition]
+    [(_ #t name name/proc (kw ...) definition)
+     #'(begin
+         (define name/proc
+           (let ()
+             definition
+             name))
+         (define-syntax name
+           (keyword-checked (quote-syntax name/proc) '(kw ...))))]))
