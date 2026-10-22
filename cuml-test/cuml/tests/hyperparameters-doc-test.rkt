@@ -1,0 +1,179 @@
+#lang racket/base
+
+(require (only-in cuml agglomerative-clustering dbscan kmeans)
+         (only-in cuml/cluster
+                  dbscan-fit
+                  dbscan-params
+                  kmeans-fit
+                  kmeans-params
+                  single-linkage-fit
+                  single-linkage-params)
+         (only-in racket/dict dict-ref)
+         (only-in racket/list append-map takef)
+         (only-in racket/match match match-define)
+         (only-in rackunit check-equal? check-not-false test-case)
+         (only-in scribble/reader read-inside))
+
+(define (manual-forms file)
+  (call-with-input-file (collection-file-path file "cuml" "scribblings")
+                        (lambda (in)
+                          (read-line in 'any)
+                          (read-inside in))))
+
+(define (defprocs datum)
+  (match datum
+    [(list* 'defproc (cons (? symbol? name) arguments) _) (list (cons name arguments))]
+    [(cons head tail) (append (defprocs head) (defprocs tail))]
+    [_ '()]))
+
+(define documented
+  (append-map defprocs (append (manual-forms "clustering.scrbl") (manual-forms "estimators.scrbl"))))
+
+(struct argument (keyword name default) #:transparent)
+
+(define (arguments-of name)
+  (for/list ([spec (in-list (dict-ref documented name))])
+    (match spec
+      [(list (? keyword? kw) id _contract default) (argument kw id default)]
+      [(list (? keyword? kw) id _contract) (argument kw id 'none)]
+      [(list id _contract default) (argument #f id default)]
+      [(list id _contract) (argument #f id 'none)])))
+
+(define (keyword-of key)
+  (string->keyword (symbol->string key)))
+
+(struct binding (name proc table keys taken keywords positional others))
+
+(define (table-bindings table keys entries)
+  (for/list ([entry (in-list entries)])
+    (match-define (list name proc extra positional others omitted) entry)
+    (define taken (filter (lambda (key) (not (memq key omitted))) keys))
+    (binding name proc table keys taken (append (map keyword-of taken) extra) positional others)))
+
+(define kmeans-keys
+  '(init n-clusters
+         max-iter
+         tol
+         n-init
+         random-state
+         oversampling-factor))
+
+(define dbscan-keys '(eps min-samples metric out-dtype max-mbytes-per-batch))
+
+(define single-linkage-keys '(n-clusters metric linkage connectivity c))
+
+(define bindings
+  (append
+   (table-bindings kmeans-params
+                   kmeans-keys
+                   (list (list 'kmeans-params kmeans-params '() (list (argument #f 'base #f)) '() '())
+                         (list 'kmeans-fit
+                               kmeans-fit
+                               '(#:params #:sample-weight #:max-samples-per-batch #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:max-samples-per-batch
+                                               'max-samples-per-batch
+                                               '(current-batch-samples))
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '())
+                         (list 'kmeans
+                               kmeans
+                               '(#:max-samples-per-batch #:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:max-samples-per-batch 'max-samples-per-batch #f)
+                                     (argument '#:resources 'resources #f))
+                               '())))
+   (table-bindings dbscan-params
+                   dbscan-keys
+                   (list (list 'dbscan-params dbscan-params '() (list (argument #f 'base #f)) '() '())
+                         (list 'dbscan-fit
+                               dbscan-fit
+                               '(#:params #:sample-weight #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '())
+                         (list 'dbscan
+                               dbscan
+                               '(#:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:resources 'resources #f))
+                               '())))
+   (table-bindings
+    single-linkage-params
+    single-linkage-keys
+    (list
+     (list 'single-linkage-params single-linkage-params '() (list (argument #f 'base #f)) '() '())
+     (list 'single-linkage-fit
+           single-linkage-fit
+           '(#:params #:resources)
+           (list (argument #f 'X 'none))
+           (list (argument '#:params 'params #f)
+                 (argument '#:resources 'resources '(current-device-resources)))
+           '(linkage))
+     (list 'agglomerative-clustering
+           agglomerative-clustering
+           '(#:resources)
+           (list (argument #f 'params #f))
+           (list (argument '#:resources 'resources #f))
+           '())))))
+
+(define-namespace-anchor anchor)
+
+(define (evaluated default bound)
+  (parameterize ([current-namespace (make-base-empty-namespace)])
+    (namespace-attach-module (namespace-anchor->empty-namespace anchor) 'cuml)
+    (namespace-require 'racket/base)
+    (namespace-require 'raft)
+    (namespace-require 'cuml)
+    (eval `(let* ,(for/list ([pair (in-list bound)])
+                    (match-define (cons key value) pair)
+                    `[,key (quote ,value)])
+             ,default))))
+
+(test-case "each documented table is its -params procedure's keys"
+  (for ([b (in-list bindings)])
+    (check-equal? (sort (binding-keys b) symbol<?)
+                  (sort (hash-keys ((binding-table b))) symbol<?)
+                  (format "~a" (binding-name b)))))
+
+(test-case "each table-backed entry documents the table's keywords in order, then the others"
+  (for ([b (in-list bindings)])
+    (check-equal? (filter values (map argument-keyword (arguments-of (binding-name b))))
+                  (binding-keywords b)
+                  (format "~a" (binding-name b)))))
+
+(test-case "each table-backed binding takes exactly the documented keywords"
+  (for ([b (in-list bindings)])
+    (define-values (required allowed) (procedure-keywords (binding-proc b)))
+    (check-equal? required '() (format "~a" (binding-name b)))
+    (check-equal? allowed (sort (binding-keywords b) keyword<?) (format "~a" (binding-name b)))))
+
+(test-case "each documented hyperparameter default is the table's"
+  (for ([b (in-list bindings)])
+    (define name (binding-name b))
+    (define defaults ((binding-table b)))
+    (define by-keyword
+      (for/hasheq ([a (in-list (arguments-of name))]
+                   #:when (argument-keyword a))
+        (values (argument-keyword a) a)))
+    (for ([key (in-list (binding-taken b))])
+      (define bound
+        (for/list ([earlier (in-list (takef (binding-keys b) (lambda (k) (not (eq? k key)))))])
+          (cons earlier (hash-ref defaults earlier))))
+      (define entry (hash-ref by-keyword (keyword-of key)))
+      (check-equal? (argument-name entry) key (format "~a #:~a" name key))
+      (check-equal? (evaluated (argument-default entry) bound)
+                    (hash-ref defaults key)
+                    (format "~a #:~a" name key)))))
+
+(test-case "the positional arguments and the defaults outside the table"
+  (for ([b (in-list bindings)])
+    (define name (binding-name b))
+    (define documented-arguments (arguments-of name))
+    (check-equal? (filter (lambda (a) (not (argument-keyword a))) documented-arguments)
+                  (binding-positional b)
+                  (format "~a" name))
+    (for ([other (in-list (binding-others b))])
+      (check-not-false (member other documented-arguments) (format "~a ~a" name other)))))

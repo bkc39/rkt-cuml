@@ -7,4 +7,5 @@
   '(("memory-test.rkt" 180) ("twin-test.rkt" 180)
                             ("kmeans-memory-test.rkt" 180)
                             ("kmeans-estimator-memory-test.rkt" 180)
-                            ("kmeans-twin-test.rkt" 180)))
+                            ("kmeans-twin-test.rkt" 180)
+                            ("kmeans-batch-test.rkt" 180)))

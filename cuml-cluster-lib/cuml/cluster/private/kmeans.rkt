@@ -3,9 +3,9 @@
 (require (only-in racket/match match match* match-define)
          (only-in raft current-device-resources device-matrix? shape)
          (only-in raft/unsafe deposit->list)
-         (only-in "defaults.rkt" define-defaults)
          (only-in "define-who.rkt" define/who)
-         (only-in "deposit.rkt" deposit-for)
+         (only-in "deposit.rkt" deposit-for/who)
+         (only-in "hyperparameters.rkt" define-hyperparameters)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job
                   cuml-cluster-kmeans-predict-job
@@ -13,10 +13,11 @@
                   cuml-cluster-kmeans-transform-job))
 
 (provide (struct-out kmeans-result)
+         current-batch-samples
          init-rows
-         kmeans-defaults
          kmeans-fit
          kmeans-fit/who
+         kmeans-params
          kmeans-predict
          kmeans-predict/who
          kmeans-score
@@ -26,15 +27,21 @@
 
 (struct kmeans-result (centroids labels inertia n-iter))
 
-(define-defaults kmeans-defaults
-                 (init 'scalable-k-means++)
-                 [n-clusters 8]
-                 [max-iter 300]
-                 [tol 1e-4]
-                 [n-init 'auto]
-                 [random-state 0]
-                 [oversampling-factor 2.0]
-                 [max-samples-per-batch 32768])
+(define-hyperparameters kmeans-params
+  [init 'scalable-k-means++]
+  [n-clusters (init-rows init 8)]
+  [max-iter 300]
+  [tol 1e-4]
+  [n-init 'auto]
+  [random-state 0]
+  [oversampling-factor 2.0])
+
+(define (batch-samples v)
+  (cond
+    [(and (exact-integer? v) (<= 0 v 2147483647)) v]
+    [else (raise-argument-error 'current-batch-samples "(integer-in 0 2147483647)" v)]))
+
+(define current-batch-samples (make-parameter 32768 batch-samples 'current-batch-samples))
 
 (define (init-rows init fallback)
   (cond
@@ -59,19 +66,12 @@
 
 (define/who (kmeans-fit who
                         X
-                        #:init (init (default 'init))
-                        #:n-clusters [n-clusters (init-rows init (default 'n-clusters))]
-                        #:max-iter [max-iter (default 'max-iter)]
-                        #:tol [tol (default 'tol)]
-                        #:n-init [n-init (default 'n-init)]
-                        #:random-state [random-state (default 'random-state)]
-                        #:oversampling-factor [oversampling-factor (default 'oversampling-factor)]
-                        #:max-samples-per-batch
-                        [max-samples-per-batch (default 'max-samples-per-batch)]
+                        #:hyperparameters kmeans-params
                         #:sample-weight [sample-weight #f]
+                        #:max-samples-per-batch [max-samples-per-batch (current-batch-samples)]
                         #:resources [resources (current-device-resources)])
   (define-values (code factor start) (seeding init oversampling-factor))
-  (define out (deposit-for who resources))
+  (define out (deposit-for/who who resources))
   (define-values (inertia n-iter)
     (cuml-cluster-kmeans-fit-job who
                                  resources
@@ -91,7 +91,7 @@
   (kmeans-result centroids labels inertia n-iter))
 
 (define (deposited job who resources centroids X max-samples-per-batch)
-  (define out (deposit-for who resources))
+  (define out (deposit-for/who who resources))
   (job who resources centroids X out max-samples-per-batch)
   (match-define (list result) (deposit->list out))
   result)
@@ -99,16 +99,14 @@
 (define/who (kmeans-predict who
                             centroids
                             X
-                            #:max-samples-per-batch
-                            [max-samples-per-batch (default 'max-samples-per-batch)]
+                            #:max-samples-per-batch [max-samples-per-batch (current-batch-samples)]
                             #:resources [resources (current-device-resources)])
   (deposited cuml-cluster-kmeans-predict-job who resources centroids X max-samples-per-batch))
 
 (define/who (kmeans-transform who
                               centroids
                               X
-                              #:max-samples-per-batch
-                              [max-samples-per-batch (default 'max-samples-per-batch)]
+                              #:max-samples-per-batch [max-samples-per-batch (current-batch-samples)]
                               #:resources [resources (current-device-resources)])
   (deposited cuml-cluster-kmeans-transform-job who resources centroids X max-samples-per-batch))
 
@@ -116,7 +114,6 @@
                           centroids
                           X
                           #:sample-weight [sample-weight #f]
-                          #:max-samples-per-batch
-                          [max-samples-per-batch (default 'max-samples-per-batch)]
+                          #:max-samples-per-batch [max-samples-per-batch (current-batch-samples)]
                           #:resources [resources (current-device-resources)])
   (- (cuml-cluster-kmeans-score-job who resources centroids X sample-weight max-samples-per-batch)))

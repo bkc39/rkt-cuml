@@ -20,14 +20,14 @@ A multi-package repository in typed-racket's style: every package is
 | Path | Package | Holds |
 |---|---|---|
 | `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging) |
-| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-fit`; single linkage: `single-linkage-fit`; spectral: `spectral-clustering-fit`, `spectral-clustering-fit-graph`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, and the loader of `libcumlrkt_cluster.so`) |
-| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`) |
+| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, `define-hyperparameters`, `define-codes` and `define/who` in `hyperparameters.rkt` and `define-who.rkt`, and the loader of `libcumlrkt_cluster.so`) |
+| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
-| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define/who` and constructor-renamed structs |
+| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, macro templates and constructor-renamed structs, and the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who` |
 | `shim/` | | the C++ shims, one shared library per family |
-| `scripts/` | | the gate scripts, the binding census and its plan |
+| `scripts/` | | the gate scripts, the binding census and its plan, and the repo's Resyntax suite (`resyntax-rules.rkt`, `cuml-recommendations`) |
 
 Why several packages: a user who needs clustering installs and loads only
 the clustering shim, and each family's native dependencies stay its own. A
@@ -133,16 +133,16 @@ the families will follow once it lands.
       `cumlrkt_family(<family> ...)` line in `shim/CMakeLists.txt`.
 - [ ] `families` in `flake.nix` (staging, packages list).
 - [ ] cuml-lib: dep, `implies`, re-export in `cuml/main.rkt`.
-- [ ] The estimator wrapper in `cuml-lib/cuml/private/<algorithm>-estimator.rkt`
-      (the `cuml/estimator` generics over the family's `/who` procedures,
-      so errors name the generic), re-exported from `cuml/main.rkt`, its
-      bare name in `reserved-names` in `scripts/check-layout.rkt`. Each
-      algorithm's defaults are one `define-defaults` table (from
-      `cuml/cluster/private/defaults.rkt`, beside `define-codes` for the
-      symbol-to-code tables, -1 for an unknown name), the estimator's
-      struct is a `define-estimator` and its constructor a
-      `define-constructor` (both `private/estimator-support.rkt`), whose
-      keyword signature gives the parameter names and their order.
+- [ ] The hyperparameters as one `define-hyperparameters` table
+      (`<algorithm>-params`), the entry points as `define/who` with
+      `#:hyperparameters <algorithm>-params`; symbol-to-code tables are
+      `define-codes` (-1 for an unknown name), beside it in
+      `hyperparameters.rkt`.
+- [ ] The estimator wrapper in `cuml-lib/cuml/private/<algorithm>-estimator.rkt`,
+      one `define-estimator` over the table and the family's `/who`
+      procedures (so errors name the generic), re-exported from
+      `cuml/main.rkt`, its bare name in `reserved-names` in
+      `scripts/check-layout.rkt`.
 - [ ] The family's package in the `pkg-deps` gate (`.racket-dev.rktd`).
 - [ ] A chapter in `cuml-doc` and its examples.
 - [ ] Tests in `cuml-test/cuml/tests/` (GPU smoke, memory, a Python twin in
@@ -223,6 +223,16 @@ installs it from there first. rkt-polars' `threading-doc` builds against
 that pin, so the `layout` check fails unless both `threading-lib` trees
 have the same version and the same sources.
 
+`resyntax` (`scripts/resyntax.sh`) runs `scripts/resyntax-rules-test.rkt`,
+then Resyntax with the `cuml-recommendations` suite (the default
+recommendations and `cuml-rules`) against the merge base with the PR's base
+branch, which it asks `gh` for. `RESYNTAX_BASE=<ref>` names the base
+instead, for a stacked branch with no PR yet or no `gh`:
+`RESYNTAX_BASE=origin/cluster/kmeans-6 scripts/resyntax.sh`. Resyntax does
+not visit a module's top level as a body, so `who-pair-to-define/who` fixes
+pairs in internal definition contexts and the `review` lint refuses them at
+module level.
+
 ### Test support
 
 raft has no public test support yet, so the tests import raft internals;
@@ -252,6 +262,11 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
 | `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`) |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
+
+`hyperparameters-test` and `estimator-support-test` define their own tables
+(`widget-params`, `gadget-params`) and estimators to test the macros apart
+from k-means; `hyperparameters-doc-test` reads the manual's `defproc`s and
+checks them against the tables.
 
 Every SKIP line the GPU suite allows matches one ERE in
 `scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there
