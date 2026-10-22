@@ -205,3 +205,49 @@
 (test-case "a procedure that only relays to its /who form is a define/who"
   (check-equal? (problems-in hand-written-who-pair)
                 '("twice only relays to twice/who: define both with define/who")))
+
+(define wrapper-that-prepares
+  '((provide f) (define (f/who who x)
+                  (list who x))
+                (define (prep x)
+                  x)
+                (define (f x)
+                  (f/who 'f (prep x)))))
+
+(define who-procedure-under-all-defined-out
+  '((provide (all-defined-out)) (define (twice who x)
+                                  (list who x))))
+
+(define who-procedure-under-prefix-out
+  '((provide (prefix-out my: twice)
+             thrice)
+    (define (twice who x)
+      (list who x))
+    (define (thrice x)
+      (twice 'thrice x))))
+
+(test-case "L7: a wrapper that passes other arguments than its formals is not a relay"
+  (check-equal? (problems-in wrapper-that-prepares) '()))
+
+(test-case "L7: all-defined-out and prefix-out export a procedure that takes who"
+  (check-equal? (problems-in who-procedure-under-all-defined-out)
+                '("twice takes who first and is exported: define it with define/who"))
+  (check-equal? (problems-in who-procedure-under-prefix-out)
+                '("twice takes who first and is exported: define it with define/who")))
+
+(define parameterized-syntax-class
+  '((require (for-syntax racket/base
+                         syntax/parse/pre)
+             syntax/parse/define)
+    (provide m)
+    (begin-for-syntax
+      (define (small? n limit)
+        (< (syntax-e n) limit))
+      (define-splicing-syntax-class (below limit)
+                                    (pattern (~seq n:nat)
+                                      #:when (small? #'n limit))))
+    (define-syntax-parse-rule (m (~var n (below 3)))
+      n)))
+
+(test-case "a splicing syntax class with parameters is bound like one without"
+  (check-equal? (problems-in parameterized-syntax-class) '()))

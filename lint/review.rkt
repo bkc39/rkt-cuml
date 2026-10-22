@@ -43,15 +43,35 @@
     #:with (kept ...) #'(f.kept ... ...)
     #:with (table ...) (filter values (attribute f.table))))
 
+(define-splicing-syntax-class relay-formal
+                              #:attributes ([argument 1])
+                              (pattern name:id
+                                #:with (argument ...) #'(name))
+                              (pattern (~seq kw:keyword [name:id _:expr])
+                                #:with (argument ...) #'(kw name)))
+
 (define-syntax-class who-wrapper
-  (pattern ((~datum define) (name:id . formals) (~and call (relay:id ((~datum quote) quoted:id) . _)))
+  #:datum-literals (define quote)
+  (pattern (define (name:id . (~and formals (formal:relay-formal ...)))
+             (~and call (relay:id (quote quoted:id) argument ...)))
     #:when (eq? (syntax-e #'quoted) (syntax-e #'name))
     #:when (equal? (format "~a/who" (syntax-e #'name)) (symbol->string (syntax-e #'relay)))
+    #:when (equal? (syntax->datum #'(argument ...)) (syntax->datum #'(formal.argument ... ...)))
     #:with procedure #'(lambda formals call)))
 
+(define-syntax-class module-definition
+  #:datum-literals (define)
+  #:attributes (name)
+  (pattern (define (name:id . _)
+             . _))
+  (pattern (define name:id
+             . _)))
+
 (define-syntax-class who-relay
-  (pattern ((~datum define) (name:id (~and who (~datum who)) . rest) body ...+)
-    #:with procedure #'(lambda (who . rest)
+  #:datum-literals (define who)
+  (pattern (define (name:id (~and who-id who) . rest)
+             body ...+)
+    #:with procedure #'(lambda (who-id . rest)
                          body ...)))
 
 (define-syntax-class reviewed-form
@@ -79,7 +99,8 @@
     #:attr review (lambda ()
                     (track-binding #'name)
                     (mark-uses #'(body ...))))
-  (pattern ((~or* define-splicing-syntax-class define-syntax-class) name:id . body)
+  (pattern ((~or* define-splicing-syntax-class define-syntax-class) (~or* name:id (name:id . _))
+                                                                    . body)
     #:attr review (lambda ()
                     (track-binding #'name #:check-usages? #f)
                     (mark-uses #'body)))
@@ -161,12 +182,11 @@
 (define provides-by-file (make-hash))
 
 (define (exported? name)
-  (and (not (regexp-match? #rx"/who$" (symbol->string (syntax-e name))))
-       (memq (syntax-e name)
+  (and (memq (syntax-e name)
              (hash-ref! provides-by-file
                         (syntax-source name)
                         (lambda () (provided-names (syntax-source name)))))
-       #t))
+       (not (regexp-match? #rx"/who$" (symbol->string (syntax-e name))))))
 
 (define (provided-names source)
   (cond
@@ -175,20 +195,30 @@
                                          (lambda ()
                                            (port-count-lines! (current-input-port))
                                            (with-module-reading-parameterization read-syntax)))
-       [(_module _name _lang (_begin form ...)) (append-map provided-in (attribute form))]
+       [(_module _name _lang (_begin form ...))
+        (define defined (append-map defined-in (attribute form)))
+        (append-map (lambda (one) (provided-in one defined)) (attribute form))]
        [_ '()])]
     [else '()]))
 
-(define (provided-in form)
+(define (defined-in form)
   (syntax-parse form
-    #:datum-literals (provide rename-out)
-    [(provide spec ...)
-     (for*/list ([spec (in-list (attribute spec))]
-                 [name (in-list (syntax-parse spec
-                                  [name:id (list #'name)]
-                                  [(rename-out [inner:id _] ...) (attribute inner)]
-                                  [_ '()]))])
-       (syntax-e name))]
+    [definition:module-definition (list (syntax-e #'definition.name))]
+    [_ '()]))
+
+(define (provided-in form defined)
+  (syntax-parse form
+    #:datum-literals (provide)
+    [(provide spec ...) (append-map (lambda (one) (spec-names one defined)) (attribute spec))]
+    [_ '()]))
+
+(define (spec-names spec defined)
+  (syntax-parse spec
+    #:datum-literals (all-defined-out prefix-out rename-out)
+    [name:id (list (syntax-e #'name))]
+    [(rename-out [inner:id _] ...) (map syntax-e (attribute inner))]
+    [(prefix-out _ inner ...) (append-map (lambda (one) (spec-names one defined)) (attribute inner))]
+    [(all-defined-out) defined]
     [_ '()]))
 
 (define (unquoted stx depth)
