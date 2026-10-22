@@ -110,7 +110,7 @@
   (check-equal? (estimator-params (kmeans)) (kmeans-params))
   (check-equal? (estimator-params (kmeans #:max-samples-per-batch 64 #:resources 'r)) (kmeans-params))
   (for ([r (in-list round-trips)])
-    (match-define (list kw key value) r)
+    (match-define (list kw _ value) r)
     (check-equal? (estimator-params (keyword-apply kmeans (list kw) (list value) '()))
                   (keyword-apply kmeans-params (list kw) (list value) '())
                   (format "~a" kw))))

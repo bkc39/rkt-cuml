@@ -15,7 +15,7 @@
          (only-in cuml/private/estimator-support define-estimator)
          (only-in racket/list combinations)
          (only-in racket/string string-append*)
-         (only-in rackunit check-equal? check-false check-not-equal? check-pred check-regexp-match check-true test-case)
+         (only-in rackunit check-equal? check-false check-match check-not-equal? check-pred check-regexp-match check-true test-case)
          (only-in "private/cuml-error.rkt" check-cuml-error raised))
 
 (define (twice size)
@@ -27,7 +27,8 @@
   [shade 'plain #:fixed]
   [label "w"])
 
-(struct model (who X params settings weight) #:transparent)
+(define (model who X params settings weight)
+  (list 'model who X params settings weight))
 
 (define/who (gadget-fit who
                         X
@@ -142,7 +143,7 @@
   (check-cuml-error 'logic
                     "fit-predict: gadget takes no sample-weight"
                     (lambda () (fit-predict (gadget) 'X #:sample-weight 'w)))
-  (check-equal? (model-weight (cadr (fit-predict (weighted-gadget) 'X #:sample-weight 'w))) 'w))
+  (check-match (cadr (fit-predict (weighted-gadget) 'X #:sample-weight 'w)) (list 'model _ _ _ _ 'w)))
 
 (test-case "E5: fit passes the generic's name, the set and the settings given"
   (define m (cadr (fit-predict (gadget #:size 4 #:place 'p) 'X)))

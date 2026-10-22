@@ -4,11 +4,19 @@
                      (only-in racket/syntax format-id)
                      ;; whole-module: its syntax classes come with it
                      syntax/parse/pre)
+         (only-in racket/match match)
          (only-in syntax/parse/define define-syntax-parse-rule)
-         (only-in "hyperparameters.rkt" absent check-fixed given-hash keyword-checked table-id))
+         (only-in "hyperparameters.rkt" absent given-hash keyword-checked logic-error table-id))
 
 (provide define-checked
          define/who)
+
+(define (check-fixed who set defaults keys)
+  (match (for/first ([key (in-list keys)]
+                     #:unless (equal? (hash-ref set key) (hash-ref defaults key)))
+           key)
+    [#f (void)]
+    [key (logic-error "~a: ~a: expected ~a, got ~a" who key (hash-ref defaults key) (hash-ref set key))]))
 
 (begin-for-syntax
   (define (key->keyword key)

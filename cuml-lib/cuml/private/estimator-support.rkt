@@ -11,7 +11,6 @@
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide define-estimator
-         logic-error
          params->string)
 
 (define (params->string name keys hyperparameters defaults setting-names settings fitted?)

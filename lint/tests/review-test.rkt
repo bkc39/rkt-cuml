@@ -125,3 +125,70 @@
 
 (test-case "each test form's body is a scope of its own"
   (check-equal? (problems-in test-forms-with-same-names) '()))
+
+(define exported-who-procedure
+  '((provide twice)
+    (define (twice who x)
+      (list who x))))
+
+(define renamed-exported-who-procedure
+  '((provide (rename-out [twice double]))
+    (define (twice who x)
+      (list who x))))
+
+(define private-relay
+  '((provide twice)
+    (define (helper who x)
+      (list who x))
+    (define (twice x)
+      (helper 'twice x))))
+
+(define hyperparameter-table
+  '((provide widget-params)
+    (define (base-size)
+      3)
+    (define-hyperparameters widget-params [size (base-size)] [scale (* 2 size)] [shade 'plain #:fixed])))
+
+(define who-definition-with-a-table
+  '((provide paint)
+    (define-hyperparameters widget-params [size 3] [shade 'plain])
+    (define/who (paint who X #:hyperparameters widget-params #:ignoring (shade))
+      (list who X size))))
+
+(define estimator-definition
+  '((provide widget
+             widget?
+             widget-model)
+    (define (widget-fit/who who X)
+      (list who X))
+    (define-estimator widget #:hyperparameters widget-params #:fit widget-fit/who #:labels values #:settings ())))
+
+(define helper-used-in-a-template
+  '((require (for-syntax racket/base))
+    (provide m)
+    (define (helper x)
+      x)
+    (define-syntax-parse-rule (m x:expr)
+      #:with y #'x
+      (helper y))))
+
+(test-case "an exported procedure that takes who first is defined with define/who"
+  (check-equal? (problems-in exported-who-procedure)
+                '("twice takes who first and is exported: define it with define/who"))
+  (check-equal? (problems-in renamed-exported-who-procedure)
+                '("twice takes who first and is exported: define it with define/who")))
+
+(test-case "a private relay that takes who is not an entry point"
+  (check-equal? (problems-in private-relay) '()))
+
+(test-case "define-hyperparameters binds the table and reviews its defaults"
+  (check-equal? (problems-in hyperparameter-table) '()))
+
+(test-case "a define/who table is a use, and its keys are not formals"
+  (check-equal? (problems-in who-definition-with-a-table) '()))
+
+(test-case "define-estimator binds the constructor, the predicate and the model accessor"
+  (check-equal? (problems-in estimator-definition) '()))
+
+(test-case "a binding used only in a macro's template is used"
+  (check-equal? (problems-in helper-used-in-a-template) '()))

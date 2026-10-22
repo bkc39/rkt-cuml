@@ -1,18 +1,17 @@
 #lang racket/base
 
 (require (for-syntax racket/base
+                     (only-in racket/match match)
                      (only-in racket/syntax format-id)
                      ;; whole-module: its syntax classes come with it
                      syntax/parse/pre)
          (only-in cuml/core exn:fail:cuml)
          (only-in racket/match match)
-         (for-syntax (only-in racket/match match))
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide (for-syntax keyword-checked
                      table-id)
          absent
-         check-fixed
          define-hyperparameters
          given-hash
          logic-error)
@@ -64,13 +63,6 @@
   (refuse-unknown who owner keys changes)
   (refuse-incomplete who owner keys base)
   (layered keys base changes))
-
-(define (check-fixed who set defaults keys)
-  (match (for/first ([key (in-list keys)]
-                     #:unless (equal? (hash-ref set key) (hash-ref defaults key)))
-           key)
-    [#f (void)]
-    [key (logic-error "~a: ~a: expected ~a, got ~a" who key (hash-ref defaults key) (hash-ref set key))]))
 
 (begin-for-syntax
   (struct keyword-checked (procedure keywords)

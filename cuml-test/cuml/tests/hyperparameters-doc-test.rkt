@@ -93,7 +93,9 @@
     (for/fold ([bound '()])
               ([key (in-list table-keys)])
       (define value (hash-ref (kmeans-params) key))
-      (check-equal? (evaluated (argument-default (hash-ref by-keyword (keyword-of key))) bound)
+      (define entry (hash-ref by-keyword (keyword-of key)))
+      (check-equal? (argument-name entry) key (format "~a #:~a" name key))
+      (check-equal? (evaluated (argument-default entry) bound)
                     value
                     (format "~a #:~a" name key))
       (append bound (list (cons key value))))))
