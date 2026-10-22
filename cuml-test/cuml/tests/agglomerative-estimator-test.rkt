@@ -173,6 +173,10 @@
                     (lambda ()
                       (fit (agglomerative-clustering) X #:sample-weight (blank-vector 5 'float32))))
   (check-cuml-error 'logic
+                    "fit: agglomerative-clustering takes no sample-weight"
+                    (lambda ()
+                      (fit (agglomerative-clustering #:linkage 'ward) 'X #:sample-weight 'w)))
+  (check-cuml-error 'logic
                     "fit-predict: agglomerative-clustering takes no sample-weight"
                     (lambda ()
                       (fit-predict (agglomerative-clustering #:n-clusters 0)
