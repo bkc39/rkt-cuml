@@ -226,7 +226,8 @@ The @racket[kmeans-result] of the fit that made @racket[estimator], or
 
 @declare-exporting[cuml]
 
-@defproc[(dbscan [#:eps eps (and/c real? (>/c 0) (</c +inf.0)) 0.5]
+@defproc[(dbscan [params (or/c #f hash?) #f]
+                 [#:eps eps (and/c real? (>/c 0) (</c +inf.0)) 0.5]
                  [#:min-samples min-samples exact-positive-integer? 5]
                  [#:metric metric (or/c 'euclidean 'cosine 'precomputed) 'euclidean]
                  [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]
@@ -235,12 +236,12 @@ The @racket[kmeans-result] of the fit that made @racket[estimator], or
                  [#:resources resources (or/c #f device-resources?) #f])
          dbscan?]{
 
-An unfitted DBSCAN estimator, with the parameters of @racket[dbscan-fit]. It
+An unfitted DBSCAN estimator with the hyperparameters @racket[(dbscan-params params ...)]. It
 is an estimator and a clusterer, and checks nothing until it is fitted.
 @racket[fit] is @racket[dbscan-fit] with these parameters and the
 @racket[sample-weight], and @racket[fit-predict] returns the fit's labels.
-@racket[y] is ignored. Each call runs on @racket[resources], or with
-@racket[#f] on the calling thread's @racket[(current-device-resources)].
+@racket[y] is ignored. @racket[resources] is a setting, as for @racket[kmeans]: each call runs on
+it, or with @racket[#f] on the calling thread's @racket[(current-device-resources)].
 Errors are @racket[dbscan-fit]'s, named after the generic that was called.
 Printing and @racket[equal?] are as for @racket[kmeans].
 
@@ -249,7 +250,7 @@ Printing and @racket[equal?] are as for @racket[kmeans].
 (define db (dbscan #:eps 2 #:min-samples 4))
 db
 (device-vector->list (fit-predict db P))
-(estimator-set-params db (hasheq 'metric 'cosine))
+(estimator-set-params db #:metric 'cosine)
 (eval:error (fit (dbscan #:eps 0) P))
 ]}
 

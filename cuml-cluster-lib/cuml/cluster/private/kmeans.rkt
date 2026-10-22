@@ -4,7 +4,7 @@
          (only-in raft current-device-resources device-matrix? shape)
          (only-in raft/unsafe deposit->list)
          (only-in "define-who.rkt" define/who)
-         (only-in "deposit.rkt" deposit-for)
+         (only-in "deposit.rkt" deposit-for/who)
          (only-in "hyperparameters.rkt" define-hyperparameters)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job
@@ -71,7 +71,7 @@
                         #:max-samples-per-batch [max-samples-per-batch (current-batch-samples)]
                         #:resources [resources (current-device-resources)])
   (define-values (code factor start) (seeding init oversampling-factor))
-  (define out (deposit-for who resources))
+  (define out (deposit-for/who who resources))
   (define-values (inertia n-iter)
     (cuml-cluster-kmeans-fit-job who
                                  resources
@@ -91,7 +91,7 @@
   (kmeans-result centroids labels inertia n-iter))
 
 (define (deposited job who resources centroids X max-samples-per-batch)
-  (define out (deposit-for who resources))
+  (define out (deposit-for/who who resources))
   (job who resources centroids X out max-samples-per-batch)
   (match-define (list result) (deposit->list out))
   result)

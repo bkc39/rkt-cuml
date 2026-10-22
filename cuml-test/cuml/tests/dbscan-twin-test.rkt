@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml dbscan estimator-params)
-         (only-in cuml/cluster dbscan-fit dbscan-result-labels)
+(require (only-in cuml/cluster dbscan-fit dbscan-params dbscan-result-labels)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/match == match match* match-define)
@@ -147,7 +146,7 @@
     [(_ (? string?)) (string->symbol value)]
     [(_ _) value]))
 
-(test-twin "cuml.DBSCAN's default parameters are the estimator's"
+(test-twin "cuml.DBSCAN's default parameters are dbscan-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
   (define mapped
@@ -155,6 +154,6 @@
                   [name (in-value (twin-key key))]
                   #:unless (memq name unbound-twin-params))
       (values name (twin-value name value))))
-  (define ours (~> (dbscan) estimator-params (hash-remove 'resources) (hash-remove 'out-dtype)))
+  (define ours (hash-remove (dbscan-params) 'out-dtype))
   (printf "twin params: ~s\n" theirs)
   (check-equal? mapped ours))

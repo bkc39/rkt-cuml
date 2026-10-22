@@ -249,6 +249,7 @@ ascending order. Both are of the @racket[out-dtype].}
                      [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]
                      [#:max-mbytes-per-batch max-mbytes-per-batch
                       (or/c #f exact-nonnegative-integer?) #f]
+                     [#:params params (or/c #f hash?) #f]
                      [#:sample-weight sample-weight (or/c #f device-vector?) #f]
                      [#:resources resources device-resources? (current-device-resources)])
          dbscan-result?]{
@@ -269,7 +270,8 @@ cosine similarity. A row with a NaN or an infinity is noise.
 @racket[max-mbytes-per-batch] bounds, in units of 10^6
 bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[0] sizes the batch from the device's memory. The outputs live on
-@racket[resources].
+@racket[resources]. @racket[params], from @racket[dbscan-params], gives every
+hyperparameter a keyword omits.
 
 @bold{Cosine boundary.} The fit runs on a unit-row copy of @racket[X] in its
 dtype. A pair at distance exactly @racket[eps] is included when those rows are
@@ -311,6 +313,25 @@ The labels and indices take the @racket[out-dtype]:
 
 @examples[#:eval ev #:label #f
 (eval:error (dbscan-fit P #:eps 0))
+]}
+
+@defproc[(dbscan-params [base (or/c #f hash?) #f]
+                        [#:eps eps (and/c real? (>/c 0) (</c +inf.0)) 0.5]
+                        [#:min-samples min-samples exact-positive-integer? 5]
+                        [#:metric metric (or/c 'euclidean 'cosine 'precomputed) 'euclidean]
+                        [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]
+                        [#:max-mbytes-per-batch max-mbytes-per-batch
+                         (or/c #f exact-nonnegative-integer?) #f])
+         (and/c hash? hash-eq? immutable?)]{
+
+The hyperparameters of @racket[dbscan-fit] and @racket[dbscan], as @racket[kmeans-params] gives
+k-means'.
+
+@examples[#:eval ev #:label #f
+(define dense (dbscan-params #:eps 2 #:min-samples 4))
+(hash-ref (dbscan-params dense #:eps 3) 'min-samples)
+(~> (dbscan-fit P #:params dense) dbscan-result-labels device-vector->list)
+(eval:error (dbscan-params (hasheq 'colour 'red)))
 ]}
 
 @bold{Errors.} @racket[dbscan-fit] raises @racket[exn:fail:cuml] of kind

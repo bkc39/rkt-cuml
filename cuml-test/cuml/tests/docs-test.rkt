@@ -4,6 +4,7 @@
                   current-batch-samples
                   dbscan
                   dbscan-fit
+                  dbscan-params
                   dbscan-result
                   dbscan-result-core-sample-indices
                   dbscan-result-labels
@@ -209,8 +210,21 @@
   (define db (dbscan #:eps 2 #:min-samples 4))
   (check-equal? (format "~v" db) "#<dbscan #:eps 2 #:min-samples 4>")
   (check-equal? (device-vector->list (fit-predict db (points))) '(0 0 0 0 1 1 1 -1))
-  (check-equal? (format "~v" (estimator-set-params db (hasheq 'metric 'cosine)))
+  (check-equal? (format "~v" (estimator-set-params db #:metric 'cosine))
                 "#<dbscan #:eps 2 #:min-samples 4 #:metric 'cosine>")
   (check-cuml-error 'logic
                     "fit: eps: expected greater than 0, got 0"
                     (lambda () (fit (dbscan #:eps 0) (points)))))
+
+(test-case "the manual: dbscan-params overrides a base and refuses an unknown key"
+  (define dense (dbscan-params #:eps 2 #:min-samples 4))
+  (check-equal? (hash-ref (dbscan-params dense #:eps 3) 'min-samples) 4)
+  (check-cuml-error 'logic
+                    "dbscan-params: dbscan has no parameter colour"
+                    (lambda () (dbscan-params (hasheq 'colour 'red)))))
+
+(test-gpu "the manual: dbscan-fit from a set"
+  (check-equal? (~> (dbscan-fit (points) #:params (dbscan-params #:eps 2 #:min-samples 4))
+                    dbscan-result-labels
+                    device-vector->list)
+                '(0 0 0 0 1 1 1 -1)))

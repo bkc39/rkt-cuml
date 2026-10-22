@@ -5,7 +5,7 @@
 (require "cluster/private/dbscan.rkt"
          "cluster/private/kmeans.rkt")
 
-(provide (except-out (all-from-out "cluster/private/dbscan.rkt") dbscan-defaults dbscan-fit/who)
+(provide (except-out (all-from-out "cluster/private/dbscan.rkt") dbscan-fit/who)
          (except-out (all-from-out "cluster/private/kmeans.rkt")
                      init-rows
                      kmeans-fit/who

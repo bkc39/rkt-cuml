@@ -9,9 +9,8 @@
                   fit
                   fit-predict
                   fitted?)
-         (only-in cuml/cluster dbscan-fit dbscan-result-labels dbscan-result?)
-         (only-in cuml/cluster/private/dbscan dbscan-defaults)
-         (only-in racket/list make-list)
+         (only-in cuml/cluster dbscan-fit dbscan-params dbscan-result-labels dbscan-result?)
+         (only-in racket/list combinations make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft device-vector->list)
@@ -23,6 +22,8 @@
                   grid-rows
                   grid-weighted-core
                   grid-weights
+                  cosine-cloud
+                  distance-matrix
                   integer-grid
                   mat
                   result->lists
@@ -31,22 +32,38 @@
          (only-in "private/kmeans-data.rkt" dtypes))
 
 (define changed
-  (hasheq 'eps 0.3
-          'min-samples 10
-          'metric 'cosine
-          'out-dtype 'int64
-          'max-mbytes-per-batch 4
-          'resources 'some-resources))
+  (hasheq 'eps 0.3 'min-samples 10 'metric 'cosine 'out-dtype 'int64 'max-mbytes-per-batch 4))
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "L19: the default parameters, and every keyword round-trips"
   (check-equal?
-   dbscan-defaults
+   (dbscan-params)
    (hasheq 'eps 0.5 'min-samples 5 'metric 'euclidean 'out-dtype 'int32 'max-mbytes-per-batch #f))
-  (check-equal? (estimator-params (dbscan)) (hash-set dbscan-defaults 'resources #f))
-  (check-equal? (round-trips dbscan changed) changed))
+  (check-equal? (estimator-params (dbscan)) (dbscan-params))
+  (check-equal? (round-trips dbscan changed) changed)
+  (check-equal? (estimator-params (dbscan (dbscan-params #:eps 0.3) #:min-samples 10))
+                (dbscan-params #:eps 0.3 #:min-samples 10)))
+
+(test-case "L19: resources is a setting, outside the parameters"
+  (check-equal? (estimator-params (dbscan #:resources 'some-resources)) (dbscan-params))
+  (check-equal? (format "~v" (dbscan #:eps 0.3 #:resources 'some-resources))
+                "#<dbscan #:eps 0.3 #:resources 'some-resources>")
+  (check-not-equal? (dbscan #:resources 'some-resources) (dbscan))
+  (check-equal? (estimator-set-params (dbscan #:resources 'some-resources) #:eps 0.3)
+                (dbscan #:eps 0.3 #:resources 'some-resources)))
+
+(test-case "L19: a base with another key, or without one, is refused under the caller's name"
+  (check-cuml-error 'logic
+                    "dbscan-params: dbscan has no parameter colour"
+                    (lambda () (dbscan-params (hasheq 'colour 'red))))
+  (check-cuml-error 'logic
+                    "dbscan: dbscan has no parameter colour"
+                    (lambda () (dbscan (hash-set (dbscan-params) 'colour 1))))
+  (check-cuml-error 'logic
+                    "dbscan-fit: expected every dbscan parameter, missing min-samples"
+                    (lambda () (dbscan-fit 'X #:params (hasheq 'eps 1) #:resources 'unused))))
 
 (test-case "L19: printing shows the parameters that differ from the defaults"
   (check-equal? (printed (dbscan)) (make-list 3 "#<dbscan>"))
@@ -64,6 +81,8 @@
   (check-equal? (equal-hash-code (dbscan #:eps 0.3)) (equal-hash-code (dbscan #:eps 0.3)))
   (check-equal? (estimator-set-params (dbscan #:eps 0.3) (hasheq)) (dbscan #:eps 0.3))
   (check-equal? (estimator-set-params (dbscan) (hasheq 'eps 0.3 'metric 'cosine))
+                (dbscan #:eps 0.3 #:metric 'cosine))
+  (check-equal? (estimator-set-params (dbscan) (hasheq 'eps 0.4) #:eps 0.3 #:metric 'cosine)
                 (dbscan #:eps 0.3 #:metric 'cosine))
   (check-cuml-error 'logic
                     "estimator-set-params: dbscan has no parameter bogus"
@@ -108,3 +127,45 @@
   (check-cuml-error 'logic
                     "fit: metric: expected euclidean, cosine or precomputed"
                     (lambda () (fit (dbscan #:metric 'l2) X))))
+
+(define identity-changes (hasheq 'eps 1.5 'min-samples 3 'out-dtype 'int64 'max-mbytes-per-batch 1))
+
+(define (subsets keys n)
+  (for*/list ([k (in-range (add1 n))]
+              [subset (in-list (combinations keys k))])
+    subset))
+
+(define (identity-fixtures dt)
+  (define rows (integer-grid 150 2 12 5))
+  (list (list "euclidean" (mat (integer-grid 300 2 20 3) dt) (hasheq))
+        (list "precomputed" (mat (distance-matrix rows) dt) (hasheq 'metric 'precomputed))
+        (list "cosine"
+              (mat (cosine-cloud 300 3 0.02 4) dt)
+              (hasheq 'metric 'cosine 'eps 0.02 'min-samples 4))))
+
+(define (ways X options)
+  (define base (dbscan-params #:min-samples 7 #:out-dtype 'int64))
+  (define (estimated e)
+    (result->lists (dbscan-model (fit e X))))
+  (list (result->lists (apply-options dbscan-fit options X))
+        (result->lists (dbscan-fit X #:params (apply-options dbscan-params options)))
+        (result->lists (apply-options dbscan-fit (hash-set options 'params base) X))
+        (result->lists (dbscan-fit X #:params (apply-options dbscan-params options base)))
+        (estimated (apply-options dbscan options))
+        (estimated (dbscan (apply-options dbscan-params options)))
+        (estimated (apply-options estimator-set-params options (dbscan)))))
+
+(test-gpu "L19: a keyword is the same as a set with that keyword, through dbscan-fit and the estimator"
+  (for* ([dt (in-list dtypes)]
+         [fixture (in-list (identity-fixtures dt))]
+         [keys (in-list (subsets '(eps min-samples out-dtype max-mbytes-per-batch) 2))])
+    (match-define (list name X fixed) fixture)
+    (define options
+      (for/fold ([options fixed]) ([key (in-list keys)])
+        (hash-set options key (hash-ref identity-changes key))))
+    (match-define (list keyword set on-base set-on-base by-keyword by-set by-update) (ways X options))
+    (define label (format "~a ~a ~a" dt name keys))
+    (check-equal? set keyword label)
+    (check-equal? set-on-base on-base label)
+    (for ([estimated (in-list (list by-keyword by-set by-update))])
+      (check-equal? estimated keyword label))))

@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml kmeans)
-         (only-in cuml/cluster kmeans-fit kmeans-params)
+(require (only-in cuml dbscan kmeans)
+         (only-in cuml/cluster dbscan-fit dbscan-params kmeans-fit kmeans-params)
          (only-in racket/dict dict-ref)
          (only-in racket/list append-map)
          (only-in racket/match match match-define)
@@ -36,7 +36,15 @@
 (define (keyword-of key)
   (string->keyword (symbol->string key)))
 
-(define table-keys
+(struct binding (name proc table keys keywords positional others))
+
+(define (table-bindings table keys entries)
+  (define keywords (map keyword-of keys))
+  (for/list ([entry (in-list entries)])
+    (match-define (list name proc extra positional others) entry)
+    (binding name proc table keys (append keywords extra) positional others)))
+
+(define kmeans-keys
   '(init n-clusters
          max-iter
          tol
@@ -44,24 +52,42 @@
          random-state
          oversampling-factor))
 
-(define table-keywords (map keyword-of table-keys))
+(define dbscan-keys '(eps min-samples metric out-dtype max-mbytes-per-batch))
 
 (define bindings
-  (list
-   (list 'kmeans-params kmeans-params table-keywords (list (argument #f 'base #f)) '())
-   (list 'kmeans-fit
-         kmeans-fit
-         (append table-keywords '(#:params #:sample-weight #:max-samples-per-batch #:resources))
-         (list (argument #f 'X 'none))
-         (list (argument '#:params 'params #f)
-               (argument '#:max-samples-per-batch 'max-samples-per-batch '(current-batch-samples))
-               (argument '#:resources 'resources '(current-device-resources))))
-   (list 'kmeans
-         kmeans
-         (append table-keywords '(#:max-samples-per-batch #:resources))
-         (list (argument #f 'params #f))
-         (list (argument '#:max-samples-per-batch 'max-samples-per-batch #f)
-               (argument '#:resources 'resources #f)))))
+  (append
+   (table-bindings kmeans-params
+                   kmeans-keys
+                   (list (list 'kmeans-params kmeans-params '() (list (argument #f 'base #f)) '())
+                         (list 'kmeans-fit
+                               kmeans-fit
+                               '(#:params #:sample-weight #:max-samples-per-batch #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:max-samples-per-batch
+                                               'max-samples-per-batch
+                                               '(current-batch-samples))
+                                     (argument '#:resources 'resources '(current-device-resources))))
+                         (list 'kmeans
+                               kmeans
+                               '(#:max-samples-per-batch #:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:max-samples-per-batch 'max-samples-per-batch #f)
+                                     (argument '#:resources 'resources #f)))))
+   (table-bindings dbscan-params
+                   dbscan-keys
+                   (list (list 'dbscan-params dbscan-params '() (list (argument #f 'base #f)) '())
+                         (list 'dbscan-fit
+                               dbscan-fit
+                               '(#:params #:sample-weight #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources))))
+                         (list 'dbscan
+                               dbscan
+                               '(#:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:resources 'resources #f)))))))
 
 (define-namespace-anchor anchor)
 
@@ -76,43 +102,45 @@
                     `[,key (quote ,value)])
              ,default))))
 
-(test-case "the documented table is kmeans-params' keys"
-  (check-equal? (sort table-keys symbol<?) (sort (hash-keys (kmeans-params)) symbol<?)))
+(test-case "each documented table is its -params procedure's keys"
+  (for ([b (in-list bindings)])
+    (check-equal? (sort (binding-keys b) symbol<?)
+                  (sort (hash-keys ((binding-table b))) symbol<?)
+                  (format "~a" (binding-name b)))))
 
 (test-case "each table-backed entry documents the table's keywords in order, then the others"
-  (for ([binding (in-list bindings)])
-    (match-define (list name _ keywords _ _) binding)
-    (check-equal? (filter values (map argument-keyword (arguments-of name)))
-                  keywords
-                  (format "~a" name))))
+  (for ([b (in-list bindings)])
+    (check-equal? (filter values (map argument-keyword (arguments-of (binding-name b))))
+                  (binding-keywords b)
+                  (format "~a" (binding-name b)))))
 
 (test-case "each table-backed binding takes exactly the documented keywords"
-  (for ([binding (in-list bindings)])
-    (match-define (list name proc keywords _ _) binding)
-    (define-values (required allowed) (procedure-keywords proc))
-    (check-equal? required '() (format "~a" name))
-    (check-equal? allowed (sort keywords keyword<?) (format "~a" name))))
+  (for ([b (in-list bindings)])
+    (define-values (required allowed) (procedure-keywords (binding-proc b)))
+    (check-equal? required '() (format "~a" (binding-name b)))
+    (check-equal? allowed (sort (binding-keywords b) keyword<?) (format "~a" (binding-name b)))))
 
 (test-case "each documented hyperparameter default is the table's"
-  (for ([binding (in-list bindings)])
-    (match-define (list name _ _ _ _) binding)
+  (for ([b (in-list bindings)])
+    (define name (binding-name b))
+    (define defaults ((binding-table b)))
     (define by-keyword
       (for/hasheq ([a (in-list (arguments-of name))]
                    #:when (argument-keyword a))
         (values (argument-keyword a) a)))
-    (for/fold ([bound '()]) ([key (in-list table-keys)])
-      (define value (hash-ref (kmeans-params) key))
+    (for/fold ([bound '()]) ([key (in-list (binding-keys b))])
+      (define value (hash-ref defaults key))
       (define entry (hash-ref by-keyword (keyword-of key)))
       (check-equal? (argument-name entry) key (format "~a #:~a" name key))
       (check-equal? (evaluated (argument-default entry) bound) value (format "~a #:~a" name key))
       (append bound (list (cons key value))))))
 
 (test-case "the positional arguments and the defaults outside the table"
-  (for ([binding (in-list bindings)])
-    (match-define (list name _ _ positional others) binding)
+  (for ([b (in-list bindings)])
+    (define name (binding-name b))
     (define documented-arguments (arguments-of name))
     (check-equal? (filter (lambda (a) (not (argument-keyword a))) documented-arguments)
-                  positional
+                  (binding-positional b)
                   (format "~a" name))
-    (for ([other (in-list others)])
+    (for ([other (in-list (binding-others b))])
       (check-not-false (member other documented-arguments) (format "~a ~a" name other)))))

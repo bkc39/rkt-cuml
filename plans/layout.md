@@ -205,11 +205,12 @@
 - `dbscan-fit` (`cuml/cluster/private/dbscan.rkt`) binds cuML's brute-force
   `ML::Dbscan::fit` for float32 and float64 with int32 or int64 labels,
   through one job, `cuml_cluster_dbscan_fit_job`. The deposit helper
-  (`deposit-for`), the shim's argument checks (`shim/cluster/src/support.hpp`)
-  and the estimator support (`cuml/private/estimator-support.rkt`) are shared
-  with k-means.
-- The `dbscan` estimator is an estimator and a clusterer; its defaults come
-  from `dbscan-defaults`.
+  (`deposit-for`, `cuml/cluster/private/deposit.rkt`) and the shim's argument
+  checks (`shim/cluster/src/support.hpp`) are shared with k-means.
+- The hyperparameters are `dbscan-params`; `dbscan-fit` is a `define/who`
+  with `#:hyperparameters dbscan-params`, and the `dbscan` estimator, an
+  estimator and a clusterer, is a `define-estimator` over it with the setting
+  `resources`, so `estimator-params` has no `'resources`.
 - The spec's decisions, each with the recommended answer:
   - **Q-A.** `#:out-dtype`, Python's name, on `dbscan-fit` and as an
     estimator parameter.
