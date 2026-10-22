@@ -2,9 +2,19 @@
 
 (module+ test
   (require (only-in racket/port call-with-output-string)
-           (only-in rackunit test-case)
+           (only-in rackunit check-equal? test-case)
            resyntax/test/private/rackunit
+           (only-in syntax/parse/pre syntax-parse)
            "resyntax-rules.rkt")
+
+  (define (relayed formals)
+    (syntax-parse (datum->syntax #f formals)
+      [(formal:relay-formal ...) #t]
+      [_ #f]))
+
+  (test-case "L-4: a relay formal is a positional id or an optional keyword argument"
+    (check-equal? (map relayed '((x) (#:k [k 1]) (x #:k [k 1]) ([y 2]) (#:k k) (#:k)))
+                  '(#t #t #t #f #f #f)))
 
   (define (program . forms)
     (code-block (call-with-output-string

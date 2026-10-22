@@ -17,7 +17,8 @@
                   ~seq))
 
 (provide cuml-recommendations
-         cuml-rules)
+         cuml-rules
+         relay-formal)
 
 (define-splicing-syntax-class relay-formal
                               #:attributes ([argument 1])
