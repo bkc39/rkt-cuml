@@ -185,3 +185,26 @@
    #rx"^application: procedure does not expect an argument with given keyword\n  procedure: widget-params\n  given keyword: #:colour"
    (exn-message e))
   (check-exn exn:fail:contract? (lambda () ((values spy) 'X #:colour 1))))
+
+(test-case "M-1: a formal named like a key of the table is refused"
+  (check-syntax-error '(define/who (f who size #:hyperparameters widget-params) size)
+                      #rx"size is both a formal and a key of widget-params")
+  (check-syntax-error '(define/who (g who X #:hyperparameters widget-params #:extra [scale 0]) scale)
+                      #rx"scale is both a formal and a key of widget-params")
+  (check-syntax-error '(module who-key racket/base
+                         (require cuml/cluster/private/define-who
+                                  cuml/cluster/private/hyperparameters)
+                         (define-hyperparameters who-params
+                           [who 1])
+                         (define/who (h who X #:hyperparameters who-params) who))
+                      #rx"who is both a formal and a key of who-params")
+  (check-equal?
+   (raised (lambda ()
+             (expanded '(define/who (f who size #:hyperparameters widget-params #:ignoring (size))
+                          size))))
+   #f))
+
+(test-case "L-1: a second #:hyperparameters is refused"
+  (check-syntax-error
+   '(define/who (f who X #:hyperparameters widget-params #:hyperparameters widget-params) X)
+   #rx"takes one #:hyperparameters"))
