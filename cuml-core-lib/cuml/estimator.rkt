@@ -60,13 +60,13 @@
    (make-keyword-procedure
     (lambda (kws vals estimator [changes (hasheq)])
       (match* (kws changes)
+        [(_ (not (? hash?))) (raise-argument-error 'estimator-set-params "hash?" changes)]
         [('() _) (estimator-set-params estimator changes)]
-        [(_ (? hash?))
+        [(_ _)
          (estimator-set-params estimator
                                (for/fold ([merged (for/hash ([(key value) (in-hash changes)])
                                                     (values key value))])
                                          ([kw (in-list kws)]
                                           [value (in-list vals)])
-                                 (hash-set merged (keyword->symbol kw) value)))]
-        [(_ _) (raise-argument-error 'estimator-set-params "hash?" changes)])))
+                                 (hash-set merged (keyword->symbol kw) value)))])))
    'estimator-set-params))

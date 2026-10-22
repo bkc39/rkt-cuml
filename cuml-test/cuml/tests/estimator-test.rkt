@@ -226,3 +226,10 @@
   (check-equal? (object-name estimator-set-params) 'estimator-set-params)
   (check-regexp-match #rx"^estimator-set-params: contract violation"
                       (exn-message (raised (lambda () (estimator-set-params 3 #:shift 1))))))
+
+(test-case "M3: estimator-set-params names itself for changes that are not a hash"
+  (define e (mean-split 1 #f))
+  (for ([call (in-list (list (lambda () (estimator-set-params e 5))
+                             (lambda () (estimator-set-params e 5 #:shift 1))))])
+    (check-regexp-match #rx"^estimator-set-params: contract violation\n  expected: hash\\?"
+                        (exn-message (raised call)))))
