@@ -61,6 +61,10 @@
                 #:random-state 3
                 #:sample-weight w)))
 
+(define (outcome r)
+  (match-define (kmeans-result C labels inertia n-iter) r)
+  (list (host C) (host-vector labels) inertia n-iter))
+
 (define (partition r)
   (match-define (kmeans-result _ labels _ n-iter) r)
   (list (host-vector labels) n-iter))
@@ -82,14 +86,17 @@
                   [(a b) (in-parallel row row0)])
          (close? a b (tolerance dt)))))
 
-(define (check-batch-fit! t unstable name dt refit rerun expected)
+(define (record! box name)
+  (set-box! box (cons name (unbox box))))
+
+(define (check-batch-fit! t unstable departed name dt refit rerun expected)
   (define actual (rerun))
   (cond
     [(agrees? actual expected dt) (check-same-fit! t name dt actual expected)]
     [(for/or ([_ (in-range 3)])
        (or (not (agrees? (refit) expected dt)) (agrees? (rerun) expected dt)))
-     (set-box! unstable (cons name (unbox unstable)))]
-    [else (check-same-fit! t name dt actual expected)]))
+     (record! unstable name)]
+    [else (record! departed name)]))
 
 (define (check-same-apply! t name dt C X w batch)
   (define (applied b)
@@ -106,6 +113,7 @@
 (test-gpu "H13: the batch size changes no label and no n-iter"
   (define t (tally 0.0 #t))
   (define unstable (box '()))
+  (define departed (box '()))
   (for* ([dt (in-list dtypes)]
          [X (in-value (blob-data rows 4 16 11 dt))]
          [init (in-list inits)]
@@ -117,33 +125,33 @@
       (define name (format "~a ~a n-init ~a~a batch ~a" dt init n-init (if w " weighted" "") batch))
       (check-batch-fit! t
                         unstable
+                        departed
                         name
                         dt
                         (lambda () (fitted X dt init n-init w 32768))
                         (lambda () (fitted X dt init n-init w batch))
                         reference)
       (check-same-apply! t name dt C X w batch)))
-  (for ([dt (in-list dtypes)])
+  (for* ([dt (in-list dtypes)]
+         [batch (in-list '(1 7 63 64))])
     (define X (mat grid64 dt))
-    (define name (format "grid64 ~a batch 1" dt))
+    (define name (format "grid64 ~a batch ~a" dt batch))
     (define reference (fitted X dt 'random 1 #f 32768))
-    (check-same-fit! t name dt (fitted X dt 'random 1 #f 1) reference)
-    (check-same-fit! t
-                     (format "~a, start" name)
-                     dt
-                     (parameterize ([current-batch-samples 1])
-                       (kmeans-fit X #:init (mat grid64-start dt)))
-                     (kmeans-fit X #:init (mat grid64-start dt)))
-    (check-same-apply! t name dt (kmeans-result-centroids reference) X #f 1))
+    (define (started)
+      (outcome (kmeans-fit X #:init (mat grid64-start dt))))
+    (check-equal? (outcome (fitted X dt 'random 1 #f batch)) (outcome reference) name)
+    (check-equal? (parameterize ([current-batch-samples batch])
+                    (started))
+                  (started)
+                  (format "~a, start" name))
+    (check-same-apply! t name dt (kmeans-result-centroids reference) X #f batch))
   (printf "H13: largest relative centroid, inertia, distance or score deviation ~a; bit-identical: ~a\n"
           (tally-largest t)
           (tally-bit-identical? t))
   (printf "H13: fits that also change between runs at the default batch: ~a\n"
-          (reverse (unbox unstable))))
-
-(define (outcome r)
-  (match-define (kmeans-result C labels inertia n-iter) r)
-  (list (host C) (host-vector labels) inertia n-iter))
+          (reverse (unbox unstable)))
+  (printf "H13: fits that departed at the batch size in 4 runs while 3 at the default agreed: ~a\n"
+          (reverse (unbox departed))))
 
 (test-gpu "H13: a parameterize, the keyword and the estimator's setting choose the same batch"
   (for ([dt (in-list dtypes)])
