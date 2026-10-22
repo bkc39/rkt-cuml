@@ -253,12 +253,12 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `process-memory` | `pool-sample`, `baseline-sample`, `test-process-memory`, `device-slack`, ... (the memory tests' sampling) |
 | `device-memory` | `process-device-bytes`, `no-process-memory-reason`, `process-memory-skip` |
 | `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions, weights, blank arrays) and tolerances (`tolerance`, `close?`, `scaled-close?`) |
+| `python-env` | `run-twin script input` (in.json to out.json), `test-twin` |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
 (`widget-params`, `gadget-params`) and estimators to test the macros apart
 from k-means; `hyperparameters-doc-test` reads the manual's `defproc`s and
 checks them against the tables.
-| `python-env` | `run-twin script input` (in.json to out.json), `test-twin` |
 
 Every SKIP line the GPU suite allows matches one ERE in
 `scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there
