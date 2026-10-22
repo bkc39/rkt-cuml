@@ -396,13 +396,26 @@
   (define sorted (sort options keyword<? #:key car))
   (keyword-apply proc (map car sorted) (map cdr sorted) positional))
 
+(define (inferred? options)
+  (and (not (assq '#:n-clusters options))
+       (match (assq '#:init options)
+         [(cons _ (? symbol?)) #f]
+         [#f #f]
+         [_ #t])))
+
 (define (five-ways X w options)
   (define set (kw-call kmeans-params options '()))
-  (list (kw-call kmeans-fit (cons (cons '#:sample-weight w) options) (list X))
-        (kmeans-fit X #:params set #:sample-weight w)
-        (kmeans-model (fit (kw-call kmeans options '()) X #:sample-weight w))
-        (kmeans-model (fit (kmeans set) X #:sample-weight w))
-        (kmeans-model (fit (kw-call estimator-set-params options (list (kmeans))) X #:sample-weight w))))
+  (define (set-params)
+    (fit (kw-call estimator-set-params options (list (kmeans))) X #:sample-weight w))
+  (append (list (kw-call kmeans-fit (cons (cons '#:sample-weight w) options) (list X))
+                (kmeans-fit X #:params set #:sample-weight w)
+                (kmeans-model (fit (kw-call kmeans options '()) X #:sample-weight w))
+                (kmeans-model (fit (kmeans set) X #:sample-weight w)))
+          (cond
+            [(inferred? options)
+             (check-cuml-error 'logic "fit: init: expected 8 rows, got 2" set-params)
+             '()]
+            [else (list (kmeans-model (set-params)))])))
 
 (define (check-five-ways name X w options)
   (match-define (cons reference others) (map outcome (five-ways X w options)))
