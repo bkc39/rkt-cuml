@@ -22,16 +22,54 @@
   (raise (exn:fail:cuml (apply format message args) (current-continuation-marks) 'logic)))
 
 (define (given-hash keys arguments)
-  (error 'given-hash "unimplemented"))
+  (for/hasheq ([key (in-list keys)]
+               [value (in-list arguments)]
+               #:unless (eq? value absent))
+    (values key value)))
+
+(define (printed key)
+  (format "~s" key))
+
+(define (refuse-unknown who owner keys set)
+  (match (sort (for/list ([key (in-hash-keys set)]
+                          #:unless (memq key keys))
+                 key)
+               string<?
+               #:key printed)
+    [(cons key _) (logic-error "~a: ~a has no parameter ~s" who owner key)]
+    ['() (void)]))
+
+(define (refuse-incomplete who owner keys set)
+  (refuse-unknown who owner keys set)
+  (match (for/first ([key (in-list keys)]
+                     #:unless (hash-has-key? set key))
+           key)
+    [#f (void)]
+    [key (logic-error "~a: expected every ~a parameter, missing ~s" who owner key)]))
+
+(define (layered keys base changes)
+  (for/hasheq ([key (in-list keys)])
+    (values key (hash-ref changes key (lambda () (hash-ref base key))))))
 
 (define (resolve-set who owner keys fill base given)
-  (error 'resolve-set "unimplemented"))
+  (cond
+    [(not base) (fill given)]
+    [(hash? base)
+     (refuse-incomplete who owner keys base)
+     (layered keys base given)]
+    [else (raise-argument-error who "(or/c #f hash?)" base)]))
 
 (define (update-set who owner keys base changes)
-  (error 'update-set "unimplemented"))
+  (refuse-unknown who owner keys changes)
+  (refuse-incomplete who owner keys base)
+  (layered keys base changes))
 
 (define (check-fixed who set defaults keys)
-  (error 'check-fixed "unimplemented"))
+  (match (for/first ([key (in-list keys)]
+                     #:unless (equal? (hash-ref set key) (hash-ref defaults key)))
+           key)
+    [#f (void)]
+    [key (logic-error "~a: ~a: expected ~a, got ~a" who key (hash-ref defaults key) (hash-ref set key))]))
 
 (begin-for-syntax
   (struct keyword-checked (procedure keywords)

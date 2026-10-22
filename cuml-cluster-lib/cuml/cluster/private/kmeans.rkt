@@ -53,7 +53,9 @@
   [oversampling-factor 2.0])
 
 (define (batch-samples v)
-  (error 'current-batch-samples "unimplemented"))
+  (cond
+    [(and (exact-integer? v) (<= 0 v 2147483647)) v]
+    [else (raise-argument-error 'current-batch-samples "(integer-in 0 2147483647)" v)]))
 
 (define current-batch-samples (make-parameter 32768 batch-samples 'current-batch-samples))
 
