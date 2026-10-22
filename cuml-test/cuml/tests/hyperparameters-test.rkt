@@ -120,6 +120,13 @@
   (check-equal? (keywords-of spy/who) (keywords-of spy))
   (check-equal? (keywords-of skipping) '(() (#:params #:scale #:size))))
 
+(test-case "L5: the fixed-key check names the entry point when another key's default cannot run"
+  (check-cuml-error 'logic
+                    "spy: shade: expected plain, got bold"
+                    (lambda () (spy 'X #:params (hash-set* literal 'size 'x 'shade 'bold))))
+  (check-equal? (spy 'X #:params (hash-set literal 'size 'x))
+                (list 'spy 'X (hash-set literal 'size 'x) 0)))
+
 (define-namespace-anchor anchor)
 
 (define (expanded form)
@@ -148,6 +155,26 @@
   (check-syntax-error '(define/who (f who X #:hyperparameters widget-params #:ignoring (colour)) X)
                       #rx"widget-params has no key colour")
   (check-syntax-error '(define/who (f who X #:hyperparameters twice) X) #rx"define-hyperparameters"))
+
+(test-case "M4: a later default that names a hyperparameter is refused"
+  (check-syntax-error '(define/who (f who X #:hyperparameters widget-params #:extra [extra size])
+                         extra)
+                      #rx"refers to a hyperparameter")
+  (check-syntax-error
+   '(define/who (f who X #:hyperparameters widget-params #:extra [extra (list 'size (twice scale))])
+      extra)
+   #rx"refers to a hyperparameter")
+  (check-equal?
+   (raised (lambda ()
+             (expanded '(define/who (f who X #:extra [extra 'size] #:hyperparameters widget-params)
+                          extra))))
+   #f))
+
+(test-case "L9: a key named params is refused"
+  (check-syntax-error '(define-hyperparameters clash-params
+                         [size 1]
+                         [params 2])
+                      #rx"params is the #:params keyword"))
 
 (test-case "H8: a misspelt keyword is a syntax error, and a run-time call Racket's error"
   (check-syntax-error '(widget-params #:colour 1) #rx"#:colour")

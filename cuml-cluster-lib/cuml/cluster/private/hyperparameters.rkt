@@ -3,13 +3,15 @@
 (require (for-syntax racket/base
                      (only-in racket/match match)
                      (only-in racket/syntax format-id)
-                     ;; whole-module: its syntax classes come with it
                      syntax/parse/pre)
          (only-in cuml/core exn:fail:cuml)
          (only-in racket/match match)
          (only-in syntax/parse/define define-syntax-parse-rule))
 
-(provide (for-syntax keyword-checked
+(provide (for-syntax key->keyword
+                     keyword-checked
+                     mention
+                     proc-name
                      table-id)
          absent
          define-hyperparameters
@@ -59,12 +61,27 @@
      (layered keys base given)]
     [else (raise-argument-error who "(or/c #f hash?)" base)]))
 
+(define (default-or-absent default)
+  (with-handlers ([exn:fail? (lambda (_) absent)])
+    (default)))
+
 (define (update-set who owner keys base changes)
   (refuse-unknown who owner keys changes)
   (refuse-incomplete who owner keys base)
   (layered keys base changes))
 
 (begin-for-syntax
+  (define (key->keyword key)
+    (string->keyword (symbol->string key)))
+
+  (define (proc-name id)
+    (format-id id "~a/proc" id #:source id))
+
+  (define params-suffix #rx"(.)-params$")
+
+  (define (owner-of table)
+    (string->symbol (regexp-replace params-suffix (symbol->string (syntax-e table)) "\\1")))
+
   (struct keyword-checked (procedure keywords)
     #:property prop:procedure
     (lambda (checked stx)
@@ -82,39 +99,34 @@
 
   (define (unknown-keyword arguments keywords)
     (match arguments
-      [(list* (app syntax-e (? keyword? kw)) _ rest)
+      [(list* (and kw-stx (app syntax-e (? keyword? kw))) _ rest)
        (cond
          [(memq kw keywords) (unknown-keyword rest keywords)]
-         [else (car arguments)])]
+         [else kw-stx])]
       [(cons _ rest) (unknown-keyword rest keywords)]
       [_ #f]))
 
   (struct hyperparameter-table keyword-checked (keys fixed resolve defaults update))
 
-  (define (key->keyword key)
-    (string->keyword (symbol->string key)))
-
-  (define (owner-of table)
-    (string->symbol (regexp-replace #rx"-params$" (symbol->string (syntax-e table)) "")))
-
   (define-syntax-class table-id
     #:description "a hyperparameter table"
     #:attributes (owner keys fixed resolve defaults update)
     (pattern id:id
-      #:do [(define table (syntax-local-value #'id (lambda () #f)))]
-      #:fail-unless (hyperparameter-table? table) "expected a table from define-hyperparameters"
-      #:attr keys (hyperparameter-table-keys table)
-      #:attr fixed (hyperparameter-table-fixed table)
-      #:with owner (owner-of #'id)
-      #:with resolve (hyperparameter-table-resolve table)
-      #:with defaults (hyperparameter-table-defaults table)
-      #:with update (hyperparameter-table-update table)))
+      #:attr table (syntax-local-value #'id (lambda () #f))
+      #:fail-unless (hyperparameter-table?
+                     (attribute table)) "expected a table from define-hyperparameters"
+      #:attr owner (datum->syntax #'id (owner-of #'id))
+      #:attr keys (hyperparameter-table-keys (attribute table))
+      #:attr fixed (hyperparameter-table-fixed (attribute table))
+      #:attr resolve (hyperparameter-table-resolve (attribute table))
+      #:attr defaults (hyperparameter-table-defaults (attribute table))
+      #:attr update (hyperparameter-table-update (attribute table))))
 
   (define-syntax-class params-name
     #:description "a table name ending in -params"
     (pattern name:id
       #:fail-unless
-      (regexp-match? #rx".-params$" (symbol->string (syntax-e #'name)))
+      (regexp-match? params-suffix (symbol->string (syntax-e #'name)))
       "expected a table name ending in -params"))
 
   (define-syntax-class hyperparameter
@@ -126,6 +138,8 @@
       #:attr fixed? #f
       #:attr keyword #f)
     (pattern [key:id default:expr (~optional (~and fixed #:fixed))]
+      #:fail-when (and (eq? (syntax-e #'key) 'params)
+                       #'key) "params is the #:params keyword of every entry"
       #:attr fixed? (and (attribute fixed) #t)
       #:with keyword (key->keyword (syntax-e #'key))))
 
@@ -143,44 +157,52 @@
   (define (forward-reference keys defaults)
     (for/or ([default (in-list defaults)]
              [position (in-naturals)])
-      (mention default (list-tail keys position)))))
+      (mention default (list-tail keys position))))
 
-(define-syntax-parse-rule (define-hyperparameters table:params-name
-                            entry:hyperparameter ...+)
-  #:fail-when (check-duplicate-identifier (attribute entry.key)) "duplicate hyperparameter"
-  #:fail-when
-  (forward-reference (attribute entry.key) (attribute entry.default))
-  "a default refers to its own or a later key"
-  #:with proc (format-id #'table "~a/proc" #'table)
+  (define-splicing-syntax-class
+   hyperparameter-list
+   #:attributes ([key 1] [default 1] [keyword 1] fixed-keys)
+   (pattern (~seq entry:hyperparameter ...+)
+     #:fail-when (check-duplicate-identifier (attribute entry.key)) "duplicate hyperparameter"
+     #:fail-when
+     (forward-reference (attribute entry.key) (attribute entry.default))
+     "a default refers to its own or a later key"
+     #:with (key ...) #'(entry.key ...)
+     #:with (default ...) #'(entry.default ...)
+     #:with (keyword ...) #'(entry.keyword ...)
+     #:attr fixed-keys (for/list ([key (in-list (attribute entry.key))]
+                                  [fixed? (in-list (attribute entry.fixed?))]
+                                  #:when fixed?)
+                         (syntax-e key)))))
+
+(define-syntax-parse-rule (define-hyperparameters table:params-name entries:hyperparameter-list)
+  #:with proc (proc-name #'table)
   #:with owner (owner-of #'table)
-  #:with (fixed-key ...) (for/list ([key (in-list (attribute entry.key))]
-                                    [fixed? (in-list (attribute entry.fixed?))]
-                                    #:when fixed?)
-                           (syntax-e key))
-  #:with (default-value ...) (generate-temporaries (attribute entry.key))
+  #:with (fixed-key ...) (attribute entries.fixed-keys)
+  #:with (default-value ...) (generate-temporaries #'(entries.key ...))
   (begin
-    (define keys '(entry.key ...))
+    (define keys '(entries.key ...))
     (define (fill given)
-      (let* ([entry.key (hash-ref given 'entry.key (lambda () entry.default))] ...)
-        (hasheq (~@ 'entry.key entry.key) ...)))
+      (let* ([entries.key (hash-ref given 'entries.key (lambda () entries.default))] ...)
+        (hasheq (~@ 'entries.key entries.key) ...)))
     (define (defaults-for set)
       (let* ([~@
-              [default-value entry.default]
-              [entry.key (hash-ref set 'entry.key)]] ...)
-        (hasheq (~@ 'entry.key default-value) ...)))
-    (define (resolve who base given)
-      (resolve-set who 'owner keys fill base given))
+              [default-value (default-or-absent (lambda () entries.default))]
+              [entries.key (hash-ref set 'entries.key)]] ...)
+        (hasheq (~@ 'entries.key default-value) ...)))
+    (define (resolve who owner base given)
+      (resolve-set who owner keys fill base given))
     (define (update who owner base changes)
       (update-set who owner keys base changes))
     (define proc
       (let ()
-        (define (table [base #f] (~@ entry.keyword [entry.key absent]) ...)
-          (resolve 'table base (given-hash keys (list entry.key ...))))
+        (define (table [base #f] (~@ entries.keyword [entries.key absent]) ...)
+          (resolve 'table 'owner base (given-hash keys (list entries.key ...))))
         table))
     (define-syntax table
       (hyperparameter-table (quote-syntax proc)
-                            '(entry.keyword ...)
-                            '(entry.key ...)
+                            '(entries.keyword ...)
+                            '(entries.key ...)
                             '(fixed-key ...)
                             (quote-syntax resolve)
                             (quote-syntax defaults-for)

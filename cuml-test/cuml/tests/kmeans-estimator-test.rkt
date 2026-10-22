@@ -122,6 +122,12 @@
   (check-cuml-error 'logic
                     "estimator-set-params: kmeans has no parameter \"n-clusters\""
                     (lambda () (estimator-set-params (kmeans) (hash "n-clusters" 3))))
+  (check-cuml-error 'logic
+                    "kmeans: kmeans has no parameter colour"
+                    (lambda () (kmeans (hash-set (kmeans-params) 'colour 1))))
+  (check-cuml-error 'logic
+                    "estimator-set-params: kmeans has no parameter colour"
+                    (lambda () (estimator-set-params (kmeans) #:colour 1)))
   (check-equal? (estimator-set-params (kmeans) (hasheq 'n-clusters 3)) (kmeans #:n-clusters 3)))
 
 (test-case "K3: an unfitted k-means estimator has every capability and no model"

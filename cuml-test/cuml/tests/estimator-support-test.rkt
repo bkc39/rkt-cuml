@@ -14,7 +14,7 @@
                   transform)
          (only-in cuml/private/estimator-support define-estimator)
          (only-in racket/list combinations)
-         (only-in racket/string string-append*)
+         (only-in racket/match match-define)
          (only-in rackunit
                   check-equal?
                   check-false
@@ -126,24 +126,36 @@
    (hash-ref (estimator-params (estimator-set-params e (hasheq 'size 1 'label "h") #:size 2)) 'label)
    "h"))
 
-(define (expected-text keys)
-  (define set (call-with gadget-params (filter (lambda (k) (memq k table-keys)) keys) '()))
-  (define defaults (hasheq 'size 3 'scale (twice (hash-ref set 'size)) 'shade 'plain 'label "w"))
-  (string-append "#<gadget"
-                 (string-append* (for/list ([key (in-list table-keys)]
-                                            #:unless (equal? (hash-ref set key)
-                                                             (hash-ref defaults key)))
-                                   (format " #:~a ~v" key (hash-ref set key))))
-                 (string-append* (for/list ([key (in-list '(speed place))]
-                                            #:when (memq key keys))
-                                   (format " #:~a ~v" key (hash-ref changed key))))
-                 ">"))
+(define printed
+  '((() "#<gadget>") ((size) "#<gadget #:size 5>")
+                     ((scale) "#<gadget #:scale 7>")
+                     ((shade) "#<gadget #:shade 'bold>")
+                     ((label) "#<gadget #:label \"x\">")
+                     ((speed) "#<gadget #:speed 2>")
+                     ((place) "#<gadget #:place 'here>")
+                     ((size scale) "#<gadget #:size 5 #:scale 7>")
+                     ((size shade) "#<gadget #:size 5 #:shade 'bold>")
+                     ((size label) "#<gadget #:size 5 #:label \"x\">")
+                     ((size speed) "#<gadget #:size 5 #:speed 2>")
+                     ((size place) "#<gadget #:size 5 #:place 'here>")
+                     ((scale shade) "#<gadget #:scale 7 #:shade 'bold>")
+                     ((scale label) "#<gadget #:scale 7 #:label \"x\">")
+                     ((scale speed) "#<gadget #:scale 7 #:speed 2>")
+                     ((scale place) "#<gadget #:scale 7 #:place 'here>")
+                     ((shade label) "#<gadget #:shade 'bold #:label \"x\">")
+                     ((shade speed) "#<gadget #:shade 'bold #:speed 2>")
+                     ((shade place) "#<gadget #:shade 'bold #:place 'here>")
+                     ((label speed) "#<gadget #:label \"x\" #:speed 2>")
+                     ((label place) "#<gadget #:label \"x\" #:place 'here>")
+                     ((speed place) "#<gadget #:speed 2 #:place 'here>")))
 
 (test-case "E3: the printer shows the keys that differ from their defaults, then the settings given"
+  (check-equal? (length printed) (length (subsets (append table-keys '(speed place)) 2)))
   (for ([keys (in-list (subsets (append table-keys '(speed place)) 2))])
+    (match-define (list _ text) (assoc keys printed))
     (define e (call-with gadget keys '()))
-    (check-equal? (format "~a" e) (expected-text keys) (format "~a" keys))
-    (check-equal? (format "~v" e) (expected-text keys)))
+    (check-equal? (format "~a" e) text (format "~a" keys))
+    (check-equal? (format "~v" e) text))
   (check-equal? (format "~a" (gadget #:size 3 #:scale 6)) "#<gadget>")
   (check-equal? (format "~a" (gadget #:size 5)) "#<gadget #:size 5>")
   (check-equal? (format "~a" (fit (gadget #:speed 1) 'X)) "#<gadget fitted #:speed 1>"))
@@ -168,10 +180,11 @@
   (check-cuml-error 'logic
                     "fit-predict: gadget takes no sample-weight"
                     (lambda () (fit-predict (gadget) 'X #:sample-weight 'w)))
-  (check-match (cadr (fit-predict (weighted-gadget) 'X #:sample-weight 'w)) (list 'model _ _ _ _ 'w)))
+  (check-match (fit-predict (weighted-gadget) 'X #:sample-weight 'w)
+               (list 'labels (list 'model _ _ _ _ 'w))))
 
 (test-case "E5: fit passes the generic's name, the set and the settings given"
-  (define m (cadr (fit-predict (gadget #:size 4 #:place 'p) 'X)))
+  (match-define (list 'labels m) (fit-predict (gadget #:size 4 #:place 'p) 'X))
   (check-equal? m (model 'fit-predict 'X (gadget-params #:size 4) (list #f 'p) #f))
   (check-cuml-error 'logic
                     "fit: shade: expected plain, got bold"
@@ -192,7 +205,10 @@
                       #f
                       'p
                       'none))
-  (check-equal? (list-ref (score (fit g 'Y) 'Y #:sample-weight 'w) 6) 'none))
+  (check-cuml-error 'logic
+                    "score: weighted-gadget takes no sample-weight"
+                    (lambda () (score (fit g 'Y) 'Y #:sample-weight 'w)))
+  (check-match (score (fit g 'Y) 'Y) (list 'score 'score _ 'Y #f 'p 'none)))
 
 (test-case "E6: an unfitted estimator is refused before X is read"
   (set-box! applied-calls 0)
@@ -203,7 +219,96 @@
                       (lambda () (generic (gadget) 'X))))
   (check-equal? (unbox applied-calls) 0))
 
+(test-case "L5: the printer shows a key whose default cannot be computed"
+  (check-equal? (format "~a" (gadget (hash-set (gadget-params) 'size 'x)))
+                "#<gadget #:size 'x #:scale 6>")
+  (check-equal? (format "~a" (gadget (hash-set* (gadget-params) 'size 'x 'label "y")))
+                "#<gadget #:size 'x #:scale 6 #:label \"y\">"))
+
+(test-case "L11: the constructor and estimator-set-params name the estimator as the owner"
+  (check-cuml-error 'logic
+                    "weighted-gadget: weighted-gadget has no parameter colour"
+                    (lambda () (weighted-gadget (hash-set (gadget-params) 'colour 1))))
+  (check-cuml-error 'logic
+                    "estimator-set-params: weighted-gadget has no parameter colour"
+                    (lambda () (estimator-set-params (weighted-gadget) #:colour 1)))
+  (check-cuml-error 'logic
+                    "weighted-gadget: expected every weighted-gadget parameter, missing size"
+                    (lambda () (weighted-gadget (hash-remove (gadget-params) 'size)))))
+
 (define-namespace-anchor anchor)
+
+(define (expanded form)
+  (parameterize ([current-namespace (namespace-anchor->namespace anchor)])
+    (expand form)))
+
+(define (check-syntax-error form pattern)
+  (define e (raised (lambda () (expanded form))))
+  (check-pred exn:fail:syntax? e)
+  (check-regexp-match pattern (exn-message e)))
+
+(test-case "L9: a setting named like a hyperparameter or params is refused"
+  (for ([setting (in-list '(size shade params))])
+    (check-syntax-error `(define-estimator clash
+                           #:hyperparameters gadget-params
+                           #:fit gadget-fit/who
+                           #:labels labelled
+                           #:settings (speed ,setting))
+                        (regexp (format "the setting ~a is also" setting)))))
+
+(define two-of-each
+  '(module two racket/base
+     (require (only-in cuml/cluster/private/define-who define/who)
+              (only-in cuml/cluster/private/hyperparameters define-hyperparameters)
+              (only-in cuml/estimator estimator-params fit)
+              (only-in cuml/private/estimator-support define-estimator))
+     (provide results)
+     (define-hyperparameters left-params
+       [size 1]
+       [shade 'plain #:fixed])
+     (define-hyperparameters right-params
+       [size 2]
+       [colour 'red])
+     (define/who (left-fit who X #:hyperparameters left-params #:speed [speed #f])
+       (list who X size shade speed))
+     (define/who (right-fit who X #:hyperparameters right-params #:sample-weight [w #f])
+       (list who X size colour w))
+     (define-estimator left
+       #:hyperparameters left-params
+       #:fit left-fit/who
+       #:labels values
+       #:settings (speed)
+       #:no-sample-weight)
+     (define-estimator right
+       #:hyperparameters right-params
+       #:fit right-fit/who
+       #:labels values
+       #:settings ())
+     (define results
+       (list
+        (left-params)
+        (right-params #:size 3)
+        (left-fit 'X)
+        (right-fit 'X #:colour 'blue)
+        (estimator-params (left #:speed 4))
+        (estimator-params (right #:colour 'green))
+        (format "~a ~a" (fit (left #:speed 4) 'X) (fit (right #:size 5) 'X #:sample-weight 'w))))))
+
+(test-case "two tables and two estimators in one module keep their own helpers"
+  (define results
+    (parameterize ([current-namespace (make-base-namespace)])
+      (namespace-attach-module (namespace-anchor->empty-namespace anchor)
+                               'cuml/private/estimator-support)
+      (eval two-of-each)
+      (dynamic-require ''two 'results)))
+  (check-equal? results
+                (list (hasheq 'size 1 'shade 'plain)
+                      (hasheq 'size 3 'colour 'red)
+                      '(left-fit X 1 plain #f)
+                      '(right-fit X 2 blue #f)
+                      (hasheq 'size 1 'shade 'plain)
+                      (hasheq 'size 2 'colour 'green)
+                      "#<left fitted #:speed 4> #<right fitted #:size 5>")))
 
 (test-case "Q-C: a misspelt constructor keyword is a syntax error"
   (define e

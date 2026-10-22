@@ -2,114 +2,113 @@
 
 (require (for-syntax racket/base
                      (only-in racket/syntax format-id)
-                     ;; whole-module: its syntax classes come with it
                      syntax/parse/pre)
          (only-in racket/match match)
          (only-in syntax/parse/define define-syntax-parse-rule)
-         (only-in "hyperparameters.rkt" absent given-hash keyword-checked logic-error table-id))
+         (only-in "hyperparameters.rkt"
+                  absent
+                  given-hash
+                  key->keyword
+                  keyword-checked
+                  logic-error
+                  mention
+                  proc-name
+                  table-id))
 
 (provide define-checked
          define/who)
 
 (define (check-fixed who set defaults keys)
-  (match (for/first ([key (in-list keys)]
-                     #:unless (equal? (hash-ref set key) (hash-ref defaults key)))
-           key)
+  (match (findf (lambda (key)
+                  (define default (hash-ref defaults key))
+                  (not (or (eq? default absent) (equal? (hash-ref set key) default))))
+                keys)
     [#f (void)]
     [key
      (logic-error "~a: ~a: expected ~a, got ~a" who key (hash-ref defaults key) (hash-ref set key))]))
 
 (begin-for-syntax
-  (define (key->keyword key)
-    (string->keyword (symbol->string key)))
+  (define (named table keys)
+    (for/list ([key (in-list keys)])
+      (datum->syntax table key table)))
 
-  (define ((resolved resolve defaults params keys fixed bound) who body)
-    #`(let ([set (#,resolve #,who #,params (given-hash '#,keys (list #,@keys)))])
-        #,@(cond
-             [(null? fixed) '()]
-             [else (list #`(check-fixed #,who set (#,defaults set) '#,fixed))])
-        (let* (#,@(for/list ([key (in-list bound)])
-                    #`[#,key (hash-ref set '#,key)]))
-          #,body)))
+  (define (earlier-key-reference defaults keys)
+    (for/fold ([seen '()]
+               [found #f]
+               #:result found)
+              ([default (in-list defaults)]
+               [bound (in-list keys)])
+      (values (append seen bound) (or found (and default (mention default seen))))))
+
+  (define-syntax-class (table-key table keys)
+    #:description "a key of the table"
+    (pattern key:id
+      #:fail-unless (memq (syntax-e #'key)
+                          keys) (format "~a has no key ~a" (syntax-e table) (syntax-e #'key))))
 
   (define-splicing-syntax-class
-   formal
-   #:attributes ([spec 1] [argument 1] wrap)
-   (pattern (~seq #:hyperparameters table:table-id (~optional (~seq #:ignoring (ignored:id ...))))
-     #:do [(define ignored-ids (or (attribute ignored) '()))
-           (define skipped (map syntax-e ignored-ids))
-           (define unknown
-             (for/first ([id (in-list ignored-ids)]
-                         #:unless (memq (syntax-e id) (attribute table.keys)))
-               id))]
-     #:fail-when unknown (format "~a has no key ~a"
-                                 (syntax-e #'table)
-                                 (and unknown (syntax-e unknown)))
-     #:do [(define (named keys)
-             (for/list ([key (in-list keys)])
-               (datum->syntax #'table key #'table)))
-           (define bound
-             (for/list ([key (in-list (attribute table.keys))]
-                        #:unless (memq key skipped))
-               key))
-           (define given
-             (for/list ([key (in-list bound)]
-                        #:unless (memq key (attribute table.fixed)))
-               key))]
-     #:with params (car (generate-temporaries '(params)))
-     #:with (key ...) (named given)
-     #:with (keyword ...) (map key->keyword given)
-     #:with (spec ...) #'((~@ keyword [key absent]) ... #:params [params #f])
-     #:with (argument ...) #'((~@ keyword key) ... #:params params)
-     #:attr wrap (resolved #'table.resolve
-                           #'table.defaults
-                           #'params
-                           (named given)
-                           (for/list ([key (in-list bound)]
-                                      #:when (memq key (attribute table.fixed)))
-                             key)
-                           (named bound)))
+   (formal who-id)
+   #:attributes ([spec 1] [argument 1] [binding 1] [key 1] default)
+   (pattern (~seq #:hyperparameters table:table-id
+                  (~optional (~seq #:ignoring ~!
+                                   ((~var ignored (table-key #'table (attribute table.keys))) ...))
+                             #:defaults ([(ignored 1) '()])))
+     #:attr skipped (map syntax-e (attribute ignored))
+     #:with (key ...) (named #'table (remq* (attribute skipped) (attribute table.keys)))
+     #:with (given-key ...) (remq* (append (attribute skipped) (attribute table.fixed))
+                                   (attribute table.keys))
+     #:with (fixed-key ...) (remq* (attribute skipped) (attribute table.fixed))
+     #:with (given-value ...) (generate-temporaries #'(given-key ...))
+     #:with (keyword ...) (map key->keyword (syntax->datum #'(given-key ...)))
+     #:with (who params set checked) (cons who-id (generate-temporaries '(params set checked)))
+     #:attr check (and (pair? (attribute fixed-key))
+                       #'[checked (check-fixed who set (table.defaults set) '(fixed-key ...))])
+     #:with (spec ...) #'((~@ keyword [given-value absent]) ... #:params [params #f])
+     #:with (argument ...) #'((~@ keyword given-value) ... #:params params)
+     #:with
+     (binding ...)
+     #'([set
+         (table.resolve who 'table.owner params (given-hash '(given-key ...) (list given-value ...)))]
+        (~? check)
+        [key (hash-ref set 'key)] ...)
+     #:attr default #f)
    (pattern id:id
      #:with (spec ...) #'(id)
      #:with (argument ...) #'(id)
-     #:attr wrap #f)
+     #:with (binding ...) #'()
+     #:with (key ...) #'()
+     #:attr default #f)
    (pattern (~seq kw:keyword [id:id default:expr])
      #:with (spec ...) #'(kw [id default])
      #:with (argument ...) #'(kw id)
-     #:attr wrap #f)))
+     #:with (binding ...) #'()
+     #:with (key ...) #'())))
 
-(define-syntax-parse-rule (define/who (name:id who:id f:formal ...)
+(define-syntax-parse-rule (define-checked name:id (kw:keyword ...) definition)
+  #:with name/proc (proc-name #'name)
+  (begin
+    (define name/proc
+      (let ()
+        definition
+        name))
+    (define-syntax name (keyword-checked (quote-syntax name/proc) '(kw ...)))))
+
+(define-syntax-parse-rule (define/who (name:id who:id (~var f (formal #'who)) ...)
                             body:expr ...+)
+  #:fail-when
+  (earlier-key-reference (attribute f.default) (attribute f.key))
+  "a default refers to a hyperparameter of an earlier #:hyperparameters"
   #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
-  #:with name/proc (format-id #'name "~a/proc" #'name #:source #'name)
-  #:with (kw ...) (for*/list ([spec (in-list (syntax->list #'(f.spec ... ...)))]
-                              #:when (keyword? (syntax-e spec)))
-                    spec)
-  #:with checked? (cond
-                    [(ormap values (attribute f.wrap)) #'#t]
-                    [else #'#f])
-  #:with wrapped (for/fold ([body #'(let ()
-                                      body ...)])
-                           ([wrap (in-list (attribute f.wrap))]
-                            #:when wrap)
-                   (wrap #'who body))
+  #:with (kw ...) (filter (lambda (spec) (keyword? (syntax-e spec)))
+                          (syntax->list #'(f.spec ... ...)))
+  #:with public #'(define (name f.spec ... ...)
+                    (name/who 'name f.argument ... ...))
+  #:with definition (cond
+                      [(null? (syntax->list #'(f.binding ... ...))) #'public]
+                      [else #'(define-checked name (kw ...) public)])
   (begin
     (define (name/who who f.spec ... ...)
-      wrapped)
-    (define-checked checked?
-                    name
-                    name/proc
-                    (kw ...)
-                    (define (name f.spec ... ...)
-                      (name/who 'name f.argument ... ...)))))
-
-(define-syntax (define-checked stx)
-  (syntax-parse stx
-    [(_ #f _ _ _ definition) #'definition]
-    [(_ #t name name/proc (kw ...) definition)
-     #'(begin
-         (define name/proc
-           (let ()
-             definition
-             name))
-         (define-syntax name (keyword-checked (quote-syntax name/proc) '(kw ...))))]))
+      (let* (f.binding ...
+             ...)
+        body ...))
+    definition))
