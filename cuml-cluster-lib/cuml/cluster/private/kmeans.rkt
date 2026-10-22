@@ -33,7 +33,7 @@
 (struct kmeans-result (centroids labels inertia n-iter))
 
 (define-hyperparameters kmeans-params
-  (init 'scalable-k-means++)
+  [init 'scalable-k-means++]
   [n-clusters (init-rows init 8)]
   [max-iter 300]
   [tol 1e-4]

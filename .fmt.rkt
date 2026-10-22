@@ -85,12 +85,18 @@
   (define xs (filter-not newl? (node-content d)))
   ((format-body-form (if (and (pair? (cdr xs)) (keyword-atom? (cadr xs))) 3 1)) d))
 
+(define-pretty format-entry
+  #:type values
+  (cond
+    [(node? doc) (format-#%app doc)]
+    [else (pretty doc)]))
+
 (define (the-formatter-map name)
   (case name
     [("_fun") format-fun]
     [("hash" "hasheq" "hasheqv" "hashalw") format-hash-pairs]
-    [("define-raft" "define-kc" "define/who" "define-hyperparameters" "define-estimator")
-     (format-define-like)]
+    [("define-raft" "define-kc" "define/who" "define-estimator") (format-define-like)]
+    [("define-hyperparameters") (format-uniform-body/helper 1 #:body-formatter format-entry)]
     [("define-cstruct") (format-uniform-body/helper 1 #:body-formatter format-binding-pairs/indirect)]
     [("define-pretty" "generator") (format-uniform-body/helper 1)]
     [("test-canary" "test-gpu"

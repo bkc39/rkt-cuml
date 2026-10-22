@@ -139,7 +139,9 @@
   (check-regexp-match pattern (exn-message e)))
 
 (test-case "H8: the definitions refuse malformed tables and entry points"
-  (check-syntax-error '(define-hyperparameters widget-table [size 1]) #rx"ending in -params")
+  (check-syntax-error '(define-hyperparameters widget-table
+                         [size 1])
+                      #rx"ending in -params")
   (check-syntax-error '(define-hyperparameters pair-params
                          [size 1]
                          [size 2])

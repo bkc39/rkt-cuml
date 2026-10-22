@@ -214,7 +214,8 @@
                                   #:when fixed?)
                          (syntax-e key)))))
 
-(define-syntax-parse-rule (define-hyperparameters table:params-name entries:hyperparameter-list)
+(define-syntax-parse-rule (define-hyperparameters table:params-name
+                            entries:hyperparameter-list)
   #:with proc (proc-name #'table)
   #:with owner (owner-of #'table)
   #:with (fixed-key ...) (attribute entries.fixed-keys)
