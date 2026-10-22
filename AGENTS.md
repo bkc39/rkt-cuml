@@ -273,8 +273,9 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
 (`widget-params`, `gadget-params`) and estimators to test the macros apart
-from k-means; `hyperparameters-doc-test` reads the manual's `defproc`s and
-checks them against the tables.
+from k-means; `hyperparameters-doc-test` reads the `defproc`s of
+`reference/{clustering,spectral,estimators}.scrbl` and checks them against
+the tables.
 
 Every SKIP line the GPU suite allows matches one ERE in
 `scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there
@@ -307,7 +308,8 @@ kills the test outright.
   Acknowledgements and AI Disclosure paragraphs, the install line, the table
   of contents. No empty chapters.
 - Two parts, after glmnet's: the guide (`guide.scrbl`, `guide/`: Getting
-  started, Concepts with every `deftech`, and one `ex-*` chapter per
+  started, Concepts with every `deftech` and the hyperparameter rule in
+  `concepts-parameters`, and one `ex-*` chapter per
   algorithm on real `datasets-core` data) and the reference
   (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
   `datasets-core` is a build-dep of cuml-doc only; cuml-test gets it through

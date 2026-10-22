@@ -18,7 +18,7 @@
          (only-in scribble/reader read-inside))
 
 (define (manual-forms file)
-  (call-with-input-file (collection-file-path file "cuml" "scribblings")
+  (call-with-input-file (collection-file-path file "cuml" "scribblings" "reference")
                         (lambda (in)
                           (read-line in 'any)
                           (read-inside in))))

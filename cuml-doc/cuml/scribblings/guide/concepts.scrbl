@@ -78,12 +78,33 @@ until @racket[fit] returns a fitted copy, in the style of scikit-learn;
 (equal? (device-vector->list (fit-predict estimator flowers))
         (kmeans-labels (kmeans-fit flowers #:n-clusters 3)))
 (hash-ref (estimator-params estimator) 'n-clusters)
-(estimator-set-params estimator (hasheq 'n-clusters 2))
+(estimator-set-params estimator #:n-clusters 2)
 (kmeans-model (fit estimator flowers))
 ]
 
 An estimator checks nothing until it is fitted. @racket[kmeans-model] and its
 siblings return the fit procedure's result.
+
+@section[#:tag "concepts-parameters"]{Parameters}
+
+A setting that changes the result is a @deftech{hyperparameter}. Each
+algorithm keeps its hyperparameters in a set, an immutable hash that
+@racket[kmeans-params] and its siblings build and check. A fit procedure takes a
+set as @racket[#:params], an estimator as its first argument, and a keyword
+wins over the same key in the set. A setting that changes only speed, memory or
+the device is an @deftech{execution setting}, kept out of the set: a parameter
+such as @racket[current-batch-samples], or a constructor setting such as
+@racket[#:resources]:
+
+@examples[#:eval ev #:label #f
+(define base (kmeans-params #:n-init 3))
+(for/list ([k (in-range 2 5)])
+  (~> (fit (kmeans base #:n-clusters k) flowers) kmeans-model kmeans-labels (crosstab species) agreement))
+(hash-ref (estimator-params (estimator-set-params (kmeans base) #:n-clusters 2)) 'n-init)
+(define (base-labels)
+  (kmeans-labels (kmeans-fit flowers #:params base #:n-clusters 3)))
+(equal? (base-labels) (parameterize ([current-batch-samples 16]) (base-labels)))
+]
 
 @section[#:tag "concepts-labels"]{Labels}
 

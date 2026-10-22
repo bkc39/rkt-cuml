@@ -2,6 +2,7 @@
 
 (require (only-in cuml
                   agglomerative-clustering
+                  current-batch-samples
                   dbscan
                   dbscan-fit
                   dbscan-result-core-sample-indices
@@ -12,6 +13,7 @@
                   kmeans
                   kmeans-fit
                   kmeans-model
+                  kmeans-params
                   kmeans-result-labels
                   kmeans-result?
                   predict
@@ -202,13 +204,31 @@
   (define estimator (kmeans #:n-clusters 3))
   (check-equal? (device-vector->list (fit-predict estimator (flowers))) (labels-at 0))
   (check-equal? (hash-ref (estimator-params estimator) 'n-clusters) 3)
-  (check-equal? (format "~v" (estimator-set-params estimator (hasheq 'n-clusters 2)))
+  (check-equal? (format "~v" (estimator-set-params estimator #:n-clusters 2))
                 "#<kmeans #:n-clusters 2>")
   (check-pred kmeans-result? (kmeans-model (fit estimator (flowers))))
   (check-not-equal? (labels-at 0) (labels-at 1))
   (check-equal? (crosstab (labels-at 0) species) (crosstab (labels-at 1) species))
   (check-equal? (labels-at 2) (labels-at 2))
   (check-equal? (crosstab (labels-at 2) species) '((50 0 0) (0 47 14) (0 3 36))))
+
+(test-gpu "the guide: a base set swept over k, changed by keyword, and the batch size"
+  (define base (kmeans-params #:n-init 3))
+  (check-equal? (for/list ([k (in-range 2 5)])
+                  (~> (fit (kmeans base #:n-clusters k) (flowers))
+                      kmeans-model
+                      kmeans-labels
+                      (crosstab species)
+                      agreement))
+                '(100 134 132))
+  (check-equal? (hash-ref (estimator-params (estimator-set-params (kmeans base) #:n-clusters 2))
+                          'n-init)
+                3)
+  (define (base-labels)
+    (kmeans-labels (kmeans-fit (flowers) #:params base #:n-clusters 3)))
+  (check-equal? (base-labels)
+                (parameterize ([current-batch-samples 16])
+                  (base-labels))))
 
 (test-gpu "the guide: refusals name the procedure or the generic"
   (check-cuml-error 'logic
