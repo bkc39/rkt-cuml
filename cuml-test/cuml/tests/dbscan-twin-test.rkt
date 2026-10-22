@@ -1,14 +1,12 @@
 #lang racket/base
 
-(require (only-in cuml dbscan estimator-params)
-         (only-in cuml/cluster dbscan-fit dbscan-result-labels)
+(require (only-in cuml/cluster dbscan-fit dbscan-params dbscan-result-labels)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* dtype)
-         (only-in threading ~>)
          (only-in "private/dbscan-data.rkt"
                   cosine-cloud
                   distance-matrix
@@ -136,10 +134,10 @@
           (length runs)
           equal-count))
 
-(test-twin "cuml.DBSCAN's default parameters are the estimator's"
+(test-twin "cuml.DBSCAN's default parameters are dbscan-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
   (define mapped (twin-params theirs '(algorithm calc-core-sample-indices)))
-  (define ours (~> (dbscan) estimator-params (hash-remove 'resources) (hash-remove 'out-dtype)))
+  (define ours (hash-remove (dbscan-params) 'out-dtype))
   (printf "twin params: ~s\n" theirs)
   (check-equal? mapped ours))

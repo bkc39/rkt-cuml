@@ -9,9 +9,13 @@
                   fit
                   fit-predict
                   fitted?)
-         (only-in cuml/cluster single-linkage-fit single-linkage-result-labels single-linkage-result?)
-         (only-in cuml/cluster/private/linkage single-linkage-defaults)
-         (only-in racket/list make-list)
+         (only-in cuml/cluster
+                  single-linkage-fit
+                  single-linkage-params
+                  single-linkage-result-labels
+                  single-linkage-result?)
+         (only-in racket/list combinations make-list)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
@@ -22,23 +26,45 @@
          (only-in "private/kmeans-data.rkt" blank-vector)
          (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows result->lists))
 
-(define changed
-  (hasheq 'n-clusters 3
-          'metric 'l1
-          'linkage 'ward
-          'connectivity 'pairwise
-          'c 20
-          'resources 'some-resources))
+(define changed (hasheq 'n-clusters 3 'metric 'l1 'linkage 'ward 'connectivity 'pairwise 'c 20))
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "the default parameters, and every keyword round-trips"
-  (check-equal? single-linkage-defaults
-                (hasheq 'n-clusters 2 'metric 'euclidean 'connectivity 'knn 'c 15))
-  (check-equal? (estimator-params (agglomerative-clustering))
-                (hash-set* single-linkage-defaults 'linkage 'single 'resources #f))
-  (check-equal? (round-trips agglomerative-clustering changed) changed))
+  (check-equal? (single-linkage-params)
+                (hasheq 'n-clusters 2 'metric 'euclidean 'linkage 'single 'connectivity 'knn 'c 15))
+  (check-equal? (estimator-params (agglomerative-clustering)) (single-linkage-params))
+  (check-equal? (round-trips agglomerative-clustering changed) changed)
+  (check-equal? (estimator-params (agglomerative-clustering (single-linkage-params #:c 20)
+                                                            #:n-clusters 3))
+                (single-linkage-params #:c 20 #:n-clusters 3)))
+
+(test-case "resources is a setting, outside the parameters"
+  (check-equal? (estimator-params (agglomerative-clustering #:resources 'some-resources))
+                (single-linkage-params))
+  (check-equal? (format "~v" (agglomerative-clustering #:c 20 #:resources 'some-resources))
+                "#<agglomerative-clustering #:c 20 #:resources 'some-resources>")
+  (check-not-equal? (agglomerative-clustering #:resources 'some-resources) (agglomerative-clustering))
+  (check-equal? (estimator-set-params (agglomerative-clustering #:resources 'some-resources)
+                                      #:linkage 'ward)
+                (agglomerative-clustering #:linkage 'ward #:resources 'some-resources)))
+
+(test-case "a base with another key, or without one, is refused under the caller's name"
+  (check-cuml-error 'logic
+                    "single-linkage-params: single-linkage has no parameter colour"
+                    (lambda () (single-linkage-params (hasheq 'colour 'red))))
+  (check-cuml-error 'logic
+                    "agglomerative-clustering: agglomerative-clustering has no parameter colour"
+                    (lambda ()
+                      (agglomerative-clustering (hash-set (single-linkage-params) 'colour 1))))
+  (check-cuml-error 'logic
+                    "estimator-set-params: agglomerative-clustering has no parameter colour"
+                    (lambda () (estimator-set-params (agglomerative-clustering) #:colour 1)))
+  (check-cuml-error 'logic
+                    "single-linkage-fit: expected every single-linkage parameter, missing metric"
+                    (lambda ()
+                      (single-linkage-fit 'X #:params (hasheq 'n-clusters 3) #:resources 'unused))))
 
 (test-case "printing shows the parameters that differ from the defaults"
   (check-equal? (printed (agglomerative-clustering)) (make-list 3 "#<agglomerative-clustering>"))
@@ -62,6 +88,11 @@
                 (agglomerative-clustering #:c 3))
   (check-equal? (estimator-set-params (agglomerative-clustering)
                                       (hasheq 'n-clusters 3 'connectivity 'pairwise))
+                (agglomerative-clustering #:n-clusters 3 #:connectivity 'pairwise))
+  (check-equal? (estimator-set-params (agglomerative-clustering)
+                                      (hasheq 'n-clusters 4)
+                                      #:n-clusters 3
+                                      #:connectivity 'pairwise)
                 (agglomerative-clustering #:n-clusters 3 #:connectivity 'pairwise))
   (check-cuml-error 'logic
                     "estimator-set-params: agglomerative-clustering has no parameter bogus"
@@ -90,6 +121,35 @@
   (check-equal? (device-vector->list (fit-predict (apply-options agglomerative-clustering options) Y))
                 (device-vector->list (single-linkage-result-labels
                                       (apply-options single-linkage-fit options Y)))))
+
+(define identity-changes (hasheq 'n-clusters 4 'connectivity 'pairwise 'c 3))
+
+(define (ways X options)
+  (define base (single-linkage-params #:n-clusters 6 #:c 5))
+  (define (estimated e)
+    (result->lists (agglomerative-clustering-model (fit e X))))
+  (list
+   (result->lists (apply-options single-linkage-fit options X))
+   (result->lists (single-linkage-fit X #:params (apply-options single-linkage-params options)))
+   (result->lists (apply-options single-linkage-fit (hash-set options 'params base) X))
+   (result->lists (single-linkage-fit X #:params (apply-options single-linkage-params options base)))
+   (estimated (apply-options agglomerative-clustering options))
+   (estimated (agglomerative-clustering (apply-options single-linkage-params options)))
+   (estimated (apply-options estimator-set-params options (agglomerative-clustering)))))
+
+(test-gpu "a keyword is the same as a set with that keyword, through single-linkage-fit and the estimator"
+  (define X (mat (integer-grid 300 2 20 3) 'float32))
+  (for* ([k (in-range 3)]
+         [keys (in-list (combinations '(n-clusters connectivity c) k))])
+    (define options
+      (for/hasheq ([key (in-list keys)])
+        (values key (hash-ref identity-changes key))))
+    (match-define (list keyword set on-base set-on-base by-keyword by-set by-update) (ways X options))
+    (define label (format "~a" keys))
+    (check-equal? set keyword label)
+    (check-equal? set-on-base on-base label)
+    (for ([estimated (in-list (list by-keyword by-set by-update))])
+      (check-equal? estimated keyword label))))
 
 (test-gpu "errors are named after the generic that was called"
   (define X (mat hand-rows 'float32))

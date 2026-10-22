@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml agglomerative-clustering estimator-params)
-         (only-in cuml/cluster single-linkage-fit single-linkage-result-labels)
+         (only-in cuml/cluster single-linkage-fit single-linkage-params single-linkage-result-labels)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in racket/flonum flsingle)
          (only-in racket/list count range split-at)
@@ -9,7 +9,6 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* dtype)
-         (only-in threading ~>)
          (only-in "private/dbscan-data.rkt" integer-grid mat same-partition?)
          (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
@@ -128,10 +127,11 @@
           (count outcome-cut? outcomes)
           (count outcome-agree? outcomes)))
 
-(test-twin "T4: cuml.AgglomerativeClustering's default parameters are the estimator's"
+(test-twin "T4: cuml.AgglomerativeClustering's default parameters are single-linkage-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
   (define mapped (twin-params theirs '(handle)))
-  (define ours (~> (agglomerative-clustering) estimator-params (hash-remove 'resources)))
+  (define ours (single-linkage-params))
   (printf "twin params: ~s\n" theirs)
-  (check-equal? mapped ours))
+  (check-equal? mapped ours)
+  (check-equal? (estimator-params (agglomerative-clustering)) ours))

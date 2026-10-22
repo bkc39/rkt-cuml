@@ -9,6 +9,7 @@ packet (§4) has the detail.
 
 | leg | behaviour | where | rkt-cuml |
 |---|---|---|---|
+| 2 #16 | k-means is not reproducible run to run on one input, batch size and `random_state`: on 4096-row blobs the k-means++ n-init 3 winner changes and float32 random init flips single rows (float atomics); 5 of 32 blob cases changed labels or n-iter over 5 calls, as much at a repeated batch 32768 as at 7, 100, 4095 or 4096 | `kmeans/` | documented (`current-batch-samples`); the batch test weighs a batch against default refits |
 | 3 #21 | `max_mbytes_per_batch` too small gives batch size 0, then `ceildiv(n, 0)`: SIGFPE | `dbscan/dbscan.cuh`, `dbscan/runner.cuh:121` | refused |
 | 3 #21 | `metric="precomputed"` on a non-square X reads out of bounds | `dbscan/` | refused |
 | 3 #21 | the cosine branch divides column j by row j's norm: wrong, order- and scale-dependent labels; out of bounds when d > n | `dbscan/vertexdeg/algo.cuh:173-184` | own unit rows on the euclidean path |

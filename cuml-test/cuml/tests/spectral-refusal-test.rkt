@@ -1,6 +1,9 @@
 #lang racket/base
 
-(require (only-in cuml/cluster spectral-clustering-fit spectral-clustering-fit-graph)
+(require (only-in cuml/cluster
+                  spectral-clustering-fit
+                  spectral-clustering-fit-graph
+                  spectral-clustering-params)
          (only-in racket/function const curry)
          (only-in racket/list make-list)
          (only-in racket/match match)
@@ -246,6 +249,17 @@
    (row "G9 before G13"
         (index-message "rows" 7 10)
         (fault (graph-edit (graph-map-vals ring past-sum) #:rows (set-entry 7 10))))))
+
+(test-case "an affinity other than nearest-neighbors in params is refused before the GPU is touched"
+  (for ([affinity (in-list '(precomputed rbf))])
+    (check-cuml-error
+     'logic
+     (format "spectral-clustering-fit: affinity: expected nearest-neighbors, got ~a" affinity)
+     (lambda ()
+       (spectral-clustering-fit 'X
+                                #:params (spectral-clustering-params #:affinity affinity)
+                                #:n-clusters 0
+                                #:resources 'unused)))))
 
 (test-gpu "spectral-clustering-fit refuses each bad argument with its message"
   (for ([r (in-list (dense-rows))])

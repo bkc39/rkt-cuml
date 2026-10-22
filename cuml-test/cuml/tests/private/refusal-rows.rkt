@@ -10,8 +10,8 @@
 
 (struct row (id message call))
 
-(define (check-row who r [thunk (row-call r)])
-  (check-cuml-error 'logic (format "~a: ~a" who (row-message r)) thunk))
+(define (check-row name r [thunk (row-call r)])
+  (check-cuml-error 'logic (format "~a: ~a" name (row-message r)) thunk))
 
 (define (with-row bad #:then [then '()])
   (list*->device-matrix (append '((1 1) (2 3)) (list bad) '((4 4) (5 6)) (list '(+nan.0 0)) then)
