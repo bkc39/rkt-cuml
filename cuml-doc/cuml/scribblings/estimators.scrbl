@@ -29,8 +29,8 @@ An implementation follows these rules, which nothing enforces:
        true, and leaves its argument unchanged;}
  @item{the methods that take @racket[y] and @racket[sample-weight] default
        both to @racket[#f];}
- @item{@racket[estimator-params] returns an immutable @racket[hasheq] keyed
-       by the constructor's keywords as symbols;}
+ @item{@racket[estimator-params] returns an immutable @racket[hasheq] of its
+       hyperparameters, keyed by name;}
  @item{@racket[estimator-set-params] returns a new, unfitted estimator.}]
 
 @defthing[gen:estimator any/c]{
@@ -86,15 +86,15 @@ Whether @racket[estimator] was returned by a @racket[fit].}
 
 @defproc[(estimator-params [estimator estimator?]) (and/c hash? hash-eq? immutable?)]{
 
-The parameters of @racket[estimator], keyed by its constructor's keywords as
-symbols.}
+The parameters of @racket[estimator]: its hyperparameters, keyed by name.}
 
-@defproc[(estimator-set-params [estimator estimator?] [params hash?]) estimator?]{
+@defproc[(estimator-set-params [estimator estimator?] [changes hash? (hasheq)]) estimator?]{
 
 An unfitted estimator with the parameters of @racket[estimator] updated by
-@racket[params], a hash of some of the keys of
-@racket[(estimator-params estimator)]. With an empty @racket[params] it is an
-unfitted copy.}
+@racket[changes], a hash of some of the keys of
+@racket[(estimator-params estimator)]. With an empty @racket[changes] it is an
+unfitted copy. It also takes each parameter as a keyword, which wins over the same key in
+@racket[changes].}
 
 @defproc[(predict [predictor predictor?] [X any/c]) any/c]{
 
@@ -158,7 +158,8 @@ and, through the fallback, a clusterer:
 
 @declare-exporting[cuml]
 
-@defproc[(kmeans [#:init init
+@defproc[(kmeans [params (or/c #f hash?) #f]
+                 [#:init init
                   (or/c 'scalable-k-means++ 'k-means++ 'random device-matrix?)
                   'scalable-k-means++]
                  [#:n-clusters n-clusters exact-positive-integer?
@@ -168,22 +169,26 @@ and, through the fallback, a clusterer:
                  [#:n-init n-init (or/c 'auto exact-positive-integer?) 'auto]
                  [#:random-state random-state exact-nonnegative-integer? 0]
                  [#:oversampling-factor oversampling-factor (and/c real? (>=/c 0)) 2.0]
-                 [#:max-samples-per-batch max-samples-per-batch exact-nonnegative-integer? 32768]
+                 [#:max-samples-per-batch max-samples-per-batch
+                  (or/c #f (integer-in 0 2147483647))
+                  #f]
                  [#:resources resources (or/c #f device-resources?) #f])
          kmeans?]{
 
-An unfitted k-means estimator, with the parameters of @racket[kmeans-fit].
-It is an estimator, predictor, clusterer, transformer and scorer, and checks
-nothing until it is fitted. @racket[n-clusters] is resolved here: changing
-@racket[init] later with @racket[estimator-set-params] keeps it.
+An unfitted estimator with the hyperparameters @racket[(kmeans-params params ...)].
+@racket[max-samples-per-batch] and @racket[resources] are settings, not hyperparameters:
+@racket[#f] reads @racket[current-batch-samples] and @racket[(current-device-resources)] at each
+call. @racket[fit] and @racket[estimator-set-params] keep them, @racket[equal?] compares them and
+the printer shows them when given, but @racket[estimator-params] omits them. It is an estimator,
+predictor, clusterer, transformer and scorer, and checks nothing until it is fitted.
+@racket[n-clusters] is resolved here: changing @racket[init] later with
+@racket[estimator-set-params] keeps it.
 
 @racket[fit] is @racket[kmeans-fit] with these parameters and the
 @racket[sample-weight]; @racket[predict], @racket[transform] and
 @racket[score] are @racket[kmeans-predict], @racket[kmeans-transform] and
 @racket[kmeans-score] on the fitted centroids; @racket[fit-predict] returns
-the fit's labels. @racket[y] is ignored. Each call runs on
-@racket[resources], or with @racket[#f] on the calling thread's
-@racket[(current-device-resources)]. Errors are @racket[kmeans-fit]'s, named
+the fit's labels. @racket[y] is ignored. Errors are @racket[kmeans-fit]'s, named
 after the generic that was called; @racket[predict], @racket[transform] and
 @racket[score] on an unfitted estimator raise @racket[exn:fail:cuml] of kind
 @racket['logic].
@@ -204,6 +209,7 @@ km
 (score fitted X)
 (hash-ref (estimator-params km) 'n-clusters)
 (fitted? (estimator-set-params fitted (hasheq 'max-iter 10)))
+(estimator-set-params km #:max-iter 10)
 (eval:error (predict km X))
 ]}
 

@@ -1,7 +1,14 @@
 #lang racket/base
 
 (require (only-in cuml estimator-params kmeans)
-         (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result kmeans-score kmeans-transform)
+         (only-in cuml/cluster
+                  current-batch-samples
+                  kmeans-fit
+                  kmeans-params
+                  kmeans-predict
+                  kmeans-result
+                  kmeans-score
+                  kmeans-transform)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list take)
@@ -329,7 +336,8 @@
    (largest 'float64)
    (if (null? off-by-one) "none" off-by-one)))
 
-(define unbound-twin-params '(verbose output-type device-buffer-samples init-size))
+(define unbound-twin-params
+  '(verbose output-type device-buffer-samples init-size max-samples-per-batch))
 
 (define (twin-key key)
   (~> key symbol->string (regexp-replace* #rx"_" _ "-") string->symbol))
@@ -348,7 +356,8 @@
                   [name (in-value (twin-key key))]
                   #:unless (memq name unbound-twin-params))
       (values name (twin-value name value))))
-  (define ours (hash-remove (estimator-params (kmeans)) 'resources))
   (printf "twin params: ~s\n" theirs)
-  (check-equal? (sort (hash-keys mapped) symbol<?) (sort (hash-keys ours) symbol<?))
-  (check-equal? mapped ours))
+  (check-equal? (sort (hash-keys mapped) symbol<?) (sort (hash-keys (kmeans-params)) symbol<?))
+  (check-equal? mapped (kmeans-params))
+  (check-equal? (estimator-params (kmeans)) (kmeans-params))
+  (check-equal? (current-batch-samples) (hash-ref theirs 'max_samples_per_batch)))

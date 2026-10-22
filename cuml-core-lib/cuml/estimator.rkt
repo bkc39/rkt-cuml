@@ -1,13 +1,14 @@
 #lang racket/base
 
-(require (only-in racket/generic define-generics define/generic raise-support-error))
+(require (only-in racket/generic define-generics define/generic raise-support-error)
+         (only-in racket/match match*))
 
 (provide gen:estimator
          estimator?
          fit
          fitted?
          estimator-params
-         estimator-set-params
+         (rename-out [set-params estimator-set-params])
          gen:predictor
          predictor?
          predict
@@ -50,3 +51,22 @@
                     (generic-transform (fit transformer X y #:sample-weight sample-weight) X))])
 
 (define-generics scorer (score scorer X [y] #:sample-weight [sample-weight]) #:requires (score))
+
+(define (keyword->symbol kw)
+  (string->symbol (keyword->string kw)))
+
+(define set-params
+  (procedure-rename
+   (make-keyword-procedure
+    (lambda (kws vals estimator [changes (hasheq)])
+      (match* (kws changes)
+        [(_ (not (? hash?))) (raise-argument-error 'estimator-set-params "hash?" changes)]
+        [('() _) (estimator-set-params estimator changes)]
+        [(_ _)
+         (estimator-set-params estimator
+                               (for/fold ([merged (for/hash ([(key value) (in-hash changes)])
+                                                    (values key value))])
+                                         ([kw (in-list kws)]
+                                          [value (in-list vals)])
+                                 (hash-set merged (keyword->symbol kw) value)))])))
+   'estimator-set-params))

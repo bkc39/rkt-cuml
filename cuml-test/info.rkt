@@ -6,11 +6,12 @@
 (define version "0.1")
 (define deps '("base"))
 (define build-deps
-  '("cuml-cluster-lib" "cuml-core-lib"
-                       "cuml-lib"
-                       ("raft" #:version "0.2")
-                       "rackunit-lib"
-                       "threading-lib"))
+  '("at-exp-lib" "cuml-cluster-lib"
+                 "cuml-core-lib"
+                 "cuml-lib"
+                 ("raft" #:version "0.2")
+                 "rackunit-lib"
+                 "threading-lib"))
 (define pkg-desc "Tests for cuml")
 (define pkg-authors '(bkc))
 (define license 'Apache-2.0)

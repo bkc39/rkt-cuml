@@ -4,8 +4,16 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 cache_dir=/var/tmp/rkt-cuml-resyntax-cache
+suite=(--refactoring-suite "(file \"$PWD/scripts/resyntax-rules.rkt\")" cuml-recommendations)
 
 pr_base() {
+  if [ -n "${RESYNTAX_BASE:-}" ]; then
+    git merge-base HEAD "$RESYNTAX_BASE" || {
+      echo "resyntax: HEAD and RESYNTAX_BASE=$RESYNTAX_BASE have no merge base" >&2
+      return 1
+    }
+    return
+  fi
   if ! git remote get-url origin >/dev/null 2>&1; then
     git merge-base HEAD master
     return
@@ -21,9 +29,11 @@ cache_key() {
     echo "$1"
     git diff "$1" -- '*.rkt' '*.scrbl'
     raco pkg show --scope user --full-checksum resyntax
-    cat scripts/resyntax.sh
+    cat scripts/resyntax.sh scripts/resyntax-rules.rkt
   } | sha256sum | cut -d' ' -f1
 }
+
+raco test scripts/resyntax-rules-test.rkt
 
 key=""
 if [ $# -gt 0 ]; then
@@ -31,7 +41,7 @@ if [ $# -gt 0 ]; then
 else
   base_ref=$(pr_base)
   key=$(cache_key "$base_ref")
-  echo "resyntax: against $base_ref, the merge base with the PR's base branch"
+  echo "resyntax: against $base_ref, the merge base with ${RESYNTAX_BASE:-the base branch of the PR}"
 fi
 
 if [ -n "$key" ] && [ "${RESYNTAX_NO_CACHE:-0}" != 1 ] && [ -e "$cache_dir/$key" ]; then
@@ -40,14 +50,14 @@ if [ -n "$key" ] && [ "${RESYNTAX_NO_CACHE:-0}" != 1 ] && [ -e "$cache_dir/$key"
 fi
 
 rc=0
-out=$(resyntax analyze --local-git-repository . "$base_ref" --analyzer-timeout 30000 2>&1) || rc=$?
+out=$(resyntax analyze "${suite[@]}" --local-git-repository . "$base_ref" --analyzer-timeout 30000 2>&1) || rc=$?
 echo "$out"
 if [ "$rc" -ne 0 ]; then
   echo "resyntax exited $rc without completing the analysis" >&2
   exit 1
 fi
 if grep -qE "resyntax: .*\.rkt:[0-9]+:[0-9]+ \[" <<<"$out"; then
-  echo "resyntax found refactoring suggestions; run: resyntax fix --local-git-repository . $base_ref" >&2
+  echo "resyntax found refactoring suggestions; run: resyntax fix ${suite[0]} '${suite[1]}' ${suite[2]} --local-git-repository . $base_ref" >&2
   exit 1
 fi
 echo "resyntax: no suggestions against $base_ref"
