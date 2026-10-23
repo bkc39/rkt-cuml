@@ -20,8 +20,8 @@ A multi-package repository in typed-racket's style: every package is
 | Path | Package | Holds |
 |---|---|---|
 | `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging) |
-| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, `define-hyperparameters`, `define-codes` and `define/who` in `hyperparameters.rkt` and `define-who.rkt`, and the loader of `libcumlrkt_cluster.so`) |
-| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`) |
+| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, `define-hyperparameters`, `define-codes` and `define/who` in `hyperparameters.rkt` and `define-who.rkt`, and the loader of `libcumlrkt_cluster.so`) |
+| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
@@ -240,12 +240,12 @@ replace each when raft offers a public form:
 
 | Module | Bindings | Used by |
 |---|---|---|
-| `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `dbscan-refusal-test`, `private/device-memory`, `private/python-env` |
-| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test` |
-| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `private/process-memory` |
+| `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
+| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, the `kmeans-*`, `dbscan-*`, `linkage-*` and `agglomerative-*` tests, `private/process-memory`, `private/python-env` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -257,7 +257,10 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions, weights, blank arrays) and tolerances (`tolerance`, `close?`, `scaled-close?`) |
 | `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical`, `same-partition?`, `pick` (the elements at a list of indices) and `fitted-lists` (`dbscan-fit` composed with `result->lists`) |
 | `linkage-data` | `connectivities`, the single-linkage fixtures (the hand grids, the tie line, `group-rows`, `two-far`), the host oracles (`linkage-oracle`: a Prim minimum spanning tree, the minimax cophenetic matrix, `oracle-bounds` and `oracle-partition` for the cuts), `children->labels`, `children-heights`, `children-cophenetic`, `valid-dendrogram-problems`, `partition-refines?` and `linked-lists` (`single-linkage-fit` composed with `result->lists`) |
+| `spectral-data` | the spectral fixtures (`blobs`, `circles`, `moons` in float32, `sparse-blocks`, `cliques`, `repeat-each`, and the shared `three-blobs`, `three-blobs-matrix` and `three-blocks`), the `fit-case` struct (a named fixture with its truth, k, options and comparison) and its constructor `planted` (options default to none, comparison to `'labels`), the `graph` struct and its transforms (`knn-graph`, the host kNN connectivity graph; `permute-graph`, `graph-shuffle`, `graph-map-vals`, `graph-edit` with `set-entry`, `graph-upper`, `graph-scale-upper`, `graph-dense`), `graph->vectors` and `edited-vectors` (`graph-edit`, then `graph->vectors`), `planted?`, and `labels` and `graph-labels` (the two fits composed with the labels' host list) |
+| `refusal-rows` | the refusal tables' `row` struct (id, message, call), `check-row name row`, and the squared-norm cases' `with-row` and `norm-message` |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
+| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`) |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables

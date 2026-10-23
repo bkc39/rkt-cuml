@@ -55,10 +55,13 @@ cumlrkt_family(cluster
   SOURCES cluster/src/blobs.cpp cluster/src/cluster.cpp cluster/src/dbscan.cpp
           cluster/src/dbscan_device.cu cluster/src/kmeans.cpp
           cluster/src/linkage.cpp cluster/src/linkage_device.cu
+          cluster/src/spectral.cpp cluster/src/spectral_device.cu
   TESTS cluster/tests/cluster_test.cpp cluster/tests/dbscan_refusal_test.cpp
         cluster/tests/dbscan_test.cpp cluster/tests/kmeans_test.cpp
         cluster/tests/kmeans_refusal_test.cpp cluster/tests/linkage_refusal_test.cpp
-        cluster/tests/linkage_test.cpp
+        cluster/tests/linkage_test.cpp cluster/tests/spectral_graph_refusal_test.cpp
+        cluster/tests/spectral_refusal_test.cpp
+        cluster/tests/spectral_test.cpp
 )
 
 cumlrkt_add_tidy_target(tidy)

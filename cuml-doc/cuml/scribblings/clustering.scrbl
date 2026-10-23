@@ -273,12 +273,8 @@ bytes, the memory of each batch of the pairwise distances; @racket[#f] or
 @racket[resources]. @racket[params], from @racket[dbscan-params], gives every
 hyperparameter a keyword omits.
 
-@bold{Cosine boundary.} The fit runs on a unit-row copy of @racket[X] in its
-dtype. A pair at distance exactly @racket[eps] is included when those rows are
-exact, as one-hot rows are, and every pair is included at @racket[eps] 2 or
-more. Otherwise a pair within a relative 10^-5 of @racket[eps], at 1024
-@racket['float32] columns, may fall on either side, and the tolerance grows
-with the number of columns.
+Cosine distances are computed in @racket[X]'s dtype, so a pair within rounding
+of @racket[eps] may fall on either side.
 
 Weights count towards @racket[min-samples]:
 
@@ -478,10 +474,12 @@ kind @racket['logic], leaving nothing allocated, when:
  @item{a row holds a NaN or an infinity, or its squared norm passes 2^125.}]
 cuML's own failures, such as a @racket['knn] graph it could not join (raise
 @racket[c]), raise @racket[exn:fail:cuml] naming the procedure, with nothing
-allocated, and running out of device memory has kind @racket['oom]. An
-@racket[X] that is not a device array, or @racket[resources] that were
-released, raises raft's @racket[exn:fail:raft] naming the procedure, and a
-number argument that does not fit the native type, such as
-@racket[#:n-clusters 2.5], raises @racket[exn:fail:contract].
+allocated, and running out of device memory has kind
+@racket['out-of-memory]. An @racket[X] that is not a device array, or
+@racket[resources] that were released, raises raft's @racket[exn:fail:raft]
+naming the procedure, and a number argument that does not fit the native type,
+such as @racket[#:n-clusters 2.5], raises @racket[exn:fail:contract].
+
+@include-section["spectral.scrbl"]
 
 @(close-eval ev)

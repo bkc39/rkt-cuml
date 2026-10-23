@@ -13,9 +13,8 @@
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes))
-
-(struct row (id message call))
+         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes)
+         (only-in "private/refusal-rows.rkt" check-row row row-call row-id))
 
 (define (other dt)
   (if (eq? dt 'float32) 'float64 'float32))
@@ -120,9 +119,6 @@
         (row "P7 length"
              "sample-weight: expected 10 elements, got 9"
              (lambda () (kmeans-score C X #:sample-weight (blank-vector 9 dt))))))
-
-(define (check-row who r thunk)
-  (check-cuml-error 'logic (format "~a: ~a" who (row-message r)) thunk))
 
 (define appliers
   (hasheq 'kmeans-predict kmeans-predict

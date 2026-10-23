@@ -8,6 +8,7 @@
 #include <initializer_list>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
+#include <rmm/cuda_stream_view.hpp>
 #include <string>
 #include <utility>
 
@@ -75,6 +76,17 @@ inline void settle(const raft::handle_t& handle) {
   raftrkt::cuda_check(
       cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),
       "cudaStreamSynchronize");
+}
+
+template <typename T>
+T read_one(const T* data, int64_t i, rmm::cuda_stream_view stream) {
+  T value{};
+  raftrkt::cuda_check(cudaMemcpyAsync(&value, data + i, sizeof(T),
+                                      cudaMemcpyDeviceToHost, stream.value()),
+                      "cudaMemcpyAsync");
+  raftrkt::cuda_check(cudaStreamSynchronize(stream.value()),
+                      "cudaStreamSynchronize");
+  return value;
 }
 
 inline void require_some(const char* name, const char* axis, int64_t extent) {

@@ -198,7 +198,8 @@
   (the batch size back in `kmeans-params`) was not applied.
   - Upstream: cuML 26.08 k-means is not reproducible run to run on one
     input, batch size and `random_state` (the k-means++ n-init 3 winner,
-    1-row flips with float32 random init); logged, not filed.
+    1-row flips with float32 random init); logged in `plans/upstream-bugs.md`,
+    not filed.
 
 ## Decisions recorded in leg 3 (DBSCAN, #8)
 
@@ -282,6 +283,46 @@
 - Pairwise is refused above 46340 rows, where cuVS's `int` count of n^2
   entries overflows, and knn is refused when its graph of 2nk entries
   passes 2^31-1. Precomputed distances are deferred (#24).
+
+## Decisions recorded in leg 5 (spectral clustering, #10)
+
+- `spectral-clustering-fit` and `spectral-clustering-fit-graph`
+  (`cuml/cluster/private/spectral.rkt`) bind the dense and the
+  rows/cols/vals overloads of `ML::SpectralClustering::fit_predict` for
+  float32, through `cuml_cluster_spectral_clustering_fit_job` and
+  `cuml_cluster_spectral_clustering_fit_graph_job`. Both return a
+  `spectral-clustering-result` of the labels. The `coo_matrix_view`
+  overload is not bound.
+- The hyperparameters are `spectral-clustering-params`, whose `affinity` is
+  `#:fixed` at `'nearest-neighbors`. `spectral-clustering-fit` is a
+  `define/who` with `#:hyperparameters spectral-clustering-params`, so it
+  takes no `#:affinity` and refuses another `affinity` in `#:params` before
+  `X` is read; `spectral-clustering-fit-graph` adds
+  `#:ignoring (n-neighbors affinity)`. The `spectral-clustering` estimator, an
+  estimator and a clusterer, is a `define-estimator` over the dense fit with
+  the setting `resources` and `#:no-sample-weight`; its constructor keeps
+  `#:affinity`, and the fit raises the refusal under the generic's name.
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** The precomputed affinity is a separate procedure over three
+    vectors and `n-samples`; a dense precomputed matrix is deferred (#28).
+  - **Q-B.** The estimator's `#:affinity` accepts only
+    `'nearest-neighbors` and refuses `'precomputed` by name (#28).
+  - **Q-C.** Self-loops in the graph are refused, with one scan and no
+    allocation: cuVS sizes its Laplacian by the diagonal entries, and
+    duplicates corrupt it.
+  - **Q-D.** Non-symmetric graphs are documented and pinned, not
+    symmetrized (#28).
+  - **Q-E.** Python's clamps are mirrored: `n-neighbors` to n−1, auto
+    `n-components` to min(k, ⌊(n−1)/3⌋); an explicit `n-components` above
+    ⌊(n−1)/3⌋ is refused.
+  - **Q-F.** Fewer than 4 samples are refused; cuVS segfaults at 2 and 3.
+  - **Q-G.** The default `eigen-tol` is `'auto` (0, as in Python), with the
+    run-to-run drift on overlapping data documented.
+  - **Q-H.** The result is a one-field struct, with room for the embedding
+    (#27).
+  - **Q-I.** Negative and non-finite weights are refused.
+- The graph is refused when its entries and samples pass 2^31-1, and the
+  dense path when its kNN graph's n(2k+1) entries would.
 
 ## Owner decisions (2026-10-17)
 

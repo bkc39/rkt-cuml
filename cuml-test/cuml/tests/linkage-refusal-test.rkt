@@ -14,21 +14,13 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/linkage-data.rkt" connectivities linked-lists))
-
-(struct row (id message call))
+         (only-in "private/linkage-data.rkt" connectivities linked-lists)
+         (only-in "private/refusal-rows.rkt" check-row norm-message row row-id with-row))
 
 (define (grid dt)
   (list*->device-matrix (for/list ([i (in-range 10)])
                           (list (add1 i) (* 2 i)))
                         #:dtype dt))
-
-(define (with-row bad)
-  (list*->device-matrix (append '((1 1) (2 3)) (list bad) '((4 4) (5 6)) (list '(+nan.0 0)))
-                        #:dtype 'float32))
-
-(define (norm-message got)
-  (format "X: row 2: expected a squared norm of at most 4.253529586511731e+37, got ~a" got))
 
 (define pairwise-message "X: pairwise connectivity holds at most 46340 rows, got 46341; use knn")
 
@@ -115,7 +107,7 @@
   (for* ([connectivity (in-list connectivities)]
          [r (in-list (fit-rows connectivity))])
     (test-case (format "~a (~a)" (row-id r) connectivity)
-      (check-cuml-error 'logic (format "single-linkage-fit: ~a" (row-message r)) (row-call r)))))
+      (check-row 'single-linkage-fit r))))
 
 (test-gpu "R3: the pairwise row limit and the knn graph size are refused before the row scan"
   (check-cuml-error 'logic

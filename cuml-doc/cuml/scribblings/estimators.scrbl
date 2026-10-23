@@ -307,5 +307,55 @@ Whether @racket[v] is an agglomerative clustering estimator.}
 The @racket[single-linkage-result] of the fit that made @racket[estimator], or
 @racket[#f] when it is unfitted.}
 
+@section[#:tag "spectral-estimator"]{Spectral clustering estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(spectral-clustering
+          [params (or/c #f hash?) #f]
+          [#:n-clusters n-clusters exact-positive-integer? 8]
+          [#:n-components n-components (or/c #f exact-positive-integer?) #f]
+          [#:random-state random-state (integer-in 0 18446744073709551615) 0]
+          [#:n-neighbors n-neighbors (and/c exact-integer? (>=/c 2)) 10]
+          [#:n-init n-init (integer-in 1 2147483647) 10]
+          [#:eigen-tol eigen-tol (or/c 'auto (and/c real? (>=/c 0))) 'auto]
+          [#:affinity affinity 'nearest-neighbors 'nearest-neighbors]
+          [#:resources resources (or/c #f device-resources?) #f])
+         spectral-clustering?]{
+
+An unfitted spectral clustering estimator with the hyperparameters
+@racket[(spectral-clustering-params params ...)], whose @racket[affinity] is
+only @racket['nearest-neighbors]. It is an estimator and a clusterer, and
+checks nothing until it is fitted. @racket[fit] is
+@racket[spectral-clustering-fit] with these parameters, and
+@racket[fit-predict] returns the fit's labels. @racket[y] is ignored, and a
+@racket[sample-weight] is refused. @racket[resources] is a setting, as for
+@racket[kmeans]: each call runs on it, or with @racket[#f] on the calling
+thread's @racket[(current-device-resources)]. Errors are
+@racket[spectral-clustering-fit]'s, named after the generic that was called.
+Printing and @racket[equal?] are as for @racket[kmeans].
+
+@examples[#:eval ev
+(define S
+  (list*->device-matrix '((0 0) (0 1) (0 2) (1 0) (1 1) (1 2)
+                          (10 0) (10 1) (10 2) (11 0) (11 1) (11 2))
+                        #:dtype 'float32))
+(define sc (spectral-clustering #:n-clusters 2 #:n-neighbors 4))
+sc
+(device-vector->list (fit-predict sc S))
+(estimator-set-params sc #:n-init 3)
+(eval:error (fit (spectral-clustering #:affinity 'precomputed) S))
+]}
+
+@defproc[(spectral-clustering? [v any/c]) boolean?]{
+
+Whether @racket[v] is a spectral clustering estimator.}
+
+@defproc[(spectral-clustering-model [estimator spectral-clustering?])
+         (or/c #f spectral-clustering-result?)]{
+
+The @racket[spectral-clustering-result] of the fit that made
+@racket[estimator], or @racket[#f] when it is unfitted.}
+
 @(close-eval host-ev)
 @(close-eval ev)
