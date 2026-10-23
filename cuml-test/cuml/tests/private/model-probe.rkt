@@ -1,12 +1,15 @@
 #lang racket/base
 
-(require (only-in cuml/core exn:fail:cuml)
-         (only-in cuml/core/private/model deposit->native-model live-anchor)
+(require (for-syntax racket/base)
+         (only-in cuml/core exn:fail:cuml)
+         (only-in cuml/core/private/hyperparameters define-codes)
+         (only-in cuml/core/private/logic-error logic-error)
+         (only-in cuml/core/private/model deposit->native-model/who live-anchor/who)
          (only-in cuml/core/private/native cuml-family-call cuml-family-library load-family)
+         (only-in cuml/core/private/release call-with-release/who)
          (only-in ffi/unsafe _fun _int _int32 _int64 _ptr get-ffi-obj)
          (only-in racket/match match-define-values)
          (only-in racket/path path-only)
-         (only-in rackunit fail)
          (only-in raft current-device-resources)
          (only-in raft/tests/private/gpu gpu-skip test-unless-skipped)
          (only-in raft/unsafe deposit define-job)
@@ -15,7 +18,6 @@
 
 (provide (struct-out counts)
          await-waiter
-         check-model-probe
          probe-counts
          probe-create-job
          probe-model
@@ -29,53 +31,50 @@
 
 (define probe (and probe-path (load-family "probe" (path-only probe-path))))
 
-(define probe-missing "no model probe library (CUML_SHIM_PROBE is not set; run inside nix develop)")
-
 (define library (and probe (cuml-family-library probe)))
 
 (define (missing . _arguments)
-  (error 'model-probe probe-missing))
+  (logic-error
+   "model-probe: no model probe library (CUML_SHIM_PROBE is not set; run inside nix develop)"))
 
-(define (entry name type)
-  (if library
-      (get-ffi-obj name library type)
-      missing))
-
-(define-syntax-parse-rule (define-probe-job id:id c-id:str params:expr)
+(define-syntax-parse-rule (define-probe-entry id:id
+                                              c-id:str
+                                              (~or* (~seq #:job params:expr) type:expr))
   (define id
-    (if probe
-        (let ()
-          (define-job id library c-id params #:exn exn:fail:cuml)
-          id)
-        missing)))
+    (cond
+      [(not library) missing]
+      [~?
+       [else (define-job id library c-id params #:exn exn:fail:cuml) id]
+       [else (get-ffi-obj c-id library type)]])))
 
-(define-probe-job probe-create-job
-                  "cuml_probe_model_create_job"
-                  (handle deposit _int64 _int32 _int32))
-(define-probe-job probe-touch-job "cuml_probe_model_touch_job" (handle view _int32 (out _int64)))
-(define-probe-job probe-release "cuml_probe_model_release_job" (handle view))
+(define-probe-entry probe-create-job
+                    "cuml_probe_model_create_job"
+                    #:job (handle deposit _int64 _int32 _int32))
+(define-probe-entry probe-touch-job
+                    "cuml_probe_model_touch_job"
+                    #:job (handle view _int32 (out _int64)))
+(define-probe-entry probe-release "cuml_probe_model_release_job" #:job (handle view))
+(define-probe-entry counts-entry
+                    "cuml_probe_model_counts"
+                    (_fun (created : (_ptr o _int64))
+                          (released : (_ptr o _int64))
+                          (destroyed : (_ptr o _int64))
+                          (stale : (_ptr o _int64))
+                          -> (status : _int)
+                          -> (values status created released destroyed stale)))
+(define-probe-entry gate-create-entry
+                    "cuml_probe_gate_create"
+                    (_fun (gate : (_ptr o _int32)) -> (status : _int) -> (values status gate)))
+(define-probe-entry gate-open-entry "cuml_probe_gate_open" (_fun _int32 -> _int))
+(define-probe-entry
+ gate-waiters-entry
+ "cuml_probe_gate_waiters"
+ (_fun _int32 (waiters : (_ptr o _int32)) -> (status : _int) -> (values status waiters)))
 
-(define counts-entry
-  (entry "cuml_probe_model_counts"
-         (_fun (created : (_ptr o _int64))
-               (released : (_ptr o _int64))
-               (destroyed : (_ptr o _int64))
-               (stale : (_ptr o _int64))
-               -> (status : _int)
-               -> (values status created released destroyed stale))))
-
-(define gate-create-entry
-  (entry "cuml_probe_gate_create"
-         (_fun (gate : (_ptr o _int32)) -> (status : _int) -> (values status gate))))
-
-(define gate-open-entry (entry "cuml_probe_gate_open" (_fun _int32 -> _int)))
-
-(define gate-waiters-entry
-  (entry "cuml_probe_gate_waiters"
-         (_fun _int32 (waiters : (_ptr o _int32)) -> (status : _int) -> (values status waiters))))
-
-(define (call who thunk)
-  ((cuml-family-call probe) who thunk))
+(define call
+  (if probe
+      (cuml-family-call probe)
+      missing))
 
 (struct counts (created released destroyed stale) #:transparent)
 
@@ -83,7 +82,7 @@
   (define-values (created released destroyed stale) (call 'probe-counts counts-entry))
   (counts created released destroyed stale))
 
-(define kind-codes (hasheq 'probe-a 1 'probe-b 2))
+(define-codes kind-code [probe-a 1] [probe-b 2])
 
 (define (probe-model #:kind [kind 'probe-a]
                      #:payload-bytes [payload-bytes 0]
@@ -91,18 +90,13 @@
                      #:release [release probe-release]
                      #:resources [resources (current-device-resources)])
   (define out (deposit #:resources resources))
-  (probe-create-job 'probe-model
-                    resources
-                    out
-                    payload-bytes
-                    region-length
-                    (hash-ref kind-codes kind kind))
+  (probe-create-job 'probe-model resources out payload-bytes region-length (kind-code kind))
   (match-define-values (m (list region))
-    (deposit->native-model 'probe-model kind out release #:opaque-bytes payload-bytes))
+    (deposit->native-model/who 'probe-model kind out release #:opaque-bytes payload-bytes))
   (values m region))
 
 (define (probe-touch m #:gate [gate -1] #:resources [resources (current-device-resources)])
-  (probe-touch-job 'probe-touch resources (live-anchor 'probe-touch m 'probe-a) gate))
+  (probe-touch-job 'probe-touch resources (live-anchor/who 'probe-touch m 'probe-a) gate))
 
 (define (await-waiter gate [seconds 5])
   (define deadline (+ (current-inexact-milliseconds) (* 1000 seconds)))
@@ -116,20 +110,13 @@
 
 (define (call-with-gate proc)
   (define gate (call 'with-gate gate-create-entry))
-  (dynamic-wind void
-                (lambda ()
-                  (proc gate (lambda () (call 'with-gate (lambda () (gate-open-entry gate))))))
-                (lambda () (call 'with-gate (lambda () (gate-open-entry gate))))))
+  (define (open!)
+    (call 'with-gate (lambda () (gate-open-entry gate))))
+  (call-with-release/who 'with-gate gate (lambda (_shut) (open!)) (lambda (held) (proc held open!))))
 
 (define-syntax-parse-rule (with-gate (gate:id open!:id) body:expr ...+)
   (call-with-gate (lambda (gate open!)
                     body ...)))
 
-(define (check-model-probe)
-  (unless probe
-    (fail probe-missing)))
-
 (define-syntax-parse-rule (test-model-probe name:expr body:expr ...+)
-  (test-unless-skipped gpu-skip name
-    (check-model-probe)
-    body ...))
+  (test-unless-skipped gpu-skip name body ...))

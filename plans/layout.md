@@ -129,7 +129,7 @@
 - The `kmeans` estimator lives in `cuml-lib/cuml/private/kmeans-estimator.rkt`
   over the `/who` forms of leg 1's procedures, which
   `cuml/cluster/private/kmeans.rkt` provides and `cuml/cluster` does not
-  export; `define/who` (`cuml/cluster/private/define-who.rkt`) defines each
+  export; `define/who` (`cuml/core/private/define-who.rkt`) defines each
   public procedure and its `/who` form from one header, and the estimator
   takes its hyperparameters from the same module's `kmeans-params` table
   (`define-hyperparameters`, see "Hyperparameter tables" below).
@@ -162,7 +162,7 @@
 
 ## Hyperparameter tables (#7, PR #16)
 
-- `define-hyperparameters` (`cuml/cluster/private/hyperparameters.rkt`)
+- `define-hyperparameters` (`cuml/core/private/hyperparameters.rkt`)
   defines a family's `<algorithm>-params` once: its keys in order, each
   default (which may read earlier keys, unless it is `#:fixed`) and its
   `#:fixed` keys. `define/who` takes the table as `#:hyperparameters`, and
@@ -337,7 +337,9 @@
   - **Q-A.** The model is a raft deposit owner: raft releases it once, on
     its reaper, with the creating handle alive, in every drop order.
   - **Q-B.** Each call runs on the caller's current resources, under a
-    native shared lock that release takes exclusively.
+    native shared lock that release takes exclusively. `use_model` takes
+    the call's stream and synchronises it before it unlocks, so a release
+    never frees memory that the call's queued kernels still read.
   - **Q-C.** Release frees the opaque members only; region arrays live
     until collected.
   - **Q-D.** Everything is private this leg; it goes public in
@@ -355,6 +357,12 @@
     from another family is refused as "not a model anchor".
 - A failed release (for one, under released resources) leaves the model
   live, and a later release succeeds.
+- A release whose thread is killed mid-release is taken over by the next
+  release; a raise or a break rolls the claim back to live.
+- `define/who`, `define-hyperparameters` and `define-codes` live in
+  `cuml/core/private/`, so cuml-core-lib's exported who-first procedures
+  are `define/who` forms like every family's, and the lint rule has no
+  path exemption.
 
 ## Owner decisions (2026-10-17)
 

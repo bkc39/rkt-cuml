@@ -209,10 +209,11 @@
   (check-equal? (problems-in renamed-exported-who-procedure)
                 '("twice takes who first and is exported: define it with define/who")))
 
-(test-case "cuml-core-lib cannot reach define/who, so its exported who-first helpers are not entry points"
-  (check-equal? (problems-in exported-who-procedure #:under "cuml-core-lib/cuml/core/private") '())
-  (check-equal? (problems-in exported-who-procedure #:under "cuml-cluster-lib/cuml/cluster/private")
-                '("twice takes who first and is exported: define it with define/who")))
+(test-case "an exported who-first procedure is a define/who in every package, cuml-core-lib included"
+  (for ([under (list "cuml-core-lib/cuml/core/private" "cuml-cluster-lib/cuml/cluster/private")])
+    (check-equal? (problems-in exported-who-procedure #:under under)
+                  '("twice takes who first and is exported: define it with define/who")
+                  under)))
 
 (test-case "a private relay that takes who is not an entry point"
   (check-equal? (problems-in private-relay) '()))

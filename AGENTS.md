@@ -19,13 +19,13 @@ A multi-package repository in typed-racket's style: every package is
 
 | Path | Package | Holds |
 |---|---|---|
-| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging; `model.rkt`, the native models: `native-model`, `deposit->native-model`, `live-anchor`, `native-model-release!`, `with-native-models`; `release.rkt`, `call-with-release` and `with-release`, restated from raft) |
-| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, `define-hyperparameters`, `define-codes` and `define/who` in `hyperparameters.rkt` and `define-who.rkt`, and the loader of `libcumlrkt_cluster.so`) |
+| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging; `logic-error.rkt`, the one `'logic` raise; `define-hyperparameters` and `define-codes` in `hyperparameters.rkt`, `define/who` in `define-who.rkt`; `model.rkt`, the native models: `native-model`, `deposit->native-model`, `live-anchor`, `native-model-release!`, `with-native-models`; `release.rkt`, `call-with-release` and `with-release`, restated from raft) |
+| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, and the loader of `libcumlrkt_cluster.so`) |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
-| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, macro templates and constructor-renamed structs, and the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who` (outside cuml-core-lib, which cannot reach `define/who`) |
+| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, macro templates and constructor-renamed structs, and the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who` |
 | `shim/` | | the C++ shims, one shared library per family, and the test-only `libcumlrkt_probe.so` (`shim/probe`, a `TEST_ONLY` family) |
 | `scripts/` | | the gate scripts, the binding census and its plan, and the repo's Resyntax suite (`resyntax-rules.rkt`, `cuml-recommendations`) |
 
@@ -93,18 +93,35 @@ device array holding the `model_kind`, and the rest are the model's arrays.
 raft releases the owner once, on its reaper, with the device set and the
 creating handle alive, whatever is dropped first (rr_resources and
 rr_buffer alias the handle and declare it before the owner), and a job pins
-every buffer passed as a `view`. So a call takes the anchor as a `view`,
-looks the model up with `use_model` (refusing another array, another kind
-or a released model) and holds a shared lock for the call; `release()`
-takes the lock exclusively and frees only the opaque members (`drop()`), on
-the creating handle's stream, never a published region. No pointer to
-caller memory survives the creating call: anything the model reads later
-is copied or owned. Racket wraps the anchor in a `native-model`
+every buffer passed as a `view`, so the model `any_model` finds outlives
+the call. So a call takes the anchor as a `view`, looks the model up with
+`use_model(anchor, name, kind, call_stream)` (refusing another array,
+another kind or a released model) and runs on its own handle's stream; the
+use holds a shared lock until it ends, and ending it synchronises
+`call_stream`, so the lock is held until the device has finished every
+kernel the call queued against the model. `release()` takes the lock
+exclusively and frees only the opaque members (`drop()`), on the creating
+handle's stream, never a published region; it can therefore not free
+memory that a use's queued work still reads, whatever stream that work is
+on. The registry is never destroyed: raft's reaper deletes models on its
+own thread, which can run after static destructors at exit
+(`never_destroyed<T>()` in `common.hpp`). No pointer to caller memory
+survives the creating call: anything the model reads later is copied or
+owned. Racket wraps the anchor in a `native-model`
 (`cuml/core/private/model.rkt`): `native-model-release!` frees at once,
-under any resources, and a second release returns at once;
-`with-native-models` releases on exit; an unreleased model is freed by the
-collector, and the creating job reports its opaque bytes as phantom bytes
-so GC pressure counts them.
+under any resources, and a second release returns at once while the first
+runs. The releasing thread claims the model by storing itself in its state;
+a raise or a break rolls the claim back to live, and a release that finds
+the claim held by a dead (killed) thread takes it over and runs the native
+release again, which does nothing the second time. `with-native-models`
+checks every binding before it holds any model, and releases on exit; its
+model arrives already evaluated, outside the extent, so control that jumps
+back into the body (a generator resume) cannot acquire again and is
+refused. An unreleased model is freed by the collector once the model and
+every region array taken from it are gone; the creating job reports its
+opaque bytes as phantom bytes, reachable from the model and from each
+region (an ephemeron table), so GC pressure counts them until the native
+owner can actually go.
 
 ### The downstream rules, inherited from rkt-raft
 
@@ -291,7 +308,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical`, `same-partition?`, `pick` (the elements at a list of indices) and `fitted-lists` (`dbscan-fit` composed with `result->lists`) |
 | `linkage-data` | `connectivities`, the single-linkage fixtures (the hand grids, the tie line, `group-rows`, `two-far`), the host oracles (`linkage-oracle`: a Prim minimum spanning tree, the minimax cophenetic matrix, `oracle-bounds` and `oracle-partition` for the cuts), `children->labels`, `children-heights`, `children-cophenetic`, `valid-dendrogram-problems`, `partition-refines?` and `linked-lists` (`single-linkage-fit` composed with `result->lists`) |
 | `spectral-data` | the spectral fixtures (`blobs`, `circles`, `moons` in float32, `sparse-blocks`, `cliques`, `repeat-each`, and the shared `three-blobs`, `three-blobs-matrix` and `three-blocks`), the `fit-case` struct (a named fixture with its truth, k, options and comparison) and its constructor `planted` (options default to none, comparison to `'labels`), the `graph` struct and its transforms (`knn-graph`, the host kNN connectivity graph; `permute-graph`, `graph-shuffle`, `graph-map-vals`, `graph-edit` with `set-entry`, `graph-upper`, `graph-scale-upper`, `graph-dense`), `graph->vectors` and `edited-vectors` (`graph-edit`, then `graph->vectors`), `planted?`, and `labels` and `graph-labels` (the two fits composed with the labels' host list) |
-| `model-probe` | the probe library (`CUML_SHIM_PROBE`) and its jobs: `probe-model` (a native model of `#:kind` with a payload and a region), `probe-touch` (a use, optionally held on a gate), `probe-release`, `probe-counts` (created, released, destroyed, stale), `with-gate`, `await-waiter`, `check-model-probe`, `test-model-probe` |
+| `model-probe` | the probe library (`CUML_SHIM_PROBE`) and its jobs: `probe-model` (a native model of `#:kind` with a payload and a region), `probe-touch` (a use, optionally held on a gate), `probe-release`, `probe-counts` (created, released, destroyed, stale), `with-gate`, `await-waiter`, `test-model-probe` (a missing library raises `exn:fail:cuml`, so the tests fail rather than skip) |
 | `refusal-rows` | the refusal tables' `row` struct (id, message, call), `check-row name row`, and the squared-norm cases' `with-row` and `norm-message` |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
 | `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`) |

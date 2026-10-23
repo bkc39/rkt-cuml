@@ -1,16 +1,19 @@
 #lang racket/base
 
 (require (for-syntax racket/base)
-         (only-in racket/match match)
+         (only-in racket/match == match match-define)
          (only-in raft current-device-resources device-vector? dtype shape)
          (only-in raft/unsafe deposit->list)
          ;; whole-module: it also provides syntax/parse at phase 1
          syntax/parse/define
-         (only-in "../../core.rkt" exn:fail:cuml)
+         (only-in "define-who.rkt" define/who)
+         (only-in "logic-error.rkt" logic-error)
          (only-in "release.rkt" with-release))
 
 (provide deposit->native-model
+         deposit->native-model/who
          live-anchor
+         live-anchor/who
          native-model-kind
          native-model-release!
          native-model-released?
@@ -19,7 +22,6 @@
 
 (struct native-model (kind [anchor #:mutable] release state phantom)
   #:constructor-name anchor->native-model
-  #:omit-define-syntaxes
   #:property prop:custom-write
   (lambda (m port _mode)
     (fprintf port
@@ -27,20 +29,25 @@
              (native-model-kind m)
              (if (native-model-released? m) " released" ""))))
 
-(define (refuse who message . args)
-  (raise (exn:fail:cuml (format "~a: ~a" who (apply format message args))
-                        (current-continuation-marks)
-                        'logic)))
+(define phantoms (make-ephemeron-hasheq))
 
 (define (anchor? a)
   (and (device-vector? a) (eq? (dtype a) 'int32) (equal? (shape a) '(1))))
 
-(define (deposit->native-model who kind d release #:opaque-bytes [opaque-bytes 0])
+(define/who (deposit->native-model who kind d release #:opaque-bytes [opaque-bytes 0])
   (match (deposit->list d)
     [(cons (? anchor? anchor) regions)
-     (values (anchor->native-model kind anchor release (box 'live) (make-phantom-bytes opaque-bytes))
-             regions)]
-    [_ (refuse who "out: region 0 is not a model anchor")]))
+     (define phantom (make-phantom-bytes opaque-bytes))
+     (for ([region (in-list regions)])
+       (hash-set! phantoms region phantom))
+     (values (anchor->native-model kind anchor release (box 'live) phantom) regions)]
+    [_ (logic-error "~a: out: region 0 is not a model anchor" who)]))
+
+(define (abandoned? state)
+  (and (thread? state) (thread-dead? state)))
+
+(define (usable? state)
+  (or (eq? state 'live) (abandoned? state)))
 
 (define (native-model-released? m)
   (eq? (unbox (native-model-state m)) 'released))
@@ -48,25 +55,40 @@
 (define (checked-model who m)
   (if (native-model? m)
       m
-      (refuse who "model: expected a native model, got ~e" m)))
+      (logic-error "~a: model: expected a native model, got ~e" who m)))
 
-(define (live-anchor who m kind)
-  (define anchor (native-model-anchor (checked-model who m)))
-  (cond
-    [(not (eq? (native-model-kind m) kind))
-     (refuse who "model: expected a ~a model, got a ~a model" kind (native-model-kind m))]
-    [(and anchor (eq? (unbox (native-model-state m)) 'live)) anchor]
-    [else (refuse who "model: expected a live model, got a released one")]))
+(define/who (live-anchor who m kind)
+  (match m
+    [(native-model (== kind) anchor _ (app unbox (? usable?)) _) anchor]
+    [(native-model (== kind) _ _ _ _)
+     (logic-error "~a: model: expected a live model, got a released one" who)]
+    [(native-model other _ _ _ _)
+     (logic-error "~a: model: expected a ~a model, got a ~a model" who kind other)]
+    [_ (logic-error "~a: model: expected a native model, got ~e" who m)]))
+
+(define (claim! state me)
+  (match (unbox state)
+    [(and seen (? usable?)) (or (box-cas! state seen me) (claim! state me))]
+    [_ #f]))
+
+(define (call-with-claim state proc)
+  (define me (current-thread))
+  (when (claim! state me)
+    (dynamic-wind void
+                  (lambda ()
+                    (proc)
+                    (set-box! state 'released))
+                  (lambda ()
+                    (when (eq? (unbox state) me)
+                      (set-box! state 'live))))))
 
 (define (release-model who m resources)
-  (define state (native-model-state m))
-  (when (box-cas! state 'live 'releasing)
-    (with-handlers ([(lambda (_) #t) (lambda (e)
-                                       (set-box! state 'live)
-                                       (raise e))])
-      ((native-model-release m) who resources (native-model-anchor m)))
-    (set-box! state 'released)
-    (set-phantom-bytes! (native-model-phantom m) 0)
+  (match-define (native-model _ anchor release state phantom) m)
+  (call-with-claim state
+                   (lambda ()
+                     (release who resources anchor)
+                     (set-phantom-bytes! phantom 0)))
+  (when (native-model-released? m)
     (set-native-model-anchor! m #f)))
 
 (define (native-model-release! m #:resources [resources (current-device-resources)])
@@ -83,8 +105,7 @@
 (define-syntax-parse-rule (with-native-models (b:model-binding ...) body:expr ...+)
   #:fail-when (check-duplicate-identifier (syntax->list #'(b.name ...))) "duplicate binding name"
   #:with (m ...) (generate-temporaries #'(b.name ...))
-  (let ([m b.model] ...)
-    (with-release
-     #:who 'with-native-models
-     ([b.name (checked-model 'with-native-models m) (released-by 'with-native-models)] ...)
-     body ...)))
+  (let ([m (checked-model 'with-native-models b.model)] ...)
+    (with-release #:who 'with-native-models
+                  ([b.name m (released-by 'with-native-models)] ...)
+                  body ...)))

@@ -4,9 +4,9 @@
                      (only-in racket/match match match-define)
                      (only-in racket/syntax format-id)
                      syntax/parse/pre)
-         (only-in cuml/core exn:fail:cuml)
          (only-in racket/match match)
-         (only-in syntax/parse/define define-syntax-parse-rule))
+         (only-in syntax/parse/define define-syntax-parse-rule)
+         (only-in "logic-error.rkt" logic-error))
 
 (provide (for-syntax key->keyword
                      keyword-checked
@@ -16,13 +16,9 @@
          absent
          define-codes
          define-hyperparameters
-         given-hash
-         logic-error)
+         given-hash)
 
 (define absent (string->uninterned-symbol "absent"))
-
-(define (logic-error message . args)
-  (raise (exn:fail:cuml (apply format message args) (current-continuation-marks) 'logic)))
 
 (define (given-hash keys arguments)
   (for/hasheq ([key (in-list keys)]
