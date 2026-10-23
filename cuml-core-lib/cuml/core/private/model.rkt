@@ -75,14 +75,14 @@
   (define me (current-thread))
   (when (claim! state me)
     (parameterize-break #f
-      (dynamic-wind void
-                    (lambda ()
-                      (release)
-                      (set-box! state 'released)
-                      (commit))
-                    (lambda ()
-                      (when (eq? (unbox state) me)
-                        (set-box! state 'live)))))
+                        (dynamic-wind void
+                                      (lambda ()
+                                        (release)
+                                        (set-box! state 'released)
+                                        (commit))
+                                      (lambda ()
+                                        (when (eq? (unbox state) me)
+                                          (set-box! state 'live)))))
     (parameterize-break (break-enabled) (void))))
 
 (define (release-model who m resources)
