@@ -19,14 +19,14 @@ A multi-package repository in typed-racket's style: every package is
 
 | Path | Package | Holds |
 |---|---|---|
-| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging) |
+| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging; `model.rkt`, the native models: `native-model`, `deposit->native-model`, `live-anchor`, `native-model-release!`, `with-native-models`; `release.rkt`, `call-with-release` and `with-release`, restated from raft) |
 | `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, `define-hyperparameters`, `define-codes` and `define/who` in `hyperparameters.rkt` and `define-who.rkt`, and the loader of `libcumlrkt_cluster.so`) |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
-| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, macro templates and constructor-renamed structs, and the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who` |
-| `shim/` | | the C++ shims, one shared library per family |
+| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, macro templates and constructor-renamed structs, and the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who` (outside cuml-core-lib, which cannot reach `define/who`) |
+| `shim/` | | the C++ shims, one shared library per family, and the test-only `libcumlrkt_probe.so` (`shim/probe`, a `TEST_ONLY` family) |
 | `scripts/` | | the gate scripts, the binding census and its plan, and the repo's Resyntax suite (`resyntax-rules.rkt`, `cuml-recommendations`) |
 
 Why several packages: a user who needs clustering installs and loads only
@@ -83,6 +83,28 @@ Each family exports `cuml_<family>_last_error`, `_last_error_kind`,
 name, plus its entry points. Each library has its own thread-local error
 slot (an inline function's static, per shared object under hidden
 visibility).
+
+### Native models
+
+A fitted model whose state cuML keeps in C++ (leg 7's HDBSCAN) is a
+`cumlrkt::model` (`shim/common/include/cumlrkt/model.hpp`), published with
+`publish_model` as a raft deposit owner: region 0 is its anchor, a one-int32
+device array holding the `model_kind`, and the rest are the model's arrays.
+raft releases the owner once, on its reaper, with the device set and the
+creating handle alive, whatever is dropped first (rr_resources and
+rr_buffer alias the handle and declare it before the owner), and a job pins
+every buffer passed as a `view`. So a call takes the anchor as a `view`,
+looks the model up with `use_model` (refusing another array, another kind
+or a released model) and holds a shared lock for the call; `release()`
+takes the lock exclusively and frees only the opaque members (`drop()`), on
+the creating handle's stream, never a published region. No pointer to
+caller memory survives the creating call: anything the model reads later
+is copied or owned. Racket wraps the anchor in a `native-model`
+(`cuml/core/private/model.rkt`): `native-model-release!` frees at once,
+under any resources, and a second release returns at once;
+`with-native-models` releases on exit; an unreleased model is freed by the
+collector, and the creating job reports its opaque bytes as phantom bytes
+so GC pressure counts them.
 
 ### The downstream rules, inherited from rkt-raft
 
@@ -170,7 +192,9 @@ gtests built with `-DCUMLRKT_SANITIZE=ON`), `CUML_ASAN_OPTIONS`,
 `CUML_UBSAN_OPTIONS`, `CUML_CUDA_DRIVER_PATH`,
 `CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH` and
 `RAFT_SHIM_PROBE` (rkt-raft's probe library, which the memory test reads the
-pool through). `PLTUSERHOME` is
+pool through) and `CUML_SHIM_PROBE` (the test-only `libcumlrkt_probe.so`,
+installed in the shim's `tests` output, which the model tests load; unset on
+a GPU host, they fail rather than skip). `PLTUSERHOME` is
 `~/.cache/rkt-cuml-devshell/<hash of the checkout path>/<hash of the rkt-raft
 and nix/racket-tools.nix store paths>`. Every install skips what is already
 installed, so a bump of either pin enters a fresh, empty home. Every shell
@@ -249,11 +273,12 @@ replace each when raft offers a public form:
 | Module | Bindings | Used by |
 |---|---|---|
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
-| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
-| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
-| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
+| `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
+| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test` |
+| `raft/tests/private/deposits` | `filled` | `model-test` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -266,6 +291,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `dbscan-data` | the DBSCAN fixtures (the hand grid, seeded integer grids, distance matrices, `repeat-rows`, the cosine margin generator), the host oracle `dbscan-oracle`, `canonical`, `same-partition?`, `pick` (the elements at a list of indices) and `fitted-lists` (`dbscan-fit` composed with `result->lists`) |
 | `linkage-data` | `connectivities`, the single-linkage fixtures (the hand grids, the tie line, `group-rows`, `two-far`), the host oracles (`linkage-oracle`: a Prim minimum spanning tree, the minimax cophenetic matrix, `oracle-bounds` and `oracle-partition` for the cuts), `children->labels`, `children-heights`, `children-cophenetic`, `valid-dendrogram-problems`, `partition-refines?` and `linked-lists` (`single-linkage-fit` composed with `result->lists`) |
 | `spectral-data` | the spectral fixtures (`blobs`, `circles`, `moons` in float32, `sparse-blocks`, `cliques`, `repeat-each`, and the shared `three-blobs`, `three-blobs-matrix` and `three-blocks`), the `fit-case` struct (a named fixture with its truth, k, options and comparison) and its constructor `planted` (options default to none, comparison to `'labels`), the `graph` struct and its transforms (`knn-graph`, the host kNN connectivity graph; `permute-graph`, `graph-shuffle`, `graph-map-vals`, `graph-edit` with `set-entry`, `graph-upper`, `graph-scale-upper`, `graph-dense`), `graph->vectors` and `edited-vectors` (`graph-edit`, then `graph->vectors`), `planted?`, and `labels` and `graph-labels` (the two fits composed with the labels' host list) |
+| `model-probe` | the probe library (`CUML_SHIM_PROBE`) and its jobs: `probe-model` (a native model of `#:kind` with a payload and a region), `probe-touch` (a use, optionally held on a gate), `probe-release`, `probe-counts` (created, released, destroyed, stale), `with-gate`, `await-waiter`, `check-model-probe`, `test-model-probe` |
 | `refusal-rows` | the refusal tables' `row` struct (id, message, call), `check-row name row`, and the squared-norm cases' `with-row` and `norm-message` |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
 | `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`) |

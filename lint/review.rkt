@@ -88,6 +88,8 @@
                                                                quote
                                                                struct
                                                                test-gpu
+                                                               test-model-probe
+                                                               test-process-memory
                                                                test-twin
                                                                test-unless-skipped
                                                                test-without-gpu)
@@ -148,12 +150,13 @@
                                body ...))))
   (pattern (test-unless-skipped reason name body ...)
     #:attr review (lambda () (review-scoped-body (list #'reason #'name) (attribute body))))
-  (pattern ((~or* test-gpu test-twin test-without-gpu) name body ...)
+  (pattern ((~or* test-gpu test-model-probe test-process-memory test-twin test-without-gpu) name
+                                                                                            body ...)
     #:attr review (lambda () (review-scoped-body (list #'name) (attribute body)))))
 
 (define (should-review? stx)
   (syntax-parse stx
-    [relay:who-relay (exported? #'relay.name)]
+    [relay:who-relay (and (exported? #'relay.name) (reaches-define/who? #'relay.name))]
     [_:who-wrapper #t]
     [_:reviewed-form #t]
     [_ #f]))
@@ -183,6 +186,12 @@
      (mark-uses #'d)]
     [#(e ...) (for-each mark-uses (attribute e))]
     [_ (void)]))
+
+(define core-library #rx"/cuml-core-lib/")
+
+(define (reaches-define/who? name)
+  (define source (syntax-source name))
+  (not (and (path-string? source) (regexp-match? core-library source))))
 
 (define provides-by-file (make-hash))
 

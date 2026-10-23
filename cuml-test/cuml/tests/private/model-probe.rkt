@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/core/private/model deposit->native-model live-anchor)
+(require (only-in cuml/core exn:fail:cuml)
+         (only-in cuml/core/private/model deposit->native-model live-anchor)
          (only-in cuml/core/private/native cuml-family-call cuml-family-library load-family)
          (only-in ffi/unsafe _fun _int _int32 _int64 _ptr get-ffi-obj)
          (only-in racket/match match-define-values)
@@ -28,27 +29,31 @@
 
 (define probe (and probe-path (load-family "probe" (path-only probe-path))))
 
-(define probe-missing
-  "no model probe library (CUML_SHIM_PROBE is not set; run inside nix develop)")
+(define probe-missing "no model probe library (CUML_SHIM_PROBE is not set; run inside nix develop)")
 
 (define library (and probe (cuml-family-library probe)))
+
+(define (missing . _arguments)
+  (error 'model-probe probe-missing))
 
 (define (entry name type)
   (if library
       (get-ffi-obj name library type)
-      (lambda _ (error 'model-probe probe-missing))))
+      missing))
 
 (define-syntax-parse-rule (define-probe-job id:id c-id:str params:expr)
   (define id
     (if probe
         (let ()
-          (define-job id library c-id params)
+          (define-job id library c-id params #:exn exn:fail:cuml)
           id)
-        (lambda _ (error 'id probe-missing)))))
+        missing)))
 
-(define-probe-job probe-create-job "cuml_probe_model_create_job" (handle deposit _int64 _int32 _int32))
+(define-probe-job probe-create-job
+                  "cuml_probe_model_create_job"
+                  (handle deposit _int64 _int32 _int32))
 (define-probe-job probe-touch-job "cuml_probe_model_touch_job" (handle view _int32 (out _int64)))
-(define-probe-job probe-release-job "cuml_probe_model_release_job" (handle view))
+(define-probe-job probe-release "cuml_probe_model_release_job" (handle view))
 
 (define counts-entry
   (entry "cuml_probe_model_counts"
@@ -56,13 +61,12 @@
                (released : (_ptr o _int64))
                (destroyed : (_ptr o _int64))
                (stale : (_ptr o _int64))
-               ->
-               (status : _int)
-               ->
-               (values status created released destroyed stale))))
+               -> (status : _int)
+               -> (values status created released destroyed stale))))
 
 (define gate-create-entry
-  (entry "cuml_probe_gate_create" (_fun (gate : (_ptr o _int32)) -> (status : _int) -> (values status gate))))
+  (entry "cuml_probe_gate_create"
+         (_fun (gate : (_ptr o _int32)) -> (status : _int) -> (values status gate))))
 
 (define gate-open-entry (entry "cuml_probe_gate_open" (_fun _int32 -> _int)))
 
@@ -81,9 +85,6 @@
 
 (define kind-codes (hasheq 'probe-a 1 'probe-b 2))
 
-(define (probe-release who resources anchor)
-  (probe-release-job who resources anchor))
-
 (define (probe-model #:kind [kind 'probe-a]
                      #:payload-bytes [payload-bytes 0]
                      #:region-length [region-length 4]
@@ -97,11 +98,7 @@
                     region-length
                     (hash-ref kind-codes kind kind))
   (match-define-values (m (list region))
-                       (deposit->native-model 'probe-model
-                                              kind
-                                              out
-                                              release
-                                              #:opaque-bytes payload-bytes))
+    (deposit->native-model 'probe-model kind out release #:opaque-bytes payload-bytes))
   (values m region))
 
 (define (probe-touch m #:gate [gate -1] #:resources [resources (current-device-resources)])
@@ -120,7 +117,8 @@
 (define (call-with-gate proc)
   (define gate (call 'with-gate gate-create-entry))
   (dynamic-wind void
-                (lambda () (proc gate (lambda () (call 'with-gate (lambda () (gate-open-entry gate))))))
+                (lambda ()
+                  (proc gate (lambda () (call 'with-gate (lambda () (gate-open-entry gate))))))
                 (lambda () (call 'with-gate (lambda () (gate-open-entry gate))))))
 
 (define-syntax-parse-rule (with-gate (gate:id open!:id) body:expr ...+)

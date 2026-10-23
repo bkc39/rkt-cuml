@@ -46,8 +46,7 @@
   (let-values ([(m _region) (model)])
     (native-model-release! m))
   (let-values ([(m _region) (model)])
-    (with-native-models ([held m])
-      (void held)))
+    (with-native-models ([held m]) (void held)))
   (define-values (m kept) (model))
   (native-model-release! m)
   kept)
@@ -57,9 +56,10 @@
   (match-define (counts c0 r0 d0 s0) before)
   (counts (- c c0) (- r r0) (- d d0) (- s s0)))
 
-(test-process-memory (format "M1: ~a rounds of ~a models, dropped or released, leave device memory flat"
-                             rounds
-                             models-per-round)
+(test-process-memory (format
+                      "M1: ~a rounds of ~a models, dropped or released, leave device memory flat"
+                      rounds
+                      models-per-round)
   (check-model-probe)
   (for ([_ (in-range 5)])
     (one-round))

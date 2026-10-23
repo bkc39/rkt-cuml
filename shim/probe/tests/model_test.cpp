@@ -1,3 +1,5 @@
+#include "cumlrkt/model.hpp"
+
 #include <cuda_runtime_api.h>
 #include <gtest/gtest.h>
 
@@ -19,7 +21,6 @@
 #include <thread>
 #include <vector>
 
-#include "cumlrkt/model.hpp"
 #include "cumlrkt/probe.h"
 #include "raftrkt/c_api.h"
 #include "raftrkt/deposit.hpp"
@@ -51,13 +52,13 @@ std::string gpu_unavailable_reason() {
   return count == 0 ? "no GPU: no CUDA device" : "";
 }
 
-#define CUMLRKT_REQUIRE_GPU()                                     \
-  do {                                                            \
-    const std::string cumlrkt_reason = gpu_unavailable_reason();  \
-    if (!cumlrkt_reason.empty()) {                                \
-      std::printf("SKIP: %s\n", cumlrkt_reason.c_str());          \
-      GTEST_SKIP() << cumlrkt_reason;                             \
-    }                                                             \
+#define CUMLRKT_REQUIRE_GPU()                                    \
+  do {                                                           \
+    const std::string cumlrkt_reason = gpu_unavailable_reason(); \
+    if (!cumlrkt_reason.empty()) {                               \
+      std::printf("SKIP: %s\n", cumlrkt_reason.c_str());         \
+      GTEST_SKIP() << cumlrkt_reason;                            \
+    }                                                            \
   } while (0)
 
 struct session {
@@ -73,8 +74,7 @@ session open_session() {
   EXPECT_EQ(rr_resources_create(0, &s.resources), RR_OK) << rr_last_error();
   EXPECT_EQ(rr_resources_handle(s.resources, &s.raw), RR_OK) << rr_last_error();
   s.handle = static_cast<const raft::handle_t*>(s.raw);
-  EXPECT_EQ(rr_holder_create(s.resources, &s.holder), RR_OK)
-      << rr_last_error();
+  EXPECT_EQ(rr_holder_create(s.resources, &s.holder), RR_OK) << rr_last_error();
   EXPECT_EQ(rr_holder_record(s.holder, &s.record), RR_OK) << rr_last_error();
   return s;
 }
@@ -82,6 +82,13 @@ session open_session() {
 void close_session(const session& s) {
   rr_holder_free(s.holder);
   rr_resources_free(s.resources);
+}
+
+// Everything allocated on the session's stream is freed before the session.
+void in_session(const std::function<void(const session&)>& body) {
+  const session s = open_session();
+  body(s);
+  close_session(s);
 }
 
 struct counts {
@@ -93,9 +100,9 @@ struct counts {
 
 counts counts_now() {
   counts c;
-  EXPECT_EQ(cuml_probe_model_counts(&c.created, &c.released, &c.destroyed,
-                                    &c.stale),
-            RR_OK)
+  EXPECT_EQ(
+      cuml_probe_model_counts(&c.created, &c.released, &c.destroyed, &c.stale),
+      RR_OK)
       << cuml_probe_last_error();
   return c;
 }
@@ -171,84 +178,108 @@ TEST(Model, AFailedPublishDeletesTheModelAndUnregistersIt) {
   close_session(s);
 }
 
-TEST(Model, LookupRefusesAnythingButALiveModelOfTheKind) {
-  CUMLRKT_REQUIRE_GPU();
-  const session s = open_session();
-  const auto stream = raft::resource::get_cuda_stream(*s.handle);
-  rmm::device_uvector<int32_t> other(1, stream);
+void refuse_non_anchors(const session& s) {
+  rmm::device_uvector<int32_t> other(
+      1, raft::resource::get_cuda_stream(*s.handle));
   const rr_view plain = raftrkt::region(other);
   std::atomic<int> destroyed{0};
-  test_model b(*s.handle, model_kind::probe_b, destroyed);
-  const rr_view anchor = b.anchor_region();
-  rr_view retyped = anchor;
+  test_model m(*s.handle, model_kind::probe_a, destroyed);
+  rr_view retyped = m.anchor_region();
   retyped.dtype = RR_DTYPE_FLOAT32;
   const std::array<const rr_view*, 2> others{&plain, &retyped};
   for (const rr_view* view : others) {
-    expect_refusal([&] { static_cast<void>(cumlrkt::any_model(view, "model")); },
-                   "model: expected a model anchor, got another array");
+    expect_refusal(
+        [&] { static_cast<void>(cumlrkt::any_model(view, "model")); },
+        "model: expected a model anchor, got another array");
   }
-  expect_refusal([&] { static_cast<void>(cumlrkt::any_model(nullptr, "model")); },
-                 "model is NULL");
   expect_refusal(
-      [&] {
-        static_cast<void>(
-            cumlrkt::use_model<test_model>(&anchor, "model", model_kind::probe_a));
-      },
-      "model: expected a probe-a model, got a probe-b model");
-  EXPECT_EQ(cumlrkt::use_model<test_model>(&anchor, "model", model_kind::probe_b)
-                .operator->(),
-            &b);
+      [&] { static_cast<void>(cumlrkt::any_model(nullptr, "model")); },
+      "model is NULL");
+  EXPECT_STREQ(cumlrkt::kind_name(model_kind::probe_a), "probe-a");
+  EXPECT_STREQ(cumlrkt::kind_name(model_kind::probe_b), "probe-b");
+}
+
+TEST(Model, LookupRefusesAnArrayThatIsNotAnAnchor) {
+  CUMLRKT_REQUIRE_GPU();
+  in_session(refuse_non_anchors);
+}
+
+void refuse_kind_and_release(const session& s) {
+  std::atomic<int> destroyed{0};
+  test_model b(*s.handle, model_kind::probe_b, destroyed);
+  const rr_view anchor = b.anchor_region();
+  const auto use_as = [&](model_kind kind) {
+    static_cast<void>(cumlrkt::use_model<test_model>(&anchor, "model", kind));
+  };
+  expect_refusal([&] { use_as(model_kind::probe_a); },
+                 "model: expected a probe-a model, got a probe-b model");
+  EXPECT_EQ(
+      cumlrkt::use_model<test_model>(&anchor, "model", model_kind::probe_b)
+          .operator->(),
+      &b);
   EXPECT_TRUE(b.release());
   EXPECT_FALSE(b.release());
   EXPECT_EQ(b.drops(), 1);
-  expect_refusal(
-      [&] {
-        static_cast<void>(
-            cumlrkt::use_model<test_model>(&anchor, "model", model_kind::probe_b));
-      },
-      "model: expected a live model, got a released one");
+  expect_refusal([&] { use_as(model_kind::probe_b); },
+                 "model: expected a live model, got a released one");
   EXPECT_EQ(&cumlrkt::any_model(&anchor, "model"), &b);
-  EXPECT_STREQ(cumlrkt::kind_name(model_kind::probe_a), "probe-a");
-  EXPECT_STREQ(cumlrkt::kind_name(model_kind::probe_b), "probe-b");
-  close_session(s);
 }
 
-void expect_destroyed_once_in_order(const std::array<int, 3>& order) {
-  const counts before = counts_now();
-  const session s = open_session();
+TEST(Model, LookupRefusesAnotherKindAndAReleasedModel) {
+  CUMLRKT_REQUIRE_GPU();
+  in_session(refuse_kind_and_release);
+}
+
+void free_step(const session& s, rr_buffer* anchor, int step) {
+  switch (step) {
+    case 0:
+      rr_holder_free(s.holder);
+      break;
+    case 1:
+      rr_buffer_free(anchor);
+      break;
+    default:
+      rr_resources_free(s.resources);
+      break;
+  }
+}
+
+void expect_counted(const counts& before, const counts& expected,
+                    const std::string& label) {
+  const counts after = counts_now();
+  EXPECT_EQ(after.created - before.created, expected.created) << label;
+  EXPECT_EQ(after.released - before.released, expected.released) << label;
+  EXPECT_EQ(after.destroyed - before.destroyed, expected.destroyed) << label;
+  EXPECT_EQ(after.stale - before.stale, expected.stale) << label;
+}
+
+void adopt_anchor(const session& s, rr_buffer** anchor) {
   ASSERT_EQ(cuml_probe_model_create(s.raw, s.record, payload_bytes,
                                     region_length, CUML_PROBE_KIND_A),
             RR_OK)
       << cuml_probe_last_error();
   ASSERT_EQ(rr_holder_close(s.holder), RR_OK) << rr_last_error();
   rr_view view{};
-  rr_buffer* anchor = nullptr;
-  ASSERT_EQ(rr_holder_adopt(s.holder, 0, &view, &anchor), RR_OK)
+  ASSERT_EQ(rr_holder_adopt(s.holder, 0, &view, anchor), RR_OK)
       << rr_last_error();
+}
+
+void expect_destroyed_once_in_order(const std::array<int, 3>& order) {
+  const counts before = counts_now();
+  const session s = open_session();
+  rr_buffer* anchor = nullptr;
+  adopt_anchor(s, &anchor);
+  ASSERT_NE(anchor, nullptr);
   const std::string label = "order " + std::to_string(order[0]) +
                             std::to_string(order[1]) + std::to_string(order[2]);
   for (const int step : order) {
     EXPECT_EQ(counts_now().destroyed, before.destroyed) << label;
-    switch (step) {
-      case 0:
-        rr_holder_free(s.holder);
-        break;
-      case 1:
-        rr_buffer_free(anchor);
-        break;
-      default:
-        rr_resources_free(s.resources);
-        break;
-    }
+    free_step(s, anchor, step);
   }
-  EXPECT_TRUE(settles_within(
-      [&] { return counts_now().destroyed == before.destroyed + 1; }))
-      << label;
-  const counts after = counts_now();
-  EXPECT_EQ(after.created - before.created, 1) << label;
-  EXPECT_EQ(after.released - before.released, 0) << label;
-  EXPECT_EQ(after.destroyed - before.destroyed, 1) << label;
-  EXPECT_EQ(after.stale - before.stale, 0) << label;
+  EXPECT_TRUE(settles_within([&] {
+    return counts_now().destroyed == before.destroyed + 1;
+  })) << label;
+  expect_counted(before, {1, 0, 1, 0}, label);
 }
 
 TEST(Model, EveryOrderOfFreeingDestroysTheModelOnceWithItsHandleAlive) {
@@ -264,9 +295,7 @@ TEST(Model, EveryOrderOfFreeingDestroysTheModelOnceWithItsHandleAlive) {
   EXPECT_EQ(rr_release_failure_count(), failures);
 }
 
-TEST(Model, AUseBlocksReleaseUntilItEnds) {
-  CUMLRKT_REQUIRE_GPU();
-  const session s = open_session();
+void block_release_while_used(const session& s) {
   std::atomic<int> destroyed{0};
   test_model m(*s.handle, model_kind::probe_a, destroyed);
   const rr_view anchor = m.anchor_region();
@@ -281,7 +310,11 @@ TEST(Model, AUseBlocksReleaseUntilItEnds) {
   ASSERT_EQ(releasing.wait_for(settle_limit), std::future_status::ready);
   EXPECT_TRUE(releasing.get());
   EXPECT_EQ(m.drops(), 1);
-  close_session(s);
+}
+
+TEST(Model, AUseBlocksReleaseUntilItEnds) {
+  CUMLRKT_REQUIRE_GPU();
+  in_session(block_release_while_used);
 }
 
 std::vector<int32_t> read_region(const rr_view& view) {
@@ -292,23 +325,29 @@ std::vector<int32_t> read_region(const rr_view& view) {
   return host;
 }
 
+void expect_one_int32(const rr_view& anchor) {
+  EXPECT_EQ(anchor.dtype, RR_DTYPE_INT32);
+  EXPECT_EQ(anchor.rank, 1);
+  EXPECT_EQ(anchor.shape[0], 1);
+}
+
+void expect_anchor_holds(int32_t kind) {
+  const session s = open_session();
+  ASSERT_EQ(cuml_probe_model_create(s.raw, s.record, 0, region_length, kind),
+            RR_OK)
+      << cuml_probe_last_error();
+  ASSERT_EQ(s.record->count, 2);
+  expect_one_int32(s.record->regions[0]);
+  EXPECT_EQ(read_region(s.record->regions[0]), std::vector<int32_t>{kind});
+  EXPECT_EQ(read_region(s.record->regions[1]),
+            (std::vector<int32_t>{0, 1, 2, 3}));
+  close_session(s);
+}
+
 TEST(Model, TheAnchorIsOneInt32HoldingTheKind) {
   CUMLRKT_REQUIRE_GPU();
-  for (const int32_t kind : {CUML_PROBE_KIND_A, CUML_PROBE_KIND_B}) {
-    const session s = open_session();
-    ASSERT_EQ(cuml_probe_model_create(s.raw, s.record, 0, region_length, kind),
-              RR_OK)
-        << cuml_probe_last_error();
-    ASSERT_EQ(s.record->count, 2);
-    const rr_view& anchor = s.record->regions[0];
-    EXPECT_EQ(anchor.dtype, RR_DTYPE_INT32);
-    EXPECT_EQ(anchor.rank, 1);
-    EXPECT_EQ(anchor.shape[0], 1);
-    EXPECT_EQ(read_region(anchor), std::vector<int32_t>{kind});
-    EXPECT_EQ(read_region(s.record->regions[1]),
-              (std::vector<int32_t>{0, 1, 2, 3}));
-    close_session(s);
-  }
+  expect_anchor_holds(CUML_PROBE_KIND_A);
+  expect_anchor_holds(CUML_PROBE_KIND_B);
 }
 
 }  // namespace

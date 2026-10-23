@@ -324,6 +324,38 @@
 - The graph is refused when its entries and samples pass 2^31-1, and the
   dense path when its kNN graph's n(2k+1) entries would.
 
+## Decisions recorded in leg 6 (native models, #11)
+
+- A fitted model whose state lives in C++ is a `cumlrkt::model`
+  (`shim/common/include/cumlrkt/model.hpp`): an anchor (one int32 holding
+  its `model_kind`) plus the model's arrays, published as one raft deposit.
+  Racket wraps it in a `native-model` (`cuml/core/private/model.rkt`).
+  Leg 6 has no public surface and no fitted model; leg 7's HDBSCAN is the
+  first, with the member layout the spec's §8 checked against cuML 26.08
+  (`CondensedHierarchy` is move-constructible, not move-assignable).
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** The model is a raft deposit owner: raft releases it once, on
+    its reaper, with the creating handle alive, in every drop order.
+  - **Q-B.** Each call runs on the caller's current resources, under a
+    native shared lock that release takes exclusively.
+  - **Q-C.** Release frees the opaque members only; region arrays live
+    until collected.
+  - **Q-D.** Everything is private this leg; it goes public in
+    `cuml/core` with docs and examples in leg 7.
+  - **Q-E.** The name is `native-model` / `with-native-models`, since
+    "handle" already means `raft::handle_t`.
+  - **Q-F.** The test object is a test-only `libcumlrkt_probe.so`
+    (`CUML_SHIM_PROBE`), built by `cumlrkt_family(... TEST_ONLY)` into the
+    shim's `tests` output and never staged.
+  - **Q-G.** `call-with-release` is restated in
+    `cuml/core/private/release.rkt`; an rkt-raft issue asks for
+    `with-release` and an explicit deposit release in `raft/unsafe`.
+  - **Q-H.** A concurrent second release returns at once.
+  - **Q-I.** The registry is header-only, one per family library; a model
+    from another family is refused as "not a model anchor".
+- A failed release (for one, under released resources) leaves the model
+  live, and a later release succeeds.
+
 ## Owner decisions (2026-10-17)
 
 - The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require
