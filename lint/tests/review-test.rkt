@@ -3,19 +3,20 @@
 (require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
          (only-in rackunit check-equal? test-case))
 
-(define (call-with-module-file forms proc #:under [under "lint"])
+(define (call-with-temporary-directory proc)
   (define root (make-temporary-directory "review-~a"))
-  (define directory (build-path root under))
-  (define file (build-path directory "module.rkt"))
-  (dynamic-wind void
-                (lambda ()
-                  (make-directory* directory)
-                  (with-output-to-file file
-                                       (lambda ()
-                                         (displayln "#lang racket/base")
-                                         (for-each writeln forms)))
-                  (proc file))
-                (lambda () (delete-directory/files root))))
+  (dynamic-wind void (lambda () (proc root)) (lambda () (delete-directory/files root))))
+
+(define (call-with-module-file forms proc #:under [under "lint"])
+  (call-with-temporary-directory (lambda (root)
+                                   (define directory (build-path root under))
+                                   (define file (build-path directory "module.rkt"))
+                                   (make-directory* directory)
+                                   (with-output-to-file file
+                                                        (lambda ()
+                                                          (displayln "#lang racket/base")
+                                                          (for-each writeln forms)))
+                                   (proc file))))
 
 (define (problems-in forms #:under [under "lint"])
   (call-with-module-file forms
