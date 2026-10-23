@@ -44,7 +44,7 @@
     [_ (logic-error "~a: out: region 0 is not a model anchor" who)]))
 
 (define (abandoned? state)
-  (and (thread? state) (thread-dead? state)))
+  (and (thread? state) (not (thread-running? state))))
 
 (define (usable? state)
   (or (eq? state 'live) (abandoned? state)))
@@ -71,25 +71,27 @@
     [(and seen (? usable?)) (or (box-cas! state seen me) (claim! state me))]
     [_ #f]))
 
-(define (call-with-claim state proc)
+(define (call-with-claim state release commit)
   (define me (current-thread))
   (when (claim! state me)
-    (dynamic-wind void
-                  (lambda ()
-                    (proc)
-                    (set-box! state 'released))
-                  (lambda ()
-                    (when (eq? (unbox state) me)
-                      (set-box! state 'live))))))
+    (parameterize-break #f
+      (dynamic-wind void
+                    (lambda ()
+                      (release)
+                      (set-box! state 'released)
+                      (commit))
+                    (lambda ()
+                      (when (eq? (unbox state) me)
+                        (set-box! state 'live)))))
+    (parameterize-break (break-enabled) (void))))
 
 (define (release-model who m resources)
   (match-define (native-model _ anchor release state phantom) m)
   (call-with-claim state
                    (lambda ()
                      (release who resources anchor)
-                     (set-phantom-bytes! phantom 0)))
-  (when (native-model-released? m)
-    (set-native-model-anchor! m #f)))
+                     (set-phantom-bytes! phantom 0))
+                   (lambda () (set-native-model-anchor! m #f))))
 
 (define (native-model-release! m #:resources [resources (current-device-resources)])
   (release-model 'native-model-release! m resources))

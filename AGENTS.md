@@ -111,9 +111,10 @@ owned. Racket wraps the anchor in a `native-model`
 (`cuml/core/private/model.rkt`): `native-model-release!` frees at once,
 under any resources, and a second release returns at once while the first
 runs. The releasing thread claims the model by storing itself in its state;
-a raise or a break rolls the claim back to live, and a release that finds
-the claim held by a dead (killed) thread takes it over and runs the native
-release again, which does nothing the second time. `with-native-models`
+a raise rolls the claim back to live, a break during the release lets it
+finish and is then delivered, and a release that finds the claim held by a
+thread that is no longer running (killed, or suspended by a kill) takes it
+over and runs the native release again, which does nothing the second time. `with-native-models`
 checks every binding before it holds any model, and releases on exit; its
 model arrives already evaluated, outside the extent, so control that jumps
 back into the body (a generator resume) cannot acquire again and is
