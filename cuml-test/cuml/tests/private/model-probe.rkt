@@ -8,7 +8,7 @@
          (only-in cuml/core/private/native cuml-family-call cuml-family-library load-family)
          (only-in cuml/core/private/release call-with-release/who)
          (only-in ffi/unsafe _fun _int _int32 _int64 _ptr get-ffi-obj)
-         (only-in racket/match match-define-values)
+         (only-in racket/match match-define match-define-values)
          (only-in racket/path path-only)
          (only-in raft current-device-resources)
          (only-in raft/tests/private/gpu gpu-skip test-unless-skipped)
@@ -17,7 +17,9 @@
          syntax/parse/define)
 
 (provide (struct-out counts)
+         MiB
          await-waiter
+         counts-
          probe-counts
          probe-create-job
          probe-model
@@ -81,6 +83,13 @@
 (define (probe-counts)
   (define-values (created released destroyed stale) (call 'probe-counts counts-entry))
   (counts created released destroyed stale))
+
+(define (counts- after before)
+  (match-define (counts c r d s) after)
+  (match-define (counts c0 r0 d0 s0) before)
+  (counts (- c c0) (- r r0) (- d d0) (- s s0)))
+
+(define MiB (* 1024 1024))
 
 (define-codes kind-code [probe-a 1] [probe-b 2])
 

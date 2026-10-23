@@ -11,9 +11,16 @@
          (only-in ffi/unsafe void/reference-sink)
          (only-in racket/async-channel async-channel-put make-async-channel)
          (only-in racket/generator generator yield)
-         (only-in racket/match match-define)
          (only-in racket/sandbox call-with-trusted-sandbox-configuration make-evaluator)
-         (only-in rackunit check-equal? check-exn check-false check-not-false check-pred check-true)
+         (only-in rackunit
+                  check-equal?
+                  check-exn
+                  check-false
+                  check-not-false
+                  check-pred
+                  check-true
+                  require/expose
+                  test-case)
          (only-in raft
                   current-device-resources
                   device-resources
@@ -26,8 +33,10 @@
          (only-in raft/tests/private/deposits filled)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/model-probe.rkt"
+                  MiB
                   await-waiter
                   counts
+                  counts-
                   counts-destroyed
                   counts-released
                   probe-counts
@@ -38,13 +47,9 @@
                   test-model-probe
                   with-gate))
 
-(define MiB (* 1024 1024))
-(define gate-seconds 5)
+(require/expose cuml/core/private/model (anchor->native-model native-model-anchor))
 
-(define (counts- after before)
-  (match-define (counts c r d s) after)
-  (match-define (counts c0 r0 d0 s0) before)
-  (counts (- c c0) (- r r0) (- d d0) (- s s0)))
+(define gate-seconds 5)
 
 (define (settled)
   (drain-finalizers!)
@@ -62,8 +67,7 @@
   (check-equal? (since before) expected label))
 
 (define (discard-model)
-  (let-values ([(_m _region) (probe-model)])
-    (void)))
+  (call-with-values probe-model void))
 
 (test-model-probe
  "a model is released once and destroyed once"
@@ -335,20 +339,31 @@
  (check-true (positive? touched) "no touch finished before its release")
  (check-true (positive? refused) "no touch was refused by the shim"))
 
+(define gated-payload (* 64 MiB))
+
+(define (call-with-gated-touch body #:spawn [spawn thread])
+  (define before (settled))
+  (with-gate (gate open!)
+             (define-values (m region) (probe-model #:payload-bytes gated-payload))
+             (define touched (make-channel))
+             (thread (lambda () (channel-put touched (probe-touch m #:gate gate))))
+             (check-true (await-waiter gate))
+             (define releaser (spawn (lambda () (native-model-release! m))))
+             (check-false (sync/timeout 0.3 releaser) "the release waits for the touch")
+             (define held (memory-use))
+             (body m releaser open!)
+             (check-equal? (sync/timeout gate-seconds touched) gated-payload)
+             (check-true (native-model-released? m))
+             (check-equal? (format "~a" m) "#<native-model probe-a released>")
+             (check-equal? (counts-released (since before)) 1)
+             (define freed (- held (memory-use)))
+             (check-true (>= freed (- gated-payload heap-noise)) (format "fell ~a bytes" freed))
+             (void/reference-sink region)))
+
 (test-model-probe "a release waits for a gated touch, and finishes once the gate opens"
-                  (with-gate (gate open!)
-                             (define-values (m region) (probe-model #:payload-bytes MiB))
-                             (define touched (make-channel))
-                             (thread (lambda () (channel-put touched (probe-touch m #:gate gate))))
-                             (check-true (await-waiter gate))
-                             (define releaser (thread (lambda () (native-model-release! m))))
-                             (check-false (sync/timeout 0.5 releaser)
-                                          "the release waits for the touch")
-                             (open!)
-                             (check-equal? (sync/timeout gate-seconds touched) MiB)
-                             (check-not-false (sync/timeout gate-seconds releaser))
-                             (check-true (native-model-released? m))
-                             (void/reference-sink region)))
+                  (call-with-gated-touch (lambda (_m releaser open!)
+                                           (open!)
+                                           (check-not-false (sync/timeout gate-seconds releaser)))))
 
 (define (killed-while-touching gate)
   (define-values (m region) (probe-model #:payload-bytes MiB))
@@ -366,63 +381,41 @@
                              (check-true (until-destroyed before 1)))
                   (check-delta before (counts 1 0 1 0) "destroyed once, never stale"))
 
-(define (release-killed-on spawn)
-  (define payload (* 64 MiB))
-  (define before (settled))
-  (with-gate (gate open!)
-             (define-values (m region) (probe-model #:payload-bytes payload))
-             (define toucher (thread (lambda () (probe-touch m #:gate gate))))
-             (check-true (await-waiter gate))
-             (define releaser (spawn (lambda () (native-model-release! m))))
-             (check-false (sync/timeout 0.3 releaser) "the release waits for the touch")
-             (kill-thread releaser)
-             (check-false (thread-running? releaser))
-             (open!)
-             (check-not-false (sync/timeout gate-seconds toucher))
-             (define held (memory-use))
-             (native-model-release! m)
-             (check-true (native-model-released? m))
-             (check-equal? (format "~a" m) "#<native-model probe-a released>")
-             (check-equal? (counts-released (since before)) 1)
-             (define freed (- held (memory-use)))
-             (check-true (>= freed (- payload heap-noise)) (format "fell ~a bytes" freed))
-             (check-equal? (with-native-models ([x m]) 'ran) 'ran)
-             (check-cuml-error 'logic
-                               (string-append "probe-touch: " released-message)
-                               (lambda () (probe-touch m)))
-             (void/reference-sink region)))
+(define (released-after-kill m releaser open!)
+  (kill-thread releaser)
+  (check-false (thread-running? releaser))
+  (open!)
+  (native-model-release! m)
+  (check-equal? (with-native-models ([x m]) 'ran) 'ran)
+  (check-cuml-error 'logic
+                    (string-append "probe-touch: " released-message)
+                    (lambda () (probe-touch m))))
 
 (test-model-probe "a release whose thread was killed is finished by the next release"
-                  (release-killed-on thread))
+                  (call-with-gated-touch released-after-kill))
 
-(test-model-probe "a release whose thread was suspended by a kill is finished by the next release"
-                  (release-killed-on thread/suspend-to-kill))
+(test-model-probe
+ "a release whose suspended thread is no longer running is finished by the next release"
+ (call-with-gated-touch released-after-kill #:spawn thread/suspend-to-kill))
 
 (test-model-probe
  "a break during a release lets the release finish, then reaches the releasing thread"
- (define payload (* 64 MiB))
- (define before (settled))
- (with-gate (gate open!)
-            (define-values (m region) (probe-model #:payload-bytes payload))
-            (define toucher (thread (lambda () (probe-touch m #:gate gate))))
-            (check-true (await-waiter gate))
-            (define outcome (make-channel))
-            (define releaser
-              (thread (lambda ()
-                        (channel-put outcome
-                                     (with-handlers ([exn:break? (lambda (_) 'break)])
-                                       (native-model-release! m)
-                                       'finished)))))
-            (check-false (sync/timeout 0.3 releaser) "the release waits for the touch")
-            (define held (memory-use))
-            (break-thread releaser)
-            (open!)
-            (check-not-false (sync/timeout gate-seconds toucher))
-            (check-equal? (sync/timeout gate-seconds outcome) 'break)
-            (check-not-false (sync/timeout gate-seconds releaser))
-            (check-true (native-model-released? m))
-            (check-equal? (format "~a" m) "#<native-model probe-a released>")
-            (check-equal? (counts-released (since before)) 1)
-            (define freed (- held (memory-use)))
-            (check-true (>= freed (- payload heap-noise)) (format "fell ~a bytes" freed))
-            (void/reference-sink region)))
+ (define outcome (make-channel))
+ (define (spawn release)
+   (thread (lambda ()
+             (channel-put outcome
+                          (with-handlers ([exn:break? (lambda (_) 'break)])
+                            (release)
+                            'finished)))))
+ (call-with-gated-touch (lambda (_m releaser open!)
+                          (break-thread releaser)
+                          (open!)
+                          (check-equal? (sync/timeout gate-seconds outcome) 'break)
+                          (check-not-false (sync/timeout gate-seconds releaser)))
+                        #:spawn spawn))
+
+(test-case "a later release clears the anchor of a model whose releaser died after it was released"
+  (define m
+    (anchor->native-model 'probe-a 'stand-in-anchor void (box 'released) (make-phantom-bytes 0)))
+  (native-model-release! m #:resources #f)
+  (check-false (native-model-anchor m)))

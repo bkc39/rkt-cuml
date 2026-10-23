@@ -73,8 +73,8 @@
 
 (define (call-with-claim state release commit)
   (define me (current-thread))
-  (when (claim! state me)
-    (parameterize-break #f
+  (parameterize-break #f
+                      (when (claim! state me)
                         (dynamic-wind void
                                       (lambda ()
                                         (release)
@@ -82,8 +82,8 @@
                                         (commit))
                                       (lambda ()
                                         (when (eq? (unbox state) me)
-                                          (set-box! state 'live)))))
-    (parameterize-break (break-enabled) (void))))
+                                          (set-box! state 'live))))))
+  (parameterize-break (break-enabled) (void)))
 
 (define (release-model who m resources)
   (match-define (native-model _ anchor release state phantom) m)
@@ -91,7 +91,9 @@
                    (lambda ()
                      (release who resources anchor)
                      (set-phantom-bytes! phantom 0))
-                   (lambda () (set-native-model-anchor! m #f))))
+                   (lambda () (set-native-model-anchor! m #f)))
+  (when (native-model-released? m)
+    (set-native-model-anchor! m #f)))
 
 (define (native-model-release! m #:resources [resources (current-device-resources)])
   (release-model 'native-model-release! m resources))

@@ -11,7 +11,9 @@
          (only-in raft/tests/private/probe probe-pool-used)
          (only-in "private/device-memory.rkt" process-device-bytes)
          (only-in "private/model-probe.rkt"
+                  MiB
                   counts
+                  counts-
                   counts-created
                   counts-destroyed
                   probe-counts
@@ -26,7 +28,6 @@
                   sample-used
                   test-process-memory))
 
-(define MiB (* 1024 1024))
 (define rounds 200)
 (define sample-every 50)
 (define models-per-round 4)
@@ -45,11 +46,6 @@
                     (lambda (m kept)
                       (native-model-release! m)
                       kept)))
-
-(define (counts- after before)
-  (match-define (counts c r d s) after)
-  (match-define (counts c0 r0 d0 s0) before)
-  (counts (- c c0) (- r r0) (- d d0) (- s s0)))
 
 (struct baseline (failures used bytes live threads counts))
 
