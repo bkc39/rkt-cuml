@@ -19,15 +19,15 @@ A multi-package repository in typed-racket's style: every package is
 
 | Path | Package | Holds |
 |---|---|---|
-| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/core/private/` (the shared loader and staging) |
-| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`), `cuml/cluster/private/` (the bodies and the loader of `libcumlrkt_cluster.so`) |
-| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core` and every family |
+| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging) |
+| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, `define-hyperparameters` and `define/who` in `hyperparameters.rkt` and `define-who.rkt`, and the loader of `libcumlrkt_cluster.so`) |
+| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
-| `lint/` | cuml-lint | the `raco review` plugin for the test forms |
+| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, macro templates and constructor-renamed structs, and the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who` |
 | `shim/` | | the C++ shims, one shared library per family |
-| `scripts/` | | the gate scripts, the binding census and its plan |
+| `scripts/` | | the gate scripts, the binding census and its plan, and the repo's Resyntax suite (`resyntax-rules.rkt`, `cuml-recommendations`) |
 
 Why several packages: a user who needs clustering installs and loads only
 the clustering shim, and each family's native dependencies stay its own. A
@@ -36,7 +36,8 @@ truly needs), never on cuml-lib or another family; `scripts/check-layout.rkt`
 and `raco setup --check-pkg-deps --unused-pkg-deps` gate it. Family packages
 export algorithm-specific procedures (`kmeans-fit`); bare algorithm names
 (`kmeans`) are reserved for cuml-lib's estimator wrappers, and
-`check-layout.rkt` holds the reserved list.
+`check-layout.rkt` holds the reserved list and checks the public modules of
+the families and of cuml-core-lib against it.
 
 ## Owner rules
 
@@ -58,6 +59,10 @@ bite here:
    500 lines.
 6. **Test programs are quoted forms**, fixtures are files (`.py` twins).
 7. **Every review finding gets a regression test** that fails without its fix.
+8. **No lint suppressions** (`;; noqa`, `#|review: ignore|#`) in new code:
+   teach `lint/review.rkt` the form instead. `#|review: ignore|#` stays on
+   `info.rkt` files and pure re-export facades; the `no-noqa` gate allowlists
+   the rest.
 
 ## Architecture
 
@@ -127,8 +132,14 @@ the families will follow once it lands.
 - [ ] `shim/<family>/{include/cumlrkt/<family>.h,src,tests}` and one
       `cumlrkt_family(<family> ...)` line in `shim/CMakeLists.txt`.
 - [ ] `families` in `flake.nix` (staging, packages list).
-- [ ] cuml-lib: dep, `implies`, re-export in `cuml/main.rkt`; the estimator
-      wrapper later, its bare name added to `reserved-names` in
+- [ ] cuml-lib: dep, `implies`, re-export in `cuml/main.rkt`.
+- [ ] The hyperparameters as one `define-hyperparameters` table
+      (`<algorithm>-params`), the entry points as `define/who` with
+      `#:hyperparameters <algorithm>-params`.
+- [ ] The estimator wrapper in `cuml-lib/cuml/private/<algorithm>-estimator.rkt`,
+      one `define-estimator` over the table and the family's `/who`
+      procedures (so errors name the generic), re-exported from
+      `cuml/main.rkt`, its bare name in `reserved-names` in
       `scripts/check-layout.rkt`.
 - [ ] The family's package in the `pkg-deps` gate (`.racket-dev.rktd`).
 - [ ] A chapter in `cuml-doc` and its examples.
@@ -186,7 +197,7 @@ wait below 30 GB available. Never two shim builds at once.
 
 ### Gates
 
-native, format, no-syntax-rule, no-raw-malloc, gpu-suite-signals, layout,
+native, format, no-syntax-rule, no-raw-malloc, no-noqa, gpu-suite-signals, layout,
 pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
@@ -210,6 +221,16 @@ installs it from there first. rkt-polars' `threading-doc` builds against
 that pin, so the `layout` check fails unless both `threading-lib` trees
 have the same version and the same sources.
 
+`resyntax` (`scripts/resyntax.sh`) runs `scripts/resyntax-rules-test.rkt`,
+then Resyntax with the `cuml-recommendations` suite (the default
+recommendations and `cuml-rules`) against the merge base with the PR's base
+branch, which it asks `gh` for. `RESYNTAX_BASE=<ref>` names the base
+instead, for a stacked branch with no PR yet or no `gh`:
+`RESYNTAX_BASE=origin/cluster/kmeans-6 scripts/resyntax.sh`. Resyntax does
+not visit a module's top level as a body, so `who-pair-to-define/who` fixes
+pairs in internal definition contexts and the `review` lint refuses them at
+module level.
+
 ### Test support
 
 raft has no public test support yet, so the tests import raft internals;
@@ -218,9 +239,9 @@ replace each when raft offers a public form:
 | Module | Bindings | Used by |
 |---|---|---|
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/python-env` |
-| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test`, `kmeans-memory-test` |
-| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `private/process-memory` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test` |
+| `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory` |
 | `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, the `kmeans-*` tests, `private/process-memory`, `private/python-env` |
 
@@ -233,6 +254,11 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `device-memory` | `process-device-bytes`, `no-process-memory-reason`, `process-memory-skip` |
 | `kmeans-data` | the k-means fixtures (the grids, blobs, host conversions, weights, blank arrays) and tolerances (`tolerance`, `close?`, `scaled-close?`) |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin` |
+
+`hyperparameters-test` and `estimator-support-test` define their own tables
+(`widget-params`, `gadget-params`) and estimators to test the macros apart
+from k-means; `hyperparameters-doc-test` reads the manual's `defproc`s and
+checks them against the tables.
 
 Every SKIP line the GPU suite allows matches one ERE in
 `scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there

@@ -3,6 +3,8 @@
 #|review: ignore|#
 
 (require cuml/cluster
-         cuml/core)
+         cuml/core
+         cuml/estimator
+         "private/kmeans-estimator.rkt")
 
-(provide (all-from-out cuml/cluster cuml/core))
+(provide (all-from-out cuml/cluster cuml/core cuml/estimator "private/kmeans-estimator.rkt"))

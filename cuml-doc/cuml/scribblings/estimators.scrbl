@@ -1,0 +1,226 @@
+#lang scribble/manual
+@(require scribble/example
+          (for-label cuml
+                     racket/base
+                     racket/contract/base
+                     racket/generic
+                     raft))
+
+@(define host-ev (make-base-eval #:lang 'racket/base '(require cuml/estimator)))
+@(define ev (make-base-eval #:lang 'racket/base '(require cuml raft)))
+
+@title[#:tag "estimators"]{Estimators}
+
+@section[#:tag "estimator-interface"]{The estimator interface}
+
+@defmodule[cuml/estimator #:no-declare]
+@declare-exporting[cuml/estimator cuml]
+
+An estimator is a value that holds its parameters and, once fitted, what it
+learned. The interface is a set of generic interfaces from
+@racketmodname[racket/generic], one per capability; an estimator implements
+@racket[gen:estimator] and whichever of the others it supports. Requiring
+@racketmodname[cuml/estimator] loads no native library, so a host-side
+library can implement it.
+
+An implementation follows these rules, which nothing enforces:
+@itemlist[
+ @item{@racket[fit] returns a new estimator for which @racket[fitted?] is
+       true, and leaves its argument unchanged;}
+ @item{the methods that take @racket[y] and @racket[sample-weight] default
+       both to @racket[#f];}
+ @item{@racket[estimator-params] returns an immutable @racket[hasheq] of its
+       hyperparameters, keyed by name;}
+ @item{@racket[estimator-set-params] returns a new, unfitted estimator.}]
+
+@defthing[gen:estimator any/c]{
+
+The interface of every estimator, with the methods @racket[fit],
+@racket[fitted?], @racket[estimator-params] and
+@racket[estimator-set-params], all required.}
+
+@defthing[gen:predictor any/c]{
+
+An estimator that labels new samples: the method @racket[predict],
+required.}
+
+@defthing[gen:clusterer any/c]{
+
+An estimator that clusters the samples it is fitted on: the method
+@racket[fit-predict]. Its fallback, for an estimator that is also a
+@racket[predictor?], is @racket[predict] after @racket[fit]; for any other
+it raises @racket[exn:fail:support] without fitting.}
+
+@defthing[gen:transformer any/c]{
+
+An estimator that maps samples to new features: the methods
+@racket[transform], required, and @racket[fit-transform], whose fallback is
+@racket[transform] after @racket[fit].}
+
+@defthing[gen:scorer any/c]{
+
+An estimator that scores samples: the method @racket[score], required.}
+
+@deftogether[(@defproc[(estimator? [v any/c]) boolean?]
+              @defproc[(predictor? [v any/c]) boolean?]
+              @defproc[(clusterer? [v any/c]) boolean?]
+              @defproc[(transformer? [v any/c]) boolean?]
+              @defproc[(scorer? [v any/c]) boolean?])]{
+
+Whether @racket[v] implements @racket[gen:estimator], @racket[gen:predictor],
+@racket[gen:clusterer], @racket[gen:transformer] or @racket[gen:scorer].}
+
+@defproc[(fit [estimator estimator?]
+              [X any/c]
+              [y any/c #f]
+              [#:sample-weight sample-weight any/c #f])
+         estimator?]{
+
+A fitted copy of @racket[estimator], fitted on the samples @racket[X], the
+targets @racket[y] and the weights @racket[sample-weight]. Fitting a fitted
+estimator fits again from its parameters.}
+
+@defproc[(fitted? [estimator estimator?]) boolean?]{
+
+Whether @racket[estimator] was returned by a @racket[fit].}
+
+@defproc[(estimator-params [estimator estimator?]) (and/c hash? hash-eq? immutable?)]{
+
+The parameters of @racket[estimator]: its hyperparameters, keyed by name.}
+
+@defproc[(estimator-set-params [estimator estimator?] [changes hash? (hasheq)]) estimator?]{
+
+An unfitted estimator with the parameters of @racket[estimator] updated by
+@racket[changes], a hash of some of the keys of
+@racket[(estimator-params estimator)]. With an empty @racket[changes] it is an
+unfitted copy. It also takes each parameter as a keyword, which wins over the same key in
+@racket[changes].}
+
+@defproc[(predict [predictor predictor?] [X any/c]) any/c]{
+
+The labels of the samples @racket[X].}
+
+@defproc[(fit-predict [clusterer clusterer?]
+                      [X any/c]
+                      [y any/c #f]
+                      [#:sample-weight sample-weight any/c #f])
+         any/c]{
+
+The labels of the samples @racket[X] after fitting @racket[clusterer] on
+them.}
+
+@defproc[(transform [transformer transformer?] [X any/c]) any/c]{
+
+The samples @racket[X] mapped to the features @racket[transformer] learned.}
+
+@defproc[(fit-transform [transformer transformer?]
+                        [X any/c]
+                        [y any/c #f]
+                        [#:sample-weight sample-weight any/c #f])
+         any/c]{
+
+The samples @racket[X] transformed after fitting @racket[transformer] on
+them.}
+
+@defproc[(score [scorer scorer?]
+                [X any/c]
+                [y any/c #f]
+                [#:sample-weight sample-weight any/c #f])
+         real?]{
+
+How well @racket[scorer] fits @racket[X], larger being better.}
+
+An estimator on host lists that splits numbers at their mean, a predictor
+and, through the fallback, a clusterer:
+
+@examples[#:eval host-ev
+(struct mean-split (cut)
+  #:methods gen:estimator
+  [(define (fit e X [y #f] #:sample-weight [w #f])
+     (mean-split (/ (apply + X) (length X))))
+   (define (fitted? e)
+     (and (mean-split-cut e) #t))
+   (define (estimator-params e)
+     (hasheq))
+   (define (estimator-set-params e params)
+     (mean-split #f))]
+  #:methods gen:predictor
+  [(define (predict e X)
+     (for/list ([x (in-list X)])
+       (if (< x (mean-split-cut e)) 0 1)))]
+  #:methods gen:clusterer
+  [])
+(fit-predict (mean-split #f) '(1 2 9 10))
+(fitted? (mean-split #f))
+]
+
+@section[#:tag "kmeans-estimator"]{k-means estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(kmeans [params (or/c #f hash?) #f]
+                 [#:init init
+                  (or/c 'scalable-k-means++ 'k-means++ 'random device-matrix?)
+                  'scalable-k-means++]
+                 [#:n-clusters n-clusters exact-positive-integer?
+                  (if (device-matrix? init) (car (shape init)) 8)]
+                 [#:max-iter max-iter exact-nonnegative-integer? 300]
+                 [#:tol tol (and/c real? (>/c 0)) 1e-4]
+                 [#:n-init n-init (or/c 'auto exact-positive-integer?) 'auto]
+                 [#:random-state random-state exact-nonnegative-integer? 0]
+                 [#:oversampling-factor oversampling-factor (and/c real? (>=/c 0)) 2.0]
+                 [#:max-samples-per-batch max-samples-per-batch
+                  (or/c #f (integer-in 0 2147483647))
+                  #f]
+                 [#:resources resources (or/c #f device-resources?) #f])
+         kmeans?]{
+
+An unfitted estimator with the hyperparameters @racket[(kmeans-params params ...)].
+@racket[max-samples-per-batch] and @racket[resources] are settings, not hyperparameters:
+@racket[#f] reads @racket[current-batch-samples] and @racket[(current-device-resources)] at each
+call. @racket[fit] and @racket[estimator-set-params] keep them, @racket[equal?] compares them and
+the printer shows them when given, but @racket[estimator-params] omits them. It is an estimator,
+predictor, clusterer, transformer and scorer, and checks nothing until it is fitted.
+@racket[n-clusters] is resolved here: changing @racket[init] later with
+@racket[estimator-set-params] keeps it.
+
+@racket[fit] is @racket[kmeans-fit] with these parameters and the
+@racket[sample-weight]; @racket[predict], @racket[transform] and
+@racket[score] are @racket[kmeans-predict], @racket[kmeans-transform] and
+@racket[kmeans-score] on the fitted centroids; @racket[fit-predict] returns
+the fit's labels. @racket[y] is ignored. Errors are @racket[kmeans-fit]'s, named
+after the generic that was called; @racket[predict], @racket[transform] and
+@racket[score] on an unfitted estimator raise @racket[exn:fail:cuml] of kind
+@racket['logic].
+
+An estimator prints the parameters that differ from the defaults, and two
+are @racket[equal?] when their parameters are and they hold the same fit or
+none.
+
+@examples[#:eval ev
+(define X
+  (list*->device-matrix '((0 0) (0 2) (2 0) (2 2) (10 10) (10 12) (12 10) (12 12))
+                        #:dtype 'float64))
+(define km (kmeans #:n-clusters 2 #:random-state 1))
+km
+(define fitted (fit km X))
+(list (fitted? km) (fitted? fitted))
+(device-vector->list (predict fitted (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
+(score fitted X)
+(hash-ref (estimator-params km) 'n-clusters)
+(fitted? (estimator-set-params fitted (hasheq 'max-iter 10)))
+(estimator-set-params km #:max-iter 10)
+(eval:error (predict km X))
+]}
+
+@defproc[(kmeans? [v any/c]) boolean?]{
+
+Whether @racket[v] is a k-means estimator.}
+
+@defproc[(kmeans-model [estimator kmeans?]) (or/c #f kmeans-result?)]{
+
+The @racket[kmeans-result] of the fit that made @racket[estimator], or
+@racket[#f] when it is unfitted.}
+
+@(close-eval host-ev)
+@(close-eval ev)

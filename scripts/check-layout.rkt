@@ -80,10 +80,19 @@
   (define package (family-package family))
   (deps-problems package (package-deps dir package) family-allowed-deps))
 
-(define (family-exports-problems dir family)
-  (for*/list ([module (in-list (public-modules dir family))]
+(define (core-public-modules dir)
+  (define collection (build-path dir "cuml-core-lib" "cuml"))
+  (if (directory-exists? collection)
+      (sort (find-files public-module-file? collection) path<?)
+      '()))
+
+(define (exports-problems modules)
+  (for*/list ([module (in-list modules)]
               [problem (in-list (reserved-problems (path->string module) (exported-names module)))])
     problem))
+
+(define (family-exports-problems dir family)
+  (exports-problems (public-modules dir family)))
 
 (define (package-version dir)
   ((get-info/full dir) 'version (lambda () #f)))
@@ -108,7 +117,8 @@
                             (package-deps dir "cuml-lib")
                             (cons "cuml-core-lib" (map family-package family-names)))
           (if exports?
-              (append-map (curry family-exports-problems dir) family-names)
+              (append (exports-problems (core-public-modules dir))
+                      (append-map (curry family-exports-problems dir) family-names))
               '())))
 
 (module+ main
@@ -190,6 +200,26 @@
      (lambda (dir)
        (check-equal? (layout-problems dir #:exports? #t)
                      (list (format "~a exports kmeans, a name reserved for cuml's estimator wrappers"
+                                   (build-path dir "cuml-toy-lib/cuml/toy.rkt")))))))
+
+  (test-case "a core module that provides a bare algorithm name is reported"
+    (call-with-tree
+     (append (toy-tree 'deps '("base" "cuml-core-lib"))
+             (list (list "cuml-core-lib/cuml/core.rkt"
+                         '(module core racket/base
+                            (provide fit
+                                     kmeans)
+                            (define fit 0)
+                            (define kmeans 0)))
+                   (list "cuml-core-lib/cuml/core/private/native.rkt"
+                         '(module native racket/base
+                            (provide kmeans)
+                            (define kmeans 0)))))
+     (lambda (dir)
+       (check-equal? (layout-problems dir #:exports? #t)
+                     (list (format "~a exports kmeans, a name reserved for cuml's estimator wrappers"
+                                   (build-path dir "cuml-core-lib/cuml/core.rkt"))
+                           (format "~a exports kmeans, a name reserved for cuml's estimator wrappers"
                                    (build-path dir "cuml-toy-lib/cuml/toy.rkt")))))))
 
   (test-case "two package directories with different versions are reported"

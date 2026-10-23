@@ -1,13 +1,22 @@
 #lang racket/base
 
-(require (only-in cuml/cluster kmeans-fit kmeans-predict kmeans-result kmeans-score kmeans-transform)
+(require (only-in cuml estimator-params kmeans)
+         (only-in cuml/cluster
+                  current-batch-samples
+                  kmeans-fit
+                  kmeans-params
+                  kmeans-predict
+                  kmeans-result
+                  kmeans-score
+                  kmeans-transform)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list take)
-         (only-in racket/match match match* match-define)
+         (only-in racket/match == match match* match-define)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in rackunit check-equal? check-not-equal? check-true test-case)
+         (only-in threading ~>)
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   close?
@@ -326,3 +335,29 @@
    (largest 'float32)
    (largest 'float64)
    (if (null? off-by-one) "none" off-by-one)))
+
+(define unbound-twin-params
+  '(verbose output-type device-buffer-samples init-size max-samples-per-batch))
+
+(define (twin-key key)
+  (~> key symbol->string (regexp-replace* #rx"_" _ "-") string->symbol))
+
+(define (twin-value key value)
+  (match* (key value)
+    [('random-state (== (json-null))) 0]
+    [(_ (? string?)) (string->symbol value)]
+    [(_ _) value]))
+
+(test-twin "cuml.KMeans's default parameters are the estimator's"
+  (match-define (hash-table ('results (list theirs)))
+    (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
+  (define mapped
+    (for*/hasheq ([(key value) (in-hash theirs)]
+                  [name (in-value (twin-key key))]
+                  #:unless (memq name unbound-twin-params))
+      (values name (twin-value name value))))
+  (printf "twin params: ~s\n" theirs)
+  (check-equal? (sort (hash-keys mapped) symbol<?) (sort (hash-keys (kmeans-params)) symbol<?))
+  (check-equal? mapped (kmeans-params))
+  (check-equal? (estimator-params (kmeans)) (kmeans-params))
+  (check-equal? (current-batch-samples) (hash-ref theirs 'max_samples_per_batch)))

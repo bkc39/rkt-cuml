@@ -1,14 +1,29 @@
 #lang racket/base
 
 (require (only-in cuml
+                  current-batch-samples
+                  estimator-params
+                  estimator-set-params
                   exn:fail:cuml
                   exn:fail:cuml?
+                  fit
+                  fit-predict
+                  fitted?
+                  gen:clusterer
+                  gen:estimator
+                  gen:predictor
+                  kmeans
                   kmeans-fit
+                  kmeans-params
                   kmeans-predict
                   kmeans-result
                   kmeans-result-centroids
+                  kmeans-result-inertia
+                  kmeans-result-labels
                   kmeans-score
-                  kmeans-transform)
+                  kmeans-transform
+                  predict
+                  score)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn test-case)
          (only-in raft
@@ -91,3 +106,59 @@
 
 (test-gpu "the manual: an inexact number argument raises exn:fail:contract"
   (check-exn exn:fail:contract? (lambda () (kmeans-fit (grid) #:n-clusters 2 #:n-init 2.5))))
+
+(struct mean-split (cut)
+  #:methods gen:estimator
+  [(define (fit _e X [_y #f] #:sample-weight [_w #f])
+     (mean-split (/ (apply + X) (length X))))
+   (define (fitted? e)
+     (and (mean-split-cut e) #t))
+   (define (estimator-params _e)
+     (hasheq))
+   (define (estimator-set-params _e _params)
+     (mean-split #f))]
+  #:methods gen:predictor
+  [(define (predict e X)
+     (for/list ([x (in-list X)])
+       (if (< x (mean-split-cut e)) 0 1)))]
+  #:methods gen:clusterer
+  [])
+
+(test-case "the manual: mean-split clusters through the fit-predict fallback"
+  (check-equal? (fit-predict (mean-split #f) '(1 2 9 10)) '(0 0 1 1))
+  (check-equal? (fitted? (mean-split #f)) #f))
+
+(test-gpu "the manual: the k-means estimator on the grid"
+  (define km (kmeans #:n-clusters 2 #:random-state 1))
+  (check-equal? (format "~v" km) "#<kmeans #:n-clusters 2 #:random-state 1>")
+  (define fitted (fit km (grid)))
+  (check-equal? (list (fitted? km) (fitted? fitted)) '(#f #t))
+  (check-equal?
+   (device-vector->list (predict fitted (list*->device-matrix '((1 1) (11 12)) #:dtype 'float64)))
+   '(1 0))
+  (check-equal? (score fitted (grid)) -16.0)
+  (check-equal? (hash-ref (estimator-params km) 'n-clusters) 2)
+  (check-equal? (fitted? (estimator-set-params fitted (hasheq 'max-iter 10))) #f)
+  (check-equal? (format "~v" (estimator-set-params km #:max-iter 10))
+                "#<kmeans #:n-clusters 2 #:max-iter 10 #:random-state 1>")
+  (check-cuml-error 'logic "predict: kmeans is not fitted" (lambda () (predict km (grid)))))
+
+(test-case "the manual: kmeans-params overrides a base and refuses an unknown key"
+  (define tight (kmeans-params #:tol 1e-6 #:n-init 3))
+  (check-equal? (hash-ref (kmeans-params tight #:n-init 5) 'n-init) 5)
+  (check-cuml-error 'logic
+                    "kmeans-params: kmeans has no parameter colour"
+                    (lambda () (kmeans-params (hasheq 'colour 'red)))))
+
+(test-gpu "the manual: a sweep over n-clusters from one set"
+  (define tight (kmeans-params #:tol 1e-6 #:n-init 3))
+  (check-equal? (for/list ([k (in-range 1 4)])
+                  (kmeans-result-inertia (kmeans-fit (grid) #:params tight #:n-clusters k)))
+                '(416.0 16.0 13.333333333333332)))
+
+(test-gpu "the manual: current-batch-samples changes no label"
+  (define (labels)
+    (device-vector->list (kmeans-result-labels (kmeans-fit (grid) #:n-clusters 2 #:random-state 1))))
+  (check-equal? (parameterize ([current-batch-samples 3])
+                  (labels))
+                (labels)))

@@ -11,8 +11,8 @@
 
 This library binds @hyperlink["https://github.com/rapidsai/cuml"]{NVIDIA
 cuML}, the RAPIDS library of machine-learning algorithms on the GPU: k-means
-clustering for now. It works on the device arrays and device resources of
-@racketmodname[raft].
+clustering, with a scikit-learn-style estimator interface. It works on the
+device arrays and device resources of @racketmodname[raft].
 
 @bold{License.} This package is distributed under @bold{Apache-2.0}.
 
@@ -26,6 +26,7 @@ Install it with @exec{raco pkg install cuml}.
 
 @local-table-of-contents[]
 
+@include-section["estimators.scrbl"]
 @include-section["clustering.scrbl"]
 
 @section[#:tag "errors"]{Errors}
