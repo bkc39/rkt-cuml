@@ -4,7 +4,8 @@
                      racket/base
                      racket/contract/base
                      racket/match
-                     raft))
+                     raft
+                     threading))
 
 @(define ev (make-base-eval #:lang 'racket/base '(require cuml raft racket/match threading)))
 
@@ -288,10 +289,10 @@ Weights count towards @racket[min-samples]:
 A precomputed matrix of the distances gives the same labels:
 
 @examples[#:eval ev #:label #f
-(define points '(0 1 2 4 6 7 8 20))
+(define positions '(0 1 2 4 6 7 8 20))
 (define D
-  (list*->device-matrix (for/list ([a (in-list points)])
-                          (for/list ([b (in-list points)])
+  (list*->device-matrix (for/list ([a (in-list positions)])
+                          (for/list ([b (in-list positions)])
                             (abs (- a b))))
                         #:dtype 'float64))
 (~> (dbscan-fit D #:eps 2 #:min-samples 4 #:metric 'precomputed)

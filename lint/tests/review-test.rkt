@@ -84,6 +84,15 @@
       (define unused 1)
       (list who x))))
 
+(define page-helpers-and-their-blocks
+  '((provide helpers
+             helpers-block
+             require-block
+             required)
+    (define-syntax-parse-rule (define-page-helpers name ...)
+      (void))
+    (define-page-helpers required require-block helpers helpers-block)))
+
 (define splicing-syntax-class-used-in-a-pattern
   '((require (for-syntax racket/base
                          syntax/parse/pre))
@@ -106,6 +115,9 @@
 (test-case "a struct that keeps its syntaxes still binds its own name"
   (check-equal? (problems-in constructor-renamed-struct-with-syntaxes)
                 '("identifier 'point' is already defined")))
+
+(test-case "define-page-helpers binds each of its names"
+  (check-equal? (problems-in page-helpers-and-their-blocks) '()))
 
 (test-case "define/who binds the name and its /who form"
   (check-equal? (problems-in who-definitions) '()))

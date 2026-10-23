@@ -220,7 +220,7 @@
           ${installRaft "$TMPDIR/rkt-raft" ""}
           ${installCuml ""}
           raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft
-          raco setup -j 4 --no-docs --check-pkg-deps --unused-pkg-deps --pkgs ${cumlPackageNames}
+          bash scripts/pkg-deps.sh ${cumlPackageNames}
           runHook postBuild
         '';
         doCheck = true;
@@ -482,7 +482,7 @@
             ${installRaft "$PLTUSERHOME/${baseNameOf (toString rkt-raft)}" "--skip-installed"}
             ${installCuml "--skip-installed"}
             RAFT_KMEANS_CANARY=${raft.kmeans-canary}/lib/libkmeans_canary.so \
-              raco setup -j 4 --pkgs raft-x86_64-linux raft
+              raco setup -j 4 --pkgs raft-x86_64-linux raft datasets-core threading-doc
             raco setup -j 4 --no-docs --pkgs ${cumlPackageNames}
           )
           _setup_rc=$?

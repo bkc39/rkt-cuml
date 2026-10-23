@@ -33,7 +33,8 @@ Why several packages: a user who needs clustering installs and loads only
 the clustering shim, and each family's native dependencies stay its own. A
 family package depends only on base, raft and cuml-core-lib (and what it
 truly needs), never on cuml-lib or another family; `scripts/check-layout.rkt`
-and `raco setup --check-pkg-deps --unused-pkg-deps` gate it. Family packages
+and `scripts/pkg-deps.sh` (`raco setup --check-pkg-deps --unused-pkg-deps`,
+red on an unused dependency too) gate it. Family packages
 export algorithm-specific procedures (`kmeans-fit`); bare algorithm names
 (`kmeans`) are reserved for cuml-lib's estimator wrappers, and
 `check-layout.rkt` holds the reserved list and checks the public modules of
@@ -158,7 +159,8 @@ scripts/gpu-suite.sh               # on the GPU host: gtests (+ ASAN/UBSAN, memc
                                    #   LD_BIND_NOW load, raco tests with the twin, the
                                    #   census; red on a SKIP not in allowed-skips.txt
 raco test --process --timeout 45 cuml-test
-scripts/render-docs.sh <dir>       # the manual, red on any warning or broken link
+scripts/render-docs.sh <dir>       # the manual, red on any warning, broken or missing link
+scripts/pkg-deps.sh <pkg> ...      # raco setup's dependency check, red on an unused one too
 nix run --max-jobs 1 --cores 4 .#copy-native-libs   # restage the shims after a C++ change
 cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loop
 ```
@@ -204,7 +206,13 @@ pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
 (`racket <plugin>/hooks/gate.rkt . all`), and `push-gates` is the pre-push
-subset. `bindings` runs the census `scripts/check-bindings.rkt`: every
+subset. The manual's link check (`scripts/check-doc-links.rkt`) runs only
+in `docs`, which is not in `push-gates` and runs on CI only on the GPU
+runner: run `docs` before any push that touches the scribblings.
+`pkg-deps` skips cuml-doc's `racket-doc` and `threading-doc` (`doc_only`:
+under `--no-docs` setup cannot see the manual's links), so it never
+reports either as unused; drop one by hand when the manual stops linking
+into it. `bindings` runs the census `scripts/check-bindings.rkt`: every
 `cuml_cluster_` export of the staged library is bound once (a `_job`'s body
 excepted), every binding is exported, and `scripts/cluster-bindings.rktd`,
 keyed by issue, plans each export; a leg flips its planned entries to due.
@@ -245,7 +253,7 @@ replace each when raft offers a public form:
 | `raft/private/job` | `executor-threads`, `jobs-live` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -265,8 +273,9 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
 (`widget-params`, `gadget-params`) and estimators to test the macros apart
-from k-means; `hyperparameters-doc-test` reads the manual's `defproc`s and
-checks them against the tables.
+from k-means; `hyperparameters-doc-test` reads the `defproc`s of
+`reference/{clustering,spectral,estimators}.scrbl` and checks them against
+the tables.
 
 Every SKIP line the GPU suite allows matches one ERE in
 `scripts/allowed-skips.txt`; a new kind of SKIP is red until a line there
@@ -298,9 +307,25 @@ kills the test outright.
 - The landing page: what the library binds, then the bold License,
   Acknowledgements and AI Disclosure paragraphs, the install line, the table
   of contents. No empty chapters.
+- Two parts, after glmnet's: the guide (`guide.scrbl`, `guide/`: Getting
+  started, Concepts with every `deftech` and the hyperparameter rule in
+  `concepts-parameters`, and one `ex-*` chapter per
+  algorithm on real `datasets-core` data) and the reference
+  (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
+  `datasets-core` is a build-dep of cuml-doc only; cuml-test gets it through
+  cuml-doc.
+- The guide's helpers are one module, `guide/helpers.rkt`: Getting started
+  shows its `require`, Examples its definitions, every guide sandbox
+  evaluates both (`utils.rkt` reads them from the file), and
+  `guide-docs-test.rkt` requires the module.
+- The guide's figures are picts from those helpers (`plot/no-gui`'s
+  `plot-pict`), drawn live by the examples: no committed images.
+  `guide-plots-test.rkt` pins the colours by label id, the sizes, and every
+  count a figure's prose names.
 - Every exported name gets a Scribble entry with live examples
   (`scribble/example`, never pasted output), each pinned in
-  `cuml-test/cuml/tests/docs-test.rkt`.
+  `cuml-test/cuml/tests/docs-test.rkt` (the reference) or
+  `guide-docs-test.rkt` (the guide).
 
 ## CI
 

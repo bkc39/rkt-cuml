@@ -79,6 +79,7 @@
                                                                define-generics
                                                                define-refactoring-rule
                                                                define-hyperparameters
+                                                               define-page-helpers
                                                                define-splicing-syntax-class
                                                                define-syntax-class
                                                                define-syntax-parse-rule
@@ -132,6 +133,10 @@
                    (~once #:omit-define-syntaxes)
                    option) ...)
     #:attr review (lambda () (recur #'(struct name (~? super) fields #:name constructor option ...))))
+  (pattern ((~and head define-page-helpers) name:id ...)
+    #:attr review (lambda ()
+                    (recur #'head)
+                    (for-each track-binding (attribute name))))
   (pattern ((~and head define/who) (name:id . formals:formal-list) body ...+)
     #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
     #:attr review (lambda ()
