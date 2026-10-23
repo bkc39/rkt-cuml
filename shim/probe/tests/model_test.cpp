@@ -15,6 +15,7 @@
 #include <memory>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
+#include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_uvector.hpp>
 #include <stdexcept>
 #include <string>
@@ -77,6 +78,10 @@ session open_session() {
   EXPECT_EQ(rr_holder_create(s.resources, &s.holder), RR_OK) << rr_last_error();
   EXPECT_EQ(rr_holder_record(s.holder, &s.record), RR_OK) << rr_last_error();
   return s;
+}
+
+rmm::cuda_stream_view stream_of(const session& s) {
+  return raft::resource::get_cuda_stream(*s.handle);
 }
 
 void close_session(const session& s) {
@@ -209,14 +214,15 @@ void refuse_kind_and_release(const session& s) {
   test_model b(*s.handle, model_kind::probe_b, destroyed);
   const rr_view anchor = b.anchor_region();
   const auto use_as = [&](model_kind kind) {
-    static_cast<void>(cumlrkt::use_model<test_model>(&anchor, "model", kind));
+    static_cast<void>(
+        cumlrkt::use_model<test_model>(&anchor, "model", kind, stream_of(s)));
   };
   expect_refusal([&] { use_as(model_kind::probe_a); },
                  "model: expected a probe-a model, got a probe-b model");
-  EXPECT_EQ(
-      cumlrkt::use_model<test_model>(&anchor, "model", model_kind::probe_b)
-          .operator->(),
-      &b);
+  EXPECT_EQ(cumlrkt::use_model<test_model>(&anchor, "model",
+                                           model_kind::probe_b, stream_of(s))
+                .operator->(),
+            &b);
   EXPECT_TRUE(b.release());
   EXPECT_FALSE(b.release());
   EXPECT_EQ(b.drops(), 1);
@@ -301,8 +307,8 @@ void block_release_while_used(const session& s) {
   const rr_view anchor = m.anchor_region();
   std::future<bool> releasing;
   {
-    const auto use =
-        cumlrkt::use_model<test_model>(&anchor, "model", model_kind::probe_a);
+    const auto use = cumlrkt::use_model<test_model>(
+        &anchor, "model", model_kind::probe_a, stream_of(s));
     releasing = std::async(std::launch::async, [&] { return m.release(); });
     EXPECT_EQ(releasing.wait_for(200ms), std::future_status::timeout);
     EXPECT_EQ(use->drops(), 0);
@@ -315,6 +321,89 @@ void block_release_while_used(const session& s) {
 TEST(Model, AUseBlocksReleaseUntilItEnds) {
   CUMLRKT_REQUIRE_GPU();
   in_session(block_release_while_used);
+}
+
+std::atomic<bool> gate_open{false};
+
+void CUDART_CB wait_for_gate(void* /*unused*/) {
+  const auto end = std::chrono::steady_clock::now() + settle_limit;
+  while (!gate_open.load() && std::chrono::steady_clock::now() < end) {
+    std::this_thread::yield();
+  }
+}
+
+class payload_model final : public cumlrkt::model {
+ public:
+  explicit payload_model(const raft::handle_t& handle)
+      : model(handle, model_kind::probe_a),
+        handle_(handle),
+        payload_(static_cast<std::size_t>(payload_bytes),
+                 raft::resource::get_cuda_stream(handle)) {}
+
+  [[nodiscard]] const std::byte* payload() const noexcept {
+    return payload_.data();
+  }
+
+ protected:
+  void drop() noexcept override {
+    try {
+      const rmm::cuda_stream_view stream =
+          raft::resource::get_cuda_stream(handle_);
+      payload_ = rmm::device_uvector<std::byte>(0, stream);
+      static_cast<void>(cudaStreamSynchronize(stream.value()));
+    } catch (...) {
+      static_cast<void>(cudaGetLastError());
+    }
+  }
+
+ private:
+  const raft::handle_t& handle_;
+  rmm::device_uvector<std::byte> payload_;
+};
+
+void copy_under_a_use(const rr_view& anchor, rmm::cuda_stream_view stream,
+                      std::byte* into, std::promise<void>& enqueued) {
+  const auto use = cumlrkt::use_model<payload_model>(
+      &anchor, "model", model_kind::probe_a, stream);
+  EXPECT_EQ(cudaLaunchHostFunc(stream.value(), wait_for_gate, nullptr),
+            cudaSuccess);
+  EXPECT_EQ(cudaMemcpyAsync(into, use->payload(),
+                            static_cast<std::size_t>(payload_bytes),
+                            cudaMemcpyDeviceToDevice, stream.value()),
+            cudaSuccess);
+  enqueued.set_value();
+}
+
+void block_release_while_the_callers_stream_reads(const session& creating) {
+  const session caller = open_session();
+  const rmm::cuda_stream_view stream = stream_of(caller);
+  {
+    payload_model m(*creating.handle);
+    const rr_view anchor = m.anchor_region();
+    rmm::device_uvector<std::byte> copy(static_cast<std::size_t>(payload_bytes),
+                                        stream);
+    gate_open.store(false);
+    std::promise<void> enqueued;
+    std::future<void> using_it = std::async(std::launch::async, [&] {
+      copy_under_a_use(anchor, stream, copy.data(), enqueued);
+    });
+    ASSERT_EQ(enqueued.get_future().wait_for(settle_limit),
+              std::future_status::ready);
+    std::future<bool> releasing =
+        std::async(std::launch::async, [&] { return m.release(); });
+    EXPECT_EQ(releasing.wait_for(200ms), std::future_status::timeout);
+    gate_open.store(true);
+    EXPECT_EQ(releasing.wait_for(settle_limit), std::future_status::ready);
+    EXPECT_TRUE(releasing.get());
+    using_it.get();
+    EXPECT_EQ(cudaStreamSynchronize(stream.value()), cudaSuccess);
+  }
+  close_session(caller);
+}
+
+TEST(Model, AReleaseWaitsForAUsesWorkOnTheCallersStream) {
+  CUMLRKT_REQUIRE_GPU();
+  in_session(block_release_while_the_callers_stream_reads);
 }
 
 std::vector<int32_t> read_region(const rr_view& view) {

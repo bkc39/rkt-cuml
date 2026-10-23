@@ -1,18 +1,21 @@
 #pragma once
 
+#include <cuda_runtime_api.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <new>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
+#include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_uvector.hpp>
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
 
+#include "cumlrkt/common.hpp"
 #include "raftrkt/array.h"
 #include "raftrkt/deposit.h"
 #include "raftrkt/deposit.hpp"
@@ -42,13 +45,8 @@ struct model_registry {
   std::unordered_map<const void*, model*> models;
 };
 
-// Never destroyed: models are deleted on raft's reaper thread, which can run
-// after static destructors at exit.
 inline model_registry& registry() noexcept {
-  alignas(model_registry) static std::byte storage[sizeof(model_registry)];
-  static model_registry* const shared =
-      ::new (static_cast<void*>(storage)) model_registry;
-  return *shared;
+  return never_destroyed<model_registry>();
 }
 
 inline void enroll(const void* anchor, model* m) {
@@ -110,8 +108,6 @@ class model {
   }
 
  protected:
-  // Frees opaque members only, never a published region, on the creating
-  // handle's stream.
   virtual void drop() noexcept = 0;
 
  private:
@@ -126,13 +122,20 @@ class model {
 template <typename M>
 class model_use {
  public:
-  model_use(M& m, const char* name)
-      : lock_(static_cast<model&>(m).guard_), model_(&m) {
+  model_use(M& m, const char* name, rmm::cuda_stream_view stream)
+      : lock_(static_cast<model&>(m).guard_), model_(&m), stream_(stream) {
     if (static_cast<model&>(m).released_) {
       throw raftrkt::logic_error(std::string(name) +
                                  ": expected a live model, got a released one");
     }
   }
+  ~model_use() {
+    static_cast<void>(cudaStreamSynchronize(stream_.value()));
+  }
+  model_use(const model_use&) = delete;
+  model_use& operator=(const model_use&) = delete;
+  model_use(model_use&&) = delete;
+  model_use& operator=(model_use&&) = delete;
 
   M& operator*() const noexcept {
     return *model_;
@@ -144,6 +147,7 @@ class model_use {
  private:
   std::shared_lock<std::shared_mutex> lock_;
   M* model_;
+  rmm::cuda_stream_view stream_;
 };
 
 inline std::size_t registered_models() {
@@ -152,8 +156,6 @@ inline std::size_t registered_models() {
   return r.models.size();
 }
 
-// The caller's view pins the anchor's buffer, and with it the model, for the
-// whole call, so the model found here outlives the call.
 inline model& any_model(const rr_view* anchor, const char* name) {
   model* found = detail::registered(*raftrkt::require(anchor, name));
   if (found == nullptr) {
@@ -165,14 +167,14 @@ inline model& any_model(const rr_view* anchor, const char* name) {
 
 template <typename M>
 model_use<M> use_model(const rr_view* anchor, const char* name,
-                       model_kind expected) {
+                       model_kind expected, rmm::cuda_stream_view stream) {
   model& found = any_model(anchor, name);
   if (found.kind() != expected) {
     throw raftrkt::logic_error(std::string(name) + ": expected a " +
                                kind_name(expected) + " model, got a " +
                                kind_name(found.kind()) + " model");
   }
-  return model_use<M>(static_cast<M&>(found), name);
+  return model_use<M>(static_cast<M&>(found), name, stream);
 }
 
 template <typename M, typename... Regions>

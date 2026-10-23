@@ -40,9 +40,7 @@ struct tallies {
 };
 
 tallies& counts() noexcept {
-  alignas(tallies) static std::byte storage[sizeof(tallies)];
-  static tallies* const shared = ::new (static_cast<void*>(storage)) tallies;
-  return *shared;
+  return cumlrkt::never_destroyed<tallies>();
 }
 
 rmm::cuda_stream_view stream_of(const raft::handle_t& handle) {
@@ -100,14 +98,12 @@ class probe_model final : public cumlrkt::model {
     return raftrkt::region(region_);
   }
 
-  int64_t touch() {
-    const rmm::cuda_stream_view stream = stream_of(handle_);
+  int64_t touch(rmm::cuda_stream_view stream) {
     if (!payload_.is_empty()) {
       raftrkt::cuda_check(
           cudaMemsetAsync(payload_.data(), 1, payload_.size(), stream.value()),
           "cudaMemsetAsync");
     }
-    settle(stream);
     return static_cast<int64_t>(payload_.size());
   }
 
@@ -142,10 +138,7 @@ struct gate_table {
 };
 
 gate_table& gates() noexcept {
-  alignas(gate_table) static std::byte storage[sizeof(gate_table)];
-  static gate_table* const shared =
-      ::new (static_cast<void*>(storage)) gate_table;
-  return *shared;
+  return cumlrkt::never_destroyed<gate_table>();
 }
 
 std::shared_ptr<gate> gate_at(int32_t id) {
@@ -251,11 +244,11 @@ int cuml_probe_model_touch(void* handle, const rr_view* anchor, int32_t gate,
                            int64_t* payload_bytes) {
   return translated([&] {
     int64_t* const answer = raftrkt::require(payload_bytes, "payload-bytes");
-    in_device_scope(handle, anchor, [&](const raft::handle_t& /*h*/) {
-      const auto use =
-          cumlrkt::use_model<probe_model>(anchor, "model", model_kind::probe_a);
+    in_device_scope(handle, anchor, [&](const raft::handle_t& h) {
+      const auto use = cumlrkt::use_model<probe_model>(
+          anchor, "model", model_kind::probe_a, stream_of(h));
       wait_at(gate);
-      *answer = use->touch();
+      *answer = use->touch(stream_of(h));
     });
   });
 }
