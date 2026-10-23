@@ -24,17 +24,10 @@
 
 namespace cumlrkt {
 
-enum class model_kind : std::uint8_t { probe_a = 1, probe_b = 2 };
-
-inline const char* kind_name(model_kind kind) noexcept {
-  switch (kind) {
-    case model_kind::probe_a:
-      return "probe-a";
-    case model_kind::probe_b:
-      return "probe-b";
-  }
-  return "unknown";
-}
+struct model_kind {
+  std::uint8_t code;
+  const char* name;
+};
 
 class model;
 
@@ -77,7 +70,7 @@ class model {
  public:
   model(const raft::handle_t& handle, model_kind kind)
       : kind_(kind), anchor_(1, raft::resource::get_cuda_stream(handle)) {
-    anchor_.set_element(0, static_cast<int32_t>(kind),
+    anchor_.set_element(0, static_cast<int32_t>(kind.code),
                         raft::resource::get_cuda_stream(handle));
     detail::enroll(anchor_.data(), this);
   }
@@ -123,12 +116,7 @@ template <typename M>
 class model_use {
  public:
   model_use(M& m, const char* name, rmm::cuda_stream_view stream)
-      : lock_(static_cast<model&>(m).guard_), model_(&m), stream_(stream) {
-    if (static_cast<model&>(m).released_) {
-      throw raftrkt::logic_error(std::string(name) +
-                                 ": expected a live model, got a released one");
-    }
-  }
+      : model_use(m, m, name, stream) {}
   ~model_use() {
     static_cast<void>(cudaStreamSynchronize(stream_.value()));
   }
@@ -145,6 +133,14 @@ class model_use {
   }
 
  private:
+  model_use(model& base, M& m, const char* name, rmm::cuda_stream_view stream)
+      : lock_(base.guard_), model_(&m), stream_(stream) {
+    if (base.released_) {
+      throw raftrkt::logic_error(std::string(name) +
+                                 ": expected a live model, got a released one");
+    }
+  }
+
   std::shared_lock<std::shared_mutex> lock_;
   M* model_;
   rmm::cuda_stream_view stream_;
@@ -169,10 +165,10 @@ template <typename M>
 model_use<M> use_model(const rr_view* anchor, const char* name,
                        model_kind expected, rmm::cuda_stream_view stream) {
   model& found = any_model(anchor, name);
-  if (found.kind() != expected) {
+  if (found.kind().code != expected.code) {
     throw raftrkt::logic_error(std::string(name) + ": expected a " +
-                               kind_name(expected) + " model, got a " +
-                               kind_name(found.kind()) + " model");
+                               expected.name + " model, got a " +
+                               found.kind().name + " model");
   }
   return model_use<M>(static_cast<M&>(found), name, stream);
 }

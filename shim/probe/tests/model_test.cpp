@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "cumlrkt/probe.h"
+#include "probe_kinds.hpp"
 #include "raftrkt/c_api.h"
 #include "raftrkt/deposit.hpp"
 
@@ -39,6 +40,8 @@ int rr_holder_adopt(rr_holder* holder, int32_t index, rr_view* view,
 namespace {
 
 using cumlrkt::model_kind;
+using cumlrkt::probe_a;
+using cumlrkt::probe_b;
 using namespace std::chrono_literals;
 
 constexpr auto settle_limit = 5s;
@@ -89,7 +92,6 @@ void close_session(const session& s) {
   rr_resources_free(s.resources);
 }
 
-// Everything allocated on the session's stream is freed before the session.
 void in_session(const std::function<void(const session&)>& body) {
   const session s = open_session();
   body(s);
@@ -167,15 +169,15 @@ TEST(Model, AFailedPublishDeletesTheModelAndUnregistersIt) {
   const std::size_t before = cumlrkt::registered_models();
   std::atomic<int> destroyed{0};
   {
-    const test_model held(*s.handle, model_kind::probe_a, destroyed);
+    const test_model held(*s.handle, probe_a, destroyed);
     EXPECT_EQ(cumlrkt::registered_models(), before + 1);
   }
   EXPECT_EQ(destroyed.load(), 1);
   expect_refusal(
       [&] {
-        cumlrkt::publish_model(s.record, "out", *s.handle,
-                               std::make_unique<test_model>(
-                                   *s.handle, model_kind::probe_a, destroyed));
+        cumlrkt::publish_model(
+            s.record, "out", *s.handle,
+            std::make_unique<test_model>(*s.handle, probe_a, destroyed));
       },
       "out: closed");
   EXPECT_EQ(destroyed.load(), 2);
@@ -188,7 +190,7 @@ void refuse_non_anchors(const session& s) {
       1, raft::resource::get_cuda_stream(*s.handle));
   const rr_view plain = raftrkt::region(other);
   std::atomic<int> destroyed{0};
-  test_model m(*s.handle, model_kind::probe_a, destroyed);
+  test_model m(*s.handle, probe_a, destroyed);
   rr_view retyped = m.anchor_region();
   retyped.dtype = RR_DTYPE_FLOAT32;
   const std::array<const rr_view*, 2> others{&plain, &retyped};
@@ -200,8 +202,6 @@ void refuse_non_anchors(const session& s) {
   expect_refusal(
       [&] { static_cast<void>(cumlrkt::any_model(nullptr, "model")); },
       "model is NULL");
-  EXPECT_STREQ(cumlrkt::kind_name(model_kind::probe_a), "probe-a");
-  EXPECT_STREQ(cumlrkt::kind_name(model_kind::probe_b), "probe-b");
 }
 
 TEST(Model, LookupRefusesAnArrayThatIsNotAnAnchor) {
@@ -211,22 +211,22 @@ TEST(Model, LookupRefusesAnArrayThatIsNotAnAnchor) {
 
 void refuse_kind_and_release(const session& s) {
   std::atomic<int> destroyed{0};
-  test_model b(*s.handle, model_kind::probe_b, destroyed);
+  test_model b(*s.handle, probe_b, destroyed);
   const rr_view anchor = b.anchor_region();
   const auto use_as = [&](model_kind kind) {
     static_cast<void>(
         cumlrkt::use_model<test_model>(&anchor, "model", kind, stream_of(s)));
   };
-  expect_refusal([&] { use_as(model_kind::probe_a); },
+  expect_refusal([&] { use_as(probe_a); },
                  "model: expected a probe-a model, got a probe-b model");
-  EXPECT_EQ(cumlrkt::use_model<test_model>(&anchor, "model",
-                                           model_kind::probe_b, stream_of(s))
-                .operator->(),
-            &b);
+  EXPECT_EQ(
+      cumlrkt::use_model<test_model>(&anchor, "model", probe_b, stream_of(s))
+          .operator->(),
+      &b);
   EXPECT_TRUE(b.release());
   EXPECT_FALSE(b.release());
   EXPECT_EQ(b.drops(), 1);
-  expect_refusal([&] { use_as(model_kind::probe_b); },
+  expect_refusal([&] { use_as(probe_b); },
                  "model: expected a live model, got a released one");
   EXPECT_EQ(&cumlrkt::any_model(&anchor, "model"), &b);
 }
@@ -303,12 +303,12 @@ TEST(Model, EveryOrderOfFreeingDestroysTheModelOnceWithItsHandleAlive) {
 
 void block_release_while_used(const session& s) {
   std::atomic<int> destroyed{0};
-  test_model m(*s.handle, model_kind::probe_a, destroyed);
+  test_model m(*s.handle, probe_a, destroyed);
   const rr_view anchor = m.anchor_region();
   std::future<bool> releasing;
   {
-    const auto use = cumlrkt::use_model<test_model>(
-        &anchor, "model", model_kind::probe_a, stream_of(s));
+    const auto use =
+        cumlrkt::use_model<test_model>(&anchor, "model", probe_a, stream_of(s));
     releasing = std::async(std::launch::async, [&] { return m.release(); });
     EXPECT_EQ(releasing.wait_for(200ms), std::future_status::timeout);
     EXPECT_EQ(use->drops(), 0);
@@ -335,7 +335,7 @@ void CUDART_CB wait_for_gate(void* /*unused*/) {
 class payload_model final : public cumlrkt::model {
  public:
   explicit payload_model(const raft::handle_t& handle)
-      : model(handle, model_kind::probe_a),
+      : model(handle, probe_a),
         handle_(handle),
         payload_(static_cast<std::size_t>(payload_bytes),
                  raft::resource::get_cuda_stream(handle)) {
@@ -367,8 +367,8 @@ class payload_model final : public cumlrkt::model {
 
 void copy_under_a_use(const rr_view& anchor, rmm::cuda_stream_view stream,
                       std::byte* into, std::promise<void>& enqueued) {
-  const auto use = cumlrkt::use_model<payload_model>(
-      &anchor, "model", model_kind::probe_a, stream);
+  const auto use =
+      cumlrkt::use_model<payload_model>(&anchor, "model", probe_a, stream);
   EXPECT_EQ(cudaLaunchHostFunc(stream.value(), wait_for_gate, nullptr),
             cudaSuccess);
   EXPECT_EQ(cudaMemcpyAsync(into, use->payload(),

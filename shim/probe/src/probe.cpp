@@ -20,6 +20,7 @@
 
 #include "cumlrkt/common.hpp"
 #include "cumlrkt/model.hpp"
+#include "probe_kinds.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/error.hpp"
 #include "raftrkt/job.hpp"
@@ -193,10 +194,14 @@ shape checked_shape(int64_t payload_bytes, int32_t region_length,
                     int32_t kind) {
   require_at_least("payload-bytes", payload_bytes, 0);
   require_at_least("region-length", region_length, 0);
-  if (kind != CUML_PROBE_KIND_A && kind != CUML_PROBE_KIND_B) {
-    throw logic_error("kind: expected 1 or 2, got " + std::to_string(kind));
+  switch (kind) {
+    case CUML_PROBE_KIND_A:
+      return {cumlrkt::probe_a, payload_bytes, region_length};
+    case CUML_PROBE_KIND_B:
+      return {cumlrkt::probe_b, payload_bytes, region_length};
+    default:
+      throw logic_error("kind: expected 1 or 2, got " + std::to_string(kind));
   }
-  return {static_cast<model_kind>(kind), payload_bytes, region_length};
 }
 
 }  // namespace
@@ -246,7 +251,7 @@ int cuml_probe_model_touch(void* handle, const rr_view* anchor, int32_t gate,
     int64_t* const answer = raftrkt::require(payload_bytes, "payload-bytes");
     in_device_scope(handle, anchor, [&](const raft::handle_t& h) {
       const auto use = cumlrkt::use_model<probe_model>(
-          anchor, "model", model_kind::probe_a, stream_of(h));
+          anchor, "model", cumlrkt::probe_a, stream_of(h));
       wait_at(gate);
       *answer = use->touch(stream_of(h));
     });
