@@ -64,6 +64,23 @@ CUMLRKT_API int cuml_cluster_kmeans_transform(void* handle,
 CUMLRKT_API void cuml_cluster_kmeans_transform_job(void* args, size_t args_len,
                                                    rr_job_outcome* outcome);
 
+#define CUML_CLUSTER_DBSCAN_METRIC_EUCLIDEAN 0
+#define CUML_CLUSTER_DBSCAN_METRIC_COSINE 1
+#define CUML_CLUSTER_DBSCAN_METRIC_PRECOMPUTED 2
+
+/* Allocates its outputs after every check and deposits them in out: region 0
+   is the n labels, region 1 the core-sample indices, ascending, both in
+   out_dtype (RR_DTYPE_INT32 or RR_DTYPE_INT64). max_mbytes_per_batch 0 is
+   cuML's automatic size. Under the cosine metric cuML runs on a copy of X. */
+CUMLRKT_API int cuml_cluster_dbscan_fit(void* handle, const rr_view* x,
+                                        const rr_view* sample_weight,
+                                        rr_deposit* out, double eps,
+                                        int32_t min_samples, int32_t metric,
+                                        int32_t out_dtype,
+                                        int64_t max_mbytes_per_batch);
+CUMLRKT_API void cuml_cluster_dbscan_fit_job(void* args, size_t args_len,
+                                             rr_job_outcome* outcome);
+
 #ifdef __cplusplus
 }
 #endif

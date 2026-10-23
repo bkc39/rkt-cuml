@@ -200,6 +200,48 @@
     input, batch size and `random_state` (the k-means++ n-init 3 winner,
     1-row flips with float32 random init); logged, not filed.
 
+## Decisions recorded in leg 3 (DBSCAN, #8)
+
+- `dbscan-fit` (`cuml/cluster/private/dbscan.rkt`) binds cuML's brute-force
+  `ML::Dbscan::fit` for float32 and float64 with int32 or int64 labels,
+  through one job, `cuml_cluster_dbscan_fit_job`. The deposit helper
+  (`deposit-for`, `cuml/cluster/private/deposit.rkt`) and the shim's argument
+  checks (`shim/cluster/src/support.hpp`) are shared with k-means.
+- The hyperparameters are `dbscan-params`; `dbscan-fit` is a `define/who`
+  with `#:hyperparameters dbscan-params`, and the `dbscan` estimator, an
+  estimator and a clusterer, is a `define-estimator` over it with the setting
+  `resources`, so `estimator-params` has no `'resources`.
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** `#:out-dtype`, Python's name, on `dbscan-fit` and as an
+    estimator parameter.
+  - **Q-B.** int32 labels over more than 2^31-1 elements are refused, not
+    switched to int64. More than 2^31-1 rows are refused at either
+    out-dtype, since raft's `make_monotonic` indexes rows with an `int`.
+  - **Q-C.** `'cosine` runs on an n×d scratch copy, so `X` is not modified.
+  - **Q-D.** Under `'cosine`, a row whose elements are all zero is refused.
+    cuML 26.08's cosine branch normalises by column
+    (`vertexdeg/algo.cuh:173-184`), so rkt-cuml does not use it: the scratch
+    copy is scaled to unit rows in `X`'s dtype (by the largest magnitude,
+    then the 2-norm), and cuML runs euclidean on it with eps' the smallest
+    value in `X`'s dtype whose square, rounded in that dtype, reaches
+    2 eps, or 8 when eps is 2 or more, so that every pair is a neighbour
+    pair there, as in sklearn, which clips cosine distances to [0, 2]. A
+    pair at cosine distance exactly eps is a neighbour pair when the unit
+    rows are exact in the dtype, as one-hot rows are. Otherwise, as with any
+    floating-point DBSCAN, pairs whose distance is close to eps may fall on
+    either side; the tolerance is relative and grows with the number of
+    columns, about 1e-5 at 1024 float32 columns.
+  - **Q-E.** Non-finite `X` is passed through, and its rows are noise.
+  - **Q-F.** `eps` must be finite and positive, so `+inf.0` is refused, as
+    are `min-samples` below 1.
+  - **Q-G.** `eps` is the exact double for float64; under `'cosine` the
+    unit rows and eps' are in `X`'s dtype.
+  - **Q-H.** Core-sample indices are always computed.
+  - **Q-I.** `'rbc` is deferred to #17.
+  - **Q-J.** `dbscan-result` has no cluster count.
+- A batch size that cuML would compute as 0, explicit or automatic, is
+  refused, since cuML divides by it (SIGFPE).
+
 ## Owner decisions (2026-10-17)
 
 - The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require

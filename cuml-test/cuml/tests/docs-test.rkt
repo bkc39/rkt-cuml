@@ -2,6 +2,12 @@
 
 (require (only-in cuml
                   current-batch-samples
+                  dbscan
+                  dbscan-fit
+                  dbscan-params
+                  dbscan-result
+                  dbscan-result-core-sample-indices
+                  dbscan-result-labels
                   estimator-params
                   estimator-set-params
                   exn:fail:cuml
@@ -29,12 +35,14 @@
          (only-in raft
                   device-matrix->list*
                   device-vector->list
+                  dtype
                   exn:fail:raft
                   exn:fail:raft-kind
                   exn:fail:raft?
                   list*->device-matrix
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error raised))
 
 (test-case "the manual: a raft handler catches exn:fail:cuml and reads its kind"
@@ -162,3 +170,61 @@
   (check-equal? (parameterize ([current-batch-samples 3])
                   (labels))
                 (labels)))
+
+(define (points)
+  (list*->device-matrix '((0) (1) (2) (4) (6) (7) (8) (20)) #:dtype 'float64))
+
+(test-gpu "the manual: DBSCAN finds two clusters, sample 3 joins 0 and sample 7 is noise"
+  (match-define (dbscan-result labels core) (dbscan-fit (points) #:eps 2 #:min-samples 4))
+  (check-equal? (device-vector->list labels) '(0 0 0 0 1 1 1 -1))
+  (check-equal? (device-vector->list core) '(2 4)))
+
+(test-gpu "the manual: weights count towards min-samples"
+  (define w (list->device-vector '(4 1 1 1 1 1 1 1) #:dtype 'float64))
+  (check-equal? (~> (dbscan-fit (points) #:eps 2 #:min-samples 4 #:sample-weight w)
+                    dbscan-result-core-sample-indices
+                    device-vector->list)
+                '(0 1 2 4)))
+
+(test-gpu "the manual: a precomputed distance matrix gives the same labels"
+  (define ps '(0 1 2 4 6 7 8 20))
+  (define D
+    (list*->device-matrix (for/list ([a (in-list ps)])
+                            (for/list ([b (in-list ps)])
+                              (abs (- a b))))
+                          #:dtype 'float64))
+  (check-equal? (~> (dbscan-fit D #:eps 2 #:min-samples 4 #:metric 'precomputed)
+                    dbscan-result-labels
+                    device-vector->list)
+                '(0 0 0 0 1 1 1 -1)))
+
+(test-gpu "the manual: the labels take the out-dtype, and eps 0 is refused"
+  (check-equal?
+   (dtype (dbscan-result-labels (dbscan-fit (points) #:eps 2 #:min-samples 4 #:out-dtype 'int64)))
+   'int64)
+  (check-cuml-error 'logic
+                    "dbscan-fit: eps: expected greater than 0, got 0"
+                    (lambda () (dbscan-fit (points) #:eps 0))))
+
+(test-gpu "the manual: the DBSCAN estimator on the points"
+  (define db (dbscan #:eps 2 #:min-samples 4))
+  (check-equal? (format "~v" db) "#<dbscan #:eps 2 #:min-samples 4>")
+  (check-equal? (device-vector->list (fit-predict db (points))) '(0 0 0 0 1 1 1 -1))
+  (check-equal? (format "~v" (estimator-set-params db #:metric 'cosine))
+                "#<dbscan #:eps 2 #:min-samples 4 #:metric 'cosine>")
+  (check-cuml-error 'logic
+                    "fit: eps: expected greater than 0, got 0"
+                    (lambda () (fit (dbscan #:eps 0) (points)))))
+
+(test-case "the manual: dbscan-params overrides a base and refuses an unknown key"
+  (define dense (dbscan-params #:eps 2 #:min-samples 4))
+  (check-equal? (hash-ref (dbscan-params dense #:eps 3) 'min-samples) 4)
+  (check-cuml-error 'logic
+                    "dbscan-params: dbscan has no parameter colour"
+                    (lambda () (dbscan-params (hasheq 'colour 'red)))))
+
+(test-gpu "the manual: dbscan-fit from a set"
+  (check-equal? (~> (dbscan-fit (points) #:params (dbscan-params #:eps 2 #:min-samples 4))
+                    dbscan-result-labels
+                    device-vector->list)
+                '(0 0 0 0 1 1 1 -1)))

@@ -1,15 +1,10 @@
 #lang racket/base
 
 (require (only-in racket/match match match* match-define)
-         (only-in raft
-                  current-device-resources
-                  device-matrix?
-                  exn:fail:raft
-                  exn:fail:raft-kind
-                  exn:fail:raft?
-                  shape)
-         (only-in raft/unsafe deposit deposit->list)
+         (only-in raft current-device-resources device-matrix? shape)
+         (only-in raft/unsafe deposit->list)
          (only-in "define-who.rkt" define/who)
+         (only-in "deposit.rkt" deposit-for/who)
          (only-in "hyperparameters.rkt" define-hyperparameters)
          (only-in "native.rkt"
                   cuml-cluster-kmeans-fit-job
@@ -63,15 +58,6 @@
     [(? device-matrix?) (values 2 oversampling-factor init)]
     [_ (values -1 oversampling-factor #f)]))
 
-(define ((renamed who) e)
-  (raise (exn:fail:raft (regexp-replace #rx"^deposit:" (exn-message e) (format "~a:" who))
-                        (exn-continuation-marks e)
-                        (exn:fail:raft-kind e))))
-
-(define (deposit-for who resources)
-  (with-handlers ([exn:fail:raft? (renamed who)])
-    (deposit #:resources resources)))
-
 (define (n-init-runs n-init code)
   (match* (n-init code)
     [('auto 0) 1]
@@ -85,7 +71,7 @@
                         #:max-samples-per-batch [max-samples-per-batch (current-batch-samples)]
                         #:resources [resources (current-device-resources)])
   (define-values (code factor start) (seeding init oversampling-factor))
-  (define out (deposit-for who resources))
+  (define out (deposit-for/who who resources))
   (define-values (inertia n-iter)
     (cuml-cluster-kmeans-fit-job who
                                  resources
@@ -105,7 +91,7 @@
   (kmeans-result centroids labels inertia n-iter))
 
 (define (deposited job who resources centroids X max-samples-per-batch)
-  (define out (deposit-for who resources))
+  (define out (deposit-for/who who resources))
   (job who resources centroids X out max-samples-per-batch)
   (match-define (list result) (deposit->list out))
   result)

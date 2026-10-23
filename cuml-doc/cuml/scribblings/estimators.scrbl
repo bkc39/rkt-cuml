@@ -222,5 +222,46 @@ Whether @racket[v] is a k-means estimator.}
 The @racket[kmeans-result] of the fit that made @racket[estimator], or
 @racket[#f] when it is unfitted.}
 
+@section[#:tag "dbscan-estimator"]{DBSCAN estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(dbscan [params (or/c #f hash?) #f]
+                 [#:eps eps (and/c real? (>/c 0) (</c +inf.0)) 0.5]
+                 [#:min-samples min-samples exact-positive-integer? 5]
+                 [#:metric metric (or/c 'euclidean 'cosine 'precomputed) 'euclidean]
+                 [#:out-dtype out-dtype (or/c 'int32 'int64) 'int32]
+                 [#:max-mbytes-per-batch max-mbytes-per-batch
+                  (or/c #f exact-nonnegative-integer?) #f]
+                 [#:resources resources (or/c #f device-resources?) #f])
+         dbscan?]{
+
+An unfitted DBSCAN estimator with the hyperparameters @racket[(dbscan-params params ...)]. It
+is an estimator and a clusterer, and checks nothing until it is fitted.
+@racket[fit] is @racket[dbscan-fit] with these parameters and the
+@racket[sample-weight], and @racket[fit-predict] returns the fit's labels.
+@racket[y] is ignored. @racket[resources] is a setting, as for @racket[kmeans]: each call runs on
+it, or with @racket[#f] on the calling thread's @racket[(current-device-resources)].
+Errors are @racket[dbscan-fit]'s, named after the generic that was called.
+Printing and @racket[equal?] are as for @racket[kmeans].
+
+@examples[#:eval ev
+(define P (list*->device-matrix '((0) (1) (2) (4) (6) (7) (8) (20)) #:dtype 'float64))
+(define db (dbscan #:eps 2 #:min-samples 4))
+db
+(device-vector->list (fit-predict db P))
+(estimator-set-params db #:metric 'cosine)
+(eval:error (fit (dbscan #:eps 0) P))
+]}
+
+@defproc[(dbscan? [v any/c]) boolean?]{
+
+Whether @racket[v] is a DBSCAN estimator.}
+
+@defproc[(dbscan-model [estimator dbscan?]) (or/c #f dbscan-result?)]{
+
+The @racket[dbscan-result] of the fit that made @racket[estimator], or
+@racket[#f] when it is unfitted.}
+
 @(close-eval host-ev)
 @(close-eval ev)

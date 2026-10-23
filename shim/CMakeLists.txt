@@ -52,8 +52,10 @@ endif()
 include(cmake/Cumlrkt.cmake)
 
 cumlrkt_family(cluster
-  SOURCES cluster/src/blobs.cpp cluster/src/cluster.cpp cluster/src/kmeans.cpp
-  TESTS cluster/tests/cluster_test.cpp cluster/tests/kmeans_test.cpp
+  SOURCES cluster/src/blobs.cpp cluster/src/cluster.cpp cluster/src/dbscan.cpp
+          cluster/src/dbscan_device.cu cluster/src/kmeans.cpp
+  TESTS cluster/tests/cluster_test.cpp cluster/tests/dbscan_refusal_test.cpp
+        cluster/tests/dbscan_test.cpp cluster/tests/kmeans_test.cpp
         cluster/tests/kmeans_refusal_test.cpp
 )
 

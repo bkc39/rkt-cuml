@@ -6,7 +6,7 @@
                   cuml-family-library
                   cuml-family-libcuml-version
                   load-family)
-         (only-in ffi/unsafe _double _double* _fun _int _int32 _pointer _uint64)
+         (only-in ffi/unsafe _double _double* _fun _int _int32 _int64 _pointer _uint64)
          (only-in ffi/unsafe/define define-ffi-definer)
          (only-in ffi/unsafe/define/conventions convention:hyphen->underscore)
          ;; whole-module: define-runtime-path needs bindings only-in strips
@@ -14,6 +14,7 @@
          (only-in raft/unsafe define-job))
 
 (provide call/cluster
+         cuml-cluster-dbscan-fit-job
          cuml-cluster-kmeans-fit-job
          cuml-cluster-kmeans-predict-job
          cuml-cluster-kmeans-score-job
@@ -76,4 +77,10 @@
             library
             "cuml_cluster_kmeans_transform_job"
             (handle view view deposit _int32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-dbscan-fit-job
+            library
+            "cuml_cluster_dbscan_fit_job"
+            (handle view view deposit _double* _int32 _int32 _int32 _int64)
             #:exn exn:fail:cuml)
