@@ -368,4 +368,120 @@ An @racket[X] or @racket[sample-weight] that is not a device array, or
 naming the procedure, and a number argument that does not fit the native type,
 such as @racket[#:min-samples 2.5], raises @racket[exn:fail:contract].
 
+@section[#:tag "single-linkage"]{Single linkage}
+
+@examples[#:eval ev
+(define P (list*->device-matrix '((0) (1) (3) (7) (15)) #:dtype 'float32))
+(match-define (single-linkage-result labels children) (single-linkage-fit P #:n-clusters 3))
+(device-vector->list labels)
+(device-matrix->list* children)
+]
+
+@defstruct*[single-linkage-result ([labels device-vector?] [children device-matrix?])]{
+
+The result of @racket[single-linkage-fit], both @racket['int32].
+@racket[children] is the dendrogram, an (n−1)×2 matrix: row @racket[i] is the
+@racket[i]th merge, in non-decreasing weight as cuML computes it in
+@racket['float32], and names the two nodes it joins, the smaller first. Node
+@racket[j] below n is sample @racket[j], and node n+@racket[i] is the cluster
+that row @racket[i] forms. Merges at equal distances come in an order cuML
+chooses.
+
+@racket[labels] gives each sample its cluster when the dendrogram is cut into
+@racket[n-clusters] clusters: their roots, in descending order of node, are
+labelled 0 to k−1, so cluster 0 formed last and single samples take the
+highest labels.}
+
+@defproc[(single-linkage-fit [X device-matrix?]
+                             [#:n-clusters n-clusters exact-positive-integer? 2]
+                             [#:metric metric 'euclidean 'euclidean]
+                             [#:connectivity connectivity (or/c 'knn 'pairwise) 'knn]
+                             [#:c c (integer-in -2147483648 2147483617) 15]
+                             [#:params params (or/c #f hash?) #f]
+                             [#:resources resources device-resources? (current-device-resources)])
+         single-linkage-result?]{
+
+Clusters the rows of @racket[X], a row-major @racket['float32] matrix, by
+single linkage under the euclidean distance: each step merges the two closest
+clusters, the distance between two clusters being that of their closest
+samples.
+
+With @racket['pairwise], every pairwise distance is held on the device, so
+@racket[X] can have at most 46340 rows, and the hierarchy is exact in the
+@racket['float32] distances below.
+
+@racket['knn] is approximate, the hierarchy of a sparse graph in which each
+sample keeps its k = min(n, max(2, ⌊log₂ n⌋ + @racket[c])) nearest samples,
+its components joined; at k = n it is @racket['pairwise]'s graph, but merges
+at nearly equal distances can pair or order differently, since the two compute
+distances differently in @racket['float32]. When distances tie,
+@racket['knn] can give a different hierarchy from one run to the next.
+
+The distances are ‖x‖²+‖y‖²−2x·y in @racket['float32]: centre @racket[X] if
+it lies far from the origin. The outputs live on @racket[resources].
+@racket[params], from @racket[single-linkage-params], gives every
+hyperparameter a keyword omits. @racket[params]'s @racket[linkage] must be
+@racket['single].
+
+@racket[P]'s cut is the same under @racket['pairwise]:
+
+@examples[#:eval ev #:label #f
+(~> (single-linkage-fit P #:n-clusters 3 #:connectivity 'pairwise)
+    single-linkage-result-labels
+    device-vector->list)
+]
+
+With one cluster per sample, sample @racket[i] has label n−1−@racket[i]:
+
+@examples[#:eval ev #:label #f
+(~> (single-linkage-fit P #:n-clusters 5) single-linkage-result-labels device-vector->list)
+]
+
+@racket[X] must be @racket['float32]:
+
+@examples[#:eval ev #:label #f
+(eval:error (single-linkage-fit (list*->device-matrix '((0) (1)) #:dtype 'float64)))
+]}
+
+@defproc[(single-linkage-params [base (or/c #f hash?) #f]
+                                [#:n-clusters n-clusters exact-positive-integer? 2]
+                                [#:metric metric 'euclidean 'euclidean]
+                                [#:linkage linkage 'single 'single]
+                                [#:connectivity connectivity (or/c 'knn 'pairwise) 'knn]
+                                [#:c c (integer-in -2147483648 2147483617) 15])
+         (and/c hash? hash-eq? immutable?)]{
+
+The hyperparameters of @racket[single-linkage-fit] and
+@racket[agglomerative-clustering], as @racket[kmeans-params] gives k-means'.
+@racket[linkage] is cuML's name for the merge rule; only @racket['single] fits.
+
+@examples[#:eval ev #:label #f
+(define coarse (single-linkage-params #:n-clusters 2 #:connectivity 'pairwise))
+(hash-ref (single-linkage-params coarse #:n-clusters 3) 'connectivity)
+(~> (single-linkage-fit P #:params coarse) single-linkage-result-labels device-vector->list)
+(eval:error (single-linkage-fit P #:params (single-linkage-params #:linkage 'ward)))
+]}
+
+@bold{Errors.} @racket[single-linkage-fit] raises @racket[exn:fail:cuml] of
+kind @racket['logic], leaving nothing allocated, when:
+@itemlist[
+ @item{@racket[params]'s @racket[linkage] is not @racket['single]:
+       @tt{linkage: expected single, got ward}, before @racket[X] is read;}
+ @item{@racket[X] is not a row-major @racket['float32] matrix with a row and
+       a column;}
+ @item{@racket[connectivity] or @racket[metric] is not one of its names;}
+ @item{@racket[X] has more than 2^31-1 elements;}
+ @item{@racket[n-clusters] is less than 1 or more than the number of rows;}
+ @item{@racket[c] is more than 2147483617;}
+ @item{with @racket['pairwise], @racket[X] has more than 46340 rows;}
+ @item{with @racket['knn], the graph's 2nk entries would pass 2^31-1;}
+ @item{a row holds a NaN or an infinity, or its squared norm passes 2^125.}]
+cuML's own failures, such as a @racket['knn] graph it could not join (raise
+@racket[c]), raise @racket[exn:fail:cuml] naming the procedure, with nothing
+allocated, and running out of device memory has kind @racket['oom]. An
+@racket[X] that is not a device array, or @racket[resources] that were
+released, raises raft's @racket[exn:fail:raft] naming the procedure, and a
+number argument that does not fit the native type, such as
+@racket[#:n-clusters 2.5], raises @racket[exn:fail:contract].
+
 @(close-eval ev)

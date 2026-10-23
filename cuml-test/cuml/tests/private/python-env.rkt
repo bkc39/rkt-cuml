@@ -1,17 +1,20 @@
 #lang racket/base
 
-(require (only-in json read-json write-json)
+(require (only-in json json-null read-json write-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
+         (only-in racket/match == match)
          (only-in racket/port open-output-nowhere)
          (only-in racket/system system*)
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu gpu-skip test-unless-skipped)
          ;; whole-module: its syntax classes come with it
-         syntax/parse/define)
+         syntax/parse/define
+         (only-in threading ~>))
 
 (provide run-twin
-         test-twin)
+         test-twin
+         twin-params)
 
 (define python (find-executable-path "python3"))
 
@@ -61,3 +64,20 @@
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped twin-skip name body ...))
+
+(define unbound-twin-params '(verbose output-type))
+
+(define (twin-key key)
+  (~> key symbol->string (regexp-replace* #rx"_" _ "-") string->symbol))
+
+(define (twin-value value)
+  (match value
+    [(== (json-null)) #f]
+    [(? string?) (string->symbol value)]
+    [_ value]))
+
+(define (twin-params theirs unbound)
+  (for*/hasheq ([(key value) (in-hash theirs)]
+                [name (in-value (twin-key key))]
+                #:unless (memq name (append unbound-twin-params unbound)))
+    (values name (twin-value value))))

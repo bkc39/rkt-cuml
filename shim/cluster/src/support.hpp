@@ -84,19 +84,44 @@ inline void require_some(const char* name, const char* axis, int64_t extent) {
   }
 }
 
-template <typename Fn>
-void on_device(
+template <typename Run>
+void in_device_scope(
     void* handle,
     std::initializer_list<std::pair<const char*, const rr_view*>> views,
-    const rr_view* first, const char* first_name, Fn&& fn) {
+    Run&& run) {
   const raft::handle_t& h = raftrkt::handle_of(handle);
   const int device = raftrkt::device_of(h);
   const raftrkt::device_scope scope{device};
   raftrkt::require_on_device(device, views);
   raftrkt::sync_guard sync{raft::resource::get_cuda_stream(h)};
-  cumlrkt::on_floats(first, first_name,
-                     [&](auto tag) { fn(h, decltype(tag){}); });
+  run(h);
   sync.finish();
+}
+
+template <typename Fn>
+void on_device(
+    void* handle,
+    std::initializer_list<std::pair<const char*, const rr_view*>> views,
+    const rr_view* first, const char* first_name, Fn&& fn) {
+  in_device_scope(handle, views, [&](const raft::handle_t& h) {
+    cumlrkt::on_floats(first, first_name,
+                       [&](auto tag) { fn(h, decltype(tag){}); });
+  });
+}
+
+template <typename Fn>
+void on_float32_device(
+    void* handle,
+    std::initializer_list<std::pair<const char*, const rr_view*>> views,
+    const rr_view* first, const char* first_name, Fn&& fn) {
+  in_device_scope(handle, views, [&](const raft::handle_t& h) {
+    const rr_view& view = *raftrkt::require(first, first_name);
+    if (view.dtype != RR_DTYPE_FLOAT32) {
+      throw logic_error(std::string(first_name) + ": expected float32, got " +
+                        raftrkt::dtype_name(view.dtype));
+    }
+    fn(h);
+  });
 }
 
 }  // namespace cumlrkt::cluster

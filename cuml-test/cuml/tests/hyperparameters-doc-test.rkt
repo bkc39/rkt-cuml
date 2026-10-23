@@ -1,9 +1,15 @@
 #lang racket/base
 
-(require (only-in cuml dbscan kmeans)
-         (only-in cuml/cluster dbscan-fit dbscan-params kmeans-fit kmeans-params)
+(require (only-in cuml agglomerative-clustering dbscan kmeans)
+         (only-in cuml/cluster
+                  dbscan-fit
+                  dbscan-params
+                  kmeans-fit
+                  kmeans-params
+                  single-linkage-fit
+                  single-linkage-params)
          (only-in racket/dict dict-ref)
-         (only-in racket/list append-map)
+         (only-in racket/list append-map takef)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-not-false test-case)
          (only-in scribble/reader read-inside))
@@ -36,13 +42,13 @@
 (define (keyword-of key)
   (string->keyword (symbol->string key)))
 
-(struct binding (name proc table keys keywords positional others))
+(struct binding (name proc table keys taken keywords positional others))
 
 (define (table-bindings table keys entries)
-  (define keywords (map keyword-of keys))
   (for/list ([entry (in-list entries)])
-    (match-define (list name proc extra positional others) entry)
-    (binding name proc table keys (append keywords extra) positional others)))
+    (match-define (list name proc extra positional others omitted) entry)
+    (define taken (filter (lambda (key) (not (memq key omitted))) keys))
+    (binding name proc table keys taken (append (map keyword-of taken) extra) positional others)))
 
 (define kmeans-keys
   '(init n-clusters
@@ -54,11 +60,13 @@
 
 (define dbscan-keys '(eps min-samples metric out-dtype max-mbytes-per-batch))
 
+(define single-linkage-keys '(n-clusters metric linkage connectivity c))
+
 (define bindings
   (append
    (table-bindings kmeans-params
                    kmeans-keys
-                   (list (list 'kmeans-params kmeans-params '() (list (argument #f 'base #f)) '())
+                   (list (list 'kmeans-params kmeans-params '() (list (argument #f 'base #f)) '() '())
                          (list 'kmeans-fit
                                kmeans-fit
                                '(#:params #:sample-weight #:max-samples-per-batch #:resources)
@@ -67,27 +75,49 @@
                                      (argument '#:max-samples-per-batch
                                                'max-samples-per-batch
                                                '(current-batch-samples))
-                                     (argument '#:resources 'resources '(current-device-resources))))
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '())
                          (list 'kmeans
                                kmeans
                                '(#:max-samples-per-batch #:resources)
                                (list (argument #f 'params #f))
                                (list (argument '#:max-samples-per-batch 'max-samples-per-batch #f)
-                                     (argument '#:resources 'resources #f)))))
+                                     (argument '#:resources 'resources #f))
+                               '())))
    (table-bindings dbscan-params
                    dbscan-keys
-                   (list (list 'dbscan-params dbscan-params '() (list (argument #f 'base #f)) '())
+                   (list (list 'dbscan-params dbscan-params '() (list (argument #f 'base #f)) '() '())
                          (list 'dbscan-fit
                                dbscan-fit
                                '(#:params #:sample-weight #:resources)
                                (list (argument #f 'X 'none))
                                (list (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources))))
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '())
                          (list 'dbscan
                                dbscan
                                '(#:resources)
                                (list (argument #f 'params #f))
-                               (list (argument '#:resources 'resources #f)))))))
+                               (list (argument '#:resources 'resources #f))
+                               '())))
+   (table-bindings
+    single-linkage-params
+    single-linkage-keys
+    (list
+     (list 'single-linkage-params single-linkage-params '() (list (argument #f 'base #f)) '() '())
+     (list 'single-linkage-fit
+           single-linkage-fit
+           '(#:params #:resources)
+           (list (argument #f 'X 'none))
+           (list (argument '#:params 'params #f)
+                 (argument '#:resources 'resources '(current-device-resources)))
+           '(linkage))
+     (list 'agglomerative-clustering
+           agglomerative-clustering
+           '(#:resources)
+           (list (argument #f 'params #f))
+           (list (argument '#:resources 'resources #f))
+           '())))))
 
 (define-namespace-anchor anchor)
 
@@ -128,12 +158,15 @@
       (for/hasheq ([a (in-list (arguments-of name))]
                    #:when (argument-keyword a))
         (values (argument-keyword a) a)))
-    (for/fold ([bound '()]) ([key (in-list (binding-keys b))])
-      (define value (hash-ref defaults key))
+    (for ([key (in-list (binding-taken b))])
+      (define bound
+        (for/list ([earlier (in-list (takef (binding-keys b) (lambda (k) (not (eq? k key)))))])
+          (cons earlier (hash-ref defaults earlier))))
       (define entry (hash-ref by-keyword (keyword-of key)))
       (check-equal? (argument-name entry) key (format "~a #:~a" name key))
-      (check-equal? (evaluated (argument-default entry) bound) value (format "~a #:~a" name key))
-      (append bound (list (cons key value))))))
+      (check-equal? (evaluated (argument-default entry) bound)
+                    (hash-ref defaults key)
+                    (format "~a #:~a" name key)))))
 
 (test-case "the positional arguments and the defaults outside the table"
   (for ([b (in-list bindings)])

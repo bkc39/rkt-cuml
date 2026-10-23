@@ -14,6 +14,7 @@
                      proc-name
                      table-id)
          absent
+         define-codes
          define-hyperparameters
          given-hash
          logic-error)
@@ -121,6 +122,10 @@
       #:attr resolve (hyperparameter-table-resolve (attribute table))
       #:attr defaults (hyperparameter-table-defaults (attribute table))
       #:attr update (hyperparameter-table-update (attribute table))))
+
+  (define-syntax-class code-entry
+    #:attributes (name value)
+    (pattern [name:id value:expr]))
 
   (define-syntax-class params-name
     #:description "a table name ending in -params"
@@ -247,3 +252,7 @@
                             (quote-syntax resolve)
                             (quote-syntax defaults-for)
                             (quote-syntax update)))))
+
+(define-syntax-parse-rule (define-codes code:id e:code-entry ...)
+  (define code
+    (let ([table (hasheq (~@ 'e.name e.value) ...)]) (lambda (key) (hash-ref table key -1)))))

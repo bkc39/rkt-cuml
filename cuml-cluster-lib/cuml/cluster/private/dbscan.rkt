@@ -1,11 +1,10 @@
 #lang racket/base
 
-(require (only-in racket/match match match-define)
-         (only-in raft current-device-resources)
+(require (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "define-who.rkt" define/who)
          (only-in "deposit.rkt" deposit-for/who)
-         (only-in "hyperparameters.rkt" define-hyperparameters)
+         (only-in "hyperparameters.rkt" define-codes define-hyperparameters)
          (only-in "native.rkt" cuml-cluster-dbscan-fit-job))
 
 (provide (struct-out dbscan-result)
@@ -22,18 +21,9 @@
   [out-dtype 'int32]
   [max-mbytes-per-batch #f])
 
-(define (metric-code metric)
-  (match metric
-    ['euclidean 0]
-    ['cosine 1]
-    ['precomputed 2]
-    [_ -1]))
+(define-codes metric-code [euclidean 0] [cosine 1] [precomputed 2])
 
-(define (out-dtype-code out-dtype)
-  (match out-dtype
-    ['int32 2]
-    ['int64 3]
-    [_ -1]))
+(define-codes out-dtype-code [int32 2] [int64 3])
 
 (define/who (dbscan-fit who
                         X
@@ -51,5 +41,4 @@
                                (metric-code metric)
                                (out-dtype-code out-dtype)
                                (or max-mbytes-per-batch 0))
-  (match-define (list labels core) (deposit->list out))
-  (dbscan-result labels core))
+  (apply dbscan-result (deposit->list out)))

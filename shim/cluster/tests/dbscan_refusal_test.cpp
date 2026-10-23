@@ -1,7 +1,6 @@
 #include <cuda_runtime_api.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -22,7 +21,6 @@ namespace {
 constexpr int64_t rows = 10;
 constexpr int64_t cols = 2;
 constexpr int64_t zero_row = 2;
-constexpr std::size_t pool = 64;
 constexpr int64_t forged_square = 46341;
 constexpr int64_t int32_most_rows = 2147483645;
 constexpr int64_t most_rows = 2147483647;
@@ -33,7 +31,6 @@ constexpr int32_t unknown_metric = 3;
 constexpr int64_t most_mbytes = 18446744073709;
 constexpr double tiny = 1e-50;
 constexpr double huge = 1e300;
-constexpr double float_overflow = 1e20;
 constexpr double float_large = 1e19;
 constexpr double float_small = 1e-20;
 constexpr double double_underflow = 1e-160;
@@ -46,26 +43,6 @@ constexpr std::size_t automatic_target = 1500000;
 std::string out_name(int32_t out_dtype) {
   return out_dtype == RR_DTYPE_INT32 ? "int32" : "int64";
 }
-
-template <typename T>
-struct refusal_case {
-  explicit refusal_case(const resources& res)
-      : data(res.r, float_dtype<T>, {pool}),
-        other(res.r, float_dtype<other_t<T>>, {pool}),
-        ints(res.r, RR_DTYPE_INT32, {pool}),
-        x(shaped(data, {rows, cols})) {
-    data.write(std::vector<T>(pool, 1));
-  }
-
-  [[nodiscard]] dbscan_call call(record& out, int32_t out_dtype) const {
-    return {.x = &x, .out = &out.r, .out_dtype = out_dtype};
-  }
-
-  device_array data;
-  device_array other;
-  device_array ints;
-  rr_view x;
-};
 
 rr_view strided(rr_view v, int64_t stride) {
   v.strides[0] = stride;
@@ -81,11 +58,6 @@ int64_t automatic_columns() {
   return static_cast<int64_t>((usable - automatic_target) / row_bytes);
 }
 
-struct refusal {
-  dbscan_call call;
-  std::string message;
-};
-
 template <typename T>
 std::string most_text() {
   return std::is_same_v<T, float> ? "3.4028234663852886e+38"
@@ -96,7 +68,7 @@ template <typename T>
 void fit_refusals(int32_t out_dtype) {
   SCOPED_TRACE(name<T>() + " " + out_name(out_dtype));
   const resources res;
-  const refusal_case<T> r(res);
+  const refusal_case<T> r(res, rows, cols);
   record out(res);
   const allocation_meter meter;
   const std::string t = name<T>();
@@ -133,7 +105,7 @@ void fit_refusals(int32_t out_dtype) {
       "sample-weight: expected 10 elements, got 9";
   const std::string min_samples_message =
       "min-samples: expected at least 1, got 0";
-  std::vector<refusal> cases{
+  std::vector<refusal<dbscan_call>> cases{
       {{.x = &x_int, .out = o, .out_dtype = d}, not_float},
       {{.x = &x_elsewhere, .out = o, .out_dtype = d},
        "X: on device 1, but the resources are on device 0"},
@@ -233,7 +205,7 @@ void fit_refusals(int32_t out_dtype) {
         {{.x = x, .out = o, .eps = huge, .out_dtype = d},
          "eps: expected at most " + most_text<T>() + ", got 1e+300"});
   }
-  for (const refusal& c : cases) {
+  for (const refusal<dbscan_call>& c : cases) {
     const std::string status = dbscan(res, c.call);
     EXPECT_EQ(status, c.message);
     EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << status;
@@ -246,13 +218,12 @@ template <typename T>
 void automatic_batch_refusal() {
   SCOPED_TRACE(name<T>());
   const resources res;
-  const refusal_case<T> r(res);
+  const refusal_case<T> r(res, rows, cols);
   record out(res);
   const int64_t columns = automatic_columns();
   const rr_view x = shaped(r.data, {automatic_rows, columns});
   const allocation_meter meter;
-  dbscan_call c = r.call(out, RR_DTYPE_INT64);
-  c.x = &x;
+  dbscan_call c{.x = &x, .out = &out.r, .out_dtype = RR_DTYPE_INT64};
   if (std::is_same_v<T, float>) {
     EXPECT_EQ(dbscan(res, c),
               "max-mbytes-per-batch: the automatic size holds no batch of "
@@ -273,9 +244,7 @@ void zero_cosine_rows() {
   for (const std::vector<double>& bad :
        std::vector<std::vector<double>>{{0, 0}, {-0.0, -0.0}}) {
     SCOPED_TRACE(std::to_string(bad[0]));
-    values host(static_cast<std::size_t>(rows * cols), 1.0);
-    std::copy(bad.begin(), bad.end(),
-              host.begin() + static_cast<std::ptrdiff_t>(zero_row * cols));
+    const values host = with_row(bad, zero_row, rows, cols);
     const auto x = upload<T>(res, {rows, cols}, host);
     record out(res);
     const allocation_meter meter;
@@ -322,9 +291,7 @@ void extreme_cosine_rows() {
   for (const cosine_row& edge : cases) {
     SCOPED_TRACE(std::to_string(edge.row[0]) + " " +
                  std::to_string(edge.row[1]));
-    values host(static_cast<std::size_t>(rows * cols), 1.0);
-    std::copy(edge.row.begin(), edge.row.end(),
-              host.begin() + static_cast<std::ptrdiff_t>(zero_row * cols));
+    values host = with_row(edge.row, zero_row, rows, cols);
     host[(zero_row + 1) * cols] = 2;
     host[((zero_row + 1) * cols) + 1] = 0;
     const auto x = upload<T>(res, {rows, cols}, host);

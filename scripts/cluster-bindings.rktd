@@ -2,6 +2,6 @@
  (scaffold due make_blobs make_blobs_job)
  (issue 6 due kmeans_fit_job kmeans_predict_job kmeans_score_job kmeans_transform_job)
  (issue 8 due dbscan_fit_job)
- (issue 9 planned single_linkage_job)
+ (issue 9 due single_linkage_fit_job)
  (issue 10 planned spectral_fit_predict_job spectral_fit_predict_graph_job)
  (issue 12 planned hdbscan_fit_job hdbscan_approximate_predict_job hdbscan_model_free))

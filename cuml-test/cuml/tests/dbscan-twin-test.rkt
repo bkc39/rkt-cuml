@@ -3,11 +3,10 @@
 (require (only-in cuml/cluster dbscan-fit dbscan-params dbscan-result-labels)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
-         (only-in racket/match == match match* match-define)
+         (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* dtype)
-         (only-in threading ~>)
          (only-in "private/dbscan-data.rkt"
                   cosine-cloud
                   distance-matrix
@@ -17,7 +16,7 @@
                   seeded
                   vec)
          (only-in "private/kmeans-data.rkt" blob-data)
-         (only-in "private/python-env.rkt" run-twin test-twin))
+         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
 
 (define-runtime-path twin "python/dbscan_twin.py")
 
@@ -135,25 +134,10 @@
           (length runs)
           equal-count))
 
-(define unbound-twin-params '(verbose output-type algorithm calc-core-sample-indices))
-
-(define (twin-key key)
-  (~> key symbol->string (regexp-replace* #rx"_" _ "-") string->symbol))
-
-(define (twin-value key value)
-  (match* (key value)
-    [(_ (== (json-null))) #f]
-    [(_ (? string?)) (string->symbol value)]
-    [(_ _) value]))
-
 (test-twin "cuml.DBSCAN's default parameters are dbscan-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped
-    (for*/hasheq ([(key value) (in-hash theirs)]
-                  [name (in-value (twin-key key))]
-                  #:unless (memq name unbound-twin-params))
-      (values name (twin-value name value))))
+  (define mapped (twin-params theirs '(algorithm calc-core-sample-indices)))
   (define ours (hash-remove (dbscan-params) 'out-dtype))
   (printf "twin params: ~s\n" theirs)
   (check-equal? mapped ours))

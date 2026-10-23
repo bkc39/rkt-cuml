@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/cluster/private/define-who define/who)
-         (only-in cuml/cluster/private/hyperparameters define-hyperparameters)
+         (only-in cuml/cluster/private/hyperparameters define-codes define-hyperparameters)
          (only-in racket/list combinations)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-pred check-regexp-match check-true test-case)
@@ -265,3 +265,8 @@
                          [size 1]
                          [shade (list size) #:fixed])
                       #rx"#:fixed default refers to the key size"))
+
+(define-codes shade-code [plain 0] [bold 1])
+
+(test-case "define-codes maps each name to its code and anything else to -1"
+  (check-equal? (map shade-code '(plain bold italic "plain" 0)) '(0 1 -1 -1 -1)))
