@@ -339,9 +339,9 @@ class payload_model final : public cumlrkt::model {
         handle_(handle),
         payload_(static_cast<std::size_t>(payload_bytes),
                  raft::resource::get_cuda_stream(handle)) {
-    EXPECT_EQ(cudaStreamSynchronize(
-                  raft::resource::get_cuda_stream(handle).value()),
-              cudaSuccess);
+    EXPECT_EQ(
+        cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),
+        cudaSuccess);
   }
 
   [[nodiscard]] const std::byte* payload() const noexcept {
