@@ -7,7 +7,7 @@ import cuml
 
 
 def main():
-    with open(sys.argv[1], "w") as f:
+    with open(sys.argv[2], "w") as f:
         json.dump({"version": cuml.__version__}, f)
 
 

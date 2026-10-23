@@ -22,13 +22,12 @@
    the estimator wrappers in `cuml-lib`, so `cuml/main` re-exports everything
    without a collision.
 
-3. **A scikit-learn-like estimator interface** (`define-generics`: `fit`,
-   `predict`, ...) with wrappers in `cuml-lib`. Open:
-   - whether the generics themselves live in `cuml-core-lib` (recommended,
-     so glmnet and other libraries can implement them);
-   - functional fit: `fit` returns a fitted estimator rather than mutating;
-   - small capability generics (`fit`, `predict`, `transform`, ...) with a
-     `fit-predict` fallback built from them.
+3. **A scikit-learn-like estimator interface** (`define-generics`) with
+   wrappers in `cuml-lib`. The generics live in `cuml-core-lib`, so glmnet
+   and other libraries can implement them. Fit is functional: `fit` returns
+   a fitted estimator rather than mutating one. The generics are small
+   capability generics (`fit`, `predict`, `transform`, ...), with a
+   `fit-predict` fallback built from them.
 
 4. **The opaque model-handle helper** (a native object plus its finalizer,
    keeping its resources alive) lives in `cuml-core-lib`.
@@ -76,10 +75,46 @@
   raft's locked revisions, so its store paths are unchanged. The Racket
   tools (fmt, review, pretty-expressive, threading-lib) are pinned in this
   repo's own `nix/racket-tools.nix`.
-- **Not carried over from rkt-raft yet:** the ASAN/UBSAN shim build (the GPU
-  suite runs the gtests under compute-sanitizer memcheck), the bounded
-  death-test gate (no death tests), the binding census
-  (`check-bindings.rkt`).
+- **Not carried over from rkt-raft yet:** the bounded death-test gate (no
+  death tests).
+
+## Decisions recorded in leg 1 (k-means, #6)
+
+- `cuml/cluster` exports `(struct-out kmeans-result)`, `kmeans-fit`,
+  `kmeans-predict`, `kmeans-transform` and `kmeans-score`, with no runtime
+  contracts. The bodies live in `cuml/cluster/private/kmeans.rkt`; the three
+  shim entries are jobs (`define-job ... #:exn exn:fail:cuml`), with no
+  short call.
+- The shim allocates every output after its checks and hands it back in a
+  raft deposit record (fit: centroids and labels; predict: labels;
+  transform: distances), so no refusal leaves an allocation behind; score
+  is its own entry with a scratch label vector. The Racket body opens the
+  deposit on the call's resources and adopts its regions. The init names
+  map to the shim's codes in one `match`.
+- The shim's refusals run in a fixed table order, first refusal wins, before
+  the GPU is touched; an empty matrix has no layout to check.
+- The decisions posted on #5, each with the recommended answer:
+  - **Q-A.** Reversed in review: the shim refuses `tol` <= 0 and a negative
+    `oversampling-factor` itself, before allocating, in the repo's wording
+    (`tol: expected greater than 0, got 0`); cuVS refused them only after
+    the outputs were allocated.
+  - **Q-B.** `#:random-state` defaults to 0.
+  - **Q-C.** `#:n-clusters` is inferred from a matrix `#:init`; an
+    explicit mismatch is refused.
+  - **Q-D.** Column-major or strided input is refused; nothing is copied.
+  - **Q-E.** predict, transform and score take centroids, not a
+    `kmeans-result`.
+  - **Q-F.** There is no `'k-means||` alias.
+  - **Q-G.** Failures before the shim (raft's view packer, define-job's
+    contract errors) stay non-cuML until the contracts leg.
+  - **Q-H.** All-zero, negative or NaN weights pass through, documented.
+  - **Q-I.** No `kmeans-fit-predict`.
+  - **Q-J.** `#:n-init 'auto` with a matrix init is 10.
+  - **Q-K.** `kmeans-transform` returns squared distances, as the entry
+    says.
+  - **Q-L.** The float32 twin allows n_iter to differ by 1, with ARI >= 0.99
+    when it does.
+  - **Q-M.** `kmeans-result` is exported with `struct-out`.
 
 ## Owner decisions (2026-10-17)
 
@@ -93,18 +128,14 @@
 - No GPU runner for now (#1). The GPU suite runs locally before each merge.
 - No tailnet nix cache in CI; the GitHub Actions cache only.
 - The dev shell deletes stale Racket homes aggressively (AGENTS.md).
-
-## Open owner questions
-
-1. An ASAN/UBSAN build of the shims as a flake check, as rkt-raft's
-   `shim-sanitizers` (a second nvcc build in CI)?
-2. A per-family binding census like rkt-raft's `check-bindings.rkt`?
-3. From `plans/layout.md` #3: the estimator generics in cuml-core-lib
-   (recommended), functional fit, capability generics with a `fit-predict`
-   fallback.
-4. The device-memory test helper calls NVML and the CUDA driver from Racket
-   directly; keep that, or route it through a probe shim?
-5. On a MIG-partitioned GPU the per-process memory tests SKIP; accept that
-   SKIP in the `gpu` gate?
+- The estimator generics live in cuml-core-lib, the wrappers in cuml-lib;
+  fit is functional; capability generics with a `fit-predict` fallback
+  (layout #3).
+- The device-memory test helper calls NVML and the CUDA driver from Racket
+  directly.
+- On a MIG-partitioned GPU the per-process memory tests SKIP, and the `gpu`
+  gate allows that SKIP (`scripts/allowed-skips.txt`).
+- The shims build with ASAN and UBSAN as the `shim-sanitizers` flake check.
+- A binding census for the clustering family, `scripts/check-bindings.rkt`.
 
 Follow-ups are GitHub issues.

@@ -34,7 +34,7 @@ done
 failed=0
 for sig in INT TERM HUP; do
   rm -f "$work/started"
-  CUML_SIGNAL_PROBE=$marker CUML_SHIM_TESTS=$stubs \
+  CUML_SIGNAL_PROBE=$marker CUML_SHIM_TESTS=$stubs CUML_SHIM_SANITIZED_TESTS=$stubs \
     env --default-signal=INT "$BASH" scripts/gpu-suite.sh >"$work/out-$sig" 2>&1 &
   outer=$!
   for _ in $(seq 50); do
@@ -70,5 +70,37 @@ for sig in INT TERM HUP; do
   fi
 done
 
+lsan_tree="$work/tree"
+mkdir -p "$lsan_tree/scripts" "$work/plain" "$work/sanitized"
+cp scripts/gpu-suite.sh "$lsan_tree/scripts/"
+for t in "${gtests[@]}"; do
+  printf '#!%s\nexit 0\n' "$BASH" >"$work/plain/$t"
+  # shellcheck disable=SC2016 # the stub, not this script, expands it
+  printf '#!%s\necho "${LSAN_OPTIONS-unset}" >%q\nexit 3\n' "$BASH" "$work/lsan-seen" >"$work/sanitized/$t"
+  chmod +x "$work/plain/$t" "$work/sanitized/$t"
+done
+lsan_seen() {
+  rm -f "$work/lsan-seen"
+  env -u LSAN_OPTIONS CUML_GPU_SUITE_BOUNDED=1 CUML_SHIM_TESTS="$work/plain" \
+    CUML_SHIM_SANITIZED_TESTS="$work/sanitized" CUML_ASAN_OPTIONS= CUML_UBSAN_OPTIONS= \
+    "$BASH" "$lsan_tree/scripts/gpu-suite.sh" >"$work/out-lsan" 2>&1 || true
+  cat "$work/lsan-seen" 2>/dev/null || echo "never ran"
+}
+seen=$(lsan_seen)
+if [ "$seen" != unset ]; then
+  echo "gpu-suite-signals: without shim/sanitizers/lsan.supp the sanitized gtests saw LSAN_OPTIONS=$seen" >&2
+  cat "$work/out-lsan" >&2
+  failed=1
+fi
+mkdir -p "$lsan_tree/shim/sanitizers"
+touch "$lsan_tree/shim/sanitizers/lsan.supp"
+seen=$(lsan_seen)
+if [ "$seen" != "suppressions=$lsan_tree/shim/sanitizers/lsan.supp" ]; then
+  echo "gpu-suite-signals: with shim/sanitizers/lsan.supp the sanitized gtests saw LSAN_OPTIONS=$seen" >&2
+  cat "$work/out-lsan" >&2
+  failed=1
+fi
+
 [ "$failed" = 0 ] || exit 1
 echo "gpu-suite-signals: SIGINT, SIGTERM and SIGHUP stop the whole suite and re-raise"
+echo "gpu-suite-signals: the sanitized gtests get LSAN_OPTIONS=suppressions=shim/sanitizers/lsan.supp when it exists"

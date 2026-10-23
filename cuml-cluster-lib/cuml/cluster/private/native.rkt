@@ -6,7 +6,7 @@
                   cuml-family-library
                   cuml-family-libcuml-version
                   load-family)
-         (only-in ffi/unsafe _double _fun _int _int32 _pointer _uint64)
+         (only-in ffi/unsafe _double _double* _fun _int _int32 _pointer _uint64)
          (only-in ffi/unsafe/define define-ffi-definer)
          (only-in ffi/unsafe/define/conventions convention:hyphen->underscore)
          ;; whole-module: define-runtime-path needs bindings only-in strips
@@ -14,6 +14,10 @@
          (only-in raft/unsafe define-job))
 
 (provide call/cluster
+         cuml-cluster-kmeans-fit-job
+         cuml-cluster-kmeans-predict-job
+         cuml-cluster-kmeans-score-job
+         cuml-cluster-kmeans-transform-job
          cuml-cluster-make-blobs
          cuml-cluster-make-blobs-job
          libcuml-version)
@@ -35,4 +39,41 @@
             library
             "cuml_cluster_make_blobs_job"
             (handle view view _int32 _double _int32 _double _double _uint64)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-kmeans-fit-job
+            library
+            "cuml_cluster_kmeans_fit_job"
+            (handle view
+                    view
+                    view
+                    deposit
+                    _int32
+                    _int32
+                    _int32
+                    _double*
+                    _int32
+                    _double*
+                    _int32
+                    _uint64
+                    (out _double)
+                    (out _int32))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-kmeans-predict-job
+            library
+            "cuml_cluster_kmeans_predict_job"
+            (handle view view deposit _int32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-kmeans-score-job
+            library
+            "cuml_cluster_kmeans_score_job"
+            (handle view view view _int32 (out _double))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-cluster-kmeans-transform-job
+            library
+            "cuml_cluster_kmeans_transform_job"
+            (handle view view deposit _int32)
             #:exn exn:fail:cuml)

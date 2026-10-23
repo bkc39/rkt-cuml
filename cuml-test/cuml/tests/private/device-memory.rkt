@@ -21,6 +21,7 @@
          (only-in raft/private/resource with-release))
 
 (provide call-with-device-allocation
+         no-process-memory-reason
          process-device-bytes
          process-memory-skip)
 
@@ -130,10 +131,12 @@
      (nvml-ok 'nvmlDeviceGetHandleByUUID status)
      handle]))
 
+(define (no-process-memory-reason uuid)
+  (format "no per-process device memory (NVML lists no device ~a; a MIG instance?)" uuid))
+
 (define (process-memory-skip #:device [device 0] #:uuid [uuid (device-uuid device)])
   (with-release ([_session (nvml-session) end-nvml-session])
-    (and (not (device-handle uuid))
-         (format "no per-process device memory (NVML lists no device ~a; a MIG instance?)" uuid))))
+    (and (not (device-handle uuid)) (no-process-memory-reason uuid))))
 
 (define (process-device-bytes #:device [device 0] #:pid [pid (getpid)])
   (define uuid (device-uuid device))

@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require (only-in json read-json)
+(require (only-in json read-json write-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/port open-output-nowhere)
@@ -41,17 +41,20 @@
         [(not (python-imports? "cuml")) "no Python twin (import cuml failed)"]
         [else #f])))
 
-(define (run-twin script)
+(define (run-twin script input)
   (with-release ([dir
                   (make-temporary-directory "cuml-twin-~a")
                   (lambda (dir) (delete-directory/files dir #:must-exist? #f))])
+    (define in-path (build-path dir "in.json"))
     (define out-path (build-path dir "out.json"))
+    (call-with-output-file in-path (lambda (out) (write-json input out)))
     (define err (open-output-string))
     (define ok?
-      (call-with-twin-env (lambda ()
-                            (parameterize ([current-directory dir]
-                                           [current-error-port err])
-                              (system* python (path->string script) (path->string out-path))))))
+      (call-with-twin-env
+       (lambda ()
+         (parameterize ([current-directory dir]
+                        [current-error-port err])
+           (system* python (path->string script) (path->string in-path) (path->string out-path))))))
     (unless ok?
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))

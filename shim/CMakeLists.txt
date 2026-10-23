@@ -22,6 +22,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_definitions(CCCL_IGNORE_DEPRECATED_STREAM_REF_HEADER)
 add_compile_options($<$<COMPILE_LANGUAGE:CUDA>:--threads=1>)
 
+option(CUMLRKT_SANITIZE "Build with AddressSanitizer and UndefinedBehaviorSanitizer" OFF)
+if(CUMLRKT_SANITIZE)
+  add_compile_options(
+    "$<$<COMPILE_LANGUAGE:C,CXX>:-fsanitize=address,undefined;-fno-sanitize-recover=undefined;-fno-omit-frame-pointer>"
+    "$<$<COMPILE_LANGUAGE:CUDA>:-Xcompiler=-fsanitize=address,-fsanitize=undefined,-fno-sanitize-recover=undefined,-fno-omit-frame-pointer>")
+  add_link_options(
+    "$<$<LINK_LANGUAGE:C,CXX>:-fsanitize=address,undefined>"
+    "$<$<LINK_LANGUAGE:CUDA>:-Xcompiler=-fsanitize=address,-fsanitize=undefined>")
+endif()
+
 find_package(raftrkt CONFIG REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_library(CUML_LIBRARY NAMES cuml REQUIRED)
@@ -42,8 +52,9 @@ endif()
 include(cmake/Cumlrkt.cmake)
 
 cumlrkt_family(cluster
-  SOURCES cluster/src/blobs.cpp cluster/src/cluster.cpp
-  TESTS cluster/tests/cluster_test.cpp
+  SOURCES cluster/src/blobs.cpp cluster/src/cluster.cpp cluster/src/kmeans.cpp
+  TESTS cluster/tests/cluster_test.cpp cluster/tests/kmeans_test.cpp
+        cluster/tests/kmeans_refusal_test.cpp
 )
 
 cumlrkt_add_tidy_target(tidy)

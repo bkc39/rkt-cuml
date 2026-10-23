@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml) ;; noqa
+         (only-in cuml/cluster kmeans-fit)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in rackunit check-equal? check-false check-not-exn test-case)
          (only-in raft raft-version))
@@ -24,3 +25,6 @@
   (parameterize ([current-namespace (fresh-namespace)])
     (dynamic-require 'cuml/core #f)
     (check-false (module-declared? 'cuml/cluster/private/native #f))))
+
+(test-case "cuml re-exports cuml/cluster's k-means"
+  (check-equal? (dynamic-require 'cuml 'kmeans-fit) kmeans-fit))
