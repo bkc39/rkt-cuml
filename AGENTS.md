@@ -86,43 +86,48 @@ visibility).
 
 ### Native models
 
-A fitted model whose state cuML keeps in C++ (leg 7's HDBSCAN) is a
-`cumlrkt::model` (`shim/common/include/cumlrkt/model.hpp`), published with
-`publish_model` as a raft deposit owner: region 0 is its anchor, a one-int32
-device array holding the `model_kind`, and the rest are the model's arrays.
-raft releases the owner once, on its reaper, with the device set and the
-creating handle alive, whatever is dropped first (rr_resources and
-rr_buffer alias the handle and declare it before the owner), and a job pins
-every buffer passed as a `view`, so the model `any_model` finds outlives
-the call. So a call takes the anchor as a `view`, looks the model up with
-`use_model(anchor, name, kind, call_stream)` (refusing another array,
-another kind or a released model) and runs on its own handle's stream; the
-use holds a shared lock until it ends, and ending it synchronises
-`call_stream`, so the lock is held until the device has finished every
-kernel the call queued against the model. `release()` takes the lock
-exclusively and frees only the opaque members (`drop()`), on the creating
-handle's stream, never a published region; it can therefore not free
-memory that a use's queued work still reads, whatever stream that work is
-on. The registry is never destroyed: raft's reaper deletes models on its
-own thread, which can run after static destructors at exit
-(`never_destroyed<T>()` in `common.hpp`). No pointer to caller memory
-survives the creating call: anything the model reads later is copied or
-owned. Racket wraps the anchor in a `native-model`
-(`cuml/core/private/model.rkt`): `native-model-release!` frees at once,
-under any resources, and a second release returns at once while the first
-runs. The releasing thread claims the model by storing itself in its state;
-a raise rolls the claim back to live, a break during the release lets it
-finish and is then delivered, and a release that finds the claim held by a
-thread that is no longer running (killed, or suspended by a kill) takes it
-over and runs the native release again, which does nothing the second time. `with-native-models`
-checks every binding before it holds any model, and releases on exit; its
-model arrives already evaluated, outside the extent, so control that jumps
-back into the body (a generator resume) cannot acquire again and is
-refused. An unreleased model is freed by the collector once the model and
-every region array taken from it are gone; the creating job reports its
-opaque bytes as phantom bytes, reachable from the model and from each
-region (an ephemeron table), so GC pressure counts them until the native
-owner can actually go.
+A fitted model whose state cuML keeps in C++ is a `cumlrkt::model`
+(`shim/common/include/cumlrkt/model.hpp`), published with `publish_model` as
+a raft deposit owner. Region 0 is its anchor, a one-int32 device array
+holding its `model_kind` code; the other regions are the model's arrays.
+
+Native side:
+
+- Each family library defines its own `model_kind` constants, a code and a
+  name (the probe's are in `shim/probe/src/probe_kinds.hpp`).
+- raft releases the owner once, on its reaper, with the device set and the
+  creating handle alive, whichever is dropped first (`rr_resources` and
+  `rr_buffer` alias the handle and declare it before the owner).
+- A job pins every buffer passed as a `view`, so a call takes the anchor as
+  a `view` and the model it finds outlives the call.
+- `use_model(anchor, name, kind, call_stream)` refuses another array,
+  another kind or a released model. The use holds a shared lock and
+  synchronises `call_stream` before it unlocks, so the lock covers every
+  kernel the call queued against the model.
+- `release()` takes the lock exclusively and calls `drop()`, which frees the
+  opaque members only, on the creating handle's stream, never a published
+  region.
+- The registry is never destroyed (`never_destroyed<T>()` in `common.hpp`):
+  raft's reaper can delete models after static destructors run at exit.
+- No pointer to caller memory survives the creating call; anything the model
+  reads later is copied or owned.
+
+Racket side (`cuml/core/private/model.rkt`, a `native-model`):
+
+- `native-model-release!` frees at once, under any resources; a second
+  release returns at once while the first runs.
+- The releasing thread claims the model by storing itself in the state. A
+  raise rolls the claim back to live. A release that finds the claim held by
+  a thread that is no longer running (killed or suspended) takes it over and
+  runs the native release again, which is idempotent.
+- A break during a release lets the release finish, then is delivered.
+- `with-native-models` checks every binding before it holds any model and
+  releases on every exit. Control that jumps back into its body (a generator
+  resume) is refused, not re-acquired.
+- An unreleased model is freed by the collector once the model and every
+  region taken from it are gone. Its opaque bytes are phantom bytes,
+  reachable from the model and from each region, so GC pressure counts them
+  until the native owner can go.
 
 ### The downstream rules, inherited from rkt-raft
 

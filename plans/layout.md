@@ -357,8 +357,8 @@
     from another family is refused as "not a model anchor".
 - A failed release (for one, under released resources) leaves the model
   live, and a later release succeeds.
-- A release whose thread is killed (or suspended by a kill) mid-release is
-  taken over by the next release; a raise rolls the claim back to live; a
+- A release whose thread stops running (killed or suspended) mid-release
+  is taken over by the next release; a raise rolls the claim back to live; a
   break during a release lets the release finish and is then delivered.
 - `define/who`, `define-hyperparameters` and `define-codes` live in
   `cuml/core/private/`, so cuml-core-lib's exported who-first procedures
