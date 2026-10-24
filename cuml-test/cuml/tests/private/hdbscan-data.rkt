@@ -35,16 +35,20 @@
 
 (provide (struct-out fitted)
          (contract-out [dataset (-> (apply or/c dataset-names) (listof (listof real?)))])
+         alternate
+         alternate-matrix
+         close?
          dataset-names
+         descent-problems
          dup
          fit-lists
+         fitted->list
          fitted-of
-         descent-problems
          label-count
-         persistence-close?
          prediction->lists
          same-fit?
-         structure-problems)
+         structure-problems
+         without-persistence)
 
 (struct fitted
         (labels probabilities
@@ -114,6 +118,15 @@
   (for*/list ([row (in-list rows)]
               [_ (in-range times)])
     row))
+
+(define (alternate rows parity)
+  (for/list ([row (in-list rows)]
+             [i (in-naturals)]
+             #:when (= (modulo i 2) parity))
+    row))
+
+(define (alternate-matrix name parity)
+  (mat (alternate (dataset name) parity) 'float32))
 
 (define (label-count labels)
   (add1 (apply max -1 labels)))
@@ -235,15 +248,34 @@
 (define (sorted-strictly? xs)
   (or (null? xs) (apply < xs)))
 
-(define (persistence-close? a b)
+(define (close? a b tolerance)
   (and (= (length a) (length b))
        (for/and ([x (in-list a)]
                  [y (in-list b)])
-         (<= (abs (- x y)) (* 1e-5 (max (abs x) (abs y) 1e-30))))))
+         (<= (abs (- x y)) (* tolerance (max (abs x) (abs y) 1e-30))))))
 
-(define (fields-without-persistence f)
-  (list-set (cdr (vector->list (struct->vector f))) 2 '()))
+(define fitted-fields
+  (list fitted-labels
+        fitted-probabilities
+        fitted-persistence
+        fitted-parents
+        fitted-children
+        fitted-lambdas
+        fitted-sizes
+        fitted-selected
+        fitted-linkage
+        fitted-distances
+        fitted-linkage-sizes
+        fitted-sources
+        fitted-destinations
+        fitted-weights))
+
+(define (fitted->list f)
+  (map (lambda (field) (field f)) fitted-fields))
+
+(define (without-persistence fields)
+  (list-set fields 2 '()))
 
 (define (same-fit? a b)
-  (and (equal? (fields-without-persistence a) (fields-without-persistence b))
-       (persistence-close? (fitted-persistence a) (fitted-persistence b))))
+  (and (equal? (without-persistence (fitted->list a)) (without-persistence (fitted->list b)))
+       (close? (fitted-persistence a) (fitted-persistence b) 1e-5)))

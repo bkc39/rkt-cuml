@@ -1,37 +1,29 @@
 #lang racket/base
 
-(require (only-in racket/list list-set range shuffle)
+(require (only-in racket/list range shuffle)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true fail test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/dbscan-data.rkt" pick same-partition? seeded)
          (only-in "private/hdbscan-data.rkt"
+                  close?
                   dataset
                   dataset-names
+                  fitted->list
                   fitted-labels
                   fitted-of
                   fitted-probabilities
-                  persistence-close?
-                  same-fit?)
-         (only-in "private/program.rkt" run-program))
-
-(define (fitted->list f)
-  (cdr (vector->list (struct->vector f))))
-
-(define (without-persistence fields)
-  (list-set fields 2 '()))
-
-(define (close? a b tolerance)
-  (and (= (length a) (length b))
-       (for/and ([x (in-list a)]
-                 [y (in-list b)])
-         (<= (abs (- x y)) (* tolerance (max (abs x) (abs y) 1e-30))))))
+                  same-fit?
+                  without-persistence)
+         (only-in "private/program.rkt" run-program)
+         (only-in threading ~>))
 
 (define determinism-program
   `(module determinism racket/base
-     (require (only-in cuml/tests/private/hdbscan-data dataset dataset-names fitted-of))
+     (require (only-in cuml/tests/private/hdbscan-data dataset dataset-names fitted->list fitted-of)
+              (only-in threading ~>))
      (write (for/list ([name (in-list dataset-names)])
-              (cdr (vector->list (struct->vector (fitted-of (dataset name)))))))))
+              (~> name dataset fitted-of fitted->list)))))
 
 (test-gpu "HD4: five fits are bit-identical, persistence within 1e-5"
   (for ([name (in-list dataset-names)])
@@ -47,11 +39,11 @@
      (for ([name (in-list dataset-names)]
            [theirs (in-list (read (open-input-string output)))])
        (test-case (symbol->string name)
-         (define ours (fitted->list (fitted-of (dataset name))))
+         (define ours (~> name dataset fitted-of fitted->list))
          (check-equal? (without-persistence theirs) (without-persistence ours))
          (match-define (list* _ _ their-persistence _) theirs)
          (match-define (list* _ _ our-persistence _) ours)
-         (check-true (persistence-close? their-persistence our-persistence))))]
+         (check-true (close? their-persistence our-persistence 1e-5))))]
     [(list status _ errors) (fail (format "the fit's process exited with ~a:\n~a" status errors))]))
 
 (define (noise-set labels)

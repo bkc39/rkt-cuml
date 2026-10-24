@@ -24,8 +24,9 @@
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" mat vec)
-         (only-in "private/estimator-data.rkt" apply-options round-trips)
-         (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?))
+         (only-in "private/estimator-data.rkt" apply-options hash-remove* round-trips)
+         (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?)
+         (only-in threading ~>))
 
 (define changed
   (hasheq 'min-cluster-size 10
@@ -91,12 +92,13 @@
   (check-not-equal? fitted-e (fit e X))
   (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
   (check-equal? (device-vector->list (fit-predict e X))
-                (device-vector->list (hdbscan-result-labels (hdbscan-fit X #:min-cluster-size 10))))
-  (check-equal?
-   (device-vector->list (fit-predict (apply-options hdbscan changed) X))
-   (device-vector->list
-    (hdbscan-result-labels
-     (apply-options hdbscan-fit (hash-remove (hash-remove changed 'metric) 'build-algo) X)))))
+                (~> (hdbscan-fit X #:min-cluster-size 10) hdbscan-result-labels device-vector->list))
+  (check-equal? (device-vector->list (fit-predict (apply-options hdbscan changed) X))
+                (~> changed
+                    (hash-remove* '(metric build-algo))
+                    (apply-options hdbscan-fit _ X)
+                    hdbscan-result-labels
+                    device-vector->list)))
 
 (test-gpu "errors are named after the generic that was called"
   (define X (mat (dataset 'b10) 'float32))

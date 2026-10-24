@@ -15,8 +15,10 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in "private/dbscan-data.rkt" mat)
-         (only-in "private/estimator-data.rkt" apply-options)
+         (only-in "private/estimator-data.rkt" apply-options hash-remove*)
          (only-in "private/hdbscan-data.rkt"
+                  alternate
+                  close?
                   dataset
                   fit-lists
                   fitted-children
@@ -38,12 +40,6 @@
 (define-runtime-path twin "python/hdbscan_twin.py")
 
 (define defaults (hash-remove (hdbscan-params) 'resources))
-
-(define (alternate rows parity)
-  (for/list ([row (in-list rows)]
-             [i (in-naturals)]
-             #:when (= (modulo i 2) parity))
-    row))
 
 (struct twin-case (name rows points options))
 
@@ -80,10 +76,6 @@
             ([(k v) (in-hash (twin-case-options c))])
     (hash-set options k v)))
 
-(define (hash-remove* h keys)
-  (for/fold ([h h]) ([k (in-list keys)])
-    (hash-remove h k)))
-
 (define (python-case op c)
   (define o (options-of c))
   (hasheq 'op op
@@ -96,12 +88,6 @@
           'alpha (hash-ref o 'alpha)
           'cluster_selection_method (symbol->string (hash-ref o 'cluster-selection-method))
           'allow_single_cluster (hash-ref o 'allow-single-cluster)))
-
-(define (close? a b tolerance)
-  (and (= (length a) (length b))
-       (for/and ([x (in-list a)]
-                 [y (in-list b)])
-         (<= (abs (- x y)) (* tolerance (max (abs x) (abs y) 1e-30))))))
 
 (define exact-fields
   (list (cons 'labels fitted-labels)

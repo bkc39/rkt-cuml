@@ -34,7 +34,8 @@
                   fitted-probabilities
                   label-count
                   same-fit?
-                  structure-problems))
+                  structure-problems)
+         (only-in threading ~>))
 
 (define flt-max 3.4028234663852886e38)
 
@@ -117,41 +118,42 @@
   (for ([name (in-list '(b50 b10 moons))])
     (test-case (symbol->string name)
       (define rows (dataset name))
-      (define labels (fitted-labels (fitted-of (append rows '((1e18 1e18))))))
+      (define labels (~> rows (append '((1e18 1e18))) fitted-of fitted-labels))
       (check-equal? labels (append (fitted-labels (fitted-of rows)) '(-1))))))
 
 (test-gpu "P1: one blob is 7 clusters, or 1 with allow-single"
   (define rows (dataset 'one-blob))
-  (check-equal? (label-count (fitted-labels (fitted-of rows))) 7)
-  (check-equal? (label-count (fitted-labels (fitted-of rows
-                                                       #:options (hasheq 'allow-single-cluster #t))))
-                1))
+  (check-equal? (~> rows fitted-of fitted-labels label-count) 7)
+  (check-equal?
+   (~> rows (fitted-of #:options (hasheq 'allow-single-cluster #t)) fitted-labels label-count)
+   1))
 
 (test-gpu "P2: each ten-fold duplicate of b50 is its own cluster but one"
-  (check-equal? (label-count (fitted-labels (fitted-of (dup (dataset 'b50) 10)))) 299))
+  (check-equal? (~> (dataset 'b50) (dup 10) fitted-of fitted-labels label-count) 299))
 
 (test-gpu "P3: b50 doubled is 24 clusters, and a permutation changes the partition"
   (define rows (dup (dataset 'b50) 2))
   (define labels (fitted-labels (fitted-of rows)))
   (check-equal? (label-count labels) 24)
   (define perm (seeded 1 (lambda () (shuffle (range (length rows))))))
-  (define permuted (fitted-labels (fitted-of (pick rows perm))))
+  (define permuted (~> rows (pick perm) fitted-of fitted-labels))
   (check-pred not (same-partition? labels perm permuted (range (length rows)))))
 
 (test-gpu "P4: epsilon 1e3 on b10 merges to 2 clusters, or 1 with allow-single"
   (define rows (dataset 'b10))
   (check-equal?
-   (label-count (fitted-labels (fitted-of rows #:options (hasheq 'cluster-selection-epsilon 1e3))))
+   (~> rows (fitted-of #:options (hasheq 'cluster-selection-epsilon 1e3)) fitted-labels label-count)
    2)
-  (check-equal? (label-count (fitted-labels (fitted-of rows
-                                                       #:options
-                                                       (hasheq 'cluster-selection-epsilon 1e3
-                                                               'allow-single-cluster #t))))
+  (check-equal? (~> rows
+                    (fitted-of #:options (hasheq 'cluster-selection-epsilon 1e3
+                                                 'allow-single-cluster #t))
+                    fitted-labels
+                    label-count)
                 1))
 
 (test-gpu "P5: leaf selection on b50 predicts at least 290 of its own fit labels"
   (define X (mat (dataset 'b50) 'float32))
   (define result (hdbscan-fit X #:cluster-selection-method 'leaf))
   (define predicted
-    (device-vector->list (hdbscan-prediction-labels (hdbscan-approximate-predict result X))))
+    (~> result (hdbscan-approximate-predict X) hdbscan-prediction-labels device-vector->list))
   (check-true (>= (count = predicted (device-vector->list (hdbscan-result-labels result))) 290)))

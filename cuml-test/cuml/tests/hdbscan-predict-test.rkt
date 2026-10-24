@@ -18,19 +18,21 @@
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/hdbscan-data.rkt" dataset dup fit-lists prediction->lists))
+         (only-in "private/hdbscan-data.rkt"
+                  alternate
+                  alternate-matrix
+                  dataset
+                  dup
+                  fit-lists
+                  label-count
+                  prediction->lists)
+         (only-in threading ~>))
 
 (define (labels-of result)
   (device-vector->list (hdbscan-result-labels result)))
 
 (define (predicted result X)
   (prediction->lists (hdbscan-approximate-predict result X)))
-
-(define (alternate rows parity)
-  (for/list ([row (in-list rows)]
-             [i (in-naturals)]
-             #:when (= (modulo i 2) parity))
-    row))
 
 (define (row-sums-at-most-one? matrix)
   (for/and ([row (in-list matrix)])
@@ -42,9 +44,9 @@
     (<= 0.0 x 1.0)))
 
 (test-gpu "AP1: predictions are int64 labels in [-1, k) and float32 probabilities in [0, 1]"
-  (define result (hdbscan-fit (mat (alternate (dataset 'b50) 0) 'float32)))
-  (define k (add1 (apply max (labels-of result))))
-  (define p (hdbscan-approximate-predict result (mat (alternate (dataset 'b50) 1) 'float32)))
+  (define result (hdbscan-fit (alternate-matrix 'b50 0)))
+  (define k (label-count (labels-of result)))
+  (define p (hdbscan-approximate-predict result (alternate-matrix 'b50 1)))
   (check-equal? (map (lambda (a) (list (dtype a) (shape a)))
                      (list (hdbscan-prediction-labels p) (hdbscan-prediction-probabilities p)))
                 '((int64 (150)) (float32 (150))))
@@ -72,11 +74,11 @@
   (hdbscan-fit (mat (dataset 'identical) 'float32)))
 
 (test-gpu "AP3: a model without clusters predicts noise"
-  (check-equal? (predicted (noise-model) (mat (take (dataset 'b50) 7) 'float32))
+  (check-equal? (predicted (noise-model) (~> (dataset 'b50) (take 7) (mat 'float32)))
                 (list (make-list 7 -1) (make-list 7 0.0))))
 
 (test-gpu "AP4: predicting two halves is predicting the whole"
-  (define result (hdbscan-fit (mat (alternate (dataset 'b10) 0) 'float32)))
+  (define result (hdbscan-fit (alternate-matrix 'b10 0)))
   (define-values (front back) (split-at (alternate (dataset 'b10) 1) 75))
   (define whole (predicted result (mat (append front back) 'float32)))
   (match-define (list first-half second-half)
@@ -92,7 +94,7 @@
       (define rows (dataset name))
       (define result (hdbscan-fit (mat rows 'float32)))
       (define labels (labels-of result))
-      (define k (add1 (apply max labels)))
+      (define k (label-count labels))
       (define m (hdbscan-all-points-membership-vectors result))
       (check-equal? (list (dtype m) (shape m)) (list 'float32 (list (length rows) k)))
       (define matrix (device-matrix->list* m))
@@ -105,8 +107,8 @@
 (test-gpu "MV2: held-out memberships are m x k with row sums at most 1"
   (for ([name (in-list '(b50 b10 moons))])
     (test-case (symbol->string name)
-      (define result (hdbscan-fit (mat (alternate (dataset name) 0) 'float32)))
-      (define k (add1 (apply max (labels-of result))))
+      (define result (hdbscan-fit (alternate-matrix name 0)))
+      (define k (label-count (labels-of result)))
       (define held-out (alternate (dataset name) 1))
       (define m (hdbscan-membership-vector result (mat held-out 'float32)))
       (check-equal? (shape m) (list (length held-out) k))
@@ -115,12 +117,12 @@
 (test-gpu "MV3: a model without clusters has empty memberships"
   (define result (noise-model))
   (check-equal? (shape (hdbscan-all-points-membership-vectors result)) '(100 0))
-  (check-equal? (shape (hdbscan-membership-vector result (mat (take (dataset 'b50) 7) 'float32)))
+  (check-equal? (shape (hdbscan-membership-vector result (~> (dataset 'b50) (take 7) (mat 'float32))))
                 '(7 0)))
 
 (test-gpu "MV4: the batch size does not change the memberships"
-  (define result (hdbscan-fit (mat (alternate (dataset 'moons) 0) 'float32)))
-  (define held-out (mat (alternate (dataset 'moons) 1) 'float32))
+  (define result (hdbscan-fit (alternate-matrix 'moons 0)))
+  (define held-out (alternate-matrix 'moons 1))
   (define (both batch)
     (list (device-matrix->list* (hdbscan-all-points-membership-vectors result #:batch-size batch))
           (device-matrix->list* (hdbscan-membership-vector result held-out #:batch-size batch))))
