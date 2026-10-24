@@ -14,20 +14,40 @@
                   cuml-cluster-hdbscan-membership-vector-job
                   cuml-cluster-model-release-job))
 
-(provide (except-out (struct-out hdbscan-result) hdbscan-result hdbscan-result-X)
-         (except-out (struct-out hdbscan-condensed-tree) hdbscan-condensed-tree)
-         (except-out (struct-out hdbscan-linkage-tree) hdbscan-linkage-tree)
-         (except-out (struct-out hdbscan-spanning-tree) hdbscan-spanning-tree)
-         (except-out (struct-out hdbscan-prediction) hdbscan-prediction)
-         hdbscan-all-points-membership-vectors
+(provide hdbscan-all-points-membership-vectors
          hdbscan-all-points-membership-vectors/who
          hdbscan-approximate-predict
          hdbscan-approximate-predict/who
+         hdbscan-condensed-tree-children
+         hdbscan-condensed-tree-lambdas
+         hdbscan-condensed-tree-parents
+         hdbscan-condensed-tree-selected-clusters
+         hdbscan-condensed-tree-sizes
+         hdbscan-condensed-tree?
          hdbscan-fit
          hdbscan-fit/who
+         hdbscan-linkage-tree-children
+         hdbscan-linkage-tree-distances
+         hdbscan-linkage-tree-sizes
+         hdbscan-linkage-tree?
          hdbscan-membership-vector
          hdbscan-membership-vector/who
-         hdbscan-params)
+         hdbscan-params
+         hdbscan-prediction-labels
+         hdbscan-prediction-probabilities
+         hdbscan-prediction?
+         hdbscan-result-cluster-persistence
+         hdbscan-result-condensed-tree
+         hdbscan-result-labels
+         hdbscan-result-minimum-spanning-tree
+         hdbscan-result-model
+         hdbscan-result-probabilities
+         hdbscan-result-single-linkage-tree
+         hdbscan-result?
+         hdbscan-spanning-tree-destinations
+         hdbscan-spanning-tree-sources
+         hdbscan-spanning-tree-weights
+         hdbscan-spanning-tree?)
 
 (struct hdbscan-result
         (labels probabilities

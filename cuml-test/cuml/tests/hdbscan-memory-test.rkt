@@ -83,7 +83,7 @@
   (define threads (executor-threads))
   (define started (current-inexact-milliseconds))
   (define samples
-    (for/list ([s (in-range (quotient rounds sample-every))])
+    (for/list ([_ (in-range (quotient rounds sample-every))])
       (for ([i (in-range sample-every)])
         (one-round i X points e))
       (define sample (pool-sample))
