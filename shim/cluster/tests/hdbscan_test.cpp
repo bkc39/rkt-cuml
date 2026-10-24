@@ -169,6 +169,18 @@ std::string descent_problems(const fitted_model& f) {
   return problems;
 }
 
+std::string opaque_problems(const fitted_model& f) {
+  const int64_t edges = f.model.r.regions[2].shape[0];
+  const int64_t k = f.clusters();
+  const int64_t least =
+      (4 * f.n) + (8 * ((2 * k) + edges + 2)) + (4 * (edges + 1 - f.n));
+  const int64_t most = least + (8 * f.n);
+  if (f.opaque >= least && f.opaque <= most) {
+    return "";
+  }
+  return std::format("opaque {} outside [{}, {}]; ", f.opaque, least, most);
+}
+
 TEST(Hdbscan, OutputsHaveTheirShapes) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -176,14 +188,10 @@ TEST(Hdbscan, OutputsHaveTheirShapes) {
   ASSERT_EQ(f.status, "accepted");
   ASSERT_EQ((std::vector<int32_t>{f.model.r.count, f.out.r.count}),
             (std::vector<int32_t>{model_regions, plain_regions}));
-  const int64_t edges = f.model.r.regions[2].shape[0];
-  const int64_t k = f.clusters();
-  const int64_t least =
-      (4 * f.n) + (8 * ((2 * k) + edges + 2)) + (4 * (edges + 1 - f.n));
-  EXPECT_GE(f.opaque, least);
-  EXPECT_LE(f.opaque, least + (8 * f.n));
   EXPECT_EQ(f.model.r.regions[selected_region].shape[0], f.clusters());
-  EXPECT_EQ(label_problems(f) + condensed_problems(f) + plain_problems(f), "");
+  EXPECT_EQ(opaque_problems(f) + label_problems(f) + condensed_problems(f) +
+                plain_problems(f),
+            "");
 }
 
 TEST(Hdbscan, LabelsDescendFromTheirSelectedClusters) {

@@ -164,7 +164,9 @@ fitted fit_outputs(const raft::handle_t& handle,
   return {std::move(m), std::move(plain)};
 }
 
-std::array<rr_view, 7> model_regions(hdbscan_model& m) {
+constexpr std::size_t model_region_count = 7;
+
+std::array<rr_view, model_region_count> model_regions(hdbscan_model& m) {
   const int64_t edges = m.tree.get_n_edges();
   return {raftrkt::region(m.labels),
           raftrkt::region(m.tree.get_parents(), edges),
@@ -202,7 +204,8 @@ void fit(const raft::handle_t& handle, const rr_view* view, const options& o,
   require_bounded_rows("X", x, raft::resource::get_cuda_stream(handle));
   fitted f = fit_outputs(handle, x, o);
   const int64_t bytes = f.model->opaque_bytes();
-  const std::array<rr_view, 7> regions = model_regions(*f.model);
+  const std::array<rr_view, model_region_count> regions =
+      model_regions(*f.model);
   cumlrkt::publish_model(into.model, "model-out", handle, std::move(f.model),
                          regions);
   publish_plain(into.plain, handle, std::move(f.plain), x.n - 1);
