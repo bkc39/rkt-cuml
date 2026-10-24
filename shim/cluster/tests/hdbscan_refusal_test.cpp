@@ -8,8 +8,8 @@
 #include "cluster_fixture.hpp"
 #include "cumlrkt/cluster.h"
 #include "hdbscan_fixture.hpp"
-#include "limits.hpp"
 #include "kmeans_fixture.hpp"
+#include "limits.hpp"
 #include "raftrkt/c_api.h"
 #include "refusal_fixture.hpp"
 
@@ -103,7 +103,8 @@ TEST(HdbscanRefusals, FitNamesTheArgument) {
        "max-cluster-size: expected at most 2147483647, got 2147483648"},
       {with(base, &call::alpha, 0), "alpha: expected greater than 0, got 0"},
       {with(base, &call::alpha, -1), "alpha: expected greater than 0, got -1"},
-      {with(base, &call::alpha, nan), "alpha: expected greater than 0, got nan"},
+      {with(base, &call::alpha, nan),
+       "alpha: expected greater than 0, got nan"},
       {with(base, &call::alpha, float_zero),
        "alpha: expected greater than 0, got 1e-46"},
       {with(base, &call::alpha, inf), alpha_most + "inf"},

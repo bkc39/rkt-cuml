@@ -153,10 +153,14 @@
                                                    #:batch-size [batch-size 4096]
                                                    #:resources [resources (current-device-resources)])
   (match-define (list memberships)
-    (call-with-prediction
-     who
-     result
-     resources
-     (lambda (anchor X out)
-       (cuml-cluster-hdbscan-all-points-membership-vectors-job who resources anchor X out batch-size))))
+    (call-with-prediction who
+                          result
+                          resources
+                          (lambda (anchor X out)
+                            (cuml-cluster-hdbscan-all-points-membership-vectors-job who
+                                                                                    resources
+                                                                                    anchor
+                                                                                    X
+                                                                                    out
+                                                                                    batch-size))))
   memberships)

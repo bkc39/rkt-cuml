@@ -39,54 +39,58 @@
 (define (fit-rows)
   (define X (grid 'float32))
   (define fit-row
-    (make-keyword-procedure (lambda (kws kw-values id message [x X])
-                              (row id message (lambda () (keyword-apply hdbscan-fit kws kw-values (list x)))))))
-  (list (fit-row "H0 float64" "X: expected float32, got float64" (grid 'float64))
-        (fit-row "H0 int32" "X: expected float32, got int32" (blank-matrix 10 2 'int32))
-        (fit-row "H1 rank" "X: expected rank 2, got rank 1" (blank-vector 10 'float32))
-        (fit-row "H1 layout"
-                 "X: expected row-major, got col-major 10x2"
-                 (blank-matrix 10 2 'float32 #:layout 'col-major))
-        (fit-row "H2" "X: expected at least 2 rows, got 1" (grid 'float32 1))
-        (fit-row "H2 empty" "X: expected at least 2 rows, got 0" (blank-matrix 0 2 'float32))
-        (fit-row "H3" "X: expected at least 1 column, got 0" (blank-matrix 10 0 'float32))
-        (fit-row "H7 zero" "min-samples: expected at least 1, got 0" #:min-samples 0)
-        (fit-row "H7 most" "min-samples: expected at most 1023, got 1024" #:min-samples 1024)
-        (fit-row "H8" "X: 4 samples are fewer than min-samples 5" (grid 'float32 4))
-        (fit-row "H8 explicit" "X: 10 samples are fewer than min-samples 11" #:min-samples 11)
-        (fit-row "H9 negative"
-                 "cluster-selection-epsilon: expected at least 0, got -1"
-                 #:cluster-selection-epsilon -1)
-        (fit-row "H9 nan"
-                 "cluster-selection-epsilon: expected at least 0, got nan"
-                 #:cluster-selection-epsilon +nan.0)
-        (fit-row "H9 inf"
-                 (float-most "cluster-selection-epsilon" "inf")
-                 #:cluster-selection-epsilon +inf.0)
-        (fit-row "H10" "max-cluster-size: expected at least 0, got -1" #:max-cluster-size -1)
-        (fit-row "H10 most"
-                 "max-cluster-size: expected at most 2147483647, got 2147483648"
-                 #:max-cluster-size (expt 2 31))
-        (fit-row "H11 zero" "alpha: expected greater than 0, got 0" #:alpha 0)
-        (fit-row "H11 negative" "alpha: expected greater than 0, got -1" #:alpha -1)
-        (fit-row "H11 nan" "alpha: expected greater than 0, got nan" #:alpha +nan.0)
-        (fit-row "H11 float zero" "alpha: expected greater than 0, got 1e-46" #:alpha 1e-46)
-        (fit-row "H11 inf" (float-most "alpha" "inf") #:alpha +inf.0)
-        (fit-row "H12" "cluster-selection-method: expected eom or leaf" #:cluster-selection-method 'average)
-        (fit-row "H13 nan" (norm-message "nan") (with-bad-row '(+nan.0 1)))
-        (fit-row "H13 inf" (norm-message "inf") (with-bad-row '(+inf.0 0)))
-        (fit-row "H13 -inf" (norm-message "inf") (with-bad-row '(0 -inf.0)))
-        (fit-row "H13 1e20" (norm-message "1.0000000400817551e+40") (with-bad-row '(1e20 0)))
-        (fit-row "H13 2^63" (norm-message "8.507059173023462e+37") (with-bad-row (list (expt 2 63) 0)))
-        (fit-row "H0 before H2" "X: expected float32, got float64" (grid 'float64 1))
-        (fit-row "H8 before H13"
-                 "X: 10 samples are fewer than min-samples 11"
-                 (with-bad-row '(+nan.0 1))
-                 #:min-samples 11)
-        (fit-row "H9 before H11"
-                 "cluster-selection-epsilon: expected at least 0, got -1"
-                 #:cluster-selection-epsilon -1
-                 #:alpha 0)))
+    (make-keyword-procedure
+     (lambda (kws kw-values id message [x X])
+       (row id message (lambda () (keyword-apply hdbscan-fit kws kw-values (list x)))))))
+  (list
+   (fit-row "H0 float64" "X: expected float32, got float64" (grid 'float64))
+   (fit-row "H0 int32" "X: expected float32, got int32" (blank-matrix 10 2 'int32))
+   (fit-row "H1 rank" "X: expected rank 2, got rank 1" (blank-vector 10 'float32))
+   (fit-row "H1 layout"
+            "X: expected row-major, got col-major 10x2"
+            (blank-matrix 10 2 'float32 #:layout 'col-major))
+   (fit-row "H2" "X: expected at least 2 rows, got 1" (grid 'float32 1))
+   (fit-row "H2 empty" "X: expected at least 2 rows, got 0" (blank-matrix 0 2 'float32))
+   (fit-row "H3" "X: expected at least 1 column, got 0" (blank-matrix 10 0 'float32))
+   (fit-row "H7 zero" "min-samples: expected at least 1, got 0" #:min-samples 0)
+   (fit-row "H7 most" "min-samples: expected at most 1023, got 1024" #:min-samples 1024)
+   (fit-row "H8" "X: 4 samples are fewer than min-samples 5" (grid 'float32 4))
+   (fit-row "H8 explicit" "X: 10 samples are fewer than min-samples 11" #:min-samples 11)
+   (fit-row "H9 negative"
+            "cluster-selection-epsilon: expected at least 0, got -1"
+            #:cluster-selection-epsilon -1)
+   (fit-row "H9 nan"
+            "cluster-selection-epsilon: expected at least 0, got nan"
+            #:cluster-selection-epsilon +nan.0)
+   (fit-row "H9 inf"
+            (float-most "cluster-selection-epsilon" "inf")
+            #:cluster-selection-epsilon +inf.0)
+   (fit-row "H10" "max-cluster-size: expected at least 0, got -1" #:max-cluster-size -1)
+   (fit-row "H10 most"
+            "max-cluster-size: expected at most 2147483647, got 2147483648"
+            #:max-cluster-size (expt 2 31))
+   (fit-row "H11 zero" "alpha: expected greater than 0, got 0" #:alpha 0)
+   (fit-row "H11 negative" "alpha: expected greater than 0, got -1" #:alpha -1)
+   (fit-row "H11 nan" "alpha: expected greater than 0, got nan" #:alpha +nan.0)
+   (fit-row "H11 float zero" "alpha: expected greater than 0, got 1e-46" #:alpha 1e-46)
+   (fit-row "H11 inf" (float-most "alpha" "inf") #:alpha +inf.0)
+   (fit-row "H12"
+            "cluster-selection-method: expected eom or leaf"
+            #:cluster-selection-method 'average)
+   (fit-row "H13 nan" (norm-message "nan") (with-bad-row '(+nan.0 1)))
+   (fit-row "H13 inf" (norm-message "inf") (with-bad-row '(+inf.0 0)))
+   (fit-row "H13 -inf" (norm-message "inf") (with-bad-row '(0 -inf.0)))
+   (fit-row "H13 1e20" (norm-message "1.0000000400817551e+40") (with-bad-row '(1e20 0)))
+   (fit-row "H13 2^63" (norm-message "8.507059173023462e+37") (with-bad-row (list (expt 2 63) 0)))
+   (fit-row "H0 before H2" "X: expected float32, got float64" (grid 'float64 1))
+   (fit-row "H8 before H13"
+            "X: 10 samples are fewer than min-samples 11"
+            (with-bad-row '(+nan.0 1))
+            #:min-samples 11)
+   (fit-row "H9 before H11"
+            "cluster-selection-epsilon: expected at least 0, got -1"
+            #:cluster-selection-epsilon -1
+            #:alpha 0)))
 
 (define (prediction-rows result)
   (define predict (curry hdbscan-approximate-predict result))
@@ -177,7 +181,8 @@
       (append
        (for/list ([mcs (in-list '(1 0 -3))])
          (list 'logic (format "hdbscan-fit: min-cluster-size: expected at least 2, got ~a" mcs)))
-       (list (list 'logic "hdbscan-fit: min-cluster-size: expected at most 2147483647, got 4294967297"))
+       (list (list 'logic
+                   "hdbscan-fit: min-cluster-size: expected at most 2147483647, got 4294967297"))
        (for*/list ([got (in-list '("nan" "inf" "inf" "1.0000000400817551e+40"))]
                    [name (in-list '(hdbscan-approximate-predict hdbscan-membership-vector))])
          (list 'logic (format "~a: ~a" name (norm-of got))))

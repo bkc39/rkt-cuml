@@ -49,8 +49,8 @@
        (test-case (symbol->string name)
          (define ours (fitted->list (fitted-of (dataset name))))
          (check-equal? (without-persistence theirs) (without-persistence ours))
-         (match-define (list _ _ their-persistence _ ...) theirs)
-         (match-define (list _ _ our-persistence _ ...) ours)
+         (match-define (list* _ _ their-persistence _) theirs)
+         (match-define (list* _ _ our-persistence _) ours)
          (check-true (persistence-close? their-persistence our-persistence))))]
     [(list status _ errors) (fail (format "the fit's process exited with ~a:\n~a" status errors))]))
 

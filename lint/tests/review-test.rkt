@@ -308,8 +308,8 @@
                 '("twice takes who first and is exported: define it with define/who")))
 
 (test-case "a facade re-exports its only-in imports with all-from-out"
-  (check-equal? (problems-in '((require (only-in racket/list first second))
-                               (provide (all-from-out racket/list))))
-                '())
+  (check-equal?
+   (problems-in '((require (only-in racket/list first second)) (provide (all-from-out racket/list))))
+   '())
   (check-equal? (problems-in '((require (only-in racket/list first)) (provide first)))
                 '("identifier 'first' provided but not defined")))

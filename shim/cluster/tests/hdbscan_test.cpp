@@ -178,8 +178,8 @@ TEST(Hdbscan, OutputsHaveTheirShapes) {
             (std::vector<int32_t>{model_regions, plain_regions}));
   const int64_t edges = f.model.r.regions[2].shape[0];
   const int64_t k = f.clusters();
-  const int64_t least = (4 * f.n) + (8 * ((2 * k) + edges + 2)) +
-                        (4 * (edges + 1 - f.n));
+  const int64_t least =
+      (4 * f.n) + (8 * ((2 * k) + edges + 2)) + (4 * (edges + 1 - f.n));
   EXPECT_GE(f.opaque, least);
   EXPECT_LE(f.opaque, least + (8 * f.n));
   EXPECT_EQ(f.model.r.regions[selected_region].shape[0], f.clusters());

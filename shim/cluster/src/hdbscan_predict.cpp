@@ -162,11 +162,10 @@ void membership_vector(const raft::handle_t& handle, const fitted_views& fitted,
                              raft::resource::get_cuda_stream(handle));
       },
       [&](float* into, std::size_t batch) {
-        ML::compute_membership_vector(handle, m->tree, *m->pd, q.x,
-                                      q.points.data,
-                                      static_cast<std::size_t>(q.points.n),
-                                      static_cast<int>(m->min_samples), metric,
-                                      into, batch);
+        ML::compute_membership_vector(
+            handle, m->tree, *m->pd, q.x, q.points.data,
+            static_cast<std::size_t>(q.points.n),
+            static_cast<int>(m->min_samples), metric, into, batch);
       });
 }
 
@@ -174,11 +173,12 @@ void all_points(const raft::handle_t& handle, const fitted_views& fitted,
                 rr_deposit* out, int64_t batch_size) {
   const model_use m = used(fitted.model, handle);
   const float* training = checked_training(*m, fitted.x);
-  memberships_for(handle, *m, {"model", m->n_rows, batch_size, out}, [] {},
-                  [&](float* into, std::size_t batch) {
-                    ML::compute_all_points_membership_vectors(
-                        handle, m->tree, *m->pd, training, metric, into, batch);
-                  });
+  memberships_for(
+      handle, *m, {"model", m->n_rows, batch_size, out}, [] {},
+      [&](float* into, std::size_t batch) {
+        ML::compute_all_points_membership_vectors(
+            handle, m->tree, *m->pd, training, metric, into, batch);
+      });
 }
 
 }  // namespace

@@ -214,8 +214,9 @@
     (match (hash-ref parent-of i #f)
       [#f '()]
       [p (cons p (ancestors p))]))
-  (define selected (for/vector ([s (in-list (fitted-selected f))])
-                     (+ n s)))
+  (define selected
+    (for/vector ([s (in-list (fitted-selected f))])
+      (+ n s)))
   (filter values
           (cons (problem (sorted-strictly? (vector->list selected))
                          "selected clusters: strictly ascending")

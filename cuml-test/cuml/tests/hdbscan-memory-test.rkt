@@ -18,11 +18,11 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
          (only-in raft current-device-resources device-vector->list)
-         (only-in raft/unsafe deposit->list)
          (only-in raft/private/foreign/memory release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until drain-finalizers! settled-count)
          (only-in raft/tests/private/probe probe-pool-used)
+         (only-in raft/unsafe deposit->list)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/hdbscan-data.rkt" dataset)
@@ -145,7 +145,11 @@
   (define used (probe-pool-used device))
   (native-model-release! model)
   (define freed (- used (probe-pool-used device)))
-  (printf "memory: a release freed ~a bytes; the fit reported ~a, in ~a to ~a\n" freed opaque least most)
+  (printf "memory: a release freed ~a bytes; the fit reported ~a, in ~a to ~a\n"
+          freed
+          opaque
+          least
+          most)
   (check-equal? freed opaque)
   (check-true (<= least opaque most))
   (void/reference-sink X regions plain))
