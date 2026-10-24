@@ -416,6 +416,6 @@
 
 (test-case "a later release clears the anchor of a model whose releaser died after it was released"
   (define m
-    (anchor->native-model 'probe-a 'stand-in-anchor void (box 'released) (make-phantom-bytes 0)))
+    (anchor->native-model 'probe-a 'stand-in-anchor void (box 'released) (make-phantom-bytes 0) 0))
   (native-model-release! m #:resources #f)
   (check-false (native-model-anchor m)))
