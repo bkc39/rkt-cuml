@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/cluster
+(require (for-syntax racket/base)
+         (only-in cuml/cluster
                   hdbscan-condensed-tree-children
                   hdbscan-condensed-tree-lambdas
                   hdbscan-condensed-tree-parents
@@ -21,19 +22,19 @@
                   hdbscan-spanning-tree-destinations
                   hdbscan-spanning-tree-sources
                   hdbscan-spanning-tree-weights)
+         (only-in racket/contract/base -> contract-out listof or/c)
          (only-in racket/file file->value)
          (only-in racket/list append* last list-set make-list range remove-duplicates)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match-define match-lambda)
          (only-in racket/math pi)
-         ;; whole-module: define-runtime-path needs bindings only-in strips
-         racket/runtime-path
+         (only-in racket/runtime-path define-runtime-path)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "dbscan-data.rkt" mat seeded)
          (only-in "estimator-data.rkt" apply-options)
          (only-in "spectral-data.rkt" blobs circles float32-rows moons))
 
 (provide (struct-out fitted)
-         dataset
+         (contract-out [dataset (-> (apply or/c dataset-names) (listof (listof real?)))])
          dataset-names
          dup
          fit-lists
@@ -107,8 +108,7 @@
                               (integer-grid 10 (* 100 k)))))]
     [(grid30) (float32-rows (integer-grid 30))]
     [(one-blob) (numpy-blobs 0.0)]
-    [(identical) (make-list 100 '(1.0 1.0))]
-    [else (raise-argument-error 'dataset "a dataset name" name)]))
+    [(identical) (make-list 100 '(1.0 1.0))]))
 
 (define (dup rows times)
   (for*/list ([row (in-list rows)]
@@ -193,7 +193,9 @@
                     (= s 1))
                   "condensed: leaf edges have size 1")
          (problem (= (length linkage) (sub1 n)) "linkage: n-1 merges")
-         (problem (andmap (lambda (pair) (<= 0 (car pair) (cadr pair) (- (* 2 n) 2))) linkage)
+         (problem (andmap (match-lambda
+                            [(list a b) (<= 0 a b (- (* 2 n) 2))])
+                          linkage)
                   "linkage: sorted pairs of ids in [0, 2n-2]")
          (problem (sorted? distances) "linkage: distances do not decrease")
          (problem (= (last linkage-sizes) n) "linkage: the last merge holds every row")
@@ -201,7 +203,7 @@
          (problem (equal? weights distances) "spanning tree: weights are the linkage distances"))))
 
 (define (sorted? xs)
-  (or (null? xs) (null? (cdr xs)) (and (<= (car xs) (cadr xs)) (sorted? (cdr xs)))))
+  (or (null? xs) (apply <= xs)))
 
 (define (descent-problems f n)
   (define parent-of
@@ -212,23 +214,25 @@
     (match (hash-ref parent-of i #f)
       [#f '()]
       [p (cons p (ancestors p))]))
-  (define selected (map (lambda (s) (+ n s)) (fitted-selected f)))
+  (define selected (for/vector ([s (in-list (fitted-selected f))])
+                     (+ n s)))
   (filter values
-          (cons (problem (sorted-strictly? selected) "selected clusters: strictly ascending")
+          (cons (problem (sorted-strictly? (vector->list selected))
+                         "selected clusters: strictly ascending")
                 (for/list ([l (in-list (fitted-labels f))]
                            [i (in-naturals)])
                   (define above
-                    (for/list ([s (in-list selected)]
+                    (for/list ([s (in-vector selected)]
                                #:when (memv s (ancestors i)))
                       s))
                   (problem (equal? above
                                    (if (= l -1)
                                        '()
-                                       (list (list-ref selected l))))
+                                       (list (vector-ref selected l))))
                            (format "point ~a: label ~a, under selected ~a" i l above))))))
 
 (define (sorted-strictly? xs)
-  (or (null? xs) (null? (cdr xs)) (and (< (car xs) (cadr xs)) (sorted-strictly? (cdr xs)))))
+  (or (null? xs) (apply < xs)))
 
 (define (persistence-close? a b)
   (and (= (length a) (length b))

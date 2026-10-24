@@ -115,49 +115,48 @@
                   model
                   X))
 
-(define (anchor-of who result)
-  (live-anchor/who who (hdbscan-result-model result) 'hdbscan))
+(define (call-with-prediction who result resources run)
+  (define anchor (live-anchor/who who (hdbscan-result-model result) 'hdbscan))
+  (define out (deposit-for/who who resources))
+  (run anchor (hdbscan-result-X result) out)
+  (deposit->list out))
 
 (define/who (hdbscan-approximate-predict who
                                          result
                                          points
                                          #:resources [resources (current-device-resources)])
-  (define anchor (anchor-of who result))
-  (define out (deposit-for/who who resources))
-  (cuml-cluster-hdbscan-approximate-predict-job who
-                                                resources
-                                                anchor
-                                                (hdbscan-result-X result)
-                                                points
-                                                out)
-  (apply hdbscan-prediction (deposit->list out)))
+  (match-define (list labels probabilities)
+    (call-with-prediction
+     who
+     result
+     resources
+     (lambda (anchor X out)
+       (cuml-cluster-hdbscan-approximate-predict-job who resources anchor X points out))))
+  (hdbscan-prediction labels probabilities))
 
 (define/who (hdbscan-membership-vector who
                                        result
                                        points
                                        #:batch-size [batch-size 4096]
                                        #:resources [resources (current-device-resources)])
-  (define anchor (anchor-of who result))
-  (define out (deposit-for/who who resources))
-  (cuml-cluster-hdbscan-membership-vector-job who
-                                              resources
-                                              anchor
-                                              (hdbscan-result-X result)
-                                              points
-                                              out
-                                              batch-size)
-  (car (deposit->list out)))
+  (match-define (list memberships)
+    (call-with-prediction
+     who
+     result
+     resources
+     (lambda (anchor X out)
+       (cuml-cluster-hdbscan-membership-vector-job who resources anchor X points out batch-size))))
+  memberships)
 
 (define/who (hdbscan-all-points-membership-vectors who
                                                    result
                                                    #:batch-size [batch-size 4096]
                                                    #:resources [resources (current-device-resources)])
-  (define anchor (anchor-of who result))
-  (define out (deposit-for/who who resources))
-  (cuml-cluster-hdbscan-all-points-membership-vectors-job who
-                                                          resources
-                                                          anchor
-                                                          (hdbscan-result-X result)
-                                                          out
-                                                          batch-size)
-  (car (deposit->list out)))
+  (match-define (list memberships)
+    (call-with-prediction
+     who
+     result
+     resources
+     (lambda (anchor X out)
+       (cuml-cluster-hdbscan-all-points-membership-vectors-job who resources anchor X out batch-size))))
+  memberships)

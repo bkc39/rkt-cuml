@@ -7,18 +7,25 @@
                   hdbscan-fit
                   hdbscan-membership-vector
                   hdbscan-result-model)
+         (only-in cuml/cluster/private/deposit deposit-for/who)
+         (only-in cuml/cluster/private/native
+                  cuml-cluster-hdbscan-fit-job
+                  cuml-cluster-model-release-job)
+         (only-in cuml/core/private/model deposit->native-model/who)
          (only-in ffi/unsafe void/reference-sink)
          (only-in racket/format ~r)
          (only-in racket/list take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
+         (only-in raft current-device-resources device-vector->list)
+         (only-in raft/unsafe deposit->list)
          (only-in raft/private/foreign/memory release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
-         (only-in raft/tests/private/collect collect-until settled-count)
+         (only-in raft/tests/private/collect collect-until drain-finalizers! settled-count)
          (only-in raft/tests/private/probe probe-pool-used)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/dbscan-data.rkt" mat)
-         (only-in "private/hdbscan-data.rkt" dataset fit-lists fitted-parents fitted-selected)
+         (only-in "private/hdbscan-data.rkt" dataset)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/process-memory.rkt"
                   baseline-sample
@@ -33,7 +40,6 @@
 (define rounds 300)
 (define sample-every 100)
 (define refusals-per-sample 20)
-(define MiB (* 1024 1024))
 
 (define (one-round i X points e)
   (define result (hdbscan-fit X))
@@ -112,21 +118,34 @@
    (<= growth device-slack)
    (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))
 
-(define (opaque-bounds f n)
-  (define k (length (fitted-selected f)))
-  (define edges (length (fitted-parents f)))
+(define (opaque-bounds n regions)
+  (match-define (list _ parents _ _ _ _ selected) regions)
+  (define k (length (device-vector->list selected)))
+  (define edges (length (device-vector->list parents)))
   (define clusters (- (add1 edges) n))
   (define least (+ (* 4 n) (* 8 (+ (add1 k) k (add1 edges))) (* 4 clusters)))
   (values least (+ least (* 8 n))))
 
-(test-process-memory "a release frees the model's opaque bytes at once, at 2 MiB granularity"
+(test-process-memory "a release frees exactly the opaque bytes the fit reports"
   (define rows (dataset 'overlap))
-  (define result (hdbscan-fit (mat rows 'float32)))
-  (define-values (least most) (opaque-bounds (fit-lists result) (length rows)))
+  (define resources (current-device-resources))
+  (define model-out (deposit-for/who 'opaque resources))
+  (define out (deposit-for/who 'opaque resources))
+  (define X (mat rows 'float32))
+  (define opaque (cuml-cluster-hdbscan-fit-job 'opaque resources X model-out out 5 5 0.0 0 1.0 0 0))
+  (define-values (model regions)
+    (deposit->native-model/who 'opaque
+                               'hdbscan
+                               model-out
+                               cuml-cluster-model-release-job
+                               #:opaque-bytes opaque))
+  (define plain (deposit->list out))
+  (define-values (least most) (opaque-bounds (length rows) regions))
+  (drain-finalizers!)
   (define used (probe-pool-used device))
-  (native-model-release! (hdbscan-result-model result))
+  (native-model-release! model)
   (define freed (- used (probe-pool-used device)))
-  (printf "memory: a release freed ~a bytes; the opaque bytes are ~a to ~a\n" freed least most)
-  (check-true (<= (- least (* 2 MiB)) freed (+ most (* 2 MiB))))
-  (check-true (> freed 0))
-  (void/reference-sink result))
+  (printf "memory: a release freed ~a bytes; the fit reported ~a, in ~a to ~a\n" freed opaque least most)
+  (check-equal? freed opaque)
+  (check-true (<= least opaque most))
+  (void/reference-sink X regions plain))

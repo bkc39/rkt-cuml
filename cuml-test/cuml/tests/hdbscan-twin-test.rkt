@@ -140,8 +140,9 @@
       (define-values (f predictions) (ours c))
       (define same
         (append (for/list ([field (in-list exact-fields)])
-                  (define equal-field? (equal? ((cdr field) f) (hash-ref theirs (car field))))
-                  (test-case (format "~a: ~a" (twin-case-name c) (car field))
+                  (match-define (cons name get) field)
+                  (define equal-field? (equal? (get f) (hash-ref theirs name)))
+                  (test-case (format "~a: ~a" (twin-case-name c) name)
                     (check-true equal-field?))
                   equal-field?)
                 (for/list ([(key value) (in-hash predictions)])

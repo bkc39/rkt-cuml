@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/list list-set range shuffle)
-         (only-in racket/match match)
+         (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true fail test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/dbscan-data.rkt" pick same-partition? seeded)
@@ -49,7 +49,9 @@
        (test-case (symbol->string name)
          (define ours (fitted->list (fitted-of (dataset name))))
          (check-equal? (without-persistence theirs) (without-persistence ours))
-         (check-true (persistence-close? (list-ref theirs 2) (list-ref ours 2)))))]
+         (match-define (list _ _ their-persistence _ ...) theirs)
+         (match-define (list _ _ our-persistence _ ...) ours)
+         (check-true (persistence-close? their-persistence our-persistence))))]
     [(list status _ errors) (fail (format "the fit's process exited with ~a:\n~a" status errors))]))
 
 (define (noise-set labels)

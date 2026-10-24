@@ -10,7 +10,8 @@
                   hdbscan-prediction-probabilities
                   hdbscan-result-labels
                   hdbscan-result-model)
-         (only-in racket/list argmax count make-list range split-at take)
+         (only-in racket/list count index-of make-list split-at take)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
@@ -60,10 +61,12 @@
              (list "one-blob, allow-single" (dataset 'one-blob) (hasheq 'allow-single-cluster #t))
              (list "b10, epsilon 3" (dataset 'b10) (hasheq 'cluster-selection-epsilon 3.0))
              (list "b50 x10" (dup (dataset 'b50) 10) (hasheq))))])
-    (test-case (car c)
-      (define X (mat (cadr c) 'float32))
-      (define result (apply-options hdbscan-fit (caddr c) X))
-      (check-equal? (car (predicted result X)) (labels-of result)))))
+    (match-define (list name rows options) c)
+    (test-case name
+      (define X (mat rows 'float32))
+      (define result (apply-options hdbscan-fit options X))
+      (match-define (list labels _) (predicted result X))
+      (check-equal? labels (labels-of result)))))
 
 (define (noise-model)
   (hdbscan-fit (mat (dataset 'identical) 'float32)))
@@ -76,11 +79,12 @@
   (define result (hdbscan-fit (mat (alternate (dataset 'b10) 0) 'float32)))
   (define-values (front back) (split-at (alternate (dataset 'b10) 1) 75))
   (define whole (predicted result (mat (append front back) 'float32)))
-  (define halves (map (lambda (rows) (predicted result (mat rows 'float32))) (list front back)))
-  (check-equal? whole (map append (car halves) (cadr halves))))
+  (match-define (list first-half second-half)
+    (map (lambda (rows) (predicted result (mat rows 'float32))) (list front back)))
+  (check-equal? whole (map append first-half second-half)))
 
 (define (argmax-index row)
-  (argmax (lambda (i) (list-ref row i)) (range (length row))))
+  (index-of row (apply max row)))
 
 (test-gpu "MV1: all-points memberships are n x k, bounded, and their argmax is the label"
   (for ([name (in-list '(b50 b10 moons))])
@@ -138,10 +142,11 @@
   (native-model-release! (hdbscan-result-model result))
   (check-true (native-model-released? (hdbscan-result-model result)))
   (for ([p (in-list procedures)])
-    (test-case (symbol->string (car p))
+    (match-define (cons name call) p)
+    (test-case (symbol->string name)
       (check-cuml-error 'logic
-                        (format "~a: model: expected a live model, got a released one" (car p))
-                        (lambda () ((cdr p) result X)))))
+                        (format "~a: model: expected a live model, got a released one" name)
+                        (lambda () (call result X)))))
   (check-equal? (fit-lists result) before)
   (native-model-release! (hdbscan-result-model result))
   (check-true (native-model-released? (hdbscan-result-model result))))
