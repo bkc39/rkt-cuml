@@ -74,6 +74,10 @@
     #:with procedure #'(lambda (who-id . rest)
                          body ...)))
 
+(define-syntax-class test-form-name
+  #:datum-literals (test-gpu test-model-probe test-process-memory test-twin test-without-gpu)
+  (pattern (~or* test-gpu test-model-probe test-process-memory test-twin test-without-gpu)))
+
 (define-syntax-class reviewed-form
   #:datum-literals (define-definition-context-refactoring-rule define-estimator
                                                                define-generics
@@ -87,10 +91,7 @@
                                                                quasiquote
                                                                quote
                                                                struct
-                                                               test-gpu
-                                                               test-twin
-                                                               test-unless-skipped
-                                                               test-without-gpu)
+                                                               test-unless-skipped)
   (pattern (quote (_ . _))
     #:attr review void)
   (pattern (quasiquote datum)
@@ -148,7 +149,7 @@
                                body ...))))
   (pattern (test-unless-skipped reason name body ...)
     #:attr review (lambda () (review-scoped-body (list #'reason #'name) (attribute body))))
-  (pattern ((~or* test-gpu test-twin test-without-gpu) name body ...)
+  (pattern (_:test-form-name name body ...)
     #:attr review (lambda () (review-scoped-body (list #'name) (attribute body)))))
 
 (define (should-review? stx)

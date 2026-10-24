@@ -1,22 +1,26 @@
 #lang racket/base
 
-(require (only-in racket/file make-temporary-file)
+(require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
          (only-in rackunit check-equal? test-case))
 
-(define (call-with-module-file forms proc)
-  (define file (make-temporary-file "review-~a.rkt"))
-  (dynamic-wind void
-                (lambda ()
-                  (with-output-to-file file
-                                       #:exists 'truncate
-                                       (lambda ()
-                                         (displayln "#lang racket/base")
-                                         (for-each writeln forms)))
-                  (proc file))
-                (lambda () (delete-file file))))
+(define (call-with-temporary-directory proc)
+  (define root (make-temporary-directory "review-~a"))
+  (dynamic-wind void (lambda () (proc root)) (lambda () (delete-directory/files root))))
 
-(define (problems-in forms)
+(define (call-with-module-file forms proc #:under [under "lint"])
+  (call-with-temporary-directory (lambda (root)
+                                   (define directory (build-path root under))
+                                   (define file (build-path directory "module.rkt"))
+                                   (make-directory* directory)
+                                   (with-output-to-file file
+                                                        (lambda ()
+                                                          (displayln "#lang racket/base")
+                                                          (for-each writeln forms)))
+                                   (proc file))))
+
+(define (problems-in forms #:under [under "lint"])
   (call-with-module-file forms
+                         #:under under
                          (lambda (file)
                            (parameterize ([current-namespace (make-base-namespace)])
                              (map (dynamic-require 'review/problem 'problem-message)
@@ -39,6 +43,18 @@
                                                         (test-gpu "b"
                                                           (define y 2)
                                                           y)))
+
+(define memory-and-model-tests-with-same-names
+  '((require (only-in cuml/tests/private/model-probe test-model-probe)
+             (only-in cuml/tests/private/process-memory test-process-memory))
+    (test-process-memory "a"
+      (define y 1)
+      y)
+    (test-process-memory "b"
+      (define y 2)
+      y)
+    (test-model-probe "c" (define y 3) y)
+    (test-model-probe "d" (define y 4) y)))
 
 (define generics-with-optional-and-keyword-methods
   '((require racket/generic) (provide gen:shape
@@ -136,7 +152,8 @@
   (check-equal? (problems-in unquotes-in-compound-data) '()))
 
 (test-case "each test form's body is a scope of its own"
-  (check-equal? (problems-in test-forms-with-same-names) '()))
+  (check-equal? (problems-in test-forms-with-same-names) '())
+  (check-equal? (problems-in memory-and-model-tests-with-same-names) '()))
 
 (define exported-who-procedure
   '((provide twice) (define (twice who x)
@@ -192,6 +209,12 @@
                 '("twice takes who first and is exported: define it with define/who"))
   (check-equal? (problems-in renamed-exported-who-procedure)
                 '("twice takes who first and is exported: define it with define/who")))
+
+(test-case "an exported who-first procedure is a define/who in every package, cuml-core-lib included"
+  (for ([under (list "cuml-core-lib/cuml/core/private" "cuml-cluster-lib/cuml/cluster/private")])
+    (check-equal? (problems-in exported-who-procedure #:under under)
+                  '("twice takes who first and is exported: define it with define/who")
+                  under)))
 
 (test-case "a private relay that takes who is not an entry point"
   (check-equal? (problems-in private-relay) '()))

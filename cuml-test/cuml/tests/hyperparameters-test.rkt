@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/cluster/private/define-who define/who)
-         (only-in cuml/cluster/private/hyperparameters define-codes define-hyperparameters)
+(require (only-in cuml/core/private/define-who define/who)
+         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
          (only-in racket/list combinations)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-pred check-regexp-match check-true test-case)
@@ -194,8 +194,8 @@
   (check-syntax-error '(define/who (g who X #:hyperparameters widget-params #:extra [scale 0]) scale)
                       #rx"scale is both a formal and a key of widget-params")
   (check-syntax-error '(module who-key racket/base
-                         (require cuml/cluster/private/define-who
-                                  cuml/cluster/private/hyperparameters)
+                         (require cuml/core/private/define-who
+                                  cuml/core/private/hyperparameters)
                          (define-hyperparameters who-params
                            [who 1])
                          (define/who (h who X #:hyperparameters who-params) who))

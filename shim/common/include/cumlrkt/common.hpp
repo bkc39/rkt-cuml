@@ -1,7 +1,9 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cuml/version_config.hpp>
+#include <new>
 #include <string>
 
 #include "raftrkt/abi.h"
@@ -16,6 +18,13 @@ using raftrkt::logic_error;
 inline raftrkt::error_slot& last_error_slot() noexcept {
   thread_local raftrkt::error_slot slot;
   return slot;
+}
+
+template <typename T>
+T& never_destroyed() noexcept {
+  alignas(T) static std::byte storage[sizeof(T)];
+  static T* const shared = ::new (static_cast<void*>(storage)) T;
+  return *shared;
 }
 
 constexpr int decimal_base = 10;

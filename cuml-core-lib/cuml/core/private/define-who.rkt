@@ -12,10 +12,10 @@
                   given-hash
                   key->keyword
                   keyword-checked
-                  logic-error
                   mention
                   proc-name
-                  table-id))
+                  table-id)
+         (only-in "logic-error.rkt" logic-error))
 
 (provide define-checked
          define/who)
