@@ -67,7 +67,7 @@
   (twin-case name (dataset data) '() options))
 
 (define sklearn-cases
-  (append (for/list ([data (in-list '(b50 b10 b5d4 moons circles gridclust))])
+  (append (for/list ([data (in-list '(b50 b10 b5d4 moons gridclust))])
             (sklearn-case (symbol->string data) data (hasheq)))
           (list (sklearn-case "b10, epsilon 3" 'b10 (hasheq 'cluster-selection-epsilon 3.0))
                 (sklearn-case "moons, alpha .5" 'moons (hasheq 'alpha 0.5))
@@ -139,7 +139,7 @@
                   'membership
                   (device-matrix->list* (hdbscan-membership-vector result points)))))
 
-(test-twin "T1, T2: HDBSCAN's trees and predictions equal cuML's; its labels are sklearn's"
+(test-twin "T1, T2: HDBSCAN's trees and predictions equal cuML's; its labels are sklearn's, but on the Racket-drawn circles"
   (match-define (hash-table ('results results) ('version version))
     (run-twin twin
               (hasheq 'cases

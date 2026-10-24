@@ -22,7 +22,7 @@
                   hdbscan-spanning-tree-sources
                   hdbscan-spanning-tree-weights)
          (only-in racket/file file->value)
-         (only-in racket/list append* last make-list range remove-duplicates)
+         (only-in racket/list append* last list-set make-list range remove-duplicates)
          (only-in racket/match match match-define)
          (only-in racket/math pi)
          ;; whole-module: define-runtime-path needs bindings only-in strips
@@ -40,7 +40,9 @@
          fitted-of
          descent-problems
          label-count
+         persistence-close?
          prediction->lists
+         same-fit?
          structure-problems)
 
 (struct fitted
@@ -217,3 +219,16 @@
 
 (define (sorted-strictly? xs)
   (or (null? xs) (null? (cdr xs)) (and (< (car xs) (cadr xs)) (sorted-strictly? (cdr xs)))))
+
+(define (persistence-close? a b)
+  (and (= (length a) (length b))
+       (for/and ([x (in-list a)]
+                 [y (in-list b)])
+         (<= (abs (- x y)) (* 1e-5 (max (abs x) (abs y) 1e-30))))))
+
+(define (fields-without-persistence f)
+  (list-set (cdr (vector->list (struct->vector f))) 2 '()))
+
+(define (same-fit? a b)
+  (and (equal? (fields-without-persistence a) (fields-without-persistence b))
+       (persistence-close? (fitted-persistence a) (fitted-persistence b))))

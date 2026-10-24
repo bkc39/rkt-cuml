@@ -22,6 +22,7 @@ constexpr int64_t index_rows = 1073741824;
 constexpr int64_t most_index = 2147483647;
 constexpr int64_t pair_count = 32769;
 constexpr double pair_spacing = 10;
+constexpr int64_t pair_side = 182;
 constexpr double past_float = 1e39;
 
 void expect_refused(const allocation_meter& meter,
@@ -347,7 +348,8 @@ TEST(HdbscanRefusals, LargeQueryRowsAreRefusedBeforeAnyOutput) {
                    membership_vector(res, f.anchor(), &f.x->view, &p->view,
                                      &out.r),
                    message, scratch_bytes);
-    expect_refused(meter, {&out},
+    const allocation_meter column_meter;
+    expect_refused(column_meter, {&out},
                    approximate_predict(res, f.anchor(), &f.x->view,
                                        &p_three->view, &out.r),
                    "points: expected 2 columns, as the model was fit on, got 4");
@@ -411,9 +413,17 @@ TEST(HdbscanRefusals, AllPointsRefusesAnOversizedMatrix) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   values host;
+  uint64_t state = 1;
+  const auto jitter = [&state] {
+    state = (state * 6364136223846793005ULL) + 1442695040888963407ULL;
+    return (static_cast<double>(state >> 11) * 0x1p-52) - 1;
+  };
   for (int64_t i = 0; i < pair_count; ++i) {
-    const double at = static_cast<double>(i) * pair_spacing;
-    host.insert(host.end(), {at, 0, at, 0});
+    const double at = (static_cast<double>(i % pair_side) * pair_spacing) +
+                      jitter();
+    const double up = (static_cast<double>(i / pair_side) * pair_spacing) +
+                      jitter();
+    host.insert(host.end(), {at, up, at, up});
   }
   record model(res);
   record out(res);
@@ -422,7 +432,9 @@ TEST(HdbscanRefusals, AllPointsRefusesAnOversizedMatrix) {
                               .model_out = &model.r,
                               .out = &out.r,
                               .min_cluster_size = 2,
-                              .min_samples = 1}),
+                              .min_samples = 1,
+                              .cluster_selection_method =
+                                  CUML_CLUSTER_HDBSCAN_LEAF}),
             "accepted");
   const int64_t k = model.r.regions[6].shape[0];
   ASSERT_GT(2 * pair_count * k, most_index);

@@ -2,7 +2,17 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
-         (only-in raft current-device-resources))
+         (only-in cuml/core/private/model deposit->native-model/who live-anchor/who)
+         (only-in racket/match match-define match-define-values)
+         (only-in raft current-device-resources)
+         (only-in raft/unsafe deposit->list)
+         (only-in "deposit.rkt" deposit-for/who)
+         (only-in "native.rkt"
+                  cuml-cluster-hdbscan-all-points-membership-vectors-job
+                  cuml-cluster-hdbscan-approximate-predict-job
+                  cuml-cluster-hdbscan-fit-job
+                  cuml-cluster-hdbscan-membership-vector-job
+                  cuml-cluster-model-release-job))
 
 (provide (except-out (struct-out hdbscan-result) hdbscan-result hdbscan-result-X)
          (except-out (struct-out hdbscan-condensed-tree) hdbscan-condensed-tree)
@@ -53,24 +63,82 @@
                          X
                          #:hyperparameters hdbscan-params
                          #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define model-out (deposit-for/who who resources))
+  (define out (deposit-for/who who resources))
+  (define opaque-bytes
+    (cuml-cluster-hdbscan-fit-job who
+                                  resources
+                                  X
+                                  model-out
+                                  out
+                                  min-cluster-size
+                                  (or min-samples min-cluster-size)
+                                  cluster-selection-epsilon
+                                  max-cluster-size
+                                  alpha
+                                  (cluster-selection-method-code cluster-selection-method)
+                                  (if allow-single-cluster 1 0)))
+  (match-define-values (model (list labels parents children lambdas sizes stabilities selected))
+    (deposit->native-model/who who
+                               'hdbscan
+                               model-out
+                               cuml-cluster-model-release-job
+                               #:opaque-bytes opaque-bytes))
+  (match-define (list probabilities linkage distances linkage-sizes sources destinations weights)
+    (deposit->list out))
+  (hdbscan-result labels
+                  probabilities
+                  stabilities
+                  (hdbscan-condensed-tree parents children lambdas sizes selected)
+                  (hdbscan-linkage-tree linkage distances linkage-sizes)
+                  (hdbscan-spanning-tree sources destinations weights)
+                  model
+                  X))
+
+(define (anchor-of who result)
+  (live-anchor/who who (hdbscan-result-model result) 'hdbscan))
 
 (define/who (hdbscan-approximate-predict who
                                          result
                                          points
                                          #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define anchor (anchor-of who result))
+  (define out (deposit-for/who who resources))
+  (cuml-cluster-hdbscan-approximate-predict-job who
+                                                resources
+                                                anchor
+                                                (hdbscan-result-X result)
+                                                points
+                                                out)
+  (apply hdbscan-prediction (deposit->list out)))
 
 (define/who (hdbscan-membership-vector who
                                        result
                                        points
                                        #:batch-size [batch-size 4096]
                                        #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define anchor (anchor-of who result))
+  (define out (deposit-for/who who resources))
+  (cuml-cluster-hdbscan-membership-vector-job who
+                                              resources
+                                              anchor
+                                              (hdbscan-result-X result)
+                                              points
+                                              out
+                                              batch-size)
+  (car (deposit->list out)))
 
 (define/who (hdbscan-all-points-membership-vectors who
                                                    result
                                                    #:batch-size [batch-size 4096]
                                                    #:resources
                                                    [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define anchor (anchor-of who result))
+  (define out (deposit-for/who who resources))
+  (cuml-cluster-hdbscan-all-points-membership-vectors-job who
+                                                         resources
+                                                         anchor
+                                                         (hdbscan-result-X result)
+                                                         out
+                                                         batch-size)
+  (car (deposit->list out)))

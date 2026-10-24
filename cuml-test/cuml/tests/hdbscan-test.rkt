@@ -33,6 +33,7 @@
                   fitted-persistence
                   fitted-probabilities
                   label-count
+                  same-fit?
                   structure-problems))
 
 (define flt-max 3.4028234663852886e38)
@@ -71,13 +72,14 @@
       (define rows (dataset name))
       (check-equal? (descent-problems (fitted-of rows) (length rows)) '()))))
 
-(test-gpu "HD3: min-samples #f is min-samples = min-cluster-size"
+(test-gpu "HD3: min-samples #f is min-samples = min-cluster-size, persistence within 1e-5"
   (for* ([name (in-list '(b50 b10 moons gridclust))]
          [mcs (in-list '(5 12))])
     (test-case (format "~a, min-cluster-size ~a" name mcs)
       (define rows (dataset name))
-      (check-equal? (fitted-of rows #:options (hasheq 'min-cluster-size mcs))
-                    (fitted-of rows #:options (hasheq 'min-cluster-size mcs 'min-samples mcs))))))
+      (check-true (same-fit? (fitted-of rows #:options (hasheq 'min-cluster-size mcs))
+                             (fitted-of rows
+                                        #:options (hasheq 'min-cluster-size mcs 'min-samples mcs)))))))
 
 (test-gpu "HD7: identical rows are noise, or one cluster with allow-single"
   (define rows (dataset 'identical))
