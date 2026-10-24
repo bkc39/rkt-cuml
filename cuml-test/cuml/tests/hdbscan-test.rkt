@@ -118,7 +118,7 @@
   (for ([name (in-list '(b50 b10 moons))])
     (test-case (symbol->string name)
       (define rows (dataset name))
-      (define labels (~> rows (append '((1e18 1e18))) fitted-of fitted-labels))
+      (define labels (~> (append rows '((1e18 1e18))) fitted-of fitted-labels))
       (check-equal? labels (append (fitted-labels (fitted-of rows)) '(-1))))))
 
 (test-gpu "P1: one blob is 7 clusters, or 1 with allow-single"
