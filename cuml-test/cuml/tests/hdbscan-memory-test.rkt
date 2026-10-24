@@ -41,9 +41,8 @@
   (hdbscan-membership-vector result points)
   (hdbscan-all-points-membership-vectors result)
   (fit-predict e X)
-  (cond
-    [(even? i) (native-model-release! (hdbscan-result-model result))]
-    [else (void)]))
+  (when (even? i)
+    (native-model-release! (hdbscan-result-model result))))
 
 (define (refusals X points)
   (define released (hdbscan-fit X))
