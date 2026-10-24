@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -173,12 +174,15 @@ model_use<M> use_model(const rr_view* anchor, const char* name,
   return model_use<M>(static_cast<M&>(found), name, stream);
 }
 
-template <typename M, typename... Regions>
+template <typename M, std::size_t N = 0>
 void publish_model(rr_deposit* out, const char* name,
                    const raft::handle_t& handle, std::unique_ptr<M>&& m,
-                   const Regions&... regions) {
+                   const std::array<rr_view, N>& regions = {}) {
   const rr_view anchor = raftrkt::require(m.get(), "model")->anchor_region();
-  raftrkt::deposit(out, name, handle, std::move(m), {anchor, regions...});
+  [&]<std::size_t... I>(std::index_sequence<I...>) {
+    raftrkt::deposit(out, name, handle, std::move(m),
+                     {anchor, std::get<I>(regions)...});
+  }(std::make_index_sequence<N>{});
 }
 
 }  // namespace cumlrkt

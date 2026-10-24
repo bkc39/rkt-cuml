@@ -120,17 +120,7 @@ CUMLRKT_API void cuml_cluster_spectral_clustering_fit_graph_job(
 #define CUML_CLUSTER_HDBSCAN_EOM 0
 #define CUML_CLUSTER_HDBSCAN_LEAF 1
 
-/* Every check precedes allocation. fit deposits the model in model_out:
-   region 0 its anchor, then the n int64 labels, the condensed tree's parents,
-   children, lambdas (float32) and sizes, one entry per edge, the k float32
-   stabilities and the k int64 selected clusters. out holds the n float32
-   probabilities, the (n-1) x 2 int64 linkage children, each row ascending,
-   the n-1 float32 distances and int64 sizes, and the minimum spanning tree's
-   n-1 int64 sources and destinations and float32 weights. opaque_bytes is
-   the device memory the model holds beyond its regions. Each prediction
-   entry takes the model's anchor and the training X it was fit on; its out
-   holds the m int64 labels and float32 probabilities, or the m x k float32
-   membership matrix (n x k for all points). */
+/* model_out regions: anchor, labels, tree (4), stabilities, selected. */
 CUMLRKT_API int cuml_cluster_hdbscan_fit(
     void* handle, const rr_view* x, rr_deposit* model_out, rr_deposit* out,
     int64_t min_cluster_size, int64_t min_samples,
@@ -160,8 +150,6 @@ CUMLRKT_API int cuml_cluster_hdbscan_all_points_membership_vectors(
 CUMLRKT_API void cuml_cluster_hdbscan_all_points_membership_vectors_job(
     void* args, size_t args_len, rr_job_outcome* outcome);
 
-/* Frees the model's opaque memory now; its regions stay valid. A second
-   release does nothing. */
 CUMLRKT_API int cuml_cluster_model_release(void* handle, const rr_view* model);
 CUMLRKT_API void cuml_cluster_model_release_job(void* args, size_t args_len,
                                                 rr_job_outcome* outcome);

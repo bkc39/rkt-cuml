@@ -1,15 +1,19 @@
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include <cmath>
 #include <cstdint>
 #include <numbers>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "cluster_fixture.hpp"
 #include "cumlrkt/cluster.h"
 #include "kmeans_fixture.hpp"
 #include "raftrkt/c_api.h"
+#include "refusal_fixture.hpp"
 
 namespace cumlrkt::test {
 
@@ -34,6 +38,13 @@ struct hdbscan_call {
   int32_t allow_single_cluster = 0;
   int64_t* opaque_bytes = nullptr;
 };
+
+template <typename T>
+hdbscan_call with(hdbscan_call c, T hdbscan_call::* field,
+                  std::type_identity_t<T> value) {
+  c.*field = value;
+  return c;
+}
 
 inline std::string hdbscan_fit(const resources& res, const hdbscan_call& c) {
   int64_t ignored = 0;
@@ -68,6 +79,19 @@ inline std::string all_points(const resources& res, const rr_view* model,
 
 inline std::string release_model(const resources& res, const rr_view* model) {
   return outcome(cuml_cluster_model_release(res.handle, model));
+}
+
+inline void expect_refused(const allocation_meter& meter,
+                           const std::vector<const record*>& outs,
+                           const std::string& status,
+                           const std::string& message, int64_t most_bytes = 0) {
+  EXPECT_EQ(status, message);
+  EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << status;
+  EXPECT_LE(meter.peak(), most_bytes) << status;
+  EXPECT_EQ(meter.current(), 0) << status;
+  for (const record* out : outs) {
+    expect_untouched(*out);
+  }
 }
 
 struct lcg {

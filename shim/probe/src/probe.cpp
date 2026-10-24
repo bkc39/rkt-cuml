@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -237,8 +238,8 @@ int cuml_probe_model_create(void* handle, rr_deposit* out,
     in_device_scope(handle, nullptr, [&](const raft::handle_t& h) {
       auto m = std::make_unique<probe_model>(h, s);
       m->fill();
-      const rr_view region = m->region();
-      cumlrkt::publish_model(into, "out", h, std::move(m), region);
+      const std::array<rr_view, 1> regions{m->region()};
+      cumlrkt::publish_model(into, "out", h, std::move(m), regions);
     });
   });
 }

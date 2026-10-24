@@ -3,7 +3,6 @@
 #include <cuml/cluster/hdbscan.hpp>
 #include <cuml/common/distance_type.hpp>
 #include <format>
-#include <functional>
 #include <initializer_list>
 #include <memory>
 #include <raft/core/handle.hpp>
@@ -16,7 +15,7 @@
 #include "cumlrkt/common.hpp"
 #include "cumlrkt/model.hpp"
 #include "hdbscan_model.hpp"
-#include "hdbscan_support.hpp"
+#include "limits.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
@@ -25,16 +24,16 @@
 namespace {
 
 using cumlrkt::logic_error;
+using cumlrkt::cluster::guarded;
 using cumlrkt::cluster::hdbscan_kind;
 using cumlrkt::cluster::hdbscan_model;
-using cumlrkt::cluster::in_device_scope;
 using cumlrkt::cluster::matrix;
+using cumlrkt::cluster::most_index;
 using cumlrkt::cluster::require_at_least;
+using cumlrkt::cluster::require_bounded_rows;
+using cumlrkt::cluster::require_index;
 using cumlrkt::cluster::rows_of;
 using cumlrkt::cluster::settle;
-using cumlrkt::cluster::hdbscan_limits::most_index;
-using cumlrkt::cluster::hdbscan_limits::require_bounded_rows;
-using cumlrkt::cluster::hdbscan_limits::require_index;
 using raftrkt::any_extent;
 
 constexpr auto metric = ML::distance::DistanceType::L2SqrtExpanded;
@@ -103,25 +102,6 @@ struct prediction_outputs {
   rmm::device_uvector<float> probabilities;
 };
 
-struct membership_outputs {
-  rmm::device_uvector<float> memberships;
-};
-
-void deposit_memberships(const raft::handle_t& handle, rr_deposit* out,
-                         int64_t rows, int64_t k,
-                         const std::function<void(float*)>& compute) {
-  auto outputs = std::make_unique<membership_outputs>(membership_outputs{
-      rmm::device_uvector<float>(static_cast<std::size_t>(rows * k),
-                                 raft::resource::get_cuda_stream(handle))});
-  if (k > 0) {
-    compute(outputs->memberships.data());
-  }
-  const std::initializer_list<rr_view> regions{raftrkt::region(
-      outputs->memberships.data(), rows, k, raftrkt::layout::row_major)};
-  settle(handle);
-  raftrkt::deposit(out, "out", handle, std::move(outputs), regions);
-}
-
 void approximate_predict(const raft::handle_t& handle,
                          const fitted_views& fitted, const rr_view* view,
                          rr_deposit* out) {
@@ -144,43 +124,61 @@ void approximate_predict(const raft::handle_t& handle,
   raftrkt::deposit(out, "out", handle, std::move(outputs), regions);
 }
 
+struct membership_request {
+  const char* name;
+  int64_t rows;
+  int64_t batch_size;
+  rr_deposit* out;
+};
+
+template <typename Check, typename Compute>
+void memberships_for(const raft::handle_t& handle, const hdbscan_model& m,
+                     const membership_request& r, Check&& check,
+                     Compute&& compute) {
+  require_at_least("batch-size", r.batch_size, 1);
+  require_entries(r.name, r.rows, m.k);
+  check();
+  auto memberships = std::make_unique<rmm::device_uvector<float>>(
+      static_cast<std::size_t>(r.rows * m.k),
+      raft::resource::get_cuda_stream(handle));
+  if (m.k > 0) {
+    compute(memberships->data(), static_cast<std::size_t>(r.batch_size));
+  }
+  const std::initializer_list<rr_view> regions{raftrkt::region(
+      memberships->data(), r.rows, m.k, raftrkt::layout::row_major)};
+  settle(handle);
+  raftrkt::deposit(r.out, "out", handle, std::move(memberships), regions);
+}
+
 void membership_vector(const raft::handle_t& handle, const fitted_views& fitted,
                        const rr_view* view, rr_deposit* out,
                        int64_t batch_size) {
   const model_use m = used(fitted.model, handle);
   const query q = checked_query(*m, fitted, view);
-  require_at_least("batch-size", batch_size, 1);
-  require_entries("points", q.points.n, m->k);
-  require_bounded_rows("points", q.points,
-                       raft::resource::get_cuda_stream(handle));
-  deposit_memberships(handle, out, q.points.n, m->k, [&](float* into) {
-    ML::compute_membership_vector(handle, m->tree, *m->pd, q.x, q.points.data,
-                                  static_cast<std::size_t>(q.points.n),
-                                  static_cast<int>(m->min_samples), metric,
-                                  into, static_cast<std::size_t>(batch_size));
-  });
+  memberships_for(
+      handle, *m, {"points", q.points.n, batch_size, out},
+      [&] {
+        require_bounded_rows("points", q.points,
+                             raft::resource::get_cuda_stream(handle));
+      },
+      [&](float* into, std::size_t batch) {
+        ML::compute_membership_vector(handle, m->tree, *m->pd, q.x,
+                                      q.points.data,
+                                      static_cast<std::size_t>(q.points.n),
+                                      static_cast<int>(m->min_samples), metric,
+                                      into, batch);
+      });
 }
 
 void all_points(const raft::handle_t& handle, const fitted_views& fitted,
                 rr_deposit* out, int64_t batch_size) {
   const model_use m = used(fitted.model, handle);
   const float* training = checked_training(*m, fitted.x);
-  require_at_least("batch-size", batch_size, 1);
-  require_entries("model", m->n_rows, m->k);
-  deposit_memberships(handle, out, m->n_rows, m->k, [&](float* into) {
-    ML::compute_all_points_membership_vectors(
-        handle, m->tree, *m->pd, training, metric, into,
-        static_cast<std::size_t>(batch_size));
-  });
-}
-
-using views = std::initializer_list<std::pair<const char*, const rr_view*>>;
-
-template <typename Run>
-int on_model(void* handle, views checked, Run&& run) {
-  return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
-    in_device_scope(handle, checked, std::forward<Run>(run));
-  });
+  memberships_for(handle, *m, {"model", m->n_rows, batch_size, out}, [] {},
+                  [&](float* into, std::size_t batch) {
+                    ML::compute_all_points_membership_vectors(
+                        handle, m->tree, *m->pd, training, metric, into, batch);
+                  });
 }
 
 }  // namespace
@@ -191,51 +189,39 @@ int cuml_cluster_hdbscan_approximate_predict(void* handle, const rr_view* model,
                                              const rr_view* x,
                                              const rr_view* points,
                                              rr_deposit* out) {
-  return on_model(handle, {{"model", model}, {"X", x}, {"points", points}},
-                  [&](const raft::handle_t& h) {
-                    approximate_predict(h, {model, x}, points,
-                                        raftrkt::require(out, "out"));
-                  });
+  return guarded(handle, {{"model", model}, {"X", x}, {"points", points}},
+                 [&](const raft::handle_t& h) {
+                   approximate_predict(h, {model, x}, points,
+                                       raftrkt::require(out, "out"));
+                 });
 }
 
-void cuml_cluster_hdbscan_approximate_predict_job(void* args, size_t args_len,
-                                                  rr_job_outcome* outcome) {
-  raftrkt::run_job<&cuml_cluster_hdbscan_approximate_predict>(
-      args, args_len, outcome, cumlrkt::last_error_slot());
-}
+CUMLRKT_JOB(cuml_cluster_hdbscan_approximate_predict)
 
 int cuml_cluster_hdbscan_membership_vector(void* handle, const rr_view* model,
                                            const rr_view* x,
                                            const rr_view* points,
                                            rr_deposit* out,
                                            int64_t batch_size) {
-  return on_model(handle, {{"model", model}, {"X", x}, {"points", points}},
-                  [&](const raft::handle_t& h) {
-                    membership_vector(h, {model, x}, points,
-                                      raftrkt::require(out, "out"), batch_size);
-                  });
+  return guarded(handle, {{"model", model}, {"X", x}, {"points", points}},
+                 [&](const raft::handle_t& h) {
+                   membership_vector(h, {model, x}, points,
+                                     raftrkt::require(out, "out"), batch_size);
+                 });
 }
 
-void cuml_cluster_hdbscan_membership_vector_job(void* args, size_t args_len,
-                                                rr_job_outcome* outcome) {
-  raftrkt::run_job<&cuml_cluster_hdbscan_membership_vector>(
-      args, args_len, outcome, cumlrkt::last_error_slot());
-}
+CUMLRKT_JOB(cuml_cluster_hdbscan_membership_vector)
 
 int cuml_cluster_hdbscan_all_points_membership_vectors(void* handle,
                                                        const rr_view* model,
                                                        const rr_view* x,
                                                        rr_deposit* out,
                                                        int64_t batch_size) {
-  return on_model(
+  return guarded(
       handle, {{"model", model}, {"X", x}}, [&](const raft::handle_t& h) {
         all_points(h, {model, x}, raftrkt::require(out, "out"), batch_size);
       });
 }
 
-void cuml_cluster_hdbscan_all_points_membership_vectors_job(
-    void* args, size_t args_len, rr_job_outcome* outcome) {
-  raftrkt::run_job<&cuml_cluster_hdbscan_all_points_membership_vectors>(
-      args, args_len, outcome, cumlrkt::last_error_slot());
-}
+CUMLRKT_JOB(cuml_cluster_hdbscan_all_points_membership_vectors)
 }

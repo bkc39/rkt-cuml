@@ -1,24 +1,21 @@
 #include <array>
-#include <cfloat>
 #include <cstddef>
 #include <cstdint>
 #include <cuml/cluster/hdbscan.hpp>
 #include <cuml/common/distance_type.hpp>
 #include <format>
-#include <limits>
+#include <initializer_list>
 #include <memory>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/device_uvector.hpp>
-#include <string>
-#include <tuple>
 #include <utility>
 
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
 #include "cumlrkt/model.hpp"
 #include "hdbscan_model.hpp"
-#include "hdbscan_support.hpp"
+#include "limits.hpp"
 #include "linkage_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
@@ -29,29 +26,28 @@ namespace {
 
 using cumlrkt::logic_error;
 using cumlrkt::cluster::ascending_pairs;
+using cumlrkt::cluster::guarded;
+using cumlrkt::cluster::hdbscan_least_cluster_size;
+using cumlrkt::cluster::hdbscan_least_rows;
 using cumlrkt::cluster::hdbscan_model;
+using cumlrkt::cluster::hdbscan_most_min_samples;
+using cumlrkt::cluster::hdbscan_most_rows;
 using cumlrkt::cluster::hdbscan_shape;
-using cumlrkt::cluster::in_device_scope;
 using cumlrkt::cluster::matrix;
-using cumlrkt::cluster::printed;
+using cumlrkt::cluster::most_index;
 using cumlrkt::cluster::require_at_least;
+using cumlrkt::cluster::require_at_most;
+using cumlrkt::cluster::require_bounded_rows;
+using cumlrkt::cluster::require_float;
+using cumlrkt::cluster::require_index;
 using cumlrkt::cluster::require_non_negative;
 using cumlrkt::cluster::require_positive;
 using cumlrkt::cluster::require_some;
 using cumlrkt::cluster::rows_of;
 using cumlrkt::cluster::settle;
-using cumlrkt::cluster::hdbscan_limits::most_index;
-using cumlrkt::cluster::hdbscan_limits::require_bounded_rows;
-using cumlrkt::cluster::hdbscan_limits::require_index;
 using raftrkt::any_extent;
 
 namespace common = ML::HDBSCAN::Common;
-
-constexpr int64_t least_rows = 2;
-constexpr int64_t least_cluster_size = 2;
-constexpr int64_t most_rows = int64_t{1} << 30;
-constexpr int64_t most_min_samples = 1023;
-constexpr double most_float = FLT_MAX;
 
 struct options {
   int64_t min_cluster_size;
@@ -63,41 +59,28 @@ struct options {
   int32_t allow_single_cluster;
 };
 
-void require_at_most(const char* what, int64_t got, int64_t most) {
-  if (got > most) {
-    throw logic_error(
-        std::format("{}: expected at most {}, got {}", what, most, got));
-  }
-}
-
-void require_float(const char* what, double got) {
-  if (got > most_float) {
-    throw logic_error(std::format("{}: expected at most {}, got {}", what,
-                                  printed(most_float), printed(got)));
-  }
-}
-
 matrix<float, int64_t> checked_x(const rr_view* view) {
   const matrix<float, int64_t> x =
       rows_of<float, int64_t>(view, "X", any_extent, any_extent);
-  if (x.n < least_rows) {
-    throw logic_error(
-        std::format("X: expected at least {} rows, got {}", least_rows, x.n));
+  if (x.n < hdbscan_least_rows) {
+    throw logic_error(std::format("X: expected at least {} rows, got {}",
+                                  hdbscan_least_rows, x.n));
   }
   require_some("X", "column", x.d);
   require_index("X", x.n, x.d);
-  if (x.n > most_rows) {
-    throw logic_error(
-        std::format("X: expected at most {} rows, got {}", most_rows, x.n));
+  if (x.n > hdbscan_most_rows) {
+    throw logic_error(std::format("X: expected at most {} rows, got {}",
+                                  hdbscan_most_rows, x.n));
   }
   return x;
 }
 
 void require_options(const options& o, int64_t n) {
-  require_at_least("min-cluster-size", o.min_cluster_size, least_cluster_size);
+  require_at_least("min-cluster-size", o.min_cluster_size,
+                   hdbscan_least_cluster_size);
   require_at_most("min-cluster-size", o.min_cluster_size, most_index);
   require_at_least("min-samples", o.min_samples, 1);
-  require_at_most("min-samples", o.min_samples, most_min_samples);
+  require_at_most("min-samples", o.min_samples, hdbscan_most_min_samples);
   if (o.min_samples > n) {
     throw logic_error(std::format("X: {} samples are fewer than min-samples {}",
                                   n, o.min_samples));
@@ -107,7 +90,7 @@ void require_options(const options& o, int64_t n) {
   require_float("cluster-selection-epsilon", o.cluster_selection_epsilon);
   require_at_least("max-cluster-size", o.max_cluster_size, 0);
   require_at_most("max-cluster-size", o.max_cluster_size, most_index);
-  require_positive("alpha", o.alpha);
+  require_positive<float>("alpha", o.alpha);
   require_float("alpha", o.alpha);
   if (o.cluster_selection_method != CUML_CLUSTER_HDBSCAN_EOM &&
       o.cluster_selection_method != CUML_CLUSTER_HDBSCAN_LEAF) {
@@ -153,18 +136,14 @@ std::unique_ptr<plain_outputs> plain_for(int64_t n,
                     rmm::device_uvector<float>(rows - 1, stream)});
 }
 
-struct fit_outputs {
-  rr_deposit* model;
-  rr_deposit* plain;
-  int64_t* opaque_bytes;
+struct fitted {
+  std::unique_ptr<hdbscan_model> model;
+  std::unique_ptr<plain_outputs> plain;
 };
 
-void fit(const raft::handle_t& handle, const rr_view* view, const options& o,
-         const fit_outputs& into) {
-  const matrix<float, int64_t> x = checked_x(view);
-  require_options(o, x.n);
+fitted fit_outputs(const raft::handle_t& handle,
+                   const matrix<float, int64_t>& x, const options& o) {
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
-  require_bounded_rows("X", x, stream);
   const auto n = static_cast<std::size_t>(x.n);
   std::unique_ptr<plain_outputs> plain = plain_for(x.n, stream);
   rmm::device_uvector<float> core_dists(n, stream);
@@ -182,17 +161,23 @@ void fit(const raft::handle_t& handle, const rr_view* view, const options& o,
       std::move(labels), found);
   ascending_pairs(plain->children.data(), x.n - 1, stream);
   settle(handle);
-  const int64_t edges = m->tree.get_n_edges();
-  const std::array<rr_view, 7> model_regions{
-      raftrkt::region(m->labels),
-      raftrkt::region(m->tree.get_parents(), edges),
-      raftrkt::region(m->tree.get_children(), edges),
-      raftrkt::region(m->tree.get_lambdas(), edges),
-      raftrkt::region(m->tree.get_sizes(), edges),
-      raftrkt::region(m->stabilities),
-      raftrkt::region(m->inverse_label_map)};
-  const int64_t merges = x.n - 1;
-  const std::initializer_list<rr_view> plain_regions{
+  return {std::move(m), std::move(plain)};
+}
+
+std::array<rr_view, 7> model_regions(hdbscan_model& m) {
+  const int64_t edges = m.tree.get_n_edges();
+  return {raftrkt::region(m.labels),
+          raftrkt::region(m.tree.get_parents(), edges),
+          raftrkt::region(m.tree.get_children(), edges),
+          raftrkt::region(m.tree.get_lambdas(), edges),
+          raftrkt::region(m.tree.get_sizes(), edges),
+          raftrkt::region(m.stabilities),
+          raftrkt::region(m.inverse_label_map)};
+}
+
+void publish_plain(rr_deposit* into, const raft::handle_t& handle,
+                   std::unique_ptr<plain_outputs>&& plain, int64_t merges) {
+  const std::initializer_list<rr_view> regions{
       raftrkt::region(plain->probabilities),
       raftrkt::region(plain->children.data(), merges, 2,
                       raftrkt::layout::row_major),
@@ -201,14 +186,26 @@ void fit(const raft::handle_t& handle, const rr_view* view, const options& o,
       raftrkt::region(plain->sources),
       raftrkt::region(plain->destinations),
       raftrkt::region(plain->weights)};
-  const int64_t bytes = m->opaque_bytes();
-  std::apply(
-      [&](const auto&... regions) {
-        cumlrkt::publish_model(into.model, "model-out", handle, std::move(m),
-                               regions...);
-      },
-      model_regions);
-  raftrkt::deposit(into.plain, "out", handle, std::move(plain), plain_regions);
+  raftrkt::deposit(into, "out", handle, std::move(plain), regions);
+}
+
+struct fit_into {
+  rr_deposit* model;
+  rr_deposit* plain;
+  int64_t* opaque_bytes;
+};
+
+void fit(const raft::handle_t& handle, const rr_view* view, const options& o,
+         const fit_into& into) {
+  const matrix<float, int64_t> x = checked_x(view);
+  require_options(o, x.n);
+  require_bounded_rows("X", x, raft::resource::get_cuda_stream(handle));
+  fitted f = fit_outputs(handle, x, o);
+  const int64_t bytes = f.model->opaque_bytes();
+  const std::array<rr_view, 7> regions = model_regions(*f.model);
+  cumlrkt::publish_model(into.model, "model-out", handle, std::move(f.model),
+                         regions);
+  publish_plain(into.plain, handle, std::move(f.plain), x.n - 1);
   *into.opaque_bytes = bytes;
 }
 
@@ -224,22 +221,16 @@ int cuml_cluster_hdbscan_fit(void* handle, const rr_view* x,
                              int32_t cluster_selection_method,
                              int32_t allow_single_cluster,
                              int64_t* opaque_bytes) {
-  return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
-    const options o{min_cluster_size,    min_samples, cluster_selection_epsilon,
-                    max_cluster_size,    alpha,       cluster_selection_method,
-                    allow_single_cluster};
-    in_device_scope(handle, {{"X", x}}, [&](const raft::handle_t& h) {
-      fit(h, x, o,
-          {.model = raftrkt::require(model_out, "model-out"),
-           .plain = raftrkt::require(out, "out"),
-           .opaque_bytes = raftrkt::require(opaque_bytes, "opaque-bytes")});
-    });
+  const options o{min_cluster_size,    min_samples, cluster_selection_epsilon,
+                  max_cluster_size,    alpha,       cluster_selection_method,
+                  allow_single_cluster};
+  return guarded(handle, {{"X", x}}, [&](const raft::handle_t& h) {
+    fit(h, x, o,
+        {.model = raftrkt::require(model_out, "model-out"),
+         .plain = raftrkt::require(out, "out"),
+         .opaque_bytes = raftrkt::require(opaque_bytes, "opaque-bytes")});
   });
 }
 
-void cuml_cluster_hdbscan_fit_job(void* args, size_t args_len,
-                                  rr_job_outcome* outcome) {
-  raftrkt::run_job<&cuml_cluster_hdbscan_fit>(args, args_len, outcome,
-                                              cumlrkt::last_error_slot());
-}
+CUMLRKT_JOB(cuml_cluster_hdbscan_fit)
 }

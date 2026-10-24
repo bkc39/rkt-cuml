@@ -8,6 +8,7 @@
 #include "cluster_fixture.hpp"
 #include "cumlrkt/cluster.h"
 #include "hdbscan_fixture.hpp"
+#include "limits.hpp"
 #include "kmeans_fixture.hpp"
 #include "raftrkt/c_api.h"
 #include "refusal_fixture.hpp"
@@ -15,28 +16,17 @@
 namespace cumlrkt::test {
 namespace {
 
-constexpr int64_t most_rows = 1073741824;
-constexpr int64_t most_min_samples = 1023;
+using cumlrkt::cluster::hdbscan_most_min_samples;
+using cumlrkt::cluster::hdbscan_most_rows;
+using cumlrkt::cluster::most_index;
+
 constexpr int64_t short_rows = 9;
 constexpr int64_t index_rows = 1073741824;
-constexpr int64_t most_index = 2147483647;
 constexpr int64_t pair_count = 32769;
 constexpr double pair_spacing = 10;
 constexpr int64_t pair_side = 182;
 constexpr double past_float = 1e39;
-
-void expect_refused(const allocation_meter& meter,
-                    const std::vector<const record*>& outs,
-                    const std::string& status, const std::string& message,
-                    int64_t most_bytes = 0) {
-  EXPECT_EQ(status, message);
-  EXPECT_EQ(cuml_cluster_last_error_kind(), RR_ERROR_LOGIC) << status;
-  EXPECT_LE(meter.peak(), most_bytes) << status;
-  EXPECT_EQ(meter.current(), 0) << status;
-  for (const record* out : outs) {
-    expect_untouched(*out);
-  }
-}
+constexpr double float_zero = 1e-46;
 
 TEST(HdbscanRefusals, FitNamesTheArgument) {
   CUMLRKT_REQUIRE_GPU();
@@ -57,7 +47,7 @@ TEST(HdbscanRefusals, FitNamesTheArgument) {
   const rr_view x_no_rows = shaped(r.data, {0, cols});
   const rr_view x_no_cols = shaped(r.data, {rows, 0});
   const rr_view x_wide = shaped(r.data, {wide_rows, wide_cols});
-  const rr_view x_tall = shaped(r.data, {most_rows + 1, 1});
+  const rr_view x_tall = shaped(r.data, {hdbscan_most_rows + 1, 1});
   const rr_view x_elsewhere = on_device(r.x, 1);
   const double nan = std::numeric_limits<double>::quiet_NaN();
   const double inf = std::numeric_limits<double>::infinity();
@@ -66,94 +56,75 @@ TEST(HdbscanRefusals, FitNamesTheArgument) {
       "got ";
   const std::string alpha_most =
       "alpha: expected at most 3.4028234663852886e+38, got ";
+  using call = hdbscan_call;
+  const call base{.x = x, .model_out = m, .out = o};
   const std::vector<refusal<hdbscan_call>> cases{
-      {{.x = &x_double, .model_out = m, .out = o},
-       "X: expected float32, got float64"},
-      {{.x = &x_int, .model_out = m, .out = o},
-       "X: expected float32, got int32"},
-      {{.x = &x_elsewhere, .model_out = m, .out = o},
+      {with(base, &call::x, &x_double), "X: expected float32, got float64"},
+      {with(base, &call::x, &x_int), "X: expected float32, got int32"},
+      {with(base, &call::x, &x_elsewhere),
        "X: on device 1, but the resources are on device 0"},
-      {{.x = x, .model_out = nullptr, .out = o}, "model-out is NULL"},
-      {{.x = x, .model_out = m, .out = nullptr}, "out is NULL"},
-      {{.x = &x_rank1, .model_out = m, .out = o},
-       "X: expected rank 2, got rank 1"},
-      {{.x = &x_col, .model_out = m, .out = o},
+      {with(base, &call::model_out, nullptr), "model-out is NULL"},
+      {with(base, &call::out, nullptr), "out is NULL"},
+      {with(base, &call::x, &x_rank1), "X: expected rank 2, got rank 1"},
+      {with(base, &call::x, &x_col),
        "X: expected row-major, got col-major 10x2"},
-      {{.x = &x_one, .model_out = m, .out = o},
-       "X: expected at least 2 rows, got 1"},
-      {{.x = &x_no_rows, .model_out = m, .out = o},
-       "X: expected at least 2 rows, got 0"},
-      {{.x = &x_no_cols, .model_out = m, .out = o},
+      {with(base, &call::x, &x_one), "X: expected at least 2 rows, got 1"},
+      {with(base, &call::x, &x_no_rows), "X: expected at least 2 rows, got 0"},
+      {with(base, &call::x, &x_no_cols),
        "X: expected at least 1 column, got 0"},
-      {{.x = &x_wide, .model_out = m, .out = o},
+      {with(base, &call::x, &x_wide),
        "X: 65536x32769 elements do not fit the index type"},
-      {{.x = &x_tall, .model_out = m, .out = o},
+      {with(base, &call::x, &x_tall),
        "X: expected at most 1073741824 rows, got 1073741825"},
-      {{.x = x, .model_out = m, .out = o, .min_cluster_size = 1},
+      {with(base, &call::min_cluster_size, 1),
        "min-cluster-size: expected at least 2, got 1"},
-      {{.x = x, .model_out = m, .out = o, .min_cluster_size = 0},
+      {with(base, &call::min_cluster_size, 0),
        "min-cluster-size: expected at least 2, got 0"},
-      {{.x = x, .model_out = m, .out = o, .min_cluster_size = -3},
+      {with(base, &call::min_cluster_size, -3),
        "min-cluster-size: expected at least 2, got -3"},
-      {{.x = x, .model_out = m, .out = o, .min_samples = 0},
+      {with(base, &call::min_cluster_size, (int64_t{1} << 32) + 1),
+       "min-cluster-size: expected at most 2147483647, got 4294967297"},
+      {with(base, &call::min_samples, 0),
        "min-samples: expected at least 1, got 0"},
-      {{.x = x, .model_out = m, .out = o, .min_samples = most_min_samples + 1},
+      {with(base, &call::min_samples, hdbscan_most_min_samples + 1),
        "min-samples: expected at most 1023, got 1024"},
-      {{.x = x, .model_out = m, .out = o, .min_samples = rows + 1},
+      {with(base, &call::min_samples, rows + 1),
        "X: 10 samples are fewer than min-samples 11"},
-      {{.x = x, .model_out = m, .out = o, .cluster_selection_epsilon = -1},
+      {with(base, &call::cluster_selection_epsilon, -1),
        "cluster-selection-epsilon: expected at least 0, got -1"},
-      {{.x = x, .model_out = m, .out = o, .cluster_selection_epsilon = nan},
+      {with(base, &call::cluster_selection_epsilon, nan),
        "cluster-selection-epsilon: expected at least 0, got nan"},
-      {{.x = x, .model_out = m, .out = o, .cluster_selection_epsilon = inf},
-       eps_most + "inf"},
-      {{.x = x,
-        .model_out = m,
-        .out = o,
-        .cluster_selection_epsilon = past_float},
+      {with(base, &call::cluster_selection_epsilon, inf), eps_most + "inf"},
+      {with(base, &call::cluster_selection_epsilon, past_float),
        eps_most + "1e+39"},
-      {{.x = x, .model_out = m, .out = o, .max_cluster_size = -1},
+      {with(base, &call::max_cluster_size, -1),
        "max-cluster-size: expected at least 0, got -1"},
-      {{.x = x, .model_out = m, .out = o, .alpha = 0},
-       "alpha: expected greater than 0, got 0"},
-      {{.x = x, .model_out = m, .out = o, .alpha = -1},
-       "alpha: expected greater than 0, got -1"},
-      {{.x = x, .model_out = m, .out = o, .alpha = nan},
-       "alpha: expected greater than 0, got nan"},
-      {{.x = x, .model_out = m, .out = o, .alpha = inf}, alpha_most + "inf"},
-      {{.x = x, .model_out = m, .out = o, .cluster_selection_method = 2},
+      {with(base, &call::max_cluster_size, most_index + 1),
+       "max-cluster-size: expected at most 2147483647, got 2147483648"},
+      {with(base, &call::alpha, 0), "alpha: expected greater than 0, got 0"},
+      {with(base, &call::alpha, -1), "alpha: expected greater than 0, got -1"},
+      {with(base, &call::alpha, nan), "alpha: expected greater than 0, got nan"},
+      {with(base, &call::alpha, float_zero),
+       "alpha: expected greater than 0, got 1e-46"},
+      {with(base, &call::alpha, inf), alpha_most + "inf"},
+      {with(base, &call::cluster_selection_method, 2),
        "cluster-selection-method: expected eom or leaf"},
-      {{.x = x, .model_out = m, .out = o, .cluster_selection_method = -1},
+      {with(base, &call::cluster_selection_method, -1),
        "cluster-selection-method: expected eom or leaf"},
-      {{.x = &x_one_double, .model_out = m, .out = o},
-       "X: expected float32, got float64"},
-      {{.x = x,
-        .model_out = m,
-        .out = o,
-        .min_cluster_size = 1,
-        .min_samples = 0},
+      {with(base, &call::x, &x_one_double), "X: expected float32, got float64"},
+      {with(with(base, &call::min_cluster_size, 1), &call::min_samples, 0),
        "min-cluster-size: expected at least 2, got 1"},
-      {{.x = &x_tall, .model_out = m, .out = o, .min_cluster_size = 1},
+      {with(with(base, &call::x, &x_tall), &call::min_cluster_size, 1),
        "X: expected at most 1073741824 rows, got 1073741825"},
-      {{.x = x,
-        .model_out = m,
-        .out = o,
-        .min_samples = rows + 1,
-        .cluster_selection_epsilon = -1},
+      {with(with(base, &call::min_samples, rows + 1),
+            &call::cluster_selection_epsilon, -1),
        "X: 10 samples are fewer than min-samples 11"},
-      {{.x = x,
-        .model_out = m,
-        .out = o,
-        .cluster_selection_epsilon = -1,
-        .max_cluster_size = -1},
+      {with(with(base, &call::cluster_selection_epsilon, -1),
+            &call::max_cluster_size, -1),
        "cluster-selection-epsilon: expected at least 0, got -1"},
-      {{.x = x, .model_out = m, .out = o, .max_cluster_size = -1, .alpha = 0},
+      {with(with(base, &call::max_cluster_size, -1), &call::alpha, 0),
        "max-cluster-size: expected at least 0, got -1"},
-      {{.x = x,
-        .model_out = m,
-        .out = o,
-        .alpha = 0,
-        .cluster_selection_method = 2},
+      {with(with(base, &call::alpha, 0), &call::cluster_selection_method, 2),
        "alpha: expected greater than 0, got 0"}};
   for (const refusal<hdbscan_call>& c : cases) {
     expect_refused(meter, {&model, &out}, hdbscan_fit(res, c.call), c.message);
