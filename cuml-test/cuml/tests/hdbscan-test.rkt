@@ -21,6 +21,7 @@
          (only-in rackunit check-equal? check-pred check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/dbscan-data.rkt" mat pick same-partition? seeded)
          (only-in "private/hdbscan-data.rkt"
                   dataset
@@ -34,8 +35,7 @@
                   fitted-probabilities
                   label-count
                   same-fit?
-                  structure-problems)
-         (only-in threading ~>))
+                  structure-problems))
 
 (define flt-max 3.4028234663852886e38)
 

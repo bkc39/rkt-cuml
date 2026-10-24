@@ -21,12 +21,12 @@
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" mat vec)
          (only-in "private/estimator-data.rkt" apply-options hash-remove* round-trips)
-         (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?)
-         (only-in threading ~>))
+         (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?))
 
 (define changed
   (hasheq 'min-cluster-size 10

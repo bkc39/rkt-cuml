@@ -15,6 +15,7 @@
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options)
@@ -25,8 +26,7 @@
                   dup
                   fit-lists
                   label-count
-                  prediction->lists)
-         (only-in threading ~>))
+                  prediction->lists))
 
 (define (labels-of result)
   (device-vector->list (hdbscan-result-labels result)))

@@ -4,6 +4,7 @@
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true fail test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/dbscan-data.rkt" pick same-partition? seeded)
          (only-in "private/hdbscan-data.rkt"
                   close?
@@ -15,8 +16,7 @@
                   fitted-probabilities
                   same-fit?
                   without-persistence)
-         (only-in "private/program.rkt" run-program)
-         (only-in threading ~>))
+         (only-in "private/program.rkt" run-program))
 
 (define determinism-program
   `(module determinism racket/base
