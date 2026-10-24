@@ -401,6 +401,15 @@
    "hdbscan-approximate-predict: model: prediction needs at least 6 training rows (2 × min-samples), got 5"
    (lambda () (hdbscan-approximate-predict few (hdbscan-groups '(0 20 40) 12 4 0.5)))))
 
+(test-gpu "the manual: a min-cluster-size above 1023 needs an explicit min-samples"
+  (define X (hdbscan-groups '(0 20 40) 12 4 0.5))
+  (check-cuml-error 'logic
+                    "hdbscan-fit: min-samples: expected at most 1023, got 2000"
+                    (lambda () (hdbscan-fit X #:min-cluster-size 2000)))
+  (check-cuml-error 'logic
+                    "fit: min-samples: expected at most 1023, got 2000"
+                    (lambda () (fit (hdbscan #:min-cluster-size 2000) X))))
+
 (test-gpu "the manual: a native model is live until released, and with-native-models releases it"
   (define X (hdbscan-groups '(0 20) 10 5 1))
   (define result (hdbscan-fit X))

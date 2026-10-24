@@ -42,11 +42,9 @@ samples without refitting. Fit the first 200 eruptions and place the last 72:
 
 @examples[#:eval ev #:label #f
 (define scaled (rows (standardized (dataset-columns 'faithful '("eruptions" "waiting")))))
-(define (matrix rs)
-  (list*->device-matrix rs #:dtype 'float32))
-(define first-200 (hdbscan-fit (matrix (take scaled 200))))
+(define first-200 (hdbscan-fit (rows->matrix (take scaled 200))))
 (define placed
-  (~> (hdbscan-approximate-predict first-200 (matrix (drop scaled 200)))
+  (~> (hdbscan-approximate-predict first-200 (rows->matrix (drop scaled 200)))
       hdbscan-prediction-labels
       device-vector->list))
 (list (sizes placed) (count negative? placed))
@@ -58,9 +56,8 @@ samples without refitting. Fit the first 200 eruptions and place the last 72:
               #:y-label "wait (min)")
 ]
 
-45 of the held-out eruptions join the long group, 25 the short one, and 2
-fall between them as noise. The fit holds C++ memory for these predictions, a
-@tech{native model}, freed when the result is collected or at once with
+The fit holds C++ memory for these predictions, a @tech{native model},
+freed when the result is collected or at once with
 @racket[native-model-release!].
 
 @(close-eval ev)

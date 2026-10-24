@@ -87,10 +87,10 @@ and a @racket['float32] probability for each point, as in
 @racket[hdbscan-result].}
 
 @defproc[(hdbscan-fit [X device-matrix?]
-                      [#:min-cluster-size min-cluster-size (and/c exact-integer? (>=/c 2)) 5]
+                      [#:min-cluster-size min-cluster-size (integer-in 2 2147483647) 5]
                       [#:min-samples min-samples (or/c #f (integer-in 1 1023)) #f]
                       [#:cluster-selection-epsilon cluster-selection-epsilon (and/c real? (>=/c 0)) 0.0]
-                      [#:max-cluster-size max-cluster-size exact-nonnegative-integer? 0]
+                      [#:max-cluster-size max-cluster-size (integer-in 0 2147483647) 0]
                       [#:alpha alpha (and/c real? (>/c 0)) 1.0]
                       [#:cluster-selection-method cluster-selection-method (or/c 'eom 'leaf) 'eom]
                       [#:allow-single-cluster allow-single-cluster boolean? #f]
@@ -103,19 +103,26 @@ least 2 rows and at least @racket[min-samples] of them, by the density of their
 neighbourhoods. A sample's core distance is the distance to its
 @racket[min-samples]-th nearest other sample (@racket[#f] is
 @racket[min-cluster-size]), so this is scikit-learn's @tt{HDBSCAN} with
-@tt{min_samples} one larger. Clusters smaller than @racket[min-cluster-size]
-are noise; a group of at least @racket[min-cluster-size] equal rows always
-forms a cluster. @racket[cluster-selection-epsilon] merges clusters closer
-than it, @racket[max-cluster-size] (0 is unlimited) caps the clusters
-@racket['eom] selects, @racket[alpha] scales the distances, and
-@racket[allow-single-cluster] lets the root be the one cluster. Every row
-must have a squared norm of at most 2@superscript{125}.
+@tt{min_samples} one larger, and a @racket[min-cluster-size] above 1023 needs
+an explicit @racket[min-samples]. Clusters smaller than
+@racket[min-cluster-size] are noise. @racket[cluster-selection-epsilon]
+merges clusters closer than it, @racket[max-cluster-size] (0 is unlimited)
+caps the clusters @racket['eom] selects, @racket[alpha] scales the distances,
+and @racket[allow-single-cluster] lets the root be the one cluster. An
+@racket[alpha] that is 0 as a @racket['float32] is refused, and one below
+about 10@superscript{−17} leaves every sample noise. Every row must have a
+squared norm of at most 2@superscript{125}. Every argument is checked before
+any output is allocated.
 
 The result keeps @racket[X] by reference, for the prediction procedures:
 change it and they answer for the new rows. The arrays live on
 @racket[resources]. @racket[params], from @racket[hdbscan-params], gives every
 hyperparameter a keyword omits; only the euclidean @racket[metric] and the
-brute-force nearest neighbours of @racket[build-algo] are bound.}
+brute-force nearest neighbours of @racket[build-algo] are bound.
+
+@examples[#:eval ev
+(eval:error (hdbscan-fit X #:min-cluster-size 2000))
+]}
 
 @defproc[(hdbscan-approximate-predict [result hdbscan-result?]
                                       [points device-matrix?]
@@ -160,10 +167,10 @@ n×0 when the fit found no cluster, whose rows sum to at most 1. On a clustered
 row, the largest entry is the row's label.}
 
 @defproc[(hdbscan-params [base (or/c #f hash?) #f]
-                         [#:min-cluster-size min-cluster-size (and/c exact-integer? (>=/c 2)) 5]
+                         [#:min-cluster-size min-cluster-size (integer-in 2 2147483647) 5]
                          [#:min-samples min-samples (or/c #f (integer-in 1 1023)) #f]
                          [#:cluster-selection-epsilon cluster-selection-epsilon (and/c real? (>=/c 0)) 0.0]
-                         [#:max-cluster-size max-cluster-size exact-nonnegative-integer? 0]
+                         [#:max-cluster-size max-cluster-size (integer-in 0 2147483647) 0]
                          [#:metric metric 'euclidean 'euclidean]
                          [#:alpha alpha (and/c real? (>/c 0)) 1.0]
                          [#:cluster-selection-method cluster-selection-method (or/c 'eom 'leaf) 'eom]

@@ -33,6 +33,7 @@
                   features
                   labels-of
                   rows
+                  rows->matrix
                   sizes
                   standardized
                   standardized-matrix)
@@ -278,11 +279,9 @@
   (check-equal? (count negative? labels) 4)
   (define standardized-rows
     (rows (standardized (dataset-columns 'faithful '("eruptions" "waiting")))))
-  (define (matrix rs)
-    (list*->device-matrix rs #:dtype 'float32))
   (define predicted
-    (~> (hdbscan-fit (matrix (take standardized-rows 200)))
-        (hdbscan-approximate-predict (matrix (drop standardized-rows 200)))
+    (~> (hdbscan-fit (rows->matrix (take standardized-rows 200)))
+        (hdbscan-approximate-predict (rows->matrix (drop standardized-rows 200)))
         hdbscan-prediction-labels
         device-vector->list))
   (check-equal? (count negative? predicted) 2)

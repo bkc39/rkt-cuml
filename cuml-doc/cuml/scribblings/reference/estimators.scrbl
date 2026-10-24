@@ -362,10 +362,10 @@ The @racket[spectral-clustering-result] of the fit that made
 @declare-exporting[cuml]
 
 @defproc[(hdbscan [params (or/c #f hash?) #f]
-                  [#:min-cluster-size min-cluster-size (and/c exact-integer? (>=/c 2)) 5]
+                  [#:min-cluster-size min-cluster-size (integer-in 2 2147483647) 5]
                   [#:min-samples min-samples (or/c #f (integer-in 1 1023)) #f]
                   [#:cluster-selection-epsilon cluster-selection-epsilon (and/c real? (>=/c 0)) 0.0]
-                  [#:max-cluster-size max-cluster-size exact-nonnegative-integer? 0]
+                  [#:max-cluster-size max-cluster-size (integer-in 0 2147483647) 0]
                   [#:metric metric 'euclidean 'euclidean]
                   [#:alpha alpha (and/c real? (>/c 0)) 1.0]
                   [#:cluster-selection-method cluster-selection-method (or/c 'eom 'leaf) 'eom]
@@ -380,7 +380,9 @@ a predictor, and checks nothing until it is fitted. @racket[fit] is
 @racket[hdbscan-fit] with these parameters, and @racket[fit-predict] returns
 the fit's labels. @racket[y] is ignored, and a @racket[sample-weight] is
 refused. @racket[resources] is a setting, as for @racket[kmeans]. Errors are
-@racket[hdbscan-fit]'s, named after the generic that was called. Printing and
+@racket[hdbscan-fit]'s, named after the generic that was called, so a
+@racket[min-cluster-size] above 1023 needs an explicit @racket[min-samples].
+Printing and
 @racket[equal?] are as for @racket[kmeans]. A refit leaves the earlier fit's
 @tech{native model} alone.
 
@@ -395,6 +397,7 @@ hd
 (device-vector->list (fit-predict hd H))
 (estimator-set-params hd #:cluster-selection-method 'leaf)
 (eval:error (fit (hdbscan #:alpha 0) H))
+(eval:error (fit (hdbscan #:min-cluster-size 2000) H))
 ]}
 
 @defproc[(hdbscan? [v any/c]) boolean?]{

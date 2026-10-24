@@ -93,6 +93,11 @@
     (check-true (andmap (lambda (l) (<= l flt-max))
                         (fitted-lambdas (fitted-of (dup (dataset 'b50) 10)))))))
 
+(test-gpu "the manual: an alpha far below 1e-17 leaves every sample noise"
+  (define fitted (fitted-of (dataset 'b50) #:options (hasheq 'alpha 1e-30)))
+  (check-equal? (fitted-labels fitted) (make-list 300 -1))
+  (check-equal? (fitted-persistence fitted) '()))
+
 (test-gpu "HD8: too few rows give all noise"
   (define rows (dataset 'b50))
   (check-equal? (fitted-labels (fitted-of (take rows 5))) (make-list 5 -1))
