@@ -3,11 +3,17 @@
 #|review: ignore|#
 
 (require "cluster/private/dbscan.rkt"
+         "cluster/private/hdbscan.rkt"
          "cluster/private/kmeans.rkt"
          "cluster/private/linkage.rkt"
          "cluster/private/spectral.rkt")
 
 (provide (except-out (all-from-out "cluster/private/dbscan.rkt") dbscan-fit/who)
+         (except-out (all-from-out "cluster/private/hdbscan.rkt")
+                     hdbscan-all-points-membership-vectors/who
+                     hdbscan-approximate-predict/who
+                     hdbscan-fit/who
+                     hdbscan-membership-vector/who)
          (except-out (all-from-out "cluster/private/kmeans.rkt")
                      init-rows
                      kmeans-fit/who

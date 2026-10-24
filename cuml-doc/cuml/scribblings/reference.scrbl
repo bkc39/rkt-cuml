@@ -11,4 +11,5 @@ together.
 
 @include-section["reference/estimators.scrbl"]
 @include-section["reference/clustering.scrbl"]
+@include-section["reference/models.scrbl"]
 @include-section["reference/errors.scrbl"]

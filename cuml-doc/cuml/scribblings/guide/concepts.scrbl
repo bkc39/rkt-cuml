@@ -143,6 +143,15 @@ A number that does not fit the native type is a contract error instead:
 
 Each procedure's entry in the @secref["reference"] lists its refusals.
 
+@section[#:tag "concepts-native-models"]{Native models}
+
+Most results are device arrays alone. An HDBSCAN result also holds a
+@deftech{native model}: the C++ state its prediction procedures read, which
+keeps its device memory until the model and every array taken from the result
+are collected. @racket[native-model-release!] frees it at once, and
+@racket[with-native-models] frees it when a block exits. The arrays stay
+valid; only predicting from a released model is refused.
+
 @section[#:tag "concepts-random-state"]{Reproducibility}
 
 k-means seeds its centroids, and spectral clustering its k-means, from

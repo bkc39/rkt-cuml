@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require (only-in "../../core.rkt" exn:fail:cuml))
+(require (only-in "exn.rkt" exn:fail:cuml))
 
 (provide logic-error)
 

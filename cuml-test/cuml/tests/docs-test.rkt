@@ -19,6 +19,12 @@
                   gen:clusterer
                   gen:estimator
                   gen:predictor
+                  hdbscan
+                  hdbscan-approximate-predict
+                  hdbscan-fit
+                  hdbscan-prediction-labels
+                  hdbscan-result-labels
+                  hdbscan-result-model
                   kmeans
                   kmeans-fit
                   kmeans-params
@@ -29,6 +35,9 @@
                   kmeans-result-labels
                   kmeans-score
                   kmeans-transform
+                  native-model-release!
+                  native-model-released?
+                  native-model?
                   predict
                   score
                   single-linkage-fit
@@ -39,7 +48,8 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-params
-                  spectral-clustering-result-labels)
+                  spectral-clustering-result-labels
+                  with-native-models)
          (only-in racket/function const)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
@@ -363,3 +373,67 @@
                             spectral-clustering-result-labels
                             device-vector->list)
                         group-truth)))
+
+(define (hdbscan-groups centres per side step)
+  (list*->device-matrix (for*/list ([centre (in-list centres)]
+                                    [i (in-range per)])
+                          (list (+ centre (* step (quotient i side))) (* step (remainder i side))))
+                        #:dtype 'float32))
+
+(test-gpu "the manual: hdbscan-fit finds three groups and places two of three new points"
+  (define result (hdbscan-fit (hdbscan-groups '(0 20 40) 12 4 0.5) #:min-cluster-size 5))
+  (define labels (device-vector->list (hdbscan-result-labels result)))
+  (check-true (planted? labels (truth-of '(12 12 12))))
+  (check-equal? (~> (hdbscan-approximate-predict result
+                                                 (list*->device-matrix '((0.5 0.5) (40.5 1) (10 30))
+                                                                       #:dtype 'float32))
+                    hdbscan-prediction-labels
+                    device-vector->list)
+                (list (car labels) (list-ref labels 24) -1)))
+
+(test-gpu "the manual: prediction needs twice min-samples training rows"
+  (define few
+    (hdbscan-fit (list*->device-matrix '((0 0) (0 1) (1 0) (1 1) (9 9)) #:dtype 'float32)
+                 #:min-cluster-size 2
+                 #:min-samples 3))
+  (check-cuml-error
+   'logic
+   "hdbscan-approximate-predict: model: prediction needs at least 6 training rows (2 × min-samples), got 5"
+   (lambda () (hdbscan-approximate-predict few (hdbscan-groups '(0 20 40) 12 4 0.5)))))
+
+(test-gpu "the manual: a min-cluster-size above 1023 needs an explicit min-samples"
+  (define X (hdbscan-groups '(0 20 40) 12 4 0.5))
+  (check-cuml-error 'logic
+                    "hdbscan-fit: min-samples: expected at most 1023, got 2000"
+                    (lambda () (hdbscan-fit X #:min-cluster-size 2000)))
+  (check-cuml-error 'logic
+                    "fit: min-samples: expected at most 1023, got 2000"
+                    (lambda () (fit (hdbscan #:min-cluster-size 2000) X))))
+
+(test-gpu "the manual: a native model is live until released, and with-native-models releases it"
+  (define X (hdbscan-groups '(0 20) 10 5 1))
+  (define result (hdbscan-fit X))
+  (define m (hdbscan-result-model result))
+  (check-true (native-model? m))
+  (check-equal? (format "~v" m) "#<native-model hdbscan>")
+  (check-equal? (native-model-released? m) #f)
+  (native-model-release! m)
+  (check-true (native-model-released? m))
+  (check-true (planted? (device-vector->list (hdbscan-result-labels result)) (truth-of '(10 10))))
+  (check-cuml-error 'logic
+                    "hdbscan-approximate-predict: model: expected a live model, got a released one"
+                    (lambda () (hdbscan-approximate-predict result X)))
+  (define held (hdbscan-result-model (hdbscan-fit X)))
+  (check-equal? (with-native-models ([h held]) (native-model-released? h)) #f)
+  (check-true (native-model-released? held)))
+
+(test-gpu "the manual: the hdbscan estimator on two groups"
+  (define H (hdbscan-groups '(0 20) 10 5 1))
+  (define hd (hdbscan #:min-cluster-size 4))
+  (check-equal? (format "~v" hd) "#<hdbscan #:min-cluster-size 4>")
+  (check-true (planted? (device-vector->list (fit-predict hd H)) (truth-of '(10 10))))
+  (check-equal? (format "~v" (estimator-set-params hd #:cluster-selection-method 'leaf))
+                "#<hdbscan #:min-cluster-size 4 #:cluster-selection-method 'leaf>")
+  (check-cuml-error 'logic
+                    "fit: alpha: expected greater than 0, got 0"
+                    (lambda () (fit (hdbscan #:alpha 0) H))))

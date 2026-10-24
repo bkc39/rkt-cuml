@@ -4,9 +4,7 @@
 #include <cstdint>
 #include <cuml/cluster/linkage.hpp>
 #include <cuml/common/distance_type.hpp>
-#include <format>
 #include <initializer_list>
-#include <limits>
 #include <memory>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
@@ -25,22 +23,21 @@ namespace {
 
 using cumlrkt::logic_error;
 using cumlrkt::cluster::ascending_pairs;
-using cumlrkt::cluster::first_large_row;
 using cumlrkt::cluster::matrix;
+using cumlrkt::cluster::most_index;
 using cumlrkt::cluster::on_float32_device;
-using cumlrkt::cluster::printed;
 using cumlrkt::cluster::require_at_least;
+using cumlrkt::cluster::require_bounded_rows;
+using cumlrkt::cluster::require_index;
 using cumlrkt::cluster::require_some;
 using cumlrkt::cluster::rows_of;
 using cumlrkt::cluster::settle;
 using raftrkt::any_extent;
 
-constexpr int64_t most_index = std::numeric_limits<int32_t>::max();
 constexpr int64_t most_pairwise_rows = 46340;
 constexpr int64_t most_log2_rows = 30;
 constexpr int64_t most_c = most_index - most_log2_rows;
 constexpr int64_t least_neighbours = 2;
-constexpr double most_squared_norm = 0x1p125;
 
 struct fit_options {
   int64_t n_clusters;
@@ -71,10 +68,7 @@ matrix<float, int64_t> checked_x(const rr_view* view) {
       rows_of<float, int64_t>(view, "X", any_extent, any_extent);
   require_some("X", "row", x.n);
   require_some("X", "column", x.d);
-  if (x.n > most_index / x.d) {
-    throw logic_error("X: " + std::to_string(x.n) + "x" + std::to_string(x.d) +
-                      " elements do not fit the index type");
-  }
+  require_index("X", x.n, x.d);
   return x;
 }
 
@@ -125,17 +119,6 @@ void require_knn_graph(int64_t n, int32_t c) {
   }
 }
 
-void require_bounded_rows(const matrix<float, int64_t>& x,
-                          rmm::cuda_stream_view stream) {
-  const auto [row, squared] =
-      first_large_row(x.data, x.n, x.d, most_squared_norm, stream);
-  if (row >= 0) {
-    throw logic_error(
-        std::format("X: row {}: expected a squared norm of at most {}, got {}",
-                    row, printed(most_squared_norm), printed(squared)));
-  }
-}
-
 struct linkage_outputs {
   rmm::device_uvector<int32_t> labels;
   rmm::device_uvector<int32_t> children;
@@ -155,7 +138,7 @@ void fit(const raft::handle_t& handle, const rr_view* view, rr_deposit* out,
     require_pairwise_rows(x.n);
   }
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
-  require_bounded_rows(x, stream);
+  require_bounded_rows("X", x, stream);
   const auto n = static_cast<std::size_t>(x.n);
   auto outputs = std::make_unique<linkage_outputs>(
       linkage_outputs{rmm::device_uvector<int32_t>(n, stream),

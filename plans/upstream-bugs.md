@@ -19,6 +19,17 @@ packet (§4) has the detail.
 | 5 #29 | NaN, Inf and 1e20 rows give silently wrong labels | spectral | refused |
 | 5 #29 | the COO graph is unchecked: out-of-range index runs silently (10⁸ is an illegal address), lengths not compared, duplicate self-loops shrink the Laplacian below nnz, nnz = 0 fails with "invalid device ordinal" | spectral | refused |
 | 5 #29 | labels renumber between otherwise identical runs | spectral | documented |
+| 7 #12 | `min_cluster_size` below 2 segfaults; it is an `int` | `hdbscan/` | refused outside [2, 2³¹−1] |
+| 7 #12 | `max_cluster_size` is an `int`: 2³¹ would read as unlimited | `hdbscan/` | refused past 2³¹−1 |
+| 7 #12 | `cluster_selection_epsilon` −1 or NaN acts as 0 | `hdbscan/` | refused |
+| 7 #12 | `alpha` 0, −1, NaN, or 0 as a float, gives all noise; below about 1e−17 too | `hdbscan/` | refused; the small range documented |
+| 7 #12 | a NaN, Inf, 1e20 or 1e18 fit row becomes noise, other outputs unchanged | `hdbscan/` | refused past a squared norm of 2¹²⁵ |
+| 7 #12 | a NaN or Inf query row is an illegal address (context poisoned) in `approximate_predict` and `membership_vector`; a 1e18 row predicts noise | `hdbscan/` prediction | refused past a squared norm of 2¹²⁵, as fit rows |
+| 7 #12 | prediction with fewer than 2·min_samples training rows is an illegal address | `approximate_predict.cuh` | refused |
+| 7 #12 | an empty query fails inside cuVS or RAFT | `hdbscan/` prediction | refused |
+| 7 #12 | a query with the wrong column count gives garbage | `hdbscan/` prediction | refused |
+| 7 #12 | the predict kernel indexes `selected_clusters` by caller labels | `approximate_predict.cuh` | labels are a model region |
+| 7 #12 | `int` counts over edges, knn sizes and m·k memberships | `hdbscan/detail/` | refused past 2³¹−1 |
 
 ## cuVS
 
