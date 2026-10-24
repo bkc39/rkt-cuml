@@ -190,18 +190,22 @@ void require_at_least(const char* what, int64_t got, int64_t least) {
   }
 }
 
+model_kind kind_of(int32_t code) {
+  switch (code) {
+    case CUML_PROBE_KIND_A:
+      return cumlrkt::probe_a;
+    case CUML_PROBE_KIND_B:
+      return cumlrkt::probe_b;
+    default:
+      throw logic_error("kind: expected 1 or 2, got " + std::to_string(code));
+  }
+}
+
 shape checked_shape(int64_t payload_bytes, int32_t region_length,
                     int32_t kind) {
   require_at_least("payload-bytes", payload_bytes, 0);
   require_at_least("region-length", region_length, 0);
-  switch (kind) {
-    case CUML_PROBE_KIND_A:
-      return {cumlrkt::probe_a, payload_bytes, region_length};
-    case CUML_PROBE_KIND_B:
-      return {cumlrkt::probe_b, payload_bytes, region_length};
-    default:
-      throw logic_error("kind: expected 1 or 2, got " + std::to_string(kind));
-  }
+  return {kind_of(kind), payload_bytes, region_length};
 }
 
 }  // namespace
