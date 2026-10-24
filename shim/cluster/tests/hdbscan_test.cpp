@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <format>
 #include <functional>
 #include <set>
 #include <string>
@@ -25,7 +27,16 @@ constexpr int32_t lambdas_region = 4;
 constexpr int32_t sizes_region = 5;
 constexpr int32_t stabilities_region = 6;
 constexpr int32_t selected_region = 7;
+constexpr int32_t probabilities_region = 0;
+constexpr int32_t linkage_region = 1;
+constexpr int32_t distances_region = 2;
+constexpr int32_t linkage_sizes_region = 3;
+constexpr int32_t sources_region = 4;
+constexpr int32_t destinations_region = 5;
+constexpr int32_t weights_region = 6;
 constexpr int32_t identical_rows = 20;
+constexpr int64_t small_batch = 7;
+constexpr std::size_t noise_values = std::size_t{2} * identical_rows;
 
 struct condensed {
   std::vector<int64_t> parents;
@@ -43,65 +54,131 @@ condensed tree_of(const fitted_model& f) {
           f.model.read<int64_t>(selected_region)};
 }
 
+std::string label_problems(const fitted_model& f) {
+  const std::vector<int64_t> labels = f.model.read<int64_t>(labels_region);
+  const std::vector<float> probabilities =
+      f.out.read<float>(probabilities_region);
+  const int64_t k = f.clusters();
+  if (static_cast<int64_t>(labels.size()) != f.n) {
+    return std::format("{} labels for {} rows; ", labels.size(), f.n);
+  }
+  std::string problems;
+  std::set<int64_t> seen;
+  for (int64_t i = 0; i < f.n; ++i) {
+    const int64_t label = labels.at(i);
+    const float p = probabilities.at(i);
+    const bool noise = label == -1;
+    const bool fits = noise ? p == 0 : p > 0;
+    if (label < -1 || label >= k || p < 0 || p > 1 || !fits) {
+      problems +=
+          std::format("row {}: label {}, probability {}; ", i, label, p);
+    }
+    if (!noise) {
+      seen.insert(label);
+    }
+  }
+  if (static_cast<int64_t>(seen.size()) != k) {
+    problems += std::format("{} of {} labels used; ", seen.size(), k);
+  }
+  return problems;
+}
+
+std::string condensed_problems(const fitted_model& f) {
+  const condensed t = tree_of(f);
+  const int64_t n = f.n;
+  const auto edges = static_cast<int64_t>(t.parents.size());
+  std::string problems;
+  std::vector<int32_t> as_child(static_cast<std::size_t>(n), 0);
+  int64_t largest = 0;
+  for (int64_t e = 0; e < edges; ++e) {
+    const int64_t child = t.children.at(e);
+    if (t.parents.at(e) < n) {
+      problems += std::format("edge {}: a point as parent; ", e);
+    }
+    largest = std::max({largest, t.parents.at(e), child});
+    if (child < n) {
+      ++as_child.at(child);
+    }
+    if (child < n && t.sizes.at(e) != 1) {
+      problems += std::format("edge {}: point of size {}; ", e, t.sizes.at(e));
+    }
+  }
+  if (largest != edges) {
+    problems += std::format("largest node {} for {} edges; ", largest, edges);
+  }
+  if (!std::ranges::all_of(as_child, [](int32_t c) { return c == 1; })) {
+    problems += "a point is not a child exactly once; ";
+  }
+  return problems;
+}
+
+std::string plain_problems(const fitted_model& f) {
+  const int64_t n = f.n;
+  const auto merges = static_cast<std::size_t>(n - 1);
+  const std::vector<int64_t> children = f.out.read<int64_t>(linkage_region);
+  const std::vector<float> distances = f.out.read<float>(distances_region);
+  const std::vector<int64_t> sizes = f.out.read<int64_t>(linkage_sizes_region);
+  if (children.size() != 2 * merges) {
+    return std::format("{} children for {} merges; ", children.size(), merges);
+  }
+  std::string problems;
+  for (int64_t i = 0; i < n - 1; ++i) {
+    const int64_t low = children.at(2 * i);
+    const int64_t high = children.at((2 * i) + 1);
+    if (low > high || low < 0 || high > (2 * n) - 2) {
+      problems += std::format("merge {}: children {} {}; ", i, low, high);
+    }
+  }
+  if (!std::ranges::is_sorted(distances)) {
+    problems += "distances descend; ";
+  }
+  if (sizes.back() != n) {
+    problems += std::format("last merge of size {}; ", sizes.back());
+  }
+  if (f.out.read<float>(weights_region) != distances) {
+    problems += "weights differ from distances; ";
+  }
+  if (f.out.read<int64_t>(sources_region).size() != merges ||
+      f.out.read<int64_t>(destinations_region).size() != merges) {
+    problems += "spanning tree ends are not n - 1 long; ";
+  }
+  return problems;
+}
+
+std::string descent_problems(const fitted_model& f) {
+  const condensed t = tree_of(f);
+  std::unordered_map<int64_t, int64_t> parent;
+  for (std::size_t e = 0; e < t.parents.size(); ++e) {
+    parent[t.children.at(e)] = t.parents.at(e);
+  }
+  const std::vector<int64_t> labels = f.model.read<int64_t>(labels_region);
+  std::string problems;
+  for (int64_t i = 0; i < f.n; ++i) {
+    std::set<int64_t> ancestors;
+    for (auto at = parent.find(i); at != parent.end();
+         at = parent.find(at->second)) {
+      ancestors.insert(at->second);
+    }
+    for (std::size_t j = 0; j < t.selected.size(); ++j) {
+      const bool own = labels.at(i) == static_cast<int64_t>(j);
+      if (ancestors.contains(f.n + t.selected.at(j)) != own) {
+        problems += std::format("point {} cluster {}; ", i, j);
+      }
+    }
+  }
+  return problems;
+}
+
 TEST(Hdbscan, OutputsHaveTheirShapes) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const fitted_model f(res, three_blobs());
   ASSERT_EQ(f.status, "accepted");
-  const int64_t n = f.n;
-  const int64_t k = f.clusters();
-  ASSERT_EQ(f.model.r.count, model_regions);
-  ASSERT_EQ(f.out.r.count, plain_regions);
+  ASSERT_EQ((std::vector<int32_t>{f.model.r.count, f.out.r.count}),
+            (std::vector<int32_t>{model_regions, plain_regions}));
   EXPECT_GT(f.opaque, 0);
-  EXPECT_EQ(f.model.r.regions[selected_region].shape[0], k);
-  const std::vector<int64_t> labels = f.model.read<int64_t>(labels_region);
-  const std::vector<float> probabilities = f.out.read<float>(0);
-  ASSERT_EQ(static_cast<int64_t>(labels.size()), n);
-  std::set<int64_t> seen;
-  for (int64_t i = 0; i < n; ++i) {
-    const int64_t label = labels.at(i);
-    const float p = probabilities.at(i);
-    EXPECT_GE(label, -1);
-    EXPECT_LT(label, k);
-    EXPECT_GE(p, 0);
-    EXPECT_LE(p, 1);
-    if (label == -1) {
-      EXPECT_EQ(p, 0);
-    } else {
-      EXPECT_GT(p, 0);
-      seen.insert(label);
-    }
-  }
-  EXPECT_EQ(static_cast<int64_t>(seen.size()), k);
-  const condensed t = tree_of(f);
-  const auto edges = static_cast<int64_t>(t.parents.size());
-  std::vector<int32_t> as_child(static_cast<std::size_t>(n), 0);
-  int64_t largest = 0;
-  for (int64_t e = 0; e < edges; ++e) {
-    EXPECT_GE(t.parents.at(e), n);
-    largest = std::max({largest, t.parents.at(e), t.children.at(e)});
-    if (t.children.at(e) < n) {
-      ++as_child.at(t.children.at(e));
-      EXPECT_EQ(t.sizes.at(e), 1);
-    }
-  }
-  EXPECT_EQ(largest, edges);
-  EXPECT_TRUE(std::ranges::all_of(as_child, [](int32_t c) { return c == 1; }));
-  const std::vector<int64_t> children = f.out.read<int64_t>(1);
-  const std::vector<float> distances = f.out.read<float>(2);
-  const std::vector<int64_t> sizes = f.out.read<int64_t>(3);
-  const std::vector<float> weights = f.out.read<float>(6);
-  ASSERT_EQ(static_cast<int64_t>(children.size()), 2 * (n - 1));
-  for (int64_t i = 0; i < n - 1; ++i) {
-    EXPECT_LE(children.at(2 * i), children.at((2 * i) + 1));
-    EXPECT_GE(children.at(2 * i), 0);
-    EXPECT_LE(children.at((2 * i) + 1), (2 * n) - 2);
-  }
-  EXPECT_TRUE(std::ranges::is_sorted(distances));
-  EXPECT_EQ(sizes.back(), n);
-  EXPECT_EQ(weights, distances);
-  EXPECT_EQ(f.out.read<int64_t>(4).size(), static_cast<std::size_t>(n - 1));
-  EXPECT_EQ(f.out.read<int64_t>(5).size(), static_cast<std::size_t>(n - 1));
+  EXPECT_EQ(f.model.r.regions[selected_region].shape[0], f.clusters());
+  EXPECT_EQ(label_problems(f) + condensed_problems(f) + plain_problems(f), "");
 }
 
 TEST(Hdbscan, LabelsDescendFromTheirSelectedClusters) {
@@ -112,24 +189,7 @@ TEST(Hdbscan, LabelsDescendFromTheirSelectedClusters) {
   const condensed t = tree_of(f);
   EXPECT_EQ(std::ranges::adjacent_find(t.selected, std::greater_equal<>{}),
             t.selected.end());
-  std::unordered_map<int64_t, int64_t> parent;
-  for (std::size_t e = 0; e < t.parents.size(); ++e) {
-    parent[t.children.at(e)] = t.parents.at(e);
-  }
-  const std::vector<int64_t> labels = f.model.read<int64_t>(labels_region);
-  for (int64_t i = 0; i < f.n; ++i) {
-    std::set<int64_t> ancestors;
-    for (auto at = parent.find(i); at != parent.end();
-         at = parent.find(at->second)) {
-      ancestors.insert(at->second);
-    }
-    const int64_t label = labels.at(i);
-    for (std::size_t j = 0; j < t.selected.size(); ++j) {
-      const bool own = label == static_cast<int64_t>(j);
-      EXPECT_EQ(ancestors.contains(f.n + t.selected.at(j)), own)
-          << "point " << i << " cluster " << j;
-    }
-  }
+  EXPECT_EQ(descent_problems(f), "");
 }
 
 TEST(Hdbscan, PredictingTheTrainingRowsGivesTheirLabels) {
@@ -138,19 +198,18 @@ TEST(Hdbscan, PredictingTheTrainingRowsGivesTheirLabels) {
   const fitted_model f(res, three_blobs());
   ASSERT_EQ(f.status, "accepted");
   record out(res);
-  ASSERT_EQ(
-      approximate_predict(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
-      "accepted");
-  EXPECT_EQ(out.read<int64_t>(0), f.model.read<int64_t>(labels_region));
   record all(res);
-  ASSERT_EQ(all_points(res, f.anchor(), &f.x->view, &all.r), "accepted");
-  EXPECT_EQ(shapes(all),
-            (std::vector<int64_t>{1, RR_DTYPE_FLOAT32, f.n, f.clusters()}));
   record some(res);
-  ASSERT_EQ(
-      membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &some.r, 7),
-      "accepted");
-  EXPECT_EQ(shapes(some), shapes(all));
+  const std::vector<std::string> calls{
+      approximate_predict(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
+      all_points(res, f.anchor(), &f.x->view, &all.r),
+      membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &some.r,
+                        small_batch)};
+  ASSERT_EQ(calls, std::vector<std::string>(3, "accepted"));
+  EXPECT_EQ(out.read<int64_t>(0), f.model.read<int64_t>(labels_region));
+  const std::vector<int64_t> every{1, RR_DTYPE_FLOAT32, f.n, f.clusters()};
+  EXPECT_EQ((std::vector{shapes(all), shapes(some)}),
+            (std::vector{every, every}));
 }
 
 TEST(Hdbscan, AReleasedModelRefusesUseAndKeepsItsRegions) {
@@ -161,20 +220,19 @@ TEST(Hdbscan, AReleasedModelRefusesUseAndKeepsItsRegions) {
   const std::vector<int64_t> labels = f.model.read<int64_t>(labels_region);
   const std::vector<float> stabilities =
       f.model.read<float>(stabilities_region);
-  EXPECT_EQ(release_model(res, f.anchor()), "accepted");
-  EXPECT_EQ(release_model(res, f.anchor()), "accepted");
+  const std::vector<std::string> releases{release_model(res, f.anchor()),
+                                          release_model(res, f.anchor())};
+  EXPECT_EQ(releases, std::vector<std::string>(2, "accepted"));
   record out(res);
-  const std::string released =
-      "model: expected a live model, got a released one";
-  EXPECT_EQ(
+  const std::vector<std::string> uses{
       approximate_predict(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
-      released);
-  EXPECT_EQ(membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
-            released);
-  EXPECT_EQ(all_points(res, f.anchor(), &f.x->view, &out.r), released);
+      membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
+      all_points(res, f.anchor(), &f.x->view, &out.r)};
+  EXPECT_EQ(uses, std::vector<std::string>(
+                      3, "model: expected a live model, got a released one"));
   expect_untouched(out);
-  EXPECT_EQ(f.model.read<int64_t>(labels_region), labels);
-  EXPECT_EQ(f.model.read<float>(stabilities_region), stabilities);
+  EXPECT_TRUE(f.model.read<int64_t>(labels_region) == labels &&
+              f.model.read<float>(stabilities_region) == stabilities);
 }
 
 TEST(Hdbscan, AnotherArrayIsNotAModel) {
@@ -198,26 +256,26 @@ TEST(Hdbscan, AnotherArrayIsNotAModel) {
 TEST(Hdbscan, ANoiseModelAnswersEmptyMemberships) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const fitted_model f(res, values(2 * identical_rows, 1.0));
+  const fitted_model f(res, values(noise_values, 1.0));
   ASSERT_EQ(f.status, "accepted");
-  ASSERT_EQ(f.clusters(), 0);
-  EXPECT_EQ(f.model.r.regions[selected_region].shape[0], 0);
+  ASSERT_EQ((std::vector<int64_t>{f.clusters(),
+                                  f.model.r.regions[selected_region].shape[0]}),
+            (std::vector<int64_t>{0, 0}));
   record all(res);
-  ASSERT_EQ(all_points(res, f.anchor(), &f.x->view, &all.r), "accepted");
-  EXPECT_EQ(shapes(all),
-            (std::vector<int64_t>{1, RR_DTYPE_FLOAT32, identical_rows, 0}));
   record some(res);
-  ASSERT_EQ(membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &some.r),
-            "accepted");
-  EXPECT_EQ(shapes(some),
-            (std::vector<int64_t>{1, RR_DTYPE_FLOAT32, identical_rows, 0}));
   record predicted(res);
-  ASSERT_EQ(approximate_predict(res, f.anchor(), &f.x->view, &f.x->view,
-                                &predicted.r),
-            "accepted");
-  EXPECT_EQ(predicted.read<int64_t>(0),
-            std::vector<int64_t>(identical_rows, -1));
-  EXPECT_EQ(predicted.read<float>(1), std::vector<float>(identical_rows, 0));
+  const std::vector<std::string> calls{
+      all_points(res, f.anchor(), &f.x->view, &all.r),
+      membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &some.r),
+      approximate_predict(res, f.anchor(), &f.x->view, &f.x->view,
+                          &predicted.r)};
+  ASSERT_EQ(calls, std::vector<std::string>(3, "accepted"));
+  const std::vector<int64_t> empty{1, RR_DTYPE_FLOAT32, identical_rows, 0};
+  EXPECT_EQ((std::vector{shapes(all), shapes(some)}),
+            (std::vector{empty, empty}));
+  EXPECT_TRUE(
+      predicted.read<int64_t>(0) == std::vector<int64_t>(identical_rows, -1) &&
+      predicted.read<float>(1) == std::vector<float>(identical_rows, 0));
 }
 
 }  // namespace

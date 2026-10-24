@@ -11,6 +11,7 @@
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/device_uvector.hpp>
 #include <string>
+#include <tuple>
 #include <utility>
 
 #include "cumlrkt/cluster.h"
@@ -152,9 +153,14 @@ std::unique_ptr<plain_outputs> plain_for(int64_t n,
                     rmm::device_uvector<float>(rows - 1, stream)});
 }
 
-void fit(const raft::handle_t& handle, const rr_view* view,
-         rr_deposit* model_out, rr_deposit* out, const options& o,
-         int64_t* opaque_bytes) {
+struct fit_outputs {
+  rr_deposit* model;
+  rr_deposit* plain;
+  int64_t* opaque_bytes;
+};
+
+void fit(const raft::handle_t& handle, const rr_view* view, const options& o,
+         const fit_outputs& into) {
   const matrix<float, int64_t> x = checked_x(view);
   require_options(o, x.n);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
@@ -196,12 +202,14 @@ void fit(const raft::handle_t& handle, const rr_view* view,
       raftrkt::region(plain->destinations),
       raftrkt::region(plain->weights)};
   const int64_t bytes = m->opaque_bytes();
-  cumlrkt::publish_model(model_out, "model-out", handle, std::move(m),
-                         model_regions[0], model_regions[1], model_regions[2],
-                         model_regions[3], model_regions[4], model_regions[5],
-                         model_regions[6]);
-  raftrkt::deposit(out, "out", handle, std::move(plain), plain_regions);
-  *opaque_bytes = bytes;
+  std::apply(
+      [&](const auto&... regions) {
+        cumlrkt::publish_model(into.model, "model-out", handle, std::move(m),
+                               regions...);
+      },
+      model_regions);
+  raftrkt::deposit(into.plain, "out", handle, std::move(plain), plain_regions);
+  *into.opaque_bytes = bytes;
 }
 
 }  // namespace
@@ -221,10 +229,10 @@ int cuml_cluster_hdbscan_fit(void* handle, const rr_view* x,
                     max_cluster_size,    alpha,       cluster_selection_method,
                     allow_single_cluster};
     in_device_scope(handle, {{"X", x}}, [&](const raft::handle_t& h) {
-      rr_deposit* const model_into = raftrkt::require(model_out, "model-out");
-      rr_deposit* const into = raftrkt::require(out, "out");
-      int64_t* const bytes = raftrkt::require(opaque_bytes, "opaque-bytes");
-      fit(h, x, model_into, into, o, bytes);
+      fit(h, x, o,
+          {.model = raftrkt::require(model_out, "model-out"),
+           .plain = raftrkt::require(out, "out"),
+           .opaque_bytes = raftrkt::require(opaque_bytes, "opaque-bytes")});
     });
   });
 }

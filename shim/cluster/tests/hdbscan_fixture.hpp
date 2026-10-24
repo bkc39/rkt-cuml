@@ -70,13 +70,19 @@ inline std::string release_model(const resources& res, const rr_view* model) {
   return outcome(cuml_cluster_model_release(res.handle, model));
 }
 
+struct lcg {
+  uint64_t state;
+
+  double bits53() {
+    state = (state * 6364136223846793005ULL) + 1442695040888963407ULL;
+    return static_cast<double>(state >> 11);
+  }
+};
+
 inline values three_blobs(int64_t n_each = blob_rows) {
   values host;
-  uint64_t state = 0x9e3779b97f4a7c15ULL;
-  const auto uniform = [&state] {
-    state = (state * 6364136223846793005ULL) + 1442695040888963407ULL;
-    return (static_cast<double>(state >> 11) + 0.5) * 0x1p-53;
-  };
+  lcg draws{0x9e3779b97f4a7c15ULL};
+  const auto uniform = [&draws] { return (draws.bits53() + 0.5) * 0x1p-53; };
   for (int64_t g = 0; g < blob_count; ++g) {
     for (int64_t i = 0; i < n_each; ++i) {
       for (int j = 0; j < 2; ++j) {
@@ -85,6 +91,20 @@ inline values three_blobs(int64_t n_each = blob_rows) {
                        (r * std::cos(2 * std::numbers::pi * uniform())));
       }
     }
+  }
+  return host;
+}
+
+inline values jittered_pairs(int64_t count, int64_t side, double spacing) {
+  values host;
+  lcg draws{1};
+  const auto jitter = [&draws] { return (draws.bits53() * 0x1p-52) - 1; };
+  for (int64_t i = 0; i < count; ++i) {
+    const auto column = static_cast<double>(i % side);
+    const auto row = static_cast<double>(i / side);
+    const double at = (column * spacing) + jitter();
+    const double up = (row * spacing) + jitter();
+    host.insert(host.end(), {at, up, at, up});
   }
   return host;
 }

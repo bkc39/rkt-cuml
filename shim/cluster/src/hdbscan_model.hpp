@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cuml/cluster/hdbscan.hpp>
-#include <optional>
+#include <memory>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
@@ -52,7 +52,8 @@ class hdbscan_model final : public cumlrkt::model {
                           cudaMemcpyDeviceToDevice, stream.value()),
           "cudaMemcpyAsync");
     }
-    pd.emplace(handle, n_rows, n_cols, this->core_dists.data());
+    pd = std::make_unique<hdbscan_common::PredictionData<int64_t, float>>(
+        handle, n_rows, n_cols, this->core_dists.data());
     hdbscan_common::generate_prediction_data(handle, tree, this->labels.data(),
                                              inverse_label_map.data(),
                                              static_cast<int>(k), *pd);
@@ -76,7 +77,7 @@ class hdbscan_model final : public cumlrkt::model {
   int64_t n_cols;
   int64_t min_samples;
   int64_t k;
-  std::optional<hdbscan_common::PredictionData<int64_t, float>> pd;
+  std::unique_ptr<hdbscan_common::PredictionData<int64_t, float>> pd;
 
  protected:
   void drop() noexcept override {

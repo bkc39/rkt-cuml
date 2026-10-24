@@ -405,19 +405,7 @@ TEST(HdbscanRefusals, PredictionNeedsTwiceMinSamplesTrainingRows) {
 TEST(HdbscanRefusals, AllPointsRefusesAnOversizedMatrix) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  values host;
-  uint64_t state = 1;
-  const auto jitter = [&state] {
-    state = (state * 6364136223846793005ULL) + 1442695040888963407ULL;
-    return (static_cast<double>(state >> 11) * 0x1p-52) - 1;
-  };
-  for (int64_t i = 0; i < pair_count; ++i) {
-    const double at =
-        (static_cast<double>(i % pair_side) * pair_spacing) + jitter();
-    const double up =
-        (static_cast<double>(i / pair_side) * pair_spacing) + jitter();
-    host.insert(host.end(), {at, up, at, up});
-  }
+  const values host = jittered_pairs(pair_count, pair_side, pair_spacing);
   record model(res);
   record out(res);
   const auto x = upload<float>(res, {2 * pair_count, cols}, host);

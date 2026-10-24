@@ -41,6 +41,11 @@ constexpr auto metric = ML::distance::DistanceType::L2SqrtExpanded;
 
 using model_use = cumlrkt::model_use<hdbscan_model>;
 
+struct fitted_views {
+  const rr_view* model;
+  const rr_view* x;
+};
+
 model_use used(const rr_view* model, const raft::handle_t& handle) {
   return cumlrkt::use_model<hdbscan_model>(
       model, "model", hdbscan_kind, raft::resource::get_cuda_stream(handle));
@@ -62,7 +67,7 @@ struct query {
   const float* x;
 };
 
-query checked_query(const hdbscan_model& m, const rr_view* x_view,
+query checked_query(const hdbscan_model& m, const fitted_views& fitted,
                     const rr_view* view) {
   const matrix<float, int64_t> points =
       rows_of<float, int64_t>(view, "points", any_extent, any_extent);
@@ -74,7 +79,7 @@ query checked_query(const hdbscan_model& m, const rr_view* x_view,
         "points: expected {} columns, as the model was fit on, got {}",
         m.n_cols, points.d));
   }
-  const float* x = checked_training(m, x_view);
+  const float* x = checked_training(m, fitted.x);
   if (m.n_rows < 2 * m.min_samples) {
     throw logic_error(std::format(
         "model: prediction needs at least {} training rows (2 × min-samples), "
@@ -117,11 +122,11 @@ void deposit_memberships(const raft::handle_t& handle, rr_deposit* out,
   raftrkt::deposit(out, "out", handle, std::move(outputs), regions);
 }
 
-void approximate_predict(const raft::handle_t& handle, const rr_view* model,
-                         const rr_view* x, const rr_view* view,
+void approximate_predict(const raft::handle_t& handle,
+                         const fitted_views& fitted, const rr_view* view,
                          rr_deposit* out) {
-  const model_use m = used(model, handle);
-  const query q = checked_query(*m, x, view);
+  const model_use m = used(fitted.model, handle);
+  const query q = checked_query(*m, fitted, view);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_bounded_rows("points", q.points, stream);
   const auto rows = static_cast<std::size_t>(q.points.n);
@@ -139,11 +144,11 @@ void approximate_predict(const raft::handle_t& handle, const rr_view* model,
   raftrkt::deposit(out, "out", handle, std::move(outputs), regions);
 }
 
-void membership_vector(const raft::handle_t& handle, const rr_view* model,
-                       const rr_view* x, const rr_view* view, rr_deposit* out,
+void membership_vector(const raft::handle_t& handle, const fitted_views& fitted,
+                       const rr_view* view, rr_deposit* out,
                        int64_t batch_size) {
-  const model_use m = used(model, handle);
-  const query q = checked_query(*m, x, view);
+  const model_use m = used(fitted.model, handle);
+  const query q = checked_query(*m, fitted, view);
   require_at_least("batch-size", batch_size, 1);
   require_entries("points", q.points.n, m->k);
   require_bounded_rows("points", q.points,
@@ -156,10 +161,10 @@ void membership_vector(const raft::handle_t& handle, const rr_view* model,
   });
 }
 
-void all_points(const raft::handle_t& handle, const rr_view* model,
-                const rr_view* x, rr_deposit* out, int64_t batch_size) {
-  const model_use m = used(model, handle);
-  const float* training = checked_training(*m, x);
+void all_points(const raft::handle_t& handle, const fitted_views& fitted,
+                rr_deposit* out, int64_t batch_size) {
+  const model_use m = used(fitted.model, handle);
+  const float* training = checked_training(*m, fitted.x);
   require_at_least("batch-size", batch_size, 1);
   require_entries("model", m->n_rows, m->k);
   deposit_memberships(handle, out, m->n_rows, m->k, [&](float* into) {
@@ -188,7 +193,7 @@ int cuml_cluster_hdbscan_approximate_predict(void* handle, const rr_view* model,
                                              rr_deposit* out) {
   return on_model(handle, {{"model", model}, {"X", x}, {"points", points}},
                   [&](const raft::handle_t& h) {
-                    approximate_predict(h, model, x, points,
+                    approximate_predict(h, {model, x}, points,
                                         raftrkt::require(out, "out"));
                   });
 }
@@ -206,7 +211,7 @@ int cuml_cluster_hdbscan_membership_vector(void* handle, const rr_view* model,
                                            int64_t batch_size) {
   return on_model(handle, {{"model", model}, {"X", x}, {"points", points}},
                   [&](const raft::handle_t& h) {
-                    membership_vector(h, model, x, points,
+                    membership_vector(h, {model, x}, points,
                                       raftrkt::require(out, "out"), batch_size);
                   });
 }
@@ -224,7 +229,7 @@ int cuml_cluster_hdbscan_all_points_membership_vectors(void* handle,
                                                        int64_t batch_size) {
   return on_model(
       handle, {{"model", model}, {"X", x}}, [&](const raft::handle_t& h) {
-        all_points(h, model, x, raftrkt::require(out, "out"), batch_size);
+        all_points(h, {model, x}, raftrkt::require(out, "out"), batch_size);
       });
 }
 
