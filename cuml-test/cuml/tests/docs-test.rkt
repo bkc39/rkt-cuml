@@ -392,12 +392,14 @@
                 (list (car labels) (list-ref labels 24) -1)))
 
 (test-gpu "the manual: prediction needs twice min-samples training rows"
-  (define few (hdbscan-fit (list*->device-matrix '((0 0) (0 1) (1 0) (1 1) (9 9)) #:dtype 'float32)
-                           #:min-cluster-size 2
-                           #:min-samples 3))
-  (check-cuml-error 'logic
-                    "hdbscan-approximate-predict: model: prediction needs at least 6 training rows (2 × min-samples), got 5"
-                    (lambda () (hdbscan-approximate-predict few (hdbscan-groups '(0 20 40) 12 4 0.5)))))
+  (define few
+    (hdbscan-fit (list*->device-matrix '((0 0) (0 1) (1 0) (1 1) (9 9)) #:dtype 'float32)
+                 #:min-cluster-size 2
+                 #:min-samples 3))
+  (check-cuml-error
+   'logic
+   "hdbscan-approximate-predict: model: prediction needs at least 6 training rows (2 × min-samples), got 5"
+   (lambda () (hdbscan-approximate-predict few (hdbscan-groups '(0 20 40) 12 4 0.5)))))
 
 (test-gpu "the manual: a native model is live until released, and with-native-models releases it"
   (define X (hdbscan-groups '(0 20) 10 5 1))

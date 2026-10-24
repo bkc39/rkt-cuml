@@ -53,13 +53,13 @@
                       (device-vector->list (hdbscan-prediction-probabilities p)))))
 
 (test-gpu "AP2: under eom, predicting the training rows gives their fit labels"
-  (for ([c (in-list (list (list "b50" (dataset 'b50) (hasheq))
-                          (list "b10" (dataset 'b10) (hasheq))
-                          (list "one-blob, allow-single"
-                                (dataset 'one-blob)
-                                (hasheq 'allow-single-cluster #t))
-                          (list "b10, epsilon 3" (dataset 'b10) (hasheq 'cluster-selection-epsilon 3.0))
-                          (list "b50 x10" (dup (dataset 'b50) 10) (hasheq))))])
+  (for ([c (in-list
+            (list
+             (list "b50" (dataset 'b50) (hasheq))
+             (list "b10" (dataset 'b10) (hasheq))
+             (list "one-blob, allow-single" (dataset 'one-blob) (hasheq 'allow-single-cluster #t))
+             (list "b10, epsilon 3" (dataset 'b10) (hasheq 'cluster-selection-epsilon 3.0))
+             (list "b50 x10" (dup (dataset 'b50) 10) (hasheq))))])
     (test-case (car c)
       (define X (mat (cadr c) 'float32))
       (define result (apply-options hdbscan-fit (caddr c) X))
@@ -94,10 +94,9 @@
       (define matrix (device-matrix->list* m))
       (check-true (entries-in-unit? matrix))
       (check-true (row-sums-at-most-one? matrix))
-      (check-equal? (count (lambda (row l) (and (>= l 0) (not (= (argmax-index row) l))))
-                           matrix
-                           labels)
-                    0))))
+      (check-equal?
+       (count (lambda (row l) (and (>= l 0) (not (= (argmax-index row) l)))) matrix labels)
+       0))))
 
 (test-gpu "MV2: held-out memberships are m x k with row sums at most 1"
   (for ([name (in-list '(b50 b10 moons))])
@@ -112,7 +111,8 @@
 (test-gpu "MV3: a model without clusters has empty memberships"
   (define result (noise-model))
   (check-equal? (shape (hdbscan-all-points-membership-vectors result)) '(100 0))
-  (check-equal? (shape (hdbscan-membership-vector result (mat (take (dataset 'b50) 7) 'float32))) '(7 0)))
+  (check-equal? (shape (hdbscan-membership-vector result (mat (take (dataset 'b50) 7) 'float32)))
+                '(7 0)))
 
 (test-gpu "MV4: the batch size does not change the memberships"
   (define result (hdbscan-fit (mat (alternate (dataset 'moons) 0) 'float32)))
@@ -149,7 +149,5 @@
 (test-gpu "NM1: with-native-models releases its models when its body raises"
   (define result (hdbscan-fit (mat (dataset 'b10) 'float32)))
   (check-exn #rx"^inside$"
-             (lambda ()
-               (with-native-models ([m (hdbscan-result-model result)])
-                 (error "inside"))))
+             (lambda () (with-native-models ([m (hdbscan-result-model result)]) (error "inside"))))
   (check-true (native-model-released? (hdbscan-result-model result))))

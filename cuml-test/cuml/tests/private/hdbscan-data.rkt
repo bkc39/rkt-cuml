@@ -71,7 +71,8 @@
                   (define shift (* gap (quotient i 100)))
                   (map (lambda (x) (+ x shift)) row))))
 
-(define dataset-names '(b50 b10 b5d4 varied overlap moons circles gridclust grid30 one-blob identical))
+(define dataset-names
+  '(b50 b10 b5d4 varied overlap moons circles gridclust grid30 one-blob identical))
 
 (define (gaussian)
   (* (sqrt (* -2.0 (log (- 1.0 (random))))) (cos (* 2.0 pi (random)))))
@@ -101,7 +102,9 @@
     [(overlap) (first-value (lambda () (blobs 2000 5 8 3.0 1)))]
     [(moons) (first-value (lambda () (moons 1000 0.05 0)))]
     [(circles) (first-value (lambda () (circles 1000 0.5 0.03 0)))]
-    [(gridclust) (float32-rows (append* (for/list ([k (in-range 3)]) (integer-grid 10 (* 100 k)))))]
+    [(gridclust)
+     (float32-rows (append* (for/list ([k (in-range 3)])
+                              (integer-grid 10 (* 100 k)))))]
     [(grid30) (float32-rows (integer-grid 30))]
     [(one-blob) (numpy-blobs 0.0)]
     [(identical) (make-list 100 '(1.0 1.0))]
@@ -167,31 +170,35 @@
       c))
   (filter
    values
-   (list
-    (problem (= (length labels) n) "labels: one per row")
-    (problem (andmap (lambda (l) (<= -1 l (sub1 k))) labels) "labels: in [-1, k)")
-    (problem (= (length (remove-duplicates (filter (lambda (l) (>= l 0)) labels))) k)
-             "labels: every cluster occurs")
-    (problem (andmap (lambda (p) (<= 0.0 p 1.0)) probabilities) "probabilities: in [0, 1]")
-    (problem (andmap (lambda (l p) (if (= l -1) (= p 0.0) (> p 0.0))) labels probabilities)
-             "probabilities: 0 exactly on noise, positive elsewhere")
-    (problem (= (length persistence) k) "persistence: one per cluster")
-    (problem (andmap (lambda (p) (>= p n)) parents) "condensed: parents are clusters")
-    (problem (= (apply max (append parents children)) (length parents))
-             "condensed: the largest id is the edge count")
-    (problem (equal? (sort points <) (range n)) "condensed: each point is a child once")
-    (problem (for/and ([c (in-list children)]
-                       [s (in-list sizes)]
-                       #:when (< c n))
-               (= s 1))
-             "condensed: leaf edges have size 1")
-    (problem (= (length linkage) (sub1 n)) "linkage: n-1 merges")
-    (problem (andmap (lambda (pair) (<= 0 (car pair) (cadr pair) (- (* 2 n) 2))) linkage)
-             "linkage: sorted pairs of ids in [0, 2n-2]")
-    (problem (sorted? distances) "linkage: distances do not decrease")
-    (problem (= (last linkage-sizes) n) "linkage: the last merge holds every row")
-    (problem (= (length sources) (length destinations) (sub1 n)) "spanning tree: n-1 edges")
-    (problem (equal? weights distances) "spanning tree: weights are the linkage distances"))))
+   (list (problem (= (length labels) n) "labels: one per row")
+         (problem (andmap (lambda (l) (<= -1 l (sub1 k))) labels) "labels: in [-1, k)")
+         (problem (= (length (remove-duplicates (filter (lambda (l) (>= l 0)) labels))) k)
+                  "labels: every cluster occurs")
+         (problem (andmap (lambda (p) (<= 0.0 p 1.0)) probabilities) "probabilities: in [0, 1]")
+         (problem (andmap (lambda (l p)
+                            (if (= l -1)
+                                (= p 0.0)
+                                (> p 0.0)))
+                          labels
+                          probabilities)
+                  "probabilities: 0 exactly on noise, positive elsewhere")
+         (problem (= (length persistence) k) "persistence: one per cluster")
+         (problem (andmap (lambda (p) (>= p n)) parents) "condensed: parents are clusters")
+         (problem (= (apply max (append parents children)) (length parents))
+                  "condensed: the largest id is the edge count")
+         (problem (equal? (sort points <) (range n)) "condensed: each point is a child once")
+         (problem (for/and ([c (in-list children)]
+                            [s (in-list sizes)]
+                            #:when (< c n))
+                    (= s 1))
+                  "condensed: leaf edges have size 1")
+         (problem (= (length linkage) (sub1 n)) "linkage: n-1 merges")
+         (problem (andmap (lambda (pair) (<= 0 (car pair) (cadr pair) (- (* 2 n) 2))) linkage)
+                  "linkage: sorted pairs of ids in [0, 2n-2]")
+         (problem (sorted? distances) "linkage: distances do not decrease")
+         (problem (= (last linkage-sizes) n) "linkage: the last merge holds every row")
+         (problem (= (length sources) (length destinations) (sub1 n)) "spanning tree: n-1 edges")
+         (problem (equal? weights distances) "spanning tree: weights are the linkage distances"))))
 
 (define (sorted? xs)
   (or (null? xs) (null? (cdr xs)) (and (<= (car xs) (cadr xs)) (sorted? (cdr xs)))))
@@ -214,7 +221,10 @@
                     (for/list ([s (in-list selected)]
                                #:when (memv s (ancestors i)))
                       s))
-                  (problem (equal? above (if (= l -1) '() (list (list-ref selected l))))
+                  (problem (equal? above
+                                   (if (= l -1)
+                                       '()
+                                       (list (list-ref selected l))))
                            (format "point ~a: label ~a, under selected ~a" i l above))))))
 
 (define (sorted-strictly? xs)

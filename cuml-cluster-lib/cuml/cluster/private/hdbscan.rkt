@@ -131,14 +131,13 @@
 (define/who (hdbscan-all-points-membership-vectors who
                                                    result
                                                    #:batch-size [batch-size 4096]
-                                                   #:resources
-                                                   [resources (current-device-resources)])
+                                                   #:resources [resources (current-device-resources)])
   (define anchor (anchor-of who result))
   (define out (deposit-for/who who resources))
   (cuml-cluster-hdbscan-all-points-membership-vectors-job who
-                                                         resources
-                                                         anchor
-                                                         (hdbscan-result-X result)
-                                                         out
-                                                         batch-size)
+                                                          resources
+                                                          anchor
+                                                          (hdbscan-result-X result)
+                                                          out
+                                                          batch-size)
   (car (deposit->list out)))

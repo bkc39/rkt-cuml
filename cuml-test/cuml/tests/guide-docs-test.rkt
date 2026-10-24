@@ -276,7 +276,8 @@
   (define labels (labels-of (hdbscan) (eruptions)))
   (check-equal? (sizes labels) '(174 94))
   (check-equal? (count negative? labels) 4)
-  (define standardized-rows (rows (standardized (dataset-columns 'faithful '("eruptions" "waiting")))))
+  (define standardized-rows
+    (rows (standardized (dataset-columns 'faithful '("eruptions" "waiting")))))
   (define (matrix rs)
     (list*->device-matrix rs #:dtype 'float32))
   (define predicted

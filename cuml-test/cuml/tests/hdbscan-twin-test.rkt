@@ -86,26 +86,16 @@
 
 (define (python-case op c)
   (define o (options-of c))
-  (hasheq 'op
-          op
-          'X
-          (twin-case-rows c)
-          'points
-          (twin-case-points c)
-          'min_cluster_size
-          (hash-ref o 'min-cluster-size)
-          'min_samples
-          (or (hash-ref o 'min-samples) (json-null))
-          'cluster_selection_epsilon
-          (hash-ref o 'cluster-selection-epsilon)
-          'max_cluster_size
-          (hash-ref o 'max-cluster-size)
-          'alpha
-          (hash-ref o 'alpha)
-          'cluster_selection_method
-          (symbol->string (hash-ref o 'cluster-selection-method))
-          'allow_single_cluster
-          (hash-ref o 'allow-single-cluster)))
+  (hasheq 'op op
+          'X (twin-case-rows c)
+          'points (twin-case-points c)
+          'min_cluster_size (hash-ref o 'min-cluster-size)
+          'min_samples (or (hash-ref o 'min-samples) (json-null))
+          'cluster_selection_epsilon (hash-ref o 'cluster-selection-epsilon)
+          'max_cluster_size (hash-ref o 'max-cluster-size)
+          'alpha (hash-ref o 'alpha)
+          'cluster_selection_method (symbol->string (hash-ref o 'cluster-selection-method))
+          'allow_single_cluster (hash-ref o 'allow-single-cluster)))
 
 (define (close? a b tolerance)
   (and (= (length a) (length b))
@@ -132,19 +122,15 @@
   (define points (mat (twin-case-points c) 'float32))
   (define result (apply-options hdbscan-fit (twin-case-options c) X))
   (values (fit-lists result)
-          (hasheq 'predicted
-                  (prediction->lists (hdbscan-approximate-predict result points))
-                  'all_points
-                  (device-matrix->list* (hdbscan-all-points-membership-vectors result))
-                  'membership
-                  (device-matrix->list* (hdbscan-membership-vector result points)))))
+          (hasheq 'predicted (prediction->lists (hdbscan-approximate-predict result points))
+                  'all_points (device-matrix->list* (hdbscan-all-points-membership-vectors result))
+                  'membership (device-matrix->list* (hdbscan-membership-vector result points)))))
 
 (test-twin "T1, T2: HDBSCAN's trees and predictions equal cuML's; its labels are sklearn's, but on the Racket-drawn circles"
   (match-define (hash-table ('results results) ('version version))
     (run-twin twin
-              (hasheq 'cases
-                      (append (map (lambda (c) (python-case "fit" c)) cuml-cases)
-                              (map (lambda (c) (python-case "sklearn" c)) sklearn-cases)))))
+              (hasheq 'cases (append (map (lambda (c) (python-case "fit" c)) cuml-cases)
+                                     (map (lambda (c) (python-case "sklearn" c)) sklearn-cases)))))
   (check-equal? version "26.08.00")
   (check-equal? version libcuml-version)
   (define-values (cuml-results sklearn-results) (split-at results (length cuml-cases)))
@@ -185,8 +171,7 @@
 (test-twin "T3: cuml's HDBSCAN default parameters are hdbscan-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped
-    (twin-params theirs '(p gen-min-span-tree prediction-data build-kwds device-ids)))
+  (define mapped (twin-params theirs '(p gen-min-span-tree prediction-data build-kwds device-ids)))
   (printf "twin params: ~s\n" theirs)
   (check-equal? mapped defaults)
   (check-equal? (hash-remove (estimator-params (hdbscan)) 'resources) defaults))

@@ -105,16 +105,14 @@ struct membership_outputs {
 void deposit_memberships(const raft::handle_t& handle, rr_deposit* out,
                          int64_t rows, int64_t k,
                          const std::function<void(float*)>& compute) {
-  auto outputs = std::make_unique<membership_outputs>(
-      membership_outputs{rmm::device_uvector<float>(
-          static_cast<std::size_t>(rows * k),
-          raft::resource::get_cuda_stream(handle))});
+  auto outputs = std::make_unique<membership_outputs>(membership_outputs{
+      rmm::device_uvector<float>(static_cast<std::size_t>(rows * k),
+                                 raft::resource::get_cuda_stream(handle))});
   if (k > 0) {
     compute(outputs->memberships.data());
   }
-  const std::initializer_list<rr_view> regions{
-      raftrkt::region(outputs->memberships.data(), rows, k,
-                      raftrkt::layout::row_major)};
+  const std::initializer_list<rr_view> regions{raftrkt::region(
+      outputs->memberships.data(), rows, k, raftrkt::layout::row_major)};
   settle(handle);
   raftrkt::deposit(out, "out", handle, std::move(outputs), regions);
 }
@@ -130,13 +128,13 @@ void approximate_predict(const raft::handle_t& handle, const rr_view* model,
   auto outputs = std::make_unique<prediction_outputs>(
       prediction_outputs{rmm::device_uvector<int64_t>(rows, stream),
                          rmm::device_uvector<float>(rows, stream)});
-  ML::out_of_sample_predict(handle, m->tree, *m->pd, q.x, m->labels.data(),
-                            q.points.data, rows, metric,
-                            static_cast<int>(m->min_samples),
-                            outputs->labels.data(),
-                            outputs->probabilities.data());
+  ML::out_of_sample_predict(
+      handle, m->tree, *m->pd, q.x, m->labels.data(), q.points.data, rows,
+      metric, static_cast<int>(m->min_samples), outputs->labels.data(),
+      outputs->probabilities.data());
   const std::initializer_list<rr_view> regions{
-      raftrkt::region(outputs->labels), raftrkt::region(outputs->probabilities)};
+      raftrkt::region(outputs->labels),
+      raftrkt::region(outputs->probabilities)};
   settle(handle);
   raftrkt::deposit(out, "out", handle, std::move(outputs), regions);
 }
@@ -151,10 +149,10 @@ void membership_vector(const raft::handle_t& handle, const rr_view* model,
   require_bounded_rows("points", q.points,
                        raft::resource::get_cuda_stream(handle));
   deposit_memberships(handle, out, q.points.n, m->k, [&](float* into) {
-    ML::compute_membership_vector(
-        handle, m->tree, *m->pd, q.x, q.points.data,
-        static_cast<std::size_t>(q.points.n), static_cast<int>(m->min_samples),
-        metric, into, static_cast<std::size_t>(batch_size));
+    ML::compute_membership_vector(handle, m->tree, *m->pd, q.x, q.points.data,
+                                  static_cast<std::size_t>(q.points.n),
+                                  static_cast<int>(m->min_samples), metric,
+                                  into, static_cast<std::size_t>(batch_size));
   });
 }
 
@@ -224,11 +222,10 @@ int cuml_cluster_hdbscan_all_points_membership_vectors(void* handle,
                                                        const rr_view* x,
                                                        rr_deposit* out,
                                                        int64_t batch_size) {
-  return on_model(handle, {{"model", model}, {"X", x}},
-                  [&](const raft::handle_t& h) {
-                    all_points(h, model, x, raftrkt::require(out, "out"),
-                               batch_size);
-                  });
+  return on_model(
+      handle, {{"model", model}, {"X", x}}, [&](const raft::handle_t& h) {
+        all_points(h, model, x, raftrkt::require(out, "out"), batch_size);
+      });
 }
 
 void cuml_cluster_hdbscan_all_points_membership_vectors_job(

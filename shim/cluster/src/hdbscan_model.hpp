@@ -61,8 +61,8 @@ class hdbscan_model final : public cumlrkt::model {
   [[nodiscard]] int64_t opaque_bytes() {
     constexpr int64_t index_bytes = sizeof(int64_t);
     constexpr int64_t value_bytes = sizeof(float);
-    const int64_t indices = pd->get_n_exemplars() + (k + 1) + k +
-                            (tree.get_n_edges() + 1);
+    const int64_t indices =
+        pd->get_n_exemplars() + (k + 1) + k + (tree.get_n_edges() + 1);
     return (value_bytes * n_rows) + (index_bytes * indices) +
            (value_bytes * tree.get_n_clusters());
   }

@@ -49,7 +49,9 @@
    (row "H2 empty" "X: expected at least 2 rows, got 0" (lambda () (fit (blank-matrix 0 2 'float32))))
    (row "H3" "X: expected at least 1 column, got 0" (lambda () (fit (blank-matrix 10 0 'float32))))
    (row "H7 zero" "min-samples: expected at least 1, got 0" (lambda () (fit X #:min-samples 0)))
-   (row "H7 most" "min-samples: expected at most 1023, got 1024" (lambda () (fit X #:min-samples 1024)))
+   (row "H7 most"
+        "min-samples: expected at most 1023, got 1024"
+        (lambda () (fit X #:min-samples 1024)))
    (row "H8" "X: 4 samples are fewer than min-samples 5" (lambda () (fit (grid 'float32 4))))
    (row "H8 explicit"
         "X: 10 samples are fewer than min-samples 11"
@@ -63,7 +65,9 @@
    (row "H9 inf"
         (string-append "cluster-selection-epsilon: " flt-most "inf")
         (lambda () (fit X #:cluster-selection-epsilon +inf.0)))
-   (row "H10" "max-cluster-size: expected at least 0, got -1" (lambda () (fit X #:max-cluster-size -1)))
+   (row "H10"
+        "max-cluster-size: expected at least 0, got -1"
+        (lambda () (fit X #:max-cluster-size -1)))
    (row "H11 zero" "alpha: expected greater than 0, got 0" (lambda () (fit X #:alpha 0)))
    (row "H11 negative" "alpha: expected greater than 0, got -1" (lambda () (fit X #:alpha -1)))
    (row "H11 nan" "alpha: expected greater than 0, got nan" (lambda () (fit X #:alpha +nan.0)))
@@ -92,25 +96,24 @@
   (define (both id message points)
     (list (row (format "~a hdbscan-approximate-predict" id) message (lambda () (predict points)))
           (row (format "~a hdbscan-membership-vector" id) message (lambda () (membership points)))))
-  (append
-   (both "A1" "points: expected float32, got float64" (grid 'float64 4))
-   (both "A2 rank" "points: expected rank 2, got rank 1" (blank-vector 4 'float32))
-   (both "A2 layout"
-         "points: expected row-major, got col-major 4x2"
-         (blank-matrix 4 2 'float32 #:layout 'col-major))
-   (both "A3" "points: expected at least 1 row, got 0" (blank-matrix 0 2 'float32))
-   (both "A4"
-         "points: expected 2 columns, as the model was fit on, got 3"
-         (blank-matrix 4 3 'float32))
-   (both "A4 before A8"
-         "points: expected 2 columns, as the model was fit on, got 3"
-         (mat '((1 2 3) (+nan.0 0 0)) 'float32))
-   (list (row "M1 hdbscan-membership-vector"
-              "batch-size: expected at least 1, got 0"
-              (lambda () (membership (grid 'float32 4) #:batch-size 0)))
-         (row "M1 hdbscan-all-points-membership-vectors"
-              "batch-size: expected at least 1, got 0"
-              (lambda () (hdbscan-all-points-membership-vectors result #:batch-size 0))))))
+  (append (both "A1" "points: expected float32, got float64" (grid 'float64 4))
+          (both "A2 rank" "points: expected rank 2, got rank 1" (blank-vector 4 'float32))
+          (both "A2 layout"
+                "points: expected row-major, got col-major 4x2"
+                (blank-matrix 4 2 'float32 #:layout 'col-major))
+          (both "A3" "points: expected at least 1 row, got 0" (blank-matrix 0 2 'float32))
+          (both "A4"
+                "points: expected 2 columns, as the model was fit on, got 3"
+                (blank-matrix 4 3 'float32))
+          (both "A4 before A8"
+                "points: expected 2 columns, as the model was fit on, got 3"
+                (mat '((1 2 3) (+nan.0 0 0)) 'float32))
+          (list (row "M1 hdbscan-membership-vector"
+                     "batch-size: expected at least 1, got 0"
+                     (lambda () (membership (grid 'float32 4) #:batch-size 0)))
+                (row "M1 hdbscan-all-points-membership-vectors"
+                     "batch-size: expected at least 1, got 0"
+                     (lambda () (hdbscan-all-points-membership-vectors result #:batch-size 0))))))
 
 (test-gpu "R1: hdbscan-fit refuses each bad argument with its message"
   (for ([r (in-list (fit-rows))])
@@ -139,10 +142,7 @@
 
 (define crash-program
   `(module crash racket/base
-     (require (only-in cuml/cluster
-                       hdbscan-approximate-predict
-                       hdbscan-fit
-                       hdbscan-membership-vector)
+     (require (only-in cuml/cluster hdbscan-approximate-predict hdbscan-fit hdbscan-membership-vector)
               (only-in raft exn:fail:raft-kind list*->device-matrix))
      (define (outcome thunk)
        (with-handlers ([exn:fail? (lambda (e) (list (exn:fail:raft-kind e) (exn-message e)))])
@@ -184,10 +184,12 @@
          (list 'logic (format "~a: ~a" name (norm-of got))))
        (for/list ([name (in-list '(hdbscan-approximate-predict hdbscan-membership-vector))])
          (list 'logic
-               (format "~a: model: prediction needs at least 10 training rows (2 × min-samples), got 9"
-                       name)))
+               (format
+                "~a: model: prediction needs at least 10 training rows (2 × min-samples), got 9"
+                name)))
        (list 'accepted)))]
-    [(list status _ errors) (fail (format "the refusals' process exited with ~a:\n~a" status errors))]))
+    [(list status _ errors)
+     (fail (format "the refusals' process exited with ~a:\n~a" status errors))]))
 
 (test-gpu "R2: rows at the squared-norm boundary, and subnormal rows, fit and predict"
   (define boundary

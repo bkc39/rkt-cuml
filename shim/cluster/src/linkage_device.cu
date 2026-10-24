@@ -80,7 +80,9 @@ void ascending_pairs(Index* children, int64_t rows,
                    ascending_pair<Index>{children});
 }
 
-template void ascending_pairs<int32_t>(int32_t*, int64_t, rmm::cuda_stream_view);
-template void ascending_pairs<int64_t>(int64_t*, int64_t, rmm::cuda_stream_view);
+template void ascending_pairs<int32_t>(int32_t*, int64_t,
+                                       rmm::cuda_stream_view);
+template void ascending_pairs<int64_t>(int64_t*, int64_t,
+                                       rmm::cuda_stream_view);
 
 }  // namespace cumlrkt::cluster

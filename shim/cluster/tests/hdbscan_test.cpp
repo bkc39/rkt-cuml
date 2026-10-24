@@ -144,12 +144,12 @@ TEST(Hdbscan, PredictingTheTrainingRowsGivesTheirLabels) {
   EXPECT_EQ(out.read<int64_t>(0), f.model.read<int64_t>(labels_region));
   record all(res);
   ASSERT_EQ(all_points(res, f.anchor(), &f.x->view, &all.r), "accepted");
-  EXPECT_EQ(shapes(all), (std::vector<int64_t>{1, RR_DTYPE_FLOAT32, f.n,
-                                               f.clusters()}));
+  EXPECT_EQ(shapes(all),
+            (std::vector<int64_t>{1, RR_DTYPE_FLOAT32, f.n, f.clusters()}));
   record some(res);
-  ASSERT_EQ(membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &some.r,
-                              7),
-            "accepted");
+  ASSERT_EQ(
+      membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &some.r, 7),
+      "accepted");
   EXPECT_EQ(shapes(some), shapes(all));
 }
 
@@ -169,9 +169,8 @@ TEST(Hdbscan, AReleasedModelRefusesUseAndKeepsItsRegions) {
   EXPECT_EQ(
       approximate_predict(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
       released);
-  EXPECT_EQ(
-      membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
-      released);
+  EXPECT_EQ(membership_vector(res, f.anchor(), &f.x->view, &f.x->view, &out.r),
+            released);
   EXPECT_EQ(all_points(res, f.anchor(), &f.x->view, &out.r), released);
   expect_untouched(out);
   EXPECT_EQ(f.model.read<int64_t>(labels_region), labels);

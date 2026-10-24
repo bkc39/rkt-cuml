@@ -147,11 +147,7 @@ TEST(HdbscanRefusals, FitNamesTheArgument) {
         .cluster_selection_epsilon = -1,
         .max_cluster_size = -1},
        "cluster-selection-epsilon: expected at least 0, got -1"},
-      {{.x = x,
-        .model_out = m,
-        .out = o,
-        .max_cluster_size = -1,
-        .alpha = 0},
+      {{.x = x, .model_out = m, .out = o, .max_cluster_size = -1, .alpha = 0},
        "max-cluster-size: expected at least 0, got -1"},
       {{.x = x,
         .model_out = m,
@@ -189,11 +185,10 @@ TEST(HdbscanRefusals, LargeFitRowsAreRefusedBeforeAnyOutput) {
     record model(res);
     record out(res);
     const allocation_meter meter;
-    expect_refused(meter, {&model, &out},
-                   hdbscan_fit(res, {.x = &x->view,
-                                     .model_out = &model.r,
-                                     .out = &out.r}),
-                   norm_refusal(bad_row, c.got), scratch_bytes);
+    expect_refused(
+        meter, {&model, &out},
+        hdbscan_fit(res, {.x = &x->view, .model_out = &model.r, .out = &out.r}),
+        norm_refusal(bad_row, c.got), scratch_bytes);
   }
   values host = with_row({nan, 0}, bad_row, rows, cols);
   const auto x = upload<float>(res, {rows, cols}, host);
@@ -257,8 +252,8 @@ TEST(HdbscanRefusals, PredictionNamesTheArgument) {
   const rr_view p_entries = shaped(r.data, {entries_rows, cols});
   const std::string entries_message =
       "points: " + std::to_string(entries_rows) + " rows with " +
-      std::to_string(k) + " clusters need " +
-      std::to_string(entries_rows * k) + " entries, more than 2147483647";
+      std::to_string(k) + " clusters need " + std::to_string(entries_rows * k) +
+      " entries, more than 2147483647";
   struct prediction {
     const rr_view* model;
     const rr_view* x;
@@ -291,10 +286,10 @@ TEST(HdbscanRefusals, PredictionNamesTheArgument) {
         meter, {&out},
         approximate_predict(res, c.call.model, c.call.x, c.call.points, &out.r),
         c.message);
-    expect_refused(meter, {&out},
-                   membership_vector(res, c.call.model, c.call.x,
-                                     c.call.points, &out.r),
-                   c.message);
+    expect_refused(
+        meter, {&out},
+        membership_vector(res, c.call.model, c.call.x, c.call.points, &out.r),
+        c.message);
   }
   expect_refused(meter, {&out}, membership_vector(res, model, x, &p, &out.r, 0),
                  "batch-size: expected at least 1, got 0");
@@ -304,8 +299,7 @@ TEST(HdbscanRefusals, PredictionNamesTheArgument) {
   expect_refused(meter, {&out},
                  membership_vector(res, model, x, &p_entries, &out.r),
                  entries_message);
-  expect_refused(meter, {&out},
-                 approximate_predict(res, model, x, &p, nullptr),
+  expect_refused(meter, {&out}, approximate_predict(res, model, x, &p, nullptr),
                  "out is NULL");
   expect_refused(meter, {&out}, all_points(res, &foreign.view, x, &out.r),
                  "model: expected a model anchor, got another array");
@@ -340,19 +334,20 @@ TEST(HdbscanRefusals, LargeQueryRowsAreRefusedBeforeAnyOutput) {
                                 "4.253529586511731e+37, got " +
                                 c.got;
     const allocation_meter meter;
-    expect_refused(meter, {&out},
-                   approximate_predict(res, f.anchor(), &f.x->view, &p->view,
-                                       &out.r),
-                   message, scratch_bytes);
-    expect_refused(meter, {&out},
-                   membership_vector(res, f.anchor(), &f.x->view, &p->view,
-                                     &out.r),
-                   message, scratch_bytes);
+    expect_refused(
+        meter, {&out},
+        approximate_predict(res, f.anchor(), &f.x->view, &p->view, &out.r),
+        message, scratch_bytes);
+    expect_refused(
+        meter, {&out},
+        membership_vector(res, f.anchor(), &f.x->view, &p->view, &out.r),
+        message, scratch_bytes);
     const allocation_meter column_meter;
-    expect_refused(column_meter, {&out},
-                   approximate_predict(res, f.anchor(), &f.x->view,
-                                       &p_three->view, &out.r),
-                   "points: expected 2 columns, as the model was fit on, got 4");
+    expect_refused(
+        column_meter, {&out},
+        approximate_predict(res, f.anchor(), &f.x->view, &p_three->view,
+                            &out.r),
+        "points: expected 2 columns, as the model was fit on, got 4");
   }
 }
 
@@ -370,12 +365,10 @@ TEST(HdbscanRefusals, BoundaryQueryRowsPredict) {
   host[(later_bad_row + 1) * cols] = std::numeric_limits<float>::denorm_min();
   const auto p = upload<float>(res, {rows, cols}, host);
   record out(res);
-  EXPECT_EQ(
-      approximate_predict(res, f.anchor(), &f.x->view, &p->view, &out.r),
-      "accepted");
-  EXPECT_EQ(shapes(out),
-            (std::vector<int64_t>{2, RR_DTYPE_INT64, rows, RR_DTYPE_FLOAT32,
-                                  rows}));
+  EXPECT_EQ(approximate_predict(res, f.anchor(), &f.x->view, &p->view, &out.r),
+            "accepted");
+  EXPECT_EQ(shapes(out), (std::vector<int64_t>{2, RR_DTYPE_INT64, rows,
+                                               RR_DTYPE_FLOAT32, rows}));
 }
 
 TEST(HdbscanRefusals, PredictionNeedsTwiceMinSamplesTrainingRows) {
@@ -388,8 +381,8 @@ TEST(HdbscanRefusals, PredictionNeedsTwiceMinSamplesTrainingRows) {
   const fitted_model enough(
       res, values(host.begin(), host.begin() + ((short_rows + 1) * cols)));
   ASSERT_EQ(enough.status, "accepted");
-  const auto p = upload<float>(res, {2, cols}, values(host.begin(),
-                                                      host.begin() + 4));
+  const auto p =
+      upload<float>(res, {2, cols}, values(host.begin(), host.begin() + 4));
   record out(res);
   const allocation_meter meter;
   const std::string message =
@@ -404,8 +397,8 @@ TEST(HdbscanRefusals, PredictionNeedsTwiceMinSamplesTrainingRows) {
                                    &p->view, &out.r),
                  message);
   record fine(res);
-  EXPECT_EQ(approximate_predict(res, enough.anchor(), &enough.x->view,
-                                &p->view, &fine.r),
+  EXPECT_EQ(approximate_predict(res, enough.anchor(), &enough.x->view, &p->view,
+                                &fine.r),
             "accepted");
 }
 
@@ -419,23 +412,23 @@ TEST(HdbscanRefusals, AllPointsRefusesAnOversizedMatrix) {
     return (static_cast<double>(state >> 11) * 0x1p-52) - 1;
   };
   for (int64_t i = 0; i < pair_count; ++i) {
-    const double at = (static_cast<double>(i % pair_side) * pair_spacing) +
-                      jitter();
-    const double up = (static_cast<double>(i / pair_side) * pair_spacing) +
-                      jitter();
+    const double at =
+        (static_cast<double>(i % pair_side) * pair_spacing) + jitter();
+    const double up =
+        (static_cast<double>(i / pair_side) * pair_spacing) + jitter();
     host.insert(host.end(), {at, up, at, up});
   }
   record model(res);
   record out(res);
   const auto x = upload<float>(res, {2 * pair_count, cols}, host);
-  ASSERT_EQ(hdbscan_fit(res, {.x = &x->view,
-                              .model_out = &model.r,
-                              .out = &out.r,
-                              .min_cluster_size = 2,
-                              .min_samples = 1,
-                              .cluster_selection_method =
-                                  CUML_CLUSTER_HDBSCAN_LEAF}),
-            "accepted");
+  ASSERT_EQ(
+      hdbscan_fit(res, {.x = &x->view,
+                        .model_out = &model.r,
+                        .out = &out.r,
+                        .min_cluster_size = 2,
+                        .min_samples = 1,
+                        .cluster_selection_method = CUML_CLUSTER_HDBSCAN_LEAF}),
+      "accepted");
   const int64_t k = model.r.regions[6].shape[0];
   ASSERT_GT(2 * pair_count * k, most_index);
   record membership(res);

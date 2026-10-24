@@ -77,9 +77,9 @@
          [mcs (in-list '(5 12))])
     (test-case (format "~a, min-cluster-size ~a" name mcs)
       (define rows (dataset name))
-      (check-true (same-fit? (fitted-of rows #:options (hasheq 'min-cluster-size mcs))
-                             (fitted-of rows
-                                        #:options (hasheq 'min-cluster-size mcs 'min-samples mcs)))))))
+      (check-true
+       (same-fit? (fitted-of rows #:options (hasheq 'min-cluster-size mcs))
+                  (fitted-of rows #:options (hasheq 'min-cluster-size mcs 'min-samples mcs)))))))
 
 (test-gpu "HD7: identical rows are noise, or one cluster with allow-single"
   (define rows (dataset 'identical))
@@ -90,7 +90,8 @@
   (check-equal? (fitted-labels single) (make-list 100 0))
   (check-equal? (fitted-probabilities single) (make-list 100 1.0))
   (test-case "dup x10 lambdas are finite"
-    (check-true (andmap (lambda (l) (<= l flt-max)) (fitted-lambdas (fitted-of (dup (dataset 'b50) 10)))))))
+    (check-true (andmap (lambda (l) (<= l flt-max))
+                        (fitted-lambdas (fitted-of (dup (dataset 'b50) 10)))))))
 
 (test-gpu "HD8: too few rows give all noise"
   (define rows (dataset 'b50))
@@ -117,7 +118,8 @@
 (test-gpu "P1: one blob is 7 clusters, or 1 with allow-single"
   (define rows (dataset 'one-blob))
   (check-equal? (label-count (fitted-labels (fitted-of rows))) 7)
-  (check-equal? (label-count (fitted-labels (fitted-of rows #:options (hasheq 'allow-single-cluster #t))))
+  (check-equal? (label-count (fitted-labels (fitted-of rows
+                                                       #:options (hasheq 'allow-single-cluster #t))))
                 1))
 
 (test-gpu "P2: each ten-fold duplicate of b50 is its own cluster but one"
@@ -133,16 +135,13 @@
 
 (test-gpu "P4: epsilon 1e3 on b10 merges to 2 clusters, or 1 with allow-single"
   (define rows (dataset 'b10))
+  (check-equal?
+   (label-count (fitted-labels (fitted-of rows #:options (hasheq 'cluster-selection-epsilon 1e3))))
+   2)
   (check-equal? (label-count (fitted-labels (fitted-of rows
-                                                       #:options (hasheq 'cluster-selection-epsilon
-                                                                         1e3))))
-                2)
-  (check-equal? (label-count (fitted-labels
-                              (fitted-of rows
-                                         #:options (hasheq 'cluster-selection-epsilon
-                                                           1e3
-                                                           'allow-single-cluster
-                                                           #t))))
+                                                       #:options
+                                                       (hasheq 'cluster-selection-epsilon 1e3
+                                                               'allow-single-cluster #t))))
                 1))
 
 (test-gpu "P5: leaf selection on b50 predicts at least 290 of its own fit labels"

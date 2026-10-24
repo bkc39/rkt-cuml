@@ -46,15 +46,14 @@ inline std::string hdbscan_fit(const resources& res, const hdbscan_call& c) {
 
 inline std::string approximate_predict(const resources& res,
                                        const rr_view* model, const rr_view* x,
-                                       const rr_view* points,
-                                       rr_deposit* out) {
+                                       const rr_view* points, rr_deposit* out) {
   return outcome(cuml_cluster_hdbscan_approximate_predict(res.handle, model, x,
                                                           points, out));
 }
 
-inline std::string membership_vector(const resources& res,
-                                     const rr_view* model, const rr_view* x,
-                                     const rr_view* points, rr_deposit* out,
+inline std::string membership_vector(const resources& res, const rr_view* model,
+                                     const rr_view* x, const rr_view* points,
+                                     rr_deposit* out,
                                      int64_t batch_size = default_batch_size) {
   return outcome(cuml_cluster_hdbscan_membership_vector(
       res.handle, model, x, points, out, batch_size));

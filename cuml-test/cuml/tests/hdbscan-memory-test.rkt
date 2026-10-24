@@ -67,8 +67,9 @@
          [_ (in-range refusals-per-sample)])
     (check-pred exn:fail:cuml? (raised thunk))))
 
-(test-process-memory (format "~a rounds of HDBSCAN fits, predictions and memberships leave device memory flat"
-                             rounds)
+(test-process-memory (format
+                      "~a rounds of HDBSCAN fits, predictions and memberships leave device memory flat"
+                      rounds)
   (define X (mat (dataset 'b50) 'float32))
   (define points (mat (dataset 'b10) 'float32))
   (define e (hdbscan))

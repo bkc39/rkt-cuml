@@ -80,14 +80,14 @@ matrix<float, int64_t> checked_x(const rr_view* view) {
   const matrix<float, int64_t> x =
       rows_of<float, int64_t>(view, "X", any_extent, any_extent);
   if (x.n < least_rows) {
-    throw logic_error(std::format("X: expected at least {} rows, got {}",
-                                  least_rows, x.n));
+    throw logic_error(
+        std::format("X: expected at least {} rows, got {}", least_rows, x.n));
   }
   require_some("X", "column", x.d);
   require_index("X", x.n, x.d);
   if (x.n > most_rows) {
-    throw logic_error(std::format("X: expected at most {} rows, got {}",
-                                  most_rows, x.n));
+    throw logic_error(
+        std::format("X: expected at most {} rows, got {}", most_rows, x.n));
   }
   return x;
 }
@@ -142,14 +142,14 @@ struct plain_outputs {
 std::unique_ptr<plain_outputs> plain_for(int64_t n,
                                          rmm::cuda_stream_view stream) {
   const auto rows = static_cast<std::size_t>(n);
-  return std::make_unique<plain_outputs>(plain_outputs{
-      rmm::device_uvector<float>(rows, stream),
-      rmm::device_uvector<int64_t>(2 * rows, stream),
-      rmm::device_uvector<float>(rows, stream),
-      rmm::device_uvector<int64_t>(rows, stream),
-      rmm::device_uvector<int64_t>(rows - 1, stream),
-      rmm::device_uvector<int64_t>(rows - 1, stream),
-      rmm::device_uvector<float>(rows - 1, stream)});
+  return std::make_unique<plain_outputs>(
+      plain_outputs{rmm::device_uvector<float>(rows, stream),
+                    rmm::device_uvector<int64_t>(2 * rows, stream),
+                    rmm::device_uvector<float>(rows, stream),
+                    rmm::device_uvector<int64_t>(rows, stream),
+                    rmm::device_uvector<int64_t>(rows - 1, stream),
+                    rmm::device_uvector<int64_t>(rows - 1, stream),
+                    rmm::device_uvector<float>(rows - 1, stream)});
 }
 
 void fit(const raft::handle_t& handle, const rr_view* view,
@@ -166,8 +166,7 @@ void fit(const raft::handle_t& handle, const rr_view* view,
   common::hdbscan_output<int64_t, float> found(
       handle, static_cast<int>(x.n), labels.data(), plain->probabilities.data(),
       plain->children.data(), plain->sizes.data(), plain->distances.data(),
-      plain->sources.data(), plain->destinations.data(),
-      plain->weights.data());
+      plain->sources.data(), plain->destinations.data(), plain->weights.data());
   common::HDBSCANParams params = params_of(o);
   ML::hdbscan(handle, x.data, n, static_cast<std::size_t>(x.d),
               ML::distance::DistanceType::L2SqrtExpanded, params, found,
@@ -218,9 +217,8 @@ int cuml_cluster_hdbscan_fit(void* handle, const rr_view* x,
                              int32_t allow_single_cluster,
                              int64_t* opaque_bytes) {
   return raftrkt::translate_exceptions(cumlrkt::last_error_slot(), [&] {
-    const options o{min_cluster_size,         min_samples,
-                    cluster_selection_epsilon, max_cluster_size,
-                    alpha,                     cluster_selection_method,
+    const options o{min_cluster_size,    min_samples, cluster_selection_epsilon,
+                    max_cluster_size,    alpha,       cluster_selection_method,
                     allow_single_cluster};
     in_device_scope(handle, {{"X", x}}, [&](const raft::handle_t& h) {
       rr_deposit* const model_into = raftrkt::require(model_out, "model-out");

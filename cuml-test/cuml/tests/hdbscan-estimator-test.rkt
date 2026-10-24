@@ -28,48 +28,30 @@
          (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?))
 
 (define changed
-  (hasheq 'min-cluster-size
-          10
-          'min-samples
-          3
-          'cluster-selection-epsilon
-          0.5
-          'max-cluster-size
-          40
-          'alpha
-          0.5
-          'cluster-selection-method
-          'leaf
-          'allow-single-cluster
-          #t
-          'metric
-          'euclidean
-          'build-algo
-          'brute-force))
+  (hasheq 'min-cluster-size 10
+          'min-samples 3
+          'cluster-selection-epsilon 0.5
+          'max-cluster-size 40
+          'alpha 0.5
+          'cluster-selection-method 'leaf
+          'allow-single-cluster #t
+          'metric 'euclidean
+          'build-algo 'brute-force))
 
 (define (printed v)
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "the default parameters, and every keyword round-trips"
   (check-equal? (hdbscan-params)
-                (hasheq 'min-cluster-size
-                        5
-                        'min-samples
-                        #f
-                        'cluster-selection-epsilon
-                        0.0
-                        'max-cluster-size
-                        0
-                        'metric
-                        'euclidean
-                        'alpha
-                        1.0
-                        'cluster-selection-method
-                        'eom
-                        'allow-single-cluster
-                        #f
-                        'build-algo
-                        'brute-force))
+                (hasheq 'min-cluster-size 5
+                        'min-samples #f
+                        'cluster-selection-epsilon 0.0
+                        'max-cluster-size 0
+                        'metric 'euclidean
+                        'alpha 1.0
+                        'cluster-selection-method 'eom
+                        'allow-single-cluster #f
+                        'build-algo 'brute-force))
   (check-equal? (estimator-params (hdbscan)) (hdbscan-params))
   (check-equal? (round-trips hdbscan changed) changed)
   (check-equal? (estimator-params (hdbscan (hdbscan-params #:alpha 0.5) #:min-cluster-size 10))
@@ -77,7 +59,8 @@
 
 (test-case "printing shows the parameters that differ from the defaults"
   (check-equal? (printed (hdbscan)) (make-list 3 "#<hdbscan>"))
-  (check-equal? (printed (hdbscan #:min-cluster-size 10)) (make-list 3 "#<hdbscan #:min-cluster-size 10>"))
+  (check-equal? (printed (hdbscan #:min-cluster-size 10))
+                (make-list 3 "#<hdbscan #:min-cluster-size 10>"))
   (check-equal? (format "~v" (hdbscan #:cluster-selection-method 'leaf #:min-samples 3))
                 "#<hdbscan #:min-samples 3 #:cluster-selection-method 'leaf>")
   (check-equal? (format "~v" (hdbscan #:min-cluster-size 5 #:alpha 1.0)) "#<hdbscan>"))
@@ -109,9 +92,11 @@
   (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
   (check-equal? (device-vector->list (fit-predict e X))
                 (device-vector->list (hdbscan-result-labels (hdbscan-fit X #:min-cluster-size 10))))
-  (check-equal? (device-vector->list (fit-predict (apply-options hdbscan changed) X))
-                (device-vector->list (hdbscan-result-labels
-                 (apply-options hdbscan-fit (hash-remove (hash-remove changed 'metric) 'build-algo) X)))))
+  (check-equal?
+   (device-vector->list (fit-predict (apply-options hdbscan changed) X))
+   (device-vector->list
+    (hdbscan-result-labels
+     (apply-options hdbscan-fit (hash-remove (hash-remove changed 'metric) 'build-algo) X)))))
 
 (test-gpu "errors are named after the generic that was called"
   (define X (mat (dataset 'b10) 'float32))

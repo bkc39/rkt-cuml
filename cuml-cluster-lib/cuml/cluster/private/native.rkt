@@ -111,21 +111,12 @@
             (handle view view view _int64 deposit _int64 _int64 _int32 _int32 _double* _uint64)
             #:exn exn:fail:cuml)
 
-(define-job cuml-cluster-hdbscan-fit-job
-            library
-            "cuml_cluster_hdbscan_fit_job"
-            (handle view
-                    deposit
-                    deposit
-                    _int64
-                    _int64
-                    _double*
-                    _int64
-                    _double*
-                    _int32
-                    _int32
-                    (out _int64))
-            #:exn exn:fail:cuml)
+(define-job
+ cuml-cluster-hdbscan-fit-job
+ library
+ "cuml_cluster_hdbscan_fit_job"
+ (handle view deposit deposit _int64 _int64 _double* _int64 _double* _int32 _int32 (out _int64))
+ #:exn exn:fail:cuml)
 
 (define-job cuml-cluster-hdbscan-approximate-predict-job
             library

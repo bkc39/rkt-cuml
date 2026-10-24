@@ -33,7 +33,8 @@
 
 (define documented
   (append-map defprocs
-              (append-map manual-forms '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "estimators.scrbl"))))
+              (append-map manual-forms
+                          '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -168,22 +169,23 @@
                                (list (argument #f 'params #f))
                                (list (argument '#:resources 'resources #f))
                                '())))
-   (table-bindings hdbscan-params
-                   hdbscan-keys
-                   (list (list 'hdbscan-params hdbscan-params '() (list (argument #f 'base #f)) '() '())
-                         (list 'hdbscan-fit
-                               hdbscan-fit
-                               '(#:params #:resources)
-                               (list (argument #f 'X 'none))
-                               (list (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources)))
-                               '(metric build-algo))
-                         (list 'hdbscan
-                               hdbscan
-                               '(#:resources)
-                               (list (argument #f 'params #f))
-                               (list (argument '#:resources 'resources #f))
-                               '())))))
+   (table-bindings
+    hdbscan-params
+    hdbscan-keys
+    (list (list 'hdbscan-params hdbscan-params '() (list (argument #f 'base #f)) '() '())
+          (list 'hdbscan-fit
+                hdbscan-fit
+                '(#:params #:resources)
+                (list (argument #f 'X 'none))
+                (list (argument '#:params 'params #f)
+                      (argument '#:resources 'resources '(current-device-resources)))
+                '(metric build-algo))
+          (list 'hdbscan
+                hdbscan
+                '(#:resources)
+                (list (argument #f 'params #f))
+                (list (argument '#:resources 'resources #f))
+                '())))))
 
 (define-namespace-anchor anchor)
 

@@ -70,8 +70,12 @@ def fit(case):
         "destinations": ints(mst[:, 1]),
         "weights": floats(mst[:, 2]),
         "predicted": [ints(labels), floats(probabilities)],
-        "all_points": host(all_points_membership_vectors(model)).astype(np.float64).tolist(),
-        "membership": host(membership_vector(model, points)).astype(np.float64).tolist(),
+        "all_points": host(all_points_membership_vectors(model))
+        .astype(np.float64)
+        .tolist(),
+        "membership": host(membership_vector(model, points))
+        .astype(np.float64)
+        .tolist(),
     }
 
 

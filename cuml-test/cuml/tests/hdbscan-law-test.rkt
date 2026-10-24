@@ -78,9 +78,8 @@
   (for ([name (in-list '(b50 b10 moons circles))])
     (test-case (symbol->string name)
       (define-values (perm base permuted) (permuted-fits name 0))
-      (check-true (close? (fitted-probabilities permuted)
-                          (pick (fitted-probabilities base) perm)
-                          1e-6)))))
+      (check-true
+       (close? (fitted-probabilities permuted) (pick (fitted-probabilities base) perm) 1e-6)))))
 
 (test-gpu "HD6: X*4+3 gives the same labels"
   (for ([name (in-list '(b50 b10 moons))])

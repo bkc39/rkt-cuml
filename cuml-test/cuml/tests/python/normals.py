@@ -11,8 +11,7 @@ def main():
     draws = np.random.default_rng(0).normal(0, 1.0, (300, 2))
     with open(sys.argv[1], "w") as f:
         f.write("(\n")
-        for a, b in draws:
-            f.write(f" ({float(a)!r} {float(b)!r})\n")
+        f.writelines(f" ({float(a)!r} {float(b)!r})\n" for a, b in draws)
         f.write(")\n")
 
 
