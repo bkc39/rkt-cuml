@@ -482,5 +482,6 @@ naming the procedure, and a number argument that does not fit the native type,
 such as @racket[#:n-clusters 2.5], raises @racket[exn:fail:contract].
 
 @include-section["spectral.scrbl"]
+@include-section["hdbscan.scrbl"]
 
 @(close-eval ev)

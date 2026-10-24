@@ -10,6 +10,10 @@
                   estimator-set-params
                   fit
                   fit-predict
+                  hdbscan
+                  hdbscan-approximate-predict
+                  hdbscan-fit
+                  hdbscan-prediction-labels
                   kmeans
                   kmeans-fit
                   kmeans-model
@@ -36,7 +40,7 @@
          (only-in pkg/lib pkg-directory)
          (only-in racket/file file->string)
          (only-in racket/function curry)
-         (only-in racket/list append-map argmax count first group-by remove-duplicates)
+         (only-in racket/list append-map argmax count drop first group-by remove-duplicates take)
          (only-in racket/match match match-define)
          (only-in racket/math exact-round)
          (only-in racket/string string-contains?)
@@ -267,6 +271,21 @@
 
 (define (eruptions)
   (standardized-matrix 'faithful '("eruptions" "waiting")))
+
+(test-gpu "the guide: HDBSCAN finds the two eruption groups with no eps to choose"
+  (define labels (labels-of (hdbscan) (eruptions)))
+  (check-equal? (sizes labels) '(174 94))
+  (check-equal? (count negative? labels) 4)
+  (define standardized-rows (rows (standardized (dataset-columns 'faithful '("eruptions" "waiting")))))
+  (define (matrix rs)
+    (list*->device-matrix rs #:dtype 'float32))
+  (define predicted
+    (~> (hdbscan-fit (matrix (take standardized-rows 200)))
+        (hdbscan-approximate-predict (matrix (drop standardized-rows 200)))
+        hdbscan-prediction-labels
+        device-vector->list))
+  (check-equal? (count negative? predicted) 2)
+  (check-equal? (sizes predicted) '(45 25)))
 
 (define (eruption-clusters-and-noise eps)
   (define labels (labels-of (dbscan #:eps eps #:min-samples 5) (eruptions)))

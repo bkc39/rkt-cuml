@@ -357,5 +357,54 @@ Whether @racket[v] is a spectral clustering estimator.}
 The @racket[spectral-clustering-result] of the fit that made
 @racket[estimator], or @racket[#f] when it is unfitted.}
 
+@section[#:tag "hdbscan-estimator"]{HDBSCAN estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(hdbscan [params (or/c #f hash?) #f]
+                  [#:min-cluster-size min-cluster-size (and/c exact-integer? (>=/c 2)) 5]
+                  [#:min-samples min-samples (or/c #f (integer-in 1 1023)) #f]
+                  [#:cluster-selection-epsilon cluster-selection-epsilon (and/c real? (>=/c 0)) 0.0]
+                  [#:max-cluster-size max-cluster-size exact-nonnegative-integer? 0]
+                  [#:metric metric 'euclidean 'euclidean]
+                  [#:alpha alpha (and/c real? (>/c 0)) 1.0]
+                  [#:cluster-selection-method cluster-selection-method (or/c 'eom 'leaf) 'eom]
+                  [#:allow-single-cluster allow-single-cluster boolean? #f]
+                  [#:build-algo build-algo 'brute-force 'brute-force]
+                  [#:resources resources (or/c #f device-resources?) #f])
+         hdbscan?]{
+
+An unfitted HDBSCAN estimator with the hyperparameters
+@racket[(hdbscan-params params ...)]. It is an estimator and a clusterer, not
+a predictor, and checks nothing until it is fitted. @racket[fit] is
+@racket[hdbscan-fit] with these parameters, and @racket[fit-predict] returns
+the fit's labels. @racket[y] is ignored, and a @racket[sample-weight] is
+refused. @racket[resources] is a setting, as for @racket[kmeans]. Errors are
+@racket[hdbscan-fit]'s, named after the generic that was called. Printing and
+@racket[equal?] are as for @racket[kmeans]. A refit leaves the earlier fit's
+@tech{native model} alone.
+
+@examples[#:eval ev
+(define H
+  (list*->device-matrix (for*/list ([centre (in-list '(0 20))]
+                                    [i (in-range 10)])
+                          (list (+ centre (quotient i 5)) (remainder i 5)))
+                        #:dtype 'float32))
+(define hd (hdbscan #:min-cluster-size 4))
+hd
+(device-vector->list (fit-predict hd H))
+(estimator-set-params hd #:cluster-selection-method 'leaf)
+(eval:error (fit (hdbscan #:alpha 0) H))
+]}
+
+@defproc[(hdbscan? [v any/c]) boolean?]{
+
+Whether @racket[v] is an HDBSCAN estimator.}
+
+@defproc[(hdbscan-model [estimator hdbscan?]) (or/c #f hdbscan-result?)]{
+
+The @racket[hdbscan-result] of the fit that made @racket[estimator], or
+@racket[#f] when it is unfitted.}
+
 @(close-eval host-ev)
 @(close-eval ev)

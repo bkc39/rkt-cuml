@@ -1,9 +1,11 @@
 #lang racket/base
 
-(require (only-in cuml agglomerative-clustering dbscan kmeans spectral-clustering)
+(require (only-in cuml agglomerative-clustering dbscan hdbscan kmeans spectral-clustering)
          (only-in cuml/cluster
                   dbscan-fit
                   dbscan-params
+                  hdbscan-fit
+                  hdbscan-params
                   kmeans-fit
                   kmeans-params
                   single-linkage-fit
@@ -31,7 +33,7 @@
 
 (define documented
   (append-map defprocs
-              (append-map manual-forms '("clustering.scrbl" "spectral.scrbl" "estimators.scrbl"))))
+              (append-map manual-forms '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -68,6 +70,16 @@
 
 (define spectral-clustering-keys
   '(n-clusters n-components random-state n-neighbors n-init eigen-tol affinity))
+
+(define hdbscan-keys
+  '(min-cluster-size min-samples
+                     cluster-selection-epsilon
+                     max-cluster-size
+                     metric
+                     alpha
+                     cluster-selection-method
+                     allow-single-cluster
+                     build-algo))
 
 (define bindings
   (append
@@ -152,6 +164,22 @@
                                '(n-neighbors affinity))
                          (list 'spectral-clustering
                                spectral-clustering
+                               '(#:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:resources 'resources #f))
+                               '())))
+   (table-bindings hdbscan-params
+                   hdbscan-keys
+                   (list (list 'hdbscan-params hdbscan-params '() (list (argument #f 'base #f)) '() '())
+                         (list 'hdbscan-fit
+                               hdbscan-fit
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '(metric build-algo))
+                         (list 'hdbscan
+                               hdbscan
                                '(#:resources)
                                (list (argument #f 'params #f))
                                (list (argument '#:resources 'resources #f))
