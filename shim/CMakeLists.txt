@@ -64,4 +64,9 @@ cumlrkt_family(cluster
         cluster/tests/spectral_test.cpp
 )
 
+cumlrkt_family(probe TEST_ONLY
+  SOURCES probe/src/probe.cpp
+  TESTS probe/tests/model_test.cpp
+)
+
 cumlrkt_add_tidy_target(tidy)

@@ -129,7 +129,7 @@
 - The `kmeans` estimator lives in `cuml-lib/cuml/private/kmeans-estimator.rkt`
   over the `/who` forms of leg 1's procedures, which
   `cuml/cluster/private/kmeans.rkt` provides and `cuml/cluster` does not
-  export; `define/who` (`cuml/cluster/private/define-who.rkt`) defines each
+  export; `define/who` (`cuml/core/private/define-who.rkt`) defines each
   public procedure and its `/who` form from one header, and the estimator
   takes its hyperparameters from the same module's `kmeans-params` table
   (`define-hyperparameters`, see "Hyperparameter tables" below).
@@ -162,7 +162,7 @@
 
 ## Hyperparameter tables (#7, PR #16)
 
-- `define-hyperparameters` (`cuml/cluster/private/hyperparameters.rkt`)
+- `define-hyperparameters` (`cuml/core/private/hyperparameters.rkt`)
   defines a family's `<algorithm>-params` once: its keys in order, each
   default (which may read earlier keys, unless it is `#:fixed`) and its
   `#:fixed` keys. `define/who` takes the table as `#:hyperparameters`, and
@@ -323,6 +323,47 @@
   - **Q-I.** Negative and non-finite weights are refused.
 - The graph is refused when its entries and samples pass 2^31-1, and the
   dense path when its kNN graph's n(2k+1) entries would.
+
+## Decisions recorded in leg 6 (native models, #11)
+
+- A fitted model whose state lives in C++ is a `cumlrkt::model`
+  (`shim/common/include/cumlrkt/model.hpp`): an anchor (one int32 holding
+  its `model_kind`) plus the model's arrays, published as one raft deposit.
+  Racket wraps it in a `native-model` (`cuml/core/private/model.rkt`).
+  Leg 6 has no public surface and no fitted model; leg 7's HDBSCAN is the
+  first, with the member layout the spec's §8 checked against cuML 26.08
+  (`CondensedHierarchy` is move-constructible, not move-assignable).
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** The model is a raft deposit owner: raft releases it once, on
+    its reaper, with the creating handle alive, in every drop order.
+  - **Q-B.** Each call runs on the caller's current resources, under a
+    native shared lock that release takes exclusively. `use_model` takes
+    the call's stream and synchronises it before it unlocks, so a release
+    never frees memory that the call's queued kernels still read.
+  - **Q-C.** Release frees the opaque members only; region arrays live
+    until collected.
+  - **Q-D.** Everything is private this leg; it goes public in
+    `cuml/core` with docs and examples in leg 7.
+  - **Q-E.** The name is `native-model` / `with-native-models`, since
+    "handle" already means `raft::handle_t`.
+  - **Q-F.** The test object is a test-only `libcumlrkt_probe.so`
+    (`CUML_SHIM_PROBE`), built by `cumlrkt_family(... TEST_ONLY)` into the
+    shim's `tests` output and never staged.
+  - **Q-G.** `call-with-release` is restated in
+    `cuml/core/private/release.rkt`; an rkt-raft issue asks for
+    `with-release` and an explicit deposit release in `raft/unsafe`.
+  - **Q-H.** A concurrent second release returns at once.
+  - **Q-I.** The registry is header-only, one per family library; a model
+    from another family is refused as "not a model anchor".
+- A failed release (for one, under released resources) leaves the model
+  live, and a later release succeeds.
+- A release whose thread stops running (killed or suspended) mid-release
+  is taken over by the next release; a raise rolls the claim back to live; a
+  break during a release lets the release finish and is then delivered.
+- `define/who`, `define-hyperparameters` and `define-codes` live in
+  `cuml/core/private/`, so cuml-core-lib's exported who-first procedures
+  are `define/who` forms like every family's, and the lint rule has no
+  path exemption.
 
 ## Owner decisions (2026-10-17)
 

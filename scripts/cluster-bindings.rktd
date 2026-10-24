@@ -4,4 +4,4 @@
  (issue 8 due dbscan_fit_job)
  (issue 9 due single_linkage_fit_job)
  (issue 10 due spectral_clustering_fit_job spectral_clustering_fit_graph_job)
- (issue 12 planned hdbscan_fit_job hdbscan_approximate_predict_job hdbscan_model_free))
+ (issue 12 planned hdbscan_fit_job hdbscan_approximate_predict_job model_release_job))

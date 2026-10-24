@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/cluster/private/define-who define/who)
-         (only-in cuml/cluster/private/hyperparameters define-hyperparameters)
+(require (only-in cuml/core/private/define-who define/who)
+         (only-in cuml/core/private/hyperparameters define-hyperparameters)
          (only-in cuml/estimator
                   estimator-params
                   estimator-set-params
@@ -258,8 +258,8 @@
 
 (define two-of-each
   '(module two racket/base
-     (require (only-in cuml/cluster/private/define-who define/who)
-              (only-in cuml/cluster/private/hyperparameters define-hyperparameters)
+     (require (only-in cuml/core/private/define-who define/who)
+              (only-in cuml/core/private/hyperparameters define-hyperparameters)
               (only-in cuml/estimator estimator-params fit)
               (only-in cuml/private/estimator-support define-estimator))
      (provide results)

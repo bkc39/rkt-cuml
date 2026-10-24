@@ -1,8 +1,8 @@
 #lang racket/base
 
-(require (only-in raft exn:fail:raft exn:fail:raft-kind exn:fail:raft?)
-         (only-in raft/unsafe deposit)
-         (only-in "define-who.rkt" define/who))
+(require (only-in cuml/core/private/define-who define/who)
+         (only-in raft exn:fail:raft exn:fail:raft-kind exn:fail:raft?)
+         (only-in raft/unsafe deposit))
 
 (provide deposit-for/who)
 

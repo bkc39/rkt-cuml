@@ -557,6 +557,7 @@
         export CUML_CUDA_DRIVER_PATH="$_drv_farm"
         export CUML_SHIM_TESTS="${shim.tests}/bin"
         export CUML_SHIM_SANITIZED_TESTS="${shimSanitizers.tests}/bin"
+        export CUML_SHIM_PROBE="${shim.tests}/lib/libcumlrkt_probe.so"
         export CUML_ASAN_OPTIONS="${sanitizerOptions.asan}"
         export CUML_UBSAN_OPTIONS="${sanitizerOptions.ubsan}"
         export RAFT_SHIM_PROBE="${raft.shim.tests}/lib/libraftrkt_probe.so"

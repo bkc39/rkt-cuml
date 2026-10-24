@@ -13,6 +13,7 @@
                  "pict-lib"
                  ("raft" #:version "0.2")
                  "rackunit-lib"
+                 "sandbox-lib"
                  "threading-lib"))
 (define pkg-desc "Tests for cuml")
 (define pkg-authors '(bkc))

@@ -3,14 +3,9 @@
 (require (for-syntax racket/base
                      (only-in racket/syntax format-id)
                      syntax/parse/pre)
-         (only-in cuml/cluster/private/define-who define-checked)
-         (only-in cuml/cluster/private/hyperparameters
-                  absent
-                  given-hash
-                  key->keyword
-                  logic-error
-                  proc-name
-                  table-id)
+         (only-in cuml/core/private/define-who define-checked)
+         (only-in cuml/core/private/hyperparameters absent given-hash key->keyword proc-name table-id)
+         (only-in cuml/core/private/logic-error logic-error)
          (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
          (only-in racket/string string-append*)
          (only-in syntax/parse/define define-syntax-parse-rule))

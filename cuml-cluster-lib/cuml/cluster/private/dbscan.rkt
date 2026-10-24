@@ -1,10 +1,10 @@
 #lang racket/base
 
-(require (only-in raft current-device-resources)
+(require (only-in cuml/core/private/define-who define/who)
+         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
+         (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
-         (only-in "define-who.rkt" define/who)
          (only-in "deposit.rkt" deposit-for/who)
-         (only-in "hyperparameters.rkt" define-codes define-hyperparameters)
          (only-in "native.rkt" cuml-cluster-dbscan-fit-job))
 
 (provide (struct-out dbscan-result)
