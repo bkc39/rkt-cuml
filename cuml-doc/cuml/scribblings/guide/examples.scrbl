@@ -40,3 +40,4 @@ after the classes; the classes can be another clustering's labels.
 @include-section["examples/dbscan.scrbl"]
 @include-section["examples/single-linkage.scrbl"]
 @include-section["examples/spectral.scrbl"]
+@include-section["examples/hdbscan.scrbl"]

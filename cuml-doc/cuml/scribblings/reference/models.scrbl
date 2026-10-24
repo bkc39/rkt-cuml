@@ -9,7 +9,6 @@
 
 @title[#:tag "native-models"]{Native models}
 
-@defmodule[cuml/core #:no-declare]
 @declare-exporting[cuml/core cuml]
 
 A @tech{native model} holds the C++ state behind a fitted result, such as
