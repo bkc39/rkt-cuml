@@ -38,13 +38,14 @@ struct past {
   }
 };
 
+template <typename Index>
 struct ascending_pair {
-  int32_t* children;
+  Index* children;
 
   __device__ void operator()(int64_t i) const {
-    int32_t* pair = children + 2 * i;
+    Index* pair = children + 2 * i;
     if (pair[0] > pair[1]) {
-      const int32_t first = pair[0];
+      const Index first = pair[0];
       pair[0] = pair[1];
       pair[1] = first;
     }
@@ -71,11 +72,15 @@ std::pair<int64_t, double> first_large_row(const float* x, int64_t n, int64_t d,
   return {i, s};
 }
 
-void ascending_pairs(int32_t* children, int64_t rows,
+template <typename Index>
+void ascending_pairs(Index* children, int64_t rows,
                      rmm::cuda_stream_view stream) {
   const thrust::counting_iterator<int64_t> first(0);
   thrust::for_each(rmm::exec_policy(stream), first, first + rows,
-                   ascending_pair{children});
+                   ascending_pair<Index>{children});
 }
+
+template void ascending_pairs<int32_t>(int32_t*, int64_t, rmm::cuda_stream_view);
+template void ascending_pairs<int64_t>(int64_t*, int64_t, rmm::cuda_stream_view);
 
 }  // namespace cumlrkt::cluster
