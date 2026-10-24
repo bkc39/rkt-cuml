@@ -6,7 +6,6 @@
 #include <cuml/cluster/spectral_clustering.hpp>
 #include <format>
 #include <initializer_list>
-#include <limits>
 #include <memory>
 #include <raft/core/device_mdspan.hpp>
 #include <raft/core/handle.hpp>
@@ -27,14 +26,16 @@
 namespace {
 
 using cumlrkt::logic_error;
-using cumlrkt::cluster::first_large_row;
 using cumlrkt::cluster::graph_scan;
 using cumlrkt::cluster::in_device_scope;
 using cumlrkt::cluster::matrix;
+using cumlrkt::cluster::most_index;
 using cumlrkt::cluster::on_float32_device;
 using cumlrkt::cluster::printed;
 using cumlrkt::cluster::read_one;
 using cumlrkt::cluster::require_at_least;
+using cumlrkt::cluster::require_bounded_rows;
+using cumlrkt::cluster::require_index;
 using cumlrkt::cluster::require_non_negative;
 using cumlrkt::cluster::require_some;
 using cumlrkt::cluster::rows_of;
@@ -42,13 +43,11 @@ using cumlrkt::cluster::scan_graph;
 using cumlrkt::cluster::settle;
 using raftrkt::any_extent;
 
-constexpr int64_t most_index = std::numeric_limits<int32_t>::max();
 constexpr int64_t least_samples = 4;
 constexpr int64_t least_neighbours = 2;
 constexpr int64_t components_per_sample = 3;
 constexpr int64_t least_basis = 20;
 constexpr int64_t least_trials = 2;
-constexpr double most_squared_norm = 0x1p125;
 constexpr double most_tol = FLT_MAX;
 
 struct solver_options {
@@ -151,10 +150,7 @@ matrix<float, int64_t> checked_x(const rr_view* view) {
                                   least_samples, x.n));
   }
   require_some("X", "column", x.d);
-  if (x.n > most_index / x.d) {
-    throw logic_error(
-        std::format("X: {}x{} elements do not fit the index type", x.n, x.d));
-  }
+  require_index("X", x.n, x.d);
   return x;
 }
 
@@ -164,17 +160,6 @@ void require_knn_graph(int64_t n, int64_t k) {
     throw logic_error(std::format(
         "X: {} rows with {} neighbours need {} graph entries, more than {}", n,
         k, entries, most_index));
-  }
-}
-
-void require_bounded_rows(const matrix<float, int64_t>& x,
-                          rmm::cuda_stream_view stream) {
-  const auto [row, squared] =
-      first_large_row(x.data, x.n, x.d, most_squared_norm, stream);
-  if (row >= 0) {
-    throw logic_error(
-        std::format("X: row {}: expected a squared norm of at most {}, got {}",
-                    row, printed(most_squared_norm), printed(squared)));
   }
 }
 
@@ -188,7 +173,7 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
   require_solver(o);
   const int64_t k = std::min(o.n_neighbors, x.n - 1);
   require_knn_graph(x.n, k);
-  require_bounded_rows(x, raft::resource::get_cuda_stream(handle));
+  require_bounded_rows("X", x, raft::resource::get_cuda_stream(handle));
   const auto dataset =
       raft::make_device_matrix_view<float, int, raft::row_major>(
           x.data, static_cast<int>(x.n), static_cast<int>(x.d));

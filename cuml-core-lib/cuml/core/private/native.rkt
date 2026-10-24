@@ -9,7 +9,7 @@
                   ffi-lib
                   get-ffi-obj)
          (only-in raft/unsafe raft-abi-pointer status-checker)
-         (only-in "../../core.rkt" exn:fail:cuml)
+         (only-in "exn.rkt" exn:fail:cuml)
          (only-in "install-native.rkt" not-staged-advice staged?))
 
 (provide (struct-out cuml-family)

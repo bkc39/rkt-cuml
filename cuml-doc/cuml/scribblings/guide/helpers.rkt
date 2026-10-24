@@ -29,6 +29,7 @@
          matched-labels
          renumbered
          rows
+         rows->matrix
          sizes
          standardized
          standardized-matrix
@@ -64,6 +65,9 @@
 
 (define (rows columns)
   (apply map list columns))
+
+(define (rows->matrix samples)
+  (list*->device-matrix samples #:dtype 'float32))
 
 (define (dataset-columns name columns)
   (~> (load-dataset-table name #:columns columns)

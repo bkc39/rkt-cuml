@@ -7,6 +7,7 @@
          cuml/estimator
          "private/agglomerative-estimator.rkt"
          "private/dbscan-estimator.rkt"
+         "private/hdbscan-estimator.rkt"
          "private/kmeans-estimator.rkt"
          "private/spectral-estimator.rkt")
 
@@ -15,5 +16,6 @@
                        cuml/estimator
                        "private/agglomerative-estimator.rkt"
                        "private/dbscan-estimator.rkt"
+                       "private/hdbscan-estimator.rkt"
                        "private/kmeans-estimator.rkt"
                        "private/spectral-estimator.rkt"))

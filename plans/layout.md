@@ -365,6 +365,39 @@
   are `define/who` forms like every family's, and the lint rule has no
   path exemption.
 
+## Decisions recorded in leg 7 (HDBSCAN, #12)
+
+- HDBSCAN is the first native model: `hdbscan-fit` returns an
+  `hdbscan-result` whose `model` holds the condensed tree, the prediction
+  data, the core distances and the labels in C++ (`shim/cluster/src/
+  hdbscan_model.hpp`, kind `hdbscan` in `cluster_kinds.hpp`), released by
+  `cuml_cluster_model_release_job`. `cuml/core` exports the native-model
+  surface with its manual page.
+- The spec's decisions, each with the recommended answer:
+  - **Q-A.** Labels are int64, as cuML returns them, unlike the other
+    families' int32.
+  - **Q-B.** Prediction data is always built.
+  - **Q-C.** `hdbscan-membership-vector` and
+    `hdbscan-all-points-membership-vectors` are bound now.
+  - **Q-D.** The labels are a model region, so a foreign vector never reaches
+    the predict kernel.
+  - **Q-E.** The training X is kept by reference, checked against the model's
+    shape at each prediction.
+  - **Q-F.** The `hdbscan` estimator is a clusterer, not a predictor.
+  - **Q-G.** Fit rows are refused above a squared norm of 2¹²⁵.
+  - **Q-H.** Empty queries are refused.
+  - **Q-I.** Linkage child pairs are sorted.
+  - **Q-J.** Unlimited `max-cluster-size` is spelled 0.
+  - **Q-K.** n = min-samples is accepted (all noise).
+  - **Q-L.** leaf selection and `max-cluster-size` are checked against the
+    Python twin only.
+  - **Q-N.** `inverse_label_map` is exposed as
+    `hdbscan-condensed-tree-selected-clusters`.
+- `min-cluster-size` and `max-cluster-size` are refused above 2147483647,
+  since cuML's params hold them as `int`.
+- Persistence varies in its last bits between identical fits, so the
+  determinism laws compare it within 1e-5 and every other output exactly.
+
 ## Owner decisions (2026-10-17)
 
 - The repository is `bkc39/rkt-cuml`. Packages start at 0.1 and require

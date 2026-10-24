@@ -15,12 +15,13 @@
          live-anchor
          live-anchor/who
          native-model-kind
+         native-model-opaque-bytes
          native-model-release!
          native-model-released?
          native-model?
          with-native-models)
 
-(struct native-model (kind [anchor #:mutable] release state phantom)
+(struct native-model (kind [anchor #:mutable] release state phantom opaque-bytes)
   #:constructor-name anchor->native-model
   #:property prop:custom-write
   (lambda (m port _mode)
@@ -40,7 +41,7 @@
      (define phantom (make-phantom-bytes opaque-bytes))
      (for ([region (in-list regions)])
        (hash-set! phantoms region phantom))
-     (values (anchor->native-model kind anchor release (box 'live) phantom) regions)]
+     (values (anchor->native-model kind anchor release (box 'live) phantom opaque-bytes) regions)]
     [_ (logic-error "~a: out: region 0 is not a model anchor" who)]))
 
 (define (abandoned? state)
@@ -59,10 +60,10 @@
 
 (define/who (live-anchor who m kind)
   (match m
-    [(native-model (== kind) anchor _ (app unbox (? usable?)) _) anchor]
-    [(native-model (== kind) _ _ _ _)
+    [(native-model (== kind) anchor _ (app unbox (? usable?)) _ _) anchor]
+    [(native-model (== kind) _ _ _ _ _)
      (logic-error "~a: model: expected a live model, got a released one" who)]
-    [(native-model other _ _ _ _)
+    [(native-model other _ _ _ _ _)
      (logic-error "~a: model: expected a ~a model, got a ~a model" who kind other)]
     [_ (logic-error "~a: model: expected a native model, got ~e" who m)]))
 
@@ -86,7 +87,7 @@
   (parameterize-break (break-enabled) (void)))
 
 (define (release-model who m resources)
-  (match-define (native-model _ anchor release state phantom) m)
+  (match-define (native-model _ anchor release state phantom _) m)
   (call-with-claim state
                    (lambda ()
                      (release who resources anchor)
