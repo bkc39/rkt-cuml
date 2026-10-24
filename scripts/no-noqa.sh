@@ -8,7 +8,7 @@ allowed_marks=(
   "cuml-test/cuml/tests/private/python-env.rkt:(define twin-skip ;; noqa"
   "lint/review.rkt:(define (review-scoped-body leading body) ;; noqa"
 )
-facades=(cuml-lib/cuml/main.rkt cuml-cluster-lib/cuml/cluster.rkt)
+facades=(cuml-lib/cuml/main.rkt cuml-core-lib/cuml/core.rkt cuml-cluster-lib/cuml/cluster.rkt)
 
 allowed() {
   local file=$1 text=$2 entry
