@@ -20,8 +20,8 @@ A multi-package repository in typed-racket's style: every package is
 | Path | Package | Holds |
 |---|---|---|
 | `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging; `logic-error.rkt`, the one `'logic` raise; `define-hyperparameters` and `define-codes` in `hyperparameters.rkt`, `define/who` in `define-who.rkt`; `model.rkt`, the native models: `native-model`, `deposit->native-model`, `live-anchor`, `native-model-release!`, `with-native-models`; `release.rkt`, `call-with-release` and `with-release`, restated from raft) |
-| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, and the loader of `libcumlrkt_cluster.so`) |
-| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`) |
+| `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`; HDBSCAN: `hdbscan-params`, `hdbscan-fit`, `hdbscan-approximate-predict`, `hdbscan-membership-vector`, `hdbscan-all-points-membership-vectors`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, and the loader of `libcumlrkt_cluster.so`) |
+| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
@@ -94,7 +94,13 @@ holding its `model_kind` code; the other regions are the model's arrays.
 Native side:
 
 - Each family library defines its own `model_kind` constants, a code and a
-  name (the probe's are in `shim/probe/src/probe_kinds.hpp`).
+  name (the probe's are in `shim/probe/src/probe_kinds.hpp`, the cluster
+  library's `hdbscan` kind in `shim/cluster/src/cluster_kinds.hpp`). A
+  library's registry sees only its own models, so an anchor from another
+  library reads as another array.
+- Each family library exports its own release job
+  (`cuml_cluster_model_release_job` for the cluster library), which a
+  `native-model`'s release procedure calls with the anchor.
 - raft releases the owner once, on its reaper, with the device set and the
   creating handle alive, whichever is dropped first (`rr_resources` and
   `rr_buffer` alias the handle and declare it before the owner).
@@ -301,7 +307,7 @@ replace each when raft offers a public form:
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*` and `spectral-*` tests, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*` and `hdbscan-*` tests, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -317,13 +323,14 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `model-probe` | the probe library (`CUML_SHIM_PROBE`) and its jobs: `probe-model` (a native model of `#:kind` with a payload and a region), `probe-touch` (a use, optionally held on a gate), `probe-release`, `probe-counts` (created, released, destroyed, stale), `with-gate`, `await-waiter`, `test-model-probe` (a missing library raises `exn:fail:cuml`, so the tests fail rather than skip) |
 | `refusal-rows` | the refusal tables' `row` struct (id, message, call), `check-row name row`, and the squared-norm cases' `with-row` and `norm-message` |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
-| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`) |
+| `hdbscan-data` | the HDBSCAN fixtures (`dataset` by name from `dataset-names`, the seed-0 numpy normals in `normals-0.rktd` behind b50, b10 and one-blob, `dup`), `fitted-of` and `fit-lists` (a fit as host lists in a `fitted` struct), `same-fit?` and `persistence-close?` (equal but for persistence within 1e-5), and the host oracles `structure-problems` and `descent-problems` |
+| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`, `hdbscan-refusal-test`, `hdbscan-law-test`) |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
 (`widget-params`, `gadget-params`) and estimators to test the macros apart
 from k-means; `hyperparameters-doc-test` reads the `defproc`s of
-`reference/{clustering,spectral,estimators}.scrbl` and checks them against
+`reference/{clustering,spectral,hdbscan,estimators}.scrbl` and checks them against
 the tables.
 
 Every SKIP line the GPU suite allows matches one ERE in
