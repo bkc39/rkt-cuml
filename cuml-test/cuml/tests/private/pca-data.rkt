@@ -71,18 +71,15 @@
 (define normal-fixture (fixture "normal" (normals 11 2000 16)))
 
 (define fixtures
-  (list normal-fixture
-        (fixture "correlated" (correlated 12 2000 16))
-        (fixture "scales"
-                 (generated-rows 13
-                                 500
-                                 13
-                                 'float64
-                                 (lambda (z _u j) (* z (expt 10.0 (- (/ j 2.0) 3.0))))))
-        (fixture "offset" (shifted (correlated 14 5000 8) 1e4))
-        integer-fixture
-        (fixture "low rank" (low-rank 17 1000 20 5))
-        wide-fixture))
+  (list
+   normal-fixture
+   (fixture "correlated" (correlated 12 2000 16))
+   (fixture "scales"
+            (generated-rows 13 500 13 'float64 (lambda (z _u j) (* z (expt 10.0 (- (/ j 2.0) 3.0))))))
+   (fixture "offset" (shifted (correlated 14 5000 8) 1e4))
+   integer-fixture
+   (fixture "low rank" (low-rank 17 1000 20 5))
+   wide-fixture))
 
 (define (fixture-rows f dtype)
   (define narrow (round-to dtype))
@@ -160,7 +157,8 @@
 (define (gaps variances)
   (for/list ([v (in-list variances)]
              [i (in-naturals)])
-    (for/fold ([gap +inf.0]) ([w (in-list variances)]
-                              [j (in-naturals)]
-                              #:unless (= i j))
+    (for/fold ([gap +inf.0])
+              ([w (in-list variances)]
+               [j (in-naturals)]
+               #:unless (= i j))
       (min gap (abs (- v w))))))

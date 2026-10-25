@@ -233,8 +233,7 @@ struct pca_fitted {
 };
 
 inline std::string pca_fit_into(const resources& res, const rr_view* x,
-                                pca_fitted& f,
-                                const pca_fit_options& o = {}) {
+                                pca_fitted& f, const pca_fit_options& o = {}) {
   f.status = outcome(cuml_decomposition_pca_fit(
       res.handle, x, &f.out.r, o.all_components, o.n_components, o.solver,
       o.tol, o.iterations, &f.noise_variance, &f.n_samples));
@@ -251,15 +250,14 @@ inline pca_views fitted_views(const pca_fitted& f) {
   return {&f.out.r.regions[0], &f.out.r.regions[4], &f.out.r.regions[1]};
 }
 
-using pca_apply = int (*)(void*, const rr_view*, const rr_view*,
-                          const rr_view*, const rr_view*, rr_deposit*,
-                          int32_t);
+using pca_apply = int (*)(void*, const rr_view*, const rr_view*, const rr_view*,
+                          const rr_view*, rr_deposit*, int32_t);
 
 inline std::string pca_apply_into(const resources& res, pca_apply entry,
                                   const rr_view* x, const pca_views& v,
                                   record& out, int32_t whiten = 0) {
-  return outcome(entry(res.handle, x, v.components, v.mean, v.variance,
-                       &out.r, whiten));
+  return outcome(
+      entry(res.handle, x, v.components, v.mean, v.variance, &out.r, whiten));
 }
 
 }  // namespace cumlrkt::test

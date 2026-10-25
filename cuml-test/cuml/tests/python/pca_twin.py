@@ -7,10 +7,10 @@ import sys
 
 import numpy as np
 import sklearn
+from cuml.decomposition import PCA as CuPCA
 from sklearn.decomposition import PCA as SkPCA
 
 import cuml
-from cuml.decomposition import PCA as CuPCA
 
 
 def host(a):

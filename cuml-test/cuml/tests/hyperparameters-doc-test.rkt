@@ -44,11 +44,13 @@
     [_ '()]))
 
 (define documented
-  (append-map
-   defprocs
-   (append-map
-    manual-forms
-    '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "preprocessing.scrbl" "decomposition.scrbl" "estimators.scrbl"))))
+  (append-map defprocs
+              (append-map manual-forms
+                          '("clustering.scrbl" "spectral.scrbl"
+                                               "hdbscan.scrbl"
+                                               "preprocessing.scrbl"
+                                               "decomposition.scrbl"
+                                               "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -226,18 +228,17 @@
            (list (argument #f 'params #f))
            (list (argument '#:resources 'resources #f))
            '())))
-   (table-bindings
-    pca-params
-    pca-keys
-    (list (list 'pca-params pca-params '() (list (argument #f 'base #f)) '() '())
-          (scaler-fit-entry 'pca-fit pca-fit)
-          (scaler-fit-entry 'pca-fit-transform pca-fit-transform)
-          (list 'pca
-                pca
-                '(#:resources)
-                (list (argument #f 'params #f))
-                (list (argument '#:resources 'resources #f))
-                '())))))
+   (table-bindings pca-params
+                   pca-keys
+                   (list (list 'pca-params pca-params '() (list (argument #f 'base #f)) '() '())
+                         (scaler-fit-entry 'pca-fit pca-fit)
+                         (scaler-fit-entry 'pca-fit-transform pca-fit-transform)
+                         (list 'pca
+                               pca
+                               '(#:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:resources 'resources #f))
+                               '())))))
 
 (define-namespace-anchor anchor)
 

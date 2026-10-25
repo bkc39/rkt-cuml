@@ -85,6 +85,7 @@ cumlrkt_family(preprocessing NO_LIBCUML
 
 cumlrkt_family(decomposition
   SOURCES decomposition/src/decomposition.cpp decomposition/src/pca.cpp
+          decomposition/src/pca_device.cu
   TESTS decomposition/tests/decomposition_test.cpp
         decomposition/tests/pca_test.cpp
         decomposition/tests/pca_refusal_test.cpp

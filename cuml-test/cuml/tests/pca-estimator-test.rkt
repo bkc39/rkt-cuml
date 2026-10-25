@@ -35,7 +35,8 @@
   (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "L18: the default parameters, and every keyword round-trips"
-  (check-equal? (pca-params) (hasheq 'n-components #f 'whiten #f 'solver 'full 'tol 0.0 'iterations 15))
+  (check-equal? (pca-params)
+                (hasheq 'n-components #f 'whiten #f 'solver 'full 'tol 0.0 'iterations 15))
   (check-equal? (estimator-params (pca)) (pca-params))
   (check-equal? (round-trips pca changed) changed)
   (check-equal? (estimator-params (pca (pca-params #:whiten #t) #:n-components 3))
@@ -69,7 +70,8 @@
       (define e (pca #:n-components 3 #:solver solver #:whiten whiten))
       (define fitted-e (fit e X '(ignored)))
       (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
-      (check-equal? (format "~v" fitted-e) "#<pca fitted>")
+      (check-equal? (format "~v" fitted-e)
+                    (format "~v" (fit (pca #:n-components 3 #:solver solver #:whiten whiten) X)))
       (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
       (define result (pca-model fitted-e))
       (check-true (pca-result? result))
@@ -88,6 +90,11 @@
     (check-equal? (fitted-of again) (fitted-of result))
     (check-true (bits-equal? (listed T2) T))
     (check-true (bits-equal? (listed (fit-transform (pca #:n-components 5) X)) T))))
+
+(test-gpu "L18: a fitted pca prints its parameters after fitted"
+  (define X (rows->matrix (take (fixture-rows normal-fixture 'float32) 50) 'float32))
+  (check-equal? (format "~v" (fit (pca) X)) "#<pca fitted>")
+  (check-equal? (format "~v" (fit (pca #:n-components 2) X)) "#<pca fitted #:n-components 2>"))
 
 (test-gpu "L16: fit-transform names the generic for a fit refusal"
   (check-cuml-error 'logic

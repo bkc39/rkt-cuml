@@ -93,9 +93,8 @@ template <typename Predicate>
 int64_t first_index(int64_t start, int64_t end, Predicate p,
                     rmm::cuda_stream_view stream) {
   const thrust::counting_iterator<int64_t> indices(start);
-  const int64_t i =
-      *thrust::find_if(rmm::exec_policy(stream), indices,
-                       indices + (end - start), p);
+  const int64_t i = *thrust::find_if(rmm::exec_policy(stream), indices,
+                                     indices + (end - start), p);
   return i == end ? -1 : i;
 }
 
@@ -165,8 +164,7 @@ template int64_t first_large_element<double>(const double*, int64_t, double,
                                              rmm::cuda_stream_view);
 template int64_t first_row_unlike_first<float>(const float*, int64_t, int64_t,
                                                rmm::cuda_stream_view);
-template int64_t first_row_unlike_first<double>(const double*, int64_t,
-                                                int64_t,
+template int64_t first_row_unlike_first<double>(const double*, int64_t, int64_t,
                                                 rmm::cuda_stream_view);
 
 }  // namespace cumlrkt

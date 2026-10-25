@@ -69,17 +69,17 @@
 (define (spectrum-problems result-lists n k m u)
   (match-define (fitted _ variance ratio singular _) result-lists)
   (define total (apply + ratio))
-  (filter
-   values
-   (list (and (not (non-increasing? variance)) (format "variance increases: ~a" variance))
-         (and (not (andmap (lambda (v) (>= v 0.0)) variance)) (format "negative variance: ~a" variance))
-         (and (not (andmap (lambda (r) (>= r 0.0)) ratio)) (format "negative ratio: ~a" ratio))
-         (and (> total (+ 1.0 (* k u))) (format "ratios sum to ~a" total))
-         (and (= k m) (> (abs (- total 1.0)) (* k u)) (format "full ratios sum to ~a" total))
-         (for/first ([s (in-list singular)]
-                     [v (in-list variance)]
-                     #:when (> (abs (- s (sqrt (* v (sub1 n))))) (* 2 u s)))
-           (format "singular value ~a against variance ~a" s v)))))
+  (filter values
+          (list (and (not (non-increasing? variance)) (format "variance increases: ~a" variance))
+                (and (not (andmap (lambda (v) (>= v 0.0)) variance))
+                     (format "negative variance: ~a" variance))
+                (and (not (andmap (lambda (r) (>= r 0.0)) ratio)) (format "negative ratio: ~a" ratio))
+                (and (> total (+ 1.0 (* k u))) (format "ratios sum to ~a" total))
+                (and (= k m) (> (abs (- total 1.0)) (* k u)) (format "full ratios sum to ~a" total))
+                (for/first ([s (in-list singular)]
+                            [v (in-list variance)]
+                            #:when (> (abs (- s (sqrt (* v (sub1 n))))) (* 2 u s)))
+                  (format "singular value ~a against variance ~a" s v)))))
 
 (test-gpu "L3, L4, L5: signs, orthonormality and the spectrum on every fixture"
   (for* ([dt (in-list dtypes)]
@@ -105,7 +105,8 @@
          [solver (in-list solvers)])
     (define result (pca-fit (rows->matrix tie-rows dt) #:solver solver))
     (match-define (fitted components _ _ _ _) (fitted-of result))
-    (check-true (andmap positive? (first-max-entries components)) (format "~a ~a ~a" dt solver components))))
+    (check-true (andmap positive? (first-max-entries components))
+                (format "~a ~a ~a" dt solver components))))
 
 (test-gpu "L11: n-components at 1 and at min(n, d), with n < d, and the k-fit is the m-fit's head"
   (for* ([dt (in-list dtypes)]
@@ -114,7 +115,8 @@
     (test-case (format "~a ~a ~a" dt solver (fixture-name f))
       (define X (fixture-matrix f dt))
       (define u (unit-roundoff dt))
-      (match-define (fitted all-components all-variance _ _ _) (fitted-of (pca-fit X #:solver solver)))
+      (match-define (fitted all-components all-variance _ _ _)
+        (fitted-of (pca-fit X #:solver solver)))
       (match-define (list* largest _) all-variance)
       (define m (length all-variance))
       (when (eq? f wide-fixture)

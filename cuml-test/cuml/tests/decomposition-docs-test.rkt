@@ -26,7 +26,9 @@
   (and (= (length got) (length want))
        (for/and ([g (in-list got)]
                  [w (in-list want)])
-         (if (list? w) (same? g w) (= g w)))))
+         (if (list? w)
+             (same? g w)
+             (= g w)))))
 
 (test-gpu "the manual: the axis example's components, spectrum and transform"
   (define fitted (pca-fit (X)))

@@ -29,6 +29,8 @@ constexpr int32_t no_solver = 2;
 constexpr double past_float = 1e39;
 constexpr double large = 1e19;
 constexpr double huge = 1e38;
+constexpr double margin = 4.0;
+constexpr std::size_t spread_modulus = 11;
 
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -52,7 +54,7 @@ template <typename T>
 std::vector<T> spread(int64_t n, int64_t d) {
   std::vector<T> host(static_cast<std::size_t>(n * d));
   for (std::size_t i = 0; i < host.size(); ++i) {
-    host[i] = static_cast<T>((i * i) % 11);
+    host[i] = static_cast<T>((i * i) % spread_modulus);
   }
   return host;
 }
@@ -152,7 +154,8 @@ TEST(PcaFitRefusals, EachConditionInTableOrder) {
       {[&] { return fit(res, c, nan_x.view()); },
        "X: row 3, column 1: expected a finite value, got nan"},
       {[&] { return fit(res, c, large_x.view()); },
-       magnitude(3, 1, std::sqrt(FLT_MAX / (4.0 * rows * cols)), 1e19F)},
+       magnitude(3, 1, std::sqrt(FLT_MAX / (margin * rows * cols)),
+                 static_cast<float>(large))},
       {[&] { return fit(res, c, same.view()); },
        "X: expected at least 2 distinct rows, got 1"},
       {[&] { return fit(res, c, &one_col, {.solver = no_solver}); },
@@ -181,13 +184,13 @@ TEST(PcaFitRefusals, EachConditionInTableOrder) {
        },
        "out is NULL"},
       {[&] {
-         return cuml_decomposition_pca_fit(res.handle, x, &c.out.out.r, 1, 0,
-                                           0, 0, 1, nullptr, &c.out.n_samples);
+         return cuml_decomposition_pca_fit(res.handle, x, &c.out.out.r, 1, 0, 0,
+                                           0, 1, nullptr, &c.out.n_samples);
        },
        "noise-variance is NULL"},
       {[&] {
-         return cuml_decomposition_pca_fit(res.handle, x, &c.out.out.r, 1, 0,
-                                           0, 0, 1, &c.out.noise_variance,
+         return cuml_decomposition_pca_fit(res.handle, x, &c.out.out.r, 1, 0, 0,
+                                           0, 1, &c.out.noise_variance,
                                            nullptr);
        },
        "n-samples is NULL"},
@@ -234,17 +237,17 @@ void expect_apply_refusals(const resources& res, pca_apply entry,
   const pca_views v = fitted_views(c.fitted);
   const std::vector<float> variance = c.fitted.out.read<float>(1);
   const double largest = *std::max_element(variance.begin(), variance.end());
-  const double most = s.inverse ? FLT_MAX / (4.0 * kept) : FLT_MAX / (4.0 * cols);
+  const double most =
+      s.inverse ? FLT_MAX / (margin * kept) : FLT_MAX / (margin * cols);
   const double whitened_most =
-      s.inverse ? FLT_MAX / (4.0 * kept * std::max(1.0, std::sqrt(largest)))
+      s.inverse ? FLT_MAX / (margin * kept * std::max(1.0, std::sqrt(largest)))
                 : most;
   const auto last = static_cast<std::size_t>(s.width - 1);
   const device_array ints(res.r, RR_DTYPE_INT32, {pool});
   const device_array floats(res.r, RR_DTYPE_FLOAT32, {pool});
   const device_array doubles(res.r, RR_DTYPE_FLOAT64, {pool});
   const filled<float> x(res, spread<float>(rows, s.width), {rows, s.width});
-  const filled<double> x64(res, spread<double>(rows, s.width),
-                           {rows, s.width});
+  const filled<double> x64(res, spread<double>(rows, s.width), {rows, s.width});
   const rr_view int_x = shaped(ints.view, {rows, s.width});
   const rr_view rank1 = shaped(floats.view, {rows});
   const rr_view col_major = shaped(x.array.view, {rows, s.width}, true);
@@ -263,9 +266,8 @@ void expect_apply_refusals(const resources& res, pca_apply entry,
   strided.strides[0] = 2;
   const filled<float> nan_x(res, with(spread<float>(rows, s.width), last, inf),
                             {rows, s.width});
-  const filled<float> huge_x(res,
-                             with(spread<float>(rows, s.width), last, huge),
-                             {rows, s.width});
+  const filled<float> huge_x(
+      res, with(spread<float>(rows, s.width), last, huge), {rows, s.width});
   record out(res);
   const auto call = [&](const rr_view* in, const pca_views& with_views,
                         int32_t whiten = 0) {
@@ -303,7 +305,9 @@ void expect_apply_refusals(const resources& res, pca_apply entry,
        "mean: expected contiguous elements, got stride 2"},
       {[&] { return call(x.view(), no_variance, 1); },
        "explained-variance: expected a vector, got none"},
-      {[&] { return call(x.view(), {v.components, v.mean, &double_vector}, 1); },
+      {[&] {
+         return call(x.view(), {v.components, v.mean, &double_vector}, 1);
+       },
        "explained-variance: expected float32, got float64"},
       {[&] { return call(x.view(), {v.components, v.mean, &long_vector}, 1); },
        "explained-variance: expected 2 elements, got 3"},
@@ -311,9 +315,11 @@ void expect_apply_refusals(const resources& res, pca_apply entry,
        std::format("X: row 0, column {}: expected a finite value, got inf",
                    last)},
       {[&] { return call(huge_x.view(), v); },
-       magnitude(0, static_cast<int64_t>(last), most, 1e38F)},
+       magnitude(0, static_cast<int64_t>(last), most,
+                 static_cast<float>(huge))},
       {[&] { return call(huge_x.view(), v, 1); },
-       magnitude(0, static_cast<int64_t>(last), whitened_most, 1e38F)},
+       magnitude(0, static_cast<int64_t>(last), whitened_most,
+                 static_cast<float>(huge))},
       {[&] { return call(&col_major, {&int_components, v.mean, nullptr}); },
        std::format("X: expected row-major, got col-major 4x{}", s.width)},
       {[&] { return call(x64.view(), {v.components, &strided, nullptr}); },

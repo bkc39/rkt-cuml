@@ -1,11 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/decomposition
-                  pca-fit
-                  pca-fit-transform
-                  pca-inverse-transform
-                  pca-transform)
-         (only-in racket/list make-list take)
+(require (only-in cuml/decomposition pca-fit pca-fit-transform pca-inverse-transform pca-transform)
+         (only-in racket/list last make-list take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
@@ -126,7 +122,7 @@
     (define plain (pca-fit X))
     (define whitened (pca-fit X #:whiten #t))
     (match-define (fitted _ variance _ _ _) (fitted-of whitened))
-    (check-equal? (last-of variance) 0.0 (format "~a: the constant column's variance" dt))
+    (check-equal? (last variance) 0.0 (format "~a: the constant column's variance" dt))
     (define t (device-matrix->list* (pca-transform plain X)))
     (define tw (device-matrix->list* (pca-transform whitened X)))
     (define eps (epsilon dt))
@@ -145,10 +141,6 @@
                        (* 4 4 u (+ r (abs m)))))))
     (check-true (<= worst 1.0) (format "~a: round trip ~a of the bound" dt worst))))
 
-(define (last-of xs)
-  (for/last ([x (in-list xs)])
-    x))
-
 (test-gpu "L7: at full rank the round trip returns X, whitened or not"
   (define checked
     (for*/list ([dt (in-list dtypes)]
@@ -158,7 +150,7 @@
                 [rows (in-value (fixture-rows f dt))]
                 [result (in-value (pca-fit (rows->matrix rows dt) #:whiten whiten))]
                 [lists (in-value (fitted-of result))]
-                #:when (>= (last-of (fitted-variance lists))
+                #:when (>= (last (fitted-variance lists))
                            (* 1e-3 (apply max (fitted-variance lists)))))
       (define u (unit-roundoff dt))
       (define X (rows->matrix rows dt))
@@ -170,7 +162,8 @@
           (for/list ([m (in-list mean)])
             (* 4 d u (+ r (abs m))))))
       (define worst (worst-ratio back rows bound))
-      (check-true (<= worst 1.0) (format "~a ~a ~a: ~a of the bound" dt (fixture-name f) whiten worst))
+      (check-true (<= worst 1.0)
+                  (format "~a ~a ~a: ~a of the bound" dt (fixture-name f) whiten worst))
       (fixture-name f)))
   (check-true (and (member "normal" checked) (member "uniform integers" checked) #t)))
 
@@ -196,7 +189,8 @@
           (for/list ([s (in-list scale)])
             (/ (* 4 d u r) s))))
       (define worst (worst-ratio t-head (take tw m) transform-bound))
-      (check-true (<= worst 1.0) (format "~a ~a ~a rows: transform ~a of the bound" dt (fixture-name f) m worst))
+      (check-true (<= worst 1.0)
+                  (format "~a ~a ~a rows: transform ~a of the bound" dt (fixture-name f) m worst))
       (define back-head
         (device-matrix->list* (pca-inverse-transform result (rows->matrix (take tw m) dt))))
       (define inverse-bound
@@ -204,8 +198,9 @@
           (for/list ([mu (in-list mean)])
             (* 4 k u (+ (norm (map * t-row scale)) (abs mu))))))
       (define worst-inverse (worst-ratio back-head (take back m) inverse-bound))
-      (check-true (<= worst-inverse 1.0)
-                  (format "~a ~a ~a rows: inverse ~a of the bound" dt (fixture-name f) m worst-inverse)))))
+      (check-true
+       (<= worst-inverse 1.0)
+       (format "~a ~a ~a rows: inverse ~a of the bound" dt (fixture-name f) m worst-inverse)))))
 
 (test-gpu "L13a: transform and inverse of one fit repeat bitwise, and fit-transform is the transform of its fit"
   (for* ([dt (in-list dtypes)]
@@ -232,6 +227,18 @@
               (struct->vector (fitted-of (pca-fit (fixture-matrix integer-fixture dt)
                                                   #:solver solver)))))))
 
+(define (vector->list* v)
+  (cond
+    [(vector? v) (map vector->list* (vector->list v))]
+    [(list? v) (map vector->list* v)]
+    [else v]))
+
+(define (pairs xs)
+  (let loop ([xs xs])
+    (match xs
+      [(list* a b more) (cons (list a b) (loop more))]
+      [_ '()])))
+
 (test-gpu "L13b: on exact-sum data six fits in three processes are bitwise equal"
   (define outputs
     (for/list ([_ (in-range 3)])
@@ -244,15 +251,3 @@
   (for ([pair (in-list (pairs first-output))])
     (match-define (list a b) pair)
     (check-true (equal? a b) "two fits in one process")))
-
-(define (vector->list* v)
-  (cond
-    [(vector? v) (map vector->list* (vector->list v))]
-    [(list? v) (map vector->list* v)]
-    [else v]))
-
-(define (pairs xs)
-  (let loop ([xs xs])
-    (match xs
-      [(list* a b more) (cons (list a b) (loop more))]
-      [_ '()])))
