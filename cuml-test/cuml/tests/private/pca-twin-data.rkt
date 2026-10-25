@@ -230,7 +230,7 @@
       (list dt k solver)))
   (define results
     (twin-results (append (for/list ([c (in-list cases)])
-                            (match-define (list dt k solver) c)
+                            (match-define (list dt k _) c)
                             (twin-case "sklearn" f dt k))
                           (for/list ([c (in-list cases)])
                             (match-define (list dt k solver) c)
