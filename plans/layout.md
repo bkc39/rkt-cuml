@@ -33,9 +33,10 @@
    keeping its resources alive) lives in `cuml-core-lib`.
 
 5. **Scope: clustering** (k-means, DBSCAN, single-linkage agglomerative,
-   spectral, HDBSCAN), **then epic #53**: `cuml/metrics`,
-   `cuml/preprocessing`, `cuml/decomposition` and `cuml/manifold`, plus the
-   table conversion in `cuml-lib`. Neither needs sparse arrays or multi-GPU.
+   spectral, HDBSCAN) **and metrics** (`cuml/metrics`: contingency,
+   adjusted Rand, silhouette, trustworthiness; leg A2, #34), **then the
+   rest of epic #53**: `cuml/preprocessing`, `cuml/decomposition` and
+   `cuml/manifold`, plus the table conversion in `cuml-lib`. Neither needs sparse arrays or multi-GPU.
    HDBSCAN's outputs sized by the call use raft's deposit records (rkt-raft
    #22).
 
@@ -467,3 +468,35 @@ Follow-ups are GitHub issues.
 - **A1-o.** datasets-core is pinned through raft's `datasets-src`, one pin.
 - **A1-p.** What is numeric is decided from the values, not the metadata's
   `type`.
+
+## Decisions recorded in leg A2 (#34)
+
+- **A2-a.** Each label vector is remapped on the device to dense int32
+  codes in ascending order; int32 and int64 are allowed independently, in
+  either argument.
+- **A2-b.** `contingency-matrix` keeps sklearn's name and returns a
+  `contingency-table`: the int64 counts and the sorted distinct row and
+  column labels, each in its argument's dtype.
+- **A2-c.** The counts come from raft's `contingencyMatrix` over the dense
+  codes, into a K×K scratch whose k₁×k₂ block is copied out.
+- **A2-d.** ARI and contingency refuse more than 46340 distinct labels in
+  either argument, where raft's 32-bit index overflows; the 17 GB scratch at
+  the bound is documented.
+- **A2-e.** Two procedures, `silhouette-score` and `silhouette-samples`, on
+  two shim entries.
+- **A2-f.** The silhouette metrics are euclidean, sqeuclidean, manhattan,
+  cosine and chebyshev, without Python's aliases; the rest of Python's table
+  is a follow-up.
+- **A2-g.** The tile keyword is `#:chunk-size`, like `#:batch-size` and
+  `#:n-neighbors`.
+- **A2-h.** Trustworthiness refuses float64. Silhouette and trustworthiness
+  rows past a squared norm of 2¹²⁵ (float64 silhouette: 2¹⁰²¹), NaN and Inf
+  among them, are refused.
+- **A2-i.** `scripts/check-bindings.rkt` takes a family list,
+  `'("cluster" "metrics")`, with one `<family>-bindings.rktd` each.
+- **A2-j.** The family-neutral shim helpers (`support.hpp`, the index and
+  norm bounds in `limits.hpp`, the row scans in `rows.hpp`/`rows.cu`) live in
+  `shim/common`, and `deposit-for/who` in `cuml/core/private/deposit.rkt`;
+  cluster is rewired with no behaviour change.
+- **A2-k.** No hyperparameter tables and no estimators: the metrics are
+  plain `define/who` procedures.
