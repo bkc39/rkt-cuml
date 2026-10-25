@@ -98,6 +98,23 @@ TEST(StandardScaler, AConstantColumnScalesByOne) {
   EXPECT_EQ(f.out.read<double>(2), (std::vector<double>{1, 1}));
 }
 
+TEST(StandardScaler, ATinySpreadOnALargeMeanKeepsItsVariance) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  constexpr int64_t samples = 1000;
+  constexpr double level = 1e6;
+  constexpr double bump = 1e-4;
+  constexpr double exact_var = 9.989989319111282e-12;
+  constexpr double relative = 1e-11;
+  std::vector<double> values(samples, level);
+  values[0] = level + bump;
+  const filled<double> x(res, values, {samples, 1});
+  fitted f(res);
+  fit_into(res, x.view(), f);
+  ASSERT_EQ(f.status, "accepted");
+  EXPECT_NEAR(f.out.read<double>(1)[0], exact_var, relative * exact_var);
+}
+
 TEST(StandardScaler, TransformAndInverseOfTheGrid) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;

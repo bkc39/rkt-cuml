@@ -71,7 +71,7 @@
       (define X (rows->matrix (dyadic-rows c k) dt))
       (define fitted (standard-scaler-fit X))
       (check-equal? (statistics fitted)
-                    (list (list (exact->inexact c)) (list (expt 4.0 k)) (list (expt 2.0 k))))
+                    (map (lambda (v) (list (exact->inexact v))) (list c (expt 4 k) (expt 2 k))))
       (define T (standard-scaler-transform fitted X))
       (check-equal? (device-matrix->list* T)
                     (for/list ([i (in-range 8)])

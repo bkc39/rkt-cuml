@@ -168,7 +168,6 @@
     (drain-finalizers!)
     (define before (probe-pool-used device))
     (thunk)
-    (drain-finalizers!)
     (check-equal? (probe-pool-used device) before id))
   (for ([r (in-list (fit-rows))])
     (define X (row-call r))

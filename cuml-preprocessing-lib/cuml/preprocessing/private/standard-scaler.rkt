@@ -1,8 +1,15 @@
 #lang racket/base
 
 (require (only-in cuml/core/private/define-who define/who)
+         (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters define-hyperparameters)
-         (only-in raft current-device-resources))
+         (only-in racket/match match match-define)
+         (only-in raft current-device-resources shape)
+         (only-in raft/unsafe deposit->list)
+         (only-in "native.rkt"
+                  cuml-preprocessing-standard-scaler-fit-job
+                  cuml-preprocessing-standard-scaler-inverse-transform-job
+                  cuml-preprocessing-standard-scaler-transform-job))
 
 (provide (struct-out standard-scaler-result)
          current-scratch-elements
@@ -29,26 +36,55 @@
 
 (define current-scratch-elements (make-parameter (expt 2 26) scratch-elements 'current-scratch-elements))
 
+(define (flag v)
+  (if v 1 0))
+
+(define (fitted who X with-mean with-std resources)
+  (define out (deposit-for/who who resources))
+  (define n-samples
+    (cuml-preprocessing-standard-scaler-fit-job who
+                                                resources
+                                                X
+                                                out
+                                                (flag with-mean)
+                                                (flag with-std)
+                                                (current-scratch-elements)))
+  (match-define (list _ n-features) (shape X))
+  (define-values (mean var scale)
+    (match (deposit->list out)
+      [(list mean var scale) (values mean var scale)]
+      [(list mean) (values (and with-mean mean) #f #f)]))
+  (standard-scaler-result mean var scale n-samples n-features (and with-mean #t) (and with-std #t)))
+
+(define (applied job who result X resources)
+  (match-define (standard-scaler-result mean _ scale _ n-features with-mean with-std) result)
+  (define out (deposit-for/who who resources))
+  (job who resources X (and with-mean mean) (and with-std scale) out n-features)
+  (match-define (list transformed) (deposit->list out))
+  transformed)
+
 (define/who (standard-scaler-fit who
                                  X
                                  #:hyperparameters standard-scaler-params
                                  #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (fitted who X with-mean with-std resources))
 
 (define/who (standard-scaler-transform who
                                        result
                                        X
                                        #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (applied cuml-preprocessing-standard-scaler-transform-job who result X resources))
 
 (define/who (standard-scaler-inverse-transform who
                                                result
                                                X
                                                #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (applied cuml-preprocessing-standard-scaler-inverse-transform-job who result X resources))
 
 (define/who (standard-scaler-fit-transform who
                                            X
                                            #:hyperparameters standard-scaler-params
                                            #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define result (fitted who X with-mean with-std resources))
+  (values result
+          (applied cuml-preprocessing-standard-scaler-transform-job who result X resources)))

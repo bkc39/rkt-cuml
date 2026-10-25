@@ -76,7 +76,8 @@
       (list dt data flags)))
   (define results
     (twin-results (for/list ([c (in-list cases)])
-                    (apply case-of "fit" (car c) (cdr c)))))
+                    (match-define (list dt data flags) c)
+                    (case-of "fit" data dt flags))))
   (for ([c (in-list cases)]
         [result (in-list results)])
     (match-define (list dt data flags) c)
@@ -90,7 +91,7 @@
       (define scale-sk (theirs-vector result 'scale))
       (check-equal? (standard-scaler-result-n-samples fitted) (hash-ref result 'n_samples))
       (check-equal? (list (and mean #t) (and var #t) (and scale #t))
-                    (list (or (car flags) (cadr flags)) (and mean-sk #t) (and scale-sk #t)))
+                    (list (and (member #t flags) #t) (and var-sk #t) (and scale-sk #t)))
       (when (and mean mean-sk)
         (check-true (within? mean
                              mean-sk
