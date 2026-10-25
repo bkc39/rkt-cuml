@@ -447,14 +447,15 @@ Follow-ups are GitHub issues.
 - **A1-e.** A missing value is refused; no `#:missing` fill this leg.
 - **A1-f.** NaN and infinite flonums pass; the families decide.
 - **A1-g.** raft's failures after the scan (released resources, out of
-  memory) pass through as `exn:fail:raft` naming `list*->device-matrix`; an
+  memory) pass through as `exn:fail:raft` naming raft's own procedure:
+  `list*->device-matrix`, or `device-matrix` for a table with no rows; an
   rkt-raft issue asks for a `#:who` on the list uploads.
 - **A1-h.** Duplicate columns are refused.
 - **A1-i.** A table with no rows gives a `(0 k)` matrix.
 - **A1-j.** No one-column `device-vector` companion; a label encoder is a
   follow-up for A3 or A6.
 - **A1-k.** A public module `cuml/table`, re-exported by `cuml`, loading no
-  native library: a re-export facade with `all-from-out` and no lint
+  cuML family or cuML native library: a re-export facade with `all-from-out` and no lint
   suppression, as `cuml/core` is.
 - **A1-l.** The tests build tables by reflection, in `table-data.rkt` only;
   bkc39/datasets is asked for a public constructor.
