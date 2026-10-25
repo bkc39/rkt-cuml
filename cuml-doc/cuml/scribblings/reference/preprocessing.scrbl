@@ -35,8 +35,8 @@
 The result of @racket[standard-scaler-fit]: each column's mean, population
 variance and scale as @racket['float64] vectors whatever @racket[X]'s dtype;
 the scale is the standard deviation, or 1 for a column indistinguishable from
-a constant. @racket[mean] is @racket[#f] when neither flag is set, and
-@racket[var] and @racket[scale] when @racket[with-std] is @racket[#f]. The
+a constant. The mean is @racket[#f] when neither flag is set, and the
+variance and scale are when @racket[with-std] is @racket[#f]. The
 flags are the fit's, and say what the transforms apply.}
 
 @defproc[(standard-scaler-fit [X device-matrix?]
@@ -47,7 +47,8 @@ flags are the fit's, and say what the transforms apply.}
          standard-scaler-result?]{
 Learns the column statistics of @racket[X], a row-major @racket['float32] or
 @racket['float64] matrix with at least one row and one column and only finite
-elements. Every statistic accumulates in @racket['float64], and the same
+elements: a NaN is refused, where sklearn ignores it at fit and passes it
+through at transform. Every statistic accumulates in @racket['float64], and the same
 @racket[X] always gives the same bits. A column whose variance is within the
 rounding error of a constant (at most n·ε·var + (n·mean·ε)², ε the
 @racket['float64] epsilon) gets a scale of exactly 1, so it is only centred.
@@ -55,8 +56,9 @@ rounding error of a constant (at most n·ε·var + (n·mean·ε)², ε the
 hyperparameter a keyword omits.
 @examples[#:eval ev #:label #f
 (define C (list*->device-matrix '((5 1) (5 3)) #:dtype 'float32))
-(~> (standard-scaler-fit C) standard-scaler-result-scale device-vector->list)
-(~> (standard-scaler-fit C) (standard-scaler-transform C) device-matrix->list*)
+(define C-fitted (standard-scaler-fit C))
+(device-vector->list (standard-scaler-result-scale C-fitted))
+(device-matrix->list* (standard-scaler-transform C-fitted C))
 (eval:error (standard-scaler-fit (list*->device-matrix '((1 +inf.0)) #:dtype 'float64)))
 ]}
 
@@ -68,7 +70,9 @@ A new matrix of @racket[X]'s shape and dtype: each element less its column's
 mean when @racket[result] centres, then divided by its scale when it scales,
 both rounded to @racket[X]'s dtype first and computed in it. @racket[X] needs
 @racket[result]'s number of columns, at least one row and finite elements,
-and may have either dtype whatever the fit's.
+and may have either dtype whatever the fit's. A scale that rounds to 0 in
+@racket[X]'s dtype gives that column non-finite elements, as sklearn's does,
+and @racket[standard-scaler-inverse-transform] refuses them.
 @examples[#:eval ev #:label #f
 (eval:error (standard-scaler-transform fitted (list*->device-matrix '((1)) #:dtype 'float64)))
 ]}

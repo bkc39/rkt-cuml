@@ -8,10 +8,9 @@
                   standard-scaler-result-var
                   standard-scaler-transform)
          (only-in cuml/preprocessing/private/standard-scaler current-scratch-elements)
-         (only-in racket/flonum flsingle)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-false check-true test-case)
+         (only-in rackunit check-equal? check-eqv? check-false check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/scaler-data.rkt"
@@ -21,8 +20,11 @@
                   host-inverse
                   host-transform
                   normal-rows
+                  round-to
                   rows->matrix
-                  ulp))
+                  standardisation-errors
+                  ulp
+                  unit-roundoff))
 
 (define flag-pairs '((#t #t) (#t #f) (#f #t) (#f #f)))
 
@@ -35,14 +37,6 @@
                       (standard-scaler-result-var result)
                       (standard-scaler-result-scale result))])
     (and v (device-vector->list v))))
-
-(define (unit-roundoff dt)
-  (if (eq? dt 'float32)
-      (expt 2.0 -24)
-      (expt 2.0 -53)))
-
-(define (round-to dt)
-  (if (eq? dt 'float32) flsingle values))
 
 (test-gpu "L2, L3: transform and inverse equal the host oracles bitwise, every dtype, flag pair and size"
   (for* ([dt (in-list '(float32 float64))]
@@ -95,30 +89,25 @@
         (max w (/ (abs (- b x)) (* 1.01 u (+ (* 3 (abs (- x m))) (abs x)))))))
     (check-true (<= worst 1.0) (format "~a ~a: worst ratio ~a" dt size worst))))
 
-(define (column-moments rows)
-  (define n (length rows))
-  (for/list ([j (in-range (length (car rows)))])
-    (define column (map (lambda (row) (list-ref row j)) rows))
-    (define mean (/ (apply + column) n))
-    (define sd (sqrt (/ (for/sum ([t (in-list column)]) (expt (- t mean) 2)) n)))
-    (list mean sd)))
+(define (columns rows)
+  (apply map list rows))
 
-(test-gpu "L6: standardised columns have mean 0 and standard deviation 1"
+(test-gpu "L6: standardised columns have mean 0 and sd 1, within the rounding of the statistics"
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((7 13) (256 64) (4099 13)))])
     (match-define (list n d) size)
-    (define bound (if (eq? dt 'float32) 1e-5 1e-12))
     (define X (rows->matrix (normal-rows (+ 5 n d) n d dt) dt))
-    (define T (standard-scaler-transform (standard-scaler-fit X) X))
-    (for ([moments (in-list (column-moments (device-matrix->list* T)))]
+    (define fitted (standard-scaler-fit X))
+    (define T (standard-scaler-transform fitted X))
+    (for ([x-column (in-list (columns (device-matrix->list* X)))]
+          [t-column (in-list (columns (device-matrix->list* T)))]
+          [mean (in-list (device-vector->list (standard-scaler-result-mean fitted)))]
+          [scale (in-list (device-vector->list (standard-scaler-result-scale fitted)))]
           [j (in-naturals)])
-      (match-define (list mean sd) moments)
-      (check-true (<= (abs mean) bound) (format "~a ~a column ~a: mean ~a" dt size j mean))
-      (check-true (<= (abs (- sd 1)) bound) (format "~a ~a column ~a: sd ~a" dt size j sd)))))
-
-(define (constant-bound n var mean)
-  (define eps (expt 2.0 -52))
-  (+ (* n eps var) (expt (* n mean eps) 2)))
+      (for ([ratio (in-list (standardisation-errors x-column t-column mean scale dt))]
+            [bound (in-list '("mean against the statistics" "mean" "sd"))])
+        (check-true (<= ratio 1)
+                    (format "~a ~a column ~a, ~a: ~a of its bound" dt size j bound ratio))))))
 
 (test-gpu "L7: a constant column scales by exactly 1 and centres to (nearly) 0"
   (for* ([dt (in-list '(float32 float64))]
@@ -128,9 +117,9 @@
       (define rounded ((round-to dt) value))
       (define X (rows->matrix (constant-rows n rounded) dt))
       (define fitted (standard-scaler-fit X))
-      (match-define (list (list mean) (list var) (list scale)) (statistics fitted))
+      (match-define (list _ (list var) (list scale)) (statistics fitted))
       (check-equal? scale 1.0)
-      (check-true (<= 0.0 var (constant-bound n var mean)) (format "var ~a" var))
+      (check-eqv? var 0.0)
       (define ts (map car (device-matrix->list* (standard-scaler-transform fitted X))))
       (cond
         [(or (eq? dt 'float32) (= n 1)) (check-equal? ts (make-list n 0.0))]

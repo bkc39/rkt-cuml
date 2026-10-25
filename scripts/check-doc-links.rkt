@@ -1,8 +1,8 @@
 #lang racket/base
 
 (require (only-in cuml/scribblings/guide/source page-helpers-path page-helpers-source)
-         (only-in racket/list append* append-map remove-duplicates)
-         (only-in racket/match == match)
+         (only-in racket/list append* append-map filter-map remove-duplicates)
+         (only-in racket/match == match match-lambda)
          (only-in racket/string string-replace)
          (only-in syntax/parse/pre ~or* attribute id kernel-literals syntax-parse)
          (only-in threading ~>))
@@ -11,9 +11,8 @@
 
 (define linked-name #rx"<a [^>]*class=\"Rkt[A-Za-z]*Link\"[^>]*>([^<]*)</a>")
 
-(define unlinked-name #rx"<span class=\"RktSym\">([^<]*)</span>")
-
-(define field-name #rx"<span class=\"RktSym\">([^<]*)</span><span class=\"hspace\">&nbsp;</span>:")
+(define unlinked-name
+  #rx"(<td>)?<span class=\"RktSym\">([^<]*)</span>(</td>|<span class=\"hspace\">&nbsp;</span>:)?")
 
 (define (exported-names module-path)
   (module-declared? module-path #t)
@@ -81,21 +80,28 @@
 (define (rendered-names pattern html)
   (remove-duplicates (map unescaped (regexp-match* pattern html #:match-select cadr))))
 
+(define (unlinked-names html)
+  (~> (regexp-match* unlinked-name html #:match-select values)
+      (filter-map (match-lambda
+                    [(list _ "<td>" _ "</td>") #f]
+                    [(list _ _ _ (regexp #rx"^<span")) #f]
+                    [(list _ _ name _) (unescaped name)])
+                  _)
+      remove-duplicates))
+
 (define (html-findings labelled bindings modules page html)
   (define shown-bindings
     (match page
       [(== helpers-page) bindings]
       [_ '()]))
-  (define fields (rendered-names field-name html))
   (append (for/list ([name (in-list (rendered-names linked-name html))]
                      #:when (member name shown-bindings))
             (format "~a: ~a, which a helper binds, links" page name))
           (for/list ([name (in-list (rendered-names linked-name html))]
                      #:when (member name modules))
             (format "~a: ~a, a module the examples require, links to a binding" page name))
-          (for/list ([name (in-list (rendered-names unlinked-name html))]
-                     #:when (hash-ref labelled name #f)
-                     #:unless (member name fields))
+          (for/list ([name (in-list (unlinked-names html))]
+                     #:when (hash-ref labelled name #f))
             (format "~a: ~a, which the examples can use, has no link" page name))))
 
 (module+ main
@@ -136,13 +142,17 @@
                   '("examples.html: type, which a helper binds, links"))
     (check-equal? (html-findings (hash) '("type") '() "kmeans.html" html) '()))
 
-  (test-case "a struct field the page declares is no name to link"
+  (test-case "a struct field's declaration is no name to link, an unlinked use of its name elsewhere is"
     (define field
       "<span class=\"RktSym\">scale</span><span class=\"hspace\">&nbsp;</span>:<span class=\"hspace\">&nbsp;</span>")
+    (define header-field "<td><span class=\"RktSym\">scale</span></td>")
     (define prose "<span class=\"RktSym\">scale</span>")
     (define labelled (hash "scale" #t))
+    (check-equal?
+     (html-findings labelled '() '() "preprocessing.html" (string-append header-field field))
+     '())
     (check-equal? (html-findings labelled '() '() "preprocessing.html" (string-append field prose))
-                  '())
+                  '("preprocessing.html: scale, which the examples can use, has no link"))
     (check-equal? (html-findings labelled '() '() "kmeans.html" prose)
                   '("kmeans.html: scale, which the examples can use, has no link")))
 

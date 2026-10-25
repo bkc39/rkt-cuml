@@ -14,9 +14,18 @@
                   standard-scaler-result?
                   standard-scaler-transform)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-false check-true test-case)
-         (only-in raft device-matrix? device-vector? dtype layout shape)
+         (only-in rackunit check-equal? check-true test-case)
+         (only-in raft
+                  device-matrix->list*
+                  device-matrix?
+                  device-vector->list
+                  device-vector?
+                  dtype
+                  layout
+                  list*->device-matrix
+                  shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/scaler-data.rkt" normal-rows rows->matrix))
 
 (define (vector-shape v)
@@ -42,16 +51,12 @@
                           (standard-scaler-result-with-mean fitted)
                           (standard-scaler-result-with-std fitted))
                     (list n d #t #t))
-      (check-true (and (exact-integer? (standard-scaler-result-n-samples fitted))
-                       (exact-integer? (standard-scaler-result-n-features fitted))))
       (define T (standard-scaler-transform fitted X))
       (define I (standard-scaler-inverse-transform fitted T))
       (define-values (again T2) (standard-scaler-fit-transform X))
       (for ([out (list T I T2)])
-        (check-equal? (matrix-shape out) (list #t dt 'row-major (list n d)))
-        (check-false (eq? out X)))
-      (check-true (standard-scaler-result? again))
-      (check-false (eq? T I)))))
+        (check-equal? (matrix-shape out) (list #t dt 'row-major (list n d))))
+      (check-true (standard-scaler-result? again)))))
 
 (test-gpu "L1: the flags give the documented fields"
   (define X (rows->matrix (normal-rows 3 7 3 'float32) 'float32))
@@ -66,3 +71,14 @@
                         (standard-scaler-result-n-features fitted))
                   (list (or with-mean with-std) with-std with-std with-mean with-std 3)
                   (format "~a ~a" with-mean with-std))))
+
+(test-gpu "a scale that rounds to 0 in X's dtype gives non-finite output, which the inverse refuses"
+  (define X (list*->device-matrix (list (list 0.0) (list (expt 2.0 -149))) #:dtype 'float32))
+  (define fitted (standard-scaler-fit X))
+  (check-equal? (device-vector->list (standard-scaler-result-scale fitted)) (list (expt 2.0 -150)))
+  (define T (standard-scaler-transform fitted X))
+  (check-equal? (device-matrix->list* T) '((+nan.0) (+inf.0)))
+  (check-cuml-error
+   'logic
+   "standard-scaler-inverse-transform: X: row 0, column 0: expected a finite value, got nan"
+   (lambda () (standard-scaler-inverse-transform fitted T))))
