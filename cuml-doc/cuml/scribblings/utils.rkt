@@ -62,11 +62,11 @@
 
 (define-page-helpers page-require page-require-block page-helpers page-helpers-block)
 
-(define (make-cuml-eval)
+(define (make-cuml-eval . setup)
   (parameterize ([sandbox-output 'string]
                  [sandbox-error-output 'string]
                  [sandbox-memory-limit #f]
                  [sandbox-eval-limits #f]
                  [sandbox-security-guard current-security-guard]
                  [sandbox-path-permissions '((exists "/"))])
-    (apply make-base-eval #:lang 'racket/base page-require page-helpers)))
+    (apply make-base-eval #:lang 'racket/base page-require (append page-helpers setup))))

@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require (for-syntax racket/base
-                     (only-in racket/list remove-duplicates)
+                     (only-in racket/list append-map group-by)
+                     (only-in racket/match match-define)
                      (only-in racket/syntax format-id)
                      syntax/parse/pre)
          (only-in cuml/core/private/define-who define-checked)
@@ -82,12 +83,9 @@
                                (on-model proc 'score e X (~? weight (unweighted 'score w)))))))
 
   (define (grouped generics methods)
-    (for/list ([generic (in-list (remove-duplicates generics free-identifier=?))])
-      (cons generic
-            (for*/list ([(other defined) (in-parallel generics methods)]
-                        #:when (free-identifier=? other generic)
-                        [method (in-list defined)])
-              method))))
+    (for/list ([group (in-list (group-by car (map cons generics methods) free-identifier=?))])
+      (match-define (cons (cons generic _) _) group)
+      (cons generic (append-map cdr group))))
 
   (define-splicing-syntax-class method-clause
                                 #:attributes ([clause 1])
