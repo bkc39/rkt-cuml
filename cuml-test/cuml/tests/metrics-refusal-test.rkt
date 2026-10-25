@@ -7,6 +7,7 @@
                   silhouette-score
                   trustworthiness)
          (only-in racket/list make-list range)
+         (only-in racket/match match)
          (only-in rackunit check-equal? check-exn test-case)
          (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
@@ -60,23 +61,23 @@
         (lambda () (proc (blank-vector 5 'float32) (labels-of '(1) 'int32))))))
 
 (test-gpu "R1: contingency-matrix and adjusted-rand-score refuse each bad label argument"
-  (for* ([entry (in-list (list (cons 'contingency-matrix contingency-matrix)
-                               (cons 'adjusted-rand-score adjusted-rand-score)))]
-         [r (in-list (label-rows (cdr entry)))])
-    (test-case (format "~a ~a" (car entry) (row-id r))
-      (check-row (car entry) r))))
+  (for* ([proc (in-list (list contingency-matrix adjusted-rand-score))]
+         [r (in-list (label-rows proc))])
+    (test-case (format "~a ~a" (object-name proc) (row-id r))
+      (check-row (object-name proc) r))))
 
 (define metric-message "metric: expected euclidean, sqeuclidean, manhattan, cosine or chebyshev")
 
 (define (silhouette-rows proc)
   (define X (rows-with 30 '(1 1)))
   (define two (labels-of (append '(0 1) (make-list 28 1)) 'int32))
-  (define zero-row
+  (define (cosine-rows bad #:dtype [dt 'float32])
     (list*->device-matrix (for/list ([i (in-range 30)])
-                            (if (= i 3)
-                                '(0 0)
-                                (list (add1 i) 1)))
-                          #:dtype 'float32))
+                            (match (assv i bad)
+                              [(list _ row) row]
+                              [#f (list (add1 i) 1)]))
+                          #:dtype dt))
+  (define zero-message "X: row 3 is zero, so no cosine distance")
   (list
    (row "S11" metric-message (lambda () (proc X two #:metric 'l2)))
    (row "S9" "chunk-size: expected at least 1, got 0" (lambda () (proc X two #:chunk-size 0)))
@@ -114,9 +115,13 @@
    (row "S12 float64 inf"
         (norm-message "X" 4 double-most "inf")
         (lambda () (proc (rows-with 30 '(+inf.0 1) #:dtype 'float64) two)))
-   (row "S13"
-        "X: row 3 is zero, so no cosine distance"
-        (lambda () (proc zero-row two #:metric 'cosine)))
+   (row "S13" zero-message (lambda () (proc (cosine-rows '((3 (0 0)))) two #:metric 'cosine)))
+   (row "S13 float32 underflow"
+        zero-message
+        (lambda () (proc (cosine-rows '((3 (1e-30 0)))) two #:metric 'cosine)))
+   (row "S13 float64 underflow"
+        zero-message
+        (lambda () (proc (cosine-rows '((3 (1e-170 0))) #:dtype 'float64) two #:metric 'cosine)))
    (row "S11 before S9" metric-message (lambda () (proc X two #:metric 'l1 #:chunk-size 0)))
    (row "S9 before S0"
         "chunk-size: expected at least 1, got 0"
@@ -132,14 +137,13 @@
         (lambda () (proc (rows-with 30 '(+nan.0 1)) (labels-of (make-list 30 0) 'int32))))
    (row "S12 before S13"
         (norm-message "X" 3 float-most "nan")
-        (lambda () (proc (rows-with 30 '(+nan.0 0) #:at 3) two #:metric 'cosine)))))
+        (lambda () (proc (cosine-rows '((2 (0 0)) (3 (+nan.0 0)))) two #:metric 'cosine)))))
 
 (test-gpu "R1: silhouette-score and silhouette-samples refuse each bad argument"
-  (for* ([entry (in-list (list (cons 'silhouette-score silhouette-score)
-                               (cons 'silhouette-samples silhouette-samples)))]
-         [r (in-list (silhouette-rows (cdr entry)))])
-    (test-case (format "~a ~a" (car entry) (row-id r))
-      (check-row (car entry) r))))
+  (for* ([proc (in-list (list silhouette-score silhouette-samples))]
+         [r (in-list (silhouette-rows proc))])
+    (test-case (format "~a ~a" (object-name proc) (row-id r))
+      (check-row (object-name proc) r))))
 
 (define (trust-rows)
   (define X (distinct-rows 100))

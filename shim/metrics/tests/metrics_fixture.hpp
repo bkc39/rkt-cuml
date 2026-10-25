@@ -209,6 +209,9 @@ class allocation_meter {
   [[nodiscard]] int64_t peak() const {
     return stats_.get_bytes_counter().peak;
   }
+  [[nodiscard]] int64_t current() const {
+    return stats_.get_bytes_counter().value;
+  }
 
  private:
   cuda::mr::any_resource<cuda::mr::device_accessible> previous_;

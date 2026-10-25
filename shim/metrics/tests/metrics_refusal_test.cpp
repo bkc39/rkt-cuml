@@ -39,6 +39,9 @@ constexpr int64_t twenty_rows_k = 10;
 constexpr int64_t wide_k = 32767;
 constexpr int64_t half_trust_rows = trust_rows / 2;
 constexpr int64_t scratch_slack = int64_t{4} << 20;
+constexpr int64_t meter_rows = int64_t{1} << 20;
+constexpr float tiny_float = 1e-30F;
+constexpr double tiny_double = 1e-170;
 
 struct refusal {
   std::function<int()> call;
@@ -255,6 +258,13 @@ TEST(SilhouetteRefusals, NameTheArgument) {
   std::vector<float> zero_host = row_with(sil_rows, 2, zero_row, 0);
   zero_host[static_cast<std::size_t>((zero_row * 2) + 1)] = 0;
   const filled<float> zero_x(res, zero_host, {sil_rows, 2});
+  std::vector<float> tiny_float_host = zero_host;
+  tiny_float_host[static_cast<std::size_t>(zero_row * 2)] = tiny_float;
+  const filled<float> tiny_x(res, tiny_float_host, {sil_rows, 2});
+  std::vector<double> tiny_host(static_cast<std::size_t>(sil_rows * 2), 1.0);
+  tiny_host[static_cast<std::size_t>(zero_row * 2)] = tiny_double;
+  tiny_host[static_cast<std::size_t>((zero_row * 2) + 1)] = 0;
+  const filled<double> tiny_double_x(res, tiny_host, {sil_rows, 2});
   std::vector<double> inf_host(static_cast<std::size_t>(sil_rows * 2), 1.0);
   inf_host[static_cast<std::size_t>(bad_row * 2)] = INFINITY;
   const filled<double> inf_x(res, inf_host, {sil_rows, 2});
@@ -302,6 +312,10 @@ TEST(SilhouetteRefusals, NameTheArgument) {
          norm_message("X", bad_row, double_most, "inf")},
         {[&] { return call(zero_x.view(), two, cosine, chunk); },
          "X: row 3 is zero, so no cosine distance"},
+        {[&] { return call(tiny_x.view(), two, cosine, chunk); },
+         "X: row 3 is zero, so no cosine distance"},
+        {[&] { return call(tiny_double_x.view(), two, cosine, chunk); },
+         "X: row 3 is zero, so no cosine distance"},
         {[&] { return call(&x_int, two, -1, 0); }, metric_message},
         {[&] { return call(&x_int, two, euclidean, 0); },
          "chunk-size: expected at least 1, got 0"},
@@ -325,6 +339,27 @@ TEST(SilhouetteRefusals, NameTheArgument) {
                           res.handle, x, two, euclidean, chunk, nullptr);
                     },
                     "score is NULL"}});
+}
+
+TEST(SilhouetteRefusals, OneLabelLeavesOnlyTheRelabelScratch) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<float> x(res, std::vector<float>(meter_rows, 1),
+                        {meter_rows, 1});
+  const filled<int32_t> labels(res, std::vector<int32_t>(meter_rows, 7),
+                               {meter_rows});
+  record out(res);
+  double score = 0;
+  for (const silhouette_call& call : silhouette_entries(res, out, score)) {
+    const allocation_meter meter;
+    expect_refusals(
+        {{[&] { return call(x.view(), labels.view(), euclidean, chunk); },
+          "labels: expected at least 2 distinct labels, got 1"}});
+    const auto scratch =
+        static_cast<int64_t>(meter_rows * (sizeof(int32_t) * 3));
+    EXPECT_LE(meter.peak(), scratch + scratch_slack);
+  }
+  expect_untouched(out);
 }
 
 TEST(SilhouetteRefusals, LabelTableOverflow) {

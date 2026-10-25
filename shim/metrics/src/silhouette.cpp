@@ -16,12 +16,12 @@
 #include "cumlrkt/metrics.h"
 #include "cumlrkt/support.hpp"
 #include "labels.hpp"
+#include "norms.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 
 namespace {
 
-using cumlrkt::first_zero_row;
 using cumlrkt::guarded;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
@@ -34,6 +34,7 @@ using cumlrkt::rows_of;
 using cumlrkt::settle;
 using cumlrkt::metrics::dense_codes;
 using cumlrkt::metrics::dense_labels;
+using cumlrkt::metrics::first_normless_row;
 using cumlrkt::metrics::labels_of;
 using cumlrkt::metrics::most_distinct_labels;
 using cumlrkt::metrics::on_labels;
@@ -110,7 +111,7 @@ void require_rows(const matrix<T, int64_t>& x, DistanceType distance,
                   rmm::cuda_stream_view stream) {
   require_bounded_rows("X", x, stream);
   if (distance == DistanceType::CosineExpanded) {
-    const int64_t row = first_zero_row(x.data, x.n, x.d, stream);
+    const int64_t row = first_normless_row(x.data, x.n, x.d, stream);
     if (row >= 0) {
       throw logic_error(
           std::format("X: row {} is zero, so no cosine distance", row));
