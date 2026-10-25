@@ -28,6 +28,7 @@
          integer-fixture
          norm
          normal-fixture
+         orthonormality-bound
          tie-rows
          wide-fixture)
 
@@ -148,6 +149,9 @@
   (for/list ([a (in-list components)])
     (for/list ([b (in-list components)])
       (dot a b))))
+
+(define (orthonormality-bound solver d u)
+  (* (if (eq? solver 'jacobi) 8 4) d u))
 
 (define (first-max-entries components)
   (for/list ([c (in-list components)])

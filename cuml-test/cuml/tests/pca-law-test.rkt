@@ -18,6 +18,7 @@
                   host-gram
                   norm
                   normal-fixture
+                  orthonormality-bound
                   tie-rows
                   wide-fixture)
          (only-in "private/scaler-data.rkt" bits-equal? rows->matrix unit-roundoff))
@@ -97,7 +98,8 @@
       (define m (min n d))
       (check-true (andmap positive? (first-max-entries components)) "L3")
       (define off (max-abs-off-identity (host-gram components)))
-      (check-true (<= off (* 4 d u)) (format "L4: |CC^T - I| = ~a, ~a d u" off (/ off (* d u))))
+      (check-true (<= off (orthonormality-bound solver d u))
+                  (format "L4: |CC^T - I| = ~a, ~a d u" off (/ off (* d u))))
       (check-equal? (spectrum-problems lists n (length variance) m u) '() "L5"))))
 
 (test-gpu "L3: the tie fixture's components take the first entry of largest magnitude positive"

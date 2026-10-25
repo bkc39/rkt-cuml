@@ -120,7 +120,12 @@
 
 (define (l14-problems mine theirs bounds dt solver #:whiten [whiten #f])
   (match-define (ours fitted noise n-samples transform) mine)
-  (match-define (hash-table ('gaps gaps) ('total total) ('std std) ('row_norms row-norms)) bounds)
+  (match-define (hash-table ('gaps gaps)
+                            ('total total)
+                            ('std std)
+                            ('row_norms row-norms)
+                            ('explained_variance (and sk-variance (cons largest _))))
+    bounds)
   (match-define (hash-table ('components c-flat)
                             ('explained_variance variance)
                             ('explained_variance_ratio ratio)
@@ -132,7 +137,6 @@
   (define u (unit dt))
   (define d (length mean))
   (define k (length variance))
-  (match-define (cons largest _) (hash-ref bounds 'explained_variance))
   (define spread (* 64 u largest))
   (define components (rows-of c-flat d))
   (define signs
@@ -144,15 +148,22 @@
         (* 8 d u largest)
         spread))
   (define n (length row-norms))
+  (define mean-bounds
+    (for/list ([m-sk (in-list mean)]
+               [sd (in-list std)])
+      (* 8 u (log2-ceiling n) (+ (abs m-sk) sd))))
+  (define mean-error (norm mean-bounds))
   (filter
    values
    (append (list (and (not (= n-samples theirs-n)) (format "n-samples ~a vs ~a" n-samples theirs-n))
-                 (over-bound "noise" noise theirs-noise spread))
+                 (over-bound "noise" noise theirs-noise variance-bound))
            (for/list ([c (in-list (fitted-components fitted))]
                       [c-sk (in-list components)]
                       [s (in-list signs)]
                       [gap (in-list gaps)]
-                      [i (in-naturals)])
+                      [v-sk (in-list sk-variance)]
+                      [i (in-naturals)]
+                      #:unless (<= v-sk spread))
              (over-bound (format "component ~a" i)
                          (norm (map (lambda (a b) (- a (* s b))) c c-sk))
                          0.0
@@ -164,12 +175,12 @@
            (for/list ([r (in-list (fitted-ratio fitted))]
                       [r-sk (in-list ratio)]
                       [i (in-naturals)])
-             (over-bound (format "ratio ~a" i) r r-sk (/ spread total)))
+             (over-bound (format "ratio ~a" i) r r-sk (/ variance-bound total)))
            (for/list ([m (in-list (fitted-mean fitted))]
                       [m-sk (in-list mean)]
-                      [sd (in-list std)]
+                      [bound (in-list mean-bounds)]
                       [j (in-naturals)])
-             (over-bound (format "mean ~a" j) m m-sk (* 8 u (log2-ceiling n) (+ (abs m-sk) sd))))
+             (over-bound (format "mean ~a" j) m m-sk bound))
            (for*/list ([(row row-sk r) (in-parallel (in-list transform)
                                                     (in-list (rows-of t-flat k))
                                                     (in-list row-norms))]
@@ -180,7 +191,7 @@
                                                            (in-list variance)
                                                            (in-naturals))]
                        #:unless (and whiten (< v-sk (* 1e-3 largest))))
-             (define plain (* r (+ (/ spread gap) (* 4 d u))))
+             (define plain (+ (* r (+ (/ spread gap) (* 4 d u))) mean-error))
              (define bound
                (if whiten
                    (+ (/ plain (sqrt v-sk)) (* (abs t-sk) (/ variance-bound (* 2 v-sk))))

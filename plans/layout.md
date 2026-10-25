@@ -592,3 +592,8 @@ Follow-ups are GitHub issues.
   and distinct-row scans; preprocessing calls the shared code.
 - **A4-p.** `tol` crosses as `_double*`, so an exact real such as `0` or
   `-1` reaches the shim's check (the documented contract is `real?`).
+- **A4-q.** Four laws were amended against measurements (disputes D1–D4):
+  L4 allows 8·d·u for Jacobi (4·d·u full); Jacobi noise and ratio take the
+  Jacobi λ bound 8·d·u·λ₁; the L14 transform bound adds ‖e_μ‖₂, the mean
+  bound's norm, scaled as the whitened transform scales; and the component
+  check skips components with λᵢ ≤ 64·u·λ₁, which span the null space.
