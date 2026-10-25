@@ -123,7 +123,7 @@
 
   (test-case "the helpers' formals, keyword arguments, internal defines, loop and match variables are bindings"
     (define bindings (helper-bindings))
-    (for ([name (in-list '("crosstab" "labels" "type" "counts" "name" "column-values" "value"))])
+    (for ([name (in-list '("crosstab" "labels" "width" "counts" "name" "column-values" "value"))])
       (check-not-false (member name bindings) name)))
 
   (test-case "a helper's binding that links on the helpers' page is a finding, elsewhere it is not"

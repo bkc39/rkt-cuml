@@ -4,6 +4,7 @@
                      datasets/core
                      racket/base
                      racket/contract/base
+                     racket/list
                      raft))
 
 @(define ev (make-base-eval #:lang 'racket/base '(require cuml datasets/core racket/list raft)))
