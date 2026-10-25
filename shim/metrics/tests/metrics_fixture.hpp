@@ -39,8 +39,8 @@ inline std::string least_norm_message(const std::string& name, int64_t row,
 
 inline const std::string float_most = "4.253529586511731e+37";
 inline const std::string double_most = "2.247116418577895e+307";
-inline const std::string float_least = "1.1754943508222875e-38";
-inline const std::string double_least = "2.2250738585072014e-308";
+inline const std::string float_least = "2.350988701644575e-38";
+inline const std::string double_least = "4.450147717014403e-308";
 
 inline std::string gpu_unavailable_reason() {
   int32_t count = 0;

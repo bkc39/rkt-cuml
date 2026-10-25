@@ -19,11 +19,8 @@ Each procedure compares labels or scores samples on the GPU, on the same
 or @racket['int64] vectors, either one in each argument; only their values
 matter, so @racket[-1] (noise) is a label like any other.
 @racket[contingency-matrix] and @racket[adjusted-rand-score] take at most
-46340 distinct values in each argument. Their device memory grows as the
-square of the larger count K: about 8·K@superscript{2} bytes, plus
-8·k@subscript{1}·k@subscript{2} for the counts when a
-@racket[contingency-matrix]'s arguments hold different counts, so near the
-bound a call can run out of device memory.
+46340 distinct values in each argument and use up to about 16·K@superscript{2}
+bytes of device memory for the larger count K.
 
 @defstruct*[contingency-table ([counts device-matrix?]
                                [row-labels device-vector?]
@@ -72,11 +69,13 @@ cluster and b to the nearest other one; a sample alone in its cluster
 scores 0. @racket[labels] must hold from 2 to n − 1 distinct values.
 Distances are computed in tiles of @racket[chunk-size] rows, at most 46340;
 a smaller value uses less memory. Results can differ in the last bits from
-call to call. Every row must have a squared norm of at most
-2@superscript{125} as @racket['float32] or 2@superscript{1021} as
-@racket['float64]; under @racket['cosine], it must also be at least
-2@superscript{−126} as @racket['float32] or 2@superscript{−1022} as
-@racket['float64], summed in @racket[X]'s dtype.
+call to call. Each row's squared norm, summed in @racket[X]'s dtype, must
+be at most 2@superscript{125} (@racket['float32]) or 2@superscript{1021}
+(@racket['float64]), and under @racket['cosine] at least d·m for d
+columns, where m is the least normal number, 2@superscript{−126} or
+2@superscript{−1022}. Distances are computed in @racket[X]'s dtype, so data
+whose pairwise distances (squared, under @racket['sqeuclidean]) come near m
+lose precision; rescale it first.
 @examples[#:eval ev
 (define X (list*->device-matrix '((0 0) (0 1) (1 0) (10 10) (10 11) (11 10)) #:dtype 'float64))
 (define y (list->device-vector '(0 0 0 1 1 1) #:dtype 'int32))
@@ -92,8 +91,8 @@ call to call. Every row must have a squared norm of at most
                              [#:resources resources device-resources? (current-device-resources)])
          device-vector?]{
 Each sample's silhouette coefficient, in @racket[X]'s dtype; their mean
-is @racket[silhouette-score]. Each lies in [−1, 1], except that under
-@racket['cosine] rounding can carry one slightly past 1.
+is @racket[silhouette-score], whose bounds apply. Each lies in [−1, 1],
+except that under @racket['cosine] rounding can carry one slightly past 1.
 @examples[#:eval ev (device-vector->list (silhouette-samples X y))]}
 
 @defproc[(trustworthiness [X device-matrix?]
@@ -110,8 +109,10 @@ in the embedding are among its nearest in @racket[X], lower as the
 embedding brings in samples that were far. @racket[n-neighbors] must be
 less than half the rows. @racket[batch-size] rows of @racket[X] are
 ranked at a time; it changes memory, not the score. Every row of both
-must have a squared norm of at most 2@superscript{125}. Tied distances can
-score differently from other implementations.
+must have a squared norm of at most 2@superscript{125}, and data whose
+squared pairwise distances come near 2@superscript{−126} lose precision;
+rescale it first. Tied distances can score differently from other
+implementations.
 @examples[#:eval ev
 (define P
   (list*->device-matrix '((0 0 0) (0 1 3) (1 0 1) (3 2 0) (5 5 4) (5 6 1) (6 5 2) (7 7 7))

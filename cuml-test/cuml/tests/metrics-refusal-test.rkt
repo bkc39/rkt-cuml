@@ -7,13 +7,19 @@
                   silhouette-score
                   trustworthiness)
          (only-in racket/list make-list range)
-         (only-in racket/match match)
+         (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn test-case)
-         (only-in raft list*->device-matrix)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/metrics-data.rkt" labels-of)
+         (only-in "private/metrics-data.rkt"
+                  labels-of
+                  overlap
+                  overlap-labels
+                  shrunk
+                  wide-labels
+                  wide-rows)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define float-most "4.253529586511731e+37")
@@ -79,8 +85,8 @@
                           #:dtype dt))
   (define (cosine-message least got)
     (format "X: row 3: expected a squared norm of at least ~a under cosine, got ~a" least got))
-  (define float-least "1.1754943508222875e-38")
-  (define double-least "2.2250738585072014e-308")
+  (define float-least "2.350988701644575e-38")
+  (define double-least "4.450147717014403e-308")
   (list
    (row "S11" metric-message (lambda () (proc X two #:metric 'l2)))
    (row "S9" "chunk-size: expected at least 1, got 0" (lambda () (proc X two #:chunk-size 0)))
@@ -158,6 +164,25 @@
          [r (in-list (silhouette-rows proc))])
     (test-case (format "~a ~a" (object-name proc) (row-id r))
       (check-row (object-name proc) r))))
+
+(test-gpu "S13: under cosine, a squared norm under d times the least normal is refused, however wide"
+  (define narrow (device-matrix->list* (overlap 'float32 #:each 150)))
+  (define narrow-labels (overlap-labels #:each 150))
+  (define cases
+    (list (list "1.1754943508222875e-35" (wide-rows 1000) wide-labels 1.3e-38 'float32)
+          (list "8.900295434028806e-305" (wide-rows 4000) wide-labels 2.5e-308 'float64)
+          (list "5.877471754111438e-38" narrow narrow-labels 1.21e-38 'float32)
+          (list "1.1125369292536007e-307" narrow narrow-labels 2.25e-308 'float64)))
+  (for* ([c (in-list cases)]
+         [proc (in-list (list silhouette-score silhouette-samples))])
+    (match-define (list least rows ys squared dt) c)
+    (test-case (format "~a ~a ~a" (object-name proc) dt least)
+      (check-cuml-error
+       'logic
+       (regexp (format "^~a: X: row [0-9]+: expected a squared norm of at least ~a under cosine, got "
+                       (object-name proc)
+                       (regexp-quote least)))
+       (lambda () (proc (shrunk rows squared dt) (labels-of ys 'int32) #:metric 'cosine))))))
 
 (define (trust-rows)
   (define X (distinct-rows 100))

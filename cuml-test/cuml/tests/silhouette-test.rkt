@@ -8,14 +8,20 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/metrics-data.rkt"
                   bijection
+                  four-blocks
+                  four-blocks-labels
                   labels-of
                   mean
                   monotone-maps
                   overlap
                   overlap-labels
+                  scaled
+                  shrunk
                   three-groups
                   three-groups-labels
                   tolerance
+                  wide-labels
+                  wide-rows
                   worst))
 
 (define metrics '(euclidean sqeuclidean manhattan cosine chebyshev))
@@ -67,26 +73,24 @@
                   (<= (abs x) (+ 1 slack)))
                 (format "~a: largest |sample| ~a" dt (apply max (map abs s))))))
 
-(define (scaled rows factor dt)
-  (list*->device-matrix (for/list ([r (in-list rows)])
-                          (for/list ([x (in-list r)])
-                            (* factor x)))
-                        #:dtype dt))
-
-(define (smallest-squared-norm rows)
-  (for/fold ([m +inf.0]) ([r (in-list rows)])
-    (min m (for/sum ([x (in-list r)]) (* x x)))))
-
-(test-gpu "S13: under cosine, a smallest row just past the least normal squared norm is accepted"
+(test-gpu "S13: under cosine, wide rows just past d times the least normal squared norm are accepted"
+  (define d 1000)
+  (define rows (wide-rows d))
   (for ([dt (in-list float-dtypes)]
-        [least (in-list '(1.1e-19 1.5e-154))]
-        [up (in-list (list (expt 2.0 63) (expt 2.0 510)))])
-    (define-values (X ys) (fixture dt))
-    (define rows (device-matrix->list* X))
-    (define small (scaled rows (/ least (sqrt (smallest-squared-norm rows))) dt))
+        [least (in-list (list (expt 2.0 -126) (expt 2.0 -1022)))]
+        [up (in-list (list (expt 2.0 58) (expt 2.0 506)))])
+    (define small (shrunk rows (* 1.1 d least) dt))
     (define unit (scaled (device-matrix->list* small) up dt))
-    (check-true (<= (worst (samples small ys #:metric 'cosine) (samples unit ys #:metric 'cosine))
+    (check-true (<= (worst (samples small wide-labels #:metric 'cosine)
+                           (samples unit wide-labels #:metric 'cosine))
                     (tolerance 'sample dt)))))
+
+(test-gpu "upstream cuVS: float32 sqeuclidean distances underflow at scale 1e-19 (upstream fixed if this fails: drop the doc caveat)"
+  (define (at factor)
+    (samples (scaled four-blocks factor 'float32) four-blocks-labels #:metric 'sqeuclidean))
+  (define base (at 1))
+  (define tiny (at 1e-19))
+  (check-true (> (worst tiny base) 0.1) (format "worst |diff| ~a" (worst tiny base))))
 
 (test-gpu "SL2: a sample alone in its cluster scores exactly 0.0"
   (for ([dt (in-list float-dtypes)])

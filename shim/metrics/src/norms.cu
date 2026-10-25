@@ -5,7 +5,6 @@
 #include <thrust/transform_reduce.h>
 
 #include <cstdint>
-#include <cuda/std/limits>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/exec_policy.hpp>
 #include <utility>
@@ -32,9 +31,11 @@ struct squared_norm {
 };
 
 template <typename T>
-struct subnormal {
+struct below {
+  T least;
+
   __device__ bool operator()(T sum) const {
-    return !(sum >= cuda::std::numeric_limits<T>::min());
+    return !(sum >= least);
   }
 };
 
@@ -42,12 +43,13 @@ struct subnormal {
 
 template <typename T>
 std::pair<int64_t, T> first_normless_row(const T* x, int64_t n, int64_t d,
+                                         T least,
                                          rmm::cuda_stream_view stream) {
   const thrust::counting_iterator<int64_t> rows(0);
   const squared_norm<T> norm{x, d};
   const auto norms = thrust::make_transform_iterator(rows, norm);
   const int64_t i = thrust::find_if(rmm::exec_policy(stream), norms, norms + n,
-                                    subnormal<T>{}) -
+                                    below<T>{least}) -
                     norms;
   if (i == n) {
     return {-1, T{0}};
@@ -59,8 +61,8 @@ std::pair<int64_t, T> first_normless_row(const T* x, int64_t n, int64_t d,
 }
 
 template std::pair<int64_t, float> first_normless_row<float>(
-    const float*, int64_t, int64_t, rmm::cuda_stream_view);
+    const float*, int64_t, int64_t, float, rmm::cuda_stream_view);
 template std::pair<int64_t, double> first_normless_row<double>(
-    const double*, int64_t, int64_t, rmm::cuda_stream_view);
+    const double*, int64_t, int64_t, double, rmm::cuda_stream_view);
 
 }  // namespace cumlrkt::metrics

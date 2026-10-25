@@ -1,13 +1,15 @@
 #lang racket/base
 
-(require (only-in racket/list remove-duplicates)
+(require (only-in racket/list make-list remove-duplicates)
          (only-in racket/match match-define)
          (only-in racket/math pi)
-         (only-in racket/sequence in-slice)
+         (only-in racket/sequence in-slice sequence->list)
          (only-in raft list*->device-matrix list->device-vector))
 
 (provide bijection
          choose2
+         four-blocks
+         four-blocks-labels
          host-ari
          host-counts
          label-pair
@@ -21,10 +23,14 @@
          permute
          projection
          random-permutation
+         scaled
+         shrunk
          sorted-distinct
          three-groups
          three-groups-labels
          tolerance
+         wide-labels
+         wide-rows
          worst
          grid-20)
 
@@ -67,8 +73,7 @@
        (loop (- left 2) (list* (* r (sin (* 2.0 pi v))) (* r (cos (* 2.0 pi v))) acc))])))
 
 (define (rows-of xs d)
-  (for/list ([row (in-slice d xs)])
-    row))
+  (sequence->list (in-slice d xs)))
 
 (define (normal-rows n d seed)
   (rows-of (normals (* n d) seed) d))
@@ -91,6 +96,44 @@
   (for*/list ([c (in-range overlap-k)]
               [_ (in-range each)])
     (+ c overlap-offset)))
+
+(define wide-each 15)
+
+(define (wide-rows d #:seed [seed 7])
+  (define g (seeded seed))
+  (for/list ([i (in-range (* 2 wide-each))])
+    (for/list ([j (in-range d)])
+      (define x (+ 0.5 (random g)))
+      (if (or (< i wide-each) (even? j))
+          x
+          (* 0.3 x)))))
+
+(define wide-labels (append (make-list wide-each 0) (make-list wide-each 1)))
+
+(define four-blocks
+  (let ([g (seeded 11)])
+    (for*/list ([c (in-range 4)]
+                [_ (in-range 50)])
+      (for/list ([_ (in-range 5)])
+        (+ (random g) (* 2.0 c))))))
+
+(define four-blocks-labels
+  (for*/list ([c (in-range 4)]
+              [_ (in-range 50)])
+    c))
+
+(define (scaled rows factor dt)
+  (list*->device-matrix (for/list ([r (in-list rows)])
+                          (for/list ([x (in-list r)])
+                            (* factor x)))
+                        #:dtype dt))
+
+(define (smallest-squared-norm rows)
+  (for/fold ([m +inf.0]) ([r (in-list rows)])
+    (min m (for/sum ([x (in-list r)]) (* x x)))))
+
+(define (shrunk rows squared dt)
+  (scaled rows (sqrt (/ squared (smallest-squared-norm rows))) dt))
 
 (define three-groups '((0 0) (0 1) (1 0) (1 1) (6 6) (6 7) (7 6) (12 0) (12 1) (13 0)))
 (define three-groups-labels '(0 0 0 0 1 1 1 2 2 2))
@@ -120,10 +163,10 @@
 
 (define (bijection xs)
   (define distinct (sorted-distinct xs))
-  (define reversed (reverse distinct))
+  (match-define (cons top rest) (reverse distinct))
   (define table
     (for/hash ([from (in-list distinct)]
-               [to (in-list (append (cdr reversed) (list (car reversed))))])
+               [to (in-list (append rest (list top)))])
       (values from to)))
   (lambda (x) (hash-ref table x)))
 

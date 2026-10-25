@@ -113,12 +113,14 @@ void require_rows(const matrix<T, int64_t>& x, DistanceType distance,
                   rmm::cuda_stream_view stream) {
   require_bounded_rows("X", x, stream);
   if (distance == DistanceType::CosineExpanded) {
-    const auto [row, squared] = first_normless_row(x.data, x.n, x.d, stream);
+    const T least = static_cast<T>(x.d) * std::numeric_limits<T>::min();
+    const auto [row, squared] =
+        first_normless_row(x.data, x.n, x.d, least, stream);
     if (row >= 0) {
       throw logic_error(std::format(
           "X: row {}: expected a squared norm of at least {} under cosine, "
           "got {}",
-          row, printed(std::numeric_limits<T>::min()), printed<T>(squared)));
+          row, printed(least), printed<T>(squared)));
     }
   }
 }
