@@ -24,19 +24,16 @@
                   score
                   single-linkage-fit
                   spectral-clustering
+                  standard-scaler-fit-transform
                   table->device-matrix)
          (only-in cuml/scribblings/guide/helpers
                   agreement
                   crosstab
                   dataset-column
-                  dataset-columns
                   features
                   labels-of
-                  rows
                   rows->matrix
-                  sizes
-                  standardized
-                  standardized-matrix)
+                  sizes)
          (only-in cuml/scribblings/guide/source page-helpers-source)
          (only-in datasets/core load-dataset-table)
          (only-in pkg/lib pkg-directory)
@@ -54,6 +51,7 @@
                   check-pred
                   test-case)
          (only-in raft
+                  device-matrix->list*
                   device-resources
                   device-vector->list
                   dtype
@@ -66,6 +64,11 @@
          (only-in "private/cuml-error.rkt" check-cuml-error))
 
 (define-namespace-anchor anchor)
+
+(define (scaled-matrix name columns)
+  (define-values (_fitted scaled)
+    (~> (load-dataset-table name) (table->device-matrix #:columns columns) standard-scaler-fit-transform))
+  scaled)
 
 (test-case "the page's require alone, in a racket/base module, expands the page's helpers and runs a threaded example"
   (define-values (shown-require shown-helpers) (page-helpers-source))
@@ -104,7 +107,7 @@
   (regexp-replace* #px"\\s+" (file->string path) " "))
 
 (define dataset-use
-  #px"\\((?:load-dataset-table|dataset-columns?|standardized-matrix|features) '([a-z-]+)")
+  #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
 (define (chapter-datasets chapter)
   (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))
@@ -136,12 +139,6 @@
   (check-equal? (agreement (crosstab labels classes)) 4)
   (check-equal? (sizes '(-1 0 0 1 -1)) '(2 1))
   (check-equal? (sizes '("B" "M" "B")) '(2 1)))
-
-(test-case "standardized leaves a constant column at 0 and refuses a non-numeric one"
-  (check-equal? (standardized '((2 2) (1 3))) '((0.0 0.0) (-1.0 1.0)))
-  (check-equal? (standardized '((2.5 2.5 2.5))) '((0.0 0.0 0.0)))
-  (check-exn #rx"^standardized: contract violation\n  expected: real[?]\n  given: \"Iris-setosa\""
-             (lambda () (standardized (dataset-columns 'iris '("sepal-length" "species"))))))
 
 (define measurements '("sepal-length" "sepal-width" "petal-length" "petal-width"))
 
@@ -264,7 +261,7 @@
   (check-equal?
    (~> (load-dataset-table 'wine) (table->device-matrix #:columns '("proline")) cultivar-table)
    raw-table)
-  (define scaled (standardized-matrix 'wine wine-measurements))
+  (define scaled (scaled-matrix 'wine wine-measurements))
   (define scaled-table (cultivar-table scaled))
   (check-equal? scaled-table '((59 5 0) (0 63 0) (0 3 48)))
   (check-equal? (agreement scaled-table) 170)
@@ -274,17 +271,16 @@
   (check-equal? scores '(-2314 -1659 -1278 -1176 -1102 -1053)))
 
 (define (eruptions)
-  (standardized-matrix 'faithful '("eruptions" "waiting")))
+  (scaled-matrix 'faithful '("eruptions" "waiting")))
 
 (test-gpu "the guide: HDBSCAN finds the two eruption groups with no eps to choose"
   (define labels (labels-of (hdbscan) (eruptions)))
   (check-equal? (sizes labels) '(174 94))
   (check-equal? (count negative? labels) 4)
-  (define standardized-rows
-    (rows (standardized (dataset-columns 'faithful '("eruptions" "waiting")))))
+  (define scaled (device-matrix->list* (eruptions)))
   (define predicted
-    (~> (hdbscan-fit (rows->matrix (take standardized-rows 200)))
-        (hdbscan-approximate-predict (rows->matrix (drop standardized-rows 200)))
+    (~> (hdbscan-fit (rows->matrix (take scaled 200)))
+        (hdbscan-approximate-predict (rows->matrix (drop scaled 200)))
         hdbscan-prediction-labels
         device-vector->list))
   (check-equal? (count negative? predicted) 2)
@@ -321,7 +317,7 @@
 (test-gpu "the guide: spectral clustering beats k-means on the tumours"
   (check-equal? (length tumour-measurements) 30)
   (check-equal? (sizes diagnosis) '(357 212))
-  (define tumours (standardized-matrix 'breast-cancer tumour-measurements))
+  (define tumours (scaled-matrix 'breast-cancer tumour-measurements))
   (define (table-of estimator)
     (crosstab (labels-of estimator tumours) diagnosis))
   (define kmeans-table (table-of (kmeans #:n-clusters 2)))

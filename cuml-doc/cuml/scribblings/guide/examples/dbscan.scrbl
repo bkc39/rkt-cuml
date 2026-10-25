@@ -22,7 +22,10 @@ groups, with a few eruptions between. The two columns differ in range, so
 standardize them:
 
 @examples[#:eval ev #:label #f
-(define eruptions (standardized-matrix 'faithful '("eruptions" "waiting")))
+(define-values (faithful-scaler eruptions)
+  (~> (load-dataset-table 'faithful)
+      (table->device-matrix #:columns '("eruptions" "waiting"))
+      standard-scaler-fit-transform))
 (shape eruptions)
 ]
 

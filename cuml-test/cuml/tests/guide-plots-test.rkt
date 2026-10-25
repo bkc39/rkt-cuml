@@ -10,6 +10,7 @@
                   kmeans-model
                   kmeans-result-labels
                   spectral-clustering
+                  standard-scaler-fit-transform
                   table->device-matrix)
          (only-in cuml/scribblings/guide/helpers
                   class-figure
@@ -24,7 +25,6 @@
                   matched-labels
                   renumbered
                   sizes
-                  standardized-matrix
                   sweep-figure)
          (only-in datasets/core load-dataset-table)
          (only-in pict pict->bitmap pict-height pict-width pict?)
@@ -48,6 +48,11 @@
 (match-define (list* blue orange _) cluster-colors)
 
 (define ink '(11 11 11))
+
+(define (scaled-matrix name columns)
+  (define-values (_fitted scaled)
+    (~> (load-dataset-table name) (table->device-matrix #:columns columns) standard-scaler-fit-transform))
+  scaled)
 
 (define (pixels picture)
   (define bitmap (pict->bitmap picture))
@@ -255,7 +260,7 @@
     (mismatches (clusters-of (kmeans #:n-clusters 3) wines cultivar) cultivar))
   (check-equal? (remove-duplicates cultivar) '("1" "2" "3"))
   (check-equal? (misplaced raw-wines) 53)
-  (check-equal? (misplaced (standardized-matrix 'wine measurements)) 8)
+  (check-equal? (misplaced (scaled-matrix 'wine measurements)) 8)
   (define raw (clusters-of (kmeans #:n-clusters 3) raw-wines cultivar))
   (define proline (dataset-column 'wine "proline"))
   (define bands
@@ -272,7 +277,7 @@
                 (< (second band) (first next)))))
 
 (test-gpu "the figures: DBSCAN's groups keep their numbers across the radii"
-  (define eruptions (standardized-matrix 'faithful '("eruptions" "waiting")))
+  (define eruptions (scaled-matrix 'faithful '("eruptions" "waiting")))
   (define fits
     (for/list ([eps (in-list '(0.1 0.2 0.3 0.5))])
       (dbscan-fit eruptions #:eps eps #:min-samples 5)))
@@ -309,7 +314,7 @@
 
 (test-gpu "the figures: the tumour clusters differ from the diagnosis on 54 and 36 tumours"
   (define diagnosis (dataset-column 'breast-cancer "diagnosis"))
-  (define tumours (standardized-matrix 'breast-cancer (features 'breast-cancer "diagnosis" "id")))
+  (define tumours (scaled-matrix 'breast-cancer (features 'breast-cancer "diagnosis" "id")))
   (define radius (dataset-column 'breast-cancer "radius-worst"))
   (define truth (renumbered diagnosis))
   (define (radii id)

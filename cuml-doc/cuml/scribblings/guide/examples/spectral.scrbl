@@ -23,7 +23,10 @@ the rest:
 @examples[#:eval ev #:label #f
 (define diagnosis (dataset-column 'breast-cancer "diagnosis"))
 (sizes diagnosis)
-(define tumours (standardized-matrix 'breast-cancer (features 'breast-cancer "diagnosis" "id")))
+(define-values (tumour-scaler tumours)
+  (~> (load-dataset-table 'breast-cancer)
+      (table->device-matrix #:columns (features 'breast-cancer "diagnosis" "id"))
+      standard-scaler-fit-transform))
 ]
 
 @section[#:tag "ex-spectral-fit"]{Against k-means}

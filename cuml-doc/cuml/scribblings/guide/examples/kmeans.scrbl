@@ -54,11 +54,12 @@ finds the same clusters.
 
 @section[#:tag "ex-kmeans-standardized"]{Standardized measurements}
 
-With each column rescaled to standard deviation 1, every measurement counts
-alike:
+With each column rescaled by @racket[standard-scaler-fit-transform] to mean 0
+and standard deviation 1, every measurement counts alike:
 
 @examples[#:eval ev #:label #f
-(define scaled (standardized-matrix 'wine measurements))
+(define-values (wine-scaler scaled)
+  (standard-scaler-fit-transform (table->device-matrix wine #:columns measurements)))
 (define scaled-table (table-of scaled))
 scaled-table
 (agreement scaled-table)
