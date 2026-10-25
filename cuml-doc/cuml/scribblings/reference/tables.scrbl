@@ -42,3 +42,5 @@ the column and the row (counting from 0), for
 (eval:error (table->device-matrix (load-dataset-table 'iris)))
 (eval:error (table->device-matrix (load-dataset-table 'airquality) #:columns '("ozone")))
 ]}
+
+@(close-eval ev)

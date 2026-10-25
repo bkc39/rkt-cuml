@@ -5,7 +5,7 @@
 This library binds @hyperlink["https://github.com/rapidsai/cuml"]{NVIDIA
 cuML}, the RAPIDS library of machine-learning algorithms on the GPU: k-means,
 DBSCAN, single-linkage and spectral clustering, with a scikit-learn-style
-estimator interface, and copies @tt{datasets-core} tables to the GPU. It
+estimator interface, and copies @racketmodname[datasets/core] tables to the GPU. It
 works on the device arrays and device resources of @racketmodname[raft].
 
 This manual has two parts: the @secref["guide"] works through the library on

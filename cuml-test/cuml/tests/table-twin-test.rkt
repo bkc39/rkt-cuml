@@ -59,5 +59,5 @@
     (define ours
       (device-matrix->list* (table->device-matrix t #:columns columns #:dtype element-type)))
     (check-equal? (list (cells unsigned ours) (cells sign ours))
-                  (list (hash-ref their 'rows) (hash-ref their 'signs))
+                  (list (cells unsigned (hash-ref their 'rows)) (hash-ref their 'signs))
                   name)))

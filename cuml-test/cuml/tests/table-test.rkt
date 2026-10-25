@@ -59,6 +59,14 @@
     (define M (table->device-matrix (synthetic-table '("a" "b") '(() ())) #:dtype element-type))
     (check-equal? (list (shape M) (dtype M)) (list '(0 2) element-type))))
 
+(test-gpu "L1c: a matrix as wide as the table"
+  (check-equal? (~> (range 40)
+                    (map number->string _)
+                    (synthetic-table (build-list 40 (lambda (i) (list i (- i)))))
+                    table->device-matrix
+                    shape)
+                '(2 40)))
+
 (test-gpu "L2: float64 round-trips every numeric selection and the edge values exactly"
   (for ([s (in-list (numeric-selections))])
     (match-define (selection name t columns) s)
@@ -106,10 +114,10 @@
 (test-gpu "L4a: a permuted selection permutes the columns of every row"
   (for ([s (in-list (numeric-selections))])
     (match-define (selection name t columns) s)
+    (define by-column (~> (matrix-of s 'float64) device-matrix->list* (apply map list _)))
     (define by-name
       (for/hash ([column (in-list columns)]
-                 [values-of
-                  (in-list (~> (matrix-of s 'float64) device-matrix->list* (apply map list _)))])
+                 [values-of (in-list by-column)])
         (values column values-of)))
     (for ([permuted (in-list (cons (reverse columns) (rotations columns)))])
       (define expected (apply map list (map (lambda (column) (hash-ref by-name column)) permuted)))
@@ -183,11 +191,3 @@
     (match-define (selection name t _) s)
     (matrix-of s 'float32)
     (check-equal? t (load-dataset-table name) (format "~a" name))))
-
-(test-gpu "L1c: a matrix as wide as the table"
-  (check-equal? (~> (range 40)
-                    (map number->string _)
-                    (synthetic-table (build-list 40 (lambda (i) (list i (- i)))))
-                    table->device-matrix
-                    shape)
-                '(2 40)))
