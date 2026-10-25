@@ -6,7 +6,7 @@
          (only-in "private/pca-data.rkt" fixture-name)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows-of)
-         (only-in "private/tsvd-data.rkt" accuracy-problems exact-reference)
+         (only-in "private/tsvd-data.rkt" accuracy-problems exact-reference sign-matched tie-fixture)
          (only-in "private/tsvd-twin-data.rkt"
                   ours
                   theirs-reference
@@ -15,6 +15,11 @@
                   twin-results))
 
 (define dtypes '(float32 float64))
+
+(define (compared f ref fitted)
+  (if (eq? f tie-fixture)
+      (sign-matched ref fitted)
+      ref))
 
 (define (first-problems problems)
   (for/list ([p (in-list problems)]
@@ -41,14 +46,16 @@
       (define d (length first-row))
       (match-define (hash-table ('singular_values spectrum) ('components components)) exact)
       (check-equal?
-       (first-problems (accuracy-problems fitted
-                                          (exact-reference rows spectrum (rows-of components d) k)
-                                          rows
-                                          dt
-                                          (if (eq? solver 'jacobi) 256 64)))
+       (first-problems (accuracy-problems
+                        fitted
+                        (compared f (exact-reference rows spectrum (rows-of components d) k) fitted)
+                        rows
+                        dt
+                        (if (eq? solver 'jacobi) 256 64)))
        '()
        "L8")
       (check-equal?
-       (first-problems (accuracy-problems fitted (theirs-reference sklearn exact d) rows dt 128))
+       (first-problems
+        (accuracy-problems fitted (compared f (theirs-reference sklearn exact d) fitted) rows dt 128))
        '()
        "L9"))))

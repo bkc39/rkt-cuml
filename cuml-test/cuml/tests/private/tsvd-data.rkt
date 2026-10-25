@@ -24,6 +24,7 @@
          normal-rows-of
          offset-fixture
          popvars
+         sign-matched
          squared-norm
          tie-fixture
          tsvd-of
@@ -145,6 +146,17 @@
              (map (lambda (v) (/ v total)) variance)
              (take spectrum k)
              (take (gaps (map (lambda (s) (* s s)) spectrum)) k)))
+
+(define (sign-matched ref got)
+  (struct-copy reference
+               ref
+               [components
+                (map (lambda (row-ref row)
+                       (if (negative? (dot row-ref row))
+                           (map - row-ref)
+                           row-ref))
+                     (reference-components ref)
+                     (svd-components got))]))
 
 (define (over what got want bound)
   (and (> (abs (- got want)) bound) (format "~a: ~a vs ~a, bound ~a" what got want bound)))
