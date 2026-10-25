@@ -58,7 +58,7 @@
                                                "preprocessing.scrbl"
                                                "decomposition.scrbl"
                                                "estimators.scrbl"
-                                               "tsvd-estimator.scrbl"))))
+                                               "decomposition-estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
