@@ -5,6 +5,7 @@
          (only-in racket/match match-define)
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
+         (only-in threading ~>)
          (only-in "private/pca-data.rkt" fitted-variance)
          (only-in "private/pca-twin-data.rkt"
                   fit-ours
@@ -17,8 +18,7 @@
                   twin-results
                   twin-rows)
          (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff)
-         (only-in threading ~>))
+         (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff))
 
 (test-twin "L15: the departures from cuML-Python are pinned"
   (define wide (named "wide"))

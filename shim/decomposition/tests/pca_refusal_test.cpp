@@ -29,6 +29,10 @@ constexpr int32_t no_solver = 2;
 constexpr double past_float = 1e39;
 constexpr double large = 1e19;
 constexpr double huge = 1e38;
+constexpr double past_whitened = 1e300;
+constexpr float past_whitened_float = 1e36F;
+constexpr float wide_spread = 0.001F;
+constexpr float narrow_spread = 0.0005F;
 constexpr double margin = 4.0;
 constexpr std::size_t spread_modulus = 11;
 
@@ -387,9 +391,11 @@ void expect_whitened_transform_bound(const std::vector<T>& fit_rows, T value,
 
 TEST(PcaTransformRefusals, WhiteningScalesTheMagnitudeBound) {
   CUMLRKT_REQUIRE_GPU();
-  expect_whitened_transform_bound<double>({0, 3, 1, 3, 2, 3, -1, 3}, 1e300, 1);
+  expect_whitened_transform_bound<double>({0, 3, 1, 3, 2, 3, -1, 3},
+                                          past_whitened, 1);
   expect_whitened_transform_bound<float>(
-      {0.001F, 0, -0.001F, 0, 0, 0.0005F, 0, -0.0005F}, 1e36F, 0);
+      {wide_spread, 0, -wide_spread, 0, 0, narrow_spread, 0, -narrow_spread},
+      past_whitened_float, 0);
 }
 
 }  // namespace

@@ -6,6 +6,7 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/pca-data.rkt"
                   column
                   constant-column
@@ -24,8 +25,7 @@
                   normal-fixture
                   wide-fixture)
          (only-in "private/program.rkt" run-program)
-         (only-in "private/scaler-data.rkt" bits-equal? round-to rows->matrix unit-roundoff)
-         (only-in threading ~>))
+         (only-in "private/scaler-data.rkt" bits-equal? round-to rows->matrix unit-roundoff))
 
 (define dtypes '(float32 float64))
 

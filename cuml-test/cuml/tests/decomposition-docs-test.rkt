@@ -11,12 +11,12 @@
                   pca-result-noise-variance
                   pca-result-singular-values
                   pca-transform)
-         (only-in racket/match match match-define)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in threading ~>))
+         (only-in threading ~>)
+         (only-in "private/cuml-error.rkt" check-cuml-error raised))
 
 (define axes '((4 0) (-4 0) (0 1) (0 -1) (0 0)))
 (define exact-axes '((4.0 0.0) (-4.0 0.0) (0.0 1.0) (0.0 -1.0) (0.0 0.0)))
@@ -74,8 +74,8 @@
   (check-cuml-error 'logic "transform: pca is not fitted" (lambda () (transform (pca) (X)))))
 
 (define (refused-bound thunk)
-  (match (regexp-match #rx"at most ([^,]+), got" (exn-message (raised thunk)))
-    [(list _ bound) (string->number bound)]))
+  (match-define (list _ bound) (regexp-match #rx"at most ([^,]+), got" (exn-message (raised thunk))))
+  (string->number bound))
 
 (test-gpu "the manual: the documented bounds are the refused ones"
   (define most 1.7976931348623157e308)
@@ -85,7 +85,8 @@
   (for ([c (in-list
             (list (list "fit"
                         (sqrt (/ most (* 4 2 2)))
-                        (lambda () (pca-fit (list*->device-matrix '((1e308 0) (0 0)) #:dtype 'float64))))
+                        (lambda ()
+                          (pca-fit (list*->device-matrix '((1e308 0) (0 0)) #:dtype 'float64))))
                   (list "tol" 3.4028234663852886e+38 (lambda () (pca-fit (X) #:tol 1e39)))
                   (list "transform" (/ most (* 4 2)) (lambda () (pca-transform plain huge)))
                   (list "whitened transform"

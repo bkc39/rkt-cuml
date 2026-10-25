@@ -11,6 +11,7 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
+         (only-in "metrics-data.rkt" rows-of)
          (only-in "pca-data.rkt"
                   fitted-components
                   fitted-mean
@@ -22,7 +23,6 @@
                   fixture-rows
                   fixtures
                   norm)
-         (only-in "metrics-data.rkt" rows-of)
          (only-in "python-env.rkt" run-twin)
          (only-in "scaler-data.rkt" rows->matrix unit-roundoff))
 
