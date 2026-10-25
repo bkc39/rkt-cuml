@@ -56,6 +56,18 @@
             "column \"n\": row 1: expected a value float64 holds exactly, got 9007199254740993"
             (synthetic-table '("n") (list (list (expt 2 53) (add1 (expt 2 53)))))
             #:dtype 'float64)
+   (refusal "T12c"
+            "column \"x\": row 0: expected a value float32 holds exactly, got 1/3"
+            (synthetic-table '("x") '((1/3))))
+   (refusal "T12d"
+            (string-append "column \"x\": row 0: expected a value float32 holds exactly, got "
+                           "340282366920938463463374607431768211456")
+            (synthetic-table '("x") (list (list (expt 2 128)))))
+   (refusal "T12e"
+            (format "column \"x\": row 0: expected a value float64 holds exactly, got ~a"
+                    (expt 10 400))
+            (synthetic-table '("x") (list (list (expt 10 400))))
+            #:dtype 'float64)
    (refusal "T13"
             "column \"x\": row 0: expected a value within float32's range, got 1e+39"
             (synthetic-table '("x") '((1e39))))
@@ -86,5 +98,4 @@
     (drain-finalizers!)
     (define before (probe-pool-used device))
     (check-row "table->device-matrix" r)
-    (drain-finalizers!)
     (check-equal? (probe-pool-used device) before (row-id r))))
