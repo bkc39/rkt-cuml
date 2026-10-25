@@ -10,8 +10,9 @@ Racket bindings to NVIDIA cuML (RAPIDS 26.08), built on
 arrays, resources and jobs, and its errors are raft's. cuML is GPU-only.
 Scope: clustering (k-means, DBSCAN, single-linkage agglomerative,
 spectral, HDBSCAN) and metrics (contingency, adjusted Rand, silhouette,
-trustworthiness), preprocessing (standard scaling) and decomposition
-(PCA); epic #53 adds the rest of decomposition and manifold. `plans/layout.md` holds the owner's decisions;
+trustworthiness), preprocessing (standard scaling), decomposition
+(PCA) and manifold (UMAP); epic #53 adds the rest of decomposition and
+manifold. `plans/layout.md` holds the owner's decisions;
 `plans/starting-notes.md` what rkt-raft established.
 
 ## Layout
@@ -26,6 +27,7 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-metrics-lib/` | cuml-metrics-lib | `cuml/metrics` (`contingency-matrix` and its `contingency-table`, `adjusted-rand-score`, `silhouette-score`, `silhouette-samples`, `trustworthiness`), `cuml/metrics/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_metrics.so`) |
 | `cuml-preprocessing-lib/` | cuml-preprocessing-lib | `cuml/preprocessing` (`standard-scaler-params`, `standard-scaler-fit`, `standard-scaler-transform`, `standard-scaler-inverse-transform`, `standard-scaler-fit-transform`, and the `standard-scaler-result` struct), `cuml/preprocessing/private/` (the bodies, their `/who` forms, the private `current-scratch-elements`, and the loader of `libcumlrkt_preprocessing.so`) |
 | `cuml-decomposition-lib/` | cuml-decomposition-lib | `cuml/decomposition` (`pca-params`, `pca-fit`, `pca-transform`, `pca-inverse-transform`, `pca-fit-transform`, and the `pca-result` struct), `cuml/decomposition/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_decomposition.so`) |
+| `cuml-manifold-lib/` | cuml-manifold-lib | `cuml/manifold` (`umap-params`, `umap-fit`, `umap-transform`, `umap-fit-transform`, and the `umap-result` struct), `cuml/manifold/private/` (the bodies, their `/who` forms, `curve.rkt`'s a, b fit, and the loader of `libcumlrkt_manifold.so`) |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
@@ -317,12 +319,12 @@ replace each when raft offers a public form:
 |---|---|---|
 | `raft/private/array` | `buffer->device-array`, `device-array-buffer` (a strided view) | `private/scaler-data` |
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
-| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test` |
-| `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `table-refusal-test`, `private/process-memory` |
-| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `table-refusal-test` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test`, `umap-memory-test` |
+| `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test`, `umap-memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `umap-memory-test`, `umap-refusal-test`, `table-refusal-test`, `private/process-memory` |
+| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `umap-refusal-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*` and `pca-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*` and `umap-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -339,18 +341,19 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `refusal-rows` | the refusal tables' `row` struct (id, message, call), `check-row name row`, and the squared-norm cases' `with-row` and `norm-message` |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back; `printed v` (its `~a`, `~s` and `~v` forms); `listed v` (a device vector or matrix as host lists, `#f` as is) |
 | `hdbscan-data` | the HDBSCAN fixtures (`dataset` by name from `dataset-names`, the seed-0 numpy normals in `normals-0.rktd` behind b50, b10 and one-blob, `dup`), `fitted-of` and `fit-lists` (a fit as host lists in a `fitted` struct), `same-fit?` and `persistence-close?` (equal but for persistence within 1e-5), and the host oracles `structure-problems` and `descent-problems` |
-| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`, `hdbscan-refusal-test`, `hdbscan-law-test`, `table-test`, `load-test`, `pca-transform-law-test`) |
+| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`, `hdbscan-refusal-test`, `hdbscan-law-test`, `table-test`, `load-test`, `pca-transform-law-test`, `umap-determinism-test`) |
 | `table-data` | `synthetic-table names columns` (a `dataset-table` built by reflection: datasets-core has no public constructor, so this depends on its struct staying `#:transparent`), `numeric-selections` (each bundled dataset with its all-real columns, as `selection` structs), `host-rows`, and the edge values `edge-table` (float64) and `edge-table32` |
 | `metrics-data` | the metrics fixtures (seeded `labels` and `label-pair`, `labels-of`, the `overlap` blobs and their `overlap-labels`, `three-groups`, the tie-free `projection`, `grid-20`), the relabellings (`monotone-maps`, `bijection`), `permute` and `random-permutation`, `rows-of` (a flat list in rows of a width), and the host oracles `sorted-distinct` and `host-counts` |
 | `pca-data` | the PCA fixtures (`fixtures`, each a `fixture` of a name and float64 rows, among them `normal-fixture`, `integer-fixture` and `wide-fixture`; `fixture-rows` and `fixture-matrix` narrow to a dtype, optionally keeping the first rows; `axis-rows`, `tie-rows`, `constant-column`, `duplicate-rows`), `fitted-of` (a result's arrays as host lists in a `fitted` struct), `dot`, `norm`, `column`, `gaps`, `first-max-entries`, `orthonormality-bound` (L4: 4·d·u full, 8·d·u Jacobi), and the host oracles `host-project`, `host-reconstruct` and `host-gram` |
 | `pca-twin-data` | the PCA twin's fixture payload (`twin-rows`, at most 40k elements; `twin-key`, `twin-ks`, `twin-case`, `twin-results`), `named` (a fixture by name), `fit-ours` (a fit as an `ours` struct), `l14-problems` (the spec's L14 bounds, the failures as strings), and `check-against-sklearn` and `check-against-cuml`, one fixture's twin cases (the twin tests split by fixture to stay under the 45 s file timeout) |
 | `scaler-data` | the standard-scaler fixtures (`normal-rows`, `generated-rows`, `dyadic-rows`, `constant-rows`, `rows->matrix`, `strided-vector`), `ulp`, `bits-equal?`, `unit-roundoff`, `vector-shape` and `matrix-shape`, `round-to`, `standardisation-errors`, and the host oracles `host-transform` and `host-inverse` (float32 emulated with `flsingle`) |
+| `umap-data` | the UMAP fixtures (each a `fixture` of a name, float64 rows and labels: `blobs`, `far-blobs`, `overlap`, `tiny`, and the interleaved split `held-out-fit` / `held-out-new`), `fixture-X` (float32 matrix), `fixture-y` (int32 labels), `relabel`, `embedding-rows`, `finite-rows?`, `bits-equal?`, and `twin-case` (a Python cuML case for `python/umap_twin.py`) |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
 (`widget-params`, `gadget-params`) and estimators to test the macros apart
 from k-means; `hyperparameters-doc-test` reads the `defproc`s of
-`reference/{clustering,spectral,hdbscan,preprocessing,decomposition,estimators}.scrbl` and checks them against
+`reference/{clustering,spectral,hdbscan,preprocessing,decomposition,manifold,estimators}.scrbl` and checks them against
 the tables.
 
 Every SKIP line the GPU suite allows matches one ERE in
@@ -401,7 +404,8 @@ kills the test outright.
   (`scribble/example`, never pasted output), each pinned in
   `cuml-test/cuml/tests/docs-test.rkt` (the reference;
   `preprocessing-docs-test.rkt` for `reference/preprocessing.scrbl`,
-  `decomposition-docs-test.rkt` for `reference/decomposition.scrbl`) or
+  `decomposition-docs-test.rkt` for `reference/decomposition.scrbl`,
+  `manifold-docs-test.rkt` for `reference/manifold.scrbl`) or
   `guide-docs-test.rkt` (the guide).
 
 ## CI

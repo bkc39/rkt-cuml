@@ -600,3 +600,47 @@ Follow-ups are GitHub issues.
   Jacobi λ bound 8·d·u·λ₁; the L14 transform bound adds ‖e_μ‖₂, the mean
   bound's norm, scaled as the whitened transform scales; and the component
   check skips components with λᵢ ≤ 64·u·λ₁, which span the null space.
+
+## Decisions recorded in leg B1 (#50)
+
+- **B1-a.** `define-estimator` gains `#:supervised`: the generic `fit`
+  passes `y` as `#:y`. Existing estimators expand unchanged.
+- **B1-b.** `fit-transform` and `umap-fit-transform` return the fit's own
+  embedding (`#:fit-transform umap-result-embedding`), `eq?` to the
+  result's, not fit then transform.
+- **B1-c.** `random-state` defaults to 0; `#f` is Python's None, a drawn
+  seed.
+- **B1-d.** `#:a` and `#:b` are exposed; giving only one is refused.
+- **B1-e.** a and b are fitted in Racket (`curve.rkt`, Levenberg–Marquardt
+  in normalised coordinates), within 2.65e-6 relative of scipy's
+  `curve_fit` on the 47 probed pairs; the header takes them, and
+  learning-rate, as `double` by value (`_double*`).
+- **B1-f.** n-neighbors above the row count is clamped to it, as Python
+  does.
+- **B1-g.** Transform refuses an n-epochs below 3 (P5: upstream reads an
+  empty edge list).
+- **B1-h.** nn-descent below 150 rows is refused (P7: non-finite at 10, 30
+  and 60 rows).
+- **B1-i.** A non-finite scan after fit and transform refuses a diverged
+  optimisation and frees the output; the message prints the value (inf or
+  nan, P10).
+- **B1-j.** Metrics are euclidean, sqeuclidean, manhattan, chebyshev and
+  cosine; nn-descent refuses manhattan and chebyshev.
+- **B1-k.** X is float32 only.
+- **B1-l.** y is int32 or int64, −1 for unlabelled, sent as dense float32
+  codes, so labels past 2²⁴ stay distinct (P12).
+- **B1-m.** No umap-learn twin in this leg: the oracles are Python cuML
+  (bitwise, brute force), the measured floors and scipy for the curve.
+- **B1-n.** `graph_` is not exposed.
+- **B1-o.** The §8 upstream parameters are fixed, not keywords.
+- **B1-p.** The logger level is `warn`.
+- **B1-q.** A2's dense-label kernel and the normless-row scan move to
+  `shim/common`; metrics and manifold call the shared code.
+- **B1-r.** Brute-force fits and transforms are bitwise repeatable in and
+  across processes for both inits (P1, branch D); nn-descent is not (P3)
+  and is documented so.
+- **B1-s.** The f22 magnitude refusal uses the common double-sum scan, so
+  1e19 rows are refused although Python fits them (P8): a conservative
+  departure.
+- **B1-t.** The facade re-exports the private module minus the `/who`
+  forms (A4's pattern), not an `only-in` list.

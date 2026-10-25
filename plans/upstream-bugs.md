@@ -41,6 +41,20 @@ packet (§4) has the detail.
 | A4 #47 | the column mean is not reproducible run to run | `raft::stats::mean` | documented; tolerance laws |
 | A4 #47 | Jacobi: 0 sweeps means cusolver's default, 2³¹ wraps to int, non-convergence is silent; `syevd`'s dev_info is unread | `raft/linalg/detail/eig.cuh` | 0 and above 2³¹−1 refused; non-convergence documented |
 | A4 #47 | `pcaFit` and `pcaTransform` write to their input | `pca.cuh` | the shim works on a copy |
+| B1 #50 | UMAP fit uses a = b = −1 unless the caller fits them; find_ab is a different float32 gradient-descent fit, up to 1e-3 off umap-learn's | `umap/runner.cuh` `_fit`, `optimize.cuh` `find_params_ab` | Racket fits a, b (LM, normalised coordinates) |
+| B1 #50 | Python's curve_fit for a, b is garbage at extreme spread: (1, 1) at 1e-6, b = −70.5 at 1e-3 | `umap.pyx` `find_ab_params` | fit in normalised coordinates; departure pinned |
+| B1 #50 | nn_descent with an L1 or Linf metric raises "nn_descent does not support transform" during a fit | `knn_graph/algo.cuh:72-77` | refused by metric |
+| B1 #50 | init_transform accumulates into the output (caller must zero) and indexes row·k in int | `runner.cuh:58-79` | output zeroed; refused past 2³¹−1 |
+| B1 #50 | transform with n_epochs 1 or 2 runs 0 epochs: every edge trimmed, then "min_element failed to launch cub::DeviceReduce::ArgMin: cudaErrorInvalidValue" (P5) | `runner.cuh:549-559` | refused below 3 (B1-g) |
+| B1 #50 | spectral init failure (incl. n ≤ n_components, and k = 600 on 800 rows) silently falls back to random init | `init_embed/runner.cuh` | n ≤ n-components refused; other failures documented |
+| B1 #50 | n_neighbors 1 gives an empty graph (self weight 0), then "__copy:: D->H: failed: cudaErrorInvalidValue" (P6) | `fuzzy_simpl_set/naive.cuh`, `runner.cuh` `trim_graph` | refused below 2 |
+| B1 #50 | smooth_knn_dist keeps max_nonzero in an int, truncating ρ when local_connectivity exceeds the non-zero count | `fuzzy_simpl_set/naive.cuh:51-75` | unreachable: local-connectivity fixed at 1 |
+| B1 #50 | Python passes integer labels as float32: labels above 2²⁴ merge (P12) | `umap.pyx` `check_y` | dense codes |
+| B1 #50 | nn-descent is not reproducible run to run, and gives non-finite embeddings at 10, 30 and 60 rows (P3, P7) | `knn_graph/algo.cuh`, cuvs#184 | documented; refused below 150 rows |
+| B1 #50 | negative_sample_rate 0 is accepted and gives a finite, deterministic embedding (P4) | `optimize_batch_kernel` | accepted; lower bound 0 |
+| B1 #50 | a fit on rows of magnitude 1e20 raises "ValueError: negative axis 0 index: -1"; NaN rows are refused only by Python's check (P8) | `umap.pyx`, `runner.cuh` | non-finite and over-large rows refused before the fit |
+| B1 #50 | cosine with a zero row: the fit is finite after a spectral fallback warning, the transform gives NaN in that row (P9) | `knn_graph` cosine | zero-norm rows refused for cosine |
+| B1 #50 | the optimisation diverges silently: learning-rate 1e35 gives an all-NaN (or inf) embedding (P10) | `optimize_batch_kernel` | non-finite scan after fit and transform |
 
 ## cuVS
 
