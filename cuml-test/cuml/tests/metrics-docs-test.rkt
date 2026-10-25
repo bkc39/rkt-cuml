@@ -17,8 +17,8 @@
 (define truth-labels '(0 0 0 1 1 1))
 (define found-labels '(1 1 -1 0 0 0))
 (define X-rows '((0 0) (0 1) (1 0) (10 10) (10 11) (11 10)))
-(define P-rows '((0 0 0) (0 1 3) (1 0 1) (2 2 0) (5 5 4) (5 6 1) (6 5 2) (7 7 7)))
-(define E-rows '((0 0) (0 1) (1 0) (2 2) (5 5) (5 6) (6 5) (7 7)))
+(define P-rows '((0 0 0) (0 1 3) (1 0 1) (3 2 0) (5 5 4) (5 6 1) (6 5 2) (7 7 7)))
+(define E-rows '((0 0) (1 2) (1 0) (2 2) (5 5) (5 6) (7 6) (7 7)))
 
 (define (truth)
   (list->device-vector truth-labels #:dtype 'int32))

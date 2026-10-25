@@ -105,9 +105,9 @@ which neighbour counts is unspecified, so tied data (duplicates, grids)
 can score differently from other implementations.
 @examples[#:eval ev
 (define P
-  (list*->device-matrix '((0 0 0) (0 1 3) (1 0 1) (2 2 0) (5 5 4) (5 6 1) (6 5 2) (7 7 7))
+  (list*->device-matrix '((0 0 0) (0 1 3) (1 0 1) (3 2 0) (5 5 4) (5 6 1) (6 5 2) (7 7 7))
                         #:dtype 'float32))
 (define E
-  (list*->device-matrix '((0 0) (0 1) (1 0) (2 2) (5 5) (5 6) (6 5) (7 7)) #:dtype 'float32))
+  (list*->device-matrix '((0 0) (1 2) (1 0) (2 2) (5 5) (5 6) (7 6) (7 7)) #:dtype 'float32))
 (trustworthiness P P #:n-neighbors 2)
 (trustworthiness P E #:n-neighbors 2)]}

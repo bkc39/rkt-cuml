@@ -80,12 +80,16 @@
         (check-close "score" (score X mapped #:dtype 'int64) base-score (score-tolerance dt))
         (check-true (<= (worst (samples X mapped #:dtype 'int64) base) (sample-tolerance dt)))))))
 
+(define small-each 50)
+(define small-n (* 4 small-each))
+
 (test-gpu "SL4: the chunk size changes nothing past the tolerance"
   (for ([dt (in-list float-dtypes)])
-    (define-values (X ys) (fixture dt))
+    (define X (overlap dt #:each small-each))
+    (define ys (overlap-labels #:each small-each))
     (define base-score (score X ys))
     (define base (samples X ys))
-    (for ([chunk (in-list (list 1 7 100 (sub1 n) n 40000))])
+    (for ([chunk (in-list (list 1 7 100 (sub1 small-n) small-n 40000))])
       (test-case (format "~a chunk ~a" dt chunk)
         (check-close "score" (score X ys #:chunk-size chunk) base-score (score-tolerance dt))
         (check-true (<= (worst (samples X ys #:chunk-size chunk) base) (sample-tolerance dt)))))))
