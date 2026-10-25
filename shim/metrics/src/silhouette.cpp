@@ -118,13 +118,18 @@ void require_rows(const matrix<T, int64_t>& x, DistanceType distance,
   }
 }
 
+struct inputs {
+  const rr_view* x;
+  const rr_view* labels;
+};
+
 template <typename T>
-checked<T> check(const raft::handle_t& handle, const rr_view* x_view,
-                 const rr_view* labels, const request& r) {
+checked<T> check(const raft::handle_t& handle, inputs in, const request& r) {
+  const rr_view* const labels = in.labels;
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
-  checked<T> c{rows_of<T, int64_t>(x_view, "X", raftrkt::any_extent,
-                                   raftrkt::any_extent),
-               rmm::device_uvector<int32_t>(0, stream), 0, 0};
+  checked<T> c{
+      rows_of<T, int64_t>(in.x, "X", raftrkt::any_extent, raftrkt::any_extent),
+      rmm::device_uvector<int32_t>(0, stream), 0, 0};
   on_labels(labels, "labels", [&](auto l) {
     using L = decltype(l);
     const L* y = labels_of<L>(labels, "labels", c.x.n);
@@ -160,10 +165,9 @@ void on_request(const rr_view* x, int32_t metric, int64_t chunk_size,
 }
 
 template <typename T>
-void samples_into(const raft::handle_t& handle, const rr_view* x,
-                  const rr_view* labels, rr_deposit* out, const request& r,
-                  double* score) {
-  checked<T> c = check<T>(handle, x, labels, r);
+void samples_into(const raft::handle_t& handle, inputs in, rr_deposit* out,
+                  const request& r, double* score) {
+  checked<T> c = check<T>(handle, in, r);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   auto scores = std::make_unique<rmm::device_uvector<T>>(
       static_cast<std::size_t>(c.x.n), stream);
@@ -184,7 +188,7 @@ int cuml_metrics_silhouette_score(void* handle, const rr_view* x,
         double* const into = raftrkt::require(score, "score");
         on_request(x, metric, chunk_size, [&](const request& r, auto tag) {
           using T = decltype(tag);
-          checked<T> c = check<T>(h, x, labels, r);
+          checked<T> c = check<T>(h, {x, labels}, r);
           *into = score_of<T>(h, c, nullptr, r.distance);
         });
       });
@@ -199,7 +203,7 @@ int cuml_metrics_silhouette_samples(void* handle, const rr_view* x,
         rr_deposit* const into = raftrkt::require(out, "out");
         double* const mean = raftrkt::require(score, "score");
         on_request(x, metric, chunk_size, [&](const request& r, auto tag) {
-          samples_into<decltype(tag)>(h, x, labels, into, r, mean);
+          samples_into<decltype(tag)>(h, {x, labels}, into, r, mean);
         });
       });
 }

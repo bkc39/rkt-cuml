@@ -34,6 +34,10 @@ constexpr int64_t long_rows = 1000;
 constexpr int64_t long_cols = 2147484;
 constexpr int64_t bad_row = 4;
 constexpr int64_t zero_row = 3;
+constexpr std::size_t row_cycle = 7;
+constexpr int64_t twenty_rows_k = 10;
+constexpr int64_t wide_k = 32767;
+constexpr int64_t half_trust_rows = trust_rows / 2;
 constexpr int64_t scratch_slack = int64_t{4} << 20;
 
 struct refusal {
@@ -50,13 +54,17 @@ void expect_refusals(const std::vector<refusal>& cases) {
   }
 }
 
-std::vector<int32_t> counting(int64_t count, int64_t repeat_last = 0) {
-  std::vector<int32_t> host;
-  for (int64_t i = 0; i < count; ++i) {
-    host.push_back(static_cast<int32_t>(i));
-  }
-  for (int64_t i = 0; i < repeat_last; ++i) {
-    host.push_back(static_cast<int32_t>(count - 1));
+struct label_run {
+  int64_t distinct;
+  int64_t repeats;
+};
+
+std::vector<int32_t> counting(label_run run) {
+  std::vector<int32_t> host(
+      static_cast<std::size_t>(run.distinct + run.repeats),
+      static_cast<int32_t>(run.distinct - 1));
+  for (int64_t i = 0; i < run.distinct; ++i) {
+    host[static_cast<std::size_t>(i)] = static_cast<int32_t>(i);
   }
   return host;
 }
@@ -65,7 +73,7 @@ std::vector<float> row_with(int64_t rows, int64_t cols, int64_t at,
                             float value) {
   std::vector<float> host(static_cast<std::size_t>(rows * cols));
   for (std::size_t i = 0; i < host.size(); ++i) {
-    host[i] = static_cast<float>(i % 7) + 1;
+    host[i] = static_cast<float>(i % row_cycle) + 1;
   }
   host[static_cast<std::size_t>(at * cols)] = value;
   return host;
@@ -106,7 +114,8 @@ TEST(LabelRefusals, ContingencyAndRandScore) {
   const rr_view huge = shaped(ints.view, {past_index});
   rr_view elsewhere = *a.view();
   elsewhere.device = 1;
-  const filled<int32_t> many(res, counting(most_labels + 1), {most_labels + 1});
+  const filled<int32_t> many(res, counting({most_labels + 1, 0}),
+                             {most_labels + 1});
   const filled<int32_t> few(res, std::vector<int32_t>(most_labels + 1, 7),
                             {most_labels + 1});
   record out(res);
@@ -161,7 +170,8 @@ TEST(LabelRefusals, ContingencyAndRandScore) {
 TEST(LabelRefusals, LeaveOnlyTheRelabelScratch) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const filled<int32_t> many(res, counting(most_labels + 1), {most_labels + 1});
+  const filled<int32_t> many(res, counting({most_labels + 1, 0}),
+                             {most_labels + 1});
   const filled<int32_t> few(res, std::vector<int32_t>(most_labels + 1, 7),
                             {most_labels + 1});
   const device_array floats(res.r, RR_DTYPE_FLOAT32, {pool});
@@ -188,8 +198,8 @@ struct silhouette_case {
   explicit silhouette_case(const resources& res)
       : x(res, row_with(sil_rows, 2, 0, 1), {sil_rows, 2}),
         labels(res, std::vector<int32_t>(sil_rows, 0), {sil_rows}),
-        two(res, counting(2, sil_rows - 2), {sil_rows}),
-        distinct(res, counting(sil_rows), {sil_rows}),
+        two(res, counting({2, sil_rows - 2}), {sil_rows}),
+        distinct(res, counting({sil_rows, 0}), {sil_rows}),
         doubles(res.r, RR_DTYPE_FLOAT64, {sil_rows, 2}),
         ints(res.r, RR_DTYPE_INT32, {pool}),
         floats(res.r, RR_DTYPE_FLOAT32, {pool}) {}
@@ -243,7 +253,7 @@ TEST(SilhouetteRefusals, NameTheArgument) {
   const filled<float> nan_x(res, row_with(sil_rows, 2, bad_row, NAN),
                             {sil_rows, 2});
   std::vector<float> zero_host = row_with(sil_rows, 2, zero_row, 0);
-  zero_host[static_cast<std::size_t>(zero_row * 2 + 1)] = 0;
+  zero_host[static_cast<std::size_t>((zero_row * 2) + 1)] = 0;
   const filled<float> zero_x(res, zero_host, {sil_rows, 2});
   std::vector<double> inf_host(static_cast<std::size_t>(sil_rows * 2), 1.0);
   inf_host[static_cast<std::size_t>(bad_row * 2)] = INFINITY;
@@ -322,7 +332,7 @@ TEST(SilhouetteRefusals, LabelTableOverflow) {
   const resources res;
   const int64_t rows = square_rows + 1;
   const filled<float> x(res, std::vector<float>(rows, 1), {rows, 1});
-  const filled<int32_t> labels(res, counting(square_rows, 1), {rows});
+  const filled<int32_t> labels(res, counting({square_rows, 1}), {rows});
   record out(res);
   double score = 0;
   for (const silhouette_call& call : silhouette_entries(res, out, score)) {
@@ -385,9 +395,11 @@ TEST(TrustworthinessRefusals, NameTheArgument) {
        "X: expected at least 1 column, got 0"},
       {[&] { return call(x.view(), &x_no_cols, neighbours, euclidean, batch); },
        "X-embedded: expected at least 1 column, got 0"},
-      {[&] { return call(&x_twenty, &x_twenty, 10, euclidean, batch); },
+      {[&] {
+         return call(&x_twenty, &x_twenty, twenty_rows_k, euclidean, batch);
+       },
        "n-neighbors: expected less than half the 20 rows, got 10"},
-      {[&] { return call(&x_wide, &x_wide, 32767, euclidean, batch); },
+      {[&] { return call(&x_wide, &x_wide, wide_k, euclidean, batch); },
        "n-neighbors: 65536 rows with 32768 neighbours each need 2147483648 "
        "entries, more than 2147483647"},
       {[&] {
@@ -409,9 +421,11 @@ TEST(TrustworthinessRefusals, NameTheArgument) {
        "batch-size: expected at least 1, got 0"},
       {[&] { return call(&doubles.view, e, 0, euclidean, batch); },
        "n-neighbors: expected at least 1, got 0"},
-      {[&] { return call(&x_twenty, &e_short, 10, euclidean, batch); },
+      {[&] {
+         return call(&x_twenty, &e_short, twenty_rows_k, euclidean, batch);
+       },
        "X-embedded: expected 20 rows, got 99"},
-      {[&] { return call(nan_x.view(), e, 50, euclidean, batch); },
+      {[&] { return call(nan_x.view(), e, half_trust_rows, euclidean, batch); },
        "n-neighbors: expected less than half the 100 rows, got 50"},
       {[&] {
          return cuml_metrics_trustworthiness(

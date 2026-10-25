@@ -2,9 +2,11 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "metrics_fixture.hpp"
@@ -33,14 +35,17 @@ TEST(Metrics, ContingencyCountsSortedLabels) {
                                                     found.view(), &out.r)),
             "accepted");
   ASSERT_EQ(out.r.count, 3);
-  EXPECT_EQ(out.r.regions[0].dtype, RR_DTYPE_INT64);
-  EXPECT_EQ(out.r.regions[0].shape[0], 3);
-  EXPECT_EQ(out.r.regions[0].shape[1], 2);
-  EXPECT_EQ(out.r.regions[1].dtype, RR_DTYPE_INT32);
-  EXPECT_EQ(out.r.regions[2].dtype, RR_DTYPE_INT64);
-  EXPECT_EQ(out.read<int64_t>(0), (std::vector<int64_t>{0, 1, 2, 0, 0, 2}));
-  EXPECT_EQ(out.read<int32_t>(1), (std::vector<int32_t>{-1, 0, 1}));
-  EXPECT_EQ(out.read<int64_t>(2), (std::vector<int64_t>{5, 7}));
+  const rr_view* regions = out.r.regions;
+  EXPECT_EQ((std::vector<int64_t>{regions[0].dtype, regions[0].shape[0],
+                                  regions[0].shape[1], regions[1].dtype,
+                                  regions[2].dtype}),
+            (std::vector<int64_t>{RR_DTYPE_INT64, 3, 2, RR_DTYPE_INT32,
+                                  RR_DTYPE_INT64}));
+  EXPECT_EQ(
+      std::tuple(out.read<int64_t>(0), out.read<int32_t>(1),
+                 out.read<int64_t>(2)),
+      std::tuple(std::vector<int64_t>{0, 1, 2, 0, 0, 2},
+                 std::vector<int32_t>{-1, 0, 1}, std::vector<int64_t>{5, 7}));
 }
 
 TEST(Metrics, ContingencyOfNothingIsEmpty) {
@@ -95,11 +100,9 @@ TEST(Metrics, SilhouetteSingletonScoresZero) {
             "accepted");
   const std::vector<double> samples = out.read<double>(0);
   ASSERT_EQ(samples.size(), 6U);
-  EXPECT_EQ(samples[5], 0.0);
-  for (const double s : samples) {
-    EXPECT_GE(s, -1.0);
-    EXPECT_LE(s, 1.0);
-  }
+  EXPECT_TRUE(samples[5] == 0.0 && std::ranges::all_of(samples, [](double s) {
+                return s >= -1.0 && s <= 1.0;
+              }));
   double plain = 0;
   ASSERT_EQ(outcome(cuml_metrics_silhouette_score(
                 res.handle, x.view(), labels.view(), euclidean, chunk, &plain)),
@@ -113,7 +116,7 @@ TEST(Metrics, TrustworthinessOfItselfIsOne) {
   std::vector<float> host;
   for (int64_t i = 0; i < grid_rows; ++i) {
     host.push_back(static_cast<float>(i * i));
-    host.push_back(static_cast<float>(3 * i + 1));
+    host.push_back(static_cast<float>((3 * i) + 1));
   }
   const filled<float> x(res, host, {grid_rows, 2});
   double score = 0;

@@ -41,16 +41,20 @@ dense_labels<T> distinct(const T* labels, int64_t n, const char* name,
   return found;
 }
 
+struct label_pair {
+  const rr_view* truth;
+  const rr_view* pred;
+};
+
 template <typename Use>
-void on_label_pair(const rr_view* labels_true, const rr_view* labels_pred,
-                   Use&& use) {
-  on_labels(labels_true, "labels-true", [&](auto t) {
+void on_label_pair(label_pair labels, Use&& use) {
+  on_labels(labels.truth, "labels-true", [&](auto t) {
     using T = decltype(t);
-    const T* a = labels_of<T>(labels_true, "labels-true", raftrkt::any_extent);
-    const int64_t n = labels_true->shape[0];
-    on_labels(labels_pred, "labels-pred", [&](auto p) {
+    const T* a = labels_of<T>(labels.truth, "labels-true", raftrkt::any_extent);
+    const int64_t n = labels.truth->shape[0];
+    on_labels(labels.pred, "labels-pred", [&](auto p) {
       using P = decltype(p);
-      const P* b = labels_of<P>(labels_pred, "labels-pred", n);
+      const P* b = labels_of<P>(labels.pred, "labels-pred", n);
       use(a, b, n);
     });
   });
@@ -113,7 +117,7 @@ int cuml_metrics_contingency_matrix(void* handle, const rr_view* labels_true,
                  {{"labels-true", labels_true}, {"labels-pred", labels_pred}},
                  [&](const raft::handle_t& h) {
                    rr_deposit* const into = raftrkt::require(out, "out");
-                   on_label_pair(labels_true, labels_pred,
+                   on_label_pair({labels_true, labels_pred},
                                  [&](const auto* a, const auto* b, int64_t n) {
                                    tabulate(h, a, b, n, into);
                                  });
@@ -127,7 +131,7 @@ int cuml_metrics_adjusted_rand_score(void* handle, const rr_view* labels_true,
                  {{"labels-true", labels_true}, {"labels-pred", labels_pred}},
                  [&](const raft::handle_t& h) {
                    double* const into = raftrkt::require(score, "score");
-                   on_label_pair(labels_true, labels_pred,
+                   on_label_pair({labels_true, labels_pred},
                                  [&](const auto* a, const auto* b, int64_t n) {
                                    *into = rand_index(h, a, b, n);
                                  });
