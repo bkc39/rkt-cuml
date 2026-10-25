@@ -63,7 +63,7 @@ TEST(UmapFit, LabelsChangeTheEmbedding) {
   const filled<float> x(res, blobs(rows, cols), {rows, cols});
   std::vector<int64_t> host(static_cast<std::size_t>(rows));
   for (int64_t i = 0; i < rows; ++i) {
-    host[static_cast<std::size_t>(i)] = i % 3 == 0 ? -1 : (i % 2) * 1000;
+    host[static_cast<std::size_t>(i)] = i % 3 == 0 ? -1 : ((i / 2) % 2) * 1000;
   }
   const filled<int64_t> y(res, host, {rows});
   const std::vector<float> supervised = fitted(res, x.view(), y.view());

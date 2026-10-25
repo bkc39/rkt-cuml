@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/flonum flsingle)
+(require (only-in json json-null)
+         (only-in racket/flonum flsingle)
          (only-in raft device-matrix->list* list*->device-matrix list->device-vector)
          (only-in "scaler-data.rkt" bits-equal? normal-source))
 
@@ -17,7 +18,8 @@
          overlap
          quality-floors
          relabel
-         tiny)
+         tiny
+         twin-case)
 
 (struct fixture (name rows labels))
 
@@ -59,15 +61,23 @@
   (= (modulo i 5) 4))
 
 (define (split-fixture f)
-  (define indexed
-    (for/list ([row (in-list (fixture-rows f))]
+  (define-values (kept-rows kept-labels new-rows new-labels)
+    (for/fold ([kept-rows '()]
+               [kept-labels '()]
+               [new-rows '()]
+               [new-labels '()]
+               #:result (values (reverse kept-rows)
+                                (reverse kept-labels)
+                                (reverse new-rows)
+                                (reverse new-labels)))
+              ([row (in-list (fixture-rows f))]
                [label (in-list (fixture-labels f))]
                [i (in-naturals)])
-      (list i row label)))
-  (define (part keep?)
-    (define kept (filter (lambda (entry) (keep? (car entry))) indexed))
-    (fixture (fixture-name f) (map cadr kept) (map caddr kept)))
-  (values (part (lambda (i) (not (every-fifth? i)))) (part every-fifth?)))
+      (if (every-fifth? i)
+          (values kept-rows kept-labels (cons row new-rows) (cons label new-labels))
+          (values (cons row kept-rows) (cons label kept-labels) new-rows new-labels))))
+  (values (fixture (fixture-name f) kept-rows kept-labels)
+          (fixture (fixture-name f) new-rows new-labels)))
 
 (define-values (held-out-fit held-out-new) (split-fixture blobs))
 
@@ -107,3 +117,41 @@
     (and (flonum? x) (< (abs x) +inf.0))))
 
 (define quality-floors (hash))
+
+(define (twin-case f result-params a b #:transform [Y #f] #:y [y #f] #:op [op "umap"])
+  (define (given key)
+    (hash-ref result-params key))
+  (hasheq 'op
+          op
+          'X
+          (fixture-rows f)
+          'y
+          (or y (json-null))
+          'Y
+          (or Y (json-null))
+          'n_neighbors
+          (given 'n-neighbors)
+          'n_components
+          (given 'n-components)
+          'metric
+          (symbol->string (given 'metric))
+          'n_epochs
+          (or (given 'n-epochs) (json-null))
+          'learning_rate
+          (given 'learning-rate)
+          'min_dist
+          (given 'min-dist)
+          'spread
+          (given 'spread)
+          'a
+          a
+          'b
+          b
+          'init
+          (symbol->string (given 'init))
+          'negative_sample_rate
+          (given 'negative-sample-rate)
+          'seed
+          (given 'random-state)
+          'build_algo
+          (if (eq? (given 'build-algo) 'nn-descent) "nn_descent" "brute_force_knn")))

@@ -318,3 +318,32 @@
   (check-pred exn:fail:syntax? e)
   (check-regexp-match #rx"#:colour" (exn-message e))
   (check-true (procedure? gadget)))
+
+(define/who (taught-fit who X #:y [y 'absent] #:hyperparameters gadget-params)
+  (list 'taught X y size))
+
+(define (taught-matrix m)
+  (list 'embedded m))
+
+(define-estimator taught-gadget
+  #:hyperparameters gadget-params
+  #:fit taught-fit/who
+  #:supervised
+  #:settings ()
+  #:no-sample-weight
+  #:apply values
+  [transform (applied-spy 'transform) #:fit-transform taught-matrix])
+
+(test-case "L19: #:supervised passes the generic's y to the fit as #:y, #f included"
+  (check-equal? (taught-gadget-model (fit (taught-gadget) 'X 'y)) '(taught X y 3))
+  (check-equal? (taught-gadget-model (fit (taught-gadget) 'X)) '(taught X #f 3))
+  (check-equal? (fit-transform (taught-gadget) 'X 'y) '(embedded (taught X y 3)))
+  (check-match (gadget-model (fit (gadget) 'X 'y)) (list 'model 'fit 'X _ _ _)))
+
+(test-case "L19: #:fit-transform is called instead of the transform procedure"
+  (set-box! applied-calls 0)
+  (check-equal? (fit-transform (taught-gadget #:size 4) 'X) '(embedded (taught X #f 4)))
+  (check-equal? (unbox applied-calls) 0)
+  (check-equal? (transform (fit (taught-gadget) 'X) 'Z)
+                (list 'transform 'transform '(taught X #f 3) 'Z #f #f 'none))
+  (check-equal? (unbox applied-calls) 1))

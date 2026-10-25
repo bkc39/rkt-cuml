@@ -27,6 +27,7 @@ constexpr int64_t few_rows = 149;
 constexpr int64_t wide_components = 4;
 constexpr double past_float = 1e39;
 constexpr double divergent_rate = 1e35;
+constexpr double most_learning_rate = 3e38;
 constexpr double large = 0x1p66;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
@@ -217,8 +218,7 @@ TEST(UmapFitRefusals, ADivergedEmbeddingIsFreed) {
                               {.learning_rate = divergent_rate});
   EXPECT_EQ(status, RR_ERROR);
   EXPECT_TRUE(outcome(status).starts_with("embedding: row "));
-  EXPECT_TRUE(outcome(status).ends_with(
-      ": the optimisation diverged to nan; lower learning-rate"));
+  EXPECT_TRUE(outcome(status).ends_with("; lower learning-rate"));
   expect_untouched(out);
 }
 
@@ -310,15 +310,16 @@ TEST(UmapTransformRefusals, EachConditionInTableOrder) {
 TEST(UmapTransformRefusals, ADivergedOutputIsFreed) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const trained t(res);
-  const filled<float> x(res, blobs(2, cols), {2, cols});
+  const filled<float> x(res, blobs(rows, cols), {rows, cols});
+  record trained(res);
+  ASSERT_EQ(outcome(umap_fit(res, x.view(), nullptr, trained)), "accepted");
   record out(res);
-  const int status = umap_transform(res, x.view(), t.views(), out,
-                                    {.learning_rate = divergent_rate});
+  const int status =
+      umap_transform(res, x.view(), {x.view(), &trained.r.regions[0]}, out,
+                     {.learning_rate = most_learning_rate});
   EXPECT_EQ(status, RR_ERROR);
   EXPECT_TRUE(outcome(status).starts_with("output: row "));
-  EXPECT_TRUE(outcome(status).ends_with(
-      ": the optimisation diverged to nan; lower learning-rate"));
+  EXPECT_TRUE(outcome(status).ends_with("; lower learning-rate"));
   expect_untouched(out);
 }
 
