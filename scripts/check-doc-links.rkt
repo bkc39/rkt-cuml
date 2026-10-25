@@ -178,10 +178,11 @@
            (for/list ([name (in-list names)])
              (format "<tr><td>~a</td></tr>" (cell name)))))
   (define (rendered-box header . fields)
-    (format (string-append "<table cellspacing=\"0\" cellpadding=\"0\" class=\"boxed RBoxed\">"
-                           "<tr><td><blockquote class=\"SubFlow\">~a</blockquote></td></tr>~a</table>")
-            header
-            (rows declaration fields)))
+    (format
+     (string-append "<table cellspacing=\"0\" cellpadding=\"0\" class=\"boxed RBoxed\">"
+                    "<tr><td><blockquote class=\"SubFlow\">~a</blockquote></td></tr>~a</table>")
+     header
+     (rows declaration fields)))
   (define (struct-header first-field . fields)
     (format (string-append "<table cellspacing=\"0\" cellpadding=\"0\" class=\"RForeground\">"
                            "<tr><td><span class=\"nobreak\">~a</span></td></tr>~a</table>")
