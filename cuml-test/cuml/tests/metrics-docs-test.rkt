@@ -16,7 +16,8 @@
                   list*->device-matrix
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/cuml-error.rkt" check-cuml-error))
+         (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/metrics-data.rkt" host-ari mean))
 
 (define truth-labels '(0 0 0 1 1 1))
 (define found-labels '(1 1 -1 0 0 0))
@@ -32,9 +33,6 @@
 
 (define (distance a b)
   (sqrt (for/sum ([x (in-list a)] [y (in-list b)]) (* (- x y) (- x y)))))
-
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
 
 (define (host-samples rows ys)
   (for/list ([p (in-list rows)]
@@ -59,24 +57,14 @@
               (max 0 (- (add1 (index-of (neighbours X i) j)) k))))
   (- 1 (/ (* 2 penalty) (* n k (- (* 2 n) (* 3 k) 1)))))
 
-(define (choose2 m)
-  (/ (* m (- m 1)) 2))
-
-(define host-ari
-  (let* ([counts '((1 0 2) (0 3 0))]
-         [index (for*/sum ([row (in-list counts)] [c (in-list row)]) (choose2 c))]
-         [a (for/sum ([row (in-list counts)]) (choose2 (apply + row)))]
-         [b (for/sum ([col (in-list (apply map list counts))]) (choose2 (apply + col)))]
-         [expected (/ (* a b) (choose2 6))])
-    (/ (- index expected) (- (/ (+ a b) 2) expected))))
-
 (test-gpu "the manual: contingency-matrix counts the example's labels"
   (match-define (contingency-table counts rows columns) (contingency-matrix (truth) (found)))
   (check-equal? (list (device-vector->list rows) (device-vector->list columns)) '((0 1) (-1 0 1)))
   (check-equal? (device-matrix->list* counts) '((1 0 2) (0 3 0))))
 
 (test-gpu "the manual: adjusted-rand-score on the example's labels"
-  (check-true (<= (abs (- (adjusted-rand-score (truth) (found)) host-ari)) 1e-14))
+  (check-true (<= (abs (- (adjusted-rand-score (truth) (found)) (host-ari truth-labels found-labels)))
+                  1e-14))
   (check-equal? (adjusted-rand-score (truth) (truth)) 1.0))
 
 (test-gpu "the manual: silhouette-score and silhouette-samples on the example's rows"

@@ -1,14 +1,19 @@
 #lang racket/base
 
 (require (only-in racket/list remove-duplicates)
+         (only-in racket/match match-define)
          (only-in racket/math pi)
+         (only-in racket/sequence in-slice)
          (only-in raft list*->device-matrix list->device-vector))
 
 (provide bijection
+         choose2
+         host-ari
          host-counts
          label-pair
          labels
          labels-of
+         mean
          monotone-maps
          normals
          overlap
@@ -19,6 +24,8 @@
          sorted-distinct
          three-groups
          three-groups-labels
+         tolerance
+         worst
          grid-20)
 
 (define (seeded seed)
@@ -60,20 +67,8 @@
        (loop (- left 2) (list* (* r (sin (* 2.0 pi v))) (* r (cos (* 2.0 pi v))) acc))])))
 
 (define (rows-of xs d)
-  (let loop ([xs xs]
-             [acc '()])
-    (cond
-      [(null? xs) (reverse acc)]
-      [else
-       (define-values (row rest) (split xs d))
-       (loop rest (cons row acc))])))
-
-(define (split xs d)
-  (for/fold ([row '()]
-             [rest xs]
-             #:result (values (reverse row) rest))
-            ([_ (in-range d)])
-    (values (cons (car rest) row) (cdr rest))))
+  (for/list ([row (in-slice d xs)])
+    row))
 
 (define (normal-rows n d seed)
   (rows-of (normals (* n d) seed) d))
@@ -135,10 +130,53 @@
 (define (sorted-distinct xs)
   (sort (remove-duplicates xs) <))
 
+(define (tally xs)
+  (for/fold ([counts (hash)]) ([x (in-list xs)])
+    (hash-update counts x add1 0)))
+
 (define (host-counts truth found)
+  (define pairs (tally (map cons truth found)))
   (for/list ([t (in-list (sorted-distinct truth))])
     (for/list ([f (in-list (sorted-distinct found))])
-      (for/sum ([a (in-list truth)] [b (in-list found)]) (if (and (= a t) (= b f)) 1 0)))))
+      (hash-ref pairs (cons t f) 0))))
+
+(define (choose2 m)
+  (/ (* m (- m 1)) 2))
+
+(define (pairs-within counts)
+  (for/sum ([c (in-hash-values counts)]) (choose2 c)))
+
+(define (host-ari truth found)
+  (define index (pairs-within (tally (map cons truth found))))
+  (define a (pairs-within (tally truth)))
+  (define b (pairs-within (tally found)))
+  (define expected (/ (* a b) (choose2 (length truth))))
+  (define most (/ (+ a b) 2))
+  (if (= most expected)
+      1
+      (/ (- index expected) (- most expected))))
+
+(define (mean xs)
+  (/ (apply + xs) (length xs)))
+
+(define (worst xs ys)
+  (for/fold ([w 0.0])
+            ([x (in-list xs)]
+             [y (in-list ys)])
+    (max w (abs (- x y)))))
+
+(define tolerances
+  (hasheq 'score '(1e-6 1e-14)
+          'sample '(2e-6 1e-14)
+          'mean '(1e-6 1e-12)
+          'spread '(1e-7 1e-15)
+          'cuml '(1e-6 1e-14)
+          'sklearn-score '(1e-5 1e-12)
+          'sklearn-sample '(1e-4 1e-12)))
+
+(define (tolerance kind dt)
+  (match-define (list single double) (hash-ref tolerances kind))
+  (if (eq? dt 'float32) single double))
 
 (define (random-permutation n seed)
   (define g (seeded seed))

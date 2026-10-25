@@ -1,7 +1,3 @@
-"""Twin of cuml/tests/metrics-twin-test.rkt: sklearn scores the labels and
-rows the Racket side used, and Python cuML scores them through the same
-C++."""
-
 import json
 import sys
 
