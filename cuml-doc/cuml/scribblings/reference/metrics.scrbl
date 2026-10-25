@@ -74,8 +74,8 @@ be at most 2@superscript{125} (@racket['float32]) or 2@superscript{1021}
 (@racket['float64]), and under @racket['cosine] at least d·m for d
 columns, where m is the least normal number, 2@superscript{−126} or
 2@superscript{−1022}. Distances are computed in @racket[X]'s dtype, so data
-whose pairwise distances (squared, under @racket['sqeuclidean]) come near m
-lose precision; rescale it first.
+whose squared pairwise distances (plain distances, under @racket['manhattan]
+and @racket['chebyshev]) come near m lose precision; rescale it first.
 @examples[#:eval ev
 (define X (list*->device-matrix '((0 0) (0 1) (1 0) (10 10) (10 11) (11 10)) #:dtype 'float64))
 (define y (list->device-vector '(0 0 0 1 1 1) #:dtype 'int32))

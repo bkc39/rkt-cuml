@@ -92,6 +92,13 @@
   (define tiny (at 1e-19))
   (check-true (> (worst tiny base) 0.1) (format "worst |diff| ~a" (worst tiny base))))
 
+(test-gpu "upstream cuVS: float32 euclidean distances underflow at scale 1e-30 (upstream fixed if this fails: drop the doc caveat)"
+  (define (at factor)
+    (samples (scaled four-blocks factor 'float32) four-blocks-labels #:metric 'euclidean))
+  (define base (at 1))
+  (define tiny (at 1e-30))
+  (check-true (> (worst tiny base) 0.1) (format "worst |diff| ~a" (worst tiny base))))
+
 (test-gpu "SL2: a sample alone in its cluster scores exactly 0.0"
   (for ([dt (in-list float-dtypes)])
     (define X (list*->device-matrix (append three-groups '((30 30))) #:dtype dt))
