@@ -55,7 +55,7 @@
   (define unknown (and names names? (findf (lambda (name) (not (member name names))) columns)))
   (cond
     [(not names) (logic-error "~a: table: expected a dataset table, got ~s" who table)]
-    [(not (or (not columns) names?))
+    [(and columns (not names?))
      (logic-error "~a: columns: expected #f or a list of column names, got ~s" who columns)]
     [(null? columns) (logic-error "~a: columns: expected at least 1 column, got 0" who)]
     [duplicate (logic-error "~a: columns: expected distinct names, got ~s twice" who duplicate)]
@@ -93,9 +93,7 @@
     [(zero? n)
      (device-matrix 0 (length selected) #:dtype element-type #:layout order #:resources resources)]
     [else
-     (list*->device-matrix (for/list ([row (in-range n)])
-                             (for/list ([column (in-list vectors)])
-                               (vector-ref column row)))
+     (list*->device-matrix (apply map list (map vector->list vectors))
                            #:dtype element-type
                            #:layout order
                            #:resources resources)]))
