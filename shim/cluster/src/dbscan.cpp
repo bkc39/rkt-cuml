@@ -18,25 +18,25 @@
 #include "cosine_eps.hpp"
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
+#include "cumlrkt/support.hpp"
 #include "dbscan_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
-#include "support.hpp"
 
 namespace {
 
+using cumlrkt::first_zero_row;
 using cumlrkt::logic_error;
+using cumlrkt::matrix;
+using cumlrkt::on_device;
+using cumlrkt::printed;
+using cumlrkt::require_at_least;
+using cumlrkt::require_positive;
+using cumlrkt::require_some;
+using cumlrkt::rows_of;
+using cumlrkt::settle;
 using cumlrkt::cluster::core_count;
 using cumlrkt::cluster::cosine_eps;
-using cumlrkt::cluster::first_zero_row;
-using cumlrkt::cluster::matrix;
-using cumlrkt::cluster::on_device;
-using cumlrkt::cluster::printed;
-using cumlrkt::cluster::require_at_least;
-using cumlrkt::cluster::require_positive;
-using cumlrkt::cluster::require_some;
-using cumlrkt::cluster::rows_of;
-using cumlrkt::cluster::settle;
 using cumlrkt::cluster::unit_rows;
 using raftrkt::any_extent;
 using Distance = ML::distance::DistanceType;

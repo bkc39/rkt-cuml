@@ -14,26 +14,26 @@
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
 #include "cumlrkt/model.hpp"
+#include "cumlrkt/support.hpp"
 #include "hdbscan_model.hpp"
 #include "limits.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
-#include "support.hpp"
 
 namespace {
 
+using cumlrkt::guarded;
 using cumlrkt::logic_error;
-using cumlrkt::cluster::guarded;
+using cumlrkt::matrix;
+using cumlrkt::most_index;
+using cumlrkt::require_at_least;
+using cumlrkt::require_bounded_rows;
+using cumlrkt::require_index;
+using cumlrkt::rows_of;
+using cumlrkt::settle;
 using cumlrkt::cluster::hdbscan_kind;
 using cumlrkt::cluster::hdbscan_model;
-using cumlrkt::cluster::matrix;
-using cumlrkt::cluster::most_index;
-using cumlrkt::cluster::require_at_least;
-using cumlrkt::cluster::require_bounded_rows;
-using cumlrkt::cluster::require_index;
-using cumlrkt::cluster::rows_of;
-using cumlrkt::cluster::settle;
 using raftrkt::any_extent;
 
 constexpr auto metric = ML::distance::DistanceType::L2SqrtExpanded;

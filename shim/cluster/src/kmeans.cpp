@@ -15,21 +15,21 @@
 
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
+#include "cumlrkt/support.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
-#include "support.hpp"
 
 namespace {
 
 using cumlrkt::logic_error;
-using cumlrkt::cluster::matrix;
-using cumlrkt::cluster::on_device;
-using cumlrkt::cluster::require_at_least;
-using cumlrkt::cluster::require_non_negative;
-using cumlrkt::cluster::require_positive;
-using cumlrkt::cluster::require_some;
-using cumlrkt::cluster::rows_of;
-using cumlrkt::cluster::settle;
+using cumlrkt::matrix;
+using cumlrkt::on_device;
+using cumlrkt::require_at_least;
+using cumlrkt::require_non_negative;
+using cumlrkt::require_positive;
+using cumlrkt::require_some;
+using cumlrkt::rows_of;
+using cumlrkt::settle;
 using raftrkt::any_extent;
 using raftrkt::layout;
 using Params = ML::kmeans::KMeansParams;
