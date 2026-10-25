@@ -222,8 +222,8 @@
                   '("cuml-lib does not depend on cuml-cluster-lib")))
 
   (test-case "family packages are the cuml-*-lib directories but core"
-    (check-equal? (filter-map family-of '("cuml-core-lib" "cuml-cluster-lib" "cuml-lib" "lint"))
-                  '("cluster")))
+    (check-equal? (filter-map family-of '("cuml-core-lib" "cuml-cluster-lib" "cuml-metrics-lib" "cuml-lib" "lint"))
+                  '("cluster" "metrics")))
 
   (test-case "a family module that provides a bare algorithm name is reported, and only that name"
     (call-with-tree

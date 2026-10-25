@@ -10,6 +10,7 @@
                  "cuml-core-lib"
                  "cuml-doc"
                  "cuml-lib"
+                 "cuml-metrics-lib"
                  "datasets-core"
                  "pict-lib"
                  ("raft" #:version "0.2")

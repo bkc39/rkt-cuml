@@ -13,13 +13,16 @@
 
 (define-runtime-path root "..")
 
-(define family "cluster")
-(define prefix (format "cuml_~a_" family))
+(define families '("cluster" "metrics"))
 (define failure-kinds '(UNBOUND MISSING TWICE UNPLANNED DUE STALE-PLAN))
 
 (struct planned (name status issue))
 
-(define (unprefixed c-id)
+(define (prefix-of family)
+  (format "cuml_~a_" family))
+
+(define ((unprefixed family) c-id)
+  (define prefix (prefix-of family))
   (and (string-prefix? c-id prefix) (substring c-id (string-length prefix))))
 
 (define (nm-output library)
@@ -28,10 +31,10 @@
                            (unless (system* nm "-D" "--defined-only" (path->string library))
                              (error 'check-bindings "nm failed on ~a" library)))))
 
-(define (exports-in nm-text)
+(define (exports-in family nm-text)
   (~> (filter-map (lambda (line)
                     (match (string-split line)
-                      [(list _ _ symbol) (unprefixed symbol)]
+                      [(list _ _ symbol) ((unprefixed family) symbol)]
                       [_ #f]))
                   (string-split nm-text "\n"))
       (sort string<?)))
@@ -42,26 +45,29 @@
     [(list* _ rest) (c-id-of name rest)]
     ['() (regexp-replace* #rx"-" (symbol->string name) "_")]))
 
-(define (form-bindings form)
+(define ((form-bindings family) form)
+  (define definer (string->symbol (format "define-~a" family)))
   (match form
     [(list* 'define-job _ _ (? string? c-id) _) (list c-id)]
-    [(list* 'define-cluster (? symbol? name) options) (list (c-id-of name options))]
-    [(list* 'entry (? string? name) _) (list (string-append prefix name))]
-    [(? list?) (append-map form-bindings form)]
+    [(list* (== definer) (? symbol? name) options) (list (c-id-of name options))]
+    [(list* 'entry (? string? name) _) (list (string-append (prefix-of family) name))]
+    [(? list?) (append-map (form-bindings family) form)]
     [_ '()]))
 
-(define (module-bindings path)
+(define (module-bindings family path)
   (define form
     (parameterize ([read-accept-reader #t]
                    [read-accept-lang #t])
       (call-with-input-file path read)))
-  (filter-map unprefixed (form-bindings form)))
+  (filter-map (unprefixed family) ((form-bindings family) form)))
 
 (define (racket-module? path)
   (and (regexp-match? #rx"[.]rkt$" path) (not (regexp-match? #rx"/compiled/" path))))
 
-(define (tree-bindings dir)
-  (~> (find-files racket-module? dir) (sort path<?) (append-map module-bindings _)))
+(define (tree-bindings family dir)
+  (~> (find-files racket-module? dir)
+      (sort path<?)
+      (append-map (lambda (path) (module-bindings family path)) _)))
 
 (define (plan-entries plan)
   (define (entries names status issue)
@@ -140,20 +146,18 @@
              [(list (== kind) _) 1]
              [_ 0])))
 
-(module+ main
-  (define (in-root . parts)
-    (apply build-path root parts))
+(define (family-census in-root family)
   (define library
     (in-root (format "cuml-~a-lib/cuml/~a/native-libs/libcumlrkt_~a.so" family family family)))
   (define plan (call-with-input-file (in-root (format "scripts/~a-bindings.rktd" family)) read))
-  (define exports (exports-in (nm-output library)))
+  (define exports (exports-in family (nm-output library)))
   (define bindings
-    (append (tree-bindings (in-root (format "cuml-~a-lib/cuml/~a/private" family family)))
-            (module-bindings (in-root "cuml-core-lib/cuml/core/private/native.rkt"))))
+    (append (tree-bindings family (in-root (format "cuml-~a-lib/cuml/~a/private" family family)))
+            (module-bindings family (in-root "cuml-core-lib/cuml/core/private/native.rkt"))))
   (define findings (census exports bindings plan))
   (for ([f (in-list findings)])
     (match-define (list kind name) f)
-    (printf "~a ~a~a\n" kind prefix name))
+    (printf "~a ~a~a\n" kind (prefix-of family) name))
   (printf "~a: ~a exports, ~a bindings, ~a job bodies; ~a planned (~a)\n"
           family
           (length exports)
@@ -161,7 +165,16 @@
           (length (job-bodies exports bindings))
           (count-of 'PLANNED findings)
           (issue-range plan))
-  (when (failed? findings)
+  (failed? findings))
+
+(module+ main
+  (define (in-root . parts)
+    (apply build-path root parts))
+  (define failures
+    (for/list ([family (in-list families)]
+               #:when (family-census in-root family))
+      family))
+  (unless (null? failures)
     (exit 1)))
 
 (module+ test
@@ -212,7 +225,7 @@
                   (lambda () (proc dir))
                   (lambda () (delete-directory/files dir #:must-exist? #f))))
 
-  (test-case "bindings come from define-cluster, its #:c-id and the define-job string"
+  (test-case "bindings come from define-<family>, its #:c-id and the define-job string"
     (call-with-temporary-directory
      (lambda (dir)
        (make-directory* (build-path dir "private"))
@@ -224,12 +237,37 @@
                     (define-cluster blobs-short (_fun -> _int) #:c-id cuml_cluster_short_blobs)
                     (define-job cuml-cluster-fit-job library "cuml_cluster_kmeans_fit_job" (handle))
                     (define-job other-job library "raft_elsewhere" (handle))))))
-       (check-equal? (tree-bindings dir) '("make_blobs" "short_blobs" "kmeans_fit_job")))))
+       (check-equal? (tree-bindings "cluster" dir) '("make_blobs" "short_blobs" "kmeans_fit_job")))))
+
+  (test-case "each family counts only its own prefix and its own definer"
+    (call-with-temporary-directory
+     (lambda (dir)
+       (make-directory* (build-path dir "private"))
+       (with-output-to-file
+        (build-path dir "private" "native.rkt")
+        (lambda ()
+          (write '(module native racket/base
+                    (define-cluster cuml-cluster-make-blobs (_fun -> _int))
+                    (define-metrics cuml-metrics-version (_fun -> _int))
+                    (define-cluster cuml-metrics-stray (_fun -> _int))
+                    (define-job ari-job library "cuml_metrics_adjusted_rand_score_job" (handle))
+                    (define-job fit-job library "cuml_cluster_kmeans_fit_job" (handle))
+                    (entry "last_error" (_fun -> _int))))))
+       (check-equal? (tree-bindings "cluster" dir) '("make_blobs" "kmeans_fit_job" "last_error"))
+       (check-equal? (tree-bindings "metrics" dir)
+                     '("version" "adjusted_rand_score_job" "last_error")))))
+
+  (test-case "the family list holds cluster and metrics"
+    (check-equal? families '("cluster" "metrics")))
 
   (test-case "nm lines become unprefixed export names"
     (check-equal?
-     (exports-in "0000 T cuml_cluster_make_blobs\n0000 T rr_other\n         U cuml_cluster_x\n")
-     '("make_blobs")))
+     (exports-in "cluster"
+                 "0000 T cuml_cluster_make_blobs\n0000 T rr_other\n         U cuml_cluster_x\n")
+     '("make_blobs"))
+    (check-equal? (exports-in "metrics"
+                              "0000 T cuml_cluster_make_blobs\n0000 T cuml_metrics_check_abi\n")
+                  '("check_abi")))
 
   (test-case "the summary names the planned issues"
     (check-equal? (issue-range plan) "issue 8")
