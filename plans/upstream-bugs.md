@@ -49,7 +49,7 @@ packet (§4) has the detail.
 | 5 #29 | k-means++ allocates its (2+⌈ln k⌉)·n buffer with int extents | `kmeans.cuh:105,121` | refused past 2³¹−1 |
 | A2 #34 | a silhouette chunk size of 0 or −1 hangs forever in a host loop | `stats/detail/batched/silhouette_score.cuh` | refused below 1 |
 | A2 #34 | silhouette with a NaN, Inf or 1e20 (float32) row gives NaN for every sample | batched silhouette | refused past a squared norm of 2¹²⁵ (float64: 2¹⁰²¹) |
-| A2 #34 | silhouette under cosine with an all-zero row gives NaN for every sample | batched silhouette | refused |
+| A2 #34 | silhouette under cosine with an all-zero row gives NaN for every sample; a row whose squared norm is subnormal gives NaN, −inf or silently wrong samples | batched silhouette | refused below a squared norm of 2⁻¹²⁶ (float64: 2⁻¹⁰²²) |
 | A2 #34 | the batched silhouette counts n·n_labels and chunk² in an `int` | batched silhouette | refused past 2³¹−1 and chunk 46340 |
 
 ## raft

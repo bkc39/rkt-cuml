@@ -52,6 +52,27 @@
                    (mean s)
                    (tolerance 'mean dt)))))
 
+(define (scaled rows factor dt)
+  (list*->device-matrix (for/list ([r (in-list rows)])
+                          (for/list ([x (in-list r)])
+                            (* factor x)))
+                        #:dtype dt))
+
+(define (smallest-squared-norm rows)
+  (for/fold ([m +inf.0]) ([r (in-list rows)])
+    (min m (for/sum ([x (in-list r)]) (* x x)))))
+
+(test-gpu "S13: under cosine, a smallest row just past the least normal squared norm is accepted"
+  (for ([dt (in-list float-dtypes)]
+        [least (in-list '(1.1e-19 1.5e-154))]
+        [up (in-list (list (expt 2.0 63) (expt 2.0 510)))])
+    (define-values (X ys) (fixture dt))
+    (define rows (device-matrix->list* X))
+    (define small (scaled rows (/ least (sqrt (smallest-squared-norm rows))) dt))
+    (define unit (scaled (device-matrix->list* small) up dt))
+    (check-true (<= (worst (samples small ys #:metric 'cosine) (samples unit ys #:metric 'cosine))
+                    (tolerance 'sample dt)))))
+
 (test-gpu "SL2: a sample alone in its cluster scores exactly 0.0"
   (for ([dt (in-list float-dtypes)])
     (define X (list*->device-matrix (append three-groups '((30 30))) #:dtype dt))

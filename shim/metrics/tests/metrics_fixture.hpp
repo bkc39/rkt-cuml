@@ -22,6 +22,26 @@
 
 namespace cumlrkt::test {
 
+inline std::string norm_message(const std::string& name, int64_t row,
+                                const std::string& most,
+                                const std::string& got) {
+  return name + ": row " + std::to_string(row) +
+         ": expected a squared norm of at most " + most + ", got " + got;
+}
+
+inline std::string least_norm_message(const std::string& name, int64_t row,
+                                      const std::string& least,
+                                      const std::string& got) {
+  return name + ": row " + std::to_string(row) +
+         ": expected a squared norm of at least " + least +
+         " under cosine, got " + got;
+}
+
+inline const std::string float_most = "4.253529586511731e+37";
+inline const std::string double_most = "2.247116418577895e+307";
+inline const std::string float_least = "1.1754943508222875e-38";
+inline const std::string double_least = "2.2250738585072014e-308";
+
 inline std::string gpu_unavailable_reason() {
   int32_t count = 0;
   if (rr_device_count(&count) != RR_OK) {

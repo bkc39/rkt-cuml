@@ -77,7 +77,10 @@
                               [(list _ row) row]
                               [#f (list (add1 i) 1)]))
                           #:dtype dt))
-  (define zero-message "X: row 3 is zero, so no cosine distance")
+  (define (cosine-message least got)
+    (format "X: row 3: expected a squared norm of at least ~a under cosine, got ~a" least got))
+  (define float-least "1.1754943508222875e-38")
+  (define double-least "2.2250738585072014e-308")
   (list
    (row "S11" metric-message (lambda () (proc X two #:metric 'l2)))
    (row "S9" "chunk-size: expected at least 1, got 0" (lambda () (proc X two #:chunk-size 0)))
@@ -115,13 +118,24 @@
    (row "S12 float64 inf"
         (norm-message "X" 4 double-most "inf")
         (lambda () (proc (rows-with 30 '(+inf.0 1) #:dtype 'float64) two)))
-   (row "S13" zero-message (lambda () (proc (cosine-rows '((3 (0 0)))) two #:metric 'cosine)))
+   (row "S13"
+        (cosine-message float-least "0")
+        (lambda () (proc (cosine-rows '((3 (0 0)))) two #:metric 'cosine)))
+   (row "S13 float64 zero"
+        (cosine-message double-least "0")
+        (lambda () (proc (cosine-rows '((3 (0 0))) #:dtype 'float64) two #:metric 'cosine)))
    (row "S13 float32 underflow"
-        zero-message
+        (cosine-message float-least "0")
         (lambda () (proc (cosine-rows '((3 (1e-30 0)))) two #:metric 'cosine)))
    (row "S13 float64 underflow"
-        zero-message
+        (cosine-message double-least "0")
         (lambda () (proc (cosine-rows '((3 (1e-170 0))) #:dtype 'float64) two #:metric 'cosine)))
+   (row "S13 float32 subnormal"
+        (cosine-message float-least "1e-40")
+        (lambda () (proc (cosine-rows '((3 (1e-20 0)))) two #:metric 'cosine)))
+   (row "S13 float64 subnormal"
+        (cosine-message double-least "1e-320")
+        (lambda () (proc (cosine-rows '((3 (1e-160 0))) #:dtype 'float64) two #:metric 'cosine)))
    (row "S11 before S9" metric-message (lambda () (proc X two #:metric 'l1 #:chunk-size 0)))
    (row "S9 before S0"
         "chunk-size: expected at least 1, got 0"

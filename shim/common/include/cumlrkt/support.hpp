@@ -11,6 +11,7 @@
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "cumlrkt/common.hpp"
@@ -51,7 +52,8 @@ inline void require_at_least(const std::string& what, int64_t got,
   }
 }
 
-inline std::string printed(double got) {
+template <typename T = double>
+std::string printed(std::type_identity_t<T> got) {
   if (std::isnan(got)) {
     return "nan";
   }

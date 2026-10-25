@@ -74,8 +74,9 @@ Distances are computed in tiles of @racket[chunk-size] rows, at most 46340;
 a smaller value uses less memory. Results can differ in the last bits from
 call to call. Every row must have a squared norm of at most
 2@superscript{125} as @racket['float32] or 2@superscript{1021} as
-@racket['float64]; under @racket['cosine], a row whose squared norm is 0 in
-@racket[X]'s dtype is refused too.
+@racket['float64]; under @racket['cosine], it must also be at least
+2@superscript{−126} as @racket['float32] or 2@superscript{−1022} as
+@racket['float64], summed in @racket[X]'s dtype.
 @examples[#:eval ev
 (define X (list*->device-matrix '((0 0) (0 1) (1 0) (10 10) (10 11) (11 10)) #:dtype 'float64))
 (define y (list->device-vector '(0 0 0 1 1 1) #:dtype 'int32))
