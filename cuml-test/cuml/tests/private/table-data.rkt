@@ -20,7 +20,7 @@
 
 (struct selection (name table columns))
 
-(define-values (table-type _skipped?) (struct-info (load-dataset-table 'anscombe #:columns '("x1"))))
+(define-values (table-type skipped?) (struct-info (load-dataset-table 'anscombe #:columns '("x1"))))
 
 (define reflected-table (struct-type-make-constructor table-type))
 
