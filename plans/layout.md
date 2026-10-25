@@ -539,13 +539,16 @@ Follow-ups are GitHub issues.
   transformed)`; the generic `fit-transform` returns the matrix.
 - **A3-l.** The guide's chapters scale with `standard-scaler-fit-transform`;
   `standardized` and `standardized-matrix` retire.
-- **A3-m.** The census adds `preprocessing` to A2's family list.
+- **A3-m.** The census finds `preprocessing` from `cuml-preprocessing-lib`, as
+  A2's derivation finds every family from its package.
 - **A3-n.** L6 asserts both bounds (decided in round 1): with exact host
   moments and u = 2⁻²⁴ or 2⁻⁵³, |mean t − (x̄ − T(m))/T(s)| ≤ u checks the
   transform's arithmetic, |mean t| ≤ 4u·(|m|/s + 1) checks the mean statistic,
   and |sd t − 1| ≤ 4u. Fixed bounds were unreachable for |m|/s up to 1e5.
 - **A3-o.** A scale that rounds to 0 in X's dtype gives non-finite output, as
   sklearn's does, and the inverse refuses it. The transform's entry says so.
-- **A3-p.** The doc link check skips a struct field only where it is one: a
-  field declaration (`name :`) or a struct header's field cell. Any other
-  unlinked use of the same name on the page is still a finding.
+- **A3-p.** The doc link check skips a struct field's name only inside that
+  struct's definition box: each `boxed RBoxed` table skips the names of its
+  own field declarations (`name :`), wherever the header renders them. Any
+  unlinked use of the name outside that box, a bare identifier on a code-block
+  line included, is still a finding.

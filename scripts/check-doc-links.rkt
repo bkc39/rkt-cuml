@@ -1,8 +1,9 @@
 #lang racket/base
 
 (require (only-in cuml/scribblings/guide/source page-helpers-path page-helpers-source)
-         (only-in racket/list append* append-map filter-map remove-duplicates)
-         (only-in racket/match == match match-lambda)
+         (only-in racket/dict in-dict)
+         (only-in racket/list append* append-map remove-duplicates)
+         (only-in racket/match == match)
          (only-in racket/string string-replace)
          (only-in syntax/parse/pre ~or* attribute id kernel-literals syntax-parse)
          (only-in threading ~>))
@@ -11,8 +12,14 @@
 
 (define linked-name #rx"<a [^>]*class=\"Rkt[A-Za-z]*Link\"[^>]*>([^<]*)</a>")
 
-(define unlinked-name
-  #rx"(<td>)?<span class=\"RktSym\">([^<]*)</span>(</td>|<span class=\"hspace\">&nbsp;</span>:)?")
+(define unlinked-name #rx"<span class=\"RktSym\">([^<]*)</span>")
+
+(define field-declaration
+  #rx"<span class=\"RktSym\">([^<]*)</span><span class=\"hspace\">&nbsp;</span>:")
+
+(define definition-box #rx"<table [^>]*class=\"boxed RBoxed\"")
+
+(define table-tag #rx"<(/)?table[ >]")
 
 (define (exported-names module-path)
   (module-declared? module-path #t)
@@ -80,14 +87,33 @@
 (define (rendered-names pattern html)
   (remove-duplicates (map unescaped (regexp-match* pattern html #:match-select cadr))))
 
+(define (table-end html start)
+  (let loop ([position start]
+             [depth 0])
+    (match (regexp-match-positions table-tag html position)
+      [(list (cons _ tag-end) #f) (loop tag-end (add1 depth))]
+      [(list (cons _ tag-end) _)
+       (match depth
+         [1 tag-end]
+         [_ (loop tag-end (sub1 depth))])]
+      [#f (string-length html)])))
+
+(define (field-scopes html)
+  (let loop ([position 0])
+    (match (regexp-match-positions definition-box html position)
+      [(list (cons start _))
+       (define end (table-end html start))
+       (define box (substring html start end))
+       (list* (cons (substring html position start) '())
+              (cons box (rendered-names field-declaration box))
+              (loop end))]
+      [#f (list (cons (substring html position) '()))])))
+
 (define (unlinked-names html)
-  (~> (regexp-match* unlinked-name html #:match-select values)
-      (filter-map (match-lambda
-                    [(list _ "<td>" _ "</td>") #f]
-                    [(list _ _ _ (regexp #rx"^<span")) #f]
-                    [(list _ _ name _) (unescaped name)])
-                  _)
-      remove-duplicates))
+  (remove-duplicates (for*/list ([(text fields) (in-dict (field-scopes html))]
+                                 [name (in-list (rendered-names unlinked-name text))]
+                                 #:unless (member name fields))
+                       name)))
 
 (define (html-findings labelled bindings modules page html)
   (define shown-bindings
@@ -142,18 +168,59 @@
                   '("examples.html: type, which a helper binds, links"))
     (check-equal? (html-findings (hash) '("type") '() "kmeans.html" html) '()))
 
-  (test-case "a struct field's declaration is no name to link, an unlinked use of its name elsewhere is"
-    (define field
-      "<span class=\"RktSym\">scale</span><span class=\"hspace\">&nbsp;</span>:<span class=\"hspace\">&nbsp;</span>")
-    (define header-field "<td><span class=\"RktSym\">scale</span></td>")
-    (define prose "<span class=\"RktSym\">scale</span>")
-    (define labelled (hash "scale" #t))
+  (define (symbol-cell name)
+    (format "<span class=\"RktSym\">~a</span>" name))
+  (define (declaration name)
+    (string-append (symbol-cell name)
+                   "<span class=\"hspace\">&nbsp;</span>:<span class=\"hspace\">&nbsp;</span>"))
+  (define (rows cell names)
+    (apply string-append
+           (for/list ([name (in-list names)])
+             (format "<tr><td>~a</td></tr>" (cell name)))))
+  (define (rendered-box header . fields)
+    (format (string-append "<table cellspacing=\"0\" cellpadding=\"0\" class=\"boxed RBoxed\">"
+                           "<tr><td><blockquote class=\"SubFlow\">~a</blockquote></td></tr>~a</table>")
+            header
+            (rows declaration fields)))
+  (define (struct-header first-field . fields)
+    (format (string-append "<table cellspacing=\"0\" cellpadding=\"0\" class=\"RForeground\">"
+                           "<tr><td><span class=\"nobreak\">~a</span></td></tr>~a</table>")
+            (symbol-cell first-field)
+            (rows symbol-cell fields)))
+  (define labelled (hash "scale" #t))
+  (define (scale-findings page html)
+    (html-findings labelled '() '() page html))
+
+  (test-case "a struct header's first and last fields are no names to link"
     (check-equal?
-     (html-findings labelled '() '() "preprocessing.html" (string-append header-field field))
-     '())
-    (check-equal? (html-findings labelled '() '() "preprocessing.html" (string-append field prose))
+     (scale-findings "preprocessing.html"
+                     (string-append (rendered-box (struct-header "scale" "mean") "scale" "mean")
+                                    (rendered-box (struct-header "mean" "scale") "mean" "scale")))
+     '()))
+
+  (test-case "a one-line struct header's fields are no names to link"
+    (define header
+      (string-append "<p class=\"RForeground\"><span class=\"RktPn\">(</span>"
+                     (symbol-cell "scale")
+                     "<span class=\"RktPn\">)</span></p>"))
+    (check-equal? (scale-findings "preprocessing.html" (rendered-box header "scale")) '()))
+
+  (test-case "a bare identifier on a code-block line is a name to link"
+    (define block
+      (format
+       "<table cellspacing=\"0\" cellpadding=\"0\" class=\"RktBlk\"><tr><td>~a</td></tr></table>"
+       (symbol-cell "scale")))
+    (check-equal? (scale-findings "kmeans.html" block)
+                  '("kmeans.html: scale, which the examples can use, has no link")))
+
+  (test-case "a field's name is skipped in its own definition box only"
+    (check-equal? (scale-findings "preprocessing.html"
+                                  (string-append (rendered-box (struct-header "scale") "scale")
+                                                 (symbol-cell "scale")))
                   '("preprocessing.html: scale, which the examples can use, has no link"))
-    (check-equal? (html-findings labelled '() '() "kmeans.html" prose)
+    (check-equal? (scale-findings "preprocessing.html" (rendered-box (symbol-cell "scale") "mean"))
+                  '("preprocessing.html: scale, which the examples can use, has no link"))
+    (check-equal? (scale-findings "kmeans.html" (declaration "scale"))
                   '("kmeans.html: scale, which the examples can use, has no link")))
 
   (test-case "a module the examples require is no name to link, and links to no binding"
