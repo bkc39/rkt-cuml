@@ -4,10 +4,11 @@
                      racket/base
                      racket/contract/base
                      racket/generic
-                     raft))
+                     raft
+                     threading))
 
 @(define host-ev (make-base-eval #:lang 'racket/base '(require cuml/estimator)))
-@(define ev (make-base-eval #:lang 'racket/base '(require cuml raft)))
+@(define ev (make-base-eval #:lang 'racket/base '(require cuml raft threading)))
 
 @title[#:tag "estimators"]{Estimators}
 
@@ -469,7 +470,7 @@ An unfitted principal component analysis with the hyperparameters
 
 @examples[#:eval ev
 (define P (list*->device-matrix '((4 0) (-4 0) (0 1) (0 -1) (0 0)) #:dtype 'float64))
-(device-matrix->list* (transform (fit (pca #:n-components 1) P) P))
+(~> (pca #:n-components 1) (fit P) (transform P) device-matrix->list*)
 (eval:error (transform (pca) P))
 ]}
 

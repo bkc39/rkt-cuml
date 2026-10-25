@@ -12,6 +12,9 @@ inline constexpr double most_squared_norm_double = 0x1p1021;
 inline constexpr double most_float = FLT_MAX;
 
 template <typename T>
+inline constexpr double most_value = std::numeric_limits<T>::max();
+
+template <typename T>
 inline constexpr double squared_norm_bound =
     sizeof(T) == sizeof(float) ? most_squared_norm : most_squared_norm_double;
 

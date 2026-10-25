@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +14,6 @@
 #include <string>
 #include <type_traits>
 #include <utility>
-#include <vector>
 
 #include "cumlrkt/decomposition.h"
 #include "cumlrkt/support.hpp"
@@ -31,18 +29,21 @@ using cumlrkt::logic_error;
 using cumlrkt::matrix;
 using cumlrkt::most_float;
 using cumlrkt::most_index;
+using cumlrkt::most_value;
 using cumlrkt::on_floats;
-using cumlrkt::printed;
 using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_finite;
+using cumlrkt::require_finite_non_negative;
 using cumlrkt::require_float;
 using cumlrkt::require_magnitudes;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
 using cumlrkt::settle;
 using cumlrkt::decomposition::fit_arrays;
+using cumlrkt::decomposition::largest_root;
 using cumlrkt::decomposition::post_fit;
+using cumlrkt::decomposition::smallest_divisor;
 using cumlrkt::decomposition::to_columns;
 using cumlrkt::decomposition::to_rows;
 using raftrkt::any_extent;
@@ -59,20 +60,9 @@ buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
   return buffer<T>(static_cast<std::size_t>(count), stream);
 }
 
-template <typename T>
-constexpr double most_value =
-    std::is_same_v<T, float> ? static_cast<double>(FLT_MAX) : DBL_MAX;
-
 void require_rows(int64_t n) {
   if (n > most_index) {
     throw logic_error(std::format("X: {} rows do not fit the index type", n));
-  }
-}
-
-void require_two(const char* axis, int64_t extent) {
-  if (extent < 2) {
-    throw logic_error(
-        std::format("X: expected at least 2 {}, got {}", axis, extent));
   }
 }
 
@@ -96,10 +86,7 @@ void require_parameters(const fit_request& r, int64_t m) {
     require_at_least("n-components", r.n_components, 1);
     require_at_most("n-components", r.n_components, m);
   }
-  if (!std::isfinite(r.tol) || r.tol < 0) {
-    throw logic_error(std::format(
-        "tol: expected a finite value of at least 0, got {}", printed(r.tol)));
-  }
+  require_finite_non_negative("tol", r.tol);
   require_float("tol", r.tol);
   require_at_least("iterations", r.iterations, 1);
   require_at_most("iterations", r.iterations, most_index);
@@ -148,8 +135,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
               const fit_request& r) {
   const matrix<T, int64_t> x =
       rows_of<T, int64_t>(view, "X", any_extent, any_extent);
-  require_two("rows", x.n);
-  require_two("columns", x.d);
+  require_some("X", "rows", x.n, 2);
+  require_some("X", "columns", x.d, 2);
   require_rows(x.n);
   if (x.d > most_columns) {
     throw logic_error(std::format(
@@ -224,20 +211,16 @@ const T* explained_variance(const apply_views& v, int64_t k) {
   return raftrkt::vector_data<T>(v.variance, "explained-variance", k);
 }
 
-template <typename T>
-double largest(const T* variance, int64_t k, rmm::cuda_stream_view stream) {
-  std::vector<T> host(static_cast<std::size_t>(k));
-  raftrkt::cuda_check(
-      cudaMemcpyAsync(host.data(), variance, host.size() * sizeof(T),
-                      cudaMemcpyDeviceToHost, stream.value()),
-      "cudaMemcpyAsync");
-  raftrkt::cuda_check(cudaStreamSynchronize(stream.value()),
-                      "cudaStreamSynchronize");
-  double most = 1;
-  for (const T v : host) {
-    most = std::max(most, std::sqrt(static_cast<double>(v)));
+template <typename T, bool Inverse>
+double spread(const raft::handle_t& handle, const T* variance, int64_t k) {
+  if (variance == nullptr) {
+    return 1.0;
   }
-  return most;
+  if constexpr (Inverse) {
+    return largest_root(handle, variance, k);
+  } else {
+    return 1.0 / smallest_divisor(handle, variance, k);
+  }
 }
 
 template <typename T>
@@ -262,11 +245,10 @@ void apply_into(const raft::handle_t& handle, const operands<T>& in,
   const T* variance = explained_variance<T>(v, k);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_finite("X", x, stream);
-  const double spread =
-      Inverse && variance != nullptr ? largest(variance, k, stream) : 1.0;
   require_magnitudes(
       "X", x,
-      most_value<T> / (overflow_margin * static_cast<double>(width) * spread),
+      most_value<T> / (overflow_margin * static_cast<double>(width) *
+                       spread<T, Inverse>(handle, variance, k)),
       stream);
   const int64_t out_width = Inverse ? d : k;
   auto result =
@@ -308,37 +290,33 @@ matrix<T, int64_t> applied_x(const rr_view* view) {
 
 template <bool Inverse>
 int applied(void* handle, const apply_views& v) {
-  return guarded(
-      handle,
-      {{"X", v.x},
-       {"components", v.components},
-       {"mean", v.mean},
-       {"explained-variance", v.variance}},
-      [&](const raft::handle_t& h) {
-        raftrkt::require(v.out, "out");
-        on_floats(v.x, "X", [&](auto x_tag) {
-          using X = decltype(x_tag);
-          const matrix<X, int64_t> x = applied_x<X>(v.x);
-          on_floats(v.components, "components", [&](auto c_tag) {
-            using C = decltype(c_tag);
-            const matrix<C, int64_t> c = rows_of<C, int64_t>(
-                v.components, "components", any_extent, any_extent);
-            require_some("components", "row", c.n);
-            if (c.d < 2) {
-              throw logic_error(std::format(
-                  "components: expected at least 2 columns, got {}", c.d));
-            }
-            if constexpr (std::is_same_v<X, C>) {
-              apply_into<C, Inverse>(h, operands<C>{x, c}, v);
-            } else {
-              throw logic_error(
-                  std::format("X: expected {}, got {}",
-                              raftrkt::dtype_name(raftrkt::dtype_code<C>),
-                              raftrkt::dtype_name(raftrkt::dtype_code<X>)));
-            }
-          });
-        });
-      });
+  return guarded(handle,
+                 {{"X", v.x},
+                  {"components", v.components},
+                  {"mean", v.mean},
+                  {"explained-variance", v.variance}},
+                 [&](const raft::handle_t& h) {
+                   raftrkt::require(v.out, "out");
+                   on_floats(v.x, "X", [&](auto x_tag) {
+                     using X = decltype(x_tag);
+                     const matrix<X, int64_t> x = applied_x<X>(v.x);
+                     on_floats(v.components, "components", [&](auto c_tag) {
+                       using C = decltype(c_tag);
+                       const matrix<C, int64_t> c = rows_of<C, int64_t>(
+                           v.components, "components", any_extent, any_extent);
+                       require_some("components", "row", c.n);
+                       require_some("components", "columns", c.d, 2);
+                       if constexpr (std::is_same_v<X, C>) {
+                         apply_into<C, Inverse>(h, operands<C>{x, c}, v);
+                       } else {
+                         throw logic_error(std::format(
+                             "X: expected {}, got {}",
+                             raftrkt::dtype_name(raftrkt::dtype_code<C>),
+                             raftrkt::dtype_name(raftrkt::dtype_code<X>)));
+                       }
+                     });
+                   });
+                 });
 }
 
 }  // namespace

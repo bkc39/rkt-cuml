@@ -158,10 +158,7 @@
   "X: row 0, column 2: expected a magnitude of at most 2.8356862219877405e+37, got 1e+38")
 
 (define (narrowed width [cells '()] [dt 'float32])
-  (grid-with cells
-             dt
-             (for/list ([row (in-list grid)])
-               (take row width))))
+  (grid-with cells dt (map (lambda (row) (take row width)) grid)))
 
 (define (shared-rows width)
   (define last-column (sub1 width))
@@ -216,15 +213,25 @@
          (cons (hand-built #:variance #f) (narrowed width `([(0 ,last-column) +inf.0])))))))
 
 (define (transform-rows)
-  (append (shared-rows 3)
-          (list (row "t9" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
-                (row "t13" t13-message (cons (fitted) (grid-with '([(0 2) 1e38]))))
-                (row "t8 before t9"
-                     "X: expected float32, got float64"
-                     (cons (fitted) (blank-matrix 4 2 'float64)))
-                (row "t12 before t13"
-                     "X: row 1, column 0: expected a finite value, got nan"
-                     (cons (fitted) (grid-with '([(0 2) 1e38] [(1 0) +nan.0])))))))
+  (append
+   (shared-rows 3)
+   (list (row "t9" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
+         (row "t13" t13-message (cons (fitted) (grid-with '([(0 2) 1e38]))))
+         (row "t13 whitened"
+              "X: row 0, column 1: expected a magnitude of at most 4.989600773836799e+291, got 1e+300"
+              (cons (pca-fit (rows->matrix '((0 3) (1 3) (2 3) (-1 3)) 'float64) #:whiten #t)
+                    (rows->matrix '((0 1e300)) 'float64)))
+         (row "t13 whitened float32"
+              "X: row 0, column 0: expected a magnitude of at most 1.736496146773559e+34, got 1e+36"
+              (cons (pca-fit (rows->matrix '((0.001 0) (-0.001 0) (0 0.0005) (0 -0.0005)) 'float32)
+                             #:whiten #t)
+                    (rows->matrix '((1e36 0)) 'float32)))
+         (row "t8 before t9"
+              "X: expected float32, got float64"
+              (cons (fitted) (blank-matrix 4 2 'float64)))
+         (row "t12 before t13"
+              "X: row 1, column 0: expected a finite value, got nan"
+              (cons (fitted) (grid-with '([(0 2) 1e38] [(1 0) +nan.0])))))))
 
 (define (inverse-rows)
   (append

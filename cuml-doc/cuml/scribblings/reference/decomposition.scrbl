@@ -52,17 +52,15 @@ the fit's @racket[whiten] flag, which the transforms read.}
                   [#:params params (or/c #f hash?) #f]
                   [#:resources resources device-resources? (current-device-resources)])
          pca-result?]{
-The principal components of @racket[X], a row-major @racket['float32] or
-@racket['float64] matrix with at least two rows, at least two columns, two
-distinct rows and finite elements, from the eigendecomposition of its
-covariance in @racket[X]'s dtype. @racket[n-components] is at most the
-smaller of @racket[X]'s row and column counts; @racket[#f] keeps that many.
-@racket['jacobi] iterates at most @racket[iterations] sweeps to tolerance
-@racket[tol] (0 for machine precision) and stops silently when it runs out;
-@racket['full] ignores both. Elements of magnitude above
-√(@italic{max}/(4·n·d)), @italic{max} the dtype's largest value, are refused,
-since their covariance could overflow. Two fits of the same @racket[X] may
-differ in the last bits.
+The principal components of @racket[X], a row-major n×d @racket['float32]
+or @racket['float64] matrix with at least two rows and columns, two distinct
+rows and finite elements of magnitude at most √(@italic{max}/(4·n·d)),
+@italic{max} the dtype's largest value. @racket[n-components] is at most
+min(n, d); @racket[#f] keeps that many. @racket['jacobi] iterates at most
+@racket[iterations] sweeps to tolerance @racket[tol], finite and at most the
+float32 maximum (0 for machine precision), and stops silently when it runs
+out; @racket['full] ignores both. Two fits of the same @racket[X] may differ
+in the last bits.
 @examples[#:eval ev #:label #f
 (pca-result-noise-variance (pca-fit X #:n-components 1))
 (eval:error (pca-fit X #:n-components 3))
@@ -77,7 +75,8 @@ A new n×k matrix: @racket[X], less @racket[result]'s mean, times the
 transposed components; when @racket[result] whitens, each column is then
 divided by the square root of its variance (at least the dtype's epsilon),
 so whitened training data has unit variance. @racket[X] needs the fit's
-dtype and column count, a row and finite elements.
+dtype and column count, a row, and finite elements of magnitude at most
+@italic{max}/(4·d), times the smallest of those divisors when it is below 1.
 @examples[#:eval ev #:label #f
 (~> (pca-fit X #:whiten #t) (pca-transform X) device-matrix->list*)
 (eval:error (pca-transform fitted (list*->device-matrix '((1 2 3)) #:dtype 'float64)))
@@ -90,7 +89,9 @@ dtype and column count, a row and finite elements.
 Maps n×k projections back: @racket[X], times each component's square root
 of variance when @racket[result] whitens, times the components, plus the
 mean. With every component kept, the round trip returns the data up to
-rounding.
+rounding. @racket[X] needs the fit's dtype, k columns, a row, and finite
+elements of magnitude at most @italic{max}/(4·k), over the largest square
+root of variance when @racket[result] whitens and it is above 1.
 @examples[#:eval ev #:label #f
 (~> (pca-transform fitted X) (pca-inverse-transform fitted _) device-matrix->list*)
 ]}

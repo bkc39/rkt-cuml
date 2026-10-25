@@ -24,7 +24,8 @@
                   normal-fixture
                   wide-fixture)
          (only-in "private/program.rkt" run-program)
-         (only-in "private/scaler-data.rkt" bits-equal? round-to rows->matrix unit-roundoff))
+         (only-in "private/scaler-data.rkt" bits-equal? round-to rows->matrix unit-roundoff)
+         (only-in threading ~>))
 
 (define dtypes '(float32 float64))
 
@@ -130,7 +131,8 @@
                              (for/list ([x (in-list (column t 3))])
                                (narrow (/ x eps))))
                 (format "~a: the zero-variance column is the projection over epsilon" dt))
-    (define back (device-matrix->list* (pca-inverse-transform whitened (pca-transform whitened X))))
+    (define back
+      (~> (pca-transform whitened X) (pca-inverse-transform whitened _) device-matrix->list*))
     (define u (unit-roundoff dt))
     (match-define (fitted _ _ _ _ mean) (fitted-of whitened))
     (define worst
@@ -156,7 +158,8 @@
       (define X (rows->matrix rows dt))
       (define mean (fitted-mean lists))
       (define d (length mean))
-      (define back (device-matrix->list* (pca-inverse-transform result (pca-transform result X))))
+      (define back
+        (~> (pca-transform result X) (pca-inverse-transform result _) device-matrix->list*))
       (define bound
         (for/list ([r (in-list (centred-norms rows mean))])
           (for/list ([m (in-list mean)])
@@ -183,7 +186,7 @@
     (define back (device-matrix->list* (pca-inverse-transform result T)))
     (for ([m (in-list '(1 2 10))])
       (define head (take rows m))
-      (define t-head (device-matrix->list* (pca-transform result (rows->matrix head dt))))
+      (define t-head (~> (rows->matrix head dt) (pca-transform result _) device-matrix->list*))
       (define transform-bound
         (for/list ([r (in-list (centred-norms head mean))])
           (for/list ([s (in-list scale)])
@@ -192,7 +195,7 @@
       (check-true (<= worst 1.0)
                   (format "~a ~a ~a rows: transform ~a of the bound" dt (fixture-name f) m worst))
       (define back-head
-        (device-matrix->list* (pca-inverse-transform result (rows->matrix (take tw m) dt))))
+        (~> (take tw m) (rows->matrix dt) (pca-inverse-transform result _) device-matrix->list*))
       (define inverse-bound
         (for/list ([t-row (in-list (take tw m))])
           (for/list ([mu (in-list mean)])

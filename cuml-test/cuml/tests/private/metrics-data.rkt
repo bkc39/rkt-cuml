@@ -23,6 +23,7 @@
          permute
          projection
          random-permutation
+         rows-of
          scaled
          shrunk
          sorted-distinct

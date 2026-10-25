@@ -65,7 +65,8 @@ std::vector<T> with(std::vector<T> host, std::size_t at, double value) {
   return host;
 }
 
-std::string magnitude(int64_t row, int64_t col, double most, float got) {
+template <typename T>
+std::string magnitude(int64_t row, int64_t col, double most, T got) {
   return std::format(
       "X: row {}, column {}: expected a magnitude of at most {}, got {}", row,
       col, most, got);
@@ -354,6 +355,41 @@ TEST(PcaInverseTransformRefusals, EachConditionInTableOrder) {
   const resources res;
   expect_apply_refusals(res, cuml_decomposition_pca_inverse_transform,
                         {.width = kept, .wrong_width = cols, .inverse = true});
+}
+
+template <typename T>
+void expect_whitened_transform_bound(const std::vector<T>& fit_rows, T value,
+                                     std::size_t column) {
+  const resources res;
+  const auto n = static_cast<int64_t>(fit_rows.size() / 2);
+  const filled<T> x(res, fit_rows, {n, 2});
+  pca_fitted fitted(res);
+  ASSERT_EQ(pca_fit_into(res, x.view(), fitted), "accepted");
+  double smallest = 1.0;
+  for (const T v : fitted.out.read<T>(1)) {
+    const T divisor = std::max(std::sqrt(v), std::numeric_limits<T>::epsilon());
+    smallest = std::min(smallest, static_cast<double>(divisor));
+  }
+  const double most =
+      std::numeric_limits<T>::max() / (margin * 2 * (1.0 / smallest));
+  const filled<T> large_x(res, with(std::vector<T>(2, T{0}), column, value),
+                          {1, 2});
+  record whitened(res);
+  EXPECT_EQ(pca_apply_into(res, cuml_decomposition_pca_transform,
+                           large_x.view(), fitted_views(fitted), whitened, 1),
+            magnitude(0, static_cast<int64_t>(column), most, value));
+  expect_untouched(whitened);
+  record plain(res);
+  EXPECT_EQ(pca_apply_into(res, cuml_decomposition_pca_transform,
+                           large_x.view(), fitted_views(fitted), plain),
+            "accepted");
+}
+
+TEST(PcaTransformRefusals, WhiteningScalesTheMagnitudeBound) {
+  CUMLRKT_REQUIRE_GPU();
+  expect_whitened_transform_bound<double>({0, 3, 1, 3, 2, 3, -1, 3}, 1e300, 1);
+  expect_whitened_transform_bound<float>(
+      {0.001F, 0, -0.001F, 0, 0, 0.0005F, 0, -0.0005F}, 1e36F, 0);
 }
 
 }  // namespace

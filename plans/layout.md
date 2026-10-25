@@ -566,7 +566,9 @@ Follow-ups are GitHub issues.
   exact-sum data, are bitwise; the rest is the twin's tolerances. The manual
   says two fits may differ in the last bits.
 - **A4-d.** The shim applies sklearn's sign rule exactly: the first index of
-  largest magnitude is made positive.
+  largest magnitude is made positive. cuML 26.08 already returns these signs
+  on every input probed, ties included, so the kernel is a guard against an
+  upstream change; a gtest pins it on hand-built components.
 - **A4-e.** The shim fits min(n, d) components and reports sklearn's
   definitions: noise is the mean of λ[k:m], λ is clamped at 0, and the ratio
   is λ/Σλ[:m], 0 when the sum is 0.
@@ -574,8 +576,9 @@ Follow-ups are GitHub issues.
 - **A4-g.** Whitening is the shim's, never cuML's: the transform divides by
   max(√λ, ε) of the fit, the inverse multiplies by √λ.
 - **A4-h.** Elements above √(max/(4·n·d)) are refused at fit, above
-  max/(4·d) at transform, and above max/(4·k·max(1, √λmax)) (whitened) or
-  max/(4·k) at inverse, before any allocation.
+  max/(4·d) at transform, times min(1, minⱼ max(√λⱼ, ε)) when whitening, and
+  above max/(4·k·max(1, √λmax)) (whitened) or max/(4·k) at inverse, before
+  any allocation.
 - **A4-i.** A matrix whose rows are all equal is refused.
 - **A4-j.** One row or one column is refused.
 - **A4-k.** The Jacobi defaults are `#:tol 0.0` and `#:iterations 15`; 0

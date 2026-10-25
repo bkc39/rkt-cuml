@@ -29,14 +29,11 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/estimator-data.rkt" round-trips)
+         (only-in "private/estimator-data.rkt" printed round-trips)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/scaler-data.rkt" bits-equal? normal-rows rows->matrix))
 
 (define changed (hasheq 'with-mean #f 'with-std #f))
-
-(define (printed v)
-  (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (define (statistics result)
   (for/list ([v (list (standard-scaler-result-mean result)

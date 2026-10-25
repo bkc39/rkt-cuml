@@ -78,6 +78,14 @@ inline void require_non_negative(const char* what, double got) {
   }
 }
 
+inline void require_finite_non_negative(const char* what, double got) {
+  if (!std::isfinite(got) || got < 0) {
+    throw logic_error(
+        std::format("{}: expected a finite value of at least 0, got {}", what,
+                    printed(got)));
+  }
+}
+
 inline void require_at_most(const char* what, int64_t got, int64_t most) {
   if (got > most) {
     throw logic_error(
@@ -152,10 +160,11 @@ void require_magnitudes(const char* name, const matrix<T, int64_t>& x,
   }
 }
 
-inline void require_some(const char* name, const char* axis, int64_t extent) {
-  if (extent == 0) {
-    throw logic_error(std::string(name) + ": expected at least 1 " + axis +
-                      ", got 0");
+inline void require_some(const char* name, const char* axis, int64_t extent,
+                         int64_t least = 1) {
+  if (extent < least) {
+    throw logic_error(std::format("{}: expected at least {} {}, got {}", name,
+                                  least, axis, extent));
   }
 }
 

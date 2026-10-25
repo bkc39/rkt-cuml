@@ -6,7 +6,7 @@
                   pca-result-explained-variance-ratio
                   pca-result-mean
                   pca-result-singular-values)
-         (only-in racket/list argmax list-set)
+         (only-in racket/list argmax list-set make-list)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "scaler-data.rkt" generated-rows round-to rows->matrix))
 
@@ -15,6 +15,7 @@
          axis-rows
          column
          constant-column
+         dot
          duplicate-rows
          first-max-entries
          fitted-of
@@ -52,9 +53,7 @@
   (product (normals seed n d) (normals (add1 seed) d d)))
 
 (define (shifted rows by)
-  (for/list ([row (in-list rows)])
-    (for/list ([x (in-list row)])
-      (+ x by))))
+  (map (lambda (row) (map (lambda (x) (+ x by)) row)) rows))
 
 (define (low-rank seed n d rank)
   (for/list ([row (in-list (product (normals seed n rank) (normals (add1 seed) rank d)))]
@@ -82,13 +81,14 @@
    (fixture "low rank" (low-rank 17 1000 20 5))
    wide-fixture))
 
-(define (fixture-rows f dtype)
+(define (fixture-rows f dtype [count +inf.0])
   (define narrow (round-to dtype))
-  (for/list ([row (in-list (fixture-source f))])
+  (for/list ([row (in-list (fixture-source f))]
+             [_ (in-range count)])
     (map narrow row)))
 
-(define (fixture-matrix f dtype)
-  (rows->matrix (fixture-rows f dtype) dtype))
+(define (fixture-matrix f dtype [count +inf.0])
+  (rows->matrix (fixture-rows f dtype count) dtype))
 
 (define (axis-rows a b c permutation)
   (define (on-axis axis value)
@@ -109,8 +109,7 @@
     (list-set row j value)))
 
 (define (duplicate-rows n row)
-  (for/list ([_ (in-range n)])
-    row))
+  (make-list n row))
 
 (define (fitted-of result)
   (fitted (device-matrix->list* (pca-result-components result))
@@ -126,8 +125,7 @@
   (sqrt (dot xs xs)))
 
 (define (column rows j)
-  (for/list ([row (in-list rows)])
-    (list-ref row j)))
+  (map (lambda (row) (list-ref row j)) rows))
 
 (define (centred row mean)
   (map - row mean))

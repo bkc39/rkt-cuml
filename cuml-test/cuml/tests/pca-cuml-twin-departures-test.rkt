@@ -15,10 +15,10 @@
                   twin-case
                   twin-ks
                   twin-results
-                  twin-rows
-                  unit)
+                  twin-rows)
          (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/scaler-data.rkt" rows->matrix))
+         (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff)
+         (only-in threading ~>))
 
 (test-twin "L15: the departures from cuML-Python are pinned"
   (define wide (named "wide"))
@@ -32,7 +32,7 @@
                         (twin-case "cuml" scales 'float32 scales-m))))
   (test-case "n < d: their noise is not the mean of the components left out"
     (match-define (cons largest _) (hash-ref wide-sk 'explained_variance))
-    (define bound (* 64 (unit 'float64) largest))
+    (define bound (* 64 (unit-roundoff 'float64) largest))
     (define ours (ours-noise (fit-ours wide 'float64 5)))
     (check-true (<= (abs (- ours (hash-ref wide-sk 'noise_variance))) bound))
     (check-true (> (abs (- ours (hash-ref wide-cuml 'noise_variance))) bound)))
@@ -40,7 +40,11 @@
     (define rows (twin-rows correlated 'float64))
     (define result (pca-fit (rows->matrix rows 'float64) #:n-components 3 #:whiten #t))
     (define mine
-      (append* (device-matrix->list* (pca-transform result (rows->matrix (take rows 10) 'float64)))))
+      (~> (take rows 10)
+          (rows->matrix 'float64)
+          (pca-transform result _)
+          device-matrix->list*
+          append*))
     (define factor (sqrt (/ 9.0 (sub1 (sample-count correlated)))))
     (define top (apply max (map abs mine)))
     (for ([ours (in-list mine)]

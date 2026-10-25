@@ -1,5 +1,7 @@
 #include <thrust/for_each.h>
+#include <thrust/functional.h>
 #include <thrust/iterator/counting_iterator.h>
+#include <thrust/transform_reduce.h>
 
 #include <cfloat>
 #include <cstdint>
@@ -45,6 +47,12 @@ __device__ double epsilon(double) {
 }
 
 template <typename T>
+__device__ T divisor(T variance) {
+  const T scale = root(variance);
+  return scale < epsilon(T{}) ? epsilon(T{}) : scale;
+}
+
+template <typename T>
 struct column_major {
   const T* x;
   const T* variance;
@@ -72,12 +80,7 @@ struct row_major {
     const int64_t i = o / d;
     const int64_t j = o - (i * d);
     const T v = x[i + (j * n)];
-    if (variance == nullptr) {
-      out[o] = v;
-    } else {
-      const T scale = root(variance[j]);
-      out[o] = over(v, scale < epsilon(T{}) ? epsilon(T{}) : scale);
-    }
+    out[o] = variance == nullptr ? v : over(v, divisor(variance[j]));
   }
 };
 
@@ -146,6 +149,20 @@ struct signed_components {
   }
 };
 
+template <typename T>
+struct wide_divisor {
+  __device__ double operator()(T v) const {
+    return static_cast<double>(divisor(v));
+  }
+};
+
+template <typename T>
+struct wide_root {
+  __device__ double operator()(T v) const {
+    return __dsqrt_rn(static_cast<double>(v));
+  }
+};
+
 template <typename F>
 void each(const raft::handle_t& handle, int64_t count, F f) {
   const auto stream = raft::resource::get_cuda_stream(handle);
@@ -177,6 +194,24 @@ void post_fit(const raft::handle_t& handle, const T* components, T* variance,
   each(handle, k, signed_components<T>{components, out.components, m, d});
 }
 
+template <typename T>
+double smallest_divisor(const raft::handle_t& handle, const T* variance,
+                        int64_t k) {
+  const auto stream = raft::resource::get_cuda_stream(handle);
+  return thrust::transform_reduce(rmm::exec_policy(stream), variance,
+                                  variance + k, wide_divisor<T>{}, 1.0,
+                                  thrust::minimum<double>{});
+}
+
+template <typename T>
+double largest_root(const raft::handle_t& handle, const T* variance,
+                    int64_t k) {
+  const auto stream = raft::resource::get_cuda_stream(handle);
+  return thrust::transform_reduce(rmm::exec_policy(stream), variance,
+                                  variance + k, wide_root<T>{}, 1.0,
+                                  thrust::maximum<double>{});
+}
+
 template void to_columns<float>(const raft::handle_t&, const float*, int64_t,
                                 int64_t, const float*, float*);
 template void to_columns<double>(const raft::handle_t&, const double*, int64_t,
@@ -191,5 +226,13 @@ template void post_fit<float>(const raft::handle_t&, const float*, float*,
 template void post_fit<double>(const raft::handle_t&, const double*, double*,
                                int64_t, int64_t, int64_t, int64_t,
                                const fit_arrays<double>&, double*);
+template double smallest_divisor<float>(const raft::handle_t&, const float*,
+                                        int64_t);
+template double smallest_divisor<double>(const raft::handle_t&, const double*,
+                                         int64_t);
+template double largest_root<float>(const raft::handle_t&, const float*,
+                                    int64_t);
+template double largest_root<double>(const raft::handle_t&, const double*,
+                                     int64_t);
 
 }  // namespace cumlrkt::decomposition

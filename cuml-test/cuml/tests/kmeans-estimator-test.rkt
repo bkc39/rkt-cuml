@@ -52,6 +52,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/estimator-data.rkt" printed)
          (only-in "private/kmeans-data.rkt"
                   blank-matrix
                   blob-data
@@ -86,9 +87,6 @@
         (list '#:n-init 'n-init 2)
         (list '#:random-state 'random-state 7)
         (list '#:oversampling-factor 'oversampling-factor 1.5)))
-
-(define (printed v)
-  (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (define (outcome r)
   (match-define (kmeans-result centroids labels inertia n-iter) r)
