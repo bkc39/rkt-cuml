@@ -30,14 +30,15 @@
   (values (overlap dt #:each each) (overlap-labels #:each each)))
 
 (define (samples X ys #:dtype [ldt 'int32] #:metric [metric 'euclidean] #:chunk-size [chunk 40000])
-  (device-vector->list
-   (silhouette-samples X (labels-of ys ldt) #:metric metric #:chunk-size chunk)))
+  (device-vector->list (silhouette-samples X (labels-of ys ldt) #:metric metric #:chunk-size chunk)))
 
 (define (score X ys #:dtype [ldt 'int32] #:metric [metric 'euclidean] #:chunk-size [chunk 40000])
   (silhouette-score X (labels-of ys ldt) #:metric metric #:chunk-size chunk))
 
 (define (worst xs ys)
-  (for/fold ([w 0.0]) ([x (in-list xs)] [y (in-list ys)])
+  (for/fold ([w 0.0])
+            ([x (in-list xs)]
+             [y (in-list ys)])
     (max w (abs (- x y)))))
 
 (define (mean xs)
@@ -56,7 +57,8 @@
       (define s (device-vector->list v))
       (check-equal? (dtype v) dt)
       (check-equal? (length s) n)
-      (check-true (for/and ([x (in-list s)]) (<= -1.0 x 1.0)))
+      (check-true (for/and ([x (in-list s)])
+                    (<= -1.0 x 1.0)))
       (check-close "score against the mean"
                    (score X ys #:metric metric)
                    (mean s)
@@ -105,7 +107,7 @@
         (samples X ys)))
     (check-true (<= (- (apply max scores) (apply min scores)) (if (eq? dt 'float32) 1e-7 1e-15)))
     (check-true (for/and ([r (in-list runs)])
-                  (<= (worst r (car runs)) (if (eq? dt 'float32) 1e-6 1e-14))))))
+                  (<= (worst r (car runs)) (sample-tolerance dt))))))
 
 (test-gpu "SL9: identical rows score exactly 0.0"
   (for ([dt (in-list float-dtypes)])
@@ -117,6 +119,6 @@
     (define-values (X ys) (fixture dt))
     (define before (device-matrix->list* X))
     (match-define (list s32 s64) (list (samples X ys) (samples X ys #:dtype 'int64)))
-    (check-true (<= (worst s32 s64) (if (eq? dt 'float32) 1e-6 1e-14)))
+    (check-true (<= (worst s32 s64) (sample-tolerance dt)))
     (check-close "score" (score X ys #:dtype 'int64) (score X ys) (if (eq? dt 'float32) 1e-7 1e-15))
     (check-equal? (device-matrix->list* X) before)))
