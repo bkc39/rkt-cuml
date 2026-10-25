@@ -6,7 +6,7 @@
                   pca-result-explained-variance-ratio
                   pca-result-mean
                   pca-result-singular-values)
-         (only-in racket/list list-set)
+         (only-in racket/list argmax list-set)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "scaler-data.rkt" generated-rows round-to rows->matrix))
 
@@ -151,8 +151,7 @@
 
 (define (first-max-entries components)
   (for/list ([c (in-list components)])
-    (for/fold ([best 0.0]) ([x (in-list c)])
-      (if (> (abs x) (abs best)) x best))))
+    (argmax abs c)))
 
 (define (gaps variances)
   (for/list ([v (in-list variances)]
