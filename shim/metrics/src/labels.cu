@@ -31,6 +31,7 @@ dense_labels<T> dense_codes(const T* labels, int64_t n,
   thrust::lower_bound(policy, values.begin(), last, labels, labels + n,
                       codes.begin());
   values.resize(static_cast<std::size_t>(k), stream);
+  values.shrink_to_fit(stream);
   return {std::move(codes), std::move(values), k};
 }
 

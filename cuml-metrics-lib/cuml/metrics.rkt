@@ -1,16 +1,10 @@
 #lang racket/base
 
-(require (only-in "metrics/private/metrics.rkt"
-                  adjusted-rand-score
-                  contingency-matrix
-                  contingency-table
-                  contingency-table-column-labels
-                  contingency-table-counts
-                  contingency-table-row-labels
-                  contingency-table?
-                  silhouette-samples
-                  silhouette-score
-                  struct:contingency-table
-                  trustworthiness))
+(require "metrics/private/metrics.rkt")
 
-(provide (all-from-out "metrics/private/metrics.rkt"))
+(provide (except-out (all-from-out "metrics/private/metrics.rkt")
+                     adjusted-rand-score/who
+                     contingency-matrix/who
+                     silhouette-samples/who
+                     silhouette-score/who
+                     trustworthiness/who))

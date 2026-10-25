@@ -8,24 +8,25 @@
                   silhouette-score
                   trustworthiness)
          (only-in cuml/metrics/private/native libcuml-version)
-         (only-in json json-null)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "private/metrics-data.rkt" label-pair labels-of overlap overlap-labels projection)
+         (only-in threading ~>)
+         (only-in "private/metrics-data.rkt"
+                  label-pair
+                  labels-of
+                  overlap
+                  overlap-labels
+                  projection
+                  tolerance
+                  worst)
          (only-in "private/python-env.rkt" run-twin test-twin))
 
 (define-runtime-path twin "python/metrics_twin.py")
 
 (define metrics '(euclidean sqeuclidean manhattan cosine chebyshev))
 (define each 150)
-
-(define (worst xs ys)
-  (for/fold ([w 0.0])
-            ([x (in-list xs)]
-             [y (in-list ys)])
-    (max w (abs (- x y)))))
 
 (define (twin-results cases)
   (match-define (hash-table ('results results) ('version version))
@@ -52,42 +53,47 @@
     (list truth found)))
 
 (define (counts truth found)
-  (device-matrix->list* (contingency-table-counts (contingency-matrix (labels-of truth 'int32)
-                                                                      (labels-of found 'int64)))))
+  (~> (contingency-matrix (labels-of truth 'int32) (labels-of found 'int64))
+      contingency-table-counts
+      device-matrix->list*))
 
 (test-twin "CC8: contingency-matrix's counts equal sklearn's contingency_matrix"
   (define cases
     (append (label-cases 40) (list '((-1 -1 0 2 2 2) (1 0 0 1 3 3)) '((5 -1 5 -1) (-2 -2 4 4)))))
   (define results
     (twin-results (for/list ([c (in-list cases)])
-                    (hasheq 'op "contingency" 'truth (car c) 'found (cadr c)))))
+                    (match-define (list truth found) c)
+                    (hasheq 'op "contingency" 'truth truth 'found found))))
   (for ([c (in-list cases)]
         [theirs (in-list results)]
         [i (in-naturals)])
+    (match-define (list truth found) c)
     (test-case (format "case ~a" i)
       (check-equal? (hash-ref theirs 'dtype) "int64")
-      (check-equal? (counts (car c) (cadr c)) (hash-ref theirs 'counts)))))
+      (check-equal? (counts truth found) (hash-ref theirs 'counts)))))
 
 (test-twin "CA5, CA6: adjusted-rand-score is within 1e-14 of sklearn and equals Python cuML"
   (define cases (append (label-cases 200) degenerate))
   (define results
     (twin-results (for/list ([c (in-list cases)])
+                    (match-define (list truth found) c)
                     (hasheq 'op "ari"
-                            'truth (car c)
-                            'found (cadr c)
-                            'cuml (and (>= (length (car c)) 2)
-                                       (andmap (lambda (x) (>= x 0)) (append (car c) (cadr c))))))))
+                            'truth truth
+                            'found found
+                            'cuml (and (>= (length truth) 2)
+                                       (andmap (lambda (x) (>= x 0)) (append truth found)))))))
   (define gaps
     (for/list ([c (in-list cases)]
                [theirs (in-list results)]
                [i (in-naturals)])
-      (define ours (adjusted-rand-score (labels-of (car c) 'int32) (labels-of (cadr c) 'int32)))
+      (match-define (list truth found) c)
+      (define ours (adjusted-rand-score (labels-of truth 'int32) (labels-of found 'int32)))
       (define gap (abs (- ours (hash-ref theirs 'sklearn))))
       (test-case (format "case ~a" i)
         (check-true (<= gap 1e-14) (format "~a against sklearn's ~a" ours (hash-ref theirs 'sklearn)))
-        (define cu (hash-ref theirs 'cuml))
-        (unless (eq? cu (json-null))
-          (check-equal? ours cu "CA6")))
+        (match (hash-ref theirs 'cuml)
+          [(? real? cu) (check-equal? ours cu "CA6")]
+          [_ (void)]))
       gap))
   (printf "twin ari: ~a cases, worst difference from sklearn ~a\n" (length gaps) (apply max gaps)))
 
@@ -124,18 +130,15 @@
     (match-define (list law dt metric X ys) r)
     (match-define (list score samples) (ours X ys metric))
     (match-define (hash-table ('score sk) ('samples sks) ('cuml_score cu) ('cuml_samples cus)) theirs)
-    (define-values (score-tolerance sample-tolerance)
-      (if (eq? dt 'float32)
-          (values 1e-5 1e-4)
-          (values 1e-12 1e-12)))
-    (define cuml-tolerance (if (eq? dt 'float32) 1e-6 1e-14))
+    (define cuml-tolerance (tolerance 'cuml dt))
     (test-case (format "~a ~a ~a" law dt metric)
-      (check-true (<= (abs (- score sk)) score-tolerance)
+      (check-true (<= (abs (- score sk)) (tolerance 'sklearn-score dt))
                   (format "score ~a against sklearn's ~a" score sk))
-      (check-true (<= (worst samples sks) sample-tolerance) (format "samples ~a" (worst samples sks)))
+      (check-true (<= (worst samples sks) (tolerance 'sklearn-sample dt))
+                  (format "samples ~a" (worst samples sks)))
       (check-true (<= (abs (- score cu)) cuml-tolerance)
                   (format "SL8 score ~a against cuML's ~a" score cu))
-      (check-true (<= (worst samples cus) cuml-tolerance)
+      (check-true (<= (worst samples cus) (tolerance 'sample dt))
                   (format "SL8 samples ~a" (worst samples cus))))))
 
 (test-twin "TW5, TW6: trustworthiness is within 1e-6 of sklearn and equals Python cuML"

@@ -8,6 +8,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/metrics-data.rkt"
                   bijection
+                  host-ari
                   host-counts
                   label-pair
                   labels-of
@@ -36,21 +37,6 @@
 
 (define (ari truth found #:true [dt1 'int32] #:pred [dt2 'int32])
   (adjusted-rand-score (labels-of truth dt1) (labels-of found dt2)))
-
-(define (choose2 m)
-  (/ (* m (- m 1)) 2))
-
-(define (host-ari truth found)
-  (define counts (host-counts truth found))
-  (define n (length truth))
-  (define index (for*/sum ([row (in-list counts)] [c (in-list row)]) (choose2 c)))
-  (define a (for/sum ([row (in-list counts)]) (choose2 (apply + row))))
-  (define b (for/sum ([col (in-list (apply map list counts))]) (choose2 (apply + col))))
-  (define expected (/ (* a b) (choose2 n)))
-  (define most (/ (+ a b) 2))
-  (if (= most expected)
-      1
-      (/ (- index expected) (- most expected))))
 
 (define (transpose rows)
   (if (null? rows)
@@ -121,10 +107,11 @@
 (test-gpu "CC6: int32 and int64 copies of the labels, in any mix, give the same counts"
   (for ([c (in-list (cases))])
     (match-define (list _ truth found) c)
-    (define expected (car (table-lists truth found)))
+    (match-define (list expected _ _) (table-lists truth found))
     (for* ([dt1 (in-list dtypes)]
            [dt2 (in-list dtypes)])
-      (check-equal? (car (table-lists truth found #:true dt1 #:pred dt2)) expected))))
+      (match-define (list counts _ _) (table-lists truth found #:true dt1 #:pred dt2))
+      (check-equal? counts expected))))
 
 (test-gpu "CC7: empty labels give an empty table, one sample ((1))"
   (match-define (list counts rows columns) (table '() '()))
@@ -185,4 +172,16 @@
     (define expected (exact->inexact (host-ari truth found)))
     (test-case (format "n ~a" n)
       (check-true (<= (abs (- (ari truth found) expected)) 1e-14)
+                  (format "~a against ~a" (ari truth found) expected)))))
+
+(test-gpu "CC1, CA8: tables past raft's shared-memory sizes match a hashed host count and the host formula"
+  (for ([size (in-list '((20000 101 61) (200000 3001 2003)))])
+    (match-define (list n k1 k2) size)
+    (define-values (truth found) (label-pair n k1 k2 (+ n k1)))
+    (test-case (format "n ~a, ~a x ~a labels" n k1 k2)
+      (match-define (list counts rows columns) (table-lists truth found #:pred 'int64))
+      (check-equal? (list (length rows) (length columns)) (list k1 k2))
+      (check-equal? counts (host-counts truth found))
+      (define expected (exact->inexact (host-ari truth found)))
+      (check-true (<= (abs (- (ari truth found) expected)) 1e-12)
                   (format "~a against ~a" (ari truth found) expected)))))

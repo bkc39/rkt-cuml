@@ -1,22 +1,21 @@
 #lang racket/base
 
 (require (only-in racket/file find-files)
-         (only-in racket/function negate)
+         (only-in racket/function curry negate)
          (only-in racket/list append-map count filter-map last remove-duplicates)
          (only-in racket/match == match match-define match-lambda)
-         (only-in racket/port with-output-to-string)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in racket/string string-prefix? string-split)
-         (only-in racket/system system*)
+         (only-in racket/system system*/exit-code)
          (only-in threading ~>))
 
 (define-runtime-path root "..")
 
-(define families '("cluster" "metrics" "preprocessing"))
 (define failure-kinds '(UNBOUND MISSING TWICE UNPLANNED DUE STALE-PLAN))
 
 (struct planned (name status issue))
+(struct report (family findings summary))
 
 (define (prefix-of family)
   (format "cuml_~a_" family))
@@ -27,9 +26,11 @@
 
 (define (nm-output library)
   (define nm (or (find-executable-path "nm") (error 'check-bindings "nm is not on PATH")))
-  (with-output-to-string (lambda ()
-                           (unless (system* nm "-D" "--defined-only" (path->string library))
-                             (error 'check-bindings "nm failed on ~a" library)))))
+  (define out (open-output-string))
+  (match (parameterize ([current-output-port out])
+           (system*/exit-code nm "-D" "--defined-only" (path->string library)))
+    [0 (get-output-string out)]
+    [_ (error 'check-bindings "nm failed on ~a" library)]))
 
 (define (exports-in family nm-text)
   (~> (filter-map (lambda (line)
@@ -65,9 +66,7 @@
   (and (regexp-match? #rx"[.]rkt$" path) (not (regexp-match? #rx"/compiled/" path))))
 
 (define (tree-bindings family dir)
-  (~> (find-files racket-module? dir)
-      (sort path<?)
-      (append-map (lambda (path) (module-bindings family path)) _)))
+  (~> (find-files racket-module? dir) (sort path<?) (append-map (curry module-bindings family) _)))
 
 (define (plan-entries plan)
   (define (entries names status issue)
@@ -155,31 +154,35 @@
     (append (tree-bindings family (in-root (format "cuml-~a-lib/cuml/~a/private" family family)))
             (module-bindings family (in-root "cuml-core-lib/cuml/core/private/native.rkt"))))
   (define findings (census exports bindings plan))
+  (report family
+          findings
+          (format "~a: ~a exports, ~a bindings, ~a job bodies; ~a planned (~a)"
+                  family
+                  (length exports)
+                  (length bindings)
+                  (length (job-bodies exports bindings))
+                  (count-of 'PLANNED findings)
+                  (issue-range plan))))
+
+(define (print-report r)
+  (match-define (report family findings summary) r)
   (for ([f (in-list findings)])
     (match-define (list kind name) f)
     (printf "~a ~a~a\n" kind (prefix-of family) name))
-  (printf "~a: ~a exports, ~a bindings, ~a job bodies; ~a planned (~a)\n"
-          family
-          (length exports)
-          (length bindings)
-          (length (job-bodies exports bindings))
-          (count-of 'PLANNED findings)
-          (issue-range plan))
-  (failed? findings))
+  (displayln summary))
 
 (module+ main
+  (require (only-in "check-layout.rkt" families))
   (define (in-root . parts)
     (apply build-path root parts))
-  (define failures
-    (for/list ([family (in-list families)]
-               #:when (family-census in-root family))
-      family))
-  (unless (null? failures)
-    (exit 1)))
+  (define reports (map (curry family-census in-root) (families root)))
+  (for-each print-report reports)
+  (exit (if (ormap (compose1 failed? report-findings) reports) 1 0)))
 
 (module+ test
   (require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
-           (only-in rackunit check-equal? check-false check-true test-case))
+           (only-in rackunit check-equal? check-exn check-false check-true test-case)
+           (only-in "check-layout.rkt" families))
 
   (define plan
     '((common last_error) (scaffold due make_blobs make_blobs_job)
@@ -257,8 +260,14 @@
        (check-equal? (tree-bindings "metrics" dir)
                      '("version" "adjusted_rand_score_job" "last_error")))))
 
-  (test-case "the family list holds cluster, metrics and preprocessing"
-    (check-equal? families '("cluster" "metrics" "preprocessing")))
+  (test-case "a family package without a bindings plan fails the census"
+    (call-with-temporary-directory
+     (lambda (dir)
+       (for ([package (in-list '("cuml-core-lib" "cuml-lib" "cuml-toy-lib"))])
+         (make-directory* (build-path dir package)))
+       (check-equal? (families dir) '("toy"))
+       (check-exn #rx"toy-bindings[.]rktd"
+                  (lambda () (family-census (lambda parts (apply build-path dir parts)) "toy"))))))
 
   (test-case "nm lines become unprefixed export names"
     (check-equal?

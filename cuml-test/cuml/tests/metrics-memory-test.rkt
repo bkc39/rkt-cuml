@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml exn:fail:cuml?)
-         (only-in cuml/metrics
+(require (only-in cuml/metrics
                   adjusted-rand-score
                   contingency-matrix
                   silhouette-samples
@@ -11,12 +10,12 @@
          (only-in racket/format ~r)
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-pred check-true)
+         (only-in rackunit check-equal? check-true)
          (only-in raft list*->device-matrix)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
-         (only-in "private/cuml-error.rkt" raised)
+         (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/metrics-data.rkt" label-pair labels-of overlap overlap-labels projection)
          (only-in "private/process-memory.rkt"
                   baseline-sample
@@ -56,17 +55,29 @@
   (define one-label (labels-of (make-list 400 3) 'int32))
   (define nan-rows (list*->device-matrix (cons '(+nan.0 0) (make-list 399 '(1 1))) #:dtype 'float32))
   (define big-rows (list*->device-matrix (cons '(1e20 0) (make-list 299 '(1 1))) #:dtype 'float32))
-  (list (lambda () (contingency-matrix truth short))
-        (lambda () (adjusted-rand-score many flat))
-        (lambda () (silhouette-score S one-label))
-        (lambda () (silhouette-samples nan-rows ys))
-        (lambda () (trustworthiness X X #:n-neighbors 150))
-        (lambda () (trustworthiness X big-rows))))
+  (define float-most "4.253529586511731e+37")
+  (list
+   (list "contingency-matrix: labels-pred: expected 2000 elements, got 3"
+         (lambda () (contingency-matrix truth short)))
+   (list "adjusted-rand-score: labels-true: expected at most 46340 distinct labels, got 46341"
+         (lambda () (adjusted-rand-score many flat)))
+   (list "silhouette-score: labels: expected at least 2 distinct labels, got 1"
+         (lambda () (silhouette-score S one-label)))
+   (list (format "silhouette-samples: X: row 0: expected a squared norm of at most ~a, got nan"
+                 float-most)
+         (lambda () (silhouette-samples nan-rows ys)))
+   (list "trustworthiness: n-neighbors: expected less than half the 300 rows, got 150"
+         (lambda () (trustworthiness X X #:n-neighbors 150)))
+   (list (format "trustworthiness: X-embedded: row 0: expected a squared norm of at most ~a, got ~a"
+                 float-most
+                 "1.0000000400817551e+40")
+         (lambda () (trustworthiness X big-rows)))))
 
 (define (refuse-all calls)
-  (for* ([thunk (in-list calls)]
+  (for* ([call (in-list calls)]
          [_ (in-range refusals-per-sample)])
-    (check-pred exn:fail:cuml? (raised thunk))))
+    (match-define (list message thunk) call)
+    (check-cuml-error 'logic message thunk)))
 
 (test-process-memory (format "~a rounds of the metrics free every output and leave device memory flat"
                              rounds)
@@ -125,3 +136,22 @@
   (check-true
    (<= growth device-slack)
    (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))
+
+(test-process-memory "a contingency table holds its counts and labels, not the n-sized relabel scratch"
+  (define n (expt 2 22))
+  (define a
+    (labels-of (for/list ([i (in-range n)])
+                 (modulo i 2))
+               'int64))
+  (define b
+    (labels-of (for/list ([i (in-range n)])
+                 (modulo i 3))
+               'int64))
+  (define before (sample-used (pool-sample)))
+  (define table (contingency-matrix a b))
+  (define held (- (sample-used (pool-sample)) before))
+  (define output (* 8 (+ (* 2 3) 2 3)))
+  (printf "memory: a 2x3 table over ~a labels holds ~a pool bytes; its output is ~a\n" n held output)
+  (check-true (<= held (+ output (* 1024 1024)))
+              (format "the table holds ~a bytes, past its ~a-byte output and 1 MiB" held output))
+  (void/reference-sink a b table))

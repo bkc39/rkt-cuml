@@ -20,6 +20,9 @@ constexpr int64_t chunk = 40000;
 constexpr int64_t neighbours = 5;
 constexpr int64_t batch = 512;
 constexpr int64_t grid_rows = 20;
+constexpr int64_t long_labels = int64_t{1} << 20;
+constexpr int64_t held_slack = int64_t{1} << 20;
+constexpr int64_t square_labels = 2048;
 
 TEST(Metrics, Version) {
   EXPECT_EQ(std::string(cuml_metrics_libcuml_version()), "26.08.00");
@@ -60,6 +63,49 @@ TEST(Metrics, ContingencyOfNothingIsEmpty) {
   EXPECT_EQ(out.r.regions[0].shape[0], 0);
   EXPECT_EQ(out.r.regions[0].shape[1], 0);
   EXPECT_EQ(out.r.regions[1].shape[0], 0);
+}
+
+TEST(Metrics, ContingencyHoldsOnlyItsOutput) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  std::vector<int64_t> twos;
+  std::vector<int64_t> threes;
+  for (int64_t i = 0; i < long_labels; ++i) {
+    twos.push_back(i % 2);
+    threes.push_back(i % 3);
+  }
+  const filled<int64_t> truth(res, twos, {long_labels});
+  const filled<int64_t> found(res, threes, {long_labels});
+  const allocation_meter meter;
+  record out(res);
+  ASSERT_EQ(outcome(cuml_metrics_contingency_matrix(res.handle, truth.view(),
+                                                    found.view(), &out.r)),
+            "accepted");
+  const int64_t held = (2 * 3 + 2 + 3) * int64_t{sizeof(int64_t)};
+  EXPECT_LE(meter.current(), held + held_slack);
+}
+
+TEST(Metrics, SquareContingencyNeedsNoSecondTable) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  std::vector<int32_t> labels;
+  std::vector<int64_t> identity;
+  for (int64_t i = 0; i < square_labels; ++i) {
+    labels.push_back(static_cast<int32_t>(i));
+    for (int64_t j = 0; j < square_labels; ++j) {
+      identity.push_back(i == j ? 1 : 0);
+    }
+  }
+  const filled<int32_t> truth(res, labels, {square_labels});
+  const allocation_meter meter;
+  record out(res);
+  ASSERT_EQ(outcome(cuml_metrics_contingency_matrix(res.handle, truth.view(),
+                                                    truth.view(), &out.r)),
+            "accepted");
+  const int64_t table =
+      square_labels * square_labels * int64_t{sizeof(int64_t)};
+  EXPECT_LE(meter.peak(), table + held_slack);
+  EXPECT_EQ(out.read<int64_t>(0), identity);
 }
 
 double ari(const resources& res, const rr_view* a, const rr_view* b) {

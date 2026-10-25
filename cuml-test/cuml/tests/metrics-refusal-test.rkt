@@ -7,12 +7,19 @@
                   silhouette-score
                   trustworthiness)
          (only-in racket/list make-list range)
+         (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn test-case)
-         (only-in raft list*->device-matrix)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/metrics-data.rkt" labels-of)
+         (only-in "private/metrics-data.rkt"
+                  labels-of
+                  overlap
+                  overlap-labels
+                  shrunk
+                  wide-labels
+                  wide-rows)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define float-most "4.253529586511731e+37")
@@ -60,23 +67,26 @@
         (lambda () (proc (blank-vector 5 'float32) (labels-of '(1) 'int32))))))
 
 (test-gpu "R1: contingency-matrix and adjusted-rand-score refuse each bad label argument"
-  (for* ([entry (in-list (list (cons 'contingency-matrix contingency-matrix)
-                               (cons 'adjusted-rand-score adjusted-rand-score)))]
-         [r (in-list (label-rows (cdr entry)))])
-    (test-case (format "~a ~a" (car entry) (row-id r))
-      (check-row (car entry) r))))
+  (for* ([proc (in-list (list contingency-matrix adjusted-rand-score))]
+         [r (in-list (label-rows proc))])
+    (test-case (format "~a ~a" (object-name proc) (row-id r))
+      (check-row (object-name proc) r))))
 
 (define metric-message "metric: expected euclidean, sqeuclidean, manhattan, cosine or chebyshev")
 
 (define (silhouette-rows proc)
   (define X (rows-with 30 '(1 1)))
   (define two (labels-of (append '(0 1) (make-list 28 1)) 'int32))
-  (define zero-row
+  (define (cosine-rows bad #:dtype [dt 'float32])
     (list*->device-matrix (for/list ([i (in-range 30)])
-                            (if (= i 3)
-                                '(0 0)
-                                (list (add1 i) 1)))
-                          #:dtype 'float32))
+                            (match (assv i bad)
+                              [(list _ row) row]
+                              [#f (list (add1 i) 1)]))
+                          #:dtype dt))
+  (define (cosine-message least got)
+    (format "X: row 3: expected a squared norm of at least ~a under cosine, got ~a" least got))
+  (define float-least "2.350988701644575e-38")
+  (define double-least "4.450147717014403e-308")
   (list
    (row "S11" metric-message (lambda () (proc X two #:metric 'l2)))
    (row "S9" "chunk-size: expected at least 1, got 0" (lambda () (proc X two #:chunk-size 0)))
@@ -115,8 +125,23 @@
         (norm-message "X" 4 double-most "inf")
         (lambda () (proc (rows-with 30 '(+inf.0 1) #:dtype 'float64) two)))
    (row "S13"
-        "X: row 3 is zero, so no cosine distance"
-        (lambda () (proc zero-row two #:metric 'cosine)))
+        (cosine-message float-least "0")
+        (lambda () (proc (cosine-rows '((3 (0 0)))) two #:metric 'cosine)))
+   (row "S13 float64 zero"
+        (cosine-message double-least "0")
+        (lambda () (proc (cosine-rows '((3 (0 0))) #:dtype 'float64) two #:metric 'cosine)))
+   (row "S13 float32 underflow"
+        (cosine-message float-least "0")
+        (lambda () (proc (cosine-rows '((3 (1e-30 0)))) two #:metric 'cosine)))
+   (row "S13 float64 underflow"
+        (cosine-message double-least "0")
+        (lambda () (proc (cosine-rows '((3 (1e-170 0))) #:dtype 'float64) two #:metric 'cosine)))
+   (row "S13 float32 subnormal"
+        (cosine-message float-least "1e-40")
+        (lambda () (proc (cosine-rows '((3 (1e-20 0)))) two #:metric 'cosine)))
+   (row "S13 float64 subnormal"
+        (cosine-message double-least "1e-320")
+        (lambda () (proc (cosine-rows '((3 (1e-160 0))) #:dtype 'float64) two #:metric 'cosine)))
    (row "S11 before S9" metric-message (lambda () (proc X two #:metric 'l1 #:chunk-size 0)))
    (row "S9 before S0"
         "chunk-size: expected at least 1, got 0"
@@ -132,14 +157,32 @@
         (lambda () (proc (rows-with 30 '(+nan.0 1)) (labels-of (make-list 30 0) 'int32))))
    (row "S12 before S13"
         (norm-message "X" 3 float-most "nan")
-        (lambda () (proc (rows-with 30 '(+nan.0 0) #:at 3) two #:metric 'cosine)))))
+        (lambda () (proc (cosine-rows '((2 (0 0)) (3 (+nan.0 0)))) two #:metric 'cosine)))))
 
 (test-gpu "R1: silhouette-score and silhouette-samples refuse each bad argument"
-  (for* ([entry (in-list (list (cons 'silhouette-score silhouette-score)
-                               (cons 'silhouette-samples silhouette-samples)))]
-         [r (in-list (silhouette-rows (cdr entry)))])
-    (test-case (format "~a ~a" (car entry) (row-id r))
-      (check-row (car entry) r))))
+  (for* ([proc (in-list (list silhouette-score silhouette-samples))]
+         [r (in-list (silhouette-rows proc))])
+    (test-case (format "~a ~a" (object-name proc) (row-id r))
+      (check-row (object-name proc) r))))
+
+(test-gpu "S13: under cosine, a squared norm under d times the least normal is refused, however wide"
+  (define narrow (device-matrix->list* (overlap 'float32 #:each 150)))
+  (define narrow-labels (overlap-labels #:each 150))
+  (define cases
+    (list (list "1.1754943508222875e-35" (wide-rows 1000) wide-labels 1.3e-38 'float32)
+          (list "8.900295434028806e-305" (wide-rows 4000) wide-labels 2.5e-308 'float64)
+          (list "5.877471754111438e-38" narrow narrow-labels 1.21e-38 'float32)
+          (list "1.1125369292536007e-307" narrow narrow-labels 2.25e-308 'float64)))
+  (for* ([c (in-list cases)]
+         [proc (in-list (list silhouette-score silhouette-samples))])
+    (match-define (list least rows ys squared dt) c)
+    (test-case (format "~a ~a ~a" (object-name proc) dt least)
+      (check-cuml-error
+       'logic
+       (regexp (format "^~a: X: row [0-9]+: expected a squared norm of at least ~a under cosine, got "
+                       (object-name proc)
+                       (regexp-quote least)))
+       (lambda () (proc (shrunk rows squared dt) (labels-of ys 'int32) #:metric 'cosine))))))
 
 (define (trust-rows)
   (define X (distinct-rows 100))
