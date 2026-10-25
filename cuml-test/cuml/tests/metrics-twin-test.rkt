@@ -138,7 +138,7 @@
                   (format "samples ~a" (worst samples sks)))
       (check-true (<= (abs (- score cu)) cuml-tolerance)
                   (format "SL8 score ~a against cuML's ~a" score cu))
-      (check-true (<= (worst samples cus) cuml-tolerance)
+      (check-true (<= (worst samples cus) (tolerance 'sample dt))
                   (format "SL8 samples ~a" (worst samples cus))))))
 
 (test-twin "TW5, TW6: trustworthiness is within 1e-6 of sklearn and equals Python cuML"
