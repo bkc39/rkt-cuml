@@ -3,9 +3,9 @@
 (require (only-in cuml/decomposition tsvd-fit tsvd-inverse-transform tsvd-transform)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in threading ~>)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/pca-data.rkt" column fixture-name fixture-rows norm)
          (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff)
          (only-in "private/tsvd-data.rkt" law-fixtures popvars squared-norm svd tsvd-of))
@@ -84,7 +84,8 @@
     (test-case (format "~a ~a ~a" dt solver (fixture-name f))
       (define X (rows->matrix rows dt))
       (define result (tsvd-fit X #:n-components d #:solver solver))
-      (define back (~> (tsvd-transform result X) (tsvd-inverse-transform result _) device-matrix->list*))
+      (define back
+        (~> (tsvd-transform result X) (tsvd-inverse-transform result _) device-matrix->list*))
       (define worst
         (for*/fold ([worst 0.0])
                    ([(row back-row) (in-parallel rows back)]

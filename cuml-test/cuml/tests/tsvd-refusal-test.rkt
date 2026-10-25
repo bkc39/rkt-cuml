@@ -52,29 +52,30 @@
 (define (fit-X-rows)
   (append
    (bad-X-rows)
-   (list
-    (row "f4" "X: expected at least 2 rows, got 1" (rows->matrix '((1 2 3)) 'float32))
-    (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
-    (row "f5" "X: expected at least 2 columns, got 1" (rows->matrix '((1) (2) (3)) 'float64))
-    (row "f4 before f5" "X: expected at least 2 rows, got 1" (rows->matrix '((1)) 'float32))
-    (row "f14 nan" "X: row 3, column 1: expected a finite value, got nan" (grid-with '([(3 1) +nan.0])))
-    (row "f14 inf"
-         "X: row 0, column 2: expected a finite value, got inf"
-         (grid-with '([(0 2) +inf.0]) 'float64))
-    (row "f14 -inf"
-         "X: row 2, column 0: expected a finite value, got -inf"
-         (grid-with '([(2 0) -inf.0])))
-    (row "f14 first in row-major order"
-         "X: row 1, column 2: expected a finite value, got nan"
-         (grid-with `([(1 2) +nan.0] [(2 0) +inf.0])))
-    (row "f15" f15-message (grid-with `([(3 1) ,past-float32])))
-    (row "f15 float64"
-         (string-append "X: expected a squared Frobenius norm of at most 2.247116418577895e+307,"
-                        " got 4.49423283715579e+307")
-         (grid-with `([(0 0) ,past-float64]) 'float64))
-    (row "f14 before f15"
-         "X: row 3, column 1: expected a finite value, got nan"
-         (grid-with `([(0 0) ,past-float32] [(3 1) +nan.0]))))))
+   (list (row "f4" "X: expected at least 2 rows, got 1" (rows->matrix '((1 2 3)) 'float32))
+         (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
+         (row "f5" "X: expected at least 2 columns, got 1" (rows->matrix '((1) (2) (3)) 'float64))
+         (row "f4 before f5" "X: expected at least 2 rows, got 1" (rows->matrix '((1)) 'float32))
+         (row "f14 nan"
+              "X: row 3, column 1: expected a finite value, got nan"
+              (grid-with '([(3 1) +nan.0])))
+         (row "f14 inf"
+              "X: row 0, column 2: expected a finite value, got inf"
+              (grid-with '([(0 2) +inf.0]) 'float64))
+         (row "f14 -inf"
+              "X: row 2, column 0: expected a finite value, got -inf"
+              (grid-with '([(2 0) -inf.0])))
+         (row "f14 first in row-major order"
+              "X: row 1, column 2: expected a finite value, got nan"
+              (grid-with `([(1 2) +nan.0] [(2 0) +inf.0])))
+         (row "f15" f15-message (grid-with `([(3 1) ,past-float32])))
+         (row "f15 float64"
+              (string-append "X: expected a squared Frobenius norm of at most 2.247116418577895e+307,"
+                             " got 4.49423283715579e+307")
+              (grid-with `([(0 0) ,past-float64]) 'float64))
+         (row "f14 before f15"
+              "X: row 3, column 1: expected a finite value, got nan"
+              (grid-with `([(0 0) ,past-float32] [(3 1) +nan.0]))))))
 
 (define (parameter-rows)
   (list
@@ -92,7 +93,9 @@
    (row "f13"
         "iterations: expected at most 2147483647, got 2147483648"
         (hasheq 'iterations (expt 2 31)))
-   (row "f7 before f9" "n-components: expected at least 1, got 0" (hasheq 'solver 'arpack 'n-components 0))
+   (row "f7 before f9"
+        "n-components: expected at least 1, got 0"
+        (hasheq 'solver 'arpack 'n-components 0))
    (row "f8 before f10" "n-components: expected at most 3, got 4" (hasheq 'n-components 4 'tol -1))
    (row "f12 before f14" "iterations: expected at least 1, got 0" (hasheq 'iterations 0))))
 
@@ -176,9 +179,7 @@
     (row "L19 float64 X"
          "X: expected float32, got float64"
          (cons (fitted) (narrowed width '() 'float64)))
-    (row "L19 float32 X"
-         "X: expected float64, got float32"
-         (cons (fitted 'float64) (narrowed width)))
+    (row "L19 float32 X" "X: expected float64, got float32" (cons (fitted 'float64) (narrowed width)))
     (row "t9"
          (format "X: row 0, column ~a: expected a finite value, got nan" last-column)
          (cons (fitted) (narrowed width `([(0 ,last-column) +nan.0]))))

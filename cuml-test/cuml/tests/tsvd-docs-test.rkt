@@ -22,8 +22,7 @@
 
 (define (close? got want)
   (cond
-    [(list? want)
-     (and (= (length got) (length want)) (andmap close? got want))]
+    [(list? want) (and (= (length got) (length want)) (andmap close? got want))]
     [else (<= (abs (- got want)) 1e-12)]))
 
 (define components
@@ -52,12 +51,13 @@
                     "tsvd-fit: solver: expected full or jacobi"
                     (lambda () (tsvd-fit (X) #:solver 'arpack)))
   (define full (tsvd-fit (X) #:n-components 3))
-  (check-true (close? (~> (tsvd-transform full (X)) (tsvd-inverse-transform full _) device-matrix->list*)
-                      rows)))
+  (check-true
+   (close? (~> (tsvd-transform full (X)) (tsvd-inverse-transform full _) device-matrix->list*) rows)))
 
 (test-gpu "the manual: tsvd-params and the estimator"
   (check-equal? (hash-ref (tsvd-params #:n-components 3) 'n-components) 3)
-  (check-true (close? (device-matrix->list* (transform (fit (truncated-svd #:n-components 2) (X)) (X)))
+  (check-true (close? (device-matrix->list* (transform (fit (truncated-svd #:n-components 2) (X))
+                                                       (X)))
                       transformed))
   (check-cuml-error 'logic
                     "transform: truncated-svd is not fitted"

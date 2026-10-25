@@ -40,16 +40,15 @@
       (match-define (cons first-row _) rows)
       (define d (length first-row))
       (match-define (hash-table ('singular_values spectrum) ('components components)) exact)
-      (check-equal? (first-problems
-                     (accuracy-problems fitted
-                                        (exact-reference rows spectrum (rows-of components d) k)
-                                        rows
-                                        dt
-                                        (if (eq? solver 'jacobi) 256 64)))
-                    '()
-                    "L8")
       (check-equal?
-       (first-problems
-        (accuracy-problems fitted (theirs-reference sklearn exact d) rows dt 128))
+       (first-problems (accuracy-problems fitted
+                                          (exact-reference rows spectrum (rows-of components d) k)
+                                          rows
+                                          dt
+                                          (if (eq? solver 'jacobi) 256 64)))
+       '()
+       "L8")
+      (check-equal?
+       (first-problems (accuracy-problems fitted (theirs-reference sklearn exact d) rows dt 128))
        '()
        "L9"))))

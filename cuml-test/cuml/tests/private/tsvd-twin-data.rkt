@@ -68,18 +68,12 @@
   (define cases
     (for/list ([request (in-list requests)])
       (match-define (list op (twin-case f k) dt solver) request)
-      (hasheq 'op
-              op
-              'fixture
-              (key f dt)
-              'd
-              (width f)
-              'k
-              k
-              'dtype
-              (symbol->string dt)
-              'solver
-              (symbol->string solver))))
+      (hasheq 'op op
+              'fixture (key f dt)
+              'd (width f)
+              'k k
+              'dtype (symbol->string dt)
+              'solver (symbol->string solver))))
   (define payload
     (for*/hasheq ([c (in-list twin-cases)]
                   [dt (in-list '(float32 float64))])
@@ -91,8 +85,8 @@
   (check-equal? version libcuml-version)
   results)
 
-(define (rows-of xs width)
-  (for/list ([row (in-slice width xs)])
+(define (rows-of xs d)
+  (for/list ([row (in-slice d xs)])
     row))
 
 (define (theirs-svd theirs d)

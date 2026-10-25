@@ -36,12 +36,10 @@
       (define rows (fixture-rows f dt))
       (define fitted (tsvd-of (tsvd-fit (rows->matrix rows dt) #:n-components k #:solver solver)))
       (define c (if (eq? solver 'jacobi) 256 64))
-      (check-equal? (first-problems (accuracy-problems fitted
-                                                       (exact-reference rows spectrum components k)
-                                                       rows
-                                                       dt
-                                                       c))
-                    '()))))
+      (check-equal?
+       (first-problems
+        (accuracy-problems fitted (exact-reference rows spectrum components k) rows dt c))
+       '()))))
 
 (define (geomspace top d)
   (for/list ([i (in-range d)])
@@ -69,8 +67,7 @@
     (match-define (list n d k) shape)
     (test-case (format "~ax~a k=~a ~a" n d k dt)
       (define X (rows->matrix (centred-rows (+ n d) n d dt) dt))
-      (match-define (svd components variance ratio singular)
-        (tsvd-of (tsvd-fit X #:n-components k)))
+      (match-define (svd components variance ratio singular) (tsvd-of (tsvd-fit X #:n-components k)))
       (define pca (pca-fit X #:n-components k))
       (define pca-variance (device-vector->list (pca-result-explained-variance pca)))
       (define u (unit-roundoff dt))
@@ -91,7 +88,7 @@
       (match-define (cons largest-variance _) scaled)
       (check-true (<= (worst-difference variance scaled) (* 128 u largest-variance))
                   (format "variances ~a vs ~a" variance scaled))
-      (check-true (<= (worst-difference ratio
-                                        (device-vector->list (pca-result-explained-variance-ratio pca)))
-                      (* 64 u))
-                  "ratios"))))
+      (check-true
+       (<= (worst-difference ratio (device-vector->list (pca-result-explained-variance-ratio pca)))
+           (* 64 u))
+       "ratios"))))

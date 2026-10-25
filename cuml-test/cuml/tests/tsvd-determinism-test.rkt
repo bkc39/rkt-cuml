@@ -5,7 +5,13 @@
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/scaler-data.rkt" bits-equal? rows->matrix)
-         (only-in "private/tsvd-data.rkt" normal-rows-of svd-components svd-ratio svd-singular svd-variance tsvd-of))
+         (only-in "private/tsvd-data.rkt"
+                  normal-rows-of
+                  svd-components
+                  svd-ratio
+                  svd-singular
+                  svd-variance
+                  tsvd-of))
 
 (define (outcome X solver)
   (define-values (result T) (tsvd-fit-transform X #:n-components 8 #:solver solver))

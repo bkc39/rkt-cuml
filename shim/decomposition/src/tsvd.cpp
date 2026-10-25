@@ -245,8 +245,7 @@ void apply_into(const raft::handle_t& handle, const operands<T>& o,
       ML::tsvdTransform(handle, columns.data(), components.data(),
                         applied.data(), p);
     }
-    to_rows<T>(handle, applied.data(), x.n, out_width, nullptr,
-               result->data());
+    to_rows<T>(handle, applied.data(), x.n, out_width, nullptr, result->data());
     settle(handle);
   }
   const std::initializer_list<rr_view> regions{
@@ -293,17 +292,14 @@ int applied(void* handle, const rr_view* x_view, const rr_view* c_view,
 
 extern "C" {
 
-int cuml_decomposition_tsvd_fit(void* handle, const rr_view* x,
-                                rr_deposit* out, int64_t n_components,
-                                int32_t solver, double tol, int64_t iterations,
+int cuml_decomposition_tsvd_fit(void* handle, const rr_view* x, rr_deposit* out,
+                                int64_t n_components, int32_t solver,
+                                double tol, int64_t iterations,
                                 int32_t with_transform) {
   return guarded(handle, {{"X", x}}, [&](const raft::handle_t& h) {
-    const fit_request r{raftrkt::require(out, "out"),
-                        n_components,
-                        solver,
-                        tol,
-                        iterations,
-                        with_transform != 0};
+    const fit_request r{
+        raftrkt::require(out, "out"), n_components, solver, tol, iterations,
+        with_transform != 0};
     on_floats(x, "X", [&](auto tag) { fit_into<decltype(tag)>(h, x, r); });
   });
 }

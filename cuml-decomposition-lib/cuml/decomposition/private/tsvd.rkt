@@ -3,7 +3,7 @@
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters define-hyperparameters)
-         (only-in racket/match match match-define)
+         (only-in racket/match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt"
@@ -42,9 +42,8 @@
                                    tol
                                    iterations
                                    (if with-transform 1 0))
-  (match (deposit->list out)
-    [(list components singular variance ratio transformed ...)
-     (apply values (tsvd-result components variance ratio singular) transformed)]))
+  (match-define (list* components singular variance ratio transformed) (deposit->list out))
+  (apply values (tsvd-result components variance ratio singular) transformed))
 
 (define (applied job who result X resources)
   (define out (deposit-for/who who resources))

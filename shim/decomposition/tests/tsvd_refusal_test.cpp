@@ -90,8 +90,8 @@ TEST(TsvdFitRefusals, EachConditionInTableOrder) {
   const filled<float> nan_x(
       res, with(with(spread<float>(rows, cols), 7, nan), 0, past_norm),
       {rows, cols});
-  const filled<float> large_x(res, with(spread<float>(rows, cols), 4, past_norm),
-                              {rows, cols});
+  const filled<float> large_x(
+      res, with(spread<float>(rows, cols), 4, past_norm), {rows, cols});
   const filled<double> large_x64(
       res, with(spread<double>(rows, cols), 4, past_norm_double), {rows, cols});
   record& out = c.out;
@@ -242,8 +242,7 @@ void expect_apply_refusals(const resources& res, tsvd_apply entry,
                    s.width - 1)},
       {[&] { return entry(res.handle, &no_rows, &int_components, &out.r); },
        "X: expected at least 1 row, got 0"},
-      {[&] { return entry(res.handle, x.view(), c, nullptr); },
-       "out is NULL"},
+      {[&] { return entry(res.handle, x.view(), c, nullptr); }, "out is NULL"},
   });
   expect_untouched(out);
 }

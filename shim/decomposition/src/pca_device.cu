@@ -140,7 +140,8 @@ void post_fit(const raft::handle_t& handle, const T* components, T* variance,
   each(handle, 1, spectrum_totals<T>{variance, totals, m, k});
   each(handle, k,
        kept_spectrum<T>{variance, totals, out, static_cast<double>(n - 1)});
-  each(handle, k, signed_components<T>{components, out.components, m, d, nullptr});
+  each(handle, k,
+       signed_components<T>{components, out.components, m, d, nullptr});
 }
 
 template void to_columns<float>(const raft::handle_t&, const float*, int64_t,

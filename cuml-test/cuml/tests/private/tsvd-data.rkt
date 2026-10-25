@@ -181,4 +181,3 @@
                              [r-ref (in-list (reference-ratio ref))]
                              [i (in-naturals)])
                     (over (format "ratio ~a" i) r r-ref (/ bound (* n total)))))))
-

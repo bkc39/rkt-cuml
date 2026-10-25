@@ -27,7 +27,7 @@ constexpr double third_square = 2;
 
 template <typename T>
 std::vector<T> axis_rows() {
-  return {4, 0, 0, -4, 0, 0, 0, 2, 0, 0, -2, 0,
+  return {4, 0, 0, -4, 0, 0,  0, 2, 0, 0, -2, 0,
           0, 0, 1, 0,  0, -1, 0, 0, 0, 0, 0,  0};
 }
 
@@ -41,8 +41,9 @@ void expect_axis_spectrum(const record& out) {
   const std::vector<T> variance{static_cast<T>(first_variance),
                                 static_cast<T>(second_variance),
                                 static_cast<T>(third_variance)};
-  const T scale = static_cast<T>(1) /
-                  static_cast<T>(first_variance + second_variance + third_variance);
+  const T scale =
+      static_cast<T>(1) /
+      static_cast<T>(first_variance + second_variance + third_variance);
   std::vector<T> ratio;
   for (const T v : variance) {
     ratio.push_back(v * scale);
@@ -61,10 +62,9 @@ void expect_axis_fit(int32_t solver) {
   const std::vector<T> host = axis_rows<T>();
   const filled<T> x(res, host, {rows, cols});
   record out(res);
-  ASSERT_EQ(tsvd_fit_into(res, x.view(), out,
-                          {.n_components = cols,
-                           .solver = solver,
-                           .with_transform = 1}),
+  ASSERT_EQ(tsvd_fit_into(
+                res, x.view(), out,
+                {.n_components = cols, .solver = solver, .with_transform = 1}),
             "accepted");
   ASSERT_EQ(out.r.count, transformed_regions);
   EXPECT_EQ(out.read<T>(0), identity<T>());
@@ -158,8 +158,7 @@ void expect_constant(T value) {
   const resources res;
   const filled<T> x(res, std::vector<T>(n * d, value), {n, d});
   record out(res);
-  ASSERT_EQ(tsvd_fit_into(res, x.view(), out, {.n_components = 2}),
-            "accepted");
+  ASSERT_EQ(tsvd_fit_into(res, x.view(), out, {.n_components = 2}), "accepted");
   expect_positive_zeros(out.read<T>(2));
   expect_positive_zeros(out.read<T>(3));
   if (value == 0) {
@@ -219,10 +218,9 @@ TEST(Tsvd, OutputsAreFiniteJustUnderTheOverflowBound) {
   for (const int32_t solver :
        {CUML_DECOMPOSITION_SOLVER_FULL, CUML_DECOMPOSITION_SOLVER_JACOBI}) {
     record out(res);
-    ASSERT_EQ(tsvd_fit_into(res, x.view(), out,
-                            {.n_components = 2,
-                             .solver = solver,
-                             .with_transform = 1}),
+    ASSERT_EQ(tsvd_fit_into(
+                  res, x.view(), out,
+                  {.n_components = 2, .solver = solver, .with_transform = 1}),
               "accepted");
     for (int32_t i = 0; i < transformed_regions; ++i) {
       for (const float v : out.read<float>(i)) {

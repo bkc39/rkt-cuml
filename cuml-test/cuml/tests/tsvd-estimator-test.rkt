@@ -49,8 +49,10 @@
   (check-equal? (format "~v" (truncated-svd #:n-components 2)) "#<truncated-svd #:n-components 2>")
   (check-equal? (truncated-svd #:solver 'jacobi) (truncated-svd #:solver 'jacobi))
   (check-not-equal? (truncated-svd #:n-components 2) (truncated-svd))
-  (check-equal? (equal-hash-code (truncated-svd #:tol 1e-3)) (equal-hash-code (truncated-svd #:tol 1e-3)))
-  (check-equal? (estimator-set-params (truncated-svd) #:n-components 4) (truncated-svd #:n-components 4))
+  (check-equal? (equal-hash-code (truncated-svd #:tol 1e-3))
+                (equal-hash-code (truncated-svd #:tol 1e-3)))
+  (check-equal? (estimator-set-params (truncated-svd) #:n-components 4)
+                (truncated-svd #:n-components 4))
   (check-cuml-error 'logic
                     "tsvd-params: tsvd has no parameter algorithm"
                     (lambda () (tsvd-params (hasheq 'algorithm 'full))))
