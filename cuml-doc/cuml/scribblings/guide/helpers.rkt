@@ -22,7 +22,6 @@
          crosstab
          dataset-column
          dataset-columns
-         dataset-matrix
          features
          labels-of
          line-plot
@@ -82,14 +81,8 @@
 (define (features name . excluded)
   (~> (load-dataset-table name) dataset-table-names (remove* excluded _)))
 
-(define (matrix-of columns #:dtype [type 'float32])
-  (~> columns rows (list*->device-matrix #:dtype type)))
-
-(define (dataset-matrix name columns #:dtype [type 'float32])
-  (matrix-of (dataset-columns name columns) #:dtype type))
-
 (define (standardized-matrix name columns)
-  (~> (dataset-columns name columns) standardized matrix-of))
+  (~> (dataset-columns name columns) standardized rows rows->matrix))
 
 (define (labels-of estimator samples)
   (device-vector->list (fit-predict estimator samples)))

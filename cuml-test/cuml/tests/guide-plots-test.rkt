@@ -9,7 +9,8 @@
                   kmeans
                   kmeans-model
                   kmeans-result-labels
-                  spectral-clustering)
+                  spectral-clustering
+                  table->device-matrix)
          (only-in cuml/scribblings/guide/helpers
                   class-figure
                   cluster-colors
@@ -18,7 +19,6 @@
                   cluster-style
                   clusters-of
                   dataset-column
-                  dataset-matrix
                   features
                   line-plot
                   matched-labels
@@ -26,6 +26,7 @@
                   sizes
                   standardized-matrix
                   sweep-figure)
+         (only-in datasets/core load-dataset-table)
          (only-in pict pict->bitmap pict-height pict-width pict?)
          (only-in racket/class send)
          (only-in racket/function curry)
@@ -222,7 +223,7 @@
 (define species (dataset-column 'iris "species"))
 
 (define (flowers)
-  (dataset-matrix 'iris (features 'iris "species")))
+  (table->device-matrix (load-dataset-table 'iris) #:columns (features 'iris "species")))
 
 (test-gpu "the figures: k-means on iris differs from the species on 16 flowers of shared petal lengths"
   (define labels
@@ -249,12 +250,13 @@
 (test-gpu "the figures: wine clusters match the cultivars but for 53 raw and 8 standardized wines, raw ones in bands of proline"
   (define cultivar (dataset-column 'wine "cultivar"))
   (define measurements (features 'wine "cultivar"))
+  (define raw-wines (table->device-matrix (load-dataset-table 'wine) #:columns measurements))
   (define (misplaced wines)
     (mismatches (clusters-of (kmeans #:n-clusters 3) wines cultivar) cultivar))
   (check-equal? (remove-duplicates cultivar) '("1" "2" "3"))
-  (check-equal? (misplaced (dataset-matrix 'wine measurements)) 53)
+  (check-equal? (misplaced raw-wines) 53)
   (check-equal? (misplaced (standardized-matrix 'wine measurements)) 8)
-  (define raw (clusters-of (kmeans #:n-clusters 3) (dataset-matrix 'wine measurements) cultivar))
+  (define raw (clusters-of (kmeans #:n-clusters 3) raw-wines cultivar))
   (define proline (dataset-column 'wine "proline"))
   (define bands
     (sort (for/list ([cluster (in-list (remove-duplicates raw))])

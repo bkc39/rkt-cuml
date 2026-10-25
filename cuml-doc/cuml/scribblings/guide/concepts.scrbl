@@ -11,12 +11,14 @@ shared pieces on the iris data of @secref["getting-started"].
 
 @local-table-of-contents[]
 
-The data comes from the helpers of @secref["examples"], and
-@racket[kmeans-labels] copies a k-means result's labels to the host:
+The data comes from @racket[table->device-matrix] and the helpers of
+@secref["examples"], and @racket[kmeans-labels] copies a k-means result's
+labels to the host:
 
 @examples[#:eval ev #:label #f
+(define iris (load-dataset-table 'iris))
 (define measurements (features 'iris "species"))
-(define flowers (dataset-matrix 'iris measurements))
+(define flowers (table->device-matrix iris #:columns measurements))
 (define species (dataset-column 'iris "species"))
 (define (kmeans-labels result)
   (device-vector->list (kmeans-result-labels result)))
@@ -30,7 +32,7 @@ sample per row and one feature per column. k-means and DBSCAN take
 take only @racket['float32]:
 
 @examples[#:eval ev #:label #f
-(define flowers64 (dataset-matrix 'iris measurements #:dtype 'float64))
+(define flowers64 (table->device-matrix iris #:columns measurements #:dtype 'float64))
 (dtype flowers64)
 (~> (kmeans-fit flowers64 #:n-clusters 3) kmeans-labels (crosstab species))
 (eval:error (single-linkage-fit flowers64 #:n-clusters 3))
@@ -40,9 +42,7 @@ A column-major matrix is refused, not transposed:
 
 @examples[#:eval ev #:label #f
 (eval:error
- (~> (dataset-columns 'iris measurements)
-     rows
-     (list*->device-matrix #:dtype 'float32 #:layout 'col-major)
+ (~> (table->device-matrix iris #:columns measurements #:layout 'col-major)
      (kmeans-fit #:n-clusters 3)))
 ]
 

@@ -23,13 +23,13 @@
                   predict
                   score
                   single-linkage-fit
-                  spectral-clustering)
+                  spectral-clustering
+                  table->device-matrix)
          (only-in cuml/scribblings/guide/helpers
                   agreement
                   crosstab
                   dataset-column
                   dataset-columns
-                  dataset-matrix
                   features
                   labels-of
                   rows
@@ -38,6 +38,7 @@
                   standardized
                   standardized-matrix)
          (only-in cuml/scribblings/guide/source page-helpers-source)
+         (only-in datasets/core load-dataset-table)
          (only-in pkg/lib pkg-directory)
          (only-in racket/file file->string)
          (only-in racket/function curry)
@@ -103,7 +104,7 @@
   (regexp-replace* #px"\\s+" (file->string path) " "))
 
 (define dataset-use
-  #px"\\((?:load-dataset-table|dataset-matrix|dataset-columns?|standardized-matrix|features) '([a-z-]+)")
+  #px"\\((?:load-dataset-table|dataset-columns?|standardized-matrix|features) '([a-z-]+)")
 
 (define (chapter-datasets chapter)
   (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))
@@ -144,8 +145,8 @@
 
 (define measurements '("sepal-length" "sepal-width" "petal-length" "petal-width"))
 
-(define (flowers)
-  (dataset-matrix 'iris measurements))
+(define (flowers [element-type 'float32])
+  (table->device-matrix (load-dataset-table 'iris) #:columns measurements #:dtype element-type))
 
 (define species (dataset-column 'iris "species"))
 
@@ -184,7 +185,7 @@
   (kmeans-labels (kmeans-fit (flowers) #:n-clusters 3 #:random-state seed)))
 
 (test-gpu "the guide: float64 for k-means, refused by single linkage, and col-major refused"
-  (define flowers64 (dataset-matrix 'iris measurements #:dtype 'float64))
+  (define flowers64 (flowers 'float64))
   (check-equal? (dtype flowers64) 'float64)
   (check-equal? (~> (kmeans-fit flowers64 #:n-clusters 3) kmeans-labels (crosstab species))
                 iris-kmeans-table)
@@ -194,9 +195,9 @@
   (check-cuml-error 'logic
                     "kmeans-fit: X: expected row-major, got col-major 150x4"
                     (lambda ()
-                      (~> (dataset-columns 'iris measurements)
-                          rows
-                          (list*->device-matrix #:dtype 'float32 #:layout 'col-major)
+                      (~> (table->device-matrix (load-dataset-table 'iris)
+                                                #:columns measurements
+                                                #:layout 'col-major)
                           (kmeans-fit #:n-clusters 3)))))
 
 (test-gpu "the guide: scoped resources, the two forms, and renumbering seeds"
@@ -257,10 +258,10 @@
                   (define column (dataset-column 'wine name))
                   (list name (apply min column) (apply max column)))
                 '(("proline" 278 1680) ("magnesium" 70 162) ("hue" 0.48 1.71)))
-  (define raw-table (cultivar-table (dataset-matrix 'wine wine-measurements)))
+  (define raw-table (cultivar-table (table->device-matrix (load-dataset-table 'wine) #:columns wine-measurements)))
   (check-equal? raw-table '((46 1 0) (0 50 19) (13 20 29)))
   (check-equal? (agreement raw-table) 125)
-  (check-equal? (cultivar-table (dataset-matrix 'wine '("proline"))) raw-table)
+  (check-equal? (cultivar-table (table->device-matrix (load-dataset-table 'wine) #:columns '("proline"))) raw-table)
   (define scaled (standardized-matrix 'wine wine-measurements))
   (define scaled-table (cultivar-table scaled))
   (check-equal? scaled-table '((59 5 0) (0 63 0) (0 3 48)))
