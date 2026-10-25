@@ -7,8 +7,8 @@
          (only-in raft device-matrix->list* list*->device-matrix list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/umap-data.rkt"
-                  bits-equal?
                   far-blobs
                   finite-rows?
                   fixture-X

@@ -23,7 +23,8 @@
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" listed printed round-trips)
-         (only-in "private/umap-data.rkt" bits-equal? far-blobs fixture-X fixture-y overlap))
+         (only-in "private/scaler-data.rkt" bits-equal?)
+         (only-in "private/umap-data.rkt" far-blobs fixture-X fixture-y overlap))
 
 (define changed
   (hasheq 'n-neighbors

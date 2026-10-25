@@ -3,10 +3,9 @@
 (require (only-in json json-null)
          (only-in racket/flonum flsingle)
          (only-in raft device-matrix->list* list*->device-matrix list->device-vector)
-         (only-in "scaler-data.rkt" bits-equal? normal-source))
+         (only-in "scaler-data.rkt" normal-source))
 
 (provide (struct-out fixture)
-         bits-equal?
          blobs
          embedding-rows
          far-blobs

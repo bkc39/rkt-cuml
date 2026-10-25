@@ -72,7 +72,7 @@
 
 (define (table-bindings table keys entries)
   (for/list ([entry (in-list entries)])
-    (match-define (list name proc extra positional others omitted leading ...) entry)
+    (match-define (list* name proc extra positional others omitted leading) entry)
     (define taken (filter (lambda (key) (not (memq key omitted))) keys))
     (binding name
              proc

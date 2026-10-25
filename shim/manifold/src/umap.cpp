@@ -59,6 +59,7 @@ constexpr std::size_t nn_descent_intermediate_degree = 128;
 constexpr int most_serial_components = 512;
 constexpr float transform_queue_size = 4.0F;
 constexpr float target_weight = 0.5F;
+constexpr float euclidean_p = 2.0F;
 
 struct umap_request {
   int64_t n_neighbors;
@@ -76,7 +77,7 @@ struct umap_request {
   int32_t metric;
 };
 
-std::optional<DistanceType> distance_of(int32_t metric) {
+DistanceType distance_of(int32_t metric) {
   switch (metric) {
     case CUML_MANIFOLD_METRIC_EUCLIDEAN:
       return DistanceType::L2SqrtExpanded;
@@ -89,7 +90,9 @@ std::optional<DistanceType> distance_of(int32_t metric) {
     case CUML_MANIFOLD_METRIC_COSINE:
       return DistanceType::CosineExpanded;
     default:
-      return std::nullopt;
+      throw logic_error(
+          "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or "
+          "cosine");
   }
 }
 
@@ -98,8 +101,8 @@ const char* metric_name(int32_t metric) {
 }
 
 void require_curve_value(const char* what, double got) {
-  if (!(std::isfinite(got) && got >= std::numeric_limits<float>::min() &&
-        got <= most_float)) {
+  if (!std::isfinite(got) || got < std::numeric_limits<float>::min() ||
+      got > most_float) {
     throw logic_error(
         std::format("{}: expected a finite float32 value above 0, got {}",
                     what, printed(got)));
@@ -107,11 +110,7 @@ void require_curve_value(const char* what, double got) {
 }
 
 void require_shared(const umap_request& r) {
-  if (!distance_of(r.metric)) {
-    throw logic_error(
-        "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or "
-        "cosine");
-  }
+  static_cast<void>(distance_of(r.metric));
 }
 
 void require_numbers(const umap_request& r) {
@@ -123,7 +122,7 @@ void require_numbers(const umap_request& r) {
     require_at_least("n-epochs", r.n_epochs, 1);
     require_at_most("n-epochs", r.n_epochs, most_index);
   }
-  if (!(std::isfinite(r.learning_rate) && r.learning_rate > 0)) {
+  if (!std::isfinite(r.learning_rate) || r.learning_rate <= 0) {
     throw logic_error(
         std::format("learning-rate: expected a finite value above 0, got {}",
                     printed(r.learning_rate)));
@@ -171,8 +170,8 @@ ML::UMAPParams umap_params(const umap_request& r, int64_t n_neighbors,
   p.deterministic = r.deterministic;
   p.force_serial_epochs = fit && r.init == CUML_MANIFOLD_INIT_SPECTRAL &&
                           r.n_components <= most_serial_components;
-  p.metric = *distance_of(r.metric);
-  p.p = 2.0F;
+  p.metric = distance_of(r.metric);
+  p.p = euclidean_p;
   p.verbosity = rapids_logger::level_enum::warn;
   p.target_metric = ML::UMAPParams::CATEGORICAL;
   p.target_weight = target_weight;
@@ -296,7 +295,7 @@ void require_labels(const std::optional<label_codes>& codes) {
 }
 
 void fit_into(const raft::handle_t& handle, const rr_view* x_view,
-              const rr_view* y, rr_deposit* out, const umap_request& r) {
+              rr_deposit* out, const rr_view* y, const umap_request& r) {
   require_fit_parameters(r);
   const matrix<float, int64_t> x = float_rows(x_view, "X");
   require_some("X", "rows", x.n, 2);
@@ -417,7 +416,7 @@ int cuml_manifold_umap_fit(void* handle, const rr_view* x, const rr_view* y,
                          .deterministic = deterministic != 0,
                          .build_algo = build_algo,
                          .metric = metric};
-    fit_into(h, x, y, raftrkt::require(out, "out"), r);
+    fit_into(h, x, raftrkt::require(out, "out"), y, r);
   });
 }
 

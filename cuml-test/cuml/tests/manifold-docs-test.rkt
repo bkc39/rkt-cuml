@@ -20,7 +20,7 @@
 
 (define truth
   (for*/list ([k 3]
-              [i 20])
+              [_ 20])
     k))
 
 (test-gpu "the manual: the three groups example"

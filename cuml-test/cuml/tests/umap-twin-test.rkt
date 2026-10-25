@@ -14,8 +14,8 @@
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list* list->device-vector)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
+         (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/umap-data.rkt"
-                  bits-equal?
                   far-blobs
                   fixture
                   fixture-X
@@ -85,7 +85,8 @@
               'results))
   (for ([run (in-list runs)]
         [found (in-list theirs)])
-    (check-true (bits-equal? (cadr run) (hash-ref found 'embedding)))))
+    (match-define (list _ embedding _) run)
+    (check-true (bits-equal? embedding (hash-ref found 'embedding)))))
 
 (define merged-labels '(0 16777216 16777217))
 

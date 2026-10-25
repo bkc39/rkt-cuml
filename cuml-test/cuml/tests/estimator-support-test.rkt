@@ -319,7 +319,7 @@
   (check-regexp-match #rx"#:colour" (exn-message e))
   (check-true (procedure? gadget)))
 
-(define/who (taught-fit who X #:y [y 'absent] #:hyperparameters gadget-params)
+(define/who (taught-fit _who X #:y [y 'absent] #:hyperparameters gadget-params)
   (list 'taught X y size))
 
 (define (taught-matrix m)

@@ -57,13 +57,15 @@ TEST(UmapFit, SpectralInitAndEveryMetricAreFinite) {
   }
 }
 
+constexpr int64_t far_label = 1000;
+
 TEST(UmapFit, LabelsChangeTheEmbedding) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<float> x(res, blobs(rows, cols), {rows, cols});
   std::vector<int64_t> host(static_cast<std::size_t>(rows));
   for (int64_t i = 0; i < rows; ++i) {
-    host[static_cast<std::size_t>(i)] = i % 3 == 0 ? -1 : ((i / 2) % 2) * 1000;
+    host[static_cast<std::size_t>(i)] = i % 3 == 0 ? -1 : ((i / 2) % 2) * far_label;
   }
   const filled<int64_t> y(res, host, {rows});
   const std::vector<float> supervised = fitted(res, x.view(), y.view());
@@ -88,6 +90,16 @@ TEST(UmapFit, NnDescentIsFinite) {
       res, x.view(), nullptr, {.build_algo = CUML_MANIFOLD_BUILD_NN_DESCENT})));
 }
 
+std::vector<float> transformed(const resources& res, const umap_trained& t,
+                               const rr_view* x) {
+  record out(res);
+  EXPECT_EQ(outcome(umap_transform(res, x, t, out)), "accepted");
+  EXPECT_EQ(out.r.count, 1);
+  EXPECT_EQ(out.r.regions[0].shape[0], fresh);
+  EXPECT_EQ(out.r.regions[0].shape[1], 2);
+  return out.r.count == 1 ? out.read<float>(0) : std::vector<float>{};
+}
+
 TEST(UmapTransform, NewRowsAreFiniteAndRepeatBitwise) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -96,16 +108,9 @@ TEST(UmapTransform, NewRowsAreFiniteAndRepeatBitwise) {
   ASSERT_EQ(outcome(umap_fit(res, x.view(), nullptr, trained)), "accepted");
   const filled<float> fresh_x(res, blobs(fresh, cols), {fresh, cols});
   const umap_trained t{x.view(), &trained.r.regions[0]};
-  record first(res);
-  record second(res);
-  ASSERT_EQ(outcome(umap_transform(res, fresh_x.view(), t, first)),
-            "accepted");
-  ASSERT_EQ(outcome(umap_transform(res, fresh_x.view(), t, second)),
-            "accepted");
-  EXPECT_EQ(first.r.regions[0].shape[0], fresh);
-  EXPECT_EQ(first.r.regions[0].shape[1], 2);
-  EXPECT_TRUE(all_finite(first.read<float>(0)));
-  EXPECT_EQ(first.read<float>(0), second.read<float>(0));
+  const std::vector<float> first = transformed(res, t, fresh_x.view());
+  EXPECT_TRUE(all_finite(first));
+  EXPECT_EQ(first, transformed(res, t, fresh_x.view()));
 }
 
 }  // namespace

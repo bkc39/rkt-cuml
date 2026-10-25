@@ -21,7 +21,7 @@
    (for*/list ([c (in-list '(0 25 50))] [i (in-range 20)])
      (list (+ c (* 0.1 i)) (- c (* 0.05 i)) (* 0.01 i i)))
    #:dtype 'float32))
-(define truth (list->device-vector (for*/list ([k 3] [i 20]) k) #:dtype 'int32))
+(define truth (list->device-vector (for*/list ([k 3] [_ 20]) k) #:dtype 'int32))
 (define fitted (umap-fit X #:n-neighbors 10))
 (shape (umap-result-embedding fitted))
 (~> fitted

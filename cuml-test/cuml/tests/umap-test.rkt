@@ -15,9 +15,8 @@
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/scaler-data.rkt" matrix-shape)
+         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
          (only-in "private/umap-data.rkt"
-                  bits-equal?
                   far-blobs
                   fixture-X
                   fixture-rows
