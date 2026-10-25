@@ -6,7 +6,7 @@
                   standard-scaler-result-with-mean
                   standard-scaler-result-with-std)
          (only-in racket/flonum fl* fl+ fl- fl/ flsingle)
-         (only-in racket/list make-list)
+         (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in racket/math pi sqr)
          (only-in raft
@@ -29,6 +29,7 @@
          host-transform
          matrix-shape
          normal-rows
+         normal-source
          round-to
          rows->matrix
          standardisation-errors
@@ -46,12 +47,9 @@
 (define (rows->matrix rows dtype)
   (list*->device-matrix rows #:dtype dtype))
 
-(define (strided-vector n)
-  (define backing
-    (list->device-vector (for/list ([i (in-range (* 2 n))])
-                           (exact->inexact i))
-                         #:dtype 'float64))
-  (buffer->device-array (device-array-buffer backing) 0 (list n) '(2) 'float64 'device))
+(define (strided-vector n [dt 'float64])
+  (define backing (list->device-vector (range (* 2 n)) #:dtype dt))
+  (buffer->device-array (device-array-buffer backing) 0 (list n) '(2) dt 'device))
 
 (define (normal-source seed)
   (define g (make-pseudo-random-generator))

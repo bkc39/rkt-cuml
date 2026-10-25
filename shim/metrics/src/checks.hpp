@@ -13,19 +13,6 @@ namespace cumlrkt::metrics {
 
 inline constexpr int64_t most_distinct_labels = 46340;
 
-template <typename Fn>
-void on_labels(const rr_view* labels, const char* name, Fn&& fn) {
-  const rr_view& view = *raftrkt::require(labels, name);
-  if (view.dtype == RR_DTYPE_INT32) {
-    fn(int32_t{});
-  } else if (view.dtype == RR_DTYPE_INT64) {
-    fn(int64_t{});
-  } else {
-    throw logic_error(std::string(name) + ": expected int32 or int64, got " +
-                      raftrkt::dtype_name(view.dtype));
-  }
-}
-
 template <typename T>
 const T* labels_of(const rr_view* labels, const char* name, int64_t n) {
   return raftrkt::vector_data<T, int32_t>(labels, name, n);

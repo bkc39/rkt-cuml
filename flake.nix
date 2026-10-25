@@ -33,6 +33,7 @@
       families = [
         "cluster"
         "decomposition"
+        "manifold"
         "metrics"
         "preprocessing"
       ];

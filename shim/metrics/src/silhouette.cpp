@@ -14,10 +14,9 @@
 #include <utility>
 
 #include "checks.hpp"
+#include "cumlrkt/labels.hpp"
 #include "cumlrkt/metrics.h"
 #include "cumlrkt/support.hpp"
-#include "labels.hpp"
-#include "norms.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 
@@ -34,12 +33,12 @@ using cumlrkt::require_index;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
 using cumlrkt::settle;
-using cumlrkt::metrics::dense_codes;
-using cumlrkt::metrics::dense_labels;
-using cumlrkt::metrics::first_normless_row;
+using cumlrkt::dense_codes;
+using cumlrkt::dense_labels;
+using cumlrkt::first_normless_row;
 using cumlrkt::metrics::labels_of;
 using cumlrkt::metrics::most_distinct_labels;
-using cumlrkt::metrics::on_labels;
+using cumlrkt::on_labels;
 using cumlrkt::metrics::require_entries;
 using ML::distance::DistanceType;
 

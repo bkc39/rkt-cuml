@@ -11,6 +11,7 @@
                  "cuml-decomposition-lib"
                  "cuml-doc"
                  "cuml-lib"
+                 "cuml-manifold-lib"
                  "cuml-metrics-lib"
                  "cuml-preprocessing-lib"
                  "datasets-core"

@@ -38,7 +38,7 @@ function(cumlrkt_family family)
   set(lib cumlrkt_${family})
   set(common_sources)
   if(NOT arg_TEST_ONLY)
-    set(common_sources common/src/rows.cu)
+    set(common_sources common/src/labels.cu common/src/rows.cu)
   endif()
   add_library(${lib} SHARED ${arg_SOURCES} ${common_sources})
   set_target_properties(${lib} PROPERTIES

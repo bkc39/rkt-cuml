@@ -61,4 +61,17 @@ void on_floats(const rr_view* x, const char* name, Fn&& fn) {
   }
 }
 
+template <typename Fn>
+void on_labels(const rr_view* labels, const char* name, Fn&& fn) {
+  const rr_view& view = *raftrkt::require(labels, name);
+  if (view.dtype == RR_DTYPE_INT32) {
+    fn(int32_t{});
+  } else if (view.dtype == RR_DTYPE_INT64) {
+    fn(int64_t{});
+  } else {
+    throw logic_error(std::string(name) + ": expected int32 or int64, got " +
+                      raftrkt::dtype_name(view.dtype));
+  }
+}
+
 }  // namespace cumlrkt

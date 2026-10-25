@@ -9,12 +9,14 @@
            "cuml-core-lib"
            "cuml-cluster-lib"
            "cuml-decomposition-lib"
+           "cuml-manifold-lib"
            "cuml-metrics-lib"
            "cuml-preprocessing-lib"
            ("datasets-core" #:version "0.1")))
 (define implies
   '("cuml-core-lib" "cuml-cluster-lib"
                     "cuml-decomposition-lib"
+                    "cuml-manifold-lib"
                     "cuml-metrics-lib"
                     "cuml-preprocessing-lib"))
 (define pkg-desc "Racket bindings to NVIDIA cuML (no documentation)")

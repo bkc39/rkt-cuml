@@ -25,7 +25,7 @@ trap 'reap; rm -rf "$work"' EXIT
 
 stubs="$work/stubs"
 mkdir -p "$stubs"
-gtests=(cumlrkt_cluster_tests cumlrkt_decomposition_tests cumlrkt_preprocessing_tests)
+gtests=(cumlrkt_cluster_tests cumlrkt_decomposition_tests cumlrkt_manifold_tests cumlrkt_preprocessing_tests)
 for t in "${gtests[@]}"; do
   printf '#!%s\ntouch %q\nexec sleep 60\n' "$BASH" "$work/started" >"$stubs/$t"
   chmod +x "$stubs/$t"

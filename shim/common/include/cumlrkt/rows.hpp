@@ -12,6 +12,10 @@ std::pair<int64_t, double> first_large_row(const T* x, int64_t n, int64_t d,
                                            rmm::cuda_stream_view stream);
 
 template <typename T>
+std::pair<int64_t, T> first_normless_row(const T* x, int64_t n, int64_t d,
+                                         T least, rmm::cuda_stream_view stream);
+
+template <typename T>
 int64_t first_zero_row(const T* x, int64_t n, int64_t d,
                        rmm::cuda_stream_view stream);
 

@@ -4,7 +4,7 @@
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_uvector.hpp>
 
-namespace cumlrkt::metrics {
+namespace cumlrkt {
 
 template <typename T>
 struct dense_labels {
@@ -17,4 +17,4 @@ template <typename T>
 dense_labels<T> dense_codes(const T* labels, int64_t n,
                             rmm::cuda_stream_view stream);
 
-}  // namespace cumlrkt::metrics
+}  // namespace cumlrkt
