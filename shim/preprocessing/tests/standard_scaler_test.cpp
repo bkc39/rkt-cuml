@@ -25,6 +25,9 @@ constexpr float spread = 7;
 
 const std::vector<double> grid{1, 10, 3, 10, 1, 14, 3, 14};
 const std::vector<double> unit{-1, -1, 1, -1, -1, 1, 1, 1};
+const std::vector<double> grid_mean{2, 12};
+const std::vector<double> grid_var{1, 4};
+const std::vector<double> grid_scale{1, 2};
 
 struct fitted {
   explicit fitted(const resources& res) : out(res) {}
@@ -39,6 +42,17 @@ void fit_into(const resources& res, const rr_view* x, fitted& f,
   f.status = outcome(cuml_preprocessing_standard_scaler_fit(
       res.handle, x, &f.out.r, with_mean, with_std, scratch_elements,
       &f.n_samples));
+}
+
+void expect_deposited(const fitted& f,
+                      const std::vector<std::vector<double>>& expected) {
+  ASSERT_EQ(f.status, "accepted");
+  ASSERT_EQ(f.out.r.count, static_cast<int32_t>(expected.size()));
+  for (int32_t i = 0; i < f.out.r.count; ++i) {
+    EXPECT_EQ(f.out.r.regions[i].dtype, RR_DTYPE_FLOAT64) << "region " << i;
+    EXPECT_EQ(f.out.read<double>(i), expected[static_cast<std::size_t>(i)])
+        << "region " << i;
+  }
 }
 
 template <typename T>
@@ -64,13 +78,8 @@ TEST(StandardScaler, FitDepositsMeanVarianceAndScale) {
   const filled<double> x(res, grid, {rows, cols});
   fitted f(res);
   fit_into(res, x.view(), f);
-  ASSERT_EQ(f.status, "accepted");
+  expect_deposited(f, {grid_mean, grid_var, grid_scale});
   EXPECT_EQ(f.n_samples, rows);
-  ASSERT_EQ(f.out.r.count, 3);
-  EXPECT_EQ(f.out.r.regions[0].dtype, RR_DTYPE_FLOAT64);
-  EXPECT_EQ(f.out.read<double>(0), (std::vector<double>{2, 12}));
-  EXPECT_EQ(f.out.read<double>(1), (std::vector<double>{1, 4}));
-  EXPECT_EQ(f.out.read<double>(2), (std::vector<double>{1, 2}));
 }
 
 TEST(StandardScaler, WithoutStdDepositsTheMeanOnly) {
@@ -80,10 +89,7 @@ TEST(StandardScaler, WithoutStdDepositsTheMeanOnly) {
   for (const int32_t with_mean : {0, 1}) {
     fitted f(res);
     fit_into(res, x.view(), f, with_mean, 0);
-    ASSERT_EQ(f.status, "accepted");
-    ASSERT_EQ(f.out.r.count, 1);
-    EXPECT_EQ(f.out.r.regions[0].dtype, RR_DTYPE_FLOAT64);
-    EXPECT_EQ(f.out.read<double>(0), (std::vector<double>{2, 12}));
+    expect_deposited(f, {grid_mean});
   }
 }
 
@@ -120,16 +126,30 @@ TEST(StandardScaler, TransformAndInverseOfTheGrid) {
   const resources res;
   const filled<double> x(res, grid, {rows, cols});
   const filled<double> t(res, unit, {rows, cols});
-  const filled<double> mean(res, {2, 12}, {cols});
-  const filled<double> scale(res, {1, 2}, {cols});
+  const filled<double> mean(res, grid_mean, {cols});
+  const filled<double> scale(res, grid_scale, {cols});
   EXPECT_EQ(applied<double>(res, false, x.view(), mean.view(), scale.view()),
             unit);
   EXPECT_EQ(applied<double>(res, true, t.view(), mean.view(), scale.view()),
             grid);
+}
+
+TEST(StandardScaler, MissingStatisticsLeaveTheirStepOut) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> x(res, grid, {rows, cols});
+  const filled<double> mean(res, grid_mean, {cols});
   EXPECT_EQ(applied<double>(res, false, x.view(), nullptr, nullptr), grid);
   EXPECT_EQ(applied<double>(res, true, x.view(), nullptr, nullptr), grid);
   EXPECT_EQ(applied<double>(res, false, x.view(), mean.view(), nullptr),
             (std::vector<double>{-1, -2, 1, -2, -1, 2, 1, 2}));
+}
+
+TEST(StandardScaler, FloatSamplesTakeDoubleStatistics) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> mean(res, grid_mean, {cols});
+  const filled<double> scale(res, grid_scale, {cols});
   const filled<float> narrow(res, {1, 10, 3, 10, 1, 14, 3, 14}, {rows, cols});
   EXPECT_EQ(
       applied<float>(res, false, narrow.view(), mean.view(), scale.view()),
@@ -166,7 +186,7 @@ TEST(StandardScaler, ViewsOnAnotherDeviceAreRefused) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<double> x(res, grid, {rows, cols});
-  const filled<double> mean(res, {2, 12}, {cols});
+  const filled<double> mean(res, grid_mean, {cols});
   rr_view x_elsewhere = *x.view();
   x_elsewhere.device = 1;
   rr_view mean_elsewhere = *mean.view();

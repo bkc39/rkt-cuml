@@ -113,17 +113,21 @@ const double* statistic(const rr_view* v, const char* name, int64_t d) {
   return v == nullptr ? nullptr : raftrkt::vector_data<double>(v, name, d);
 }
 
+struct statistics_views {
+  const rr_view* mean;
+  const rr_view* scale;
+};
+
 template <typename T, bool Inverse>
 void apply_into(const raft::handle_t& handle, const rr_view* view,
-                const rr_view* mean_view, const rr_view* scale_view,
-                rr_deposit* out, int64_t n_features) {
+                statistics_views stats, rr_deposit* out, int64_t n_features) {
   const matrix<T, int64_t> x = samples<T>(view);
   if (x.d != n_features) {
     throw logic_error(
         std::format("X: expected {} columns, got {}", n_features, x.d));
   }
-  const double* mean = statistic(mean_view, "mean", n_features);
-  const double* scale = statistic(scale_view, "scale", n_features);
+  const double* mean = statistic(stats.mean, "mean", n_features);
+  const double* scale = statistic(stats.scale, "scale", n_features);
   require_finite(handle, x);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   auto result = std::make_unique<rmm::device_uvector<T>>(
@@ -146,8 +150,8 @@ int applied(void* handle, const rr_view* x, const rr_view* mean,
                  [&](const raft::handle_t& h) {
                    rr_deposit* const into = raftrkt::require(out, "out");
                    on_floats(x, "X", [&](auto tag) {
-                     apply_into<decltype(tag), Inverse>(h, x, mean, scale, into,
-                                                        n_features);
+                     apply_into<decltype(tag), Inverse>(h, x, {mean, scale},
+                                                        into, n_features);
                    });
                  });
 }
@@ -156,12 +160,9 @@ int applied(void* handle, const rr_view* x, const rr_view* mean,
 
 extern "C" {
 
-int cuml_preprocessing_standard_scaler_fit(void* handle, const rr_view* x,
-                                           rr_deposit* out, int32_t with_mean,
-                                           int32_t with_std,
-                                           int64_t scratch_elements,
-                                           int64_t* n_samples) {
-  static_cast<void>(with_mean);
+int cuml_preprocessing_standard_scaler_fit(
+    void* handle, const rr_view* x, rr_deposit* out, int32_t /*with_mean*/,
+    int32_t with_std, int64_t scratch_elements, int64_t* n_samples) {
   return guarded(handle, {{"X", x}}, [&](const raft::handle_t& h) {
     const fit_request r{raftrkt::require(out, "out"), with_std != 0,
                         scratch_elements,
