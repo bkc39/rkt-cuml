@@ -7,7 +7,8 @@
                   kmeans
                   pca
                   spectral-clustering
-                  standard-scaler)
+                  standard-scaler
+                  truncated-svd)
          (only-in cuml/cluster
                   dbscan-fit
                   dbscan-params
@@ -20,7 +21,13 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-params)
-         (only-in cuml/decomposition pca-fit pca-fit-transform pca-params)
+         (only-in cuml/decomposition
+                  pca-fit
+                  pca-fit-transform
+                  pca-params
+                  tsvd-fit
+                  tsvd-fit-transform
+                  tsvd-params)
          (only-in cuml/preprocessing
                   standard-scaler-fit
                   standard-scaler-fit-transform
@@ -101,6 +108,8 @@
 (define standard-scaler-keys '(with-mean with-std))
 
 (define pca-keys '(n-components whiten solver tol iterations))
+
+(define tsvd-keys '(n-components solver tol iterations))
 
 (define (scaler-fit-entry name proc)
   (list name
@@ -235,6 +244,17 @@
                          (scaler-fit-entry 'pca-fit-transform pca-fit-transform)
                          (list 'pca
                                pca
+                               '(#:resources)
+                               (list (argument #f 'params #f))
+                               (list (argument '#:resources 'resources #f))
+                               '())))
+   (table-bindings tsvd-params
+                   tsvd-keys
+                   (list (list 'tsvd-params tsvd-params '() (list (argument #f 'base #f)) '() '())
+                         (scaler-fit-entry 'tsvd-fit tsvd-fit)
+                         (scaler-fit-entry 'tsvd-fit-transform tsvd-fit-transform)
+                         (list 'truncated-svd
+                               truncated-svd
                                '(#:resources)
                                (list (argument #f 'params #f))
                                (list (argument '#:resources 'resources #f))

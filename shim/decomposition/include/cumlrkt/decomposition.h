@@ -51,6 +51,35 @@ CUMLRKT_API int cuml_decomposition_pca_inverse_transform(
 CUMLRKT_API void cuml_decomposition_pca_inverse_transform_job(
     void* args, size_t args_len, rr_job_outcome* outcome);
 
+/* Deposits in out, all in X's dtype: region 0 the k x d row-major
+   components, region 1 the k singular values, region 2 the k explained
+   variances, region 3 their ratios, and when with_transform region 4 the
+   n x k row-major transform of X. */
+CUMLRKT_API int cuml_decomposition_tsvd_fit(void* handle, const rr_view* x,
+                                            rr_deposit* out,
+                                            int64_t n_components,
+                                            int32_t solver, double tol,
+                                            int64_t iterations,
+                                            int32_t with_transform);
+CUMLRKT_API void cuml_decomposition_tsvd_fit_job(void* args, size_t args_len,
+                                                 rr_job_outcome* outcome);
+
+/* Region 0 of out is x times the transposed components, n x k, row-major;
+   x and components share a dtype. */
+CUMLRKT_API int cuml_decomposition_tsvd_transform(void* handle,
+                                                  const rr_view* x,
+                                                  const rr_view* components,
+                                                  rr_deposit* out);
+CUMLRKT_API void cuml_decomposition_tsvd_transform_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
+/* Region 0 of out is x times the components, n x d, row-major. */
+CUMLRKT_API int cuml_decomposition_tsvd_inverse_transform(
+    void* handle, const rr_view* x, const rr_view* components,
+    rr_deposit* out);
+CUMLRKT_API void cuml_decomposition_tsvd_inverse_transform_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
 #ifdef __cplusplus
 }
 #endif

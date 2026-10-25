@@ -1,13 +1,9 @@
-#include <thrust/for_each.h>
-#include <thrust/iterator/counting_iterator.h>
-
 #include <cfloat>
 #include <cstdint>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cuda_stream.hpp>
-#include <rmm/exec_policy.hpp>
 
 #include "pca_device.hpp"
+#include "signs.cuh"
 
 namespace cumlrkt::decomposition {
 
@@ -123,36 +119,6 @@ struct kept_spectrum {
   }
 };
 
-template <typename T>
-struct signed_components {
-  const T* components;
-  T* out;
-  int64_t m;
-  int64_t d;
-
-  __device__ void operator()(int64_t i) const {
-    T best = components[i];
-    for (int64_t j = 1; j < d; ++j) {
-      const T c = components[i + (j * m)];
-      if (fabs(c) > fabs(best)) {
-        best = c;
-      }
-    }
-    const bool flip = best < 0;
-    for (int64_t j = 0; j < d; ++j) {
-      const T c = components[i + (j * m)];
-      out[(i * d) + j] = flip ? -c : c;
-    }
-  }
-};
-
-template <typename F>
-void each(const raft::handle_t& handle, int64_t count, F f) {
-  const auto stream = raft::resource::get_cuda_stream(handle);
-  thrust::for_each_n(rmm::exec_policy(stream),
-                     thrust::counting_iterator<int64_t>(0), count, f);
-}
-
 }  // namespace
 
 template <typename T>
@@ -174,7 +140,7 @@ void post_fit(const raft::handle_t& handle, const T* components, T* variance,
   each(handle, 1, spectrum_totals<T>{variance, totals, m, k});
   each(handle, k,
        kept_spectrum<T>{variance, totals, out, static_cast<double>(n - 1)});
-  each(handle, k, signed_components<T>{components, out.components, m, d});
+  each(handle, k, signed_components<T>{components, out.components, m, d, nullptr});
 }
 
 template void to_columns<float>(const raft::handle_t&, const float*, int64_t,
