@@ -127,9 +127,10 @@
       (dot row c))))
 
 (define (popvar xs)
+  (define exact-xs (map inexact->exact xs))
   (define n (length xs))
-  (define mean (/ (apply + xs) n))
-  (/ (for/sum ([x (in-list xs)]) (* (- x mean) (- x mean))) n))
+  (define mean (/ (apply + exact-xs) n))
+  (real->double-flonum (/ (for/sum ([x (in-list exact-xs)]) (* (- x mean) (- x mean))) n)))
 
 (define (popvars rows)
   (match-define (cons first-row _) rows)

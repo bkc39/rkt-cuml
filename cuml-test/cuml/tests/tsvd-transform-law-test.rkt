@@ -80,7 +80,7 @@
   (for ([c (in-list (filter tall-case? (cases)))])
     (match-define (list dt solver f) c)
     (define rows (fixture-rows f dt))
-    (define-values (_ d) (extents rows))
+    (define-values (_n d) (extents rows))
     (test-case (format "~a ~a ~a" dt solver (fixture-name f))
       (define X (rows->matrix rows dt))
       (define result (tsvd-fit X #:n-components d #:solver solver))
