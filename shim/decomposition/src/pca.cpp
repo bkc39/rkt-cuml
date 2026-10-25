@@ -40,10 +40,9 @@ using cumlrkt::require_magnitudes;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
 using cumlrkt::settle;
+using cumlrkt::decomposition::bounds_of;
 using cumlrkt::decomposition::fit_arrays;
-using cumlrkt::decomposition::largest_root;
 using cumlrkt::decomposition::post_fit;
-using cumlrkt::decomposition::smallest_divisor;
 using cumlrkt::decomposition::to_columns;
 using cumlrkt::decomposition::to_rows;
 using raftrkt::any_extent;
@@ -135,8 +134,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
               const fit_request& r) {
   const matrix<T, int64_t> x =
       rows_of<T, int64_t>(view, "X", any_extent, any_extent);
-  require_some("X", "rows", x.n, 2);
-  require_some("X", "columns", x.d, 2);
+  require_some("X", "row", x.n, 2);
+  require_some("X", "column", x.d, 2);
   require_rows(x.n);
   if (x.d > most_columns) {
     throw logic_error(std::format(
@@ -211,16 +210,19 @@ const T* explained_variance(const apply_views& v, int64_t k) {
   return raftrkt::vector_data<T>(v.variance, "explained-variance", k);
 }
 
-template <typename T, bool Inverse>
-double spread(const raft::handle_t& handle, const T* variance, int64_t k) {
-  if (variance == nullptr) {
-    return 1.0;
-  }
-  if constexpr (Inverse) {
-    return largest_root(handle, variance, k);
-  } else {
-    return 1.0 / smallest_divisor(handle, variance, k);
-  }
+template <typename T>
+double forward_spread(const raft::handle_t& handle, const T* variance,
+                      int64_t k) {
+  return variance == nullptr
+             ? 1.0
+             : 1.0 / bounds_of(handle, variance, k).smallest_divisor;
+}
+
+template <typename T>
+double inverse_spread(const raft::handle_t& handle, const T* variance,
+                      int64_t k) {
+  return variance == nullptr ? 1.0
+                             : bounds_of(handle, variance, k).largest_root;
 }
 
 template <typename T>
@@ -248,7 +250,8 @@ void apply_into(const raft::handle_t& handle, const operands<T>& in,
   require_magnitudes(
       "X", x,
       most_value<T> / (overflow_margin * static_cast<double>(width) *
-                       spread<T, Inverse>(handle, variance, k)),
+                       (Inverse ? inverse_spread(handle, variance, k)
+                                : forward_spread(handle, variance, k))),
       stream);
   const int64_t out_width = Inverse ? d : k;
   auto result =
@@ -305,7 +308,7 @@ int applied(void* handle, const apply_views& v) {
                        const matrix<C, int64_t> c = rows_of<C, int64_t>(
                            v.components, "components", any_extent, any_extent);
                        require_some("components", "row", c.n);
-                       require_some("components", "columns", c.d, 2);
+                       require_some("components", "column", c.d, 2);
                        if constexpr (std::is_same_v<X, C>) {
                          apply_into<C, Inverse>(h, operands<C>{x, c}, v);
                        } else {

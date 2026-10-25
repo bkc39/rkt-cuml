@@ -27,11 +27,6 @@ template <typename T>
 using rows = std::vector<std::vector<T>>;
 
 template <typename T>
-T* data(const device_array& a) {
-  return static_cast<T*>(a.view.data);
-}
-
-template <typename T>
 std::vector<T> column_major(const rows<T>& components) {
   const std::size_t m = components.size();
   std::vector<T> out(m * cells);
@@ -60,17 +55,7 @@ rows<T> signed_rows(const rows<T>& components) {
   EXPECT_EQ(
       cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),
       cudaSuccess);
-  std::vector<T> host(components.size() * cells);
-  EXPECT_EQ(cudaMemcpy(host.data(), out.view.data, host.size() * sizeof(T),
-                       cudaMemcpyDeviceToHost),
-            cudaSuccess);
-  rows<T> result;
-  for (std::size_t i = 0; i < components.size(); ++i) {
-    result.emplace_back(
-        host.begin() + static_cast<std::ptrdiff_t>(i * cells),
-        host.begin() + static_cast<std::ptrdiff_t>((i + 1) * cells));
-  }
-  return result;
+  return row_slices(out.read<T>(), cells);
 }
 
 template <typename T>

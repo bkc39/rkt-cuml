@@ -163,8 +163,8 @@ void require_magnitudes(const char* name, const matrix<T, int64_t>& x,
 inline void require_some(const char* name, const char* axis, int64_t extent,
                          int64_t least = 1) {
   if (extent < least) {
-    throw logic_error(std::format("{}: expected at least {} {}, got {}", name,
-                                  least, axis, extent));
+    throw logic_error(std::format("{}: expected at least {} {}{}, got {}", name,
+                                  least, axis, least == 1 ? "" : "s", extent));
   }
 }
 

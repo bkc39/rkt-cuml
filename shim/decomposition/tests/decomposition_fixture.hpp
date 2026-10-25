@@ -131,9 +131,37 @@ struct device_array {
     }
   }
 
+  template <typename T>
+  [[nodiscard]] std::vector<T> read() const {
+    std::vector<T> host(static_cast<std::size_t>(view.shape[0]) *
+                        (view.rank == 2 ? view.shape[1] : 1));
+    if (!host.empty()) {
+      EXPECT_EQ(rr_copy_d2h(host.data(), buffer, host.size() * sizeof(T)),
+                RR_OK)
+          << rr_last_error();
+    }
+    return host;
+  }
+
   rr_buffer* buffer = nullptr;
   rr_view view{};
 };
+
+template <typename T>
+T* data(const device_array& a) {
+  return static_cast<T*>(a.view.data);
+}
+
+template <typename T>
+std::vector<std::vector<T>> row_slices(const std::vector<T>& flat,
+                                       std::size_t width) {
+  std::vector<std::vector<T>> out;
+  for (auto it = flat.begin(); it != flat.end();
+       it += static_cast<std::ptrdiff_t>(width)) {
+    out.emplace_back(it, it + static_cast<std::ptrdiff_t>(width));
+  }
+  return out;
+}
 
 template <typename T>
 struct filled {

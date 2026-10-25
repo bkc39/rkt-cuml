@@ -150,16 +150,17 @@ struct signed_components {
 };
 
 template <typename T>
-struct wide_divisor {
-  __device__ double operator()(T v) const {
-    return static_cast<double>(divisor(v));
+struct bounds_one {
+  __device__ variance_bounds operator()(T v) const {
+    return {static_cast<double>(divisor(v)), root(static_cast<double>(v))};
   }
 };
 
-template <typename T>
-struct wide_root {
-  __device__ double operator()(T v) const {
-    return __dsqrt_rn(static_cast<double>(v));
+struct bounds_both {
+  __host__ __device__ variance_bounds
+  operator()(const variance_bounds& a, const variance_bounds& b) const {
+    return {thrust::minimum<double>{}(a.smallest_divisor, b.smallest_divisor),
+            thrust::maximum<double>{}(a.largest_root, b.largest_root)};
   }
 };
 
@@ -195,21 +196,12 @@ void post_fit(const raft::handle_t& handle, const T* components, T* variance,
 }
 
 template <typename T>
-double smallest_divisor(const raft::handle_t& handle, const T* variance,
-                        int64_t k) {
+variance_bounds bounds_of(const raft::handle_t& handle, const T* variance,
+                          int64_t k) {
   const auto stream = raft::resource::get_cuda_stream(handle);
   return thrust::transform_reduce(rmm::exec_policy(stream), variance,
-                                  variance + k, wide_divisor<T>{}, 1.0,
-                                  thrust::minimum<double>{});
-}
-
-template <typename T>
-double largest_root(const raft::handle_t& handle, const T* variance,
-                    int64_t k) {
-  const auto stream = raft::resource::get_cuda_stream(handle);
-  return thrust::transform_reduce(rmm::exec_policy(stream), variance,
-                                  variance + k, wide_root<T>{}, 1.0,
-                                  thrust::maximum<double>{});
+                                  variance + k, bounds_one<T>{},
+                                  variance_bounds{1.0, 1.0}, bounds_both{});
 }
 
 template void to_columns<float>(const raft::handle_t&, const float*, int64_t,
@@ -226,13 +218,9 @@ template void post_fit<float>(const raft::handle_t&, const float*, float*,
 template void post_fit<double>(const raft::handle_t&, const double*, double*,
                                int64_t, int64_t, int64_t, int64_t,
                                const fit_arrays<double>&, double*);
-template double smallest_divisor<float>(const raft::handle_t&, const float*,
-                                        int64_t);
-template double smallest_divisor<double>(const raft::handle_t&, const double*,
-                                         int64_t);
-template double largest_root<float>(const raft::handle_t&, const float*,
-                                    int64_t);
-template double largest_root<double>(const raft::handle_t&, const double*,
-                                     int64_t);
+template variance_bounds bounds_of<float>(const raft::handle_t&, const float*,
+                                          int64_t);
+template variance_bounds bounds_of<double>(const raft::handle_t&, const double*,
+                                           int64_t);
 
 }  // namespace cumlrkt::decomposition
