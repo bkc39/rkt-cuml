@@ -249,7 +249,7 @@
   (check-cuml-error
    'logic
    #rx"^umap-transform: output: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
-   (lambda () (umap-transform (hand-built #:params (umap-params #:learning-rate 1e35)) tiny-X))))
+   (lambda () (umap-transform (hand-built #:params (umap-params #:learning-rate 3e38)) tiny-X))))
 
 (test-gpu "L14: the generics refuse with their own names"
   (define model (fit (umap #:init 'random) tiny-X))

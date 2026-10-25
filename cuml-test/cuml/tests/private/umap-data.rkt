@@ -16,7 +16,6 @@
          held-out-fit
          held-out-new
          overlap
-         quality-floors
          relabel
          tiny
          twin-case)
@@ -87,7 +86,7 @@
 
 (define tiny
   (fixture "tiny"
-           '((0.0 0.0 0.0) (0.5 0.25 0.0)
+           '((0.125 0.0 0.0) (0.5 0.25 0.0)
                            (1.0 0.0 0.5)
                            (0.25 1.0 0.0)
                            (10.0 10.0 10.0)
@@ -115,8 +114,6 @@
   (for*/and ([row (in-list rows)]
              [x (in-list row)])
     (and (flonum? x) (< (abs x) +inf.0))))
-
-(define quality-floors (hash))
 
 (define (twin-case f result-params a b #:transform [Y #f] #:y [y #f] #:op [op "umap"])
   (define (given key)
