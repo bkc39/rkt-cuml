@@ -36,7 +36,7 @@
   (check-true (<= (abs (- got expected)) bound)
               (format "~a: ~a against ~a, past ~a" what got expected bound)))
 
-(test-gpu "SL1: samples are n values in X's dtype within [-1, 1], and the score is their mean"
+(test-gpu "SL1: samples are n values in X's dtype within [-1, 1] on this fixture, and the score is their mean"
   (for* ([dt (in-list float-dtypes)]
          [metric (in-list metrics)])
     (test-case (format "~a ~a" dt metric)
@@ -51,6 +51,21 @@
                    (score X ys #:metric metric)
                    (mean s)
                    (tolerance 'mean dt)))))
+
+(define (aligned-rows dt)
+  (list*->device-matrix (for*/list ([direction (in-list '((0.3 0.5 0.7) (0.9 0.2 0.4)))]
+                                    [k (in-range 1 21)])
+                          (for/list ([x (in-list direction)])
+                            (* k x)))
+                        #:dtype dt))
+
+(test-gpu "SL1: under cosine, samples pass 1 only by rounding"
+  (for ([dt (in-list float-dtypes)]
+        [slack (in-list '(1e-5 1e-12))])
+    (define s (samples (aligned-rows dt) (append (make-list 20 0) (make-list 20 1)) #:metric 'cosine))
+    (check-true (for/and ([x (in-list s)])
+                  (<= (abs x) (+ 1 slack)))
+                (format "~a: largest |sample| ~a" dt (apply max (map abs s))))))
 
 (define (scaled rows factor dt)
   (list*->device-matrix (for/list ([r (in-list rows)])

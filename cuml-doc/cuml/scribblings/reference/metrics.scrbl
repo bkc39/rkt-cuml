@@ -92,7 +92,8 @@ call to call. Every row must have a squared norm of at most
                              [#:resources resources device-resources? (current-device-resources)])
          device-vector?]{
 Each sample's silhouette coefficient, in @racket[X]'s dtype; their mean
-is @racket[silhouette-score].
+is @racket[silhouette-score]. Each lies in [−1, 1], except that under
+@racket['cosine] rounding can carry one slightly past 1.
 @examples[#:eval ev (device-vector->list (silhouette-samples X y))]}
 
 @defproc[(trustworthiness [X device-matrix?]
