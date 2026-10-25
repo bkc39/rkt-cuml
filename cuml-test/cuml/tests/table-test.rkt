@@ -140,13 +140,23 @@
   (check-equal? (list (exn:fail:raft? e) (exn:fail:cuml? e) (and e (exn-message e)))
                 (list #t #f released-message)))
 
-(test-gpu "L7: released resources raise raft's error, explicit or read from the parameter at the call"
+(define (in-fresh-thread thunk)
+  (define result (box #f))
+  (thread-wait (thread (lambda () (set-box! result (thunk)))))
+  (unbox result))
+
+(test-gpu "L7: released resources raise raft's error, and the default is read at each call"
   (define t (load-dataset-table 'anscombe))
-  (define r (released-resources))
-  (check-raft-only (raised (lambda () (table->device-matrix t #:resources r))))
-  (check-raft-only (raised (lambda ()
-                             (parameterize ([current-device-resources r])
-                               (table->device-matrix t))))))
+  (check-raft-only (raised (lambda () (table->device-matrix t #:resources (released-resources)))))
+  (match-define (list released-default fresh-shape)
+    (in-fresh-thread (lambda ()
+                       (define default
+                         (with-device-resources ([r (current-device-resources)])
+                           r))
+                       (list (raised (lambda () (table->device-matrix t #:resources default)))
+                             (shape (table->device-matrix t))))))
+  (check-raft-only released-default)
+  (check-equal? fresh-shape '(11 8)))
 
 (test-gpu "L10: cuml/table loads no family and no native library"
   (check-equal?
