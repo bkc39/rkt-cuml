@@ -13,6 +13,7 @@
 
 (define family-allowed-deps '("base" "raft" "cuml-core-lib"))
 (define core-allowed-deps '("base" "raft"))
+(define umbrella-base-deps '("base" "raft" "cuml-core-lib" "datasets-core"))
 (define dependency-fields '(deps build-deps implies))
 (define reserved-names
   '(agglomerative-clustering dbscan hdbscan kmeans single-linkage spectral-clustering))
@@ -113,6 +114,9 @@
   (define family-names (families dir))
   (append (append-map (curry family-deps-problems dir) family-names)
           (deps-problems "cuml-core-lib" (package-deps dir "cuml-core-lib") core-allowed-deps)
+          (deps-problems "cuml-lib"
+                         (package-deps dir "cuml-lib")
+                         (append umbrella-base-deps (map family-package family-names)))
           (missing-problems "cuml-lib"
                             (package-deps dir "cuml-lib")
                             (cons "cuml-core-lib" (map family-package family-names)))
@@ -168,9 +172,12 @@
           `(module info info
              (define ,field ',deps))))
 
-  (define (toy-tree field toy-deps)
-    (list (info-file "cuml-core-lib" 'deps '("base" "raft"))
-          (info-file "cuml-lib" 'deps '("base" "cuml-core-lib" "cuml-toy-lib"))
+  (define (toy-tree field
+                    toy-deps
+                    #:core [core-deps '("base" "raft")]
+                    #:umbrella [umbrella-deps '("base" "cuml-core-lib" "cuml-toy-lib")])
+    (list (info-file "cuml-core-lib" 'deps core-deps)
+          (info-file "cuml-lib" 'deps umbrella-deps)
           (info-file "cuml-toy-lib" field toy-deps)
           (list "cuml-toy-lib/cuml/toy.rkt"
                 '(module toy racket/base
@@ -185,6 +192,29 @@
        (call-with-tree (toy-tree field '("base" ("raft" #:version "0.2") "cuml-lib"))
                        (lambda (dir) (layout-problems dir #:exports? #f)))
        '("cuml-toy-lib depends on cuml-lib; it may depend only on (base raft cuml-core-lib)"))))
+
+  (test-case "cuml-lib may depend on datasets-core, and on nothing else outside the repo"
+    (check-equal? (call-with-tree (toy-tree 'deps
+                                            '("base" "cuml-core-lib")
+                                            #:umbrella '("base" ("raft" #:version "0.2")
+                                                                "cuml-core-lib"
+                                                                "cuml-toy-lib"
+                                                                ("datasets-core" #:version "0.1")
+                                                                "datasets"))
+                                  (lambda (dir) (layout-problems dir #:exports? #f)))
+                  '("cuml-lib depends on datasets; it may depend only on (base raft cuml-core-lib datasets-core cuml-toy-lib)")))
+
+  (test-case "a family that depends on datasets-core is reported"
+    (check-equal?
+     (call-with-tree (toy-tree 'deps '("base" "cuml-core-lib" ("datasets-core" #:version "0.1")))
+                     (lambda (dir) (layout-problems dir #:exports? #f)))
+     '("cuml-toy-lib depends on datasets-core; it may depend only on (base raft cuml-core-lib)")))
+
+  (test-case "core that depends on datasets-core is reported"
+    (check-equal?
+     (call-with-tree (toy-tree 'deps '("base" "cuml-core-lib") #:core '("base" "raft" "datasets-core"))
+                     (lambda (dir) (layout-problems dir #:exports? #f)))
+     '("cuml-core-lib depends on datasets-core; it may depend only on (base raft)")))
 
   (test-case "cuml-lib must depend on every family"
     (check-equal? (missing-problems "cuml-lib" '("base" "cuml-core-lib") '("cuml-cluster-lib"))

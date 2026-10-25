@@ -154,7 +154,8 @@
       '';
 
       # rkt-raft's recipe at rkt-raft's pins: raft's build-deps (polars,
-      # datasets) installed offline, so raft installs with --deps fail.
+      # datasets) installed offline, so raft installs with --deps fail;
+      # datasets-core is also cuml-lib's runtime dependency.
       installDocsDeps = skip: ''
         raco pkg install --batch -j 4 --copy --no-docs --scope user ${skip} \
           ${raftInputs.rkt-polars.packages.${system}.racket-deps}/*/

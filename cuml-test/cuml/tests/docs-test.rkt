@@ -49,8 +49,11 @@
                   spectral-clustering-fit-graph
                   spectral-clustering-params
                   spectral-clustering-result-labels
+                  table->device-matrix
                   with-native-models)
+         (only-in datasets/core load-dataset-table)
          (only-in racket/function const)
+         (only-in racket/list take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft
@@ -61,7 +64,8 @@
                   exn:fail:raft-kind
                   exn:fail:raft?
                   list*->device-matrix
-                  list->device-vector)
+                  list->device-vector
+                  shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
@@ -437,3 +441,17 @@
   (check-cuml-error 'logic
                     "fit: alpha: expected greater than 0, got 0"
                     (lambda () (fit (hdbscan #:alpha 0) H))))
+
+(test-gpu "the manual: a table's columns copied to the GPU, and the refusals naming a column and row"
+  (define X
+    (table->device-matrix (load-dataset-table 'anscombe) #:columns '("x1" "y1") #:dtype 'float64))
+  (check-equal? (shape X) '(11 2))
+  (check-equal? (take (device-matrix->list* X) 3) '((10.0 8.04) (8.0 6.95) (13.0 7.58)))
+  (check-cuml-error
+   'logic
+   "table->device-matrix: column \"species\": row 0: expected a real number, got \"Iris-setosa\""
+   (lambda () (table->device-matrix (load-dataset-table 'iris))))
+  (check-cuml-error
+   'logic
+   "table->device-matrix: column \"ozone\": row 4: expected a number, got a missing value"
+   (lambda () (table->device-matrix (load-dataset-table 'airquality) #:columns '("ozone")))))

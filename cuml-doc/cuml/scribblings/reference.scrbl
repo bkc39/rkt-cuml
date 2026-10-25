@@ -9,6 +9,7 @@ together.
 
 @local-table-of-contents[]
 
+@include-section["reference/tables.scrbl"]
 @include-section["reference/estimators.scrbl"]
 @include-section["reference/clustering.scrbl"]
 @include-section["reference/models.scrbl"]
