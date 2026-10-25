@@ -597,3 +597,34 @@ Follow-ups are GitHub issues.
   Jacobi λ bound 8·d·u·λ₁; the L14 transform bound adds ‖e_μ‖₂, the mean
   bound's norm, scaled as the whitened transform scales; and the component
   check skips components with λᵢ ≤ 64·u·λ₁, which span the null space.
+
+## Decisions recorded in leg A5 (#48)
+
+- **A5-a.** Truncated SVD is libcuml's `tsvdFitTransform`, `tsvdTransform`
+  and `tsvdInverseTransform` on transposed column-major copies, with the
+  shim's post-fit kernel; transform and inverse of one result are bitwise
+  equal to cuML-Python's, and `tsvd-fit-transform`'s matrix is bitwise
+  `tsvd-transform` of the same X.
+- **A5-b.** The signs are A4-d's rule, from the shared kernel in
+  `shim/decomposition/src/signs.cuh`; the fit-transform matrix negates the
+  columns the rule flips.
+- **A5-c.** `#:n-components` defaults to 1, cuML's.
+- **A5-d.** `#:tol` defaults to 0.0 and `#:iterations` to 15, as in A4-k;
+  cuML-Python's tol of 1e-7 is the one parameter the twin maps differently.
+- **A5-e.** `n-components` is in [1, min(n, d)], with A4's message form.
+- **A5-f.** NaN and negative-zero singular values are reported as +0.
+- **A5-g.** The explained-variance ratio is +0 when the total variance is
+  0; a matrix whose rows all equal the first reports +0 variances and
+  ratios, since raft's mean leaves rounding noise there.
+- **A5-h.** A squared Frobenius norm above 2¹²⁵ (float32) or 2¹⁰²¹
+  (float64) is refused before any allocation.
+- **A5-i.** Transform and inverse refuse X in another dtype than the fit's,
+  as A4-l.
+- **A5-j.** Rows are at most 2³¹−1 and columns at most 46340, so the d×d
+  Gram matrix fits the solver's `int`, with A4's messages.
+- **A5-k.** The explained variance is cuML's and sklearn's: the population
+  variance of each column of the transform, the ratio over the sum of the
+  columns' population variances of X.
+- **A5-l.** One row or one column is refused, as A4-j; a constant matrix is
+  accepted (unlike A4-i), since truncated SVD does not centre.
+- **A5-m.** `tol` crosses as `_double*`, as A4-p.
