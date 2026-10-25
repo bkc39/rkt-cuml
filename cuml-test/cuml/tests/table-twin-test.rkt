@@ -35,14 +35,10 @@
 
 (define (twin-case->jsexpr c)
   (match-define (twin-case name t columns element-type) c)
-  (hasheq 'name
-          name
-          'names
-          columns
-          'columns
-          (apply map list (host-rows t columns))
-          'dtype
-          (symbol->string element-type)))
+  (hasheq 'name name
+          'names columns
+          'columns (apply map list (host-rows t columns))
+          'dtype (symbol->string element-type)))
 
 (test-twin "L12: every numeric selection and the JSON-safe edge values match pandas through cupy"
   (define all (cases))
@@ -50,6 +46,7 @@
   (for ([c (in-list all)]
         [their (in-list theirs)])
     (match-define (twin-case name t columns element-type) c)
-    (check-equal? (device-matrix->list* (table->device-matrix t #:columns columns #:dtype element-type))
-                  (hash-ref their 'rows)
-                  name)))
+    (check-equal?
+     (device-matrix->list* (table->device-matrix t #:columns columns #:dtype element-type))
+     (hash-ref their 'rows)
+     name)))

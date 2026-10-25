@@ -79,13 +79,24 @@
 
 (test-gpu "L3: values float32 represents come back equal, and underflow is pinned"
   (define representable
-    (list 0 1 -1 (expt 2 24) (- (expt 2 24)) (sub1 (expt 2 24)) 1/2 0.5 (flsingle 5.1) (flsingle 0.1)))
+    (list 0
+          1
+          -1
+          (expt 2 24)
+          (- (expt 2 24))
+          (sub1 (expt 2 24))
+          1/2
+          0.5
+          (flsingle 5.1)
+          (flsingle 0.1)))
   (define got
-    (map car (device-matrix->list* (table->device-matrix (synthetic-table '("v") (list representable))))))
+    (map car
+         (device-matrix->list* (table->device-matrix (synthetic-table '("v") (list representable))))))
   (for ([v (in-list representable)]
         [g (in-list got)])
     (check-true (= v g) (format "~a came back as ~a" v g)))
-  (check-equal? (device-matrix->list* (table->device-matrix (synthetic-table '("v") '((1e-46 1e-45)))))
+  (check-equal? (device-matrix->list* (table->device-matrix (synthetic-table '("v")
+                                                                             '((1e-46 1e-45)))))
                 '((0.0) (1.401298464324817e-45))))
 
 (define (rotations columns)
@@ -94,7 +105,8 @@
 
 (test-gpu "L4: a permuted selection permutes the columns of every row"
   (for* ([s (in-list (numeric-selections))]
-         [permuted (in-list (cons (reverse (selection-columns s)) (rotations (selection-columns s))))])
+         [permuted (in-list (cons (reverse (selection-columns s))
+                                  (rotations (selection-columns s))))])
     (match-define (selection name t columns) s)
     (define by-name
       (for/hash ([column (in-list columns)]
@@ -131,8 +143,7 @@
   (check-equal? (device-matrix->list* col-major) (device-matrix->list* row-major)))
 
 (define (released-resources)
-  (with-device-resources ([r (device-resources)])
-    r))
+  (with-device-resources ([r (device-resources)]) r))
 
 (define released-message "list*->device-matrix: the device resources on device 0 were released")
 
@@ -150,9 +161,7 @@
   (check-raft-only (raised (lambda () (table->device-matrix t #:resources (released-resources)))))
   (match-define (list released-default fresh-shape)
     (in-fresh-thread (lambda ()
-                       (define default
-                         (with-device-resources ([r (current-device-resources)])
-                           r))
+                       (define default (with-device-resources ([r (current-device-resources)]) r))
                        (list (raised (lambda () (table->device-matrix t #:resources default)))
                              (shape (table->device-matrix t))))))
   (check-raft-only released-default)
@@ -175,5 +184,6 @@
     (check-equal? t (load-dataset-table name) (format "~a" name))))
 
 (test-gpu "L1: a matrix as wide as the table"
-  (define t (synthetic-table (map number->string (range 40)) (build-list 40 (lambda (i) (list i (- i))))))
+  (define t
+    (synthetic-table (map number->string (range 40)) (build-list 40 (lambda (i) (list i (- i))))))
   (check-equal? (shape (table->device-matrix t)) '(2 40)))

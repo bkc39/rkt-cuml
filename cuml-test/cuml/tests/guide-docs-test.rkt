@@ -192,13 +192,12 @@
   (check-cuml-error 'logic
                     "single-linkage-fit: X: expected float32, got float64"
                     (lambda () (single-linkage-fit flowers64 #:n-clusters 3)))
-  (check-cuml-error 'logic
-                    "kmeans-fit: X: expected row-major, got col-major 150x4"
-                    (lambda ()
-                      (~> (table->device-matrix (load-dataset-table 'iris)
-                                                #:columns measurements
-                                                #:layout 'col-major)
-                          (kmeans-fit #:n-clusters 3)))))
+  (check-cuml-error
+   'logic
+   "kmeans-fit: X: expected row-major, got col-major 150x4"
+   (lambda ()
+     (~> (table->device-matrix (load-dataset-table 'iris) #:columns measurements #:layout 'col-major)
+         (kmeans-fit #:n-clusters 3)))))
 
 (test-gpu "the guide: scoped resources, the two forms, and renumbering seeds"
   (check-equal? (with-device-resources ([r (device-resources)])
@@ -258,10 +257,13 @@
                   (define column (dataset-column 'wine name))
                   (list name (apply min column) (apply max column)))
                 '(("proline" 278 1680) ("magnesium" 70 162) ("hue" 0.48 1.71)))
-  (define raw-table (cultivar-table (table->device-matrix (load-dataset-table 'wine) #:columns wine-measurements)))
+  (define raw-table
+    (cultivar-table (table->device-matrix (load-dataset-table 'wine) #:columns wine-measurements)))
   (check-equal? raw-table '((46 1 0) (0 50 19) (13 20 29)))
   (check-equal? (agreement raw-table) 125)
-  (check-equal? (cultivar-table (table->device-matrix (load-dataset-table 'wine) #:columns '("proline"))) raw-table)
+  (check-equal? (cultivar-table (table->device-matrix (load-dataset-table 'wine)
+                                                      #:columns '("proline")))
+                raw-table)
   (define scaled (standardized-matrix 'wine wine-measurements))
   (define scaled-table (cultivar-table scaled))
   (check-equal? scaled-table '((59 5 0) (0 63 0) (0 3 48)))

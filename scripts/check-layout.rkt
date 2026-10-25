@@ -194,15 +194,16 @@
        '("cuml-toy-lib depends on cuml-lib; it may depend only on (base raft cuml-core-lib)"))))
 
   (test-case "cuml-lib may depend on datasets-core, and on nothing else outside the repo"
-    (check-equal? (call-with-tree (toy-tree 'deps
-                                            '("base" "cuml-core-lib")
-                                            #:umbrella '("base" ("raft" #:version "0.2")
-                                                                "cuml-core-lib"
-                                                                "cuml-toy-lib"
-                                                                ("datasets-core" #:version "0.1")
-                                                                "datasets"))
-                                  (lambda (dir) (layout-problems dir #:exports? #f)))
-                  '("cuml-lib depends on datasets; it may depend only on (base raft cuml-core-lib datasets-core cuml-toy-lib)")))
+    (check-equal?
+     (call-with-tree (toy-tree 'deps
+                               '("base" "cuml-core-lib")
+                               #:umbrella '("base" ("raft" #:version "0.2")
+                                                   "cuml-core-lib"
+                                                   "cuml-toy-lib"
+                                                   ("datasets-core" #:version "0.1")
+                                                   "datasets"))
+                     (lambda (dir) (layout-problems dir #:exports? #f)))
+     '("cuml-lib depends on datasets; it may depend only on (base raft cuml-core-lib datasets-core cuml-toy-lib)")))
 
   (test-case "a family that depends on datasets-core is reported"
     (check-equal?
@@ -211,10 +212,10 @@
      '("cuml-toy-lib depends on datasets-core; it may depend only on (base raft cuml-core-lib)")))
 
   (test-case "core that depends on datasets-core is reported"
-    (check-equal?
-     (call-with-tree (toy-tree 'deps '("base" "cuml-core-lib") #:core '("base" "raft" "datasets-core"))
-                     (lambda (dir) (layout-problems dir #:exports? #f)))
-     '("cuml-core-lib depends on datasets-core; it may depend only on (base raft)")))
+    (check-equal? (call-with-tree
+                   (toy-tree 'deps '("base" "cuml-core-lib") #:core '("base" "raft" "datasets-core"))
+                   (lambda (dir) (layout-problems dir #:exports? #f)))
+                  '("cuml-core-lib depends on datasets-core; it may depend only on (base raft)")))
 
   (test-case "cuml-lib must depend on every family"
     (check-equal? (missing-problems "cuml-lib" '("base" "cuml-core-lib") '("cuml-cluster-lib"))

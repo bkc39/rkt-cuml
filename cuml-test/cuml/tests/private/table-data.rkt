@@ -56,8 +56,7 @@
 (define edge-values32
   (list -0.0 +nan.0 +inf.0 -inf.0 5e-324 0 (expt 2 24) (- (expt 2 24)) 0.5 1e-45 1e-46))
 
-(define edge-values
-  (append edge-values32 (list 1.7976931348623157e308 (expt 2 53) (- (expt 2 53)))))
+(define edge-values (append edge-values32 (list 1.7976931348623157e308 (expt 2 53) (- (expt 2 53)))))
 
 (define (edge-of xs)
   (synthetic-table '("x" "i") (list xs (build-list (length xs) values))))
