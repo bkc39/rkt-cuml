@@ -57,7 +57,8 @@
                                                "hdbscan.scrbl"
                                                "preprocessing.scrbl"
                                                "decomposition.scrbl"
-                                               "estimators.scrbl"))))
+                                               "estimators.scrbl"
+                                               "tsvd-estimator.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
