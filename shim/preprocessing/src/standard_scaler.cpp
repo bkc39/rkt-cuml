@@ -88,8 +88,7 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   auto stats = std::make_unique<statistics>(x.d, r.with_std, stream);
   {
-    const int64_t chunk =
-        std::clamp<int64_t>(r.scratch_elements / x.n, 1, x.d);
+    const int64_t chunk = std::clamp<int64_t>(r.scratch_elements / x.n, 1, x.d);
     rmm::device_uvector<double> scratch(
         static_cast<std::size_t>((x.n + 1) * chunk), stream);
     column_statistics(handle, x.data, x.n, x.d, chunk, scratch.data(),
@@ -171,9 +170,11 @@ int cuml_preprocessing_standard_scaler_fit(void* handle, const rr_view* x,
   });
 }
 
-int cuml_preprocessing_standard_scaler_transform(
-    void* handle, const rr_view* x, const rr_view* mean, const rr_view* scale,
-    rr_deposit* out, int64_t n_features) {
+int cuml_preprocessing_standard_scaler_transform(void* handle, const rr_view* x,
+                                                 const rr_view* mean,
+                                                 const rr_view* scale,
+                                                 rr_deposit* out,
+                                                 int64_t n_features) {
   return applied<false>(handle, x, mean, scale, out, n_features);
 }
 

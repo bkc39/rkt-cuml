@@ -42,9 +42,7 @@
       (expt 2.0 -53)))
 
 (define (round-to dt)
-  (if (eq? dt 'float32)
-      flsingle
-      values))
+  (if (eq? dt 'float32) flsingle values))
 
 (test-gpu "L2, L3: transform and inverse equal the host oracles bitwise, every dtype, flag pair and size"
   (for* ([dt (in-list '(float32 float64))]
@@ -109,10 +107,7 @@
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((7 13) (256 64) (4099 13)))])
     (match-define (list n d) size)
-    (define bound
-      (if (eq? dt 'float32)
-          1e-5
-          1e-12))
+    (define bound (if (eq? dt 'float32) 1e-5 1e-12))
     (define X (rows->matrix (normal-rows (+ 5 n d) n d dt) dt))
     (define T (standard-scaler-transform (standard-scaler-fit X) X))
     (for ([moments (in-list (column-moments (device-matrix->list* T)))]
@@ -145,12 +140,12 @@
 
 (test-gpu "L8: the near-constant mask is sklearn's"
   (define base 1e8)
-  (define tiny
-    (rows->matrix (list (list base) (list base) (list (+ base (ulp base)))) 'float64))
-  (check-equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit tiny))) '(1.0))
+  (define tiny (rows->matrix (list (list base) (list base) (list (+ base (ulp base)))) 'float64))
+  (check-equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit tiny)))
+                '(1.0))
   (define spread (rows->matrix (cons (list (+ 1e6 1e-4)) (constant-rows 999 1e6)) 'float64))
-  (check-false (equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit spread)))
-                       '(1.0))))
+  (check-false
+   (equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit spread))) '(1.0))))
 
 (test-gpu "L9: the flags decide what is kept and what is applied"
   (for ([dt (in-list '(float32 float64))])

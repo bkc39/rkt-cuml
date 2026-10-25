@@ -34,7 +34,8 @@
     [(and (exact-integer? v) (<= 1 v (expt 2 62))) v]
     [else (raise-argument-error 'current-scratch-elements "(integer-in 1 (expt 2 62))" v)]))
 
-(define current-scratch-elements (make-parameter (expt 2 26) scratch-elements 'current-scratch-elements))
+(define current-scratch-elements
+  (make-parameter (expt 2 26) scratch-elements 'current-scratch-elements))
 
 (define (flag v)
   (if v 1 0))
@@ -86,5 +87,4 @@
                                            #:hyperparameters standard-scaler-params
                                            #:resources [resources (current-device-resources)])
   (define result (fitted who X with-mean with-std resources))
-  (values result
-          (applied cuml-preprocessing-standard-scaler-transform-job who result X resources)))
+  (values result (applied cuml-preprocessing-standard-scaler-transform-job who result X resources)))

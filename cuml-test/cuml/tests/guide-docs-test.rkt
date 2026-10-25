@@ -67,7 +67,9 @@
 
 (define (scaled-matrix name columns)
   (define-values (_fitted scaled)
-    (~> (load-dataset-table name) (table->device-matrix #:columns columns) standard-scaler-fit-transform))
+    (~> (load-dataset-table name)
+        (table->device-matrix #:columns columns)
+        standard-scaler-fit-transform))
   scaled)
 
 (test-case "the page's require alone, in a racket/base module, expands the page's helpers and runs a threaded example"
@@ -106,8 +108,7 @@
 (define (flattened-text path)
   (regexp-replace* #px"\\s+" (file->string path) " "))
 
-(define dataset-use
-  #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
+(define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
 (define (chapter-datasets chapter)
   (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))

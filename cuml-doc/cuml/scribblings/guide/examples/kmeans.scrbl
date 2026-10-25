@@ -96,6 +96,7 @@ every added cluster; where its gains shrink is a hint. Ten seedings per fit
 keep a poor local optimum from hiding the trend:
 
 @examples[#:eval ev #:label #f
+(require (only-in racket/math exact-round))
 (define scores
   (for/list ([k (in-range 1 7)])
     (define fitted (fit (kmeans #:n-clusters k #:n-init 10) scaled))

@@ -35,13 +35,12 @@
   (check-equal? (dynamic-require 'cuml 'standard-scaler-fit) standard-scaler-fit))
 
 (test-case "L20: cuml/preprocessing maps its own shim, and neither the cluster shim nor libcuml"
-  (check-equal?
-   (run-program `(module m racket/base
-                   (require cuml/preprocessing
-                            (only-in racket/file file->string))
-                   (define maps (file->string "/proc/self/maps"))
-                   (write (for/list ([library (in-list '("libcumlrkt_preprocessing.so"
-                                                         "libcumlrkt_cluster.so"
-                                                         "libcuml.so"))])
-                            (regexp-match? (regexp-quote library) maps)))))
-   '(0 "(#t #f #f)" "")))
+  (check-equal? (run-program `(module m racket/base
+                                (require cuml/preprocessing
+                                         (only-in racket/file file->string))
+                                (define maps (file->string "/proc/self/maps"))
+                                (write (for/list ([library (in-list '("libcumlrkt_preprocessing.so"
+                                                                      "libcumlrkt_cluster.so"
+                                                                      "libcuml.so"))])
+                                         (regexp-match? (regexp-quote library) maps)))))
+                '(0 "(#t #f #f)" "")))

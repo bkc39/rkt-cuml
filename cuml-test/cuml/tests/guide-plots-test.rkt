@@ -51,7 +51,9 @@
 
 (define (scaled-matrix name columns)
   (define-values (_fitted scaled)
-    (~> (load-dataset-table name) (table->device-matrix #:columns columns) standard-scaler-fit-transform))
+    (~> (load-dataset-table name)
+        (table->device-matrix #:columns columns)
+        standard-scaler-fit-transform))
   scaled)
 
 (define (pixels picture)

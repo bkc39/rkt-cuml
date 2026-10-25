@@ -26,4 +26,4 @@
                        "private/hdbscan-estimator.rkt"
                        "private/kmeans-estimator.rkt"
                        "private/spectral-estimator.rkt"
-         "private/standard-scaler-estimator.rkt"))
+                       "private/standard-scaler-estimator.rkt"))

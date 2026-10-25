@@ -46,8 +46,9 @@
         (lambda () (standard-scaler-inverse-transform fitted integers))
         (lambda () (standard-scaler-transform fitted inf-row))))
 
-(test-process-memory (format "~a fit, transform and inverse rounds and their refusals leave device memory flat"
-                             rounds)
+(test-process-memory (format
+                      "~a fit, transform and inverse rounds and their refusals leave device memory flat"
+                      rounds)
   (define X (rows->matrix (normal-rows 7 4096 32 'float32) 'float32))
   (define fitted (one-round X))
   (define calls (refusals fitted))
@@ -78,7 +79,8 @@
       (check-equal? (sample-used after-refusals)
                     (sample-used sample)
                     "a refused call holds no pool memory once it returns")
-      (values (cons sample samples) (cons (- (settled-count buffer-drop-count) before) refused-drops))))
+      (values (cons sample samples)
+              (cons (- (settled-count buffer-drop-count) before) refused-drops))))
   (define wanted (* buffers-per-round rounds))
   (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
   (define freed (- (buffer-drop-count) drops))
@@ -103,6 +105,9 @@
   (check-true (collect-until (lambda () (= (jobs-live) live))))
   (check-true (<= (executor-threads) (add1 threads)))
   (for ([u (in-list used)])
-    (check-equal? u base-used "pool use returns to the baseline after a collection, so no scratch is kept"))
-  (check-true (<= growth device-slack)
-              (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))
+    (check-equal? u
+                  base-used
+                  "pool use returns to the baseline after a collection, so no scratch is kept"))
+  (check-true
+   (<= growth device-slack)
+   (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))

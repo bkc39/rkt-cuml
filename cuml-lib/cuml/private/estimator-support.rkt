@@ -154,8 +154,8 @@
                 (settings-of e)
                 #f))]
       (~? (~@ #:methods gen:clusterer
-                       [(define (fit-predict e X [_y #f] #:sample-weight [w #f])
-                          (labels (fitted 'fit-predict e X w)))]))
+              [(define (fit-predict e X [_y #f] #:sample-weight [w #f])
+                 (labels (fitted 'fit-predict e X w)))]))
       (~@ #:methods generic [method ...]) ...
       extra.clause ...
       ...

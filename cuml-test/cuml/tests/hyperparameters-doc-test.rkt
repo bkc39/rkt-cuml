@@ -1,6 +1,12 @@
 #lang racket/base
 
-(require (only-in cuml agglomerative-clustering dbscan hdbscan kmeans spectral-clustering standard-scaler)
+(require (only-in cuml
+                  agglomerative-clustering
+                  dbscan
+                  hdbscan
+                  kmeans
+                  spectral-clustering
+                  standard-scaler)
          (only-in cuml/cluster
                   dbscan-fit
                   dbscan-params
@@ -36,12 +42,11 @@
     [_ '()]))
 
 (define documented
-  (append-map defprocs
-              (append-map manual-forms
-                          '("clustering.scrbl" "spectral.scrbl"
-                                              "hdbscan.scrbl"
-                                              "preprocessing.scrbl"
-                                              "estimators.scrbl"))))
+  (append-map
+   defprocs
+   (append-map
+    manual-forms
+    '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "preprocessing.scrbl" "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -207,15 +212,16 @@
    (table-bindings
     standard-scaler-params
     standard-scaler-keys
-    (list (list 'standard-scaler-params standard-scaler-params '() (list (argument #f 'base #f)) '() '())
-          (scaler-fit-entry 'standard-scaler-fit standard-scaler-fit)
-          (scaler-fit-entry 'standard-scaler-fit-transform standard-scaler-fit-transform)
-          (list 'standard-scaler
-                standard-scaler
-                '(#:resources)
-                (list (argument #f 'params #f))
-                (list (argument '#:resources 'resources #f))
-                '())))))
+    (list
+     (list 'standard-scaler-params standard-scaler-params '() (list (argument #f 'base #f)) '() '())
+     (scaler-fit-entry 'standard-scaler-fit standard-scaler-fit)
+     (scaler-fit-entry 'standard-scaler-fit-transform standard-scaler-fit-transform)
+     (list 'standard-scaler
+           standard-scaler
+           '(#:resources)
+           (list (argument #f 'params #f))
+           (list (argument '#:resources 'resources #f))
+           '())))))
 
 (define-namespace-anchor anchor)
 

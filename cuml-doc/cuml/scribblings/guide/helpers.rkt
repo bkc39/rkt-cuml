@@ -8,7 +8,6 @@
          racket/function
          racket/list
          racket/match
-         racket/math
          raft
          threading)
 

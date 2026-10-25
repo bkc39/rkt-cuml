@@ -72,8 +72,8 @@ struct fit_case {
 
 int fit(const resources& res, fit_case& c, const rr_view* x,
         int64_t scratch_elements = scratch) {
-  return cuml_preprocessing_standard_scaler_fit(
-      res.handle, x, &c.out.r, 1, 1, scratch_elements, &c.n_samples);
+  return cuml_preprocessing_standard_scaler_fit(res.handle, x, &c.out.r, 1, 1,
+                                                scratch_elements, &c.n_samples);
 }
 
 TEST(FitRefusals, EachConditionInTableOrder) {
@@ -260,8 +260,7 @@ TEST(TransformRefusals, EachConditionInTableOrder) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   expect_apply_refusals(res, [&](const rr_view* x, const rr_view* m,
-                                 const rr_view* s, rr_deposit* out,
-                                 int64_t d) {
+                                 const rr_view* s, rr_deposit* out, int64_t d) {
     return cuml_preprocessing_standard_scaler_transform(res.handle, x, m, s,
                                                         out, d);
   });
@@ -271,8 +270,7 @@ TEST(InverseTransformRefusals, EachConditionInTableOrder) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   expect_apply_refusals(res, [&](const rr_view* x, const rr_view* m,
-                                 const rr_view* s, rr_deposit* out,
-                                 int64_t d) {
+                                 const rr_view* s, rr_deposit* out, int64_t d) {
     return cuml_preprocessing_standard_scaler_inverse_transform(res.handle, x,
                                                                 m, s, out, d);
   });

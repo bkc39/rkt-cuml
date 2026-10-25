@@ -21,7 +21,8 @@
 (define-runtime-path twin "python/standard_scaler_twin.py")
 
 (define (twin-results cases)
-  (match-define (hash-table ('results results) ('version version)) (run-twin twin (hasheq 'cases cases)))
+  (match-define (hash-table ('results results) ('version version))
+    (run-twin twin (hasheq 'cases cases)))
   (check-equal? version "1.8.0")
   results)
 
@@ -33,7 +34,9 @@
         (dataset "scales"
                  (generated-rows 3 178 13 dt (lambda (z _u j) (* z (expt 10.0 (- (/ j 2.0) 3.0))))))
         (dataset "uniform" (generated-rows 4 1000 32 dt (lambda (_z u _j) (floor (* 256 u)))))
-        (dataset "constant" (map (lambda (row) (list (car row) 3.3)) (generated-rows 5 50 1 dt (lambda (z _u _j) z))))
+        (dataset "constant"
+                 (map (lambda (row) (list (car row) 3.3))
+                      (generated-rows 5 50 1 dt (lambda (z _u _j) z))))
         (dataset "near-constant" (cons (list (+ 1e8 (ulp 1e8))) (constant-rows 2 1e8)))
         (dataset "tiny spread" (cons (list (+ 1e6 1e-4)) (constant-rows 999 1e6)))
         (dataset "one row" (list '(1.5 -2.0 1e3)))))
@@ -53,7 +56,9 @@
 
 (define (fit-of data dt flags)
   (match-define (list with-mean with-std) flags)
-  (standard-scaler-fit (rows->matrix (dataset-rows data) dt) #:with-mean with-mean #:with-std with-std))
+  (standard-scaler-fit (rows->matrix (dataset-rows data) dt)
+                       #:with-mean with-mean
+                       #:with-std with-std))
 
 (define (listed v)
   (and v (device-vector->list v)))
@@ -141,8 +146,10 @@
          (check-equal? (bits-of back y-dt) (hash-ref result 'inverse_bits) "inverse")]
         [else
          (define d (length (car (dataset-rows data))))
-         (define mean (or (listed (standard-scaler-result-mean fitted)) (build-list d (lambda (_) 0.0))))
-         (define scale (or (listed (standard-scaler-result-scale fitted)) (build-list d (lambda (_) 1.0))))
+         (define mean
+           (or (listed (standard-scaler-result-mean fitted)) (build-list d (lambda (_) 0.0))))
+         (define scale
+           (or (listed (standard-scaler-result-scale fitted)) (build-list d (lambda (_) 1.0))))
          (define tolerance
            (for/list ([t-sk (in-list (hash-ref result 'transform))]
                       [j (in-naturals)])

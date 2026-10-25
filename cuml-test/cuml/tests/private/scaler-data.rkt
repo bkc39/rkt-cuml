@@ -26,7 +26,10 @@
   (list*->device-matrix rows #:dtype dtype))
 
 (define (strided-vector n)
-  (define backing (list->device-vector (for/list ([i (in-range (* 2 n))]) (exact->inexact i)) #:dtype 'float64))
+  (define backing
+    (list->device-vector (for/list ([i (in-range (* 2 n))])
+                           (exact->inexact i))
+                         #:dtype 'float64))
   (buffer->device-array (device-array-buffer backing) 0 (list n) '(2) 'float64 'device))
 
 (define (normal-source seed)
@@ -49,10 +52,7 @@
 (define (normal-rows seed n d dtype)
   (define next (normal-source seed))
   (define shape (column-shape seed d))
-  (define round-to
-    (if (eq? dtype 'float32)
-        flsingle
-        values))
+  (define round-to (if (eq? dtype 'float32) flsingle values))
   (for/list ([_ (in-range n)])
     (for/list ([column (in-list shape)])
       (round-to (max -1e4 (min 1e4 (+ (car column) (* (cdr column) (next)))))))))
@@ -62,10 +62,7 @@
   (define uniform (make-pseudo-random-generator))
   (parameterize ([current-pseudo-random-generator uniform])
     (random-seed (+ seed 104729)))
-  (define round-to
-    (if (eq? dtype 'float32)
-        flsingle
-        values))
+  (define round-to (if (eq? dtype 'float32) flsingle values))
   (for/list ([_ (in-range n)])
     (for/list ([j (in-range d)])
       (define u

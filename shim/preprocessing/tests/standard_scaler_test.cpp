@@ -46,11 +46,11 @@ std::vector<T> applied(const resources& res, bool inverse, const rr_view* x,
                        const rr_view* mean, const rr_view* scale,
                        int64_t d = cols) {
   record out(res);
-  const int status =
-      inverse ? cuml_preprocessing_standard_scaler_inverse_transform(
-                    res.handle, x, mean, scale, &out.r, d)
-              : cuml_preprocessing_standard_scaler_transform(
-                    res.handle, x, mean, scale, &out.r, d);
+  const int status = inverse
+                         ? cuml_preprocessing_standard_scaler_inverse_transform(
+                               res.handle, x, mean, scale, &out.r, d)
+                         : cuml_preprocessing_standard_scaler_transform(
+                               res.handle, x, mean, scale, &out.r, d);
   EXPECT_EQ(outcome(status), "accepted");
   EXPECT_EQ(out.r.count, 1);
   EXPECT_EQ(out.r.regions[0].dtype, dtype_of<T>);
@@ -131,8 +131,9 @@ TEST(StandardScaler, TransformAndInverseOfTheGrid) {
   EXPECT_EQ(applied<double>(res, false, x.view(), mean.view(), nullptr),
             (std::vector<double>{-1, -2, 1, -2, -1, 2, 1, 2}));
   const filled<float> narrow(res, {1, 10, 3, 10, 1, 14, 3, 14}, {rows, cols});
-  EXPECT_EQ(applied<float>(res, false, narrow.view(), mean.view(), scale.view()),
-            (std::vector<float>{-1, -1, 1, -1, -1, 1, 1, 1}));
+  EXPECT_EQ(
+      applied<float>(res, false, narrow.view(), mean.view(), scale.view()),
+      (std::vector<float>{-1, -1, 1, -1, -1, 1, 1, 1}));
 }
 
 TEST(StandardScaler, ChunkedFitsAreBitwiseEqual) {

@@ -48,7 +48,8 @@
   (check-equal? (standard-scaler-params) (hasheq 'with-mean #t 'with-std #t))
   (check-equal? (estimator-params (standard-scaler)) (standard-scaler-params))
   (check-equal? (round-trips standard-scaler changed) changed)
-  (check-equal? (estimator-params (standard-scaler (standard-scaler-params #:with-mean #f) #:with-std #f))
+  (check-equal? (estimator-params (standard-scaler (standard-scaler-params #:with-mean #f)
+                                                   #:with-std #f))
                 (standard-scaler-params #:with-mean #f #:with-std #f)))
 
 (test-case "L17: printing, equality and set-params"
@@ -62,7 +63,8 @@
   (check-not-equal? (standard-scaler #:with-mean #f) (standard-scaler))
   (check-equal? (equal-hash-code (standard-scaler #:with-std #f))
                 (equal-hash-code (standard-scaler #:with-std #f)))
-  (check-equal? (estimator-set-params (standard-scaler) #:with-mean #f) (standard-scaler #:with-mean #f))
+  (check-equal? (estimator-set-params (standard-scaler) #:with-mean #f)
+                (standard-scaler #:with-mean #f))
   (check-cuml-error 'logic
                     "standard-scaler-params: standard-scaler has no parameter copy"
                     (lambda () (standard-scaler-params (hasheq 'copy #t))))
@@ -77,8 +79,7 @@
 
 (test-gpu "L18: inverse-transform of a transformer without one is not supported"
   (define X (rows->matrix (normal-rows 2 40 2 'float32) 'float32))
-  (check-exn exn:fail:support?
-             (lambda () (inverse-transform (fit (kmeans #:n-clusters 2) X) X))))
+  (check-exn exn:fail:support? (lambda () (inverse-transform (fit (kmeans #:n-clusters 2) X) X))))
 
 (test-gpu "L11, L18: the estimator is the procedures, bitwise, and fit leaves its argument unfitted"
   (for* ([dt (in-list '(float32 float64))]
@@ -89,20 +90,23 @@
       (define fitted-e (fit e X '(ignored)))
       (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
       (check-true (standard-scaler-result? (standard-scaler-model fitted-e)))
-      (check-equal? (format "~v" fitted-e)
-                    (format "~v" (fit (standard-scaler #:with-mean (car flags) #:with-std (cadr flags)) X)))
+      (check-equal?
+       (format "~v" fitted-e)
+       (format "~v" (fit (standard-scaler #:with-mean (car flags) #:with-std (cadr flags)) X)))
       (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
       (define result (standard-scaler-fit X #:with-mean (car flags) #:with-std (cadr flags)))
       (check-true (bits-equal? (statistics (standard-scaler-model fitted-e)) (statistics result)))
       (define T (device-matrix->list* (standard-scaler-transform result X)))
       (check-true (bits-equal? (device-matrix->list* (transform fitted-e X)) T))
       (check-true (bits-equal? (device-matrix->list* (fit-transform e X)) T))
-      (define-values (again T2) (standard-scaler-fit-transform X #:with-mean (car flags) #:with-std (cadr flags)))
+      (define-values (again T2)
+        (standard-scaler-fit-transform X #:with-mean (car flags) #:with-std (cadr flags)))
       (check-true (bits-equal? (statistics again) (statistics result)))
       (check-true (bits-equal? (device-matrix->list* T2) T))
       (define Tm (transform fitted-e X))
       (check-true (bits-equal? (device-matrix->list* (inverse-transform fitted-e Tm))
-                               (device-matrix->list* (standard-scaler-inverse-transform result Tm)))))))
+                               (device-matrix->list* (standard-scaler-inverse-transform result
+                                                                                        Tm)))))))
 
 (test-gpu "L11: fit-transform names the generic for a fit refusal"
   (check-cuml-error 'logic

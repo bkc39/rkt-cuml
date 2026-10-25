@@ -28,25 +28,23 @@
                            (standard-scaler-result-scale fitted)))
                 '((2.0 12.0) (1.0 4.0) (1.0 2.0)))
   (check-equal? (device-matrix->list* (standard-scaler-transform fitted (X))) unit)
-  (check-equal? (device-matrix->list* (standard-scaler-inverse-transform
-                                       fitted
-                                       (standard-scaler-transform fitted (X))))
+  (check-equal? (device-matrix->list*
+                 (standard-scaler-inverse-transform fitted (standard-scaler-transform fitted (X))))
                 '((1.0 10.0) (3.0 10.0) (1.0 14.0) (3.0 14.0)))
-  (check-cuml-error 'logic
-                    "standard-scaler-transform: X: expected 2 columns, got 1"
-                    (lambda ()
-                      (standard-scaler-transform fitted
-                                                 (list*->device-matrix '((1)) #:dtype 'float64)))))
+  (check-cuml-error
+   'logic
+   "standard-scaler-transform: X: expected 2 columns, got 1"
+   (lambda () (standard-scaler-transform fitted (list*->device-matrix '((1)) #:dtype 'float64)))))
 
 (test-gpu "the manual: a constant column scales by 1, and inf is refused"
   (define C (list*->device-matrix '((5 1) (5 3)) #:dtype 'float32))
   (define fitted (standard-scaler-fit C))
   (check-equal? (device-vector->list (standard-scaler-result-scale fitted)) '(1.0 1.0))
   (check-equal? (device-matrix->list* (standard-scaler-transform fitted C)) '((0.0 -1.0) (0.0 1.0)))
-  (check-cuml-error
-   'logic
-   "standard-scaler-fit: X: row 0, column 1: expected a finite value, got inf"
-   (lambda () (standard-scaler-fit (list*->device-matrix '((1 +inf.0)) #:dtype 'float64)))))
+  (check-cuml-error 'logic
+                    "standard-scaler-fit: X: row 0, column 1: expected a finite value, got inf"
+                    (lambda ()
+                      (standard-scaler-fit (list*->device-matrix '((1 +inf.0)) #:dtype 'float64)))))
 
 (test-gpu "the manual: standard-scaler-params and the estimator"
   (check-false (hash-ref (standard-scaler-params #:with-mean #f) 'with-mean))

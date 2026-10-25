@@ -61,8 +61,8 @@ struct scale_of {
     const double eps = __DBL_EPSILON__;
     const double v = var[j];
     const double spread = n * mean[j] * eps;
-    const double bound = __dadd_rn(__dmul_rn(__dmul_rn(n, eps), v),
-                                   __dmul_rn(spread, spread));
+    const double bound =
+        __dadd_rn(__dmul_rn(__dmul_rn(n, eps), v), __dmul_rn(spread, spread));
     scale[j] = v <= bound ? 1.0 : sqrt(v);
   }
 };
@@ -155,8 +155,8 @@ void column_statistics(const raft::handle_t& handle, const T* x, int64_t n,
                        double* residual, double* mean, double* var) {
   for (int64_t first = 0; first < d; first += chunk) {
     const int64_t count = std::min(chunk, d - first);
-    const auto columns = raft::make_device_vector_view<double, int64_t>(
-        scratch, n * count);
+    const auto columns =
+        raft::make_device_vector_view<double, int64_t>(scratch, n * count);
     const auto block =
         raft::make_device_matrix_view<const double, int64_t, raft::col_major>(
             scratch, n, count);
