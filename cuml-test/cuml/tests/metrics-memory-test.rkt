@@ -68,7 +68,8 @@
          [_ (in-range refusals-per-sample)])
     (check-pred exn:fail:cuml? (raised thunk))))
 
-(test-process-memory (format "~a rounds of the metrics free every output and leave device memory flat" rounds)
+(test-process-memory (format "~a rounds of the metrics free every output and leave device memory flat"
+                             rounds)
   (match-define (list truth found S ys X E) (data))
   (define calls (refusals truth S ys X))
   (for ([_ (in-range 5)])

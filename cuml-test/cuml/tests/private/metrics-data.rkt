@@ -121,7 +121,7 @@
   (list (lambda (x) (- (* 1000 x) 7))
         (lambda (x) (* x (expt 2 40)))
         (lambda (x) (* (- x 1) (expt 2 40)))
-        (lambda (x) (- x 1))))
+        sub1))
 
 (define (bijection xs)
   (define distinct (sorted-distinct xs))

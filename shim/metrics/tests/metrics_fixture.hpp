@@ -95,9 +95,10 @@ struct device_array {
     for (const int64_t extent : shape) {
       count *= static_cast<std::size_t>(extent);
     }
-    EXPECT_EQ(rr_buffer_alloc(r, std::max<std::size_t>(count, 1) * itemsize(dtype),
-                              &buffer),
-              RR_OK)
+    EXPECT_EQ(
+        rr_buffer_alloc(r, std::max<std::size_t>(count, 1) * itemsize(dtype),
+                        &buffer),
+        RR_OK)
         << rr_last_error();
     view.dtype = dtype;
     view.rank = static_cast<int32_t>(shape.size());

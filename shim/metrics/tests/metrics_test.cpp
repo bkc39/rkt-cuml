@@ -1,3 +1,5 @@
+#include "cumlrkt/metrics.h"
+
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -5,7 +7,6 @@
 #include <string>
 #include <vector>
 
-#include "cumlrkt/metrics.h"
 #include "metrics_fixture.hpp"
 #include "raftrkt/c_api.h"
 
@@ -88,9 +89,9 @@ TEST(Metrics, SilhouetteSingletonScoresZero) {
   const filled<int32_t> labels(res, {0, 0, 0, 1, 1, 2}, {6});
   record out(res);
   double score = 0;
-  ASSERT_EQ(outcome(cuml_metrics_silhouette_samples(
-                res.handle, x.view(), labels.view(), &out.r, euclidean, chunk,
-                &score)),
+  ASSERT_EQ(outcome(cuml_metrics_silhouette_samples(res.handle, x.view(),
+                                                    labels.view(), &out.r,
+                                                    euclidean, chunk, &score)),
             "accepted");
   const std::vector<double> samples = out.read<double>(0);
   ASSERT_EQ(samples.size(), 6U);
@@ -100,9 +101,8 @@ TEST(Metrics, SilhouetteSingletonScoresZero) {
     EXPECT_LE(s, 1.0);
   }
   double plain = 0;
-  ASSERT_EQ(outcome(cuml_metrics_silhouette_score(res.handle, x.view(),
-                                                  labels.view(), euclidean,
-                                                  chunk, &plain)),
+  ASSERT_EQ(outcome(cuml_metrics_silhouette_score(
+                res.handle, x.view(), labels.view(), euclidean, chunk, &plain)),
             "accepted");
   EXPECT_NEAR(plain, score, 1e-12);
 }

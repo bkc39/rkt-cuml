@@ -93,16 +93,16 @@ void require_shape(int64_t n, int64_t d) {
 
 void require_label_count(int64_t k, int64_t n) {
   if (k < least_labels) {
-    throw logic_error(std::format(
-        "labels: expected at least {} distinct labels, got {}", least_labels,
-        k));
+    throw logic_error(
+        std::format("labels: expected at least {} distinct labels, got {}",
+                    least_labels, k));
   }
   if (k > n - 1) {
     throw logic_error(std::format(
         "labels: expected at most {} distinct labels, got {}", n - 1, k));
   }
-  require_entries(
-      std::format("labels: {} rows with {} distinct labels", n, k), n, k);
+  require_entries(std::format("labels: {} rows with {} distinct labels", n, k),
+                  n, k);
 }
 
 template <typename T>
@@ -145,8 +145,8 @@ double score_of(const raft::handle_t& handle, checked<T>& c, T* scores,
                 DistanceType distance) {
   const double score = ML::Metrics::Batched::silhouette_score(
       handle, c.x.data, static_cast<int>(c.x.n), static_cast<int>(c.x.d),
-      c.codes.data(), static_cast<int>(c.k), scores,
-      static_cast<int>(c.chunk), distance);
+      c.codes.data(), static_cast<int>(c.k), scores, static_cast<int>(c.chunk),
+      distance);
   settle(handle);
   return score;
 }

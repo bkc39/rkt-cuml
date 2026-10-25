@@ -151,8 +151,8 @@ TEST(LabelRefusals, ContingencyAndRandScore) {
        },
        "out is NULL"},
       {[&] {
-         return cuml_metrics_adjusted_rand_score(res.handle, a.view(),
-                                                 b.view(), nullptr);
+         return cuml_metrics_adjusted_rand_score(res.handle, a.view(), b.view(),
+                                                 nullptr);
        },
        "score is NULL"},
   });
@@ -175,11 +175,11 @@ TEST(LabelRefusals, LeaveOnlyTheRelabelScratch) {
     EXPECT_EQ(meter.peak(), 0);
   }
   const allocation_meter meter;
-  EXPECT_NE(cuml_metrics_contingency_matrix(res.handle, many.view(),
-                                            few.view(), &out.r),
+  EXPECT_NE(cuml_metrics_contingency_matrix(res.handle, many.view(), few.view(),
+                                            &out.r),
             RR_OK);
-  const auto scratch = static_cast<int64_t>((most_labels + 1) *
-                                            (sizeof(int32_t) * 2));
+  const auto scratch =
+      static_cast<int64_t>((most_labels + 1) * (sizeof(int32_t) * 2));
   EXPECT_LE(meter.peak(), scratch + scratch_slack);
   expect_untouched(out);
 }
@@ -202,8 +202,8 @@ struct silhouette_case {
   device_array floats;
 };
 
-using silhouette_call = std::function<int(const rr_view*, const rr_view*,
-                                          int32_t, int64_t)>;
+using silhouette_call =
+    std::function<int(const rr_view*, const rr_view*, int32_t, int64_t)>;
 
 std::vector<silhouette_call> silhouette_entries(const resources& res,
                                                 record& out, double& score) {
@@ -254,8 +254,7 @@ TEST(SilhouetteRefusals, NameTheArgument) {
   const std::string metric_message =
       "metric: expected euclidean, sqeuclidean, manhattan, cosine or "
       "chebyshev";
-  for (const silhouette_call& call :
-       silhouette_entries(res, out, score)) {
+  for (const silhouette_call& call : silhouette_entries(res, out, score)) {
     expect_refusals({
         {[&] { return call(x, two, -1, chunk); }, metric_message},
         {[&] { return call(x, two, cosine + 2, chunk); }, metric_message},
@@ -279,8 +278,9 @@ TEST(SilhouetteRefusals, NameTheArgument) {
          "X: 65536x32769 elements do not fit the index type"},
         {[&] { return call(&x_two_rows, &y_two, euclidean, chunk); },
          "X: expected at least 3 rows, got 2"},
-        {[&] { return call(&x_past_chunk, &y_past_chunk, euclidean,
-                           past_chunk); },
+        {[&] {
+           return call(&x_past_chunk, &y_past_chunk, euclidean, past_chunk);
+         },
          "chunk-size: expected at most 46340, got 50000"},
         {[&] { return call(x, s.labels.view(), euclidean, chunk); },
          "labels: expected at least 2 distinct labels, got 1"},
@@ -305,9 +305,9 @@ TEST(SilhouetteRefusals, NameTheArgument) {
   }
   expect_untouched(out);
   expect_refusals({{[&] {
-                      return cuml_metrics_silhouette_samples(
-                          res.handle, x, two, nullptr, euclidean, chunk,
-                          &score);
+                      return cuml_metrics_silhouette_samples(res.handle, x, two,
+                                                             nullptr, euclidean,
+                                                             chunk, &score);
                     },
                     "out is NULL"},
                    {[&] {
@@ -326,10 +326,10 @@ TEST(SilhouetteRefusals, LabelTableOverflow) {
   record out(res);
   double score = 0;
   for (const silhouette_call& call : silhouette_entries(res, out, score)) {
-    expect_refusals({{[&] { return call(x.view(), labels.view(), euclidean,
-                                        chunk); },
-                      "labels: 46342 rows with 46341 distinct labels need "
-                      "2147534622 entries, more than 2147483647"}});
+    expect_refusals(
+        {{[&] { return call(x.view(), labels.view(), euclidean, chunk); },
+          "labels: 46342 rows with 46341 distinct labels need "
+          "2147534622 entries, more than 2147483647"}});
   }
   expect_untouched(out);
 }
@@ -357,20 +357,23 @@ TEST(TrustworthinessRefusals, NameTheArgument) {
   double score = 0;
   const auto call = [&](const rr_view* a, const rr_view* b, int64_t k,
                         int32_t metric, int64_t batch_size) {
-    return cuml_metrics_trustworthiness(res.handle, a, b, k, metric,
-                                        batch_size, &score);
+    return cuml_metrics_trustworthiness(res.handle, a, b, k, metric, batch_size,
+                                        &score);
   };
   const std::string metric_message = "metric: expected euclidean";
   expect_refusals({
       {[&] { return call(x.view(), e, neighbours, 1, batch); }, metric_message},
-      {[&] { return call(x.view(), e, neighbours, -1, batch); }, metric_message},
+      {[&] { return call(x.view(), e, neighbours, -1, batch); },
+       metric_message},
       {[&] { return call(x.view(), e, neighbours, euclidean, 0); },
        "batch-size: expected at least 1, got 0"},
       {[&] { return call(x.view(), e, 0, euclidean, batch); },
        "n-neighbors: expected at least 1, got 0"},
       {[&] { return call(&doubles.view, e, neighbours, euclidean, batch); },
        "X: expected float32, got float64"},
-      {[&] { return call(x.view(), &doubles.view, neighbours, euclidean, batch); },
+      {[&] {
+         return call(x.view(), &doubles.view, neighbours, euclidean, batch);
+       },
        "X-embedded: expected float32, got float64"},
       {[&] { return call(&x_rank1, e, neighbours, euclidean, batch); },
        "X: expected rank 2, got rank 1"},
@@ -387,15 +390,18 @@ TEST(TrustworthinessRefusals, NameTheArgument) {
       {[&] { return call(&x_wide, &x_wide, 32767, euclidean, batch); },
        "n-neighbors: 65536 rows with 32768 neighbours each need 2147483648 "
        "entries, more than 2147483647"},
-      {[&] { return call(&x_square, &x_square, neighbours, euclidean,
-                         square_rows); },
+      {[&] {
+         return call(&x_square, &x_square, neighbours, euclidean, square_rows);
+       },
        "batch-size: 46341 rows of 46341 distances need 2147488281 entries, "
        "more than 2147483647"},
       {[&] { return call(&x_long, &e_long, 1, euclidean, 1); },
        "X: 1000x2147484 elements do not fit the index type"},
       {[&] { return call(nan_x.view(), e, neighbours, euclidean, batch); },
        norm_message("X", bad_row, float_most, "nan")},
-      {[&] { return call(x.view(), big_e.view(), neighbours, euclidean, batch); },
+      {[&] {
+         return call(x.view(), big_e.view(), neighbours, euclidean, batch);
+       },
        norm_message("X-embedded", bad_row, float_most,
                     "1.0000000400817551e+40")},
       {[&] { return call(&doubles.view, e, 0, -1, 0); }, metric_message},
@@ -408,9 +414,8 @@ TEST(TrustworthinessRefusals, NameTheArgument) {
       {[&] { return call(nan_x.view(), e, 50, euclidean, batch); },
        "n-neighbors: expected less than half the 100 rows, got 50"},
       {[&] {
-         return cuml_metrics_trustworthiness(res.handle, x.view(), e,
-                                             neighbours, euclidean, batch,
-                                             nullptr);
+         return cuml_metrics_trustworthiness(
+             res.handle, x.view(), e, neighbours, euclidean, batch, nullptr);
        },
        "score is NULL"},
   });
@@ -426,9 +431,9 @@ TEST(TrustworthinessRefusals, AfterARefusedNanCallAValidCallScores) {
   EXPECT_EQ(cuml_metrics_trustworthiness(res.handle, nan_x.view(), x.view(),
                                          neighbours, euclidean, batch, &score),
             RR_ERROR);
-  EXPECT_EQ(outcome(cuml_metrics_trustworthiness(res.handle, x.view(),
-                                                 x.view(), neighbours,
-                                                 euclidean, batch, &score)),
+  EXPECT_EQ(outcome(cuml_metrics_trustworthiness(res.handle, x.view(), x.view(),
+                                                 neighbours, euclidean, batch,
+                                                 &score)),
             "accepted");
   EXPECT_EQ(score, 1.0);
 }

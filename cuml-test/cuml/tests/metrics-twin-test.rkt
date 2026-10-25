@@ -22,26 +22,28 @@
 (define each 150)
 
 (define (worst xs ys)
-  (for/fold ([w 0.0]) ([x (in-list xs)] [y (in-list ys)])
+  (for/fold ([w 0.0])
+            ([x (in-list xs)]
+             [y (in-list ys)])
     (max w (abs (- x y)))))
 
 (define (twin-results cases)
-  (match-define (hash-table ('results results) ('version version)) (run-twin twin (hasheq 'cases cases)))
+  (match-define (hash-table ('results results) ('version version))
+    (run-twin twin (hasheq 'cases cases)))
   (check-equal? version libcuml-version)
   results)
 
 (define degenerate
-  '((() ())
-    ((4) (9))
-    ((3 3 3 3) (1 1 1 1))
-    ((0 1 2 3) (0 1 2 3))
-    ((5 5 5 5 5) (0 1 2 3 4))
-    ((0 1 2 3 4) (5 5 5 5 5))
-    ((0 0 1 1) (1 1 0 0))
-    ((0 0 1 1) (0 1 0 1))
-    ((0 0 0 1 1 1) (0 1 2 3 4 5))
-    ((-1 -1 0 0 1) (2 2 2 0 0))
-    ((7 7 7 7 7 7 7 8) (7 7 7 7 7 7 7 7))))
+  '((() ()) ((4) (9))
+            ((3 3 3 3) (1 1 1 1))
+            ((0 1 2 3) (0 1 2 3))
+            ((5 5 5 5 5) (0 1 2 3 4))
+            ((0 1 2 3 4) (5 5 5 5 5))
+            ((0 0 1 1) (1 1 0 0))
+            ((0 0 1 1) (0 1 0 1))
+            ((0 0 0 1 1 1) (0 1 2 3 4 5))
+            ((-1 -1 0 0 1) (2 2 2 0 0))
+            ((7 7 7 7 7 7 7 8) (7 7 7 7 7 7 7 7))))
 
 (define (label-cases count)
   (for/list ([seed (in-range count)])
@@ -55,8 +57,7 @@
 
 (test-twin "CC8: contingency-matrix's counts equal sklearn's contingency_matrix"
   (define cases
-    (append (label-cases 40)
-            (list '((-1 -1 0 2 2 2) (1 0 0 1 3 3)) '((5 -1 5 -1) (-2 -2 4 4)))))
+    (append (label-cases 40) (list '((-1 -1 0 2 2 2) (1 0 0 1 3 3)) '((5 -1 5 -1) (-2 -2 4 4)))))
   (define results
     (twin-results (for/list ([c (in-list cases)])
                     (hasheq 'op "contingency" 'truth (car c) 'found (cadr c)))))
@@ -105,9 +106,7 @@
 (define (noisy-labels)
   (for/list ([y (in-list (overlap-labels #:each each))]
              [i (in-naturals)])
-    (if (zero? (modulo i 7))
-        -1
-        y)))
+    (if (zero? (modulo i 7)) -1 y)))
 
 (test-twin "SL6-SL8: silhouette agrees with sklearn on the float64 cast and with Python cuML"
   (define runs
@@ -129,15 +128,15 @@
       (if (eq? dt 'float32)
           (values 1e-5 1e-4)
           (values 1e-12 1e-12)))
-    (define cuml-tolerance
-      (if (eq? dt 'float32)
-          1e-6
-          1e-14))
+    (define cuml-tolerance (if (eq? dt 'float32) 1e-6 1e-14))
     (test-case (format "~a ~a ~a" law dt metric)
-      (check-true (<= (abs (- score sk)) score-tolerance) (format "score ~a against sklearn's ~a" score sk))
+      (check-true (<= (abs (- score sk)) score-tolerance)
+                  (format "score ~a against sklearn's ~a" score sk))
       (check-true (<= (worst samples sks) sample-tolerance) (format "samples ~a" (worst samples sks)))
-      (check-true (<= (abs (- score cu)) cuml-tolerance) (format "SL8 score ~a against cuML's ~a" score cu))
-      (check-true (<= (worst samples cus) cuml-tolerance) (format "SL8 samples ~a" (worst samples cus))))))
+      (check-true (<= (abs (- score cu)) cuml-tolerance)
+                  (format "SL8 score ~a against cuML's ~a" score cu))
+      (check-true (<= (worst samples cus) cuml-tolerance)
+                  (format "SL8 samples ~a" (worst samples cus))))))
 
 (test-twin "TW5, TW6: trustworthiness is within 1e-6 of sklearn and equals Python cuML"
   (define runs

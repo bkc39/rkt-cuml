@@ -35,8 +35,8 @@ inline void require_entries(const std::string& what, int64_t rows,
                             int64_t each) {
   int64_t entries = 0;
   if (__builtin_mul_overflow(rows, each, &entries)) {
-    throw logic_error(std::format("{} need more than {} entries", what,
-                                  most_index));
+    throw logic_error(
+        std::format("{} need more than {} entries", what, most_index));
   }
   if (entries > most_index) {
     throw logic_error(std::format("{} need {} entries, more than {}", what,

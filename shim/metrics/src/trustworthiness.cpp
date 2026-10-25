@@ -59,8 +59,8 @@ void require_neighbours(int64_t n, int64_t k) {
 }
 
 void require_batch(int64_t n, int64_t batch) {
-  require_entries(
-      std::format("batch-size: {} rows of {} distances", batch, n), batch, n);
+  require_entries(std::format("batch-size: {} rows of {} distances", batch, n),
+                  batch, n);
 }
 
 double score(const raft::handle_t& handle, const rr_view* x_view,
@@ -82,11 +82,10 @@ double score(const raft::handle_t& handle, const rr_view* x_view,
   require_bounded_rows("X", x, stream);
   require_bounded_rows("X-embedded", e, stream);
   const double found =
-      ML::Metrics::trustworthiness_score<float,
-                                         DistanceType::L2SqrtUnexpanded>(
-          handle, x.data, e.data, static_cast<int>(x.n),
-          static_cast<int>(x.d), static_cast<int>(e.d),
-          static_cast<int>(o.n_neighbors), static_cast<int>(batch));
+      ML::Metrics::trustworthiness_score<float, DistanceType::L2SqrtUnexpanded>(
+          handle, x.data, e.data, static_cast<int>(x.n), static_cast<int>(x.d),
+          static_cast<int>(e.d), static_cast<int>(o.n_neighbors),
+          static_cast<int>(batch));
   settle(handle);
   return found;
 }
@@ -96,9 +95,9 @@ double score(const raft::handle_t& handle, const rr_view* x_view,
 extern "C" {
 
 int cuml_metrics_trustworthiness(void* handle, const rr_view* x,
-                                 const rr_view* x_embedded,
-                                 int64_t n_neighbors, int32_t metric,
-                                 int64_t batch_size, double* score_out) {
+                                 const rr_view* x_embedded, int64_t n_neighbors,
+                                 int32_t metric, int64_t batch_size,
+                                 double* score_out) {
   return guarded(handle, {{"X", x}, {"X-embedded", x_embedded}},
                  [&](const raft::handle_t& h) {
                    double* const into = raftrkt::require(score_out, "score");

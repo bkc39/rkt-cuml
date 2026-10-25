@@ -6,6 +6,10 @@ import json
 import sys
 
 import numpy as np
+from cuml.metrics import adjusted_rand_score as cu_ari
+from cuml.metrics import trustworthiness as cu_trustworthiness
+from cuml.metrics.cluster import silhouette_samples as cu_samples
+from cuml.metrics.cluster import silhouette_score as cu_score
 from sklearn.manifold import trustworthiness as sk_trustworthiness
 from sklearn.metrics import adjusted_rand_score as sk_ari
 from sklearn.metrics import silhouette_samples as sk_samples
@@ -13,10 +17,6 @@ from sklearn.metrics import silhouette_score as sk_score
 from sklearn.metrics.cluster import contingency_matrix as sk_contingency
 
 import cuml
-from cuml.metrics import adjusted_rand_score as cu_ari
-from cuml.metrics import trustworthiness as cu_trustworthiness
-from cuml.metrics.cluster import silhouette_samples as cu_samples
-from cuml.metrics.cluster import silhouette_score as cu_score
 
 
 def host(a):
@@ -48,7 +48,9 @@ def silhouette(case):
     }
     if case["cuml"]:
         result["cuml_score"] = float(cu_score(X, labels, metric=metric))
-        result["cuml_samples"] = host(cu_samples(X, labels, metric=metric)).astype(np.float64).tolist()
+        result["cuml_samples"] = (
+            host(cu_samples(X, labels, metric=metric)).astype(np.float64).tolist()
+        )
     return result
 
 
@@ -57,7 +59,11 @@ def trustworthiness(case):
     E = np.asarray(case["E"], dtype=np.float32)
     k = case["n_neighbors"]
     return {
-        "sklearn": float(sk_trustworthiness(X.astype(np.float64), E.astype(np.float64), n_neighbors=k)),
+        "sklearn": float(
+            sk_trustworthiness(
+                X.astype(np.float64), E.astype(np.float64), n_neighbors=k
+            )
+        ),
         "cuml": float(cu_trustworthiness(X, E, n_neighbors=k)),
     }
 

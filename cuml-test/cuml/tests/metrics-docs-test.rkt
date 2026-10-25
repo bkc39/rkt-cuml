@@ -10,7 +10,11 @@
          (only-in racket/list index-of range remove-duplicates take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true)
-         (only-in raft device-matrix->list* device-vector->list list*->device-matrix list->device-vector)
+         (only-in raft
+                  device-matrix->list*
+                  device-vector->list
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error))
 
@@ -51,9 +55,8 @@
 (define (host-trustworthiness X E k)
   (define n (length X))
   (define penalty
-    (for*/sum ([i (in-range n)]
-               [j (in-list (take (neighbours E i) k))])
-      (max 0 (- (add1 (index-of (neighbours X i) j)) k))))
+    (for*/sum ([i (in-range n)] [j (in-list (take (neighbours E i) k))])
+              (max 0 (- (add1 (index-of (neighbours X i) j)) k))))
   (- 1 (/ (* 2 penalty) (* n k (- (* 2 n) (* 3 k) 1)))))
 
 (define (choose2 m)
@@ -86,7 +89,8 @@
                 (<= (abs (- s e)) 1e-12)))
   (check-cuml-error 'logic
                     "silhouette-score: labels: expected at least 2 distinct labels, got 1"
-                    (lambda () (silhouette-score X (list->device-vector '(0 0 0 0 0 0) #:dtype 'int32)))))
+                    (lambda ()
+                      (silhouette-score X (list->device-vector '(0 0 0 0 0 0) #:dtype 'int32)))))
 
 (test-gpu "the manual: trustworthiness of the example's embedding"
   (define P (list*->device-matrix P-rows #:dtype 'float32))

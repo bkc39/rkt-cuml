@@ -1,7 +1,10 @@
 #lang racket/base
 
 (require (only-in cuml/core exn:fail:cuml)
-         (only-in cuml/core/private/native cuml-family-libcuml-version cuml-family-library load-family)
+         (only-in cuml/core/private/native
+                  cuml-family-libcuml-version
+                  cuml-family-library
+                  load-family)
          (only-in ffi/unsafe _double _int32 _int64)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
