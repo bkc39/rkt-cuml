@@ -44,16 +44,38 @@ void expect_axis_spectrum(const record& out) {
   const T scale =
       static_cast<T>(1) /
       static_cast<T>(first_variance + second_variance + third_variance);
-  std::vector<T> ratio;
-  for (const T v : variance) {
-    ratio.push_back(v * scale);
-  }
+  const std::vector<T> ratio{variance[0] * scale, variance[1] * scale,
+                             variance[2] * scale};
   EXPECT_EQ(out.read<T>(1),
             (std::vector<T>{std::sqrt(static_cast<T>(first_square)),
                             std::sqrt(static_cast<T>(second_square)),
                             std::sqrt(static_cast<T>(third_square))}));
   EXPECT_EQ(out.read<T>(2), variance);
   EXPECT_EQ(out.read<T>(3), ratio);
+}
+
+template <typename T>
+void expect_axis_plain_fit(const resources& res, const filled<T>& x) {
+  record plain(res);
+  ASSERT_EQ(tsvd_fit_into(res, x.view(), plain, {.n_components = 2}),
+            "accepted");
+  ASSERT_EQ(plain.r.count, fit_regions);
+  EXPECT_EQ(plain.read<T>(0), (std::vector<T>{1, 0, 0, 0, 1, 0}));
+}
+
+template <typename T>
+void expect_axis_round_trip(const resources& res, const filled<T>& x,
+                            const record& out, const std::vector<T>& host) {
+  record t(res);
+  ASSERT_EQ(tsvd_apply_into(res, cuml_decomposition_tsvd_transform, x.view(),
+                            &out.r.regions[0], t),
+            "accepted");
+  EXPECT_EQ(t.read<T>(0), host);
+  record back(res);
+  ASSERT_EQ(tsvd_apply_into(res, cuml_decomposition_tsvd_inverse_transform,
+                            &t.r.regions[0], &out.r.regions[0], back),
+            "accepted");
+  EXPECT_EQ(back.read<T>(0), host);
 }
 
 template <typename T>
@@ -70,21 +92,8 @@ void expect_axis_fit(int32_t solver) {
   EXPECT_EQ(out.read<T>(0), identity<T>());
   expect_axis_spectrum<T>(out);
   EXPECT_EQ(out.read<T>(4), host);
-  record plain(res);
-  ASSERT_EQ(tsvd_fit_into(res, x.view(), plain, {.n_components = 2}),
-            "accepted");
-  ASSERT_EQ(plain.r.count, fit_regions);
-  EXPECT_EQ(plain.read<T>(0), (std::vector<T>{1, 0, 0, 0, 1, 0}));
-  record t(res);
-  ASSERT_EQ(tsvd_apply_into(res, cuml_decomposition_tsvd_transform, x.view(),
-                            &out.r.regions[0], t),
-            "accepted");
-  EXPECT_EQ(t.read<T>(0), host);
-  record back(res);
-  ASSERT_EQ(tsvd_apply_into(res, cuml_decomposition_tsvd_inverse_transform,
-                            &t.r.regions[0], &out.r.regions[0], back),
-            "accepted");
-  EXPECT_EQ(back.read<T>(0), host);
+  expect_axis_plain_fit<T>(res, x);
+  expect_axis_round_trip<T>(res, x, out, host);
 }
 
 TEST(Tsvd, AxisFixtureFitsAndTransformsExactly) {
@@ -202,6 +211,20 @@ TEST(Tsvd, ViewsOnAnotherDeviceAreRefused) {
   expect_untouched(out);
 }
 
+void expect_finite_fit(const resources& res, const filled<float>& x,
+                       int32_t solver) {
+  record out(res);
+  ASSERT_EQ(
+      tsvd_fit_into(res, x.view(), out,
+                    {.n_components = 2, .solver = solver, .with_transform = 1}),
+      "accepted");
+  for (int32_t i = 0; i < transformed_regions; ++i) {
+    for (const float v : out.read<float>(i)) {
+      EXPECT_TRUE(std::isfinite(v)) << "region " << i;
+    }
+  }
+}
+
 TEST(Tsvd, OutputsAreFiniteJustUnderTheOverflowBound) {
   CUMLRKT_REQUIRE_GPU();
   constexpr int64_t n = 50;
@@ -217,16 +240,7 @@ TEST(Tsvd, OutputsAreFiniteJustUnderTheOverflowBound) {
   const filled<float> x(res, host, {n, d});
   for (const int32_t solver :
        {CUML_DECOMPOSITION_SOLVER_FULL, CUML_DECOMPOSITION_SOLVER_JACOBI}) {
-    record out(res);
-    ASSERT_EQ(tsvd_fit_into(
-                  res, x.view(), out,
-                  {.n_components = 2, .solver = solver, .with_transform = 1}),
-              "accepted");
-    for (int32_t i = 0; i < transformed_regions; ++i) {
-      for (const float v : out.read<float>(i)) {
-        EXPECT_TRUE(std::isfinite(v)) << "region " << i;
-      }
-    }
+    expect_finite_fit(res, x, solver);
   }
 }
 
