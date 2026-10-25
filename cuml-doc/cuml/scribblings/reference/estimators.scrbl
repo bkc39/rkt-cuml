@@ -448,5 +448,39 @@ Whether @racket[v] is a standard scaler estimator.}
 The @racket[standard-scaler-result] of the fit that made @racket[estimator],
 or @racket[#f] when it is unfitted.}
 
+@section[#:tag "pca-estimator"]{PCA estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(pca [params (or/c #f hash?) #f]
+              [#:n-components n-components (or/c #f exact-positive-integer?) #f]
+              [#:whiten whiten boolean? #f]
+              [#:solver solver (or/c 'full 'jacobi) 'full]
+              [#:tol tol (and/c real? (>=/c 0)) 0.0]
+              [#:iterations iterations (integer-in 1 2147483647) 15]
+              [#:resources resources (or/c #f device-resources?) #f])
+         pca?]{
+
+An unfitted principal component analysis with the hyperparameters
+@racket[(pca-params params ...)]: an estimator and a transformer.
+@racket[fit] is @racket[pca-fit]; @racket[transform] and
+@racket[inverse-transform] are the procedures of the same name on the fit.
+@racket[y] is ignored and a @racket[sample-weight] refused. Errors name the generic.
+
+@examples[#:eval ev
+(define P (list*->device-matrix '((4 0) (-4 0) (0 1) (0 -1) (0 0)) #:dtype 'float64))
+(device-matrix->list* (transform (fit (pca #:n-components 1) P) P))
+(eval:error (transform (pca) P))
+]}
+
+@defproc[(pca? [v any/c]) boolean?]{
+
+Whether @racket[v] is a PCA estimator.}
+
+@defproc[(pca-model [estimator pca?]) (or/c #f pca-result?)]{
+
+The @racket[pca-result] of the fit that made @racket[estimator], or
+@racket[#f] when it is unfitted.}
+
 @(close-eval host-ev)
 @(close-eval ev)

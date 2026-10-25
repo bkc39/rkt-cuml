@@ -8,6 +8,7 @@
 (define build-deps
   '("at-exp-lib" "cuml-cluster-lib"
                  "cuml-core-lib"
+                 "cuml-decomposition-lib"
                  "cuml-doc"
                  "cuml-lib"
                  "cuml-metrics-lib"

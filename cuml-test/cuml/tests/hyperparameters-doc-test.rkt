@@ -5,6 +5,7 @@
                   dbscan
                   hdbscan
                   kmeans
+                  pca
                   spectral-clustering
                   standard-scaler)
          (only-in cuml/cluster
@@ -19,6 +20,7 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-params)
+         (only-in cuml/decomposition pca-fit pca-fit-transform pca-params)
          (only-in cuml/preprocessing
                   standard-scaler-fit
                   standard-scaler-fit-transform
@@ -46,7 +48,7 @@
    defprocs
    (append-map
     manual-forms
-    '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "preprocessing.scrbl" "estimators.scrbl"))))
+    '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "preprocessing.scrbl" "decomposition.scrbl" "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -95,6 +97,8 @@
                      build-algo))
 
 (define standard-scaler-keys '(with-mean with-std))
+
+(define pca-keys '(n-components whiten solver tol iterations))
 
 (define (scaler-fit-entry name proc)
   (list name
@@ -221,7 +225,19 @@
            '(#:resources)
            (list (argument #f 'params #f))
            (list (argument '#:resources 'resources #f))
-           '())))))
+           '())))
+   (table-bindings
+    pca-params
+    pca-keys
+    (list (list 'pca-params pca-params '() (list (argument #f 'base #f)) '() '())
+          (scaler-fit-entry 'pca-fit pca-fit)
+          (scaler-fit-entry 'pca-fit-transform pca-fit-transform)
+          (list 'pca
+                pca
+                '(#:resources)
+                (list (argument #f 'params #f))
+                (list (argument '#:resources 'resources #f))
+                '())))))
 
 (define-namespace-anchor anchor)
 

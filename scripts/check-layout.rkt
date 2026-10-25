@@ -21,6 +21,7 @@
   '(agglomerative-clustering dbscan
                              hdbscan
                              kmeans
+                             pca
                              single-linkage
                              spectral-clustering
                              standard-scaler))

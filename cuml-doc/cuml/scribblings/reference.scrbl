@@ -13,6 +13,7 @@ together.
 @include-section["reference/estimators.scrbl"]
 @include-section["reference/clustering.scrbl"]
 @include-section["reference/preprocessing.scrbl"]
+@include-section["reference/decomposition.scrbl"]
 @include-section["reference/metrics.scrbl"]
 @include-section["reference/models.scrbl"]
 @include-section["reference/errors.scrbl"]

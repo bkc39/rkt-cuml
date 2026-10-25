@@ -128,6 +128,30 @@ void require_bounded_rows(const char* name, const matrix<T, int64_t>& x,
   }
 }
 
+template <typename T>
+void require_finite(const char* name, const matrix<T, int64_t>& x,
+                    rmm::cuda_stream_view stream) {
+  const int64_t i = first_non_finite(x.data, x.n * x.d, stream);
+  if (i >= 0) {
+    const T got = read_one(x.data, i, stream);
+    throw logic_error(
+        std::format("{}: row {}, column {}: expected a finite value, got {}",
+                    name, i / x.d, i % x.d, printed(static_cast<double>(got))));
+  }
+}
+
+template <typename T>
+void require_magnitudes(const char* name, const matrix<T, int64_t>& x,
+                        double most, rmm::cuda_stream_view stream) {
+  const int64_t i = first_large_element(x.data, x.n * x.d, most, stream);
+  if (i >= 0) {
+    const T got = read_one(x.data, i, stream);
+    throw logic_error(std::format(
+        "{}: row {}, column {}: expected a magnitude of at most {}, got {}",
+        name, i / x.d, i % x.d, printed(most), printed<T>(got)));
+  }
+}
+
 inline void require_some(const char* name, const char* axis, int64_t extent) {
   if (extent == 0) {
     throw logic_error(std::string(name) + ": expected at least 1 " + axis +
