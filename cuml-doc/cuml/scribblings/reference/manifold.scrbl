@@ -131,4 +131,45 @@ The hyperparameters of @racket[umap-fit] and @racket[umap], as @racket[kmeans-pa
 (eval:error (umap-params (hasheq 'local-connectivity 2.0)))
 ]}
 
+@section[#:tag "umap-estimator"]{UMAP estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(umap [params (or/c #f hash?) #f]
+               [#:n-neighbors n-neighbors (integer-in 2 2147483647) 15]
+               [#:n-components n-components (integer-in 1 2147483647) 2]
+               [#:metric metric (or/c 'euclidean 'sqeuclidean 'manhattan 'chebyshev 'cosine) 'euclidean]
+               [#:n-epochs n-epochs (or/c #f (integer-in 1 2147483647)) #f]
+               [#:learning-rate learning-rate (and/c real? positive?) 1.0]
+               [#:min-dist min-dist (and/c real? (>=/c 0)) 0.1]
+               [#:spread spread (and/c real? positive?) 1.0]
+               [#:a a (or/c #f (and/c real? positive?)) #f]
+               [#:b b (or/c #f (and/c real? positive?)) #f]
+               [#:init init (or/c 'spectral 'random) 'spectral]
+               [#:negative-sample-rate negative-sample-rate (integer-in 0 2147483647) 5]
+               [#:random-state random-state (or/c #f (integer-in 0 18446744073709551615)) 0]
+               [#:build-algo build-algo (or/c 'brute-force 'nn-descent) 'brute-force]
+               [#:resources resources (or/c #f device-resources?) #f])
+         umap?]{
+
+An unfitted UMAP with the hyperparameters @racket[(umap-params params ...)]:
+an estimator and a transformer. @racket[fit] is @racket[umap-fit], with
+@racket[y] as its @racket[#:y]; @racket[transform] is @racket[umap-transform];
+@racket[fit-transform] returns the fit's embedding. A @racket[sample-weight]
+is refused. Errors name the generic.
+
+@examples[#:eval ev #:label #f
+(shape (fit-transform (umap #:n-neighbors 10) X))
+(eval:error (transform (umap) X))
+]}
+
+@defproc[(umap? [v any/c]) boolean?]{
+
+Whether @racket[v] is a UMAP estimator.}
+
+@defproc[(umap-model [estimator umap?]) (or/c #f umap-result?)]{
+
+The @racket[umap-result] of the fit that made @racket[estimator], or
+@racket[#f] when it is unfitted.}
+
 @(close-eval ev)
