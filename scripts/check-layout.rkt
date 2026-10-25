@@ -9,6 +9,8 @@
          (only-in setup/getinfo get-info/full)
          (only-in threading ~>))
 
+(provide families)
+
 (define-runtime-path root "..")
 
 (define family-allowed-deps '("base" "raft" "cuml-core-lib"))
