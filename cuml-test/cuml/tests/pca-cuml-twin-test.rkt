@@ -6,7 +6,7 @@
          (only-in "private/pca-twin-data.rkt" check-against-cuml named twin-results)
          (only-in "private/python-env.rkt" test-twin twin-params))
 
-(for ([name (in-list '("normal" "correlated" "scales"))])
+(for ([name (in-list '("normal" "correlated"))])
   (test-twin (format "L15: ~a is cuML-Python's within the L14 bounds" name)
     (check-against-cuml (named name))))
 

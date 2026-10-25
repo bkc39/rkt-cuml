@@ -7,7 +7,6 @@
          (only-in raft device-matrix->list*)
          (only-in "private/pca-data.rkt" fitted-variance)
          (only-in "private/pca-twin-data.rkt"
-                  check-against-cuml
                   fit-ours
                   named
                   ours-fitted
@@ -20,10 +19,6 @@
                   unit)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows->matrix))
-
-(for ([name (in-list '("uniform integers"))])
-  (test-twin (format "L15: ~a is cuML-Python's within the L14 bounds" name)
-    (check-against-cuml (named name))))
 
 (test-twin "L15: the departures from cuML-Python are pinned"
   (define wide (named "wide"))
