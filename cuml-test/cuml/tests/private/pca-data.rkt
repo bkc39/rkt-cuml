@@ -87,7 +87,7 @@
   (define rows (fixture-source f))
   (map (lambda (row) (map narrow row))
        (if count
-           (take rows count)
+           (take rows (min count (length rows)))
            rows)))
 
 (define (fixture-matrix f dtype [count #f])
