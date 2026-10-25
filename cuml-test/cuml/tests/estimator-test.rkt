@@ -14,6 +14,7 @@
                   gen:predictor
                   gen:scorer
                   gen:transformer
+                  inverse-transform
                   predict
                   predictor?
                   score
@@ -215,6 +216,21 @@
   [(define (predict e X)
      (for/list ([x (in-list X)])
        (if (< x (mean-split-cut e)) 0 1)))])
+
+(struct shifter (by)
+  #:methods gen:transformer
+  [(define (transform e X)
+     (map (lambda (x) (+ x (shifter-by e))) X))
+   (define (inverse-transform e X)
+     (map (lambda (x) (- x (shifter-by e))) X))])
+
+(test-case "E10: inverse-transform is optional, and its fallback is not supported"
+  (define e (raised (lambda () (inverse-transform (threshold 0 1) '(1 2 3)))))
+  (check-true (exn:fail:support? e))
+  (check-equal? (exn-message e) "inverse-transform: not implemented for (threshold 0 1)")
+  (check-equal? (inverse-transform (shifter 3) (transform (shifter 3) '(1 2 3))) '(1 2 3))
+  (check-regexp-match #rx"^inverse-transform: contract violation:\n  expected: transformer\\?"
+                      (exn-message (raised (lambda () (inverse-transform (labeller) '(1)))))))
 
 (test-case "G1: estimator-set-params takes keywords as a host implementation's hash"
   (define e (fit (mean-split 1 #f) '(1 2 9 10)))

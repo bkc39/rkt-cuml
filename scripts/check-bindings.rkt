@@ -13,7 +13,7 @@
 
 (define-runtime-path root "..")
 
-(define families '("cluster" "metrics"))
+(define families '("cluster" "metrics" "preprocessing"))
 (define failure-kinds '(UNBOUND MISSING TWICE UNPLANNED DUE STALE-PLAN))
 
 (struct planned (name status issue))
@@ -257,8 +257,8 @@
        (check-equal? (tree-bindings "metrics" dir)
                      '("version" "adjusted_rand_score_job" "last_error")))))
 
-  (test-case "the family list holds cluster and metrics"
-    (check-equal? families '("cluster" "metrics")))
+  (test-case "the family list holds cluster, metrics and preprocessing"
+    (check-equal? families '("cluster" "metrics" "preprocessing")))
 
   (test-case "nm lines become unprefixed export names"
     (check-equal?

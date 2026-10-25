@@ -74,6 +74,14 @@ cumlrkt_family(metrics
   TESTS metrics/tests/metrics_test.cpp metrics/tests/metrics_refusal_test.cpp
 )
 
+cumlrkt_family(preprocessing NO_LIBCUML
+  SOURCES preprocessing/src/preprocessing.cpp preprocessing/src/standard_scaler.cpp
+          preprocessing/src/standard_scaler_device.cu
+  TESTS preprocessing/tests/preprocessing_test.cpp
+        preprocessing/tests/standard_scaler_test.cpp
+        preprocessing/tests/standard_scaler_refusal_test.cpp
+)
+
 cumlrkt_family(probe TEST_ONLY
   SOURCES probe/src/probe.cpp
   TESTS probe/tests/model_test.cpp

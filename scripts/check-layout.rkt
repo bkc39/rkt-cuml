@@ -16,7 +16,12 @@
 (define umbrella-base-deps '("base" "raft" "cuml-core-lib" "datasets-core"))
 (define dependency-fields '(deps build-deps implies))
 (define reserved-names
-  '(agglomerative-clustering dbscan hdbscan kmeans single-linkage spectral-clustering))
+  '(agglomerative-clustering dbscan
+                             hdbscan
+                             kmeans
+                             single-linkage
+                             spectral-clustering
+                             standard-scaler))
 
 (define (dep-name dep)
   (match dep

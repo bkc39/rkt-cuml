@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml agglomerative-clustering dbscan hdbscan kmeans spectral-clustering)
+(require (only-in cuml agglomerative-clustering dbscan hdbscan kmeans spectral-clustering standard-scaler)
          (only-in cuml/cluster
                   dbscan-fit
                   dbscan-params
@@ -13,6 +13,10 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-params)
+         (only-in cuml/preprocessing
+                  standard-scaler-fit
+                  standard-scaler-fit-transform
+                  standard-scaler-params)
          (only-in racket/dict dict-ref)
          (only-in racket/list append-map takef)
          (only-in racket/match match match-define)
@@ -34,7 +38,10 @@
 (define documented
   (append-map defprocs
               (append-map manual-forms
-                          '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "estimators.scrbl"))))
+                          '("clustering.scrbl" "spectral.scrbl"
+                                              "hdbscan.scrbl"
+                                              "preprocessing.scrbl"
+                                              "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -81,6 +88,17 @@
                      cluster-selection-method
                      allow-single-cluster
                      build-algo))
+
+(define standard-scaler-keys '(with-mean with-std))
+
+(define (scaler-fit-entry name proc)
+  (list name
+        proc
+        '(#:params #:resources)
+        (list (argument #f 'X 'none))
+        (list (argument '#:params 'params #f)
+              (argument '#:resources 'resources '(current-device-resources)))
+        '()))
 
 (define bindings
   (append
@@ -182,6 +200,18 @@
                 '(metric build-algo))
           (list 'hdbscan
                 hdbscan
+                '(#:resources)
+                (list (argument #f 'params #f))
+                (list (argument '#:resources 'resources #f))
+                '())))
+   (table-bindings
+    standard-scaler-params
+    standard-scaler-keys
+    (list (list 'standard-scaler-params standard-scaler-params '() (list (argument #f 'base #f)) '() '())
+          (scaler-fit-entry 'standard-scaler-fit standard-scaler-fit)
+          (scaler-fit-entry 'standard-scaler-fit-transform standard-scaler-fit-transform)
+          (list 'standard-scaler
+                standard-scaler
                 '(#:resources)
                 (list (argument #f 'params #f))
                 (list (argument '#:resources 'resources #f))

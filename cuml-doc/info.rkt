@@ -6,7 +6,8 @@
 (define version "0.1")
 (define deps '("base"))
 (define build-deps
-  '("cuml-lib" "datasets-core"
+  '("cuml-lib" "cuml-preprocessing-lib"
+               "datasets-core"
                ("raft" #:version "0.2")
                "pict-doc"
                "pict-lib"
