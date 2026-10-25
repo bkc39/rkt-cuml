@@ -68,7 +68,8 @@
 (define (applied-rows)
   (define good (float64s '(1 2 3)))
   (append
-   (map (lambda (r) (row (row-id r) (row-message r) (cons (fitted) (row-call r)))) (bad-X-rows))
+   (for/list ([r (in-list (bad-X-rows))])
+     (row (row-id r) (row-message r) (cons (fitted) (row-call r))))
    (list (row "t5" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
          (row "t5 with both flags off"
               "X: expected 3 columns, got 2"

@@ -13,6 +13,8 @@
 
 (define unlinked-name #rx"<span class=\"RktSym\">([^<]*)</span>")
 
+(define field-name #rx"<span class=\"RktSym\">([^<]*)</span><span class=\"hspace\">&nbsp;</span>:")
+
 (define (exported-names module-path)
   (module-declared? module-path #t)
   (define-values (variables syntaxes) (module->exports module-path))
@@ -84,6 +86,7 @@
     (match page
       [(== helpers-page) bindings]
       [_ '()]))
+  (define fields (rendered-names field-name html))
   (append (for/list ([name (in-list (rendered-names linked-name html))]
                      #:when (member name shown-bindings))
             (format "~a: ~a, which a helper binds, links" page name))
@@ -91,7 +94,8 @@
                      #:when (member name modules))
             (format "~a: ~a, a module the examples require, links to a binding" page name))
           (for/list ([name (in-list (rendered-names unlinked-name html))]
-                     #:when (hash-ref labelled name #f))
+                     #:when (hash-ref labelled name #f)
+                     #:unless (member name fields))
             (format "~a: ~a, which the examples can use, has no link" page name))))
 
 (module+ main
@@ -123,7 +127,7 @@
 
   (test-case "the helpers' formals, keyword arguments, internal defines, loop and match variables are bindings"
     (define bindings (helper-bindings))
-    (for ([name (in-list '("crosstab" "labels" "width" "counts" "name" "column-values" "value"))])
+    (for ([name (in-list '("crosstab" "labels" "width" "counts" "name" "column-values" "left"))])
       (check-not-false (member name bindings) name)))
 
   (test-case "a helper's binding that links on the helpers' page is a finding, elsewhere it is not"
@@ -131,6 +135,16 @@
     (check-equal? (html-findings (hash) '("type") '() helpers-page html)
                   '("examples.html: type, which a helper binds, links"))
     (check-equal? (html-findings (hash) '("type") '() "kmeans.html" html) '()))
+
+  (test-case "a struct field the page declares is no name to link"
+    (define field
+      "<span class=\"RktSym\">scale</span><span class=\"hspace\">&nbsp;</span>:<span class=\"hspace\">&nbsp;</span>")
+    (define prose "<span class=\"RktSym\">scale</span>")
+    (define labelled (hash "scale" #t))
+    (check-equal? (html-findings labelled '() '() "preprocessing.html" (string-append field prose))
+                  '())
+    (check-equal? (html-findings labelled '() '() "kmeans.html" prose)
+                  '("kmeans.html: scale, which the examples can use, has no link")))
 
   (test-case "a module the examples require is no name to link, and links to no binding"
     (define modules (required-modules))

@@ -177,7 +177,8 @@
 
 (test-gpu "L10: fits are deterministic, whatever the scratch"
   (for ([dt (in-list '(float32 float64))])
-    (define-values (n d) (values 1000 24))
+    (define n 1000)
+    (define d 24)
     (define X (rows->matrix (normal-rows 99 n d dt) dt))
     (define once (statistics (standard-scaler-fit X)))
     (check-true (bits-equal? (statistics (standard-scaler-fit X)) once) "a second fit")
