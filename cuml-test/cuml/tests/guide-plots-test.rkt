@@ -10,7 +10,6 @@
                   kmeans-model
                   kmeans-result-labels
                   spectral-clustering
-                  standard-scaler-fit-transform
                   table->device-matrix)
          (only-in cuml/scribblings/guide/helpers
                   class-figure
@@ -43,18 +42,12 @@
                   test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in threading ~>))
+         (only-in threading ~>)
+         (only-in "private/guide-data.rkt" scaled-matrix))
 
 (match-define (list* blue orange _) cluster-colors)
 
 (define ink '(11 11 11))
-
-(define (scaled-matrix name columns)
-  (define-values (_fitted scaled)
-    (~> (load-dataset-table name)
-        (table->device-matrix #:columns columns)
-        standard-scaler-fit-transform))
-  scaled)
 
 (define (pixels picture)
   (define bitmap (pict->bitmap picture))

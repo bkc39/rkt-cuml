@@ -107,7 +107,8 @@
                             (~optional (~seq #:labels labels:expr))
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
-                            (~optional (~seq #:apply model->argument:expr entry:applied ...+))
+                            (~optional (~seq #:apply model->argument:expr entry:applied ...+)
+                                       #:defaults ([(entry.generic 1) '()] [(entry.method 2) '()]))
                             extra:method-clause ...)
   #:with name* (format-id #'name "~a*" #'name)
   #:with (field ...) (for/list ([field (in-list '(hyperparameters settings model))])
@@ -119,8 +120,7 @@
   #:with (key-name ...) (attribute table.keys)
   #:with (keyword ...) (map key->keyword (attribute table.keys))
   #:with (setting-keyword ...) (map key->keyword (syntax->datum #'(setting ...)))
-  #:with ((generic method ...) ...) (grouped (or (attribute entry.generic) '())
-                                             (or (attribute entry.method) '()))
+  #:with ((generic method ...) ...) (grouped (attribute entry.generic) (attribute entry.method))
   #:with weighted? (cond
                      [(attribute no-weight) #'#f]
                      [else #'#t])

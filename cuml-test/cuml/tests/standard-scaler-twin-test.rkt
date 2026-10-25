@@ -28,6 +28,10 @@
 
 (struct dataset (name rows))
 
+(define (dataset-width data)
+  (match-define (cons row _) (dataset-rows data))
+  (length row))
+
 (define (datasets dt)
   (list (dataset "normal" (generated-rows 1 2000 16 dt (lambda (z _u _j) z)))
         (dataset "offset" (generated-rows 2 5000 8 dt (lambda (z _u _j) (+ 1e4 z))))
@@ -46,7 +50,7 @@
   (hasheq 'op op
           'X (append* (dataset-rows data))
           'Y (append* (or y (dataset-rows data)))
-          'd (length (car (dataset-rows data)))
+          'd (dataset-width data)
           'dtype (symbol->string dt)
           'y_dtype (symbol->string y-dt)
           'with_mean with-mean
@@ -145,16 +149,16 @@
          (check-equal? (bits-of t y-dt) (hash-ref result 'transform_bits) "transform")
          (check-equal? (bits-of back y-dt) (hash-ref result 'inverse_bits) "inverse")]
         [else
-         (define d (length (car (dataset-rows data))))
+         (define d (dataset-width data))
          (define mean
            (or (listed (standard-scaler-result-mean fitted)) (build-list d (lambda (_) 0.0))))
          (define scale
            (or (listed (standard-scaler-result-scale fitted)) (build-list d (lambda (_) 1.0))))
          (define tolerance
            (for/list ([t-sk (in-list (hash-ref result 'transform))]
-                      [j (in-naturals)])
-             (define k (modulo j d))
-             (* 1e-11 (+ 1 (abs t-sk) (/ (abs (list-ref mean k)) (list-ref scale k))))))
+                      [m (in-cycle (in-list mean))]
+                      [s (in-cycle (in-list scale))])
+             (* 1e-11 (+ 1 (abs t-sk) (/ (abs m) s)))))
          (check-true (within? t (hash-ref result 'transform) tolerance) "transform")]))))
 
 (test-twin "L17: the hyperparameters are sklearn's but copy"

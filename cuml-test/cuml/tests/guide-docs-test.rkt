@@ -24,7 +24,6 @@
                   score
                   single-linkage-fit
                   spectral-clustering
-                  standard-scaler-fit-transform
                   table->device-matrix)
          (only-in cuml/scribblings/guide/helpers
                   agreement
@@ -61,16 +60,10 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in syntax/modread with-module-reading-parameterization)
          (only-in threading ~>)
-         (only-in "private/cuml-error.rkt" check-cuml-error))
+         (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/guide-data.rkt" scaled-matrix))
 
 (define-namespace-anchor anchor)
-
-(define (scaled-matrix name columns)
-  (define-values (_fitted scaled)
-    (~> (load-dataset-table name)
-        (table->device-matrix #:columns columns)
-        standard-scaler-fit-transform))
-  scaled)
 
 (test-case "the page's require alone, in a racket/base module, expands the page's helpers and runs a threaded example"
   (define-values (shown-require shown-helpers) (page-helpers-source))
