@@ -20,7 +20,7 @@
 (struct twin-case (name table columns dtype))
 
 (define (json-safe? x)
-  (not (or (nan? x) (infinite? x) (eqv? x -0.0))))
+  (not (or (nan? x) (infinite? x))))
 
 (define (json-table xs)
   (synthetic-table '("x") (list (filter json-safe? xs))))
@@ -33,6 +33,15 @@
           (list (twin-case "edge float32" (json-table edge-values32) '("x") 'float32)
                 (twin-case "edge float64" (json-table edge-values) '("x") 'float64))))
 
+(define (cells f rows)
+  (map (lambda (row) (map f row)) rows))
+
+(define (unsigned x)
+  (if (eqv? x -0.0) 0.0 x))
+
+(define (sign x)
+  (if (or (< x 0.0) (eqv? x -0.0)) -1.0 1.0))
+
 (define (twin-case->jsexpr c)
   (match-define (twin-case name t columns element-type) c)
   (hasheq 'name name
@@ -43,10 +52,12 @@
 (test-twin "L12: every numeric selection and the JSON-safe edge values match pandas through cupy"
   (define all (cases))
   (define theirs (hash-ref (run-twin twin (hasheq 'cases (map twin-case->jsexpr all))) 'cases))
+  (check-equal? (map (lambda (their) (hash-ref their 'name)) theirs) (map twin-case-name all))
   (for ([c (in-list all)]
         [their (in-list theirs)])
     (match-define (twin-case name t columns element-type) c)
-    (check-equal?
-     (device-matrix->list* (table->device-matrix t #:columns columns #:dtype element-type))
-     (hash-ref their 'rows)
-     name)))
+    (define ours
+      (device-matrix->list* (table->device-matrix t #:columns columns #:dtype element-type)))
+    (check-equal? (list (cells unsigned ours) (cells sign ours))
+                  (list (hash-ref their 'rows) (hash-ref their 'signs))
+                  name)))

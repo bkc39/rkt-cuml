@@ -1,8 +1,5 @@
-"""Twin of cuml/tests/table-twin-test.rkt: each case's named columns, as a
-pandas DataFrame, through to_numpy at the case's dtype and onto the GPU with
-cupy."""
-
 import json
+import math
 import sys
 
 import cupy as cp
@@ -16,10 +13,17 @@ def rows(case):
     return cp.asnumpy(cp.asarray(host)).tolist()
 
 
+def signs(rows):
+    return [[math.copysign(1.0, x) for x in row] for row in rows]
+
+
 def main():
     with open(sys.argv[1]) as f:
         cases = json.load(f)["cases"]
-    out = [{"name": case["name"], "rows": rows(case)} for case in cases]
+    out = []
+    for case in cases:
+        got = rows(case)
+        out.append({"name": case["name"], "rows": got, "signs": signs(got)})
     with open(sys.argv[2], "w") as f:
         json.dump({"cases": out}, f)
 
