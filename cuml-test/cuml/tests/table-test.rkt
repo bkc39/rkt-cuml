@@ -18,6 +18,7 @@
                   shape
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/program.rkt" run-program)
          (only-in "private/table-data.rkt"
@@ -26,8 +27,7 @@
                   host-rows
                   numeric-selections
                   selection
-                  synthetic-table)
-         (only-in threading ~>))
+                  synthetic-table))
 
 (define dtypes '(float32 float64))
 

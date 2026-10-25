@@ -7,7 +7,7 @@
                   dataset-table-row-count
                   load-dataset-table)
          (only-in racket/list filter-map index-of)
-         (only-in racket/match match))
+         (only-in racket/match match match/values))
 
 (provide edge-table
          edge-table32
@@ -20,7 +20,8 @@
 
 (struct selection (name table columns))
 
-(define-values (table-type skipped?) (struct-info (load-dataset-table 'anscombe #:columns '("x1"))))
+(define table-type
+  (match/values (struct-info (load-dataset-table 'anscombe #:columns '("x1"))) [(type #f) type]))
 
 (define reflected-table (struct-type-make-constructor table-type))
 
