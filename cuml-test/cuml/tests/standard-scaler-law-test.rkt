@@ -156,8 +156,10 @@
                                           [k (in-list s)])
                                  (narrow (/ x k))))))
     (define centred (fit-with X '(#t #f)))
-    (check-equal? (cdr (statistics centred)) '(#f #f))
-    (check-true (bits-equal? (car (statistics centred)) (car (statistics full))))
+    (match-define (list centred-mean centred-var centred-scale) (statistics centred))
+    (match-define (list full-mean _ _) (statistics full))
+    (check-equal? (list centred-var centred-scale) '(#f #f))
+    (check-true (bits-equal? centred-mean full-mean))
     (check-true (bits-equal? (device-matrix->list* (standard-scaler-transform centred X))
                              (for/list ([row (in-list host)])
                                (for/list ([x (in-list row)]

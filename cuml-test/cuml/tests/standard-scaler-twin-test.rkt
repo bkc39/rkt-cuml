@@ -10,13 +10,18 @@
                   standard-scaler-result-var
                   standard-scaler-transform)
          (only-in json json-null)
-         (only-in racket/list append*)
-         (only-in racket/match match-define)
+         (only-in racket/list append* make-list)
+         (only-in racket/match match-define match-lambda)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
-         (only-in "private/scaler-data.rkt" constant-rows generated-rows rows->matrix ulp))
+         (only-in "private/scaler-data.rkt"
+                  constant-rows
+                  generated-rows
+                  rows->matrix
+                  ulp
+                  unit-roundoff))
 
 (define-runtime-path twin "python/standard_scaler_twin.py")
 
@@ -39,7 +44,8 @@
                  (generated-rows 3 178 13 dt (lambda (z _u j) (* z (expt 10.0 (- (/ j 2.0) 3.0))))))
         (dataset "uniform" (generated-rows 4 1000 32 dt (lambda (_z u _j) (floor (* 256 u)))))
         (dataset "constant"
-                 (map (lambda (row) (list (car row) 3.3))
+                 (map (match-lambda
+                        [(list x) (list x 3.3)])
                       (generated-rows 5 50 1 dt (lambda (z _u _j) z))))
         (dataset "near-constant" (cons (list (+ 1e8 (ulp 1e8))) (constant-rows 2 1e8)))
         (dataset "tiny spread" (cons (list (+ 1e6 1e-4)) (constant-rows 999 1e6)))
@@ -105,7 +111,7 @@
         (check-true (within? mean
                              mean-sk
                              (for/list ([m (in-list mean-sk)]
-                                        [s (in-list (or scale-sk (map (lambda (_) 1.0) mean-sk)))])
+                                        [s (in-list (or scale-sk (make-list (length mean-sk) 1.0)))])
                                (* 1e-12 (+ (abs m) s))))
                     (format "mean ~a vs ~a" mean mean-sk)))
       (when var-sk
@@ -118,10 +124,9 @@
           (check-equal? (= s 1.0) (= s-sk 1.0) "a masked column is masked on both sides"))))))
 
 (define (bits-of xs dt)
+  (define size (if (eq? dt 'float32) 4 8))
   (for/list ([x (in-list xs)])
-    (if (eq? dt 'float32)
-        (integer-bytes->integer (real->floating-point-bytes x 4) #f)
-        (integer-bytes->integer (real->floating-point-bytes x 8) #f))))
+    (integer-bytes->integer (real->floating-point-bytes x size) #f)))
 
 (test-twin "L15, L16: transform and inverse are sklearn's, bitwise in float32"
   (define cases
@@ -150,16 +155,21 @@
          (check-equal? (bits-of back y-dt) (hash-ref result 'inverse_bits) "inverse")]
         [else
          (define d (dataset-width data))
-         (define mean
-           (or (listed (standard-scaler-result-mean fitted)) (build-list d (lambda (_) 0.0))))
-         (define scale
-           (or (listed (standard-scaler-result-scale fitted)) (build-list d (lambda (_) 1.0))))
-         (define tolerance
+         (define mean (or (listed (standard-scaler-result-mean fitted)) (make-list d 0.0)))
+         (define scale (or (listed (standard-scaler-result-scale fitted)) (make-list d 1.0)))
+         (define x-sk (hash-ref result 'inverse))
+         (define transform-tolerance
            (for/list ([t-sk (in-list (hash-ref result 'transform))]
                       [m (in-cycle (in-list mean))]
                       [s (in-cycle (in-list scale))])
              (* 1e-11 (+ 1 (abs t-sk) (/ (abs m) s)))))
-         (check-true (within? t (hash-ref result 'transform) tolerance) "transform")]))))
+         (define inverse-tolerance
+           (for/list ([x (in-list x-sk)]
+                      [m (in-cycle (in-list mean))]
+                      [s (in-cycle (in-list scale))])
+             (* 4 (unit-roundoff 'float64) (+ 1 (abs x) (abs m) s))))
+         (check-true (within? t (hash-ref result 'transform) transform-tolerance) "transform")
+         (check-true (within? back x-sk inverse-tolerance) "inverse")]))))
 
 (test-twin "L17: the hyperparameters are sklearn's but copy"
   (match-define (list theirs) (twin-results (list (hasheq 'op "params"))))
