@@ -15,7 +15,8 @@ groups joined by a run of close samples merge into one.
 The iris measurements of @secref["getting-started"]:
 
 @examples[#:eval ev #:label #f
-(define flowers (table->device-matrix (load-dataset-table 'iris) #:columns (features 'iris "species")))
+(define flowers
+  (table->device-matrix (load-dataset-table 'iris) #:columns (features 'iris "species")))
 (define species (dataset-column 'iris "species"))
 ]
 

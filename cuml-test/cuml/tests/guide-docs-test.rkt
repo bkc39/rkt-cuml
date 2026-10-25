@@ -258,12 +258,12 @@
                   (list name (apply min column) (apply max column)))
                 '(("proline" 278 1680) ("magnesium" 70 162) ("hue" 0.48 1.71)))
   (define raw-table
-    (cultivar-table (table->device-matrix (load-dataset-table 'wine) #:columns wine-measurements)))
+    (~> (load-dataset-table 'wine) (table->device-matrix #:columns wine-measurements) cultivar-table))
   (check-equal? raw-table '((46 1 0) (0 50 19) (13 20 29)))
   (check-equal? (agreement raw-table) 125)
-  (check-equal? (cultivar-table (table->device-matrix (load-dataset-table 'wine)
-                                                      #:columns '("proline")))
-                raw-table)
+  (check-equal?
+   (~> (load-dataset-table 'wine) (table->device-matrix #:columns '("proline")) cultivar-table)
+   raw-table)
   (define scaled (standardized-matrix 'wine wine-measurements))
   (define scaled-table (cultivar-table scaled))
   (check-equal? scaled-table '((59 5 0) (0 63 0) (0 3 48)))
