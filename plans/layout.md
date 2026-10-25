@@ -32,10 +32,12 @@
 4. **The opaque model-handle helper** (a native object plus its finalizer,
    keeping its resources alive) lives in `cuml-core-lib`.
 
-5. **Scope: clustering only for now** (k-means, DBSCAN, single-linkage
-   agglomerative, spectral, HDBSCAN). None needs sparse arrays. HDBSCAN's
-   outputs sized by the call use raft's deposit records (rkt-raft #22,
-   merged).
+5. **Scope: clustering** (k-means, DBSCAN, single-linkage agglomerative,
+   spectral, HDBSCAN), **then epic #53**: `cuml/metrics`,
+   `cuml/preprocessing`, `cuml/decomposition` and `cuml/manifold`, plus the
+   table conversion in `cuml-lib`. Neither needs sparse arrays or multi-GPU.
+   HDBSCAN's outputs sized by the call use raft's deposit records (rkt-raft
+   #22).
 
 6. **cuML is GPU-only.** libcuml has no CPU path, so neither has cuml.
 
@@ -421,3 +423,47 @@
 - A binding census for the clustering family, `scripts/check-bindings.rkt`.
 
 Follow-ups are GitHub issues.
+
+## Owner decisions for epic #53 (2026-10-24)
+
+- **Q-A.** Four new family packages after cuML's namespaces,
+  `cuml-metrics-lib`, `cuml-preprocessing-lib`, `cuml-decomposition-lib`,
+  `cuml-manifold-lib`, each with its own `libcumlrkt_<family>.so` in the one
+  native package; no family depends on another or on `cuml-lib`.
+- **Q-B.** The `datasets` table conversion lives in the umbrella `cuml-lib`;
+  neither core nor a family depends on `datasets` or `datasets-core`
+  (`check-layout.rkt`).
+- **Q-C.** The embeddings chapter uses sklearn's digits from `datasets-uci`.
+- **Q-D.** An algorithm that is not bit-deterministic under a fixed seed is
+  checked by quality metrics plus label agreement, not exact arrays.
+
+## Decisions recorded in leg A1 (#32)
+
+- **A1-a.** The name is `table->device-matrix`; `table` is a `dataset-table?`.
+- **A1-b.** The default dtype is `'float32`, raft's and the guide's.
+- **A1-c.** `#:layout` is bound, defaulting to `'row-major`.
+- **A1-d.** An exact number the dtype cannot hold exactly is refused; inexact
+  values are rounded.
+- **A1-e.** A missing value is refused; no `#:missing` fill this leg.
+- **A1-f.** NaN and infinite flonums pass; the families decide.
+- **A1-g.** raft's failures after the scan (released resources, out of
+  memory) pass through as `exn:fail:raft` naming `list*->device-matrix`; an
+  rkt-raft issue asks for a `#:who` on the list uploads.
+- **A1-h.** Duplicate columns are refused.
+- **A1-i.** A table with no rows gives a `(0 k)` matrix.
+- **A1-j.** No one-column `device-vector` companion; a label encoder is a
+  follow-up for A3 or A6.
+- **A1-k.** A public module `cuml/table`, re-exported by `cuml`, loading no
+  native library: a re-export facade with `all-from-out` and no lint
+  suppression, as `cuml/core` is.
+- **A1-l.** The tests build tables by reflection, in `table-data.rkt` only;
+  bkc39/datasets is asked for a public constructor.
+- **A1-m.** cuml-lib's runtime dependency on datasets-core, whose licence
+  covers GPL-2.0-only and CC-BY-4.0 data files, is accepted: data in a
+  separate package, not linked code; cuml stays Apache-2.0.
+- **A1-n.** `dataset-matrix` and `matrix-of` retire now; `standardized`,
+  `standardized-matrix`, `rows`, `rows->matrix` and `dataset-columns` stay
+  until A6.
+- **A1-o.** datasets-core is pinned through raft's `datasets-src`, one pin.
+- **A1-p.** What is numeric is decided from the values, not the metadata's
+  `type`.
