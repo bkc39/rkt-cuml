@@ -2,6 +2,7 @@
 
 (require (only-in cuml/metrics trustworthiness)
          (only-in racket/list remove-duplicates)
+         (only-in racket/match match-lambda)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
@@ -33,8 +34,9 @@
     (check-true (<= 0.0 s 1.0) (format "k ~a: ~a" k s)))
   (define grid (list*->device-matrix grid-20 #:dtype 'float32))
   (define line
-    (list*->device-matrix (for/list ([p (in-list grid-20)])
-                            (list (car p)))
+    (list*->device-matrix (map (match-lambda
+                                 [(list x _) (list x)])
+                               grid-20)
                           #:dtype 'float32))
   (for ([k (in-list '(1 4 5 8))])
     (check-true (<= 0.0 (trustworthiness grid line #:n-neighbors k) 1.0))))

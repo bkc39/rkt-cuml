@@ -34,21 +34,27 @@
 (define (distance a b)
   (sqrt (for/sum ([x (in-list a)] [y (in-list b)]) (* (- x y) (- x y)))))
 
+(define (mean-distance p rows ys label)
+  (mean (for/list ([q (in-list rows)]
+                   [l (in-list ys)]
+                   #:when (and (= l label) (not (eq? p q))))
+          (distance p q))))
+
 (define (host-samples rows ys)
   (for/list ([p (in-list rows)]
              [c (in-list ys)])
-    (define (mean-to label)
-      (mean (for/list ([q (in-list rows)]
-                       [l (in-list ys)]
-                       #:when (and (= l label) (not (eq? p q))))
-              (distance p q))))
-    (define a (mean-to c))
-    (define b (apply min (map mean-to (remove c (remove-duplicates ys)))))
+    (define a (mean-distance p rows ys c))
+    (define b
+      (apply min
+             (for/list ([label (in-list (remove c (remove-duplicates ys)))])
+               (mean-distance p rows ys label))))
     (/ (- b a) (max a b))))
 
 (define (neighbours rows i)
-  (define others (remove i (range (length rows))))
-  (sort others < #:key (lambda (j) (distance (list-ref rows i) (list-ref rows j)))))
+  (define v (list->vector rows))
+  (define p (vector-ref v i))
+  (define others (remove i (range (vector-length v))))
+  (sort others < #:key (lambda (j) (distance p (vector-ref v j)))))
 
 (define (host-trustworthiness X E k)
   (define n (length X))

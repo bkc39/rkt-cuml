@@ -107,10 +107,11 @@
 (test-gpu "CC6: int32 and int64 copies of the labels, in any mix, give the same counts"
   (for ([c (in-list (cases))])
     (match-define (list _ truth found) c)
-    (define expected (car (table-lists truth found)))
+    (match-define (list expected _ _) (table-lists truth found))
     (for* ([dt1 (in-list dtypes)]
            [dt2 (in-list dtypes)])
-      (check-equal? (car (table-lists truth found #:true dt1 #:pred dt2)) expected))))
+      (match-define (list counts _ _) (table-lists truth found #:true dt1 #:pred dt2))
+      (check-equal? counts expected))))
 
 (test-gpu "CC7: empty labels give an empty table, one sample ((1))"
   (match-define (list counts rows columns) (table '() '()))

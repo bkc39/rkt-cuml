@@ -4,11 +4,10 @@
          (only-in racket/function curry negate)
          (only-in racket/list append-map count filter-map last remove-duplicates)
          (only-in racket/match == match match-define match-lambda)
-         (only-in racket/port with-output-to-string)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in racket/string string-prefix? string-split)
-         (only-in racket/system system*)
+         (only-in racket/system system*/exit-code)
          (only-in threading ~>))
 
 (define-runtime-path root "..")
@@ -27,9 +26,11 @@
 
 (define (nm-output library)
   (define nm (or (find-executable-path "nm") (error 'check-bindings "nm is not on PATH")))
-  (with-output-to-string (lambda ()
-                           (unless (system* nm "-D" "--defined-only" (path->string library))
-                             (error 'check-bindings "nm failed on ~a" library)))))
+  (define out (open-output-string))
+  (match (parameterize ([current-output-port out])
+           (system*/exit-code nm "-D" "--defined-only" (path->string library)))
+    [0 (get-output-string out)]
+    [_ (error 'check-bindings "nm failed on ~a" library)]))
 
 (define (exports-in family nm-text)
   (~> (filter-map (lambda (line)
