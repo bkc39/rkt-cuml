@@ -19,20 +19,16 @@
                   pca-result-n-samples
                   pca-result?
                   pca-transform)
-         (only-in racket/list make-list take)
+         (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/estimator-data.rkt" round-trips)
-         (only-in "private/pca-data.rkt" fitted-of fixture-rows integer-fixture normal-fixture)
+         (only-in "private/estimator-data.rkt" listed printed round-trips)
+         (only-in "private/pca-data.rkt" fitted-of fixture-matrix integer-fixture normal-fixture)
          (only-in "private/scaler-data.rkt" bits-equal? rows->matrix))
 
 (define changed (hasheq 'n-components 2 'whiten #t 'solver 'jacobi 'tol 1e-6 'iterations 30))
-
-(define (printed v)
-  (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "L18: the default parameters, and every keyword round-trips"
   (check-equal? (pca-params)
@@ -58,15 +54,12 @@
 (test-case "L18: pca is an estimator and a transformer, not a clusterer or a predictor"
   (check-equal? (capabilities (pca) pca?) '(#t #f #f #t #f #t)))
 
-(define (listed M)
-  (device-matrix->list* M))
-
 (test-gpu "L13, L18: the estimator is the procedures, bitwise, on the same fit"
   (for* ([dt (in-list '(float32 float64))]
          [solver (in-list '(full jacobi))]
          [whiten (in-list '(#f #t))])
     (test-case (format "~a ~a ~a" dt solver whiten)
-      (define X (rows->matrix (take (fixture-rows normal-fixture dt) 300) dt))
+      (define X (fixture-matrix normal-fixture dt 300))
       (define e (pca #:n-components 3 #:solver solver #:whiten whiten))
       (define fitted-e (fit e X '(ignored)))
       (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
@@ -83,7 +76,7 @@
 
 (test-gpu "L13b, L18: on exact sums the fits agree bitwise, so fit-transform is fit then transform"
   (for ([dt (in-list '(float32 float64))])
-    (define X (rows->matrix (fixture-rows integer-fixture dt) dt))
+    (define X (fixture-matrix integer-fixture dt))
     (define result (pca-fit X #:n-components 5))
     (define T (listed (pca-transform result X)))
     (define-values (again T2) (pca-fit-transform X #:n-components 5))
@@ -92,7 +85,7 @@
     (check-true (bits-equal? (listed (fit-transform (pca #:n-components 5) X)) T))))
 
 (test-gpu "L18: a fitted pca prints its parameters after fitted"
-  (define X (rows->matrix (take (fixture-rows normal-fixture 'float32) 50) 'float32))
+  (define X (fixture-matrix normal-fixture 'float32 50))
   (check-equal? (format "~v" (fit (pca) X)) "#<pca fitted>")
   (check-equal? (format "~v" (fit (pca #:n-components 2) X)) "#<pca fitted #:n-components 2>"))
 

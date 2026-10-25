@@ -9,7 +9,16 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in racket/math pi sqr)
-         (only-in raft device-vector->list list*->device-matrix list->device-vector)
+         (only-in racket/sequence in-slice sequence->list)
+         (only-in raft
+                  device-matrix?
+                  device-vector->list
+                  device-vector?
+                  dtype
+                  layout
+                  list*->device-matrix
+                  list->device-vector
+                  shape)
          (only-in raft/private/array buffer->device-array device-array-buffer)
          (only-in threading ~>))
 
@@ -19,16 +28,28 @@
          generated-rows
          host-inverse
          host-transform
+         matrix-shape
          normal-rows
          round-to
          rows->matrix
+         rows-of
          standardisation-errors
          strided-vector
          ulp
-         unit-roundoff)
+         unit-roundoff
+         vector-shape)
+
+(define (vector-shape v)
+  (list (device-vector? v) (dtype v) (shape v)))
+
+(define (matrix-shape m)
+  (list (device-matrix? m) (dtype m) (layout m) (shape m)))
 
 (define (rows->matrix rows dtype)
   (list*->device-matrix rows #:dtype dtype))
+
+(define (rows-of xs d)
+  (sequence->list (in-slice d xs)))
 
 (define (strided-vector n)
   (define backing

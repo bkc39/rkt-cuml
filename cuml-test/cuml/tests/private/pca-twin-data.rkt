@@ -9,7 +9,6 @@
          (only-in racket/list append* last split-at take)
          (only-in racket/match match match-define)
          racket/runtime-path
-         (only-in racket/sequence in-slice)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in "pca-data.rkt"
@@ -18,12 +17,13 @@
                   fitted-of
                   fitted-ratio
                   fitted-variance
+                  dot
                   fixture-name
                   fixture-rows
                   fixtures
                   norm)
          (only-in "python-env.rkt" run-twin)
-         (only-in "scaler-data.rkt" rows->matrix))
+         (only-in "scaler-data.rkt" rows->matrix rows-of unit-roundoff))
 
 (provide (struct-out ours)
          check-against-cuml
@@ -36,8 +36,7 @@
          twin-key
          twin-ks
          twin-results
-         twin-rows
-         unit)
+         twin-rows)
 
 (define-runtime-path twin "../python/pca_twin.py")
 
@@ -97,20 +96,8 @@
         (pca-result-n-samples result)
         (device-matrix->list* (pca-transform result X))))
 
-(define (unit dt)
-  (if (eq? dt 'float32)
-      (expt 2.0 -24)
-      (expt 2.0 -53)))
-
-(define (rows-of xs width)
-  (for/list ([row (in-slice width xs)])
-    row))
-
 (define (sign x)
   (if (< x 0) -1.0 1.0))
-
-(define (dot xs ys)
-  (for/sum ([x (in-list xs)] [y (in-list ys)]) (* x y)))
 
 (define (log2-ceiling n)
   (integer-length (sub1 n)))
@@ -134,7 +121,7 @@
                             ('n_samples theirs-n)
                             ('transform t-flat))
     theirs)
-  (define u (unit dt))
+  (define u (unit-roundoff dt))
   (define d (length mean))
   (define k (length variance))
   (define spread (* 64 u largest))

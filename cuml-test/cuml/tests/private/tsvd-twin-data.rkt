@@ -5,12 +5,11 @@
          (only-in racket/list append* take)
          (only-in racket/match match match-define)
          racket/runtime-path
-         (only-in racket/sequence in-slice)
          (only-in rackunit check-equal?)
          (only-in raft device-matrix->list*)
          (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps)
          (only-in "python-env.rkt" run-twin)
-         (only-in "scaler-data.rkt" generated-rows rows->matrix)
+         (only-in "scaler-data.rkt" generated-rows rows->matrix rows-of)
          (only-in "tsvd-data.rkt"
                   normal-fixture
                   normal-rows-of
@@ -23,7 +22,6 @@
 (provide (struct-out twin-case)
          float-bits
          ours
-         rows-of
          theirs-reference
          theirs-svd
          twin-cases
@@ -84,10 +82,6 @@
   (check-equal? version "26.08.00")
   (check-equal? version libcuml-version)
   results)
-
-(define (rows-of xs d)
-  (for/list ([row (in-slice d xs)])
-    row))
 
 (define (theirs-svd theirs d)
   (match-define (hash-table ('components components)

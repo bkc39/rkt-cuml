@@ -5,10 +5,10 @@
          (only-in rackunit check-equal? test-case)
          (only-in "private/pca-data.rkt" fixture-name)
          (only-in "private/python-env.rkt" test-twin)
+         (only-in "private/scaler-data.rkt" rows-of)
          (only-in "private/tsvd-data.rkt" accuracy-problems exact-reference)
          (only-in "private/tsvd-twin-data.rkt"
                   ours
-                  rows-of
                   theirs-reference
                   twin-case
                   twin-cases

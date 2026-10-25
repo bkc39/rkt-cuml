@@ -15,24 +15,10 @@
                   standard-scaler-transform)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft
-                  device-matrix->list*
-                  device-matrix?
-                  device-vector->list
-                  device-vector?
-                  dtype
-                  layout
-                  list*->device-matrix
-                  shape)
+         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/scaler-data.rkt" normal-rows rows->matrix))
-
-(define (vector-shape v)
-  (list (device-vector? v) (dtype v) (shape v)))
-
-(define (matrix-shape m)
-  (list (device-matrix? m) (dtype m) (layout m) (shape m)))
+         (only-in "private/scaler-data.rkt" matrix-shape normal-rows rows->matrix vector-shape))
 
 (test-gpu "L1: the result's vectors are float64 of length d, and the outputs keep X's shape and dtype"
   (for* ([dt (in-list '(float32 float64))]

@@ -20,22 +20,15 @@
                   tsvd-transform)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/estimator-data.rkt" round-trips)
-         (only-in "private/pca-data.rkt" fixture-rows)
-         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix)
+         (only-in "private/estimator-data.rkt" listed printed round-trips)
+         (only-in "private/pca-data.rkt" fixture-matrix)
+         (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/tsvd-data.rkt" normal-fixture offset-fixture tsvd-of))
 
 (define changed (hasheq 'n-components 2 'solver 'jacobi 'tol 1e-6 'iterations 30))
-
-(define (printed v)
-  (list (format "~a" v) (format "~s" v) (format "~v" v)))
-
-(define (listed M)
-  (device-matrix->list* M))
 
 (test-case "L20: the default parameters, and every keyword round-trips"
   (check-equal? (tsvd-params) (hasheq 'n-components 1 'solver 'full 'tol 0.0 'iterations 15))
@@ -67,7 +60,7 @@
          [dt (in-list '(float32 float64))]
          [solver (in-list '(full jacobi))])
     (test-case (format "~a ~a" dt solver)
-      (define X (rows->matrix (fixture-rows f dt) dt))
+      (define X (fixture-matrix f dt))
       (define result (tsvd-fit X #:n-components 3 #:solver solver))
       (define T (listed (tsvd-transform result X)))
       (define-values (again T2) (tsvd-fit-transform X #:n-components 3 #:solver solver))
@@ -86,7 +79,7 @@
                   "inverse-transform"))))
 
 (test-gpu "L20: a fitted truncated-svd prints its parameters after fitted"
-  (define X (rows->matrix (fixture-rows normal-fixture 'float32) 'float32))
+  (define X (fixture-matrix normal-fixture 'float32))
   (check-equal? (format "~v" (fit (truncated-svd) X)) "#<truncated-svd fitted>")
   (check-equal? (format "~v" (fit (truncated-svd #:n-components 2) X))
                 "#<truncated-svd fitted #:n-components 2>"))

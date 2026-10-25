@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cuml/decomposition/params.hpp>
@@ -35,6 +34,7 @@ using cumlrkt::printed;
 using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_finite;
+using cumlrkt::require_finite_non_negative;
 using cumlrkt::require_float;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
@@ -60,13 +60,6 @@ buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
 void require_rows(int64_t n) {
   if (n > most_index) {
     throw logic_error(std::format("X: {} rows do not fit the index type", n));
-  }
-}
-
-void require_two(const char* axis, int64_t extent) {
-  if (extent < 2) {
-    throw logic_error(
-        std::format("X: expected at least 2 {}, got {}", axis, extent));
   }
 }
 
@@ -100,10 +93,7 @@ void require_parameters(const fit_request& r, int64_t m) {
       r.solver != CUML_DECOMPOSITION_SOLVER_JACOBI) {
     throw logic_error("solver: expected full or jacobi");
   }
-  if (!std::isfinite(r.tol) || r.tol < 0) {
-    throw logic_error(std::format(
-        "tol: expected a finite value of at least 0, got {}", printed(r.tol)));
-  }
+  require_finite_non_negative("tol", r.tol);
   require_float("tol", r.tol);
   require_at_least("iterations", r.iterations, 1);
   require_at_most("iterations", r.iterations, most_index);
@@ -150,8 +140,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
               const fit_request& r) {
   const matrix<T, int64_t> x =
       rows_of<T, int64_t>(view, "X", any_extent, any_extent);
-  require_two("rows", x.n);
-  require_two("columns", x.d);
+  require_some("X", "row", x.n, 2);
+  require_some("X", "column", x.d, 2);
   require_rows(x.n);
   require_columns(x.d);
   require_parameters(r, std::min(x.n, x.d));
@@ -256,36 +246,32 @@ void apply_into(const raft::handle_t& handle, const operands<T>& o,
 template <bool Inverse>
 int applied(void* handle, const rr_view* x_view, const rr_view* c_view,
             rr_deposit* out) {
-  return guarded(
-      handle, {{"X", x_view}, {"components", c_view}},
-      [&](const raft::handle_t& h) {
-        raftrkt::require(out, "out");
-        on_floats(x_view, "X", [&](auto x_tag) {
-          using X = decltype(x_tag);
-          const matrix<X, int64_t> x =
-              rows_of<X, int64_t>(x_view, "X", any_extent, any_extent);
-          require_some("X", "row", x.n);
-          require_rows(x.n);
-          on_floats(c_view, "components", [&](auto c_tag) {
-            using C = decltype(c_tag);
-            const matrix<C, int64_t> c = rows_of<C, int64_t>(
-                c_view, "components", any_extent, any_extent);
-            require_some("components", "row", c.n);
-            if (c.d < 2) {
-              throw logic_error(std::format(
-                  "components: expected at least 2 columns, got {}", c.d));
-            }
-            if constexpr (std::is_same_v<X, C>) {
-              apply_into<C, Inverse>(h, operands<C>{x, c}, out);
-            } else {
-              throw logic_error(
-                  std::format("X: expected {}, got {}",
-                              raftrkt::dtype_name(raftrkt::dtype_code<C>),
-                              raftrkt::dtype_name(raftrkt::dtype_code<X>)));
-            }
-          });
-        });
-      });
+  return guarded(handle, {{"X", x_view}, {"components", c_view}},
+                 [&](const raft::handle_t& h) {
+                   raftrkt::require(out, "out");
+                   on_floats(x_view, "X", [&](auto x_tag) {
+                     using X = decltype(x_tag);
+                     const matrix<X, int64_t> x = rows_of<X, int64_t>(
+                         x_view, "X", any_extent, any_extent);
+                     require_some("X", "row", x.n);
+                     require_rows(x.n);
+                     on_floats(c_view, "components", [&](auto c_tag) {
+                       using C = decltype(c_tag);
+                       const matrix<C, int64_t> c = rows_of<C, int64_t>(
+                           c_view, "components", any_extent, any_extent);
+                       require_some("components", "row", c.n);
+                       require_some("components", "column", c.d, 2);
+                       if constexpr (std::is_same_v<X, C>) {
+                         apply_into<C, Inverse>(h, operands<C>{x, c}, out);
+                       } else {
+                         throw logic_error(std::format(
+                             "X: expected {}, got {}",
+                             raftrkt::dtype_name(raftrkt::dtype_code<C>),
+                             raftrkt::dtype_name(raftrkt::dtype_code<X>)));
+                       }
+                     });
+                   });
+                 });
 }
 
 }  // namespace

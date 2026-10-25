@@ -16,28 +16,17 @@
                   pca-transform)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-pred check-true test-case)
-         (only-in raft device-matrix->list* device-matrix? device-vector? dtype layout shape)
+         (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/pca-data.rkt" fixture-name fixture-rows fixtures)
-         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix))
-
-(define (vector-shape v)
-  (list (device-vector? v) (dtype v) (shape v)))
-
-(define (matrix-shape m)
-  (list (device-matrix? m) (dtype m) (layout m) (shape m)))
-
-(define (first-rows rows count)
-  (for/list ([row (in-list rows)]
-             [_ (in-range count)])
-    row))
+         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix vector-shape))
 
 (test-gpu "L1: the result's fields have their shapes and X's dtype, and the outputs keep it"
   (for* ([dt (in-list '(float32 float64))]
          [f (in-list fixtures)]
          [k (in-list '(#f 1 3))]
          [whiten (in-list '(#f #t))])
-    (define rows (first-rows (fixture-rows f dt) 200))
+    (define rows (fixture-rows f dt 200))
     (match-define (cons first-row _) rows)
     (define n (length rows))
     (define d (length first-row))
@@ -72,7 +61,7 @@
          [f (in-list fixtures)]
          [solver (in-list '(full jacobi))])
     (test-case (format "~a ~a ~a" dt (fixture-name f) solver)
-      (define rows (first-rows (fixture-rows f dt) 300))
+      (define rows (fixture-rows f dt 300))
       (define X (rows->matrix rows dt))
       (define result (pca-fit X #:solver solver #:whiten #t))
       (define T (pca-transform result X))

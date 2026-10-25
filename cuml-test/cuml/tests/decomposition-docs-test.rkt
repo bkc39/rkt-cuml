@@ -5,16 +5,26 @@
                   pca-fit
                   pca-inverse-transform
                   pca-params
+                  pca-result
                   pca-result-components
                   pca-result-explained-variance
                   pca-result-explained-variance-ratio
+                  pca-result-mean
                   pca-result-noise-variance
                   pca-result-singular-values
                   pca-transform)
-         (only-in rackunit check-equal? check-true)
-         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
+         (only-in math/flonum +max.0)
+         (only-in racket/match match-lambda)
+         (only-in racket/math nan?)
+         (only-in rackunit check-equal? check-false check-true test-case)
+         (only-in raft
+                  device-matrix->list*
+                  device-vector->list
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/cuml-error.rkt" check-cuml-error))
+         (only-in threading ~>)
+         (only-in "private/cuml-error.rkt" check-cuml-error raised))
 
 (define axes '((4 0) (-4 0) (0 1) (0 -1) (0 0)))
 (define exact-axes '((4.0 0.0) (-4.0 0.0) (0.0 1.0) (0.0 -1.0) (0.0 0.0)))
@@ -39,8 +49,9 @@
                            (pca-result-singular-values fitted)))
                 (list '(8.0 0.5) (list (/ 8.0 8.5) (/ 0.5 8.5)) (list (sqrt 32.0) (sqrt 2.0))))
   (check-true (same? (device-matrix->list* (pca-transform fitted (X))) exact-axes))
-  (check-true (same? (device-matrix->list* (pca-inverse-transform fitted (pca-transform fitted (X))))
-                     exact-axes)))
+  (check-true
+   (same? (~> (pca-transform fitted (X)) (pca-inverse-transform fitted _) device-matrix->list*)
+          exact-axes)))
 
 (test-gpu "the manual: noise variance and the fit's refusals"
   (check-equal? (pca-result-noise-variance (pca-fit (X) #:n-components 1)) 0.5)
@@ -52,7 +63,7 @@
                     (lambda () (pca-fit (list*->device-matrix '((1 2) (1 2)) #:dtype 'float64)))))
 
 (test-gpu "the manual: whitening, and a transform refusal"
-  (define whitened (device-matrix->list* (pca-transform (pca-fit (X) #:whiten #t) (X))))
+  (define whitened (~> (pca-fit (X) #:whiten #t) (pca-transform (X)) device-matrix->list*))
   (check-true (same? whitened
                      (for/list ([row (in-list exact-axes)])
                        (map / row (list (sqrt 8.0) (sqrt 0.5))))))
@@ -66,6 +77,49 @@
   (check-cuml-error 'logic
                     "pca-params: pca has no parameter copy"
                     (lambda () (pca-params (hasheq 'copy #t))))
-  (check-true (same? (device-matrix->list* (transform (fit (pca #:n-components 1) (X)) (X)))
+  (check-true (same? (~> (pca #:n-components 1) (fit (X)) (transform (X)) device-matrix->list*)
                      '((4.0) (-4.0) (0.0) (0.0) (0.0))))
   (check-cuml-error 'logic "transform: pca is not fitted" (lambda () (transform (pca) (X)))))
+
+(define most +max.0)
+(define margin-width (* 4 2))
+(define slack 1e-12)
+
+(define (bound-cases plain whitened)
+  (define (huge v)
+    (list*->device-matrix `((,v 0)) #:dtype 'float64))
+  `(("fit" ,(sqrt (/ most (* margin-width 2)))
+           ,(lambda (v) (pca-fit (list*->device-matrix `((,v 0) (0 0)) #:dtype 'float64))))
+    ("tol" 3.4028234663852886e+38 ,(lambda (v) (pca-fit (X) #:tol v)))
+    ("transform" ,(/ most margin-width) ,(lambda (v) (pca-transform plain (huge v))))
+    ("whitened transform" ,(* (/ most margin-width) (min 1 (sqrt 0.5)))
+                          ,(lambda (v) (pca-transform whitened (huge v))))
+    ("inverse" ,(/ most margin-width) ,(lambda (v) (pca-inverse-transform plain (huge v))))
+    ("whitened inverse" ,(/ (/ most margin-width) (max 1 (sqrt 8.0)))
+                        ,(lambda (v) (pca-inverse-transform whitened (huge v))))))
+
+(test-gpu "the manual: the documented bounds are the refused ones"
+  (for-each (match-lambda
+              [(list what documented call)
+               (test-case what
+                 (check-cuml-error 'logic
+                                   #rx"expected a magnitude of at most|expected at most"
+                                   (lambda () (call (* documented (+ 1 slack)))))
+                 (check-false (raised (lambda () (call (* documented (- 1 slack)))))))])
+            (bound-cases (pca-fit (X)) (pca-fit (X) #:whiten #t))))
+
+(test-gpu "the manual: a hand-built result is checked only for dtypes and shapes"
+  (define fitted (pca-fit (X) #:whiten #t))
+  (define hand-built
+    (pca-result (pca-result-components fitted)
+                (list->device-vector '(-1.0 0.5) #:dtype 'float64)
+                (pca-result-explained-variance-ratio fitted)
+                (pca-result-singular-values fitted)
+                (pca-result-mean fitted)
+                0.0
+                5
+                #t))
+  (check-true (~> (pca-transform hand-built (list*->device-matrix '((1 1)) #:dtype 'float64))
+                  device-matrix->list*
+                  caar
+                  nan?)))

@@ -47,7 +47,7 @@
           (spec-out-dtype s)
           (spec-mbytes s)))
 
-(define (rows-of s)
+(define (spec-rows s)
   (match (spec-kind s)
     ['blob (device-matrix->list* (blob-data 1000 3 4 7 (spec-dt s) #:std 0.4))]
     ['grid (integer-grid 500 2 25 1)]
@@ -75,7 +75,7 @@
 (struct run (spec rows weights found labels-dtype))
 
 (define (racket-fit s)
-  (define rows (rows-of s))
+  (define rows (spec-rows s))
   (define w (weights-of s (length rows)))
   (define r
     (dbscan-fit (mat rows (spec-dt s))

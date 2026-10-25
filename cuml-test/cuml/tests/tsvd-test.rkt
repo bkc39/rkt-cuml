@@ -12,17 +12,11 @@
                   tsvd-transform)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-true test-case)
-         (only-in raft device-matrix->list* device-matrix? device-vector? dtype layout shape)
+         (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/pca-data.rkt" fixture-name fixture-rows)
-         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix)
+         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix vector-shape)
          (only-in "private/tsvd-data.rkt" law-fixtures))
-
-(define (vector-shape v)
-  (list (device-vector? v) (dtype v) (shape v)))
-
-(define (matrix-shape m)
-  (list (device-matrix? m) (dtype m) (layout m) (shape m)))
 
 (test-gpu "L1: the result's fields have their shapes and X's dtype, and the outputs keep it"
   (for* ([dt (in-list '(float32 float64))]

@@ -8,7 +8,7 @@
          (only-in racket/list argmax make-list take)
          (only-in racket/match match-define)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "pca-data.rkt" column fixture gaps)
+         (only-in "pca-data.rkt" column dot fixture gaps)
          (only-in "scaler-data.rkt" generated-rows unit-roundoff))
 
 (provide (struct-out exact)
@@ -67,9 +67,6 @@
 (define twos-fixture (fixture "twos" (make-list 6 (make-list 4 2.0))))
 
 (define tie-fixture (fixture "tie" '((1.0 -1.0) (-1.0 1.0) (2.0 -2.0) (0.5 -0.5))))
-
-(define (dot xs ys)
-  (for/sum ([x (in-list xs)] [y (in-list ys)]) (* x y)))
 
 (define (reflector a)
   (define scale (/ 2.0 (dot a a)))
