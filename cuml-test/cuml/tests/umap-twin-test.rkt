@@ -31,11 +31,7 @@
 
 (define (ours f options #:y [y #f])
   (define result
-    (keyword-apply umap-fit
-                   (map car options)
-                   (map cdr options)
-                   (list (fixture-X f))
-                   #:y y))
+    (keyword-apply umap-fit (map car options) (map cdr options) (list (fixture-X f)) #:y y))
   (list result
         (device-matrix->list* (umap-result-embedding result))
         (device-matrix->list* (umap-transform result (fixture-X held-out-new)))))
@@ -57,12 +53,13 @@
             (list (cons '#:init init) (cons '#:n-neighbors k)))))
 
 (test-twin "L6: fit and transform equal Python cuML's bitwise on held-out blobs"
-  (define runs (for/list ([options (in-list configs)]) (ours held-out-fit options)))
+  (define runs
+    (for/list ([options (in-list configs)])
+      (ours held-out-fit options)))
   (define theirs
     (hash-ref (run-twin twin
-                        (hasheq 'cases
-                                (for/list ([run (in-list runs)])
-                                  (case-of held-out-fit (car run)))))
+                        (hasheq 'cases (for/list ([run (in-list runs)])
+                                         (case-of held-out-fit (car run)))))
               'results))
   (for ([options (in-list configs)]
         [run (in-list runs)]
@@ -79,9 +76,8 @@
       (ours held-out-fit (list (cons '#:init init)) #:y (fixture-y held-out-fit))))
   (define theirs
     (hash-ref (run-twin twin
-                        (hasheq 'cases
-                                (for/list ([run (in-list runs)])
-                                  (case-of held-out-fit (car run) #:y labels))))
+                        (hasheq 'cases (for/list ([run (in-list runs)])
+                                         (case-of held-out-fit (car run) #:y labels))))
               'results))
   (for ([run (in-list runs)]
         [found (in-list theirs)])
@@ -98,12 +94,16 @@
     (umap-fit (fixture-X overlap) #:y (list->device-vector labels #:dtype 'int64) #:init 'random))
   (define embedding (device-matrix->list* (umap-result-embedding result)))
   (define (twin-of y)
-    (twin-case overlap (umap-result-params result) (umap-result-a result) (umap-result-b result) #:y y))
+    (twin-case overlap
+               (umap-result-params result)
+               (umap-result-a result)
+               (umap-result-b result)
+               #:y y))
   (match-define (list dense raw)
     (hash-ref (run-twin twin
-                        (hasheq 'cases
-                                (list (twin-of (for/list ([i (in-range 600)]) (modulo i 3)))
-                                      (twin-of labels))))
+                        (hasheq 'cases (list (twin-of (for/list ([i (in-range 600)])
+                                                        (modulo i 3)))
+                                             (twin-of labels))))
               'results))
   (check-true (bits-equal? embedding (hash-ref dense 'embedding)) "dense codes")
   (check-false (bits-equal? embedding (hash-ref raw 'embedding)) "raw labels"))
@@ -116,11 +116,10 @@
   (define clamped (umap-fit (fixture-X twelve) #:n-neighbors 12 #:init 'random))
   (match-define (list found)
     (hash-ref (run-twin twin
-                        (hasheq 'cases
-                                (list (twin-case twelve
-                                                 (umap-result-params result)
-                                                 (umap-result-a result)
-                                                 (umap-result-b result)))))
+                        (hasheq 'cases (list (twin-case twelve
+                                                        (umap-result-params result)
+                                                        (umap-result-a result)
+                                                        (umap-result-b result)))))
               'results))
   (define embedding (device-matrix->list* (umap-result-embedding result)))
   (check-true (bits-equal? embedding (device-matrix->list* (umap-result-embedding clamped))))

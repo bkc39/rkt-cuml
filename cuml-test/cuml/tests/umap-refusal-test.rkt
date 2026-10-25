@@ -63,8 +63,12 @@
 (define (parameter-rows)
   (list
    (row "R1" "min-dist: expected a finite value of at least 0, got -0.1" (hasheq 'min-dist -0.1))
-   (row "R1 nan" "min-dist: expected a finite value of at least 0, got +nan.0" (hasheq 'min-dist +nan.0))
-   (row "R1 inf" "min-dist: expected a finite value of at least 0, got +inf.0" (hasheq 'min-dist +inf.0))
+   (row "R1 nan"
+        "min-dist: expected a finite value of at least 0, got +nan.0"
+        (hasheq 'min-dist +nan.0))
+   (row "R1 inf"
+        "min-dist: expected a finite value of at least 0, got +inf.0"
+        (hasheq 'min-dist +inf.0))
    (row "R2" "spread: expected a finite value above 0, got 0" (hasheq 'spread 0))
    (row "R3" "min-dist: expected at most the spread 1.0, got 1.5" (hasheq 'min-dist 1.5))
    (row "R4" "b: expected a value when a is given, got #f" (hasheq 'a 1.0))
@@ -109,43 +113,45 @@
    (row "f10" "negative-sample-rate: expected at least 0, got -1" (hasheq 'negative-sample-rate -1))))
 
 (define (X-rows)
-  (list
-   (row "f12" "X: expected float32, got float64" (cons (tiny-with '() 'float64) #f))
-   (row "f13" "X: expected rank 2, got rank 1" (cons (blank-vector 8 'float32) #f))
-   (row "f13 layout"
-        "X: expected row-major, got col-major 8x3"
-        (cons (blank-matrix 8 3 'float32 #:layout 'col-major) #f))
-   (row "f14" "X: expected at least 2 rows, got 1" (cons (rows->matrix '((1 2 3)) 'float32) #f))
-   (row "f15" "X: expected at least 1 column, got 0" (cons (blank-matrix 8 0 'float32) #f))
-   (row "f19" "X: nn-descent needs at least 150 rows, got 8" (cons tiny-X #f))
-   (row "f20" "y: expected int32 or int64, got float32" (cons tiny-X (labels 8 'float32)))
-   (row "f20 rank" "y: expected rank 1, got rank 2" (cons tiny-X (blank-matrix 8 1 'int32)))
-   (row "f20 stride"
-        "y: expected contiguous elements, got stride 2"
-        (cons tiny-X (strided-vector 8 'int64)))
-   (row "f20 length" "y: expected 8 elements, got 7" (cons tiny-X (labels 7)))
-   (row "f21"
-        "X: row 3, column 1: expected a finite value, got nan"
-        (cons (tiny-with '([(3 1) +nan.0])) (labels 8)))
-   (row "f21 inf"
-        "X: row 0, column 2: expected a finite value, got -inf"
-        (cons (tiny-with '([(0 2) -inf.0])) #f))
-   (row "f22" f22-message (cons (tiny-with `([(4 0) 0.0] [(4 1) ,large] [(4 2) 0.0])) #f))
-   (row "f23" f23-message (cons (tiny-with '([(3 0) 0.0] [(3 1) 0.0] [(3 2) 0.0])) #f))
-   (row "f12 before f14" "X: expected float32, got float64" (cons (rows->matrix '((1 2 3)) 'float64) #f))
-   (row "f14 before f17"
-        "X: expected at least 2 rows, got 1"
-        (cons (rows->matrix '((1 2 3)) 'float32) #f))
-   (row "f20 before f21"
-        "y: expected 8 elements, got 7"
-        (cons (tiny-with '([(3 1) +nan.0])) (labels 7)))
-   (row "f21 before f22"
-        "X: row 3, column 1: expected a finite value, got nan"
-        (cons (tiny-with `([(3 1) +nan.0] [(1 1) ,large])) #f))
-   (row "f22 before f23"
-        f22-message
-        (cons (tiny-with `([(3 0) 0.0] [(3 1) 0.0] [(3 2) 0.0] [(4 0) 0.0] [(4 1) ,large] [(4 2) 0.0]))
-              #f))))
+  (list (row "f12" "X: expected float32, got float64" (cons (tiny-with '() 'float64) #f))
+        (row "f13" "X: expected rank 2, got rank 1" (cons (blank-vector 8 'float32) #f))
+        (row "f13 layout"
+             "X: expected row-major, got col-major 8x3"
+             (cons (blank-matrix 8 3 'float32 #:layout 'col-major) #f))
+        (row "f14" "X: expected at least 2 rows, got 1" (cons (rows->matrix '((1 2 3)) 'float32) #f))
+        (row "f15" "X: expected at least 1 column, got 0" (cons (blank-matrix 8 0 'float32) #f))
+        (row "f19" "X: nn-descent needs at least 150 rows, got 8" (cons tiny-X #f))
+        (row "f20" "y: expected int32 or int64, got float32" (cons tiny-X (labels 8 'float32)))
+        (row "f20 rank" "y: expected rank 1, got rank 2" (cons tiny-X (blank-matrix 8 1 'int32)))
+        (row "f20 stride"
+             "y: expected contiguous elements, got stride 2"
+             (cons tiny-X (strided-vector 8 'int64)))
+        (row "f20 length" "y: expected 8 elements, got 7" (cons tiny-X (labels 7)))
+        (row "f21"
+             "X: row 3, column 1: expected a finite value, got nan"
+             (cons (tiny-with '([(3 1) +nan.0])) (labels 8)))
+        (row "f21 inf"
+             "X: row 0, column 2: expected a finite value, got -inf"
+             (cons (tiny-with '([(0 2) -inf.0])) #f))
+        (row "f22" f22-message (cons (tiny-with `([(4 0) 0.0] [(4 1) ,large] [(4 2) 0.0])) #f))
+        (row "f23" f23-message (cons (tiny-with '([(3 0) 0.0] [(3 1) 0.0] [(3 2) 0.0])) #f))
+        (row "f12 before f14"
+             "X: expected float32, got float64"
+             (cons (rows->matrix '((1 2 3)) 'float64) #f))
+        (row "f14 before f17"
+             "X: expected at least 2 rows, got 1"
+             (cons (rows->matrix '((1 2 3)) 'float32) #f))
+        (row "f20 before f21"
+             "y: expected 8 elements, got 7"
+             (cons (tiny-with '([(3 1) +nan.0])) (labels 7)))
+        (row "f21 before f22"
+             "X: row 3, column 1: expected a finite value, got nan"
+             (cons (tiny-with `([(3 1) +nan.0] [(1 1) ,large])) #f))
+        (row "f22 before f23"
+             f22-message
+             (cons (tiny-with
+                    `([(3 0) 0.0] [(3 1) 0.0] [(3 2) 0.0] [(4 0) 0.0] [(4 1) ,large] [(4 2) 0.0]))
+                   #f))))
 
 (define (x-options r)
   (match (row-id r)
@@ -159,7 +165,8 @@
         (cons 'umap-fit-transform
               (lambda (X y options) (apply-options umap-fit-transform (hash-set options 'y y) X)))
         (cons 'fit (lambda (X y options) (fit (apply-options umap options) X y)))
-        (cons 'fit-transform (lambda (X y options) (fit-transform (apply-options umap options) X y)))))
+        (cons 'fit-transform
+              (lambda (X y options) (fit-transform (apply-options umap options) X y)))))
 
 (test-gpu "L14: the fits refuse each bad hyperparameter with its message, R before f"
   (for* ([entry (in-list (fit-calls))]
@@ -167,9 +174,10 @@
     (match-define (cons who call) entry)
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call tiny-X #f (row-call r))))))
-  (check-cuml-error 'logic
-                    "umap-fit: n-components: spectral init needs fewer components than the 8 rows, got 8"
-                    (lambda () (umap-fit tiny-X #:n-components 8)))
+  (check-cuml-error
+   'logic
+   "umap-fit: n-components: spectral init needs fewer components than the 8 rows, got 8"
+   (lambda () (umap-fit tiny-X #:n-components 8)))
   (check-cuml-error 'logic
                     "umap-fit: n-neighbors: expected at least 2, got 1"
                     (lambda () (umap-fit (tiny-with '() 'float64) #:n-neighbors 1)))
@@ -281,9 +289,10 @@
     (check-equal? (probe-pool-used device) before id))
   (for ([r (in-list (X-rows))])
     (match-define (cons X y) (row-call r))
-    (unchanged (row-id r)
-               (lambda ()
-                 (check-row 'umap-fit r (lambda () (apply-options umap-fit (hash-set (x-options r) 'y y) X))))))
+    (unchanged
+     (row-id r)
+     (lambda ()
+       (check-row 'umap-fit r (lambda () (apply-options umap-fit (hash-set (x-options r) 'y y) X))))))
   (for ([r (in-list (transform-rows))])
     (match-define (cons result X) (row-call r))
     (unchanged (row-id r)

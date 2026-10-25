@@ -16,12 +16,7 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
-         (only-in "private/umap-data.rkt"
-                  far-blobs
-                  fixture-X
-                  fixture-rows
-                  fixture-y
-                  overlap))
+         (only-in "private/umap-data.rkt" far-blobs fixture-X fixture-rows fixture-y overlap))
 
 (define (single? x)
   (and (flonum? x) (eqv? x (flsingle x))))
@@ -63,5 +58,4 @@
   (define before (device-matrix->list* (umap-result-embedding result)))
   (umap-transform result X)
   (check-true (bits-equal? (device-matrix->list* X) (fixture-rows overlap)) "result X")
-  (check-true (bits-equal? (device-matrix->list* (umap-result-embedding result)) before)
-              "embedding"))
+  (check-true (bits-equal? (device-matrix->list* (umap-result-embedding result)) before) "embedding"))

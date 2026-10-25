@@ -27,32 +27,19 @@
          (only-in "private/umap-data.rkt" far-blobs fixture-X fixture-y overlap))
 
 (define changed
-  (hasheq 'n-neighbors
-          5
-          'n-components
-          3
-          'metric
-          'cosine
-          'n-epochs
-          50
-          'learning-rate
-          0.5
-          'min-dist
-          0.2
-          'spread
-          2.0
-          'a
-          1.5
-          'b
-          0.9
-          'init
-          'random
-          'negative-sample-rate
-          3
-          'random-state
-          7
-          'build-algo
-          'nn-descent))
+  (hasheq 'n-neighbors 5
+          'n-components 3
+          'metric 'cosine
+          'n-epochs 50
+          'learning-rate 0.5
+          'min-dist 0.2
+          'spread 2.0
+          'a 1.5
+          'b 0.9
+          'init 'random
+          'negative-sample-rate 3
+          'random-state 7
+          'build-algo 'nn-descent))
 
 (test-case "L15: the default parameters, and every keyword round-trips"
   (check-equal? (umap-params)
@@ -105,7 +92,8 @@
   (define X (fixture-X overlap))
   (define y (fixture-y overlap))
   (define supervised (listed (umap-result-embedding (umap-fit X #:y y #:init 'random))))
-  (check-true (bits-equal? (listed (umap-result-embedding (umap-model (fit (umap #:init 'random) X y))))
-                           supervised))
+  (check-true (bits-equal?
+               (listed (umap-result-embedding (umap-model (fit (umap #:init 'random) X y))))
+               supervised))
   (check-true (bits-equal? (listed (fit-transform (umap #:init 'random) X y)) supervised))
   (check-false (bits-equal? (listed (fit-transform (umap #:init 'random) X)) supervised)))

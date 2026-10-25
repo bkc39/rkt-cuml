@@ -84,7 +84,11 @@
     [else (fitted-curve who min-dist spread)]))
 
 (define (refuse-curve-value who name v)
-  (logic-error "~a: ~a: expected a finite value above 0 and at most ~a, got ~a" who name most-float v))
+  (logic-error "~a: ~a: expected a finite value above 0 and at most ~a, got ~a"
+               who
+               name
+               most-float
+               v))
 
 (define (drawn-seed)
   (+ (* (random seed-half) seed-half) (random seed-half)))

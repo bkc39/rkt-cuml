@@ -34,8 +34,8 @@ constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr double denormal = 1e-40;
 
 void expect_refused(const resources& res,
-                     const std::function<int(record&)>& run,
-                     const std::string& message) {
+                    const std::function<int(record&)>& run,
+                    const std::string& message) {
   record out(res);
   const int status = run(out);
   EXPECT_EQ(status, RR_ERROR) << message;
@@ -44,8 +44,7 @@ void expect_refused(const resources& res,
   expect_untouched(out);
 }
 
-std::vector<float> with(std::vector<float> host, std::size_t at,
-                        double value) {
+std::vector<float> with(std::vector<float> host, std::size_t at, double value) {
   host[at] = static_cast<float>(value);
   return host;
 }
@@ -214,8 +213,8 @@ TEST(UmapFitRefusals, ADivergedEmbeddingIsFreed) {
   const resources res;
   const filled<float> x(res, blobs(rows, cols), {rows, cols});
   record out(res);
-  const int status = umap_fit(res, x.view(), nullptr, out,
-                              {.learning_rate = divergent_rate});
+  const int status =
+      umap_fit(res, x.view(), nullptr, out, {.learning_rate = divergent_rate});
   EXPECT_EQ(status, RR_ERROR);
   EXPECT_TRUE(outcome(status).starts_with("embedding: row "));
   EXPECT_TRUE(outcome(status).ends_with("; lower learning-rate"));

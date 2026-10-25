@@ -38,8 +38,7 @@ label_codes float_codes(const T* labels, int64_t n,
   const auto policy = rmm::exec_policy(stream);
   const T* first = found.values.data();
   const T* last = first + found.k;
-  const bool has_unlabelled =
-      thrust::binary_search(policy, first, last, T{-1});
+  const bool has_unlabelled = thrust::binary_search(policy, first, last, T{-1});
   const int64_t unlabelled =
       has_unlabelled ? thrust::lower_bound(policy, first, last, T{-1}) - first
                      : -1;

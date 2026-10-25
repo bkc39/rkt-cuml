@@ -148,8 +148,9 @@ def versions():
 
     out = {"scipy": scipy.__version__}
     try:
-        import cuml
         import sklearn
+
+        import cuml
 
         out.update({"cuml": cuml.__version__, "sklearn": sklearn.__version__})
     except ImportError:

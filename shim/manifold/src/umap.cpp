@@ -1,4 +1,5 @@
 #include <cuda_runtime_api.h>
+#include <cuml/manifold/umapparams.h>
 
 #include <algorithm>
 #include <cmath>
@@ -6,7 +7,6 @@
 #include <cstdint>
 #include <cuml/common/distance_type.hpp>
 #include <cuml/manifold/umap.hpp>
-#include <cuml/manifold/umapparams.h>
 #include <format>
 #include <initializer_list>
 #include <limits>
@@ -104,8 +104,8 @@ void require_curve_value(const char* what, double got) {
   if (!std::isfinite(got) || got < std::numeric_limits<float>::min() ||
       got > most_float) {
     throw logic_error(
-        std::format("{}: expected a finite float32 value above 0, got {}",
-                    what, printed(got)));
+        std::format("{}: expected a finite float32 value above 0, got {}", what,
+                    printed(got)));
   }
 }
 
@@ -288,9 +288,9 @@ std::optional<label_codes> codes_of(const rr_view* y, int64_t n,
 
 void require_labels(const std::optional<label_codes>& codes) {
   if (codes && codes->labelled > most_labels) {
-    throw logic_error(std::format(
-        "y: expected at most {} distinct labels besides -1, got {}",
-        most_labels, codes->labelled));
+    throw logic_error(
+        std::format("y: expected at most {} distinct labels besides -1, got {}",
+                    most_labels, codes->labelled));
   }
 }
 
@@ -304,8 +304,9 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
   require_spectral(r, x.n);
   if (r.build_algo == CUML_MANIFOLD_BUILD_NN_DESCENT &&
       x.n < least_nn_descent_rows) {
-    throw logic_error(std::format("X: nn-descent needs at least {} rows, got {}",
-                                  least_nn_descent_rows, x.n));
+    throw logic_error(
+        std::format("X: nn-descent needs at least {} rows, got {}",
+                    least_nn_descent_rows, x.n));
   }
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_y(y, x.n);
@@ -398,10 +399,9 @@ int cuml_manifold_umap_fit(void* handle, const rr_view* x, const rr_view* y,
                            rr_deposit* out, int64_t n_neighbors,
                            int64_t n_components, int32_t epochs_given,
                            int64_t n_epochs, double learning_rate, double a,
-                           double b, int32_t init,
-                           int64_t negative_sample_rate, uint64_t random_state,
-                           int32_t deterministic, int32_t build_algo,
-                           int32_t metric) {
+                           double b, int32_t init, int64_t negative_sample_rate,
+                           uint64_t random_state, int32_t deterministic,
+                           int32_t build_algo, int32_t metric) {
   return guarded(handle, {{"X", x}, {"y", y}}, [&](const raft::handle_t& h) {
     const umap_request r{.n_neighbors = n_neighbors,
                          .n_components = n_components,

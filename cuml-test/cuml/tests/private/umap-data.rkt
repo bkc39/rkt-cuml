@@ -86,12 +86,12 @@
 (define tiny
   (fixture "tiny"
            '((0.125 0.0 0.0) (0.5 0.25 0.0)
-                           (1.0 0.0 0.5)
-                           (0.25 1.0 0.0)
-                           (10.0 10.0 10.0)
-                           (10.5 10.25 10.0)
-                           (11.0 10.0 10.5)
-                           (10.25 11.0 10.0))
+                             (1.0 0.0 0.5)
+                             (0.25 1.0 0.0)
+                             (10.0 10.0 10.0)
+                             (10.5 10.25 10.0)
+                             (11.0 10.0 10.5)
+                             (10.25 11.0 10.0))
            '(0 0 0 0 1 1 1 1)))
 
 (define (fixture-X f)
@@ -117,37 +117,20 @@
 (define (twin-case f result-params a b #:transform [Y #f] #:y [y #f] #:op [op "umap"])
   (define (given key)
     (hash-ref result-params key))
-  (hasheq 'op
-          op
-          'X
-          (fixture-rows f)
-          'y
-          (or y (json-null))
-          'Y
-          (or Y (json-null))
-          'n_neighbors
-          (given 'n-neighbors)
-          'n_components
-          (given 'n-components)
-          'metric
-          (symbol->string (given 'metric))
-          'n_epochs
-          (or (given 'n-epochs) (json-null))
-          'learning_rate
-          (given 'learning-rate)
-          'min_dist
-          (given 'min-dist)
-          'spread
-          (given 'spread)
-          'a
-          a
-          'b
-          b
-          'init
-          (symbol->string (given 'init))
-          'negative_sample_rate
-          (given 'negative-sample-rate)
-          'seed
-          (given 'random-state)
-          'build_algo
-          (if (eq? (given 'build-algo) 'nn-descent) "nn_descent" "brute_force_knn")))
+  (hasheq 'op op
+          'X (fixture-rows f)
+          'y (or y (json-null))
+          'Y (or Y (json-null))
+          'n_neighbors (given 'n-neighbors)
+          'n_components (given 'n-components)
+          'metric (symbol->string (given 'metric))
+          'n_epochs (or (given 'n-epochs) (json-null))
+          'learning_rate (given 'learning-rate)
+          'min_dist (given 'min-dist)
+          'spread (given 'spread)
+          'a a
+          'b b
+          'init (symbol->string (given 'init))
+          'negative_sample_rate (given 'negative-sample-rate)
+          'seed (given 'random-state)
+          'build_algo (if (eq? (given 'build-algo) 'nn-descent) "nn_descent" "brute_force_knn")))

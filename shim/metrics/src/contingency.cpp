@@ -19,15 +19,15 @@
 
 namespace {
 
-using cumlrkt::guarded;
-using cumlrkt::logic_error;
-using cumlrkt::settle;
-using cumlrkt::metrics::count_pairs;
 using cumlrkt::dense_codes;
 using cumlrkt::dense_labels;
+using cumlrkt::guarded;
+using cumlrkt::logic_error;
+using cumlrkt::on_labels;
+using cumlrkt::settle;
+using cumlrkt::metrics::count_pairs;
 using cumlrkt::metrics::labels_of;
 using cumlrkt::metrics::most_distinct_labels;
-using cumlrkt::on_labels;
 
 template <typename T>
 dense_labels<T> distinct(const T* labels, int64_t n, const char* name,

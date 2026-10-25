@@ -34,10 +34,9 @@ CUMLRKT_API const char* cuml_manifold_libcuml_version(void);
 CUMLRKT_API int cuml_manifold_umap_fit(
     void* handle, const rr_view* x, const rr_view* y, rr_deposit* out,
     int64_t n_neighbors, int64_t n_components, int32_t epochs_given,
-    int64_t n_epochs, double learning_rate, double a,
-    double b, int32_t init, int64_t negative_sample_rate,
-    uint64_t random_state, int32_t deterministic, int32_t build_algo,
-    int32_t metric);
+    int64_t n_epochs, double learning_rate, double a, double b, int32_t init,
+    int64_t negative_sample_rate, uint64_t random_state, int32_t deterministic,
+    int32_t build_algo, int32_t metric);
 CUMLRKT_API void cuml_manifold_umap_fit_job(void* args, size_t args_len,
                                             rr_job_outcome* outcome);
 
@@ -46,9 +45,8 @@ CUMLRKT_API int cuml_manifold_umap_transform(
     void* handle, const rr_view* x, const rr_view* train_x,
     const rr_view* embedding, rr_deposit* out, int64_t n_neighbors,
     int64_t n_components, int32_t epochs_given, int64_t n_epochs,
-    double learning_rate, double a, double b,
-    int64_t negative_sample_rate, uint64_t random_state, int32_t deterministic,
-    int32_t metric);
+    double learning_rate, double a, double b, int64_t negative_sample_rate,
+    uint64_t random_state, int32_t deterministic, int32_t metric);
 CUMLRKT_API void cuml_manifold_umap_transform_job(void* args, size_t args_len,
                                                   rr_job_outcome* outcome);
 

@@ -27,9 +27,8 @@
 (test-twin "L4a, L4b: a and b are within the bounds of scipy's curve_fit and a precise solver"
   (define found
     (hash-ref (run-twin twin
-                        (hasheq 'cases
-                                (for/list ([p (in-list pairs)])
-                                  (hasheq 'op "ab" 'spread (car p) 'min_dist (cdr p)))))
+                        (hasheq 'cases (for/list ([p (in-list pairs)])
+                                         (hasheq 'op "ab" 'spread (car p) 'min_dist (cdr p)))))
               'results))
   (for ([p (in-list pairs)]
         [theirs (in-list found)])

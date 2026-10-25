@@ -56,12 +56,12 @@
     (define held (umap-fit (fixture-X held-out-fit) #:init init))
     (define found
       (hash-ref (run-twin twin
-                          (hasheq 'cases
-                                  (append (for/list ([entry (in-list fits)])
-                                            (quality-case (car entry) (cdr entry)))
-                                          (list (quality-case held-out-fit
-                                                              held
-                                                              #:transform (fixture-rows held-out-new))))))
+                          (hasheq 'cases (append (for/list ([entry (in-list fits)])
+                                                   (quality-case (car entry) (cdr entry)))
+                                                 (list (quality-case held-out-fit
+                                                                     held
+                                                                     #:transform
+                                                                     (fixture-rows held-out-new))))))
                 'results))
     (for ([entry (in-list fits)]
           [theirs (in-list found)])

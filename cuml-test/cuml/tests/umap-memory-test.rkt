@@ -43,8 +43,9 @@
         (lambda () (umap-transform fitted narrow))
         (lambda () (umap-transform fitted no-rows))))
 
-(test-process-memory (format "~a fit, transform and fit-transform rounds and their refusals leave device memory flat"
-                             rounds)
+(test-process-memory (format
+                      "~a fit, transform and fit-transform rounds and their refusals leave device memory flat"
+                      rounds)
   (define X (rows->matrix (normal-rows 7 4096 16 'float32) 'float32))
   (define fitted (one-round X))
   (define calls (refusals fitted))

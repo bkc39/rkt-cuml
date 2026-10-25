@@ -22,10 +22,14 @@
 
 namespace {
 
+using cumlrkt::dense_codes;
+using cumlrkt::dense_labels;
+using cumlrkt::first_normless_row;
 using cumlrkt::guarded;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
 using cumlrkt::on_floats;
+using cumlrkt::on_labels;
 using cumlrkt::printed;
 using cumlrkt::require_at_least;
 using cumlrkt::require_bounded_rows;
@@ -33,12 +37,8 @@ using cumlrkt::require_index;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
 using cumlrkt::settle;
-using cumlrkt::dense_codes;
-using cumlrkt::dense_labels;
-using cumlrkt::first_normless_row;
 using cumlrkt::metrics::labels_of;
 using cumlrkt::metrics::most_distinct_labels;
-using cumlrkt::on_labels;
 using cumlrkt::metrics::require_entries;
 using ML::distance::DistanceType;
 

@@ -50,9 +50,9 @@ TEST(UmapFit, SpectralInitAndEveryMetricAreFinite) {
        {CUML_MANIFOLD_METRIC_EUCLIDEAN, CUML_MANIFOLD_METRIC_SQEUCLIDEAN,
         CUML_MANIFOLD_METRIC_MANHATTAN, CUML_MANIFOLD_METRIC_CHEBYSHEV,
         CUML_MANIFOLD_METRIC_COSINE}) {
-    EXPECT_TRUE(all_finite(fitted(
-        res, x.view(), nullptr,
-        {.init = CUML_MANIFOLD_INIT_SPECTRAL, .metric = metric})))
+    EXPECT_TRUE(all_finite(
+        fitted(res, x.view(), nullptr,
+               {.init = CUML_MANIFOLD_INIT_SPECTRAL, .metric = metric})))
         << metric;
   }
 }
@@ -65,7 +65,8 @@ TEST(UmapFit, LabelsChangeTheEmbedding) {
   const filled<float> x(res, blobs(rows, cols), {rows, cols});
   std::vector<int64_t> host(static_cast<std::size_t>(rows));
   for (int64_t i = 0; i < rows; ++i) {
-    host[static_cast<std::size_t>(i)] = i % 3 == 0 ? -1 : ((i / 2) % 2) * far_label;
+    host[static_cast<std::size_t>(i)] =
+        i % 3 == 0 ? -1 : ((i / 2) % 2) * far_label;
   }
   const filled<int64_t> y(res, host, {rows});
   const std::vector<float> supervised = fitted(res, x.view(), y.view());

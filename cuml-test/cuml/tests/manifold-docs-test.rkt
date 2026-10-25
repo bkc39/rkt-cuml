@@ -2,7 +2,12 @@
 
 (require (only-in cuml fit-transform transform umap)
          (only-in cuml/cluster hdbscan-fit hdbscan-result-labels)
-         (only-in cuml/manifold umap-fit umap-params umap-result-a umap-result-embedding umap-transform)
+         (only-in cuml/manifold
+                  umap-fit
+                  umap-params
+                  umap-result-a
+                  umap-result-embedding
+                  umap-transform)
          (only-in cuml/manifold/private/curve curve-parameters)
          (only-in cuml/metrics adjusted-rand-score)
          (only-in racket/flonum flsingle)

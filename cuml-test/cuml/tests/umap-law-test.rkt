@@ -33,7 +33,8 @@
     (test-case (format "~a ~a" metric init)
       (define result (umap-fit (fixture-X held-out-fit) #:metric metric #:init init))
       (check-true (finite-rows? (embedded result)) "fit")
-      (check-true (finite-rows? (device-matrix->list* (umap-transform result (fixture-X held-out-new))))
+      (check-true (finite-rows? (device-matrix->list* (umap-transform result
+                                                                      (fixture-X held-out-new))))
                   "transform"))))
 
 (test-gpu "L9: supervision does not lower the label agreement on overlap"
@@ -46,10 +47,9 @@
 (test-gpu "L9: relabelled y gives the same embedding, and an all -1 y is accepted"
   (define X (fixture-X overlap))
   (define labels (fixture-labels overlap))
-  (check-true (bits-equal? (embedded (umap-fit X #:y (fixture-y overlap)))
-                           (embedded (umap-fit X
-                                               #:y (list->device-vector (relabel labels)
-                                                                        #:dtype 'int64)))))
+  (check-true (bits-equal?
+               (embedded (umap-fit X #:y (fixture-y overlap)))
+               (embedded (umap-fit X #:y (list->device-vector (relabel labels) #:dtype 'int64)))))
   (define unlabelled (list->device-vector (map (lambda (_) -1) labels) #:dtype 'int32))
   (check-true (finite-rows? (embedded (umap-fit X #:y unlabelled)))))
 
