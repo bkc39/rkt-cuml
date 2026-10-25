@@ -18,6 +18,12 @@ Each procedure compares labels or scores samples on the GPU, on the same
 @racket[device-resources] as its arguments. Labels may be @racket['int32]
 or @racket['int64] vectors, either one in each argument; only their values
 matter, so @racket[-1] (noise) is a label like any other.
+@racket[contingency-matrix] and @racket[adjusted-rand-score] take at most
+46340 distinct values in each argument. Their device memory grows as the
+square of the larger count K: about 8·K@superscript{2} bytes, plus
+8·k@subscript{1}·k@subscript{2} for the counts when a
+@racket[contingency-matrix]'s arguments hold different counts, so near the
+bound a call can run out of device memory.
 
 @defstruct*[contingency-table ([counts device-matrix?]
                                [row-labels device-vector?]
@@ -33,8 +39,7 @@ argument in ascending order, in that argument's dtype.}
                              [#:resources resources device-resources? (current-device-resources)])
          contingency-table?]{
 Counts how the samples of each label of @racket[labels-true] fall among
-the labels of @racket[labels-pred]. Each argument may hold at most 46340
-distinct values. Empty labels give an empty table.
+the labels of @racket[labels-pred]. Empty labels give an empty table.
 @examples[#:eval ev
 (define truth (list->device-vector '(0 0 0 1 1 1) #:dtype 'int32))
 (define found (list->device-vector '(1 1 -1 0 0 0) #:dtype 'int64))
@@ -49,8 +54,7 @@ distinct values. Empty labels give an empty table.
 The Rand index of the two labelings corrected for chance: 1.0 when they
 partition the samples identically, whatever the label values, near 0.0
 for independent labelings, and negative below chance. It is symmetric.
-Fewer than two samples score 1.0. Each argument may hold at most 46340
-distinct values.
+Fewer than two samples score 1.0.
 @examples[#:eval ev (adjusted-rand-score truth found) (adjusted-rand-score truth truth)]}
 
 @defproc[(silhouette-score [X device-matrix?]
@@ -68,7 +72,10 @@ cluster and b to the nearest other one; a sample alone in its cluster
 scores 0. @racket[labels] must hold from 2 to n − 1 distinct values.
 Distances are computed in tiles of @racket[chunk-size] rows, at most 46340;
 a smaller value uses less memory. Results can differ in the last bits from
-call to call. Under @racket['cosine], an all-zero row is refused.
+call to call. Every row must have a squared norm of at most
+2@superscript{125} as @racket['float32] or 2@superscript{1021} as
+@racket['float64]; under @racket['cosine], a row whose squared norm is 0 in
+@racket[X]'s dtype is refused too.
 @examples[#:eval ev
 (define X (list*->device-matrix '((0 0) (0 1) (1 0) (10 10) (10 11) (11 10)) #:dtype 'float64))
 (define y (list->device-vector '(0 0 0 1 1 1) #:dtype 'int32))
@@ -100,9 +107,9 @@ one row per row of @racket[X], keeps the euclidean neighbourhoods of
 in the embedding are among its nearest in @racket[X], lower as the
 embedding brings in samples that were far. @racket[n-neighbors] must be
 less than half the rows. @racket[batch-size] rows of @racket[X] are
-ranked at a time; it changes memory, not the score. With tied distances,
-which neighbour counts is unspecified, so tied data (duplicates, grids)
-can score differently from other implementations.
+ranked at a time; it changes memory, not the score. Every row of both
+must have a squared norm of at most 2@superscript{125}. Tied distances can
+score differently from other implementations.
 @examples[#:eval ev
 (define P
   (list*->device-matrix '((0 0 0) (0 1 3) (1 0 1) (3 2 0) (5 5 4) (5 6 1) (6 5 2) (7 7 7))
