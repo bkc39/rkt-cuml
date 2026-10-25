@@ -157,6 +157,12 @@
 (define t13-message
   "X: row 0, column 2: expected a magnitude of at most 2.8356862219877405e+37, got 1e+38")
 
+(define (whitened-fit rows dt)
+  (pca-fit (rows->matrix rows dt) #:whiten #t))
+
+(define (whitened-row id message fit-rows X-rows dt)
+  (row id message (cons (whitened-fit fit-rows dt) (rows->matrix X-rows dt))))
+
 (define (narrowed width [cells '()] [dt 'float32])
   (grid-with cells dt (map (lambda (row) (take row width)) grid)))
 
@@ -217,15 +223,18 @@
    (shared-rows 3)
    (list (row "t9" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
          (row "t13" t13-message (cons (fitted) (grid-with '([(0 2) 1e38]))))
-         (row "t13 whitened"
-              "X: row 0, column 1: expected a magnitude of at most 4.989600773836799e+291, got 1e+300"
-              (cons (pca-fit (rows->matrix '((0 3) (1 3) (2 3) (-1 3)) 'float64) #:whiten #t)
-                    (rows->matrix '((0 1e300)) 'float64)))
-         (row "t13 whitened float32"
-              "X: row 0, column 0: expected a magnitude of at most 1.736496146773559e+34, got 1e+36"
-              (cons (pca-fit (rows->matrix '((0.001 0) (-0.001 0) (0 0.0005) (0 -0.0005)) 'float32)
-                             #:whiten #t)
-                    (rows->matrix '((1e36 0)) 'float32)))
+         (whitened-row
+          "t13 whitened"
+          "X: row 0, column 1: expected a magnitude of at most 4.989600773836799e+291, got 1e+300"
+          '((0 3) (1 3) (2 3) (-1 3))
+          '((0 1e300))
+          'float64)
+         (whitened-row
+          "t13 whitened float32"
+          "X: row 0, column 0: expected a magnitude of at most 1.736496146773559e+34, got 1e+36"
+          '((0.001 0) (-0.001 0) (0 0.0005) (0 -0.0005))
+          '((1e36 0))
+          'float32)
          (row "t8 before t9"
               "X: expected float32, got float64"
               (cons (fitted) (blank-matrix 4 2 'float64)))
@@ -240,6 +249,12 @@
          (row "t13 inverse"
               "X: row 0, column 1: expected a magnitude of at most 4.2535293329816107e+37, got 1e+38"
               (cons (fitted) (rows->matrix '((1 1e38) (2 3)) 'float32)))
+         (whitened-row
+          "t13 whitened inverse"
+          "X: row 0, column 0: expected a magnitude of at most 1.7406088932282882e+307, got 1e+308"
+          '((0 3) (1 3) (2 3) (-1 3))
+          '((1e308 0))
+          'float64)
          (row "t12 inverse"
               "X: row 1, column 0: expected a finite value, got -inf"
               (cons (fitted) (rows->matrix '((1 1) (-inf.0 3)) 'float32))))))
@@ -320,7 +335,8 @@
   (for ([r (in-list (fit-X-rows))])
     (define X (row-call r))
     (unchanged (row-id r) (lambda () (check-row 'pca-fit r (lambda () (pca-fit X))))))
-  (for ([r (in-list (transform-rows))])
-    (match-define (cons result X) (row-call r))
-    (unchanged (row-id r)
-               (lambda () (check-row 'pca-transform r (lambda () (pca-transform result X)))))))
+  (for ([entry (in-list (applied-calls))])
+    (match-define (list who call rows) entry)
+    (for ([r (in-list (rows))])
+      (match-define (cons result X) (row-call r))
+      (unchanged (row-id r) (lambda () (check-row who r (lambda () (call result X))))))))

@@ -41,7 +41,10 @@ magnitude is positive; their @racket[explained-variance] (never negative)
 and its share of the total; the @racket[singular-values], each the square
 root of its variance times n − 1; the column @racket[mean]; the
 @racket[noise-variance], the mean variance of the components not kept; and
-the fit's @racket[whiten] flag, which the transforms read.}
+the fit's @racket[whiten] flag, which the transforms read. A hand-built
+result is checked only for dtypes and shapes, so non-finite,
+negative-variance or non-orthonormal fields give unspecified, possibly
+non-finite output.}
 
 @defproc[(pca-fit [X device-matrix?]
                   [#:n-components n-components (or/c #f exact-positive-integer?) #f]

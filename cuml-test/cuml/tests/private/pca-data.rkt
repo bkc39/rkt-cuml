@@ -6,7 +6,8 @@
                   pca-result-explained-variance-ratio
                   pca-result-mean
                   pca-result-singular-values)
-         (only-in racket/list argmax list-set make-list)
+         (only-in racket/function curryr)
+         (only-in racket/list argmax list-set make-list take)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "scaler-data.rkt" generated-rows round-to rows->matrix))
 
@@ -81,13 +82,15 @@
    (fixture "low rank" (low-rank 17 1000 20 5))
    wide-fixture))
 
-(define (fixture-rows f dtype [count +inf.0])
+(define (fixture-rows f dtype [count #f])
   (define narrow (round-to dtype))
-  (for/list ([row (in-list (fixture-source f))]
-             [_ (in-range count)])
-    (map narrow row)))
+  (define rows (fixture-source f))
+  (map (lambda (row) (map narrow row))
+       (if count
+           (take rows count)
+           rows)))
 
-(define (fixture-matrix f dtype [count +inf.0])
+(define (fixture-matrix f dtype [count #f])
   (rows->matrix (fixture-rows f dtype count) dtype))
 
 (define (axis-rows a b c permutation)
@@ -125,7 +128,7 @@
   (sqrt (dot xs xs)))
 
 (define (column rows j)
-  (map (lambda (row) (list-ref row j)) rows))
+  (map (curryr list-ref j) rows))
 
 (define (centred row mean)
   (map - row mean))

@@ -9,6 +9,7 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in racket/math pi sqr)
+         (only-in racket/sequence in-slice sequence->list)
          (only-in raft
                   device-matrix?
                   device-vector->list
@@ -31,6 +32,7 @@
          normal-rows
          round-to
          rows->matrix
+         rows-of
          standardisation-errors
          strided-vector
          ulp
@@ -45,6 +47,9 @@
 
 (define (rows->matrix rows dtype)
   (list*->device-matrix rows #:dtype dtype))
+
+(define (rows-of xs d)
+  (sequence->list (in-slice d xs)))
 
 (define (strided-vector n)
   (define backing
