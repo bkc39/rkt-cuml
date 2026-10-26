@@ -238,14 +238,16 @@ void require_scanned(const char* name, const matrix<float, int64_t>& x,
 }
 
 void require_converged(const char* name, const float* out, int64_t rows,
-                       int64_t cols, rmm::cuda_stream_view stream) {
+                       int64_t cols, bool spectral,
+                       rmm::cuda_stream_view stream) {
   const int64_t i = cumlrkt::first_non_finite(out, rows * cols, stream);
   if (i >= 0) {
     const float got = read_one(out, i, stream);
     throw logic_error(std::format(
         "{}: row {}, column {}: the optimisation diverged to {}; lower "
-        "learning-rate",
-        name, i / cols, i % cols, printed(static_cast<double>(got))));
+        "learning-rate{}",
+        name, i / cols, i % cols, printed(static_cast<double>(got)),
+        spectral ? " or use init 'random" : ""));
   }
 }
 
@@ -338,7 +340,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
                   nullptr, &p, embedding, graph);
   }
   auto* data = static_cast<float*>(embedding->data());
-  require_converged("embedding", data, x.n, r.n_components, stream);
+  require_converged("embedding", data, x.n, r.n_components,
+                    r.init == CUML_MANIFOLD_INIT_SPECTRAL, stream);
   settle(handle);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(data, x.n, r.n_components, layout::row_major)};
@@ -401,7 +404,8 @@ void transform_into(const raft::handle_t& handle, const transform_views& v,
                       static_cast<int>(x.d), train.data,
                       static_cast<int>(train.n), embedding.data,
                       static_cast<int>(train.n), &p, result->data());
-  require_converged("output", result->data(), x.n, r.n_components, stream);
+  require_converged("output", result->data(), x.n, r.n_components, false,
+                    stream);
   settle(handle);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(result->data(), x.n, r.n_components, layout::row_major)};

@@ -14,6 +14,7 @@
                   umap-transform)
          (only-in cuml/manifold/private/curve curve-parameters)
          (only-in racket/flonum flsingle)
+         (only-in racket/list take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-true fail test-case)
          (only-in raft exn:fail:raft? list->device-vector)
@@ -40,9 +41,9 @@
 (define (tiny-X)
   (fixture-X tiny))
 
-(define (labels n [dt 'int32])
+(define (labels n [dt 'int32] [groups 2])
   (list->device-vector (for/list ([i (in-range n)])
-                         (modulo i 2))
+                         (modulo i groups))
                        #:dtype dt))
 
 (define large (flsingle 1e20))
@@ -162,6 +163,9 @@
         (row "f26 defaults"
              "n-components: spectral init of 2 components needs at least 8 rows, got 7"
              (cons (tiny-with '() 'float32 (cdr (fixture-rows tiny))) #f))
+        (row "f29"
+             "embedding: row 0, column 0: the optimisation diverged to nan; lower learning-rate or use init 'random"
+             (cons (rows->matrix (take (fixture-rows tiny) 6) 'float32) (labels 6 'int32 3)))
         (row "f12 before f14"
              "X: expected float32, got float64"
              (cons (rows->matrix '((1 2 3)) 'float64) #f))
@@ -184,6 +188,7 @@
     [(or "f23" "f22 before f23") (hasheq 'metric 'cosine)]
     ["f14 before f17" (hasheq 'n-components 8)]
     [(or "f26" "f26 one short") (hasheq 'n-components 3)]
+    ["f29" (hasheq 'n-components 1 'n-epochs 20)]
     [_ (hasheq)]))
 
 (define (fit-calls)

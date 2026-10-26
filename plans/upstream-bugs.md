@@ -46,7 +46,7 @@ packet (§4) has the detail.
 | B1 #50 | nn_descent with an L1 or Linf metric raises "nn_descent does not support transform" during a fit | `knn_graph/algo.cuh:72-77` | refused by metric |
 | B1 #50 | init_transform accumulates into the output (caller must zero) and indexes row·k in int | `runner.cuh:58-79` | output zeroed; refused past 2³¹−1 |
 | B1 #50 | transform with n_epochs 1 or 2 runs 0 epochs: every edge trimmed, then "min_element failed to launch cub::DeviceReduce::ArgMin: cudaErrorInvalidValue" (P5) | `runner.cuh:549-559` | refused below 3 (B1-g) |
-| B1 #50 | spectral init failure (incl. n ≤ n_components, and k = 600 on 800 rows) silently falls back to random init | `init_embed/runner.cuh` | n ≤ n-components refused; other failures documented |
+| B1 #50 | spectral init failure (incl. n ≤ n_components, and 12 identical rows with labels i mod 3, 1 component, random_state 1; k = 600 on 800 rows is now refused by f26) silently falls back to random init | `init_embed/runner.cuh` | n ≤ n-components refused; other failures documented (B1 r2 finding 1) |
 | B1 #50 | n_neighbors 1 gives an empty graph (self weight 0), then "__copy:: D->H: failed: cudaErrorInvalidValue" (P6) | `fuzzy_simpl_set/naive.cuh`, `runner.cuh` `trim_graph` | refused below 2 |
 | B1 #50 | smooth_knn_dist keeps max_nonzero in an int, truncating ρ when local_connectivity exceeds the non-zero count | `fuzzy_simpl_set/naive.cuh:51-75` | unreachable: local-connectivity fixed at 1 |
 | B1 #50 | Python passes integer labels as float32: labels above 2²⁴ merge (P12) | `umap.pyx` `check_y` | dense codes |
@@ -78,6 +78,7 @@ packet (§4) has the detail.
 | A2 #34 | cosine distances are not clamped to [0, 2] (sklearn's `cosine_distances` clamps), so silhouette samples of rows pointing the same way exceed 1 by rounding: 1.0000004 (float32), 1 + 7e-16 (float64) | `CosineExpanded` distance | documented |
 | A2 #34 | the batched silhouette counts n·n_labels and chunk² in an `int` | batched silhouette | refused past 2³¹−1 and chunk 46340 |
 | B1 #50 | spectral embedding with n < 2·nev + 2 (UMAP's spectral init asks for nev = n_components + 1) sizes its Lanczos basis at ncv = min(n − nev, max(2·nev + 1, 20)) < nev + 2, and `lanczos_smallest` writes row nev + 1 of it (`lanczos.cuh:678-679`): at n = 2·nev 86 to 144 compute-sanitizer errors and a plain segfault; at n = 2·nev + 1 a host segfault (exit 139 plain, 11 under memcheck, whose summary still reads "0 errors"), measured at 7/2, 9/3, 41/19, 99/48, 401/199, 799/398 and 800/399; clean from n = 2·nev + 2 (B1 r0, corrected in B1 r1). Python: `UMAP(n_components=3, init="spectral", random_state=0).fit(X)` on 9 rows of 10-column blobs segfaults; 10 rows is clean | `spectral_embedding::transform`, raft `sparse/solver/detail/lanczos.cuh` | refused unless n ≥ 2(n-components + 2) (f26) |
+| B1 #50 | spectral init divides the eigenvectors by their largest absolute value with no NaN check, so a degenerate solve returns NaN without throwing and the random fallback never runs: 6 rows, 1 component, labels i mod 3, `n_epochs=20` give an all-NaN embedding in Python cuML 26.08, at `learning_rate=0.01` too | `init_embed/spectral_algo.cuh:73-91` | refused by the non-finite scan (f25), whose advice names init `'random` (f29) |
 
 ## raft
 
