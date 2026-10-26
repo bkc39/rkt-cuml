@@ -9,6 +9,7 @@
                   spectral-clustering
                   standard-scaler
                   truncated-svd
+                  tsne
                   umap)
          (only-in cuml/cluster
                   dbscan-fit
@@ -29,7 +30,13 @@
                   tsvd-fit
                   tsvd-fit-transform
                   tsvd-params)
-         (only-in cuml/manifold umap-fit umap-fit-transform umap-params)
+         (only-in cuml/manifold
+                  tsne-fit
+                  tsne-fit-transform
+                  tsne-params
+                  umap-fit
+                  umap-fit-transform
+                  umap-params)
          (only-in cuml/preprocessing
                   standard-scaler-fit
                   standard-scaler-fit-transform
@@ -136,6 +143,17 @@
                 negative-sample-rate
                 random-state
                 build-algo))
+
+(define tsne-keys
+  '(n-components perplexity
+                 early-exaggeration
+                 learning-rate
+                 max-iter
+                 n-neighbors
+                 method
+                 metric
+                 init
+                 random-state))
 
 (define (estimator-entry name proc)
   (list name
@@ -274,7 +292,13 @@
                    (list (list 'umap-params umap-params '() (list (argument #f 'base #f)) '() '())
                          (supervised-fit-entry 'umap-fit umap-fit)
                          (supervised-fit-entry 'umap-fit-transform umap-fit-transform)
-                         (estimator-entry 'umap umap)))))
+                         (estimator-entry 'umap umap)))
+   (table-bindings tsne-params
+                   tsne-keys
+                   (list (list 'tsne-params tsne-params '() (list (argument #f 'base #f)) '() '())
+                         (fit-entry 'tsne-fit tsne-fit)
+                         (fit-entry 'tsne-fit-transform tsne-fit-transform)
+                         (estimator-entry 'tsne tsne)))))
 
 (define-namespace-anchor anchor)
 

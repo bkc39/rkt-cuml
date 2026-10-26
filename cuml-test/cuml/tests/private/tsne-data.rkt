@@ -1,0 +1,152 @@
+#lang racket/base
+
+(require (only-in cuml/core exn:fail:cuml?)
+         (only-in cuml/manifold
+                  tsne-fit
+                  tsne-result
+                  tsne-result-embedding
+                  tsne-result-kl-divergence
+                  tsne-result-n-iter
+                  tsne-result?)
+         (only-in cuml/metrics trustworthiness)
+         (only-in racket/list range split-at)
+         (only-in racket/match match-define)
+         (only-in racket/math exact-ceiling)
+         racket/runtime-path
+         (only-in rackunit check-equal? check-regexp-match check-true test-case)
+         (only-in raft device-matrix->list*)
+         (only-in "blob-data.rkt" centred-blobs uniform-source)
+         (only-in "estimator-data.rkt" apply-options)
+         (only-in "python-env.rkt" run-cases)
+         (only-in "scaler-data.rkt" bits-equal?)
+         (only-in "umap-data.rkt"
+                  check-within
+                  far-blobs
+                  finite-rows?
+                  fixture
+                  fixture-name
+                  fixture-rows
+                  fixture-X))
+
+(provide check-quality
+         check-small-sweep
+         check-tsne-parity
+         derived-neighbours
+         embedded
+         tsne-case
+         twin
+         wide-blobs)
+
+(define-runtime-path twin "../python/tsne_twin.py")
+
+(define wide-blobs
+  (let-values ([(rows labels)
+                (centred-blobs (let ([next (uniform-source 54)])
+                                 (for/list ([_ (in-range 5)])
+                                   (for/list ([_ (in-range 50)])
+                                     (+ -10.0 (* 20.0 (next))))))
+                               2400
+                               55)])
+    (fixture "wide-blobs" rows labels)))
+
+(define sweep-sizes '(2 3 4 5 6 7 8 10 12 16 20 30 40))
+
+(define (small-sweep)
+  (for*/list ([n (in-list sweep-sizes)]
+              [seed (in-range 8)])
+    (define next (uniform-source (+ 1000 (* 8 n) seed)))
+    (fixture (format "sweep n=~a seed=~a" n seed)
+             (for/list ([_ (in-range n)])
+               (for/list ([_ (in-range 4)])
+                 (next)))
+             (for/list ([_ (in-range n)])
+               0))))
+
+(define diverged
+  #rx"^tsne-fit: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$")
+
+(define (check-small-sweep method init)
+  (for ([f (in-list (small-sweep))])
+    (define n (length (fixture-rows f)))
+    (define outcome
+      (with-handlers ([exn:fail:cuml? values])
+        (tsne-fit (fixture-X f) #:method method #:init init #:perplexity (min 30.0 n))))
+    (test-case (format "~a ~a ~a" method init (fixture-name f))
+      (cond
+        [(tsne-result? outcome) (check-true (finite-rows? (embedded outcome)))]
+        [else (check-regexp-match diverged (exn-message outcome))])))
+  (check-true (finite-rows? (embedded (tsne-fit (fixture-X far-blobs) #:method method #:init init)))
+              "a valid call after the sweep"))
+
+(define (derived-neighbours perplexity)
+  (min 1023 (max 2 (exact-ceiling (* 3 perplexity)))))
+
+(define (embedded result)
+  (device-matrix->list* (tsne-result-embedding result)))
+
+(define (tsne-case f result #:op [op "tsne"] #:neighbours [k #f])
+  (match-define (tsne-result _ _ _ params) result)
+  (define (given key)
+    (hash-ref params key))
+  (hasheq 'op op
+          'X (fixture-rows f)
+          'perplexity (given 'perplexity)
+          'early_exaggeration (given 'early-exaggeration)
+          'learning_rate (given 'learning-rate)
+          'max_iter (given 'max-iter)
+          'n_neighbors (or k (given 'n-neighbors) (derived-neighbours (given 'perplexity)))
+          'method (symbol->string (given 'method))
+          'metric (symbol->string (given 'metric))
+          'init (symbol->string (given 'init))
+          'seed (given 'random-state)))
+
+(define (check-tsne-parity f configs #:neighbours [k #f])
+  (define results
+    (for/list ([options (in-list configs)])
+      (apply-options tsne-fit options (fixture-X f))))
+  (define theirs
+    (run-cases twin
+               (for/list ([result (in-list results)])
+                 (tsne-case f result #:neighbours k))))
+  (for ([options (in-list configs)]
+        [result (in-list results)]
+        [found (in-list theirs)])
+    (test-case (format "~a ~a" (fixture-name f) options)
+      (check-true (bits-equal? (embedded result) (hash-ref found 'embedding)) "embedding")
+      (check-equal? (tsne-result-kl-divergence result) (hash-ref found 'kl) "kl")
+      (check-equal? (tsne-result-n-iter result) (hash-ref found 'n_iter) "n-iter"))))
+
+(define sklearn-bound 0.05)
+
+(define (check-quality method fixtures)
+  (define results
+    (for/list ([f (in-list fixtures)])
+      (tsne-fit (fixture-X f) #:method method)))
+  (define (cases op)
+    (for/list ([f (in-list fixtures)]
+               [result (in-list results)])
+      (tsne-case f result #:op op)))
+  (define references (if (eq? method 'exact) (cases "sklearn") '()))
+  (define-values (spreads found-references)
+    (split-at (run-cases twin
+                         (append (for/list ([c (in-list (cases "quality"))])
+                                   (hash-set c 'seeds (range 20)))
+                                 references))
+              (length fixtures)))
+  (define ours
+    (for/list ([f (in-list fixtures)]
+               [result (in-list results)])
+      (trustworthiness (fixture-X f) (tsne-result-embedding result) #:n-neighbors 10)))
+  (for ([f (in-list fixtures)]
+        [t (in-list ours)]
+        [theirs (in-list spreads)])
+    (define name (format "~a ~a" method (fixture-name f)))
+    (test-case name
+      (check-within name t (hash-ref theirs 'trustworthiness))))
+  (for ([f (in-list fixtures)]
+        [t (in-list ours)]
+        [reference (in-list found-references)])
+    (define name (format "~a ~a against sklearn" method (fixture-name f)))
+    (test-case name
+      (check-true (<= (abs (- t (hash-ref reference 'trustworthiness))) sklearn-bound)
+                  (format "~a: ~a against ~a" name t (hash-ref reference 'trustworthiness))))))
