@@ -662,10 +662,12 @@ Follow-ups are GitHub issues.
   with nev = n-components + 1, and raft's `lanczos_smallest` writes row
   nev + 1 of that basis (`lanczos.cuh:678-679`), so it needs ncv ≥ nev + 2.
   Python cuML 26.08, 10-column blobs, with exit status: n = 2·nev
-  (6/2, 8/3, 40/19, 98/48, 798/398) segfaults plain (139) and gives 86 to 144
-  memcheck errors; n = 2·nev + 1 (7/2, 9/3, 41/19, 99/48, 401/199, 799/398,
-  and 800/399) segfaults plain (139) and dies with SIGSEGV under memcheck
-  (exit 11) after printing "ERROR SUMMARY: 0 errors"; n = 2·nev + 2 and
+  (6/2, 8/3, 40/19, 98/48, 400/199, 798/398, 800/399) segfaults plain (139)
+  and under memcheck either reports 86 to 144 errors (6/2, 8/3, 40/19,
+  98/48, 798/398) or dies with SIGSEGV (exit 11) after printing "ERROR
+  SUMMARY: 0 errors" (400/199, 800/399); n = 2·nev + 1 (7/2, 9/3, 41/19,
+  99/48, 401/199, 799/398) segfaults plain (139) and dies with SIGSEGV under
+  memcheck (exit 11) after printing "0 errors"; n = 2·nev + 2 and
   2·nev + 3 (8/2, 9/2, 10/3, 11/3, 42/19, 43/19, 100/48, 101/48, 402/199,
   800/398) exit 0 with 0 errors. Supervised fits match: 7/2, 9/3, 99/48
   crash, 8/2, 10/3, 100/48 are clean. Under a pooled allocator the stray
