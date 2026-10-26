@@ -370,7 +370,7 @@
 
 (test-gpu "the figures: wine in the plane of two components"
   (define-values (chapter blocks) (force decomposition))
-  (match-define (list _ _ (list _ _ _ _ _ explained _) _ ...) blocks)
+  (match-define (list* _ _ (list _ _ _ _ _ explained _) _) blocks)
   (define shares (cumulative (chapter 'ratios)))
   (check-equal? (size explained) '(320 240))
   (check-true (apply <= shares))

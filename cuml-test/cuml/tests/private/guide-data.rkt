@@ -43,7 +43,7 @@
 (define (example-blocks datum)
   (match datum
     [(list* 'examples arguments) (list (block-forms arguments))]
-    [(list data ...) (append-map example-blocks data)]
+    [(? list?) (append-map example-blocks datum)]
     [_ '()]))
 
 (define (evaluated-chapter name)

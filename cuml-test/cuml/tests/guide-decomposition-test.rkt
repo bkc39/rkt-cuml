@@ -11,7 +11,7 @@
                   kmeans-transform)
          (only-in cuml/scribblings/guide/helpers clusters-of components-for)
          (only-in racket/function curry)
-         (only-in racket/list range)
+         (only-in racket/list last range)
          (only-in racket/match match match-define)
          (only-in racket/promise delay force)
          (only-in rackunit check check-equal? check-regexp-match test-case)
@@ -41,8 +41,8 @@
 
 (test-gpu "decomposition: the chapter's k-means scores"
   (define-values (chapter blocks) (force decomposition))
-  (match-define (list _ _ _ (list _ ... scores) _ ...) blocks)
-  (check-equal? scores '("0.897" "0.895" "0.912"))
+  (match-define (list* _ _ _ k-means _) blocks)
+  (check-equal? (last k-means) '("0.897" "0.895" "0.912"))
   (for ([row (in-list scored)])
     (match-define (list name columns text) row)
     (check-scored (chapter 'cultivar-ids)

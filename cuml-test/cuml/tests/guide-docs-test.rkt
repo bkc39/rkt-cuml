@@ -424,7 +424,7 @@
   (define first-gap (- largest second-largest))
   (define second-gap (min first-gap (- second-largest third-largest)))
   (match-define (list first-svd second-svd) (device-matrix->list* (tsvd-result-components svd-fit)))
-  (match-define (list first-pca second-pca _ ...)
+  (match-define (list* first-pca second-pca _)
     (device-matrix->list* (pca-result-components scaled-fit)))
   (define pca-singular (host (pca-result-singular-values scaled-fit) 2))
   (for ([row (in-list
