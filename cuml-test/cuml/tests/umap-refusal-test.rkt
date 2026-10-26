@@ -37,7 +37,8 @@
                       [#f x])))
                 dt))
 
-(define tiny-X (fixture-X tiny))
+(define (tiny-X)
+  (fixture-X tiny))
 
 (define (labels n [dt 'int32])
   (list->device-vector (for/list ([i (in-range n)])
@@ -120,13 +121,13 @@
              (cons (blank-matrix 8 3 'float32 #:layout 'col-major) #f))
         (row "f14" "X: expected at least 2 rows, got 1" (cons (rows->matrix '((1 2 3)) 'float32) #f))
         (row "f15" "X: expected at least 1 column, got 0" (cons (blank-matrix 8 0 'float32) #f))
-        (row "f19" "X: nn-descent needs at least 150 rows, got 8" (cons tiny-X #f))
-        (row "f20" "y: expected int32 or int64, got float32" (cons tiny-X (labels 8 'float32)))
-        (row "f20 rank" "y: expected rank 1, got rank 2" (cons tiny-X (blank-matrix 8 1 'int32)))
+        (row "f19" "X: nn-descent needs at least 150 rows, got 8" (cons (tiny-X) #f))
+        (row "f20" "y: expected int32 or int64, got float32" (cons (tiny-X) (labels 8 'float32)))
+        (row "f20 rank" "y: expected rank 1, got rank 2" (cons (tiny-X) (blank-matrix 8 1 'int32)))
         (row "f20 stride"
              "y: expected contiguous elements, got stride 2"
-             (cons tiny-X (strided-vector 8 'int64)))
-        (row "f20 length" "y: expected 8 elements, got 7" (cons tiny-X (labels 7)))
+             (cons (tiny-X) (strided-vector 8 'int64)))
+        (row "f20 length" "y: expected 8 elements, got 7" (cons (tiny-X) (labels 7)))
         (row "f21"
              "X: row 3, column 1: expected a finite value, got nan"
              (cons (tiny-with '([(3 1) +nan.0])) (labels 8)))
@@ -173,17 +174,17 @@
          [r (in-list (parameter-rows))])
     (match-define (cons who call) entry)
     (test-case (format "~a ~a" who (row-id r))
-      (check-row who r (lambda () (call tiny-X #f (row-call r))))))
+      (check-row who r (lambda () (call (tiny-X) #f (row-call r))))))
   (check-cuml-error
    'logic
    "umap-fit: n-components: spectral init needs fewer components than the 8 rows, got 8"
-   (lambda () (umap-fit tiny-X #:n-components 8)))
+   (lambda () (umap-fit (tiny-X) #:n-components 8)))
   (check-cuml-error 'logic
                     "umap-fit: n-neighbors: expected at least 2, got 1"
                     (lambda () (umap-fit (tiny-with '() 'float64) #:n-neighbors 1)))
-  (for ([bad (in-list (list (lambda () (umap-fit tiny-X #:n-neighbors 2.5))
-                            (lambda () (umap-fit tiny-X #:learning-rate 'fast))
-                            (lambda () (umap-fit tiny-X #:random-state -1))))])
+  (for ([bad (in-list (list (lambda () (umap-fit (tiny-X) #:n-neighbors 2.5))
+                            (lambda () (umap-fit (tiny-X) #:learning-rate 'fast))
+                            (lambda () (umap-fit (tiny-X) #:random-state -1))))])
     (check-exn exn:fail:contract? bad)))
 
 (test-gpu "L14: the fits refuse each bad X and y with its message, the first refusal winning"
@@ -198,10 +199,10 @@
   (check-cuml-error
    'logic
    #rx"^umap-fit: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
-   (lambda () (umap-fit tiny-X #:learning-rate 1e35 #:init 'random))))
+   (lambda () (umap-fit (tiny-X) #:learning-rate 1e35 #:init 'random))))
 
 (define (fitted)
-  (umap-fit tiny-X #:init 'random))
+  (umap-fit (tiny-X) #:init 'random))
 
 (define (hand-built #:X [X #f] #:embedding [embedding #f] #:params [params #f])
   (define base (fitted))
@@ -218,29 +219,29 @@
    (row "t3" "X: expected at least 1 row, got 0" (cons (fitted) (blank-matrix 0 3 'float32)))
    (row "t5"
         "result X: expected float32, got float64"
-        (cons (hand-built #:X (tiny-with '() 'float64)) tiny-X))
+        (cons (hand-built #:X (tiny-with '() 'float64)) (tiny-X)))
    (row "t5 rows"
         "result X: expected at least 2 rows, got 1"
-        (cons (hand-built #:X (rows->matrix '((1 2 3)) 'float32)) tiny-X))
+        (cons (hand-built #:X (rows->matrix '((1 2 3)) 'float32)) (tiny-X)))
    (row "t6"
         "embedding: expected float32, got float64"
-        (cons (hand-built #:embedding (blank-matrix 8 2 'float64)) tiny-X))
+        (cons (hand-built #:embedding (blank-matrix 8 2 'float64)) (tiny-X)))
    (row "t6 rows"
         "embedding: expected 8 rows, got 7"
-        (cons (hand-built #:embedding (blank-matrix 7 2 'float32)) tiny-X))
+        (cons (hand-built #:embedding (blank-matrix 7 2 'float32)) (tiny-X)))
    (row "t6 columns"
         "embedding: expected 2 columns, got 3"
-        (cons (hand-built #:embedding (blank-matrix 8 3 'float32)) tiny-X))
+        (cons (hand-built #:embedding (blank-matrix 8 3 'float32)) (tiny-X)))
    (row "t7" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 2 2 'float32)))
    (row "t8"
         "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or cosine"
-        (cons (hand-built #:params (umap-params #:metric 'minkowski)) tiny-X))
+        (cons (hand-built #:params (umap-params #:metric 'minkowski)) (tiny-X)))
    (row "t8 n-neighbors"
         "n-neighbors: expected at least 2, got 1"
-        (cons (hand-built #:params (umap-params #:n-neighbors 1)) tiny-X))
+        (cons (hand-built #:params (umap-params #:n-neighbors 1)) (tiny-X)))
    (row "t9"
         "n-epochs: transform runs n-epochs/3 epochs and needs at least 3, got 2"
-        (cons (hand-built #:params (umap-params #:n-epochs 2)) tiny-X))
+        (cons (hand-built #:params (umap-params #:n-epochs 2)) (tiny-X)))
    (row "t11"
         "X: row 3, column 1: expected a finite value, got nan"
         (cons (fitted) (tiny-with '([(3 1) +nan.0]))))
@@ -257,28 +258,28 @@
   (check-cuml-error
    'logic
    #rx"^umap-transform: output: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
-   (lambda () (umap-transform (hand-built #:params (umap-params #:learning-rate 3e38)) tiny-X))))
+   (lambda () (umap-transform (hand-built #:params (umap-params #:learning-rate 3e38)) (tiny-X)))))
 
 (test-gpu "L14: the generics refuse with their own names"
-  (define model (fit (umap #:init 'random) tiny-X))
+  (define model (fit (umap #:init 'random) (tiny-X)))
   (check-cuml-error 'logic
                     "transform: X: expected 3 columns, got 2"
                     (lambda () (transform model (blank-matrix 2 2 'float32))))
   (define w (list->device-vector '(1 1 1 1 1 1 1 1) #:dtype 'float32))
-  (check-cuml-error 'logic "transform: umap is not fitted" (lambda () (transform (umap) tiny-X)))
+  (check-cuml-error 'logic "transform: umap is not fitted" (lambda () (transform (umap) (tiny-X))))
   (check-cuml-error 'logic
                     "fit: umap takes no sample-weight"
-                    (lambda () (fit (umap) tiny-X #:sample-weight w)))
+                    (lambda () (fit (umap) (tiny-X) #:sample-weight w)))
   (check-cuml-error 'logic
                     "fit-transform: umap takes no sample-weight"
-                    (lambda () (fit-transform (umap) tiny-X #:sample-weight w))))
+                    (lambda () (fit-transform (umap) (tiny-X) #:sample-weight w))))
 
 (test-gpu "L14: after a refused NaN, large or cosine zero row, a valid call succeeds"
   (for ([r (in-list (X-rows))]
         #:when (member (row-id r) '("f21" "f22" "f23")))
     (match-define (cons X y) (row-call r))
     (check-row 'umap-fit r (lambda () (apply-options umap-fit (hash-set (x-options r) 'y y) X)))
-    (check-true (and (umap-fit tiny-X #:init 'random) #t) (row-id r))))
+    (check-true (and (umap-fit (tiny-X) #:init 'random) #t) (row-id r))))
 
 (test-pools "L14: a refusal leaves the RMM pool where it was"
   (define device 0)
