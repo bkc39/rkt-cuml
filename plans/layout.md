@@ -774,3 +774,52 @@ Follow-ups are GitHub issues.
   corrected after B1 r1 finding 1). Spectral init also refuses an n·ncv
   basis past 2³¹ − 1 elements through the shared `require_basis` (f27,
   B1 r1 finding 2).
+
+## Decisions recorded in leg B2 (#51)
+
+- **B2-a.** `#:method` takes `'fft` and `'exact` only; Barnes-Hut is not
+  exposed (it spins forever once coordinates go non-finite).
+- **B2-b.** `min_grad_norm` is 0 for `'fft` and 1e-7 for `'exact`, with no
+  keyword. cuML's FFT early stop reads mean |x-step|/2 from iteration 0
+  and collapses the embedding on 12000 rows at learning rate 200; L8 pins
+  Python's collapse beside our full run.
+- **B2-c.** learning-rate defaults to 200 with cuML's "none" rule (r
+  before the exaggeration ends, 2r after); `'auto` is not offered.
+- **B2-d.** `#:n-neighbors` defaults to `#f`, meaning
+  min(1023, max(2, ⌈3·perplexity⌉)), clamped to the row count; above
+  1023 is refused (f6).
+- **B2-e.** perplexity is refused at or below 1 (f7) and above
+  min(n-neighbors, n) (f17).
+- **B2-f.** `define-estimator` gains a `[fit-transform proc]` entry: the
+  estimator is `transformer?`, its `fit-transform` is `proc` of the fit's
+  model, and its `transform` raises "transform: tsne has no transform; use
+  fit-transform". It cannot be combined with `[transform ...]` (a syntax
+  error). Existing estimators expand unchanged.
+- **B2-g.** distances are squared (`square_distances` true), as Python's
+  default.
+- **B2-h.** n-components is kept and accepts only 2 (f4).
+- **B2-i.** the keyword is `#:max-iter`; `n-iter` is the result field.
+- **B2-j.** `tsne-fit` returns a `tsne-result` (embedding, kl-divergence,
+  n-iter, params). `tsne-fit-transform` returns `(values result
+  embedding)`, as every other `X-fit-transform` (A3-k, B1-b), not the
+  matrix alone as the spec proposed.
+- **B2-k.** a kNN of all-zero distances without every row equal is caught
+  by f23 after the fit.
+- **B2-l.** a `#f` random-state draws the seed in Racket, so FFT is always
+  reproducible under `(random-seed k)`; P4 measured the deterministic FFT
+  path at 1.3–1.9× the time of `random_state=None`.
+- **B2-m.** f23 reuses B1's "lower learning-rate" advice.
+- **B2-n.** KL divergence and the iteration count come back as host
+  out-parameters of the job (PCA's shape), not deposit regions. cuML
+  computes KL at iteration max_iter − 1 before its break check and returns
+  the last iteration's index, so n-iter = min(iter + 1, max-iter) and
+  kl-divergence is `#f` unless n-iter = max-iter.
+- **B2-o.** `to_columns` and `to_rows` moved to `shim/common`
+  (`transpose.{hpp,cu}`, `device.cuh`), UMAP's scans to
+  `manifold_support.{hpp,cpp}`; PCA, tSVD and UMAP results are bitwise
+  unchanged. `bound-params`, `drawn-seed`, `finite-real?` and
+  `metric-code` moved to `cuml/manifold/private/support.rkt`.
+- **B2-p.** random-state is checked in the shim ("random-state: expected
+  at least 0, got -1"); the job takes it as `_int64`.
+- **B2-q.** L3 runs the small sweep at perplexity min(30, n), since f17
+  refuses the default perplexity below 30 rows.
