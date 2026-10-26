@@ -60,8 +60,7 @@ CUMLRKT_API int cuml_manifold_tsne_fit(
     void* handle, const rr_view* x, rr_deposit* out, int64_t n_components,
     double perplexity, double early_exaggeration, double learning_rate,
     int64_t max_iter, int64_t n_neighbors, int32_t method, int32_t metric,
-    int32_t init, int64_t random_state, double* kl_divergence,
-    int64_t* n_iter);
+    int32_t init, int64_t random_state, double* kl_divergence, int64_t* n_iter);
 CUMLRKT_API void cuml_manifold_tsne_fit_job(void* args, size_t args_len,
                                             rr_job_outcome* outcome);
 

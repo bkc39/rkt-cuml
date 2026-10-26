@@ -23,5 +23,6 @@
   (check-true (>= t trust-floor) (format "trustworthiness ~a" t))
   (match-define (list theirs)
     (run-cases twin (list (tsne-case wide-blobs result #:op "python-default"))))
-  (check-true (< (hash-ref theirs 'n_iter) 250) (format "Python's n_iter ~a" (hash-ref theirs 'n_iter)))
+  (check-true (< (hash-ref theirs 'n_iter) 250)
+              (format "Python's n_iter ~a" (hash-ref theirs 'n_iter)))
   (check-true (< (hash-ref theirs 'std) 1e-3) (format "Python's std ~a" (hash-ref theirs 'std))))

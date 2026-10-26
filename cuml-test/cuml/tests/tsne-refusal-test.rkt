@@ -37,40 +37,41 @@
   (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))
 
 (define (parameter-rows)
-  (list (row "f1" "method: expected fft or exact" (hasheq 'method 'barnes-hut))
-        (row "f2"
-             "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or cosine"
-             (hasheq 'metric 'minkowski))
-        (row "f3" "init: expected random or pca" (hasheq 'init 'spectral))
-        (row "f1 before f2" "method: expected fft or exact" (hasheq 'method 'bh 'metric 'minkowski))
-        (row "f4" "n-components: expected 2, got 3" (hasheq 'n-components 3))
-        (row "f5" "n-neighbors: expected at least 2, got 1" (hasheq 'n-neighbors 1))
-        (row "f6" "n-neighbors: expected at most 1023, got 1024" (hasheq 'n-neighbors 1024))
-        (row "f7" "perplexity: expected a finite value above 1, got 1" (hasheq 'perplexity 1.0))
-        (row "f7 nan" "perplexity: expected a finite value above 1, got nan" (hasheq 'perplexity +nan.0))
-        (row "f7 inf" "perplexity: expected a finite value above 1, got inf" (hasheq 'perplexity +inf.0))
-        (row "f7 most" (beyond-float 'perplexity "1e+39") (hasheq 'perplexity 1e39))
-        (row "f8"
-             "early-exaggeration: expected a finite value of at least 1, got 0.5"
-             (hasheq 'early-exaggeration 0.5))
-        (row "f8 nan"
-             "early-exaggeration: expected a finite value of at least 1, got nan"
-             (hasheq 'early-exaggeration +nan.0))
-        (row "f8 most" (beyond-float 'early-exaggeration "1e+39") (hasheq 'early-exaggeration 1e39))
-        (row "f9" "learning-rate: expected a finite value above 0, got 0" (hasheq 'learning-rate 0.0))
-        (row "f9 nan"
-             "learning-rate: expected a finite value above 0, got nan"
-             (hasheq 'learning-rate +nan.0))
-        (row "f9 most"
-             "learning-rate: expected at most 1.7014117331926443e+38, got 2e+38"
-             (hasheq 'learning-rate 2e38))
-        (row "f9 subnormal" (least-rate-message "1e-40") (hasheq 'learning-rate 1e-40))
-        (row "f9 underflow" (least-rate-message "1e-50") (hasheq 'learning-rate 1e-50))
-        (row "f10" "max-iter: expected at least 1, got 0" (hasheq 'max-iter 0))
-        (row "f10 most"
-             "max-iter: expected at most 2147483647, got 2147483648"
-             (hasheq 'max-iter (expt 2 31)))
-        (row "random-state" "random-state: expected at least 0, got -1" (hasheq 'random-state -1))))
+  (list
+   (row "f1" "method: expected fft or exact" (hasheq 'method 'barnes-hut))
+   (row "f2"
+        "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or cosine"
+        (hasheq 'metric 'minkowski))
+   (row "f3" "init: expected random or pca" (hasheq 'init 'spectral))
+   (row "f1 before f2" "method: expected fft or exact" (hasheq 'method 'bh 'metric 'minkowski))
+   (row "f4" "n-components: expected 2, got 3" (hasheq 'n-components 3))
+   (row "f5" "n-neighbors: expected at least 2, got 1" (hasheq 'n-neighbors 1))
+   (row "f6" "n-neighbors: expected at most 1023, got 1024" (hasheq 'n-neighbors 1024))
+   (row "f7" "perplexity: expected a finite value above 1, got 1" (hasheq 'perplexity 1.0))
+   (row "f7 nan" "perplexity: expected a finite value above 1, got nan" (hasheq 'perplexity +nan.0))
+   (row "f7 inf" "perplexity: expected a finite value above 1, got inf" (hasheq 'perplexity +inf.0))
+   (row "f7 most" (beyond-float 'perplexity "1e+39") (hasheq 'perplexity 1e39))
+   (row "f8"
+        "early-exaggeration: expected a finite value of at least 1, got 0.5"
+        (hasheq 'early-exaggeration 0.5))
+   (row "f8 nan"
+        "early-exaggeration: expected a finite value of at least 1, got nan"
+        (hasheq 'early-exaggeration +nan.0))
+   (row "f8 most" (beyond-float 'early-exaggeration "1e+39") (hasheq 'early-exaggeration 1e39))
+   (row "f9" "learning-rate: expected a finite value above 0, got 0" (hasheq 'learning-rate 0.0))
+   (row "f9 nan"
+        "learning-rate: expected a finite value above 0, got nan"
+        (hasheq 'learning-rate +nan.0))
+   (row "f9 most"
+        "learning-rate: expected at most 1.7014117331926443e+38, got 2e+38"
+        (hasheq 'learning-rate 2e38))
+   (row "f9 subnormal" (least-rate-message "1e-40") (hasheq 'learning-rate 1e-40))
+   (row "f9 underflow" (least-rate-message "1e-50") (hasheq 'learning-rate 1e-50))
+   (row "f10" "max-iter: expected at least 1, got 0" (hasheq 'max-iter 0))
+   (row "f10 most"
+        "max-iter: expected at most 2147483647, got 2147483648"
+        (hasheq 'max-iter (expt 2 31)))
+   (row "random-state" "random-state: expected at least 0, got -1" (hasheq 'random-state -1))))
 
 (define one-row (rows->matrix '((1 2 3)) 'float32))
 
@@ -149,7 +150,9 @@
   #rx"^tsne-fit: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$")
 
 (test-gpu "L11: f23: a diverged embedding is refused and freed"
-  (check-cuml-error 'logic diverged (lambda () (tsne-fit (tiny-X) #:perplexity 5.0 #:learning-rate 1e30)))
+  (check-cuml-error 'logic
+                    diverged
+                    (lambda () (tsne-fit (tiny-X) #:perplexity 5.0 #:learning-rate 1e30)))
   (check-cuml-error 'logic
                     diverged
                     (lambda ()
@@ -163,7 +166,8 @@
       (match (raised (lambda () (tsne-fit listed-X #:random-state seed)))
         [(? exn:fail:raft? e)
          (check-equal? (exn-message e)
-                       (format "tsne-fit: expected a device array or #f for a view, given ~e" listed-X))]
+                       (format "tsne-fit: expected a device array or #f for a view, given ~e"
+                               listed-X))]
         [other (fail (format "expected an exn:fail:raft, got ~e" other))]))))
 
 (test-gpu "L11: the generics refuse with their own names"

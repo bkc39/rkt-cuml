@@ -157,9 +157,7 @@
              "X: expected at least 2 rows, got 1"
              (cons (rows->matrix '((1 2 3)) 'float32) #f))
         (row "f20 before f21" "y: expected 8 elements, got 7" (cons (tiny-with nan-row) (labels 7)))
-        (row "f21 before f22"
-             nan-message
-             (cons (tiny-with (append nan-row '([(1 1) 1e20]))) #f))
+        (row "f21 before f22" nan-message (cons (tiny-with (append nan-row '([(1 1) 1e20]))) #f))
         (row "f22 before f23" large-message (cons (tiny-with (append zero-row large-row)) #f))))
 
 (define (x-options r)

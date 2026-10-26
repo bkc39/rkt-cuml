@@ -10,18 +10,12 @@
 (define held-out-configs
   (for*/list ([init (in-list '(random pca))]
               [metric (in-list '(euclidean sqeuclidean manhattan chebyshev cosine))])
-    (hasheq 'init
-            init
-            'metric
-            metric
-            'perplexity
-            20.0
-            'early-exaggeration
-            8.0
-            'learning-rate
-            150.0
-            'max-iter
-            400)))
+    (hasheq 'init init
+            'metric metric
+            'perplexity 20.0
+            'early-exaggeration 8.0
+            'learning-rate 150.0
+            'max-iter 400)))
 
 (test-twin "L5: FFT fits equal Python cuML's bitwise on held-out blobs, every metric and init"
   (check-tsne-parity held-out-fit held-out-configs))

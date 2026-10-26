@@ -41,13 +41,12 @@
 (define-runtime-path twin "../python/tsne_twin.py")
 
 (define wide-blobs
-  (let-values ([(rows labels)
-                (centred-blobs (let ([next (uniform-source 54)])
-                                 (for/list ([_ (in-range 5)])
-                                   (for/list ([_ (in-range 50)])
-                                     (+ -10.0 (* 20.0 (next))))))
-                               2400
-                               55)])
+  (let-values ([(rows labels) (centred-blobs (let ([next (uniform-source 54)])
+                                               (for/list ([_ (in-range 5)])
+                                                 (for/list ([_ (in-range 50)])
+                                                   (+ -10.0 (* 20.0 (next))))))
+                                             2400
+                                             55)])
     (fixture "wide-blobs" rows labels)))
 
 (define sweep-sizes '(2 3 4 5 6 7 8 10 12 16 20 30 40))
@@ -125,8 +124,8 @@
 (define (fitted-cases method fixtures op)
   (for/lists (results cases)
              ([f (in-list fixtures)])
-    (define result (tsne-fit (fixture-X f) #:method method))
-    (values result (tsne-case f result #:op op))))
+             (define result (tsne-fit (fixture-X f) #:method method))
+             (values result (tsne-case f result #:op op))))
 
 (define (check-quality method fixtures)
   (define-values (results cases) (fitted-cases method fixtures "quality"))

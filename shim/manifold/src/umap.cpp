@@ -21,9 +21,9 @@
 
 #include "cumlrkt/manifold.h"
 #include "cumlrkt/support.hpp"
+#include "manifold_support.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
-#include "manifold_support.hpp"
 #include "raftrkt/view.hpp"
 #include "umap_device.hpp"
 

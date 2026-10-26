@@ -95,7 +95,11 @@ def sklearn(case):
         random_state=1,
         min_grad_norm=1e-12,
     ).fit_transform(X)
-    return {"trustworthiness": float(trustworthiness(X, E.astype(np.float32), n_neighbors=10))}
+    return {
+        "trustworthiness": float(
+            trustworthiness(X, E.astype(np.float32), n_neighbors=10)
+        )
+    }
 
 
 def params(case):

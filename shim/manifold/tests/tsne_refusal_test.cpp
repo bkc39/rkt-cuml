@@ -143,8 +143,7 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
       res, with(zero_row(blobs(rows, cols), 3, cols), (4 * cols) + 1, large),
       {rows, cols});
   const filled<float> zero_x(res, zero_row(blobs(rows, 2), 3, 2), {rows, 2});
-  const filled<float> zeros(res, std::vector<float>(rows * 2, 0.0F),
-                            {rows, 2});
+  const filled<float> zeros(res, std::vector<float>(rows * 2, 0.0F), {rows, 2});
   const filled<float> same(res, std::vector<float>(rows * cols, 1.5F),
                            {rows, cols});
   const tsne_options cosine{.metric = CUML_MANIFOLD_METRIC_COSINE};

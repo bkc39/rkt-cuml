@@ -63,9 +63,9 @@ TEST(TsneFit, ExactAndEveryMetricAreFinite) {
         CUML_MANIFOLD_METRIC_COSINE}) {
     for (const int32_t method :
          {CUML_MANIFOLD_TSNE_FFT, CUML_MANIFOLD_TSNE_EXACT}) {
-      EXPECT_TRUE(all_finite(fitted(
-          res, x.view(),
-          {.max_iter = short_run, .method = method, .metric = metric})))
+      EXPECT_TRUE(all_finite(
+          fitted(res, x.view(),
+                 {.max_iter = short_run, .method = method, .metric = metric})))
           << metric << " " << method;
     }
   }
@@ -83,9 +83,9 @@ TEST(TsneFit, PcaInitLeavesXUntouched) {
             .method = method,
             .init = CUML_MANIFOLD_TSNE_INIT_PCA});
     std::vector<float> after(host.size());
-    EXPECT_EQ(rr_copy_d2h(after.data(), x.array.buffer,
-                          after.size() * sizeof(float)),
-              RR_OK)
+    EXPECT_EQ(
+        rr_copy_d2h(after.data(), x.array.buffer, after.size() * sizeof(float)),
+        RR_OK)
         << rr_last_error();
     EXPECT_EQ(after, host);
   }

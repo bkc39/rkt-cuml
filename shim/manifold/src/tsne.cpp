@@ -90,9 +90,9 @@ void require_codes(const tsne_request& r) {
 
 void require_learning_rate(double rate) {
   if (!std::isfinite(rate) || rate <= 0) {
-    throw logic_error(std::format(
-        "learning-rate: expected a finite value above 0, got {}",
-        printed(rate)));
+    throw logic_error(
+        std::format("learning-rate: expected a finite value above 0, got {}",
+                    printed(rate)));
   }
   if (rate > most_float / 2) {
     throw logic_error(std::format("learning-rate: expected at most {}, got {}",
@@ -135,15 +135,15 @@ void require_shape(const tsne_request& r, const matrix<float, int64_t>& x) {
   require_rows_fit("X", x);
   const int64_t entries = x.n * embedding_dim;
   if (r.init == CUML_MANIFOLD_TSNE_INIT_RANDOM && entries > most_index) {
-    throw logic_error(std::format(
-        "X: random init of {} rows needs {} entries, more than {}", x.n,
-        entries, most_index));
+    throw logic_error(
+        std::format("X: random init of {} rows needs {} entries, more than {}",
+                    x.n, entries, most_index));
   }
   const int64_t k = std::min(r.n_neighbors, x.n);
   if (r.perplexity > static_cast<double>(k)) {
     throw logic_error(
-        std::format("perplexity: expected at most the {} neighbours, got {}",
-                    k, printed(r.perplexity)));
+        std::format("perplexity: expected at most the {} neighbours, got {}", k,
+                    printed(r.perplexity)));
   }
   if (r.method == CUML_MANIFOLD_TSNE_EXACT && x.n > most_exact_rows) {
     throw logic_error(
@@ -155,7 +155,8 @@ void require_shape(const tsne_request& r, const matrix<float, int64_t>& x) {
 void require_distinct(const matrix<float, int64_t>& x,
                       rmm::cuda_stream_view stream) {
   if (cumlrkt::first_row_unlike_first(x.data, x.n, x.d, stream) < 0) {
-    throw logic_error("X: every row equals row 0; t-SNE needs two distinct rows");
+    throw logic_error(
+        "X: every row equals row 0; t-SNE needs two distinct rows");
   }
 }
 
@@ -187,9 +188,8 @@ ML::TSNEParams tsne_params(const tsne_request& r, int64_t n) {
   p.square_distances = true;
   p.metric = distance_of(r.metric);
   p.p = euclidean_p;
-  p.algorithm = r.method == CUML_MANIFOLD_TSNE_EXACT
-                    ? ML::TSNE_ALGORITHM::EXACT
-                    : ML::TSNE_ALGORITHM::FFT;
+  p.algorithm = r.method == CUML_MANIFOLD_TSNE_EXACT ? ML::TSNE_ALGORITHM::EXACT
+                                                     : ML::TSNE_ALGORITHM::FFT;
   return p;
 }
 
@@ -217,9 +217,9 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
     buffer<float> columns = scratch<float>(x.n * x.d, stream);
     to_columns<float>(handle, x.data, x.n, x.d, nullptr, columns.data(), 0);
     buffer<float> y = scratch<float>(x.n * embedding_dim, stream);
-    raftrkt::cuda_check(cudaMemsetAsync(y.data(), 0, y.size() * sizeof(float),
-                                        stream.value()),
-                        "cudaMemsetAsync");
+    raftrkt::cuda_check(
+        cudaMemsetAsync(y.data(), 0, y.size() * sizeof(float), stream.value()),
+        "cudaMemsetAsync");
     ML::TSNE_fit(handle, columns.data(), y.data(), static_cast<int>(x.n),
                  static_cast<int>(x.d), nullptr, nullptr, p, &kl, &iterations);
     to_rows<float>(handle, y.data(), x.n, embedding_dim, nullptr,

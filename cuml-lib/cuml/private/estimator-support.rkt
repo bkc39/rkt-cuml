@@ -127,13 +127,11 @@
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
                             (~optional (~seq #:apply model->argument:expr entry:applied ...+)
-                                       #:defaults ([(entry.generic 1) '()]
-                                                   [(entry.kind 1) '()]
-                                                   [(entry.method 2) '()]))
+                                       #:defaults ([(entry.generic 1) '()] [(entry.kind 1) '()]
+                                                                           [(entry.method 2) '()]))
                             extra:method-clause ...)
-  #:fail-when (and (memq 'fit-transform (attribute entry.kind))
-                   (memq 'transform (attribute entry.kind))
-                   #'name)
+  #:fail-when
+  (and (memq 'fit-transform (attribute entry.kind)) (memq 'transform (attribute entry.kind)) #'name)
   "fit-transform without transform cannot be given with transform"
   #:with name* (format-id #'name "~a*" #'name)
   #:with (field ...) (for/list ([field (in-list '(hyperparameters settings model))])
