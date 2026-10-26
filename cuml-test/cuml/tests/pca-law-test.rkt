@@ -6,7 +6,7 @@
                   pca-result-noise-variance
                   pca-transform)
          (only-in racket/list last take)
-         (only-in racket/match match match-define)
+         (only-in racket/match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
@@ -23,6 +23,7 @@
                   gaps
                   host-gram
                   magnitude-rows
+                  non-increasing?
                   norm
                   normal-fixture
                   orthonormality-bound
@@ -70,11 +71,6 @@
              ([(row i) (in-indexed gram)]
               [(g j) (in-indexed row)])
     (max worst (abs (- g (if (= i j) 1.0 0.0))))))
-
-(define (non-increasing? xs)
-  (match xs
-    [(list* a (and more (list* b _))) (and (>= a b) (non-increasing? more))]
-    [_ #t]))
 
 (define (spectrum-problems result-lists n k m u)
   (match-define (fitted _ variance ratio singular _) result-lists)

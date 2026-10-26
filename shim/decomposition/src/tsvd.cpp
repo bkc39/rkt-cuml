@@ -130,6 +130,34 @@ ML::paramsTSVD tsvd_params(const tsvd_shape& shape) {
 }
 
 template <typename T>
+struct operands {
+  matrix<T, int64_t> x;
+  matrix<T, int64_t> c;
+};
+
+template <typename T>
+struct apply_scratch {
+  T* columns;
+  T* components;
+  T* applied;
+};
+
+template <typename T, bool Inverse>
+void apply_rows(const raft::handle_t& handle, const operands<T>& o,
+                const apply_scratch<T>& s, T* out) {
+  const auto& [x, c] = o;
+  to_columns<T>(handle, x.data, x.n, x.d, nullptr, s.columns, 0);
+  to_columns<T>(handle, c.data, c.n, c.d, nullptr, s.components, 0);
+  const ML::paramsTSVD p = tsvd_params(tsvd_shape{x.n, c.d, c.n});
+  if constexpr (Inverse) {
+    ML::tsvdInverseTransform(handle, s.columns, s.components, s.applied, p);
+  } else {
+    ML::tsvdTransform(handle, s.columns, s.components, s.applied, p);
+  }
+  to_rows<T>(handle, s.applied, x.n, Inverse ? c.d : c.n, nullptr, out);
+}
+
+template <typename T>
 void fit_into(const raft::handle_t& handle, const rr_view* view,
               const fit_request& r) {
   const matrix<T, int64_t> x =
@@ -174,7 +202,15 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
         tsvd_extents{x.n, x.d, k, constant, exponent}, flipped.data(),
         tsvd_arrays<T>{outputs->components.data(), outputs->singular.data(),
                        outputs->variance.data(), outputs->ratio.data(),
-                       r.with_transform ? outputs->transform.data() : nullptr});
+                       r.with_transform && exponent == 0
+                           ? outputs->transform.data()
+                           : nullptr});
+    if (r.with_transform && exponent != 0) {
+      apply_rows<T, false>(
+          handle, operands<T>{x, {outputs->components.data(), k, x.d}},
+          apply_scratch<T>{columns.data(), components.data(), transform.data()},
+          outputs->transform.data());
+    }
     settle(handle);
   }
   rr_view components_region =
@@ -194,12 +230,6 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
         {components_region, singular_region, variance_region, ratio_region});
   }
 }
-
-template <typename T>
-struct operands {
-  matrix<T, int64_t> x;
-  matrix<T, int64_t> c;
-};
 
 template <typename T, bool Inverse>
 void apply_into(const raft::handle_t& handle, const operands<T>& o,
@@ -222,19 +252,12 @@ void apply_into(const raft::handle_t& handle, const operands<T>& o,
       std::make_unique<buffer<T>>(scratch<T>(x.n * out_width, stream));
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
-    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data(), 0);
     buffer<T> components = scratch<T>(k * d, stream);
-    to_columns<T>(handle, c.data, k, d, nullptr, components.data(), 0);
     buffer<T> applied = scratch<T>(x.n * out_width, stream);
-    const ML::paramsTSVD p = tsvd_params(tsvd_shape{x.n, d, k});
-    if constexpr (Inverse) {
-      ML::tsvdInverseTransform(handle, columns.data(), components.data(),
-                               applied.data(), p);
-    } else {
-      ML::tsvdTransform(handle, columns.data(), components.data(),
-                        applied.data(), p);
-    }
-    to_rows<T>(handle, applied.data(), x.n, out_width, nullptr, result->data());
+    apply_rows<T, Inverse>(
+        handle, o,
+        apply_scratch<T>{columns.data(), components.data(), applied.data()},
+        result->data());
     settle(handle);
   }
   const std::initializer_list<rr_view> regions{

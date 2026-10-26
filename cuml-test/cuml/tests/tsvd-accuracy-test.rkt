@@ -12,7 +12,7 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/pca-data.rkt" fixture-name fixture-rows)
+         (only-in "private/pca-data.rkt" centred column fixture-name fixture-rows)
          (only-in "private/scaler-data.rkt" round-to rows->matrix unit-roundoff)
          (only-in "private/tsvd-data.rkt"
                   accuracy-problems
@@ -46,10 +46,12 @@
   (define rows
     (for/list ([row (in-list (normal-rows-of seed n d))])
       (map (lambda (z s) (+ 5.0 (* z s))) row scales)))
-  (define means (apply map (lambda column (/ (apply + column) n)) rows))
+  (define means
+    (for/list ([j (in-range d)])
+      (/ (apply + (column rows j)) n)))
   (define narrow (round-to dt))
   (for/list ([row (in-list rows)])
-    (map (lambda (x m) (narrow (- x m))) row means)))
+    (map narrow (centred row means))))
 
 (test-gpu "L14: on centred X, the fit is pca-fit's, its variances scaled by (n - 1)/n"
   (for* ([shape (in-list '((500 12 5) (300 6 6)))]

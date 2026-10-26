@@ -37,12 +37,11 @@ struct signed_rows {
   T* out;
   int64_t n;
   int64_t k;
-  int exponent;
 
   __device__ void operator()(int64_t o) const {
     const int64_t i = o / k;
     const int64_t j = o - (i * k);
-    const T v = scaled(t[i + (j * n)], -exponent);
+    const T v = t[i + (j * n)];
     out[o] = flipped[j] ? -v : v;
   }
 };
@@ -67,8 +66,7 @@ void tsvd_post_fit(const raft::handle_t& handle, const tsvd_arrays<T>& fitted,
   each(handle, e.k, kept_spectrum<T>{fitted, out, e.constant, e.exponent});
   if (out.transform != nullptr) {
     each(handle, e.n * e.k,
-         signed_rows<T>{fitted.transform, flipped, out.transform, e.n, e.k,
-                        e.exponent});
+         signed_rows<T>{fitted.transform, flipped, out.transform, e.n, e.k});
   }
 }
 

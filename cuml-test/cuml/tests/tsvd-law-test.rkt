@@ -2,7 +2,7 @@
 
 (require (only-in cuml/decomposition tsvd-fit tsvd-fit-transform tsvd-transform)
          (only-in racket/list drop take)
-         (only-in racket/match match match-define)
+         (only-in racket/match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
@@ -15,6 +15,7 @@
                   gaps
                   host-gram
                   magnitude-rows
+                  non-increasing?
                   over-bound
                   scaled-rows)
          (only-in "private/scaler-data.rkt" bits-equal? rows->matrix unit-roundoff)
@@ -34,11 +35,6 @@
 
 (define dtypes '(float32 float64))
 (define solvers '(full jacobi))
-
-(define (non-increasing? xs)
-  (match xs
-    [(list* a (and more (list* b _))) (and (>= a b) (non-increasing? more))]
-    [_ #t]))
 
 (define (off-identity components)
   (for*/fold ([worst 0.0])
@@ -173,3 +169,13 @@
     (match-define (list dt by) scale)
     (test-case (format "~a ~a ~a" dt solver by)
       (check-equal? (tiny-problems dt solver by) '()))))
+
+(test-gpu "L13, L24: on X with subnormal entries, fit-transform's matrix is fit then transform's"
+  (for ([c (in-list '((float32 full 1e-38) (float64 full 1e-308) (float32 jacobi 1e-40)))])
+    (match-define (list dt solver by) c)
+    (test-case (format "~a ~a ~a" dt solver by)
+      (define X (rows->matrix (scaled-rows magnitude-rows by) dt))
+      (define-values (_ T) (tsvd-fit-transform X #:n-components 2 #:solver solver))
+      (define fitted (tsvd-fit X #:n-components 2 #:solver solver))
+      (check-true (bits-equal? (device-matrix->list* T)
+                               (device-matrix->list* (tsvd-transform fitted X)))))))

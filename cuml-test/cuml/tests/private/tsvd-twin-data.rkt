@@ -7,7 +7,7 @@
          racket/runtime-path
          (only-in rackunit check-equal?)
          (only-in raft device-matrix->list*)
-         (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps)
+         (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps product)
          (only-in "python-env.rkt" run-twin)
          (only-in "scaler-data.rkt" generated-rows rows->matrix rows-of)
          (only-in "tsvd-data.rkt"
@@ -30,12 +30,6 @@
 (define-runtime-path twin "../python/tsvd_twin.py")
 
 (struct twin-case (fixture k))
-
-(define (product a b)
-  (define columns (apply map list b))
-  (for/list ([row (in-list a)])
-    (for/list ([c (in-list columns)])
-      (for/sum ([x (in-list row)] [y (in-list c)]) (* x y)))))
 
 (define low-rank-fixture
   (fixture "low rank"

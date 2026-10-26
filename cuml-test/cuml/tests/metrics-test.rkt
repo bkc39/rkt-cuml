@@ -15,7 +15,8 @@
                   monotone-maps
                   permute
                   random-permutation
-                  sorted-distinct))
+                  sorted-distinct)
+         (only-in "private/scaler-data.rkt" transpose))
 
 (define dtypes '(int32 int64))
 
@@ -37,11 +38,6 @@
 
 (define (ari truth found #:true [dt1 'int32] #:pred [dt2 'int32])
   (adjusted-rand-score (labels-of truth dt1) (labels-of found dt2)))
-
-(define (transpose rows)
-  (if (null? rows)
-      '()
-      (apply map list rows)))
 
 (test-gpu "CC1: counts are int64 k1 x k2; the label vectors are the sorted distinct values in their dtypes"
   (for* ([c (in-list (cases))]

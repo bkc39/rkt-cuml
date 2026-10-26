@@ -10,7 +10,7 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
          (only-in "pca-data.rkt" dot fixture gaps over-bound)
-         (only-in "scaler-data.rkt" generated-rows unit-roundoff))
+         (only-in "scaler-data.rkt" generated-rows transpose unit-roundoff))
 
 (provide (struct-out exact)
          (struct-out reference)
@@ -115,7 +115,8 @@
       (map (lambda (v) (* s v)) row)))
   (define scale (/ 2.0 (dot a a)))
   (define w
-    (apply map (lambda column (for/sum ([ai (in-list a)] [x (in-list column)]) (* ai x))) scaled))
+    (map (lambda (column) (for/sum ([ai (in-list a)] [x (in-list column)]) (* ai x)))
+         (transpose scaled)))
   (define padded (append scaled (make-list (- n d) (make-list d 0.0))))
   (define rows
     (for/list ([ai (in-list a)]
@@ -144,7 +145,7 @@
   (real->double-flonum (/ (for/sum ([x (in-list exact-xs)]) (* (- x mean) (- x mean))) n)))
 
 (define (popvars rows)
-  (apply map (lambda column (popvar column)) rows))
+  (map popvar (transpose rows)))
 
 (define (squared-norm rows)
   (for*/sum ([row (in-list rows)] [x (in-list row)]) (* x x)))

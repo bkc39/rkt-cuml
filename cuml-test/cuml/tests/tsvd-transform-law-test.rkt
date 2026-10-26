@@ -7,7 +7,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/pca-data.rkt" column fixture-name fixture-rows norm)
-         (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff)
+         (only-in "private/scaler-data.rkt" rows->matrix transpose unit-roundoff)
          (only-in "private/tsvd-data.rkt"
                   extents
                   first-problems
@@ -29,9 +29,6 @@
 (define (absolute rows)
   (for/list ([row (in-list rows)])
     (map abs row)))
-
-(define (transpose rows)
-  (apply map list rows))
 
 (define (gamma m u)
   (/ (* m u) (- 1 (* m u))))

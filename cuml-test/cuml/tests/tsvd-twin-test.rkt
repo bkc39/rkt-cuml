@@ -9,6 +9,7 @@
          (only-in "private/tsvd-data.rkt"
                   accuracy-problems
                   exact-reference
+                  extents
                   first-problems
                   sign-matched
                   tie-fixture)
@@ -42,8 +43,7 @@
     (match-define (list (and c (twin-case f k)) dt) p)
     (test-case (format "~a ~a ~a" (fixture-name f) dt solver)
       (define-values (rows fitted _T _I) (ours c dt solver))
-      (match-define (cons first-row _) rows)
-      (define d (length first-row))
+      (define-values (_n d) (extents rows))
       (match-define (hash-table ('singular_values spectrum) ('components components)) exact)
       (check-equal?
        (first-problems (accuracy-problems

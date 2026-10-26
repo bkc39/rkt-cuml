@@ -38,8 +38,8 @@
 (define past-float32 (expt 2.0 64))
 (define past-float64 (expt 2.0 511))
 
-(define f15-message
-  "X: expected a squared Frobenius norm of at most 4.253529586511731e+37, got 3.402823669209385e+38")
+(define (f15-message most got)
+  (format "X: expected a squared Frobenius norm of at most ~a, got ~a" most got))
 
 (define (bad-X-rows)
   (list (row "f1" "X: expected float32 or float64, got int32" (blank-matrix 4 3 'int32))
@@ -71,10 +71,11 @@
          (row "f14 first in row-major order"
               "X: row 1, column 2: expected a finite value, got nan"
               (grid-with `([(1 2) +nan.0] [(2 0) +inf.0])))
-         (row "f15" f15-message (grid-with `([(3 1) ,past-float32])))
+         (row "f15"
+              (f15-message 4.253529586511731e+37 3.402823669209385e+38)
+              (grid-with `([(3 1) ,past-float32])))
          (row "f15 float64"
-              (string-append "X: expected a squared Frobenius norm of at most 2.247116418577895e+307,"
-                             " got 4.49423283715579e+307")
+              (f15-message 2.247116418577895e+307 4.49423283715579e+307)
               (grid-with `([(0 0) ,past-float64]) 'float64))
          (row "f14 before f15"
               "X: row 3, column 1: expected a finite value, got nan"
