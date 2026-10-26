@@ -11,14 +11,12 @@
          raft
          threading)
 
-(provide agreement
-         class-figure
+(provide class-figure
          cluster-colors
          cluster-legend
          cluster-plot
          cluster-style
          clusters-of
-         crosstab
          dataset-column
          dataset-columns
          features
@@ -30,20 +28,6 @@
          rows->matrix
          sizes
          sweep-figure)
-
-(define (crosstab labels classes)
-  (define names (remove-duplicates classes))
-  (define (counts cluster)
-    (for/list ([name (in-list names)])
-      (count (lambda (sample) (equal? (cdr sample) name)) cluster)))
-  (~> (map cons labels classes)
-      (filter (lambda (sample) (>= (car sample) 0)) _)
-      (group-by car _)
-      (map counts _)
-      (sort < #:key (lambda (row) (index-of row (apply max row))))))
-
-(define (agreement tallies)
-  (~> tallies (map (curry apply max) _) (apply + _)))
 
 (define (sizes labels)
   (~> (remove* '(-1) labels) (group-by values _) (map length _) (sort >)))

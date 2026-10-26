@@ -6,9 +6,13 @@
                   dbscan-result-core-sample-indices
                   dbscan-result-labels
                   fit
+                  fit-transform
                   kmeans
                   kmeans-model
                   kmeans-result-labels
+                  pca
+                  pca-fit
+                  pca-result-explained-variance-ratio
                   spectral-clustering
                   table->device-matrix)
          (only-in cuml/scribblings/guide/helpers
@@ -29,10 +33,21 @@
          (only-in pict pict->bitmap pict-height pict-width pict?)
          (only-in racket/class send)
          (only-in racket/function curry)
-         (only-in racket/list count first make-list range remove-duplicates rest second third)
+         (only-in racket/list
+                  count
+                  first
+                  last
+                  make-list
+                  range
+                  remove-duplicates
+                  rest
+                  second
+                  take
+                  third)
          (only-in racket/match match-define)
          (only-in rackunit
                   check
+                  check-=
                   check-equal?
                   check-exn
                   check-false
@@ -40,7 +55,7 @@
                   check-not-false
                   check-true
                   test-case)
-         (only-in raft device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" scaled-matrix))
@@ -337,3 +352,45 @@
                               (and (= label 0) (= class 1) (< r malignant-min))))
                      clusterings)
                 '(8 2)))
+
+(test-gpu "the figures: wine in the plane of two components"
+  (define cultivar (dataset-column 'wine "cultivar"))
+  (define scaled (scaled-matrix 'wine (features 'wine "cultivar")))
+  (define ratios (~> (pca-fit scaled) pca-result-explained-variance-ratio device-vector->list))
+  (define cumulative
+    (for/list ([k (in-range 1 14)])
+      (apply + (take ratios k))))
+  (check-equal? (size (line-plot (range 1 14) cumulative)) '(320 240))
+  (check-true (apply <= cumulative))
+  (check-= (last cumulative) 1.0 (* 13 (expt 2.0 -24)))
+  (define projected (fit-transform (pca #:n-components 2) scaled))
+  (define plane (device-matrix->list* projected))
+  (define truth (renumbered cultivar))
+  (define (mean-of id axis)
+    (define coordinates
+      (for/list ([point (in-list plane)]
+                 [class (in-list truth)]
+                 #:when (= class id))
+        (axis point)))
+    (/ (apply + coordinates) (length coordinates)))
+  (check > (mean-of 0 first) 0.0)
+  (check > 0.0 (mean-of 2 first))
+  (check > 0.0 (mean-of 1 second))
+  (define clusterings
+    (for/list ([samples (in-list (list scaled projected))])
+      (clusters-of (kmeans #:n-clusters 3) samples cultivar)))
+  (define (misplaced-classes labels)
+    (for/list ([cluster (in-list labels)]
+               [class (in-list truth)]
+               #:unless (= cluster class))
+      class))
+  (check-equal? (map (lambda (labels) (mismatches labels cultivar)) clusterings) '(8 5))
+  (check-equal? (map (lambda (labels) (count (curry = 1) (misplaced-classes labels))) clusterings)
+                '(8 4))
+  (check-equal? (size (class-figure (map first plane)
+                                    (map second plane)
+                                    (list (list "13 columns" (first clusterings))
+                                          (list "2 components" (second clusterings)))
+                                    cultivar
+                                    #:class-title "cultivar"))
+                '(652 622)))

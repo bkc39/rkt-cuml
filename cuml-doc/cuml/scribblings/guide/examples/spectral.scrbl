@@ -22,6 +22,7 @@ the rest:
 
 @examples[#:eval ev #:label #f
 (define diagnosis (dataset-column 'breast-cancer "diagnosis"))
+(define diagnosis-ids (list->device-vector (renumbered diagnosis) #:dtype 'int32))
 (sizes diagnosis)
 (define-values (tumour-scaler tumours)
   (~> (load-dataset-table 'breast-cancer)
@@ -32,13 +33,16 @@ the rest:
 @section[#:tag "ex-spectral-fit"]{Against k-means}
 
 @examples[#:eval ev #:label #f
-(define (table-of estimator)
-  (crosstab (labels-of estimator tumours) diagnosis))
-(define kmeans-table (table-of (kmeans #:n-clusters 2)))
-(define spectral-table (table-of (spectral-clustering #:n-clusters 2)))
-kmeans-table
-spectral-table
-(map agreement (list kmeans-table spectral-table))
+(define (counts-of labels)
+  (~> (contingency-matrix diagnosis-ids labels) contingency-table-counts device-matrix->list*))
+(define (labels-in estimator)
+  (fit-predict estimator tumours))
+(define kmeans-found (labels-in (kmeans #:n-clusters 2)))
+(define spectral-found (labels-in (spectral-clustering #:n-clusters 2)))
+(counts-of kmeans-found)
+(counts-of spectral-found)
+(map (lambda (labels) (~r (adjusted-rand-score diagnosis-ids labels) #:precision 3))
+     (list kmeans-found spectral-found))
 ]
 
 The benign tumours are many and alike, the malignant ones fewer and more
@@ -72,11 +76,15 @@ clustering 2.
 @section[#:tag "ex-spectral-neighbours"]{The neighbour graph}
 
 @racket[n-neighbors] sets the graph. Three neighbours are too few; from five
-on, the agreement changes little:
+on, the index changes little:
 
 @examples[#:eval ev #:label #f
 (for/list ([k (in-list '(3 5 10 30))])
-  (list k (~> (spectral-clustering #:n-clusters 2 #:n-neighbors k) table-of agreement)))
+  (list k
+        (~> (spectral-clustering #:n-clusters 2 #:n-neighbors k)
+            labels-in
+            (adjusted-rand-score diagnosis-ids _)
+            (~r #:precision 3))))
 ]
 
 Spectral clustering differs most from k-means on clusters that are not

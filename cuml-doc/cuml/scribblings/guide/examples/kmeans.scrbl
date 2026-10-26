@@ -20,6 +20,7 @@ cultivars:
 (define wine (load-dataset-table 'wine))
 (define measurements (features 'wine "cultivar"))
 (define cultivar (dataset-column 'wine "cultivar"))
+(define cultivar-ids (list->device-vector (renumbered cultivar) #:dtype 'int32))
 (sizes cultivar)
 ]
 
@@ -33,23 +34,24 @@ The measurements have very different ranges:
 
 @section[#:tag "ex-kmeans-raw"]{Raw measurements}
 
-@racket[table-of] clusters wines into three and counts each cluster's
-cultivars:
+@racket[labels-in] clusters wines into three, and @racket[counts-of] counts
+each cultivar's wines in each cluster:
 
 @examples[#:eval ev #:label #f
-(define (table-of wines)
-  (crosstab (labels-of (kmeans #:n-clusters 3) wines) cultivar))
-(define raw-table (table-of (table->device-matrix wine #:columns measurements)))
-raw-table
-(agreement raw-table)
+(define (labels-in wines)
+  (fit-predict (kmeans #:n-clusters 3) wines))
+(define (counts-of labels)
+  (~> (contingency-matrix cultivar-ids labels) contingency-table-counts device-matrix->list*))
+(define raw-labels (labels-in (table->device-matrix wine #:columns measurements)))
+(counts-of raw-labels)
+(~r (adjusted-rand-score cultivar-ids raw-labels) #:precision 3)
 ]
 
-125 of the 178 wines are in a cluster whose majority is their cultivar.
-Proline, in the hundreds, decides the distances: on proline alone, k-means
-finds the same clusters.
+The adjusted Rand index is 0.371. Proline, in the hundreds, decides the
+distances: on proline alone, k-means finds the same clusters.
 
 @examples[#:eval ev #:label #f
-(equal? raw-table (table-of (table->device-matrix wine #:columns '("proline"))))
+(adjusted-rand-score raw-labels (labels-in (table->device-matrix wine #:columns '("proline"))))
 ]
 
 @section[#:tag "ex-kmeans-standardized"]{Standardized measurements}
@@ -60,12 +62,12 @@ and standard deviation 1, every measurement counts alike:
 @examples[#:eval ev #:label #f
 (define-values (wine-scaler scaled)
   (standard-scaler-fit-transform (table->device-matrix wine #:columns measurements)))
-(define scaled-table (table-of scaled))
-scaled-table
-(agreement scaled-table)
+(define scaled-labels (labels-in scaled))
+(counts-of scaled-labels)
+(~r (adjusted-rand-score cultivar-ids scaled-labels) #:precision 3)
 ]
 
-170 of 178 now agree. Scale the features before k-means unless their units
+It rises to 0.864. Scale the features before k-means unless their units
 are comparable.
 
 Proline against flavanoids, in their own units, with each cluster in the colour
