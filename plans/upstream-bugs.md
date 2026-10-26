@@ -37,6 +37,7 @@ packet (§4) has the detail.
 | A4 #47 | noise variance averages d − k eigenvalues, null ones included, when n < d | `pca.cuh` `trunc_comp_exp_vars` | fit min(n, d) components; mean of λ[k:m] |
 | A4 #47 | float32 explained variances go negative; singular values clamp, variances don't | `pca.cuh` | clamped to 0 |
 | A4 #47 | covariance overflow (float32 3e38, float64 1e160) is NaN everywhere; float32 1e19 is garbage | `pca.cuh` (covariance gemm) | refused past √(max/(4nd)) |
+| A4 #47 | covariance underflow: below about 1e-19 (float32) or 1e-154 (float64) XᵀX is subnormal or 0, so λ and σ are 0, the components arbitrary, and Jacobi returns NaN components (float32 1e-20, float64 1e-160) | `pca.cuh` (covariance gemm), `eigJacobi` | X fitted at a power-of-two scale, results scaled back |
 | A4 #47 | n_components above n_rows accepted: arbitrary null-space components | `pca.cuh` `pca_fit` | refused past min(n, d) |
 | A4 #47 | the column mean is not reproducible run to run | `raft::stats::mean` | documented; tolerance laws |
 | A4 #47 | Jacobi: 0 sweeps means cusolver's default, 2³¹ wraps to int, non-convergence is silent; `syevd`'s dev_info is unread | `raft/linalg/detail/eig.cuh` | 0 and above 2³¹−1 refused; non-convergence documented |

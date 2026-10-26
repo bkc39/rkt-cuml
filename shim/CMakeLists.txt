@@ -90,6 +90,7 @@ cumlrkt_family(decomposition
         decomposition/tests/pca_test.cpp
         decomposition/tests/pca_refusal_test.cpp
         decomposition/tests/pca_sign_test.cpp
+        decomposition/tests/scale_test.cpp
         decomposition/src/pca_device.cu
 )
 

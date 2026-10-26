@@ -21,7 +21,8 @@
                   fixture-name
                   fixture-rows
                   fixtures
-                  norm)
+                  norm
+                  over-bound)
          (only-in "python-env.rkt" run-twin)
          (only-in "scaler-data.rkt" rows->matrix rows-of unit-roundoff))
 
@@ -101,9 +102,6 @@
 
 (define (log2-ceiling n)
   (integer-length (sub1 n)))
-
-(define (over-bound what got want bound)
-  (and (> (abs (- got want)) bound) (format "~a: ~a vs ~a, bound ~a" what got want bound)))
 
 (define (l14-problems mine theirs bounds dt solver #:whiten [whiten #f])
   (match-define (ours fitted noise n-samples transform) mine)
