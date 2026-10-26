@@ -268,8 +268,7 @@ TEST(UmapTransformRefusals, EachConditionInTableOrder) {
                                 {rows, cols});
   const filled<float> zero_train(res, zero_row(blobs(rows, cols), 3, cols),
                                  {rows, cols});
-  const filled<float> zero_x(res, zero_row(blobs(2, cols), 0, cols),
-                             {2, cols});
+  const filled<float> zero_x(res, zero_row(blobs(2, cols), 0, cols), {2, cols});
   const filled<float> nan_x(res, with(blobs(2, cols), 4, nan), {2, cols});
   const umap_trained good = t.views();
   const auto apply = [&](const rr_view* v, const umap_trained& on,

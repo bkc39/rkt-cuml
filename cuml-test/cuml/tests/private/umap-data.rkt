@@ -188,11 +188,10 @@
   (define held-result (umap-fit (fixture-X held) #:init init))
   (define found
     (hash-ref (run-twin twin
-                        (hasheq 'cases
-                                (append (map quality-case fits results)
-                                        (list (quality-case held
-                                                            held-result
-                                                            #:transform (fixture-rows new))))))
+                        (hasheq 'cases (append (map quality-case fits results)
+                                               (list (quality-case held
+                                                                   held-result
+                                                                   #:transform (fixture-rows new))))))
               'results))
   (for ([f (in-list fits)]
         [result (in-list results)]
@@ -202,11 +201,10 @@
                     (trustworthiness (fixture-X f) (umap-result-embedding result) #:n-neighbors 10)
                     (hash-ref theirs 'trustworthiness))))
   (test-case (format "~a transform ~a" init (fixture-name new))
-    (check-within (format "~a transform ~a" init (fixture-name new))
-                  (trustworthiness (fixture-X new)
-                                   (umap-transform held-result (fixture-X new))
-                                   #:n-neighbors 10)
-                  (hash-ref (last found) 'trustworthiness))))
+    (check-within
+     (format "~a transform ~a" init (fixture-name new))
+     (trustworthiness (fixture-X new) (umap-transform held-result (fixture-X new)) #:n-neighbors 10)
+     (hash-ref (last found) 'trustworthiness))))
 
 (define (ours f new options #:y [y #f])
   (define result

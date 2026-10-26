@@ -70,9 +70,10 @@
             a)))
 
 (define (r5-message name v)
-  (format "~a: expected a finite value of at least 1.1754943508222875e-38 and at most 3.4028234663852886e+38, got ~a"
-          name
-          v))
+  (format
+   "~a: expected a finite value of at least 1.1754943508222875e-38 and at most 3.4028234663852886e+38, got ~a"
+   name
+   v))
 
 (define (least-rate-message v)
   (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))
@@ -158,9 +159,7 @@
         (row "f14 before f17"
              "X: expected at least 2 rows, got 1"
              (cons (rows->matrix '((1 2 3)) 'float32) #f))
-        (row "f20 before f21"
-             "y: expected 8 elements, got 7"
-             (cons (tiny-with nan-row) (labels 7)))
+        (row "f20 before f21" "y: expected 8 elements, got 7" (cons (tiny-with nan-row) (labels 7)))
         (row "f21 before f22"
              "X: row 3, column 1: expected a finite value, got nan"
              (cons (tiny-with `([(3 1) +nan.0] [(1 1) ,large])) #f))
@@ -229,59 +228,58 @@
                (or params (umap-result-params base))))
 
 (define (transform-rows)
-  (list
-   (row "t1" "X: expected float32, got int32" (cons (fitted) (blank-matrix 2 3 'int32)))
-   (row "t2" "X: expected rank 2, got rank 1" (cons (fitted) (blank-vector 3 'float32)))
-   (row "t3" "X: expected at least 1 row, got 0" (cons (fitted) (blank-matrix 0 3 'float32)))
-   (row "t5"
-        "result X: expected float32, got float64"
-        (cons (hand-built #:X (tiny-with '() 'float64)) (tiny-X)))
-   (row "t5 rows"
-        "result X: expected at least 2 rows, got 1"
-        (cons (hand-built #:X (rows->matrix '((1 2 3)) 'float32)) (tiny-X)))
-   (row "t6"
-        "embedding: expected float32, got float64"
-        (cons (hand-built #:embedding (blank-matrix 8 2 'float64)) (tiny-X)))
-   (row "t6 rows"
-        "embedding: expected 8 rows, got 7"
-        (cons (hand-built #:embedding (blank-matrix 7 2 'float32)) (tiny-X)))
-   (row "t6 columns"
-        "embedding: expected 2 columns, got 3"
-        (cons (hand-built #:embedding (blank-matrix 8 3 'float32)) (tiny-X)))
-   (row "t7" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 2 2 'float32)))
-   (row "t8"
-        "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or cosine"
-        (cons (hand-built #:params (umap-params #:metric 'minkowski)) (tiny-X)))
-   (row "t8 n-neighbors"
-        "n-neighbors: expected at least 2, got 1"
-        (cons (hand-built #:params (umap-params #:n-neighbors 1)) (tiny-X)))
-   (row "t9"
-        "n-epochs: transform runs n-epochs/3 epochs and needs at least 3, got 2"
-        (cons (hand-built #:params (umap-params #:n-epochs 2)) (tiny-X)))
-   (row "t8 learning-rate"
-        (least-rate-message 1e-50)
-        (cons (hand-built #:params (umap-params #:learning-rate 1e-50)) (tiny-X)))
-   (row "t11 result X"
-        (string-append "result " nan-message)
-        (cons (hand-built #:X (tiny-with nan-row)) (tiny-X)))
-   (row "t11 result X norm"
-        (string-append "result " f22-message)
-        (cons (hand-built #:X (tiny-with large-row)) (tiny-X)))
-   (row "t11 result X cosine"
-        (string-append "result " f23-message)
-        (cons (hand-built #:X (tiny-with zero-row) #:params (umap-params #:metric 'cosine))
-              (tiny-X)))
-   (row "t11 result X before X"
-        (string-append "result " nan-message)
-        (cons (hand-built #:X (tiny-with nan-row)) (tiny-with large-row)))
-   (row "t11" nan-message (cons (fitted) (tiny-with nan-row)))
-   (row "t11 norm" f22-message (cons (fitted) (tiny-with large-row)))
-   (row "t11 cosine"
-        f23-message
-        (cons (umap-fit (tiny-X) #:init 'random #:metric 'cosine) (tiny-with zero-row)))
-   (row "t7 before t11"
-        "X: expected 3 columns, got 2"
-        (cons (fitted) (rows->matrix '((+nan.0 1)) 'float32)))))
+  (list (row "t1" "X: expected float32, got int32" (cons (fitted) (blank-matrix 2 3 'int32)))
+        (row "t2" "X: expected rank 2, got rank 1" (cons (fitted) (blank-vector 3 'float32)))
+        (row "t3" "X: expected at least 1 row, got 0" (cons (fitted) (blank-matrix 0 3 'float32)))
+        (row "t5"
+             "result X: expected float32, got float64"
+             (cons (hand-built #:X (tiny-with '() 'float64)) (tiny-X)))
+        (row "t5 rows"
+             "result X: expected at least 2 rows, got 1"
+             (cons (hand-built #:X (rows->matrix '((1 2 3)) 'float32)) (tiny-X)))
+        (row "t6"
+             "embedding: expected float32, got float64"
+             (cons (hand-built #:embedding (blank-matrix 8 2 'float64)) (tiny-X)))
+        (row "t6 rows"
+             "embedding: expected 8 rows, got 7"
+             (cons (hand-built #:embedding (blank-matrix 7 2 'float32)) (tiny-X)))
+        (row "t6 columns"
+             "embedding: expected 2 columns, got 3"
+             (cons (hand-built #:embedding (blank-matrix 8 3 'float32)) (tiny-X)))
+        (row "t7" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 2 2 'float32)))
+        (row "t8"
+             "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or cosine"
+             (cons (hand-built #:params (umap-params #:metric 'minkowski)) (tiny-X)))
+        (row "t8 n-neighbors"
+             "n-neighbors: expected at least 2, got 1"
+             (cons (hand-built #:params (umap-params #:n-neighbors 1)) (tiny-X)))
+        (row "t9"
+             "n-epochs: transform runs n-epochs/3 epochs and needs at least 3, got 2"
+             (cons (hand-built #:params (umap-params #:n-epochs 2)) (tiny-X)))
+        (row "t8 learning-rate"
+             (least-rate-message 1e-50)
+             (cons (hand-built #:params (umap-params #:learning-rate 1e-50)) (tiny-X)))
+        (row "t11 result X"
+             (string-append "result " nan-message)
+             (cons (hand-built #:X (tiny-with nan-row)) (tiny-X)))
+        (row "t11 result X norm"
+             (string-append "result " f22-message)
+             (cons (hand-built #:X (tiny-with large-row)) (tiny-X)))
+        (row "t11 result X cosine"
+             (string-append "result " f23-message)
+             (cons (hand-built #:X (tiny-with zero-row) #:params (umap-params #:metric 'cosine))
+                   (tiny-X)))
+        (row "t11 result X before X"
+             (string-append "result " nan-message)
+             (cons (hand-built #:X (tiny-with nan-row)) (tiny-with large-row)))
+        (row "t11" nan-message (cons (fitted) (tiny-with nan-row)))
+        (row "t11 norm" f22-message (cons (fitted) (tiny-with large-row)))
+        (row "t11 cosine"
+             f23-message
+             (cons (umap-fit (tiny-X) #:init 'random #:metric 'cosine) (tiny-with zero-row)))
+        (row "t7 before t11"
+             "X: expected 3 columns, got 2"
+             (cons (fitted) (rows->matrix '((+nan.0 1)) 'float32)))))
 
 (test-gpu "L14: transform refuses each bad argument with its message"
   (for ([r (in-list (transform-rows))])

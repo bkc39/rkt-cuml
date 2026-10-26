@@ -102,8 +102,7 @@ const char* metric_name(int32_t metric) {
 }
 
 void require_curve_value(const char* what, double got) {
-  if (!std::isfinite(got) || got < least_float ||
-      got > most_float) {
+  if (!std::isfinite(got) || got < least_float || got > most_float) {
     throw logic_error(
         std::format("{}: expected a finite float32 value above 0, got {}", what,
                     printed(got)));
@@ -225,8 +224,7 @@ void require_scanned(const char* name, const matrix<float, int64_t>& x,
   require_finite(name, x, stream);
   require_bounded_rows(name, x, stream);
   if (metric == CUML_MANIFOLD_METRIC_COSINE) {
-    const float least =
-        static_cast<float>(x.d) * least_float;
+    const float least = static_cast<float>(x.d) * least_float;
     const auto [row, squared] =
         cumlrkt::first_normless_row(x.data, x.n, x.d, least, stream);
     if (row >= 0) {

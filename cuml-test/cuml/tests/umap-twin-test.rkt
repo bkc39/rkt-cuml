@@ -54,8 +54,7 @@
 
 (test-twin "L6: a supervised fit equals Python's given the dense codes, -1 unlabelled"
   (define labels (fixture-labels held-out-fit))
-  (define cases
-    `((spectral ,labels) (random ,labels) (random ,(partly-unlabelled labels))))
+  (define cases `((spectral ,labels) (random ,labels) (random ,(partly-unlabelled labels))))
   (define runs
     (for/list ([c (in-list cases)])
       (match-define (list init y) c)
