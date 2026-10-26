@@ -1,12 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml/manifold
-                  umap-fit
-                  umap-result-a
-                  umap-result-b
-                  umap-result-embedding
-                  umap-result-params
-                  umap-transform)
+(require (only-in cuml/manifold umap-fit umap-result umap-result-embedding umap-transform)
          (only-in cuml/metrics trustworthiness)
          (only-in json json-null)
          (only-in racket/list drop last range take)
@@ -14,18 +8,19 @@
          racket/runtime-path
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix list->device-vector)
-         (only-in "blob-data.rkt" centred-blobs)
+         (only-in "blob-data.rkt" centred-blobs uniform-source)
+         (only-in "estimator-data.rkt" apply-options)
          (only-in "metrics-data.rkt" median)
-         (only-in "python-env.rkt" run-twin)
+         (only-in "python-env.rkt" run-cases)
          (only-in "scaler-data.rkt" bits-equal?))
 
 (provide (struct-out fixture)
+         (struct-out outcome)
          blobs
          case-of
          check-parity
          check-quality
          digits
-         embedding-rows
          far-blobs
          finite-rows?
          fixture-X
@@ -42,6 +37,8 @@
 
 (struct fixture (name rows labels))
 
+(struct outcome (result embedding transformed))
+
 (define-runtime-path twin "../python/umap_twin.py")
 
 (define (grouped name seed centres per-group)
@@ -55,34 +52,22 @@
 (define blobs
   (grouped "blobs"
            51
-           (parameterize ([current-pseudo-random-generator (make-pseudo-random-generator)])
-             (random-seed 50)
+           (let ([next (uniform-source 50)])
              (for/list ([_ (in-range 5)])
                (for/list ([_ (in-range 10)])
-                 (+ -10.0 (* 20.0 (random))))))
+                 (+ -10.0 (* 20.0 (next))))))
            200))
 
 (define (every-fifth? i)
   (= (modulo i 5) 4))
 
 (define (split-fixture f)
-  (define-values (kept-rows kept-labels new-rows new-labels)
-    (for/fold ([kept-rows '()]
-               [kept-labels '()]
-               [new-rows '()]
-               [new-labels '()]
-               #:result (values (reverse kept-rows)
-                                (reverse kept-labels)
-                                (reverse new-rows)
-                                (reverse new-labels)))
-              ([row (in-list (fixture-rows f))]
-               [label (in-list (fixture-labels f))]
-               [i (in-naturals)])
-      (if (every-fifth? i)
-          (values kept-rows kept-labels (cons row new-rows) (cons label new-labels))
-          (values (cons row kept-rows) (cons label kept-labels) new-rows new-labels))))
-  (values (fixture (fixture-name f) kept-rows kept-labels)
-          (fixture (fixture-name f) new-rows new-labels)))
+  (match-define (fixture name rows labels) f)
+  (define (picked keep?)
+    (for/lists (picked-rows picked-labels #:result (fixture name picked-rows picked-labels))
+               ([row (in-list rows)] [label (in-list labels)] [i (in-naturals)] #:when (keep? i))
+               (values row label)))
+  (values (picked (lambda (i) (not (every-fifth? i)))) (picked every-fifth?)))
 
 (define-values (held-out-fit held-out-new) (split-fixture blobs))
 
@@ -113,17 +98,15 @@
         -1
         (+ (* (expt 2 40) y) 7))))
 
-(define (embedding-rows E)
-  (device-matrix->list* E))
-
 (define (finite-rows? rows)
   (for*/and ([row (in-list rows)]
              [x (in-list row)])
     (and (flonum? x) (< (abs x) +inf.0))))
 
-(define (twin-case f result-params a b #:transform [Y #f] #:y [y #f] #:op [op "umap"])
+(define (twin-case f result #:transform [Y #f] #:y [y #f] #:op [op "umap"])
+  (match-define (umap-result _ _ a b params) result)
   (define (given key)
-    (hash-ref result-params key))
+    (hash-ref params key))
   (hasheq 'op op
           'X (fixture-rows f)
           'y (or y (json-null))
@@ -144,7 +127,7 @@
 
 (define (digits)
   (match-define (list (hash-table ['X rows] ['y labels]))
-    (hash-ref (run-twin twin (hasheq 'cases (list (hasheq 'op "digits")))) 'results))
+    (run-cases twin (list (hasheq 'op "digits"))))
   (fixture "digits" rows labels))
 
 (define (tail-split f)
@@ -155,31 +138,22 @@
 
 (define (jittered f seed)
   (match-define (fixture name rows labels) f)
-  (parameterize ([current-pseudo-random-generator (make-pseudo-random-generator)])
-    (random-seed seed)
-    (fixture (format "~a jittered" name)
-             (for/list ([row (in-list rows)])
-               (for/list ([x (in-list row)])
-                 (+ x (* 0.01 (random)))))
-             labels)))
+  (define next (uniform-source seed))
+  (fixture (format "~a jittered" name)
+           (for/list ([row (in-list rows)])
+             (for/list ([x (in-list row)])
+               (+ x (* 0.01 (next)))))
+           labels))
 
 (define (check-within name ours spread)
-  (define floor (apply min spread))
-  (define delta (- (apply max spread) floor))
+  (define least (apply min spread))
+  (define delta (- (apply max spread) least))
   (define centre (median spread))
-  (printf "~a: ours ~a, Python min ~a median ~a delta ~a\n" name ours floor centre delta)
-  (check-true (>= ours (- floor delta)) (format "~a: ~a below ~a - ~a" name ours floor delta))
+  (check-true (>= ours (- least delta)) (format "~a: ~a below ~a - ~a" name ours least delta))
   (check-true (<= (abs (- ours centre)) delta) (format "~a: ~a off the median ~a" name ours centre)))
 
 (define (quality-case f result #:transform [Y #f])
-  (hash-set* (twin-case f
-                        (umap-result-params result)
-                        (umap-result-a result)
-                        (umap-result-b result)
-                        #:transform Y
-                        #:op "quality")
-             'seeds
-             (range 20)))
+  (hash-set (twin-case f result #:transform Y #:op "quality") 'seeds (range 20)))
 
 (define (check-quality init fits held new)
   (define results
@@ -187,12 +161,9 @@
       (umap-fit (fixture-X f) #:init init)))
   (define held-result (umap-fit (fixture-X held) #:init init))
   (define found
-    (hash-ref (run-twin twin
-                        (hasheq 'cases (append (map quality-case fits results)
-                                               (list (quality-case held
-                                                                   held-result
-                                                                   #:transform (fixture-rows new))))))
-              'results))
+    (run-cases twin
+               (append (map quality-case fits results)
+                       (list (quality-case held held-result #:transform (fixture-rows new))))))
   (for ([f (in-list fits)]
         [result (in-list results)]
         [theirs (in-list found)])
@@ -207,33 +178,26 @@
      (hash-ref (last found) 'trustworthiness))))
 
 (define (ours f new options #:y [y #f])
-  (define result
-    (keyword-apply umap-fit (map car options) (map cdr options) (list (fixture-X f)) #:y y))
-  (list result
-        (device-matrix->list* (umap-result-embedding result))
-        (device-matrix->list* (umap-transform result (fixture-X new)))))
+  (define result (apply-options umap-fit (hash-set options 'y y) (fixture-X f)))
+  (outcome result
+           (device-matrix->list* (umap-result-embedding result))
+           (device-matrix->list* (umap-transform result (fixture-X new)))))
 
 (define (case-of f new result #:y [y #f])
-  (twin-case f
-             (umap-result-params result)
-             (umap-result-a result)
-             (umap-result-b result)
-             #:y y
-             #:transform (fixture-rows new)))
+  (twin-case f result #:y y #:transform (fixture-rows new)))
 
 (define (check-parity f new configs #:transform? [transform? #t])
   (define runs
     (for/list ([options (in-list configs)])
       (ours f new options)))
   (define theirs
-    (hash-ref (run-twin twin
-                        (hasheq 'cases (for/list ([run (in-list runs)])
-                                         (case-of f new (car run)))))
-              'results))
+    (run-cases twin
+               (for/list ([r (in-list runs)])
+                 (case-of f new (outcome-result r)))))
   (for ([options (in-list configs)]
-        [run (in-list runs)]
+        [r (in-list runs)]
         [found (in-list theirs)])
-    (match-define (list _ embedding transformed) run)
+    (match-define (outcome _ embedding transformed) r)
     (test-case (format "~a ~a" (fixture-name f) options)
       (check-true (bits-equal? embedding (hash-ref found 'embedding)) "fit")
       (when transform?

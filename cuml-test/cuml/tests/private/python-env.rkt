@@ -13,7 +13,8 @@
          syntax/parse/define
          (only-in threading ~>))
 
-(provide run-twin
+(provide run-cases
+         run-twin
          test-twin
          twin-params)
 
@@ -62,6 +63,9 @@
     (unless ok?
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))
+
+(define (run-cases script cases)
+  (hash-ref (run-twin script (hasheq 'cases cases)) 'results))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped twin-skip name body ...))

@@ -4,17 +4,23 @@
          (only-in racket/math pi))
 
 (provide centred-blobs
-         normal-source)
+         normal-source
+         uniform-source)
 
-(define (normal-source seed)
+(define (uniform-source seed)
   (define g (make-pseudo-random-generator))
   (parameterize ([current-pseudo-random-generator g])
     (random-seed seed))
   (lambda ()
     (parameterize ([current-pseudo-random-generator g])
-      (define u (- 1.0 (random)))
-      (define v (random))
-      (* (sqrt (* -2.0 (log u))) (cos (* 2.0 pi v))))))
+      (random))))
+
+(define (normal-source seed)
+  (define next (uniform-source seed))
+  (lambda ()
+    (define u (- 1.0 (next)))
+    (define v (next))
+    (* (sqrt (* -2.0 (log u))) (cos (* 2.0 pi v)))))
 
 (define (centred-blobs centres per-group seed)
   (define next (normal-source seed))

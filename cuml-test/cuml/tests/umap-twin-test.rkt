@@ -1,18 +1,12 @@
 #lang racket/base
 
-(require (only-in cuml/manifold
-                  umap-fit
-                  umap-params
-                  umap-result-a
-                  umap-result-b
-                  umap-result-embedding
-                  umap-result-params)
+(require (only-in cuml/manifold umap-fit umap-params umap-result-embedding)
          (only-in racket/list take)
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list* list->device-vector)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params)
+         (only-in "private/python-env.rkt" run-cases test-twin twin-params)
          (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/umap-data.rkt"
                   far-blobs
@@ -26,23 +20,23 @@
                   ours
                   case-of
                   check-parity
+                  outcome-embedding
+                  outcome-result
                   overlap
                   twin-case))
 
 (define-runtime-path twin "python/umap_twin.py")
 
 (define configs
-  (append (for*/list ([init (in-list '(spectral random))]
-                      [metric (in-list '(euclidean sqeuclidean manhattan chebyshev cosine))])
-            (list (cons '#:init init) (cons '#:metric metric) (cons '#:n-neighbors 16)))
-          (for*/list ([init (in-list '(spectral random))]
-                      [k (in-list '(3 16))])
-            (list (cons '#:init init) (cons '#:n-components k)))
-          (list (list (cons '#:init 'random)
-                      (cons '#:learning-rate 0.5)
-                      (cons '#:min-dist 0.3)
-                      (cons '#:n-epochs 60)
-                      (cons '#:negative-sample-rate 2)))))
+  (append
+   (for*/list ([init (in-list '(spectral random))]
+               [metric (in-list '(euclidean sqeuclidean manhattan chebyshev cosine))])
+     (hasheq 'init init 'metric metric 'n-neighbors 16))
+   (for*/list ([init (in-list '(spectral random))]
+               [k (in-list '(3 16))])
+     (hasheq 'init init 'n-components k))
+   (list
+    (hasheq 'init 'random 'learning-rate 0.5 'min-dist 0.3 'n-epochs 60 'negative-sample-rate 2))))
 
 (test-twin "L6: fit and transform equal Python cuML's bitwise on held-out blobs"
   (check-parity held-out-fit held-out-new configs))
@@ -58,22 +52,21 @@
   (define runs
     (for/list ([c (in-list cases)])
       (match-define (list init y) c)
-      (match-define (list result embedding _)
-        (ours held-out-fit
-              held-out-new
-              (list (cons '#:init init))
-              #:y (list->device-vector y #:dtype 'int32)))
-      (list init y result embedding)))
+      (ours held-out-fit
+            held-out-new
+            (hasheq 'init init)
+            #:y (list->device-vector y #:dtype 'int32))))
   (define theirs
-    (hash-ref (run-twin twin
-                        (hasheq 'cases (for/list ([run (in-list runs)])
-                                         (match-define (list _ y result _) run)
-                                         (case-of held-out-fit held-out-new result #:y y))))
-              'results))
-  (for ([run (in-list runs)]
+    (run-cases twin
+               (for/list ([c (in-list cases)]
+                          [r (in-list runs)])
+                 (match-define (list _ y) c)
+                 (case-of held-out-fit held-out-new (outcome-result r) #:y y))))
+  (for ([c (in-list cases)]
+        [r (in-list runs)]
         [found (in-list theirs)])
-    (match-define (list init _ _ embedding) run)
-    (check-true (bits-equal? embedding (hash-ref found 'embedding)) (format "~a" init))))
+    (match-define (list init _) c)
+    (check-true (bits-equal? (outcome-embedding r) (hash-ref found 'embedding)) (format "~a" init))))
 
 (define merged-labels '(0 16777216 16777217))
 
@@ -86,17 +79,12 @@
     (umap-fit (fixture-X overlap) #:y (list->device-vector labels #:dtype 'int64) #:init 'random))
   (define embedding (device-matrix->list* (umap-result-embedding result)))
   (define (twin-of y)
-    (twin-case overlap
-               (umap-result-params result)
-               (umap-result-a result)
-               (umap-result-b result)
-               #:y y))
+    (twin-case overlap result #:y y))
   (match-define (list dense raw)
-    (hash-ref (run-twin twin
-                        (hasheq 'cases (list (twin-of (for/list ([i (in-range 600)])
-                                                        (modulo i 3)))
-                                             (twin-of labels))))
-              'results))
+    (run-cases twin
+               (list (twin-of (for/list ([i (in-range 600)])
+                                (modulo i 3)))
+                     (twin-of labels))))
   (check-true (bits-equal? embedding (hash-ref dense 'embedding)) "dense codes")
   (check-false (bits-equal? embedding (hash-ref raw 'embedding)) "raw labels"))
 
@@ -106,13 +94,7 @@
 (test-twin "L10: n-neighbors past the row count is Python's clamp, bitwise"
   (define result (umap-fit (fixture-X twelve) #:n-neighbors 20 #:init 'random))
   (define clamped (umap-fit (fixture-X twelve) #:n-neighbors 12 #:init 'random))
-  (match-define (list found)
-    (hash-ref (run-twin twin
-                        (hasheq 'cases (list (twin-case twelve
-                                                        (umap-result-params result)
-                                                        (umap-result-a result)
-                                                        (umap-result-b result)))))
-              'results))
+  (match-define (list found) (run-cases twin (list (twin-case twelve result))))
   (define embedding (device-matrix->list* (umap-result-embedding result)))
   (check-true (bits-equal? embedding (device-matrix->list* (umap-result-embedding clamped))))
   (check-true (bits-equal? embedding (hash-ref found 'embedding)))
@@ -134,7 +116,6 @@
                      device-ids))
 
 (test-twin "L15: the parameters are Python's, but for random-state and build-algo"
-  (match-define (list theirs)
-    (hash-ref (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))) 'results))
+  (match-define (list theirs) (run-cases twin (list (hasheq 'op "params"))))
   (check-equal? (twin-params theirs unbound)
                 (hash-set* (umap-params) 'random-state #f 'build-algo 'auto)))

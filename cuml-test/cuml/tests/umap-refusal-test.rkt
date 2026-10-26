@@ -305,15 +305,17 @@
 
 (test-gpu "L14: f28: a non-array X is refused by the view check, under any seed"
   (define unseeded (umap-fit (tiny-X) #:init 'random #:random-state #f))
-  (for ([call (in-list (list (list 'umap-fit 0 (lambda () (umap-fit listed-X #:random-state 0)))
-                             (list 'umap-fit #f (lambda () (umap-fit listed-X #:random-state #f)))
-                             (list 'umap-transform #f (lambda () (umap-transform unseeded listed-X)))))])
+  (for ([call (in-list
+               (list (list 'umap-fit 0 (lambda () (umap-fit listed-X #:random-state 0)))
+                     (list 'umap-fit #f (lambda () (umap-fit listed-X #:random-state #f)))
+                     (list 'umap-transform #f (lambda () (umap-transform unseeded listed-X)))))])
     (match-define (list who seed thunk) call)
     (test-case (format "~a, random-state ~a" who seed)
       (match (raised thunk)
         [(? exn:fail:raft? e)
-         (check-equal? (exn-message e)
-                       (format "~a: expected a device array or #f for a view, given ~e" who listed-X))]
+         (check-equal?
+          (exn-message e)
+          (format "~a: expected a device array or #f for a view, given ~e" who listed-X))]
         [other (fail (format "expected an exn:fail:raft, got ~e" other))]))))
 
 (test-gpu "L14: the generics refuse with their own names"

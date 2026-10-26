@@ -6,7 +6,7 @@
 (define configs
   (for*/list ([init (in-list '(spectral random))]
               [k (in-list '(2 3 16))])
-    (list (cons '#:init init) (cons '#:n-components k))))
+    (hasheq 'init init 'n-components k)))
 
 (test-twin "L6: fit equals Python cuML's bitwise on digits"
   (define-values (head tail) (tail-split (digits)))
