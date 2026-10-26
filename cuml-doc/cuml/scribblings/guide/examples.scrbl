@@ -37,7 +37,7 @@ entries, @racket[cumulative] sums explained-variance ratios,
 @racket[components-for] gives the fewest leading components whose cumulative
 share reaches a share,
 @racket[columns-of] copies a matrix's columns to the host, and
-@racket[summary] rounds a PCA or truncated SVD fit's first singular values and
+@racket[spectrum] rounds a PCA or truncated SVD fit's first singular values and
 explained-variance ratios.
 
 @local-table-of-contents[]

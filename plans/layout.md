@@ -663,7 +663,7 @@ Follow-ups are GitHub issues.
 - **A6-d.** A score is `(rounded (adjusted-rand-score ids labels))`, a string
   from the guide helper `rounded`; each is pinned against the exact rational
   ARI of its pinned table (`table-ari`). `class-ids`, `counts-of`, `rounded`,
-  `leading`, `cumulative`, `components-for`, `columns-of` and `summary` live
+  `leading`, `cumulative`, `components-for`, `columns-of` and `spectrum` live
   in `guide/helpers.rkt` once, and the tests import them (amended after A6 r0
   style items 1, 2, 4, 5 and 13, and A6 final style item 2).
 - **A6-e.** No reconstruction section until `mean-squared-error` is bound.

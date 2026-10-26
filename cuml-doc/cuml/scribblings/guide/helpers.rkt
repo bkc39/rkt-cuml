@@ -34,7 +34,7 @@
          rows
          rows->matrix
          sizes
-         summary
+         spectrum
          sweep-figure)
 
 (define (sizes labels)
@@ -129,7 +129,7 @@
 (define (columns-of matrix)
   (~> matrix device-matrix->list* (apply map list _)))
 
-(define (summary result n)
+(define (spectrum result n)
   (~> (match result
         [(? pca-result?)
          (list (pca-result-singular-values result) (pca-result-explained-variance-ratio result))]

@@ -98,8 +98,8 @@ and ratios:
 
 @examples[#:eval ev #:label #f
 (define svd-fit (tsvd-fit scaled #:n-components 2))
-(summary svd-fit 2)
-(summary scaled-fit 2)
+(spectrum svd-fit 2)
+(spectrum scaled-fit 2)
 ]
 
 @(close-eval ev)

@@ -49,7 +49,7 @@
                   rounded
                   rows->matrix
                   sizes
-                  summary)
+                  spectrum)
          (only-in cuml/scribblings/guide/source page-helpers-source)
          (only-in datasets/core load-dataset-table)
          (only-in pkg/lib pkg-directory)
@@ -417,8 +417,8 @@
   (define scaled (wine-scaled))
   (define svd-fit (tsvd-fit scaled #:n-components 2))
   (define scaled-fit (pca-fit scaled))
-  (check-equal? (summary svd-fit 2) '(("28.942" "21.082") ("0.362" "0.192")))
-  (check-equal? (summary scaled-fit 2) '(("28.942" "21.082") ("0.362" "0.192")))
+  (check-equal? (spectrum svd-fit 2) '(("28.942" "21.082") ("0.362" "0.192")))
+  (check-equal? (spectrum scaled-fit 2) '(("28.942" "21.082") ("0.362" "0.192")))
   (match-define (list largest second-largest third-largest)
     (host (pca-result-explained-variance scaled-fit) 3))
   (define first-gap (- largest second-largest))
