@@ -97,6 +97,7 @@ cumlrkt_family(manifold
   SOURCES manifold/src/manifold.cpp manifold/src/umap.cpp
           manifold/src/umap_device.cu
   TESTS manifold/tests/manifold_test.cpp manifold/tests/umap_test.cpp
+        manifold/tests/umap_wide_test.cpp
         manifold/tests/umap_refusal_test.cpp
 )
 
