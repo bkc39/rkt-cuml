@@ -64,6 +64,10 @@
   (format "X: row 3: expected a squared norm of at least ~a under cosine, got 0"
           (* 3 (expt 2.0 -126))))
 
+(define f29-message
+  (string-append "embedding: row 0, column 0: the optimisation diverged to nan;"
+                 " lower learning-rate or use init 'random"))
+
 (define r6-message
   (let-values ([(a _b) (curve-parameters 0.1 1e30)])
     (format (string-append "spread: with min-dist 0.1, a spread of 1e+30 gives a curve parameter"
@@ -164,7 +168,7 @@
              "n-components: spectral init of 2 components needs at least 8 rows, got 7"
              (cons (tiny-with '() 'float32 (cdr (fixture-rows tiny))) #f))
         (row "f29"
-             "embedding: row 0, column 0: the optimisation diverged to nan; lower learning-rate or use init 'random"
+             f29-message
              (cons (rows->matrix (take (fixture-rows tiny) 6) 'float32) (labels 6 'int32 3)))
         (row "f12 before f14"
              "X: expected float32, got float64"
