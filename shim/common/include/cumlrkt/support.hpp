@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -104,6 +105,20 @@ inline void require_index(const char* name, int64_t rows, int64_t cols) {
   if (cols > 0 && rows > most_index / cols) {
     throw logic_error(std::format(
         "{}: {}x{} elements do not fit the index type", name, rows, cols));
+  }
+}
+
+inline constexpr int64_t least_basis = 20;
+
+inline void require_basis(int64_t n, int64_t nev, const char* subject,
+                          const char* unit,
+                          const char* vectors = "components") {
+  const int64_t ncv = std::min(n - nev, std::max((2 * nev) + 1, least_basis));
+  if (n * ncv > most_index) {
+    throw logic_error(std::format(
+        "{}: {} {} and {} {} need a {}x{} eigensolver basis, more than {} "
+        "elements",
+        subject, n, unit, nev, vectors, n, ncv, most_index));
   }
 }
 

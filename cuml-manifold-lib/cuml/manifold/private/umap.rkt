@@ -1,16 +1,23 @@
 #lang racket/base
 
-(require (only-in cuml/core/private/define-who define/who)
+(require (for-syntax racket/base
+                     (only-in syntax/parse attribute))
+         (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters
+                  define-codes
+                  define-hyperparameters
+                  key->keyword
+                  table-id)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          (only-in racket/math infinite? nan?)
-         (only-in raft current-device-resources shape)
+         (only-in raft current-device-resources device-array? shape)
          (only-in raft/unsafe deposit->list)
          (only-in "curve.rkt" curve-parameters)
-         (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job))
+         (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job)
+         (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide (struct-out umap-result)
          umap-fit
@@ -92,8 +99,9 @@
   (+ (* (random seed-half) seed-half) (random seed-half)))
 
 (define (rows-of a)
-  (match-define (cons n _) (shape a))
-  n)
+  (match (and (device-array? a) (shape a))
+    [(cons n _) n]
+    [_ 0]))
 
 (define (flag v)
   (if v 1 0))
@@ -102,28 +110,32 @@
   (values (flag n-epochs)
           (or n-epochs 0)
           (or random-state (drawn-seed))
-          (flag (or random-state (< (rows) deterministic-below)))))
+          (flag (or random-state (< rows deterministic-below)))))
 
-(define (fitted who
-                X
-                y
-                n-neighbors
-                n-components
-                metric
-                n-epochs
-                learning-rate
-                min-dist
-                spread
-                given-a
-                given-b
-                init
-                negative-sample-rate
-                random-state
-                build-algo
-                resources)
+(define-syntax-parse-rule (bound-params table:table-id)
+  #:with (key ...) (for/list ([key (in-list (attribute table.keys))])
+                     (datum->syntax #'table key #'table))
+  #:with (keyword ...) (map key->keyword (attribute table.keys))
+  (table (~@ keyword key) ...))
+
+(define (fitted who X y params resources)
+  (match-define (hash-table ['n-neighbors n-neighbors]
+                            ['n-components n-components]
+                            ['metric metric]
+                            ['n-epochs n-epochs]
+                            ['learning-rate learning-rate]
+                            ['min-dist min-dist]
+                            ['spread spread]
+                            ['a given-a]
+                            ['b given-b]
+                            ['init init]
+                            ['negative-sample-rate negative-sample-rate]
+                            ['random-state random-state]
+                            ['build-algo build-algo])
+    params)
   (define-values (a b) (curve who min-dist spread given-a given-b))
   (define-values (epochs-given epochs seed deterministic)
-    (schedule n-epochs random-state (lambda () (rows-of X))))
+    (schedule n-epochs random-state (rows-of X)))
   (define out (deposit-for/who who resources))
   (cuml-manifold-umap-fit-job who
                               resources
@@ -144,70 +156,21 @@
                               (build-algo-code build-algo)
                               (metric-code metric))
   (match-define (list embedding) (deposit->list out))
-  (umap-result embedding
-               X
-               a
-               b
-               (umap-params #:n-neighbors n-neighbors
-                            #:n-components n-components
-                            #:metric metric
-                            #:n-epochs n-epochs
-                            #:learning-rate learning-rate
-                            #:min-dist min-dist
-                            #:spread spread
-                            #:a given-a
-                            #:b given-b
-                            #:init init
-                            #:negative-sample-rate negative-sample-rate
-                            #:random-state random-state
-                            #:build-algo build-algo)))
+  (umap-result embedding X a b params))
 
 (define/who (umap-fit who
                       X
                       #:y [y #f]
                       #:hyperparameters umap-params
                       #:resources [resources (current-device-resources)])
-  (fitted who
-          X
-          y
-          n-neighbors
-          n-components
-          metric
-          n-epochs
-          learning-rate
-          min-dist
-          spread
-          a
-          b
-          init
-          negative-sample-rate
-          random-state
-          build-algo
-          resources))
+  (fitted who X y (bound-params umap-params) resources))
 
 (define/who (umap-fit-transform who
                                 X
                                 #:y [y #f]
                                 #:hyperparameters umap-params
                                 #:resources [resources (current-device-resources)])
-  (define result
-    (fitted who
-            X
-            y
-            n-neighbors
-            n-components
-            metric
-            n-epochs
-            learning-rate
-            min-dist
-            spread
-            a
-            b
-            init
-            negative-sample-rate
-            random-state
-            build-algo
-            resources))
+  (define result (fitted who X y (bound-params umap-params) resources))
   (values result (umap-result-embedding result)))
 
 (define/who (umap-transform who result X #:resources [resources (current-device-resources)])
@@ -221,7 +184,7 @@
                             ['random-state random-state])
     params)
   (define-values (epochs-given epochs seed deterministic)
-    (schedule n-epochs random-state (lambda () (max (rows-of train-X) (rows-of X)))))
+    (schedule n-epochs random-state (max (rows-of train-X) (rows-of X))))
   (define out (deposit-for/who who resources))
   (cuml-manifold-umap-transform-job who
                                     resources

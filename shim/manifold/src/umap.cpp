@@ -39,6 +39,7 @@ using cumlrkt::printed;
 using cumlrkt::read_one;
 using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
+using cumlrkt::require_basis;
 using cumlrkt::require_bounded_rows;
 using cumlrkt::require_finite;
 using cumlrkt::require_float;
@@ -258,20 +259,22 @@ void require_spectral(const umap_request& r, int64_t n) {
         "got {}",
         n, r.n_components));
   }
-  const int64_t least_rows = 2 * (r.n_components + 1);
-  if (n <= least_rows) {
+  const int64_t nev = r.n_components + 1;
+  const int64_t least_rows = 2 * (nev + 1);
+  if (n < least_rows) {
     throw logic_error(std::format(
-        "n-components: spectral init of {} components needs more than {} "
+        "n-components: spectral init of {} components needs at least {} "
         "rows, got {}",
         r.n_components, least_rows, n));
   }
-  const int64_t entries = n * (r.n_components + 1);
+  const int64_t entries = n * nev;
   if (entries > most_index) {
     throw logic_error(std::format(
         "n-components: spectral init of {} rows with {} components needs {} "
         "entries, more than {}",
         n, r.n_components, entries, most_index));
   }
+  require_basis(n, nev, "n-components", "rows", "eigenvectors");
 }
 
 void require_y(const rr_view* y, int64_t n) {

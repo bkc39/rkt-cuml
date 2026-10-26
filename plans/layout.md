@@ -656,14 +656,24 @@ Follow-ups are GitHub issues.
   magnitude, cosine zero rows) before scanning the new X, at O(nd), since
   `umap-result` is exported and the X is kept by reference (B1 r0
   finding 8).
-- **B1-x.** Spectral init is refused unless n > 2(n-components + 1) (f26,
+- **B1-x.** Spectral init is refused unless n ≥ 2(n-components + 2) (f26,
   fit only; transform never runs the spectral solve). cuVS's spectral
-  embedding sizes its Lanczos basis at min(n − nev, max(2·nev + 1, 20)) with
-  nev = n-components + 1, and a basis no wider than nev makes its sgemm read
-  past the basis: compute-sanitizer counts 170 to 595 out-of-bounds reads in
-  ours and in Python cuML 26.08 at every measured n ≤ 2·nev (5 to 1600
-  rows), and none below. Under a pooled allocator the reads land in
-  neighbouring memory, which is where B1 r0's non-repeatable 600-component
-  transforms and the later `cudaErrorIllegalAddress` came from. Refused
-  rather than documented: the region is memory-unsafe, not just slow or
-  approximate (amended after B1 r0 fault).
+  embedding sizes its Lanczos basis at ncv = min(n − nev, max(2·nev + 1, 20))
+  with nev = n-components + 1, and raft's `lanczos_smallest` writes row
+  nev + 1 of that basis (`lanczos.cuh:678-679`), so it needs ncv ≥ nev + 2.
+  Python cuML 26.08, 10-column blobs, with exit status: n = 2·nev
+  (6/2, 8/3, 40/19, 98/48, 798/398) segfaults plain (139) and gives 86 to 144
+  memcheck errors; n = 2·nev + 1 (7/2, 9/3, 41/19, 99/48, 401/199, 799/398,
+  and 800/399) segfaults plain (139) and dies with SIGSEGV under memcheck
+  (exit 11) after printing "ERROR SUMMARY: 0 errors"; n = 2·nev + 2 and
+  2·nev + 3 (8/2, 9/2, 10/3, 11/3, 42/19, 43/19, 100/48, 101/48, 402/199,
+  800/398) exit 0 with 0 errors. Supervised fits match: 7/2, 9/3, 99/48
+  crash, 8/2, 10/3, 100/48 are clean. Under a pooled allocator the stray
+  accesses land in neighbouring memory, which is where B1 r0's
+  non-repeatable 600-component transforms and the later
+  `cudaErrorIllegalAddress` came from. Refused rather than documented: the
+  region is memory-unsafe or crashes the process (amended after B1 r0
+  fault; the r0 bound n > 2(n-components + 1) let n = 2·nev + 1 through,
+  corrected after B1 r1 finding 1). Spectral init also refuses an n·ncv
+  basis past 2³¹ − 1 elements through the shared `require_basis` (f27,
+  B1 r1 finding 2).

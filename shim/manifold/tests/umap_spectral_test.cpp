@@ -77,8 +77,8 @@ run fit_then_transform(const resources& res, const rr_view* x, const rr_view* y,
   return r;
 }
 
-void expect_repeatable(const resources& res, const rr_view* x,
-                       const rr_view* y, int64_t components) {
+void expect_repeatable(const resources& res, const rr_view* x, const rr_view* y,
+                       int64_t components) {
   const umap_options o = spectral(components);
   const run first = fit_then_transform(res, x, y, o);
   const run again = fit_then_transform(res, x, y, o);
