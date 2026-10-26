@@ -60,7 +60,7 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/guide-data.rkt" scaled-matrix))
+         (only-in "private/guide-data.rkt" chapter-clusterer mismatches scaled-matrix))
 
 (match-define (list* blue orange _) cluster-colors)
 
@@ -231,9 +231,6 @@
   (check-exn #rx"^sweep-figure: label ids run from 0 to 7\n  label: 8"
              (lambda () (sweep-figure (range 10) (range 10) '("k") (list past-seven)))))
 
-(define (mismatches labels classes)
-  (count (lambda (cluster class) (not (= cluster class))) labels (renumbered classes)))
-
 (define (span numbers)
   (list (apply min numbers) (apply max numbers)))
 
@@ -379,7 +376,7 @@
   (check < (second two) (min (second one) (second three)))
   (define clusterings
     (for/list ([samples (in-list (list scaled projected))])
-      (clusters-of (kmeans #:n-clusters 3 #:n-init 10) samples cultivar)))
+      (clusters-of (chapter-clusterer) samples cultivar)))
   (define (misplaced-classes labels)
     (for/list ([cluster (in-list labels)]
                [class (in-list truth)]

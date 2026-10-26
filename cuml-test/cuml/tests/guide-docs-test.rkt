@@ -11,7 +11,6 @@
                   estimator-set-params
                   fit
                   fit-predict
-                  fit-transform
                   hdbscan
                   hdbscan-approximate-predict
                   hdbscan-fit
@@ -20,11 +19,8 @@
                   kmeans-fit
                   kmeans-model
                   kmeans-params
-                  kmeans-result-centroids
                   kmeans-result-labels
                   kmeans-result?
-                  kmeans-transform
-                  pca
                   pca-fit
                   pca-result-components
                   pca-result-explained-variance
@@ -55,7 +51,6 @@
          (only-in cuml/scribblings/guide/source page-helpers-source)
          (only-in datasets/core load-dataset-table)
          (only-in pkg/lib pkg-directory)
-         (only-in racket/file file->string)
          (only-in racket/function curry curryr)
          (only-in racket/list
                   append-map
@@ -89,10 +84,15 @@
                   shape
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in syntax/modread with-module-reading-parameterization)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/guide-data.rkt" cluster-columns host scaled-matrix table-ari)
+         (only-in "private/guide-data.rkt"
+                  check-scored
+                  cluster-columns
+                  flattened-text
+                  host
+                  read-document
+                  scaled-matrix)
          (only-in "private/scaler-data.rkt" unit-roundoff))
 
 (define-namespace-anchor anchor)
@@ -135,10 +135,6 @@
     [(cons head tail) (append (included-sections head) (included-sections tail))]
     [_ '()]))
 
-(define (read-document file)
-  (call-with-input-file file
-                        (lambda (in) (with-module-reading-parameterization (lambda () (read in))))))
-
 (define (guide-chapters [file (collection-file-path "guide.scrbl" "cuml" "scribblings")])
   (define-values (dir _name _directory?) (split-path file))
   (append-map (lambda (section)
@@ -151,9 +147,6 @@
     (wine ("doi:10.24432/C5PC7J" "CC BY 4.0") "doi:10.24432/C5PC7J. CC BY 4.0")
     (faithful ("R 4.3.3" "GPL-2 or GPL-3") "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
     (breast-cancer ("doi:10.24432/C5DW2B" "CC BY 4.0") "doi:10.24432/C5DW2B. CC BY 4.0")))
-
-(define (flattened-text path)
-  (regexp-replace* #px"\\s+" (file->string path) " "))
 
 (define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
@@ -193,13 +186,6 @@
 
 (define (kmeans-labels result)
   (device-vector->list (kmeans-result-labels result)))
-
-(define (check-scored ids labels columns text)
-  (check-equal? (cluster-columns (counts-of ids labels)) columns)
-  (define ari (adjusted-rand-score ids labels))
-  (check-= ari (table-ari columns) 1e-12)
-  (check-equal? (rounded (table-ari columns)) text)
-  (check-equal? (rounded ari) text))
 
 (define (species-ids)
   (class-ids species))
@@ -419,48 +405,6 @@
   (check-equal? (map (curry components-for ratios) '(0.8 0.9)) '(5 8))
   (check-equal? (take (leading scaled-fit wine-measurements 2) 2)
                 '(("flavanoids" "total-phenols") ("color-intensity" "alcohol"))))
-
-(define (clusterer [seed 0])
-  (kmeans #:n-clusters 3 #:n-init 10 #:random-state seed))
-
-(define (centroid-gaps fitted samples)
-  (~> (kmeans-transform (~> fitted kmeans-model kmeans-result-centroids) samples)
-      device-matrix->list*
-      (map (lambda (distances)
-             (match (sort (map sqrt distances) <)
-               [(list* nearest next _) (- next nearest)]))
-           _)))
-
-(define (projections)
-  (define scaled (wine-scaled))
-  (list scaled
-        (fit-transform (pca #:n-components 2) scaled)
-        (fit-transform (pca #:n-components 2 #:whiten #t) scaled)))
-
-(test-gpu "the guide: decomposition, two components cluster about as well as 13 columns, whitened better"
-  (define samples (projections))
-  (match-define (list all-labels projected-labels whitened-labels)
-    (map (curry fit-predict (clusterer)) samples))
-  (check-scored (cultivar-ids) all-labels '((0 3 48) (0 65 0) (59 3 0)) "0.897")
-  (check-scored (cultivar-ids) projected-labels '((0 1 48) (0 65 0) (59 5 0)) "0.895")
-  (check-scored (cultivar-ids) whitened-labels '((0 1 48) (1 67 0) (58 3 0)) "0.912")
-  (for ([labels (in-list (list projected-labels whitened-labels))]
-        [reduced (in-list (cdr samples))])
-    (check >= (adjusted-rand-score all-labels labels) 0.85)
-    (define fitted (fit (clusterer) reduced))
-    (check-equal? (~> fitted kmeans-model kmeans-result-labels device-vector->list)
-                  (device-vector->list labels))
-    (check >= (apply min (centroid-gaps fitted reduced)) 1e-3)))
-
-(test-gpu "the guide: decomposition, the k-means ordering holds for seeds 0 to 9"
-  (define samples (projections))
-  (for ([seed (in-range 10)])
-    (match-define (list all projected whitened)
-      (map (lambda (reduced)
-             (adjusted-rand-score (cultivar-ids) (fit-predict (clusterer seed) reduced)))
-           samples))
-    (check >= whitened (max all projected) (format "seed ~a" seed))
-    (check <= (abs (- projected all)) 0.015 (format "seed ~a" seed))))
 
 (define u (unit-roundoff 'float32))
 

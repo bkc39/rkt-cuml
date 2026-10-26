@@ -33,7 +33,8 @@ after the classes; the classes can be another clustering's labels.
 each class's samples in each cluster, and @racket[rounded] prints a score to
 three places. @racket[leading] names each principal component's largest
 entries, @racket[cumulative] sums explained-variance ratios,
-@racket[components-for] counts the components that reach a share, and
+@racket[components-for] gives the fewest leading components whose cumulative
+share reaches a share, and
 @racket[columns-of] copies a matrix's columns to the host.
 
 @local-table-of-contents[]
