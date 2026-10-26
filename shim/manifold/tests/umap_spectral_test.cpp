@@ -74,6 +74,17 @@ run fit_then_transform(const resources& res, const rr_view* x, const rr_view* y,
   return r;
 }
 
+void expect_repeatable(const resources& res, const rr_view* x,
+                       const rr_view* y) {
+  const umap_options o = spectral(most_bound_components);
+  const run first = fit_then_transform(res, x, y, o);
+  const run again = fit_then_transform(res, x, y, o);
+  EXPECT_EQ(first.fit, "accepted");
+  EXPECT_EQ(first.transform, "accepted");
+  EXPECT_EQ(again.embedding, first.embedding);
+  EXPECT_EQ(again.output, first.output);
+}
+
 TEST(UmapSpectralBound, FitsAndTransformsAtTheBoundRepeatBitwise) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -83,16 +94,8 @@ TEST(UmapSpectralBound, FitsAndTransformsAtTheBoundRepeatBitwise) {
     host[static_cast<std::size_t>(i)] = i % groups;
   }
   const filled<int64_t> y(res, host, {bound_rows});
-  for (const rr_view* labels : {static_cast<const rr_view*>(nullptr),
-                                static_cast<const rr_view*>(y.view())}) {
-    const umap_options o = spectral(most_bound_components);
-    const run first = fit_then_transform(res, x.view(), labels, o);
-    const run again = fit_then_transform(res, x.view(), labels, o);
-    EXPECT_EQ(first.fit, "accepted");
-    EXPECT_EQ(first.transform, "accepted");
-    EXPECT_EQ(again.embedding, first.embedding) << (labels != nullptr);
-    EXPECT_EQ(again.output, first.output) << (labels != nullptr);
-  }
+  expect_repeatable(res, x.view(), nullptr);
+  expect_repeatable(res, x.view(), y.view());
 }
 
 TEST(UmapSpectralBound, ABasisNoWiderThanTheComponentsIsRefused) {
