@@ -378,8 +378,8 @@
   (check > 0.0 (first three))
   (check < (second two) (min (second one) (second three)))
   (define clusterings
-    (map (lambda (samples) (clusters-of (kmeans #:n-clusters 3 #:n-init 10) samples cultivar))
-         (list scaled projected)))
+    (for/list ([samples (in-list (list scaled projected))])
+      (clusters-of (kmeans #:n-clusters 3 #:n-init 10) samples cultivar)))
   (define (misplaced-classes labels)
     (for/list ([cluster (in-list labels)]
                [class (in-list truth)]
