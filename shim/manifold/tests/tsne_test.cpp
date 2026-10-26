@@ -33,24 +33,26 @@ std::vector<float> fitted(const resources& res, const rr_view* x,
   return out.r.count == 1 ? out.read<float>(0) : std::vector<float>{};
 }
 
+void check_repeats(const resources& res, const rr_view* x, int32_t init) {
+  tsne_stats stats;
+  const std::vector<float> first =
+      fitted(res, x, {.max_iter = short_run, .init = init}, &stats);
+  EXPECT_EQ(first.size(), static_cast<std::size_t>(rows * 2));
+  EXPECT_TRUE(all_finite(first));
+  EXPECT_EQ(stats.n_iter, short_run);
+  EXPECT_GE(stats.kl_divergence, 0);
+  tsne_stats again;
+  EXPECT_EQ(first,
+            fitted(res, x, {.max_iter = short_run, .init = init}, &again));
+  EXPECT_EQ(again.kl_divergence, stats.kl_divergence);
+}
+
 TEST(TsneFit, FftIsFiniteAndRepeatsBitwise) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<float> x(res, blobs(rows, cols), {rows, cols});
-  for (const int32_t init :
-       {CUML_MANIFOLD_TSNE_INIT_RANDOM, CUML_MANIFOLD_TSNE_INIT_PCA}) {
-    tsne_stats stats;
-    const std::vector<float> first =
-        fitted(res, x.view(), {.max_iter = short_run, .init = init}, &stats);
-    EXPECT_EQ(first.size(), static_cast<std::size_t>(rows * 2));
-    EXPECT_TRUE(all_finite(first));
-    EXPECT_EQ(stats.n_iter, short_run);
-    EXPECT_GE(stats.kl_divergence, 0);
-    tsne_stats again;
-    EXPECT_EQ(first, fitted(res, x.view(),
-                            {.max_iter = short_run, .init = init}, &again));
-    EXPECT_EQ(again.kl_divergence, stats.kl_divergence);
-  }
+  check_repeats(res, x.view(), CUML_MANIFOLD_TSNE_INIT_RANDOM);
+  check_repeats(res, x.view(), CUML_MANIFOLD_TSNE_INIT_PCA);
 }
 
 TEST(TsneFit, ExactAndEveryMetricAreFinite) {
