@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (for-syntax racket/base
-                     (only-in syntax/parse attribute))
+                     (only-in syntax/parse/pre attribute))
          (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters
@@ -15,9 +15,9 @@
          (only-in racket/math infinite? nan?)
          (only-in raft current-device-resources device-array? shape)
          (only-in raft/unsafe deposit->list)
+         (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "curve.rkt" curve-parameters)
-         (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job)
-         (only-in syntax/parse/define define-syntax-parse-rule))
+         (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job))
 
 (provide (struct-out umap-result)
          umap-fit
