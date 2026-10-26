@@ -18,6 +18,7 @@
          "private/spectral-estimator.rkt"
          "private/standard-scaler-estimator.rkt"
          "private/truncated-svd-estimator.rkt"
+         "private/tsne-estimator.rkt"
          "private/umap-estimator.rkt")
 
 (provide (all-from-out cuml/cluster
@@ -36,4 +37,5 @@
                        "private/spectral-estimator.rkt"
                        "private/standard-scaler-estimator.rkt"
                        "private/truncated-svd-estimator.rkt"
+                       "private/tsne-estimator.rkt"
                        "private/umap-estimator.rkt"))

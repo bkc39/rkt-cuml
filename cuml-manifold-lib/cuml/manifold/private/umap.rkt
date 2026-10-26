@@ -1,23 +1,16 @@
 #lang racket/base
 
-(require (for-syntax racket/base
-                     (only-in syntax/parse/pre attribute))
-         (only-in cuml/core/private/define-who define/who)
+(require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters
-                  define-codes
-                  define-hyperparameters
-                  key->keyword
-                  table-id)
+         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
          (only-in racket/match match match-define)
-         (only-in racket/math infinite? nan?)
          (only-in raft current-device-resources device-array? shape)
          (only-in raft/unsafe deposit->list)
-         (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "curve.rkt" curve-parameters)
-         (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job))
+         (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job)
+         (only-in "support.rkt" bound-params drawn-seed finite-real? metric-code))
 
 (provide (struct-out umap-result)
          umap-fit
@@ -45,17 +38,12 @@
   [random-state 0]
   [build-algo 'brute-force])
 
-(define-codes metric-code [euclidean 0] [sqeuclidean 1] [manhattan 2] [chebyshev 3] [cosine 4])
 (define-codes init-code [random 0] [spectral 1])
 (define-codes build-algo-code [brute-force 0] [nn-descent 1])
 
 (define most-float 3.4028234663852886e+38)
 (define least-normal-float (expt 2.0 -126))
 (define deterministic-below 300)
-(define seed-half 65536)
-
-(define (finite-real? v)
-  (and (real? v) (not (nan? v)) (not (infinite? v))))
 
 (define (float-normal? v)
   (and (finite-real? v) (<= least-normal-float v most-float)))
@@ -95,9 +83,6 @@
                most-float
                v))
 
-(define (drawn-seed)
-  (+ (* (random seed-half) seed-half) (random seed-half)))
-
 (define (rows-of a)
   (match (and (device-array? a) (shape a))
     [(cons n _) n]
@@ -111,12 +96,6 @@
           (or n-epochs 0)
           (or random-state (drawn-seed))
           (flag (or random-state (< rows deterministic-below)))))
-
-(define-syntax-parse-rule (bound-params table:table-id)
-  #:with (key ...) (for/list ([key (in-list (attribute table.keys))])
-                     (datum->syntax #'table key #'table))
-  #:with (keyword ...) (map key->keyword (attribute table.keys))
-  (table (~@ keyword key) ...))
 
 (define (fitted who X y params resources)
   (match-define (hash-table ['n-neighbors n-neighbors]

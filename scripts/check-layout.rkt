@@ -26,6 +26,7 @@
                              spectral-clustering
                              standard-scaler
                              truncated-svd
+                             tsne
                              umap))
 
 (define (dep-name dep)
