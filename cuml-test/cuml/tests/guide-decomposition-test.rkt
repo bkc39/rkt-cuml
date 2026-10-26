@@ -73,14 +73,14 @@
   (for ([seed (in-list (append (range 10) '(73)))])
     (define clusterer (estimator-set-params (chapter-clusterer) #:random-state seed))
     (match-define (list all projected whitened)
-      (map (lambda (reduced) (mismatches (clusters-of clusterer reduced cultivar) cultivar))
-           samples))
+      (map (lambda (reduced) (mismatches (clusters-of clusterer reduced cultivar) cultivar)) samples))
     (check <= whitened (min all projected) (format "seed ~a" seed))
     (check <= (abs (- projected all)) 1 (format "seed ~a" seed))))
 
 (test-case "the guide: components-for gives the fewest leading components whose cumulative share reaches a share"
   (check-equal? (map (curry components-for '(1/2 3/10 1/5)) '(1/4 4/5 1)) '(1 2 3))
   (check-not-false
-   (string-contains? (flattened-text (collection-file-path "examples.scrbl" "cuml" "scribblings" "guide"))
-                     (string-append "@racket[components-for] gives the fewest leading components"
-                                    " whose cumulative share reaches a share"))))
+   (string-contains?
+    (flattened-text (collection-file-path "examples.scrbl" "cuml" "scribblings" "guide"))
+    (string-append "@racket[components-for] gives the fewest leading components"
+                   " whose cumulative share reaches a share"))))
