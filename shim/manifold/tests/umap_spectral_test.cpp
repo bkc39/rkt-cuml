@@ -56,8 +56,8 @@ struct run {
   std::vector<float> output;
 };
 
-run fit_then_transform(const resources& res, const rr_view* x,
-                       const rr_view* y, const umap_options& o) {
+run fit_then_transform(const resources& res, const rr_view* x, const rr_view* y,
+                       const umap_options& o) {
   run r;
   record trained(res);
   r.fit = outcome(umap_fit(res, x, y, trained, o));
