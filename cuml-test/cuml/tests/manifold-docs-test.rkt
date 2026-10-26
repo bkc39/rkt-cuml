@@ -66,7 +66,7 @@
    (lambda () (umap-fit (fixture-X held-out-fit) #:n-components 399))))
 
 (test-gpu "the manual: the t-SNE example, tsne-fit and tsne-params"
-  (define embedded (tsne-fit (X) #:perplexity 10))
+  (define embedded (tsne-fit (X) #:perplexity 5))
   (check-equal? (shape (tsne-result-embedding embedded)) '(60 2))
   (check-equal? (~> embedded
                     tsne-result-embedding
@@ -84,7 +84,7 @@
                     (lambda () (tsne-params (hasheq 'angle 0.5)))))
 
 (test-gpu "the manual: the t-SNE estimator"
-  (check-equal? (shape (fit-transform (tsne #:perplexity 10) (X))) '(60 2))
+  (check-equal? (shape (fit-transform (tsne #:perplexity 5) (X))) '(60 2))
   (check-cuml-error 'logic
                     "transform: tsne has no transform; use fit-transform"
-                    (lambda () (transform (fit (tsne #:perplexity 10) (X)) (X)))))
+                    (lambda () (transform (fit (tsne #:perplexity 5) (X)) (X)))))

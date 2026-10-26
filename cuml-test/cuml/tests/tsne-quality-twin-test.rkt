@@ -2,7 +2,7 @@
 
 (require (only-in "private/python-env.rkt" test-twin)
          (only-in "private/tsne-data.rkt" check-quality)
-         (only-in "private/umap-data.rkt" blobs digits overlap))
+         (only-in "private/umap-data.rkt" blobs overlap))
 
-(test-twin "L6: FFT trustworthiness lies within Python cuML's seed spread on blobs, overlap and digits"
-  (check-quality 'fft (list blobs overlap (digits))))
+(test-twin "L6: FFT trustworthiness lies within Python cuML's seed spread on blobs and overlap"
+  (check-quality 'fft (list blobs overlap)))

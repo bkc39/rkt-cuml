@@ -9,7 +9,7 @@
                   tsne-result-n-iter
                   tsne-result?)
          (only-in cuml/metrics trustworthiness)
-         (only-in racket/list range split-at)
+         (only-in racket/list range)
          (only-in racket/match match-define)
          (only-in racket/math exact-ceiling)
          racket/runtime-path
@@ -29,6 +29,7 @@
                   fixture-X))
 
 (provide check-quality
+         check-sklearn
          check-small-sweep
          check-tsne-parity
          derived-neighbours
@@ -118,35 +119,35 @@
 
 (define sklearn-bound 0.05)
 
+(define (trust-of f result)
+  (trustworthiness (fixture-X f) (tsne-result-embedding result) #:n-neighbors 10))
+
+(define (fitted-cases method fixtures op)
+  (for/lists (results cases)
+             ([f (in-list fixtures)])
+    (define result (tsne-fit (fixture-X f) #:method method))
+    (values result (tsne-case f result #:op op))))
+
 (define (check-quality method fixtures)
-  (define results
-    (for/list ([f (in-list fixtures)])
-      (tsne-fit (fixture-X f) #:method method)))
-  (define (cases op)
-    (for/list ([f (in-list fixtures)]
-               [result (in-list results)])
-      (tsne-case f result #:op op)))
-  (define references (if (eq? method 'exact) (cases "sklearn") '()))
-  (define-values (spreads found-references)
-    (split-at (run-cases twin
-                         (append (for/list ([c (in-list (cases "quality"))])
-                                   (hash-set c 'seeds (range 20)))
-                                 references))
-              (length fixtures)))
-  (define ours
-    (for/list ([f (in-list fixtures)]
-               [result (in-list results)])
-      (trustworthiness (fixture-X f) (tsne-result-embedding result) #:n-neighbors 10)))
+  (define-values (results cases) (fitted-cases method fixtures "quality"))
+  (define spreads
+    (run-cases twin
+               (for/list ([c (in-list cases)])
+                 (hash-set c 'seeds (range 20)))))
   (for ([f (in-list fixtures)]
-        [t (in-list ours)]
+        [result (in-list results)]
         [theirs (in-list spreads)])
     (define name (format "~a ~a" method (fixture-name f)))
     (test-case name
-      (check-within name t (hash-ref theirs 'trustworthiness))))
+      (check-within name (trust-of f result) (hash-ref theirs 'trustworthiness)))))
+
+(define (check-sklearn fixtures)
+  (define-values (results cases) (fitted-cases 'exact fixtures "sklearn"))
   (for ([f (in-list fixtures)]
-        [t (in-list ours)]
-        [reference (in-list found-references)])
-    (define name (format "~a ~a against sklearn" method (fixture-name f)))
+        [result (in-list results)]
+        [reference (in-list (run-cases twin cases))])
+    (define name (format "exact ~a against sklearn" (fixture-name f)))
+    (define t (trust-of f result))
+    (define theirs (hash-ref reference 'trustworthiness))
     (test-case name
-      (check-true (<= (abs (- t (hash-ref reference 'trustworthiness))) sklearn-bound)
-                  (format "~a: ~a against ~a" name t (hash-ref reference 'trustworthiness))))))
+      (check-true (<= (abs (- t theirs)) sklearn-bound) (format "~a: ~a against ~a" name t theirs)))))

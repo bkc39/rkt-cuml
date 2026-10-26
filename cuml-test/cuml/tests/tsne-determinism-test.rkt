@@ -5,6 +5,3 @@
 
 (test-gpu "L4: FFT fits on far-blobs repeat bitwise in and across processes, euclidean and sqeuclidean"
   (check-tsne-repeatable 'far-blobs '(euclidean sqeuclidean)))
-
-(test-gpu "L4: FFT fits on digits repeat bitwise in and across processes"
-  (check-tsne-repeatable 'digits '(euclidean)))

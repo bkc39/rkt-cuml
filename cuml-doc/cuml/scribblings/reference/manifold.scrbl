@@ -192,7 +192,7 @@ The @racket[umap-result] of the fit that made @racket[estimator], or
 @section[#:tag "tsne"]{t-SNE}
 
 @examples[#:eval ev
-(define embedded (tsne-fit X #:perplexity 10))
+(define embedded (tsne-fit X #:perplexity 5))
 (shape (tsne-result-embedding embedded))
 (~> embedded
     tsne-result-embedding
@@ -305,8 +305,8 @@ embedding. @racket[fit] is @racket[tsne-fit]; there is no @racket[transform].
 A @racket[sample-weight] is refused. Errors name the generic.
 
 @examples[#:eval ev #:label #f
-(shape (fit-transform (tsne #:perplexity 10) X))
-(eval:error (transform (fit (tsne #:perplexity 10) X) X))
+(shape (fit-transform (tsne #:perplexity 5) X))
+(eval:error (transform (fit (tsne #:perplexity 5) X) X))
 ]}
 
 @defproc[(tsne? [v any/c]) boolean?]{
