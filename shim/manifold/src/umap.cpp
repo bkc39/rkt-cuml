@@ -43,6 +43,7 @@ using cumlrkt::require_basis;
 using cumlrkt::require_bounded_rows;
 using cumlrkt::require_finite;
 using cumlrkt::require_float;
+using cumlrkt::require_rows;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
 using cumlrkt::settle;
@@ -210,10 +211,7 @@ matrix<float, int64_t> float_rows(const rr_view* view, const char* name) {
 }
 
 void require_rows_fit(const char* name, const matrix<float, int64_t>& x) {
-  if (x.n > most_index) {
-    throw logic_error(
-        std::format("{}: {} rows do not fit the index type", name, x.n));
-  }
+  require_rows(x.n, name);
   if (x.d > most_index) {
     throw logic_error(
         std::format("{}: {} columns do not fit the index type", name, x.d));

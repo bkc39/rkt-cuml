@@ -1,7 +1,7 @@
 # Upstream bugs
 
-Found by the cluster arc (#5), the metrics leg (A2, #34), the PCA leg (A4, #47) and the truncated SVD leg
-(A5, #48) against libcuml 26.08.00, cuVS 26.08.01 and raft
+Found by the cluster arc (#5), the metrics leg (A2, #34), the PCA leg (A4, #47), the truncated SVD leg
+(A5, #48) and the UMAP leg (B1, #50) against libcuml 26.08.00, cuVS 26.08.01 and raft
 26.08. None is filed upstream (owner, 2026-10-20: log locally). Each is refused,
 worked around or documented by the shim, and a test pins it; the leg's PR
 packet (§4) has the detail.

@@ -186,9 +186,10 @@ buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
   return buffer<T>(static_cast<std::size_t>(count), stream);
 }
 
-inline void require_rows(int64_t n) {
+inline void require_rows(int64_t n, const char* name = "X") {
   if (n > most_index) {
-    throw logic_error(std::format("X: {} rows do not fit the index type", n));
+    throw logic_error(
+        std::format("{}: {} rows do not fit the index type", name, n));
   }
 }
 

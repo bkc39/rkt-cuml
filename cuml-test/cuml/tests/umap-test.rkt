@@ -12,11 +12,18 @@
                   umap-result?
                   umap-transform)
          (only-in racket/flonum flsingle)
+         (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
-         (only-in "private/umap-data.rkt" far-blobs fixture-X fixture-rows fixture-y overlap))
+         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix)
+         (only-in "private/umap-data.rkt"
+                  far-blobs
+                  finite-rows?
+                  fixture-X
+                  fixture-rows
+                  fixture-y
+                  overlap))
 
 (define (single? x)
   (and (flonum? x) (eqv? x (flsingle x))))
@@ -59,3 +66,18 @@
   (umap-transform result X)
   (check-true (bits-equal? (device-matrix->list* X) (fixture-rows overlap)) "result X")
   (check-true (bits-equal? (device-matrix->list* (umap-result-embedding result)) before) "embedding"))
+
+(test-gpu "spectral init falls back to random on 12 identical rows, labels i mod 3"
+  (define X (rows->matrix (make-list 12 '(1.0 2.0 3.0 4.0)) 'float32))
+  (define y
+    (list->device-vector (for/list ([i (in-range 12)])
+                           (modulo i 3))
+                         #:dtype 'int32))
+  (define (embedding-of result)
+    (device-matrix->list* (umap-result-embedding result)))
+  (define (fitted)
+    (umap-fit X #:y y #:n-components 1 #:random-state 1 #:init 'spectral))
+  (define spectral (fitted))
+  (check-true (finite-rows? (embedding-of spectral)))
+  (check-equal? (hash-ref (umap-result-params spectral) 'init) 'spectral)
+  (check-true (bits-equal? (embedding-of spectral) (embedding-of (fitted)))))
