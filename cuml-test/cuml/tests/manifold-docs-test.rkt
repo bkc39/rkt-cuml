@@ -55,8 +55,8 @@
   (check-equal? (shape (fit-transform (umap #:n-neighbors 10) (X))) '(60 2))
   (check-cuml-error 'logic "transform: umap is not fitted" (lambda () (transform (umap) (X)))))
 
-(test-gpu "the manual: spectral needs more than 2(n-components + 1) rows"
+(test-gpu "the manual: spectral needs at least 2(n-components + 2) rows"
   (check-cuml-error
    'logic
-   "umap-fit: n-components: spectral init of 399 components needs more than 800 rows, got 800"
+   "umap-fit: n-components: spectral init of 399 components needs at least 802 rows, got 800"
    (lambda () (umap-fit (fixture-X held-out-fit) #:n-components 399))))

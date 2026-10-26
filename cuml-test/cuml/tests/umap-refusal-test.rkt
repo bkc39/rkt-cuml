@@ -15,12 +15,12 @@
          (only-in cuml/manifold/private/curve curve-parameters)
          (only-in racket/flonum flsingle)
          (only-in racket/match match match-define)
-         (only-in rackunit check-equal? check-exn check-true test-case)
-         (only-in raft list->device-vector)
+         (only-in rackunit check-equal? check-exn check-true fail test-case)
+         (only-in raft exn:fail:raft? list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
@@ -154,8 +154,14 @@
         (row "f22" f22-message (cons (tiny-with large-row) #f))
         (row "f23" f23-message (cons (tiny-with zero-row) #f))
         (row "f26"
-             "n-components: spectral init of 3 components needs more than 8 rows, got 8"
+             "n-components: spectral init of 3 components needs at least 10 rows, got 8"
              (cons (tiny-X) #f))
+        (row "f26 one short"
+             "n-components: spectral init of 3 components needs at least 10 rows, got 9"
+             (cons (tiny-with '() 'float32 (cons '(5.0 5.0 5.0) (fixture-rows tiny))) #f))
+        (row "f26 defaults"
+             "n-components: spectral init of 2 components needs at least 8 rows, got 7"
+             (cons (tiny-with '() 'float32 (cdr (fixture-rows tiny))) #f))
         (row "f12 before f14"
              "X: expected float32, got float64"
              (cons (rows->matrix '((1 2 3)) 'float64) #f))
@@ -177,7 +183,7 @@
     ["f19" (hasheq 'build-algo 'nn-descent)]
     [(or "f23" "f22 before f23") (hasheq 'metric 'cosine)]
     ["f14 before f17" (hasheq 'n-components 8)]
-    ["f26" (hasheq 'n-components 3)]
+    [(or "f26" "f26 one short") (hasheq 'n-components 3)]
     [_ (hasheq)]))
 
 (define (fit-calls)
@@ -294,6 +300,21 @@
    'logic
    #rx"^umap-transform: output: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
    (lambda () (umap-transform (hand-built #:params (umap-params #:learning-rate 3e38)) (tiny-X)))))
+
+(define listed-X '((0.125 0.0 0.0) (0.5 0.25 0.0)))
+
+(test-gpu "L14: f28: a non-array X is refused by the view check, under any seed"
+  (define unseeded (umap-fit (tiny-X) #:init 'random #:random-state #f))
+  (for ([call (in-list (list (list 'umap-fit 0 (lambda () (umap-fit listed-X #:random-state 0)))
+                             (list 'umap-fit #f (lambda () (umap-fit listed-X #:random-state #f)))
+                             (list 'umap-transform #f (lambda () (umap-transform unseeded listed-X)))))])
+    (match-define (list who seed thunk) call)
+    (test-case (format "~a, random-state ~a" who seed)
+      (match (raised thunk)
+        [(? exn:fail:raft? e)
+         (check-equal? (exn-message e)
+                       (format "~a: expected a device array or #f for a view, given ~e" who listed-X))]
+        [other (fail (format "expected an exn:fail:raft, got ~e" other))]))))
 
 (test-gpu "L14: the generics refuse with their own names"
   (define model (fit (umap #:init 'random) (tiny-X)))

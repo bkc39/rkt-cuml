@@ -24,6 +24,8 @@ constexpr int64_t half_index = int64_t{1} << 30;
 constexpr int64_t quarter_index = int64_t{1} << 29;
 constexpr int64_t most_labels = int64_t{1} << 24;
 constexpr int64_t few_rows = 149;
+constexpr int64_t basis_rows = 10578738;
+constexpr int64_t basis_components = 100;
 constexpr int64_t wide_components = 4;
 constexpr double past_float = 1e39;
 constexpr double divergent_rate = 1e35;
@@ -143,6 +145,8 @@ TEST(UmapFitRefusals, InputsInTableOrder) {
   const rr_view wide = shaped(p.floats.view, {2, past_index});
   const rr_view three = shaped(p.floats.view, {3, cols});
   const rr_view huge = shaped(p.floats.view, {half_index, 2});
+  const rr_view basis = shaped(p.floats.view, {basis_rows, cols});
+  const rr_view basis_most = shaped(p.floats.view, {basis_rows - 1, cols});
   const rr_view short_x = shaped(p.floats.view, {few_rows, cols});
   const rr_view float_y = shaped(p.floats.view, {rows});
   const rr_view rank2_y = shaped(p.ints.view, {rows, 1});
@@ -157,6 +161,8 @@ TEST(UmapFitRefusals, InputsInTableOrder) {
       {rows, cols});
   const filled<float> zero_x(res, zero_row(blobs(rows, 2), 3, 2), {rows, 2});
   const umap_options spectral{.init = CUML_MANIFOLD_INIT_SPECTRAL};
+  const umap_options basis_spectral{.n_components = basis_components,
+                                    .init = CUML_MANIFOLD_INIT_SPECTRAL};
   const umap_options nn_descent{.build_algo = CUML_MANIFOLD_BUILD_NN_DESCENT};
   const umap_options cosine{.metric = CUML_MANIFOLD_METRIC_COSINE};
   const auto fit = [&](const rr_view* v, const rr_view* y,
@@ -175,11 +181,16 @@ TEST(UmapFitRefusals, InputsInTableOrder) {
        "n-components: spectral init needs fewer components than the 3 rows, "
        "got 3"},
       {fit(x.view(), nullptr, {.n_components = 3, .init = 1}),
-       "n-components: spectral init of 3 components needs more than 8 rows, "
+       "n-components: spectral init of 3 components needs at least 10 rows, "
        "got 8"},
       {fit(&huge, nullptr, spectral),
        "n-components: spectral init of 1073741824 rows with 2 components "
        "needs 3221225472 entries, more than 2147483647"},
+      {fit(&basis, nullptr, basis_spectral),
+       "n-components: 10578738 rows and 101 eigenvectors need a "
+       "10578738x203 eigensolver basis, more than 2147483647 elements"},
+      {fit(&basis_most, &float_y, basis_spectral),
+       "y: expected int32 or int64, got float32"},
       {fit(&short_x, nullptr, nn_descent),
        "X: nn-descent needs at least 150 rows, got 149"},
       {fit(x.view(), &float_y), "y: expected int32 or int64, got float32"},

@@ -4,6 +4,7 @@
 #include <random>
 #include <string>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 #include "cumlrkt/manifold.h"
@@ -18,6 +19,8 @@ constexpr int64_t bound_rows = 100;
 constexpr int64_t cols = 10;
 constexpr int64_t wide_components = 600;
 constexpr int64_t most_bound_components = 48;
+constexpr int64_t least_rows_of_two = 8;
+constexpr int64_t least_rows_of_three = 10;
 constexpr int64_t epochs = 30;
 constexpr int64_t groups = 5;
 constexpr uint32_t seed = 50;
@@ -75,8 +78,8 @@ run fit_then_transform(const resources& res, const rr_view* x, const rr_view* y,
 }
 
 void expect_repeatable(const resources& res, const rr_view* x,
-                       const rr_view* y) {
-  const umap_options o = spectral(most_bound_components);
+                       const rr_view* y, int64_t components) {
+  const umap_options o = spectral(components);
   const run first = fit_then_transform(res, x, y, o);
   const run again = fit_then_transform(res, x, y, o);
   EXPECT_EQ(first.fit, "accepted");
@@ -94,8 +97,19 @@ TEST(UmapSpectralBound, FitsAndTransformsAtTheBoundRepeatBitwise) {
     host[static_cast<std::size_t>(i)] = i % groups;
   }
   const filled<int64_t> y(res, host, {bound_rows});
-  expect_repeatable(res, x.view(), nullptr);
-  expect_repeatable(res, x.view(), y.view());
+  expect_repeatable(res, x.view(), nullptr, most_bound_components);
+  expect_repeatable(res, x.view(), y.view(), most_bound_components);
+}
+
+TEST(UmapSpectralBound, FitsAndTransformsAtTheLeastRows) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (const auto& [n, components] :
+       {std::pair{least_rows_of_two, int64_t{2}},
+        std::pair{least_rows_of_three, int64_t{3}}}) {
+    const filled<float> x(res, normal_blobs(n), {n, cols});
+    expect_repeatable(res, x.view(), nullptr, components);
+  }
 }
 
 TEST(UmapSpectralBound, ABasisNoWiderThanTheComponentsIsRefused) {
@@ -104,13 +118,18 @@ TEST(UmapSpectralBound, ABasisNoWiderThanTheComponentsIsRefused) {
   const filled<float> bound_x(res, normal_blobs(bound_rows),
                               {bound_rows, cols});
   const filled<float> wide_x(res, normal_blobs(wide_rows), {wide_rows, cols});
+  const filled<float> short_x(res, normal_blobs(bound_rows - 1),
+                              {bound_rows - 1, cols});
   for (const auto& [x, components, message] :
-       {std::tuple{bound_x.view(), most_bound_components + 1,
-                   "n-components: spectral init of 49 components needs more "
-                   "than 100 rows, got 100"},
+       {std::tuple{short_x.view(), most_bound_components,
+                   "n-components: spectral init of 48 components needs at "
+                   "least 100 rows, got 99"},
+        std::tuple{bound_x.view(), most_bound_components + 1,
+                   "n-components: spectral init of 49 components needs at "
+                   "least 102 rows, got 100"},
         std::tuple{wide_x.view(), wide_components,
-                   "n-components: spectral init of 600 components needs more "
-                   "than 1202 rows, got 800"}}) {
+                   "n-components: spectral init of 600 components needs at "
+                   "least 1204 rows, got 800"}}) {
     record out(res);
     EXPECT_EQ(outcome(umap_fit(res, x, nullptr, out, spectral(components))),
               message);
