@@ -11,7 +11,8 @@
                   fitted?
                   predict
                   score
-                  transform)
+                  transform
+                  transformer?)
          (only-in cuml/private/estimator-support define-estimator)
          (only-in racket/list combinations)
          (only-in racket/match match-define)
@@ -347,3 +348,35 @@
   (check-equal? (transform (fit (taught-gadget) 'X) 'Z)
                 (list 'transform 'transform '(taught X #f 3) 'Z #f #f 'none))
   (check-equal? (unbox applied-calls) 1))
+
+(define-estimator embedding-gadget
+  #:hyperparameters gadget-params
+  #:fit gadget-fit/who
+  #:settings (speed place)
+  #:no-sample-weight
+  #:apply values
+  [fit-transform taught-matrix])
+
+(test-case "L17: [fit-transform proc] fits and applies proc, and its transform is refused"
+  (check-true (transformer? (embedding-gadget)))
+  (check-match (fit-transform (embedding-gadget #:speed 2) 'X)
+               (list 'embedded (list 'model 'fit-transform 'X _ '(2 #f) #f)))
+  (check-cuml-error 'logic
+                    "fit-transform: embedding-gadget takes no sample-weight"
+                    (lambda () (fit-transform (embedding-gadget) 'X #:sample-weight 'w)))
+  (check-cuml-error 'logic
+                    "transform: embedding-gadget has no transform; use fit-transform"
+                    (lambda () (transform (fit (embedding-gadget) 'X) 'Z)))
+  (check-cuml-error 'logic
+                    "transform: embedding-gadget has no transform; use fit-transform"
+                    (lambda () (transform (embedding-gadget) 'Z))))
+
+(test-case "L17: [fit-transform proc] cannot be given with [transform proc]"
+  (check-syntax-error '(define-estimator both
+                         #:hyperparameters gadget-params
+                         #:fit gadget-fit/who
+                         #:settings ()
+                         #:apply values
+                         [transform values]
+                         [fit-transform values])
+                      #rx"fit-transform without transform cannot be given with transform"))
