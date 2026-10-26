@@ -47,6 +47,14 @@
 
 (define large (flsingle 1e20))
 
+(define nan-row '([(3 1) +nan.0]))
+
+(define large-row `([(4 0) 0.0] [(4 1) ,large] [(4 2) 0.0]))
+
+(define zero-row '([(3 0) 0.0] [(3 1) 0.0] [(3 2) 0.0]))
+
+(define nan-message "X: row 3, column 1: expected a finite value, got nan")
+
 (define f22-message
   (format "X: row 4: expected a squared norm of at most 4.253529586511731e+37, got ~a"
           (* large large)))
@@ -61,6 +69,14 @@
                            " a of ~a, outside float32's normal range")
             a)))
 
+(define (r5-message name v)
+  (format "~a: expected a finite value of at least 1.1754943508222875e-38 and at most 3.4028234663852886e+38, got ~a"
+          name
+          v))
+
+(define (least-rate-message v)
+  (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))
+
 (define (parameter-rows)
   (list
    (row "R1" "min-dist: expected a finite value of at least 0, got -0.1" (hasheq 'min-dist -0.1))
@@ -74,12 +90,12 @@
    (row "R3" "min-dist: expected at most the spread 1.0, got 1.5" (hasheq 'min-dist 1.5))
    (row "R4" "b: expected a value when a is given, got #f" (hasheq 'a 1.0))
    (row "R4 mirror" "a: expected a value when b is given, got #f" (hasheq 'b 1.0))
-   (row "R5"
-        "a: expected a finite value above 0 and at most 3.4028234663852886e+38, got 0"
-        (hasheq 'a 0 'b 1.0))
-   (row "R5 b"
-        "b: expected a finite value above 0 and at most 3.4028234663852886e+38, got 1e+39"
-        (hasheq 'a 1.0 'b 1e39))
+   (row "R5" (r5-message 'a 0) (hasheq 'a 0 'b 1.0))
+   (row "R5 b" (r5-message 'b 1e39) (hasheq 'a 1.0 'b 1e39))
+   (row "R5 subnormal" (r5-message 'a 1e-40) (hasheq 'a 1e-40 'b 1.0))
+   (row "R5 underflow" (r5-message 'a 1e-50) (hasheq 'a 1e-50 'b 1.0))
+   (row "R5 b subnormal" (r5-message 'b 1e-40) (hasheq 'a 1.0 'b 1e-40))
+   (row "R5 b underflow" (r5-message 'b 1e-50) (hasheq 'a 1.0 'b 1e-50))
    (row "R6" r6-message (hasheq 'spread 1e30))
    (row "R1 before f1"
         "min-dist: expected a finite value of at least 0, got -0.1"
@@ -111,6 +127,8 @@
    (row "f9 most"
         "learning-rate: expected at most 3.4028234663852886e+38, got 1e+39"
         (hasheq 'learning-rate 1e39))
+   (row "f9 subnormal" (least-rate-message 1e-40) (hasheq 'learning-rate 1e-40))
+   (row "f9 underflow" (least-rate-message 1e-50) (hasheq 'learning-rate 1e-50))
    (row "f10" "negative-sample-rate: expected at least 0, got -1" (hasheq 'negative-sample-rate -1))))
 
 (define (X-rows)
@@ -128,14 +146,12 @@
              "y: expected contiguous elements, got stride 2"
              (cons (tiny-X) (strided-vector 8 'int64)))
         (row "f20 length" "y: expected 8 elements, got 7" (cons (tiny-X) (labels 7)))
-        (row "f21"
-             "X: row 3, column 1: expected a finite value, got nan"
-             (cons (tiny-with '([(3 1) +nan.0])) (labels 8)))
+        (row "f21" nan-message (cons (tiny-with nan-row) (labels 8)))
         (row "f21 inf"
              "X: row 0, column 2: expected a finite value, got -inf"
              (cons (tiny-with '([(0 2) -inf.0])) #f))
-        (row "f22" f22-message (cons (tiny-with `([(4 0) 0.0] [(4 1) ,large] [(4 2) 0.0])) #f))
-        (row "f23" f23-message (cons (tiny-with '([(3 0) 0.0] [(3 1) 0.0] [(3 2) 0.0])) #f))
+        (row "f22" f22-message (cons (tiny-with large-row) #f))
+        (row "f23" f23-message (cons (tiny-with zero-row) #f))
         (row "f12 before f14"
              "X: expected float32, got float64"
              (cons (rows->matrix '((1 2 3)) 'float64) #f))
@@ -144,7 +160,7 @@
              (cons (rows->matrix '((1 2 3)) 'float32) #f))
         (row "f20 before f21"
              "y: expected 8 elements, got 7"
-             (cons (tiny-with '([(3 1) +nan.0])) (labels 7)))
+             (cons (tiny-with nan-row) (labels 7)))
         (row "f21 before f22"
              "X: row 3, column 1: expected a finite value, got nan"
              (cons (tiny-with `([(3 1) +nan.0] [(1 1) ,large])) #f))
@@ -242,10 +258,27 @@
    (row "t9"
         "n-epochs: transform runs n-epochs/3 epochs and needs at least 3, got 2"
         (cons (hand-built #:params (umap-params #:n-epochs 2)) (tiny-X)))
-   (row "t11"
-        "X: row 3, column 1: expected a finite value, got nan"
-        (cons (fitted) (tiny-with '([(3 1) +nan.0]))))
-   (row "t11 norm" f22-message (cons (fitted) (tiny-with `([(4 0) 0.0] [(4 1) ,large] [(4 2) 0.0]))))
+   (row "t8 learning-rate"
+        (least-rate-message 1e-50)
+        (cons (hand-built #:params (umap-params #:learning-rate 1e-50)) (tiny-X)))
+   (row "t11 result X"
+        (string-append "result " nan-message)
+        (cons (hand-built #:X (tiny-with nan-row)) (tiny-X)))
+   (row "t11 result X norm"
+        (string-append "result " f22-message)
+        (cons (hand-built #:X (tiny-with large-row)) (tiny-X)))
+   (row "t11 result X cosine"
+        (string-append "result " f23-message)
+        (cons (hand-built #:X (tiny-with zero-row) #:params (umap-params #:metric 'cosine))
+              (tiny-X)))
+   (row "t11 result X before X"
+        (string-append "result " nan-message)
+        (cons (hand-built #:X (tiny-with nan-row)) (tiny-with large-row)))
+   (row "t11" nan-message (cons (fitted) (tiny-with nan-row)))
+   (row "t11 norm" f22-message (cons (fitted) (tiny-with large-row)))
+   (row "t11 cosine"
+        f23-message
+        (cons (umap-fit (tiny-X) #:init 'random #:metric 'cosine) (tiny-with zero-row)))
    (row "t7 before t11"
         "X: expected 3 columns, got 2"
         (cons (fitted) (rows->matrix '((+nan.0 1)) 'float32)))))

@@ -44,14 +44,19 @@
   (define unsupervised (ari truth (umap-result-embedding (umap-fit X))))
   (check-true (>= supervised unsupervised) (format "~a < ~a" supervised unsupervised)))
 
+(define (constant-labels f v)
+  (list->device-vector (map (lambda (_) v) (fixture-labels f)) #:dtype 'int32))
+
 (test-gpu "L9: relabelled y gives the same embedding, and an all -1 y is accepted"
   (define X (fixture-X overlap))
   (define labels (fixture-labels overlap))
   (check-true (bits-equal?
                (embedded (umap-fit X #:y (fixture-y overlap)))
                (embedded (umap-fit X #:y (list->device-vector (relabel labels) #:dtype 'int64)))))
-  (define unlabelled (list->device-vector (map (lambda (_) -1) labels) #:dtype 'int32))
-  (check-true (finite-rows? (embedded (umap-fit X #:y unlabelled)))))
+  (define unlabelled (embedded (umap-fit X #:y (constant-labels overlap -1))))
+  (check-true (finite-rows? unlabelled))
+  (check-false (bits-equal? unlabelled (embedded (umap-fit X #:y (constant-labels overlap 0))))
+               "an all -1 y is not one class"))
 
 (test-gpu "L12: transforming the training matrix equals transforming a copy of it"
   (define X (fixture-X held-out-fit))
@@ -62,13 +67,14 @@
                                (umap-transform result _)
                                device-matrix->list*))))
 
-(test-gpu "L13: seeds 0 and 1 differ, and a reseeded #f random-state repeats below 300 rows"
+(test-gpu "L13: seeds 0 and 1 differ, and #f draws from the reseeded PRNG below 300 rows"
   (define X (fixture-X far-blobs))
   (for ([init (in-list '(spectral random))])
     (check-false (bits-equal? (embedded (umap-fit X #:init init #:random-state 0))
                               (embedded (umap-fit X #:init init #:random-state 1)))
                  (format "~a" init)))
-  (define (reseeded)
-    (random-seed 7)
+  (define (reseeded seed)
+    (random-seed seed)
     (embedded (umap-fit (fixture-X tiny) #:random-state #f #:n-neighbors 4)))
-  (check-true (bits-equal? (reseeded) (reseeded))))
+  (check-true (bits-equal? (reseeded 7) (reseeded 7)))
+  (check-false (bits-equal? (reseeded 7) (reseeded 8)) "#f draws its seed from the PRNG"))

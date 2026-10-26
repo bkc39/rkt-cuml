@@ -32,6 +32,7 @@ constexpr double large = 0x1p66;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr double denormal = 1e-40;
+constexpr double underflow = 1e-50;
 
 void expect_refused(const resources& res,
                     const std::function<int(record&)>& run,
@@ -107,6 +108,10 @@ TEST(UmapFitRefusals, ParametersInTableOrder) {
        "learning-rate: expected a finite value above 0, got inf"},
       {{.learning_rate = past_float},
        "learning-rate: expected at most 3.4028234663852886e+38, got 1e+39"},
+      {{.learning_rate = denormal},
+       "learning-rate: expected at least 1.1754943508222875e-38, got 1e-40"},
+      {{.learning_rate = underflow},
+       "learning-rate: expected at least 1.1754943508222875e-38, got 1e-50"},
       {{.negative_sample_rate = -1},
        "negative-sample-rate: expected at least 0, got -1"},
       {{.negative_sample_rate = past_index},
@@ -257,6 +262,14 @@ TEST(UmapTransformRefusals, EachConditionInTableOrder) {
   const rr_view narrow = shaped(p.floats.view, {2, cols - 1});
   const rr_view big = shaped(p.floats.view, {half_index, cols});
   const rr_view bigger = shaped(p.floats.view, {quarter_index, cols});
+  const rr_view big_train = shaped(p.floats.view, {half_index, cols});
+  const rr_view big_embedding = shaped(p.floats.view, {half_index, 2});
+  const filled<float> nan_train(res, with(blobs(rows, cols), 4, nan),
+                                {rows, cols});
+  const filled<float> zero_train(res, zero_row(blobs(rows, cols), 3, cols),
+                                 {rows, cols});
+  const filled<float> zero_x(res, zero_row(blobs(2, cols), 0, cols),
+                             {2, cols});
   const filled<float> nan_x(res, with(blobs(2, cols), 4, nan), {2, cols});
   const umap_trained good = t.views();
   const auto apply = [&](const rr_view* v, const umap_trained& on,
@@ -286,6 +299,8 @@ TEST(UmapTransformRefusals, EachConditionInTableOrder) {
        "cosine"},
       {apply(x.view(), good, {.n_neighbors = 1}),
        "n-neighbors: expected at least 2, got 1"},
+      {apply(x.view(), good, {.learning_rate = underflow}),
+       "learning-rate: expected at least 1.1754943508222875e-38, got 1e-50"},
       {apply(x.view(), good, {.a = 0}),
        "a: expected a finite float32 value above 0, got 0"},
       {apply(x.view(), good, {.epochs_given = 1, .n_epochs = 2}),
@@ -298,8 +313,22 @@ TEST(UmapTransformRefusals, EachConditionInTableOrder) {
              {.n_neighbors = 2, .n_components = wide_components}),
        "X: 536870912 rows with 4 components each need 2147483648 entries, "
        "more than 2147483647"},
+      {apply(x.view(), {&big_train, &big_embedding}, {.n_neighbors = 2}),
+       "result X: 1073741824 rows with 2 components each need 2147483648 "
+       "entries, more than 2147483647"},
+      {apply(x.view(), {nan_train.view(), t.embedding.view()}),
+       "result X: row 1, column 1: expected a finite value, got nan"},
+      {apply(x.view(), {zero_train.view(), t.embedding.view()},
+             {.metric = CUML_MANIFOLD_METRIC_COSINE}),
+       "result X: row 3: expected a squared norm of at least "
+       "3.5264830524668625e-38 under cosine, got 0"},
+      {apply(nan_x.view(), {nan_train.view(), t.embedding.view()}),
+       "result X: row 1, column 1: expected a finite value, got nan"},
       {apply(nan_x.view(), good),
        "X: row 1, column 1: expected a finite value, got nan"},
+      {apply(zero_x.view(), good, {.metric = CUML_MANIFOLD_METRIC_COSINE}),
+       "X: row 0: expected a squared norm of at least 3.5264830524668625e-38 "
+       "under cosine, got 0"},
   };
   for (const auto& [run, message] : cases) {
     expect_refused(res, run, message);

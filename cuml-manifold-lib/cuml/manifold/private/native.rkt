@@ -3,7 +3,6 @@
 (require (only-in cuml/core exn:fail:cuml)
          (only-in cuml/core/private/native cuml-family-library load-family)
          (only-in ffi/unsafe _double* _int32 _int64 _uint64)
-         ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in raft/unsafe define-job))
 

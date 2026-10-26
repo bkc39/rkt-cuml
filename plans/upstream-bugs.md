@@ -55,6 +55,8 @@ packet (§4) has the detail.
 | B1 #50 | a fit on rows of magnitude 1e20 raises "ValueError: negative axis 0 index: -1"; NaN rows are refused only by Python's check (P8) | `umap.pyx`, `runner.cuh` | non-finite and over-large rows refused before the fit |
 | B1 #50 | cosine with a zero row: the fit is finite after a spectral fallback warning, the transform gives NaN in that row (P9) | `knn_graph` cosine | zero-norm rows refused for cosine |
 | B1 #50 | the optimisation diverges silently: learning-rate 1e35 gives an all-NaN (or inf) embedding (P10) | `optimize_batch_kernel` | non-finite scan after fit and transform |
+| B1 #50 | transform picks its index width from the new rows alone, and init_transform reads `embeddings[indices[i+j] * n_components + d]` as an int product, so a training set with n·n-components past 2³¹−1 is read out of bounds | `umap.cu:138` `dispatch_to_uint64_t`, `runner.cuh:72` | refused past 2³¹−1 at transform (t10) |
+| B1 #50 | learning-rate 1e-50 rounds `initial_alpha` to 0 in float32, and the fit silently returns the initial layout (B1 r0 p1) | `runner.cuh`, `optimize_batch_kernel` | refused below 2⁻¹²⁶ in float32 (f9) |
 
 ## cuVS
 

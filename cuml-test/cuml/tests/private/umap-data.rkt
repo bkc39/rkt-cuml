@@ -1,12 +1,27 @@
 #lang racket/base
 
-(require (only-in json json-null)
-         (only-in racket/flonum flsingle)
+(require (only-in cuml/manifold
+                  umap-fit
+                  umap-result-a
+                  umap-result-b
+                  umap-result-embedding
+                  umap-result-params
+                  umap-transform)
+         (only-in cuml/metrics trustworthiness)
+         (only-in json json-null)
+         (only-in racket/list drop last range take)
+         (only-in racket/match match-define)
+         racket/runtime-path
+         (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix list->device-vector)
-         (only-in "scaler-data.rkt" normal-source))
+         (only-in "blob-data.rkt" centred-blobs)
+         (only-in "metrics-data.rkt" median)
+         (only-in "python-env.rkt" run-twin))
 
 (provide (struct-out fixture)
          blobs
+         check-quality
+         digits
          embedding-rows
          far-blobs
          finite-rows?
@@ -16,30 +31,16 @@
          held-out-new
          overlap
          relabel
+         tail-split
          tiny
          twin-case)
 
 (struct fixture (name rows labels))
 
-(define (uniform-source seed)
-  (define g (make-pseudo-random-generator))
-  (parameterize ([current-pseudo-random-generator g])
-    (random-seed seed))
-  (lambda (lo hi)
-    (parameterize ([current-pseudo-random-generator g])
-      (+ lo (* (- hi lo) (random))))))
+(define-runtime-path twin "../python/umap_twin.py")
 
 (define (grouped name seed centres per-group)
-  (define next (normal-source seed))
-  (define rows
-    (for*/list ([centre (in-list centres)]
-                [_ (in-range per-group)])
-      (for/list ([c (in-list centre)])
-        (flsingle (+ c (next))))))
-  (define labels
-    (for*/list ([k (in-range (length centres))]
-                [_ (in-range per-group)])
-      k))
+  (define-values (rows labels) (centred-blobs centres per-group seed))
   (fixture name rows labels))
 
 (define (axis d i value)
@@ -47,13 +48,14 @@
     (if (= i j) value 0.0)))
 
 (define blobs
-  (let ([draw (uniform-source 50)])
-    (grouped "blobs"
-             51
+  (grouped "blobs"
+           51
+           (parameterize ([current-pseudo-random-generator (make-pseudo-random-generator)])
+             (random-seed 50)
              (for/list ([_ (in-range 5)])
                (for/list ([_ (in-range 10)])
-                 (draw -10.0 10.0)))
-             200)))
+                 (+ -10.0 (* 20.0 (random))))))
+           200))
 
 (define (every-fifth? i)
   (= (modulo i 5) 4))
@@ -134,3 +136,59 @@
           'negative_sample_rate (given 'negative-sample-rate)
           'seed (given 'random-state)
           'build_algo (if (eq? (given 'build-algo) 'nn-descent) "nn_descent" "brute_force_knn")))
+
+(define (digits)
+  (match-define (list (hash-table ['X rows] ['y labels]))
+    (hash-ref (run-twin twin (hasheq 'cases (list (hasheq 'op "digits")))) 'results))
+  (fixture "digits" rows labels))
+
+(define (tail-split f)
+  (match-define (fixture name rows labels) f)
+  (define cut (quotient (* 4 (length rows)) 5))
+  (values (fixture name (take rows cut) (take labels cut))
+          (fixture (format "~a tail" name) (drop rows cut) (drop labels cut))))
+
+(define (check-within name ours spread)
+  (define floor (apply min spread))
+  (define delta (- (apply max spread) floor))
+  (define centre (median spread))
+  (printf "~a: ours ~a, Python min ~a median ~a delta ~a\n" name ours floor centre delta)
+  (check-true (>= ours (- floor delta)) (format "~a: ~a below ~a - ~a" name ours floor delta))
+  (check-true (<= (abs (- ours centre)) delta) (format "~a: ~a off the median ~a" name ours centre)))
+
+(define (quality-case f result #:transform [Y #f])
+  (hash-set* (twin-case f
+                        (umap-result-params result)
+                        (umap-result-a result)
+                        (umap-result-b result)
+                        #:transform Y
+                        #:op "quality")
+             'seeds
+             (range 20)))
+
+(define (check-quality init fits held new)
+  (define results
+    (for/list ([f (in-list fits)])
+      (umap-fit (fixture-X f) #:init init)))
+  (define held-result (umap-fit (fixture-X held) #:init init))
+  (define found
+    (hash-ref (run-twin twin
+                        (hasheq 'cases
+                                (append (map quality-case fits results)
+                                        (list (quality-case held
+                                                            held-result
+                                                            #:transform (fixture-rows new))))))
+              'results))
+  (for ([f (in-list fits)]
+        [result (in-list results)]
+        [theirs (in-list found)])
+    (test-case (format "~a fit ~a" init (fixture-name f))
+      (check-within (format "~a fit ~a" init (fixture-name f))
+                    (trustworthiness (fixture-X f) (umap-result-embedding result) #:n-neighbors 10)
+                    (hash-ref theirs 'trustworthiness))))
+  (test-case (format "~a transform ~a" init (fixture-name new))
+    (check-within (format "~a transform ~a" init (fixture-name new))
+                  (trustworthiness (fixture-X new)
+                                   (umap-transform held-result (fixture-X new))
+                                   #:n-neighbors 10)
+                  (hash-ref (last found) 'trustworthiness))))

@@ -63,15 +63,24 @@ so writing to it afterwards changes later transforms; the curve parameters
          umap-result?]{
 Embeds the rows of @racket[X], a row-major @racket['float32] matrix with at
 least two rows and finite rows of squared norm at most 2@superscript{125},
-in @racket[n-components] dimensions. Neighbourhoods use @racket[n-neighbors]
-neighbours, at most the row count. @racket[y], @racket['int32] or
-@racket['int64] labels with @racket[-1] for unlabelled, supervises the
-embedding. @racket[a] and @racket[b], given together, set the curve that
-@racket[min-dist] and @racket[spread] otherwise fit. @racket[n-epochs]
-defaults to 500, or 200 above 10000 rows. @racket['spectral] needs more rows
-than components; @racket['nn-descent] needs 150 rows and is not reproducible.
-A @racket[random-state] gives the same embedding on every run; @racket[#f]
-draws a seed from @racket[current-pseudo-random-generator].
+in @racket[n-components] dimensions. Under @racket['cosine], each row of
+@racket[X]'s d columns also needs a squared norm of at least
+d·2@superscript{-126}, so a zero row is refused. Neighbourhoods use
+@racket[n-neighbors] neighbours, at most the row count. @racket[y],
+@racket['int32] or @racket['int64] labels with @racket[-1] for unlabelled,
+supervises the embedding. @racket[a] and @racket[b], given together, each
+between 2@superscript{-126} and the largest float32, set the curve that
+@racket[min-dist] and @racket[spread] otherwise fit; @racket[min-dist] is
+at most @racket[spread]. @racket[learning-rate] is at least
+2@superscript{-126} once rounded to float32. @racket[n-epochs] defaults to
+500, or 200 above 10000 rows; a fit with @racket[n-epochs] 1 or 2 cannot be
+transformed. @racket['spectral] needs more rows than components, and falls
+back to @racket['random] where cuML's spectral solve cannot run: at 600
+components on 800 rows the embedding is bitwise the @racket['random] one,
+while @racket[params] still say @racket['spectral]. @racket['nn-descent] needs 150 rows, supports only
+@racket['euclidean], @racket['sqeuclidean] and @racket['cosine], and is not
+reproducible. A @racket[random-state] gives the same embedding on every run;
+@racket[#f] draws a seed from @racket[current-pseudo-random-generator].
 @examples[#:eval ev #:label #f
 (umap-result-a (umap-fit X #:n-neighbors 10))
 (eval:error (umap-fit X #:min-dist 2.0))
@@ -85,7 +94,9 @@ Places new rows of @racket[X] into @racket[result]'s embedding, with the
 fit's parameters: each starts at the weighted mean of its neighbours among
 the training rows and is optimised for a third of @racket[n-epochs] (100,
 or 30 above 10000 rows, when unset), at a quarter of the learning rate. The
-training rows themselves come out near, not at, their embedding.
+training rows themselves come out near, not at, their embedding. Both
+@racket[X] and @racket[result]'s training matrix are checked as
+@racket[umap-fit] checks its @racket[X].
 @examples[#:eval ev #:label #f
 (shape (umap-transform fitted X))
 ]}

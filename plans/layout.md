@@ -644,3 +644,13 @@ Follow-ups are GitHub issues.
   departure.
 - **B1-t.** The facade re-exports the private module minus the `/who`
   forms (A4's pattern), not an `only-in` list.
+- **B1-u.** Given a and b are refused below 2⁻¹²⁶ on the value passed
+  (R5), so a subnormal or underflowing value never reaches the shim's f11
+  (B1 r0 finding 6).
+- **B1-v.** A learning-rate whose float32 rounding is below 2⁻¹²⁶ is
+  refused at fit and transform (f9), where cuML would run with a zero step
+  (B1 r0 finding 7).
+- **B1-w.** Transform scans the result's training X as fit scans X (finite,
+  magnitude, cosine zero rows) before scanning the new X, at O(nd), since
+  `umap-result` is exported and the X is kept by reference (B1 r0
+  finding 8).
