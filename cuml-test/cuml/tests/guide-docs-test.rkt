@@ -190,7 +190,8 @@
   (check-equal? (rounded (table-ari columns)) text)
   (check-equal? (rounded ari) text))
 
-(define species-ids (class-ids species))
+(define (species-ids)
+  (class-ids species))
 
 (define iris-kmeans-columns '((0 2 36) (0 48 14) (50 0 0)))
 
@@ -204,7 +205,10 @@
   (check-equal? (format "~v" fitted) "#<kmeans fitted #:n-clusters 3>")
   (define labels (~> fitted kmeans-model kmeans-labels))
   (check-equal? (length labels) 150)
-  (check-scored species-ids (~> fitted kmeans-model kmeans-result-labels) iris-kmeans-columns "0.73")
+  (check-scored (species-ids)
+                (~> fitted kmeans-model kmeans-result-labels)
+                iris-kmeans-columns
+                "0.73")
   (define cluster-species
     (for/hash ([label (in-list (remove-duplicates labels))])
       (define names
@@ -225,7 +229,7 @@
 (test-gpu "the guide: float64 for k-means, refused by single linkage, and col-major refused"
   (define flowers64 (flowers 'float64))
   (check-equal? (dtype flowers64) 'float64)
-  (check-scored species-ids
+  (check-scored (species-ids)
                 (kmeans-result-labels (kmeans-fit flowers64 #:n-clusters 3))
                 iris-kmeans-columns
                 "0.73")
@@ -254,7 +258,7 @@
   (check-not-equal? (device-vector->list (labels-at 0)) (device-vector->list (labels-at 1)))
   (check-equal? (adjusted-rand-score (labels-at 0) (labels-at 1)) 1.0)
   (check-equal? (device-vector->list (labels-at 2)) (device-vector->list (labels-at 2)))
-  (check-scored species-ids (labels-at 2) '((0 3 36) (0 47 14) (50 0 0)) "0.716"))
+  (check-scored (species-ids) (labels-at 2) '((0 3 36) (0 47 14) (50 0 0)) "0.716"))
 
 (test-gpu "the guide: a base set swept over k, changed by keyword, and the batch size"
   (define base (kmeans-params #:n-init 3))
@@ -262,7 +266,7 @@
         [columns (in-list '(((0 47 50) (50 3 0)) ((0 2 36) (0 48 14) (50 0 0))
                                                  ((0 0 32) (0 23 17) (0 27 1) (50 0 0))))]
         [text (in-list '("0.54" "0.73" "0.65"))])
-    (check-scored species-ids
+    (check-scored (species-ids)
                   (~> (fit (kmeans base #:n-clusters k) (flowers)) kmeans-model kmeans-result-labels)
                   columns
                   text))
@@ -287,7 +291,8 @@
 (define wine-measurements (features 'wine "cultivar"))
 (define cultivar (dataset-column 'wine "cultivar"))
 
-(define cultivar-ids (class-ids cultivar))
+(define (cultivar-ids)
+  (class-ids cultivar))
 
 (define (cultivar-labels wines)
   (fit-predict (kmeans #:n-clusters 3) wines))
@@ -305,14 +310,14 @@
     (~> (load-dataset-table 'wine)
         (table->device-matrix #:columns wine-measurements)
         cultivar-labels))
-  (check-scored cultivar-ids raw-labels '((0 50 19) (13 20 29) (46 1 0)) "0.371")
+  (check-scored (cultivar-ids) raw-labels '((0 50 19) (13 20 29) (46 1 0)) "0.371")
   (check-equal? (~> (load-dataset-table 'wine)
                     (table->device-matrix #:columns '("proline"))
                     cultivar-labels
                     (adjusted-rand-score raw-labels _))
                 1.0)
   (define scaled (scaled-matrix 'wine wine-measurements))
-  (check-scored cultivar-ids (cultivar-labels scaled) wine-scaled-columns "0.864")
+  (check-scored (cultivar-ids) (cultivar-labels scaled) wine-scaled-columns "0.864")
   (define scores
     (for/list ([k (in-range 1 7)])
       (exact-round (score (fit (kmeans #:n-clusters k #:n-init 10) scaled) scaled))))
@@ -352,10 +357,10 @@
 (test-gpu "the guide: single linkage finds setosa, then chains versicolor and virginica"
   (define (single-linkage-labels k)
     (fit-predict (agglomerative-clustering #:n-clusters k) (flowers)))
-  (check-equal? (cluster-columns (counts-of species-ids (single-linkage-labels 2)))
+  (check-equal? (cluster-columns (counts-of (species-ids) (single-linkage-labels 2)))
                 '((0 50 50) (50 0 0)))
-  (check-scored species-ids (single-linkage-labels 3) '((0 0 2) (0 50 48) (50 0 0)) "0.564")
-  (define six (cluster-columns (counts-of species-ids (single-linkage-labels 6))))
+  (check-scored (species-ids) (single-linkage-labels 3) '((0 0 2) (0 50 48) (50 0 0)) "0.564")
+  (define six (cluster-columns (counts-of (species-ids) (single-linkage-labels 6))))
   (check-equal? (length six) 6)
   (check-not-false (member '(0 46 46) six)))
 
@@ -428,10 +433,10 @@
   (define whitened (fit-transform (pca #:n-components 2 #:whiten #t) scaled))
   (match-define (list all-labels projected-labels whitened-labels)
     (map cultivar-labels (list scaled projected whitened)))
-  (check-scored cultivar-ids all-labels wine-scaled-columns "0.864")
+  (check-scored (cultivar-ids) all-labels wine-scaled-columns "0.864")
   (for ([labels (in-list (list projected-labels whitened-labels))]
         [samples (in-list (list projected whitened))])
-    (check-scored cultivar-ids labels '((0 1 48) (1 67 0) (58 3 0)) "0.912")
+    (check-scored (cultivar-ids) labels '((0 1 48) (1 67 0) (58 3 0)) "0.912")
     (check >= (adjusted-rand-score all-labels labels) 0.85)
     (define fitted (fit (kmeans #:n-clusters 3) samples))
     (check-equal? (~> fitted kmeans-model kmeans-result-labels device-vector->list)
