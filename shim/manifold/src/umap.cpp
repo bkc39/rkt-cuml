@@ -53,6 +53,7 @@ using DistanceType = ML::distance::DistanceType;
 
 constexpr int64_t least_nn_descent_rows = 150;
 constexpr int64_t least_transform_epochs = 3;
+constexpr float least_float = std::numeric_limits<float>::min();
 constexpr int64_t most_labels = int64_t{1} << 24;
 constexpr std::size_t nn_descent_degree = 64;
 constexpr std::size_t nn_descent_intermediate_degree = 128;
@@ -101,7 +102,7 @@ const char* metric_name(int32_t metric) {
 }
 
 void require_curve_value(const char* what, double got) {
-  if (!std::isfinite(got) || got < std::numeric_limits<float>::min() ||
+  if (!std::isfinite(got) || got < least_float ||
       got > most_float) {
     throw logic_error(
         std::format("{}: expected a finite float32 value above 0, got {}", what,
@@ -128,6 +129,11 @@ void require_numbers(const umap_request& r) {
                     printed(r.learning_rate)));
   }
   require_float("learning-rate", r.learning_rate);
+  if (static_cast<float>(r.learning_rate) < least_float) {
+    throw logic_error(std::format("learning-rate: expected at least {}, got {}",
+                                  printed(least_float),
+                                  printed(r.learning_rate)));
+  }
   require_at_least("negative-sample-rate", r.negative_sample_rate, 0);
   require_at_most("negative-sample-rate", r.negative_sample_rate, most_index);
   require_curve_value("a", r.a);
@@ -214,20 +220,20 @@ void require_rows_fit(const char* name, const matrix<float, int64_t>& x) {
   }
 }
 
-void require_scanned(const matrix<float, int64_t>& x, int32_t metric,
-                     rmm::cuda_stream_view stream) {
-  require_finite("X", x, stream);
-  require_bounded_rows("X", x, stream);
+void require_scanned(const char* name, const matrix<float, int64_t>& x,
+                     int32_t metric, rmm::cuda_stream_view stream) {
+  require_finite(name, x, stream);
+  require_bounded_rows(name, x, stream);
   if (metric == CUML_MANIFOLD_METRIC_COSINE) {
     const float least =
-        static_cast<float>(x.d) * std::numeric_limits<float>::min();
+        static_cast<float>(x.d) * least_float;
     const auto [row, squared] =
         cumlrkt::first_normless_row(x.data, x.n, x.d, least, stream);
     if (row >= 0) {
       throw logic_error(std::format(
-          "X: row {}: expected a squared norm of at least {} under cosine, "
+          "{}: row {}: expected a squared norm of at least {} under cosine, "
           "got {}",
-          row, printed(least), printed<float>(squared)));
+          name, row, printed(least), printed<float>(squared)));
     }
   }
 }
@@ -310,7 +316,7 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
   }
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_y(y, x.n);
-  require_scanned(x, r.metric, stream);
+  require_scanned("X", x, r.metric, stream);
   std::optional<label_codes> codes = codes_of(y, x.n, stream);
   require_labels(codes);
   const int64_t k = std::min(r.n_neighbors, x.n);
@@ -338,12 +344,13 @@ struct transform_views {
   rr_deposit* out;
 };
 
-void require_entries(int64_t m, int64_t each, const char* what) {
+void require_entries(const char* name, int64_t m, int64_t each,
+                     const char* what) {
   const int64_t entries = m * each;
   if (entries > most_index) {
     throw logic_error(
-        std::format("X: {} rows with {} {} each need {} entries, more than {}",
-                    m, each, what, entries, most_index));
+        std::format("{}: {} rows with {} {} each need {} entries, more than {}",
+                    name, m, each, what, entries, most_index));
   }
 }
 
@@ -369,10 +376,12 @@ void transform_into(const raft::handle_t& handle, const transform_views& v,
         least_transform_epochs, r.n_epochs));
   }
   const int64_t k = std::min(r.n_neighbors, train.n);
-  require_entries(x.n, k, "neighbours");
-  require_entries(x.n, r.n_components, "components");
+  require_entries("X", x.n, k, "neighbours");
+  require_entries("X", x.n, r.n_components, "components");
+  require_entries("result X", train.n, r.n_components, "components");
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
-  require_scanned(x, r.metric, stream);
+  require_scanned("result X", train, r.metric, stream);
+  require_scanned("X", x, r.metric, stream);
   ML::UMAPParams p = umap_params(r, k, false);
   auto result = std::make_unique<rmm::device_uvector<float>>(
       static_cast<std::size_t>(x.n * r.n_components), stream);

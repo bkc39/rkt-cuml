@@ -16,10 +16,13 @@
          (only-in raft device-matrix->list* list*->device-matrix list->device-vector)
          (only-in "blob-data.rkt" centred-blobs)
          (only-in "metrics-data.rkt" median)
-         (only-in "python-env.rkt" run-twin))
+         (only-in "python-env.rkt" run-twin)
+         (only-in "scaler-data.rkt" bits-equal?))
 
 (provide (struct-out fixture)
          blobs
+         case-of
+         check-parity
          check-quality
          digits
          embedding-rows
@@ -29,7 +32,9 @@
          fixture-y
          held-out-fit
          held-out-new
+         jittered
          overlap
+         ours
          relabel
          tail-split
          tiny
@@ -148,6 +153,16 @@
   (values (fixture name (take rows cut) (take labels cut))
           (fixture (format "~a tail" name) (drop rows cut) (drop labels cut))))
 
+(define (jittered f seed)
+  (match-define (fixture name rows labels) f)
+  (parameterize ([current-pseudo-random-generator (make-pseudo-random-generator)])
+    (random-seed seed)
+    (fixture (format "~a jittered" name)
+             (for/list ([row (in-list rows)])
+               (for/list ([x (in-list row)])
+                 (+ x (* 0.01 (random)))))
+             labels)))
+
 (define (check-within name ours spread)
   (define floor (apply min spread))
   (define delta (- (apply max spread) floor))
@@ -192,3 +207,36 @@
                                    (umap-transform held-result (fixture-X new))
                                    #:n-neighbors 10)
                   (hash-ref (last found) 'trustworthiness))))
+
+(define (ours f new options #:y [y #f])
+  (define result
+    (keyword-apply umap-fit (map car options) (map cdr options) (list (fixture-X f)) #:y y))
+  (list result
+        (device-matrix->list* (umap-result-embedding result))
+        (device-matrix->list* (umap-transform result (fixture-X new)))))
+
+(define (case-of f new result #:y [y #f])
+  (twin-case f
+             (umap-result-params result)
+             (umap-result-a result)
+             (umap-result-b result)
+             #:y y
+             #:transform (fixture-rows new)))
+
+(define (check-parity f new configs #:transform? [transform? #t])
+  (define runs
+    (for/list ([options (in-list configs)])
+      (ours f new options)))
+  (define theirs
+    (hash-ref (run-twin twin
+                        (hasheq 'cases (for/list ([run (in-list runs)])
+                                         (case-of f new (car run)))))
+              'results))
+  (for ([options (in-list configs)]
+        [run (in-list runs)]
+        [found (in-list theirs)])
+    (match-define (list _ embedding transformed) run)
+    (test-case (format "~a ~a" (fixture-name f) options)
+      (check-true (bits-equal? embedding (hash-ref found 'embedding)) "fit")
+      (when transform?
+        (check-true (bits-equal? transformed (hash-ref found 'transform)) "transform")))))

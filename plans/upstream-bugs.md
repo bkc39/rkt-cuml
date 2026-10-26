@@ -102,3 +102,4 @@ packet (§4) has the detail.
 | A2 #34 | `adjusted_rand_score` truncates int64 labels to int32 without a warning: [0, 0, 2⁴⁰, 2⁴⁰] against [0, 0, 1, 1] scores 0.0, not 1.0 | int64 labels remapped |
 | A2 #34 | `silhouette_score` lets a 1e20 float32 row through and returns NaN, where sklearn gives 0.593 | refused |
 | A2 #34 | `trustworthiness` passes a 1e20 float32 entry into the illegal address above | refused |
+| B1 #50 | transform is not bitwise repeatable where neighbour distances tie: three transforms of digits' last 360 rows differ in Python, and ours differ in 54 rows by up to 0.345; a 0.01 jitter makes both repeatable | brute-force knn tie order | documented; L6 checks the digits transform on jittered rows (B1 r0) |

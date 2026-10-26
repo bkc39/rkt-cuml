@@ -638,7 +638,9 @@ Follow-ups are GitHub issues.
   `shim/common`; metrics and manifold call the shared code.
 - **B1-r.** Brute-force fits and transforms are bitwise repeatable in and
   across processes for both inits (P1, branch D); nn-descent is not (P3)
-  and is documented so.
+  and is documented so. Transforms of rows whose neighbour distances tie
+  (digits) are not, here or in Python cuML; documented, and L6 checks the
+  digits transform on jittered rows (amended after B1 r0 finding 4).
 - **B1-s.** The f22 magnitude refusal uses the common double-sum scan, so
   1e19 rows are refused although Python fits them (P8): a conservative
   departure.

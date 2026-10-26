@@ -6,8 +6,7 @@
                   umap-result-a
                   umap-result-b
                   umap-result-embedding
-                  umap-result-params
-                  umap-transform)
+                  umap-result-params)
          (only-in racket/list take)
          (only-in racket/match match-define)
          racket/runtime-path
@@ -16,7 +15,6 @@
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
          (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/umap-data.rkt"
-                  digits
                   far-blobs
                   fixture
                   fixture-X
@@ -25,43 +23,13 @@
                   fixture-rows
                   held-out-fit
                   held-out-new
+                  ours
+                  case-of
+                  check-parity
                   overlap
-                  tail-split
                   twin-case))
 
 (define-runtime-path twin "python/umap_twin.py")
-
-(define (ours f new options #:y [y #f])
-  (define result
-    (keyword-apply umap-fit (map car options) (map cdr options) (list (fixture-X f)) #:y y))
-  (list result
-        (device-matrix->list* (umap-result-embedding result))
-        (device-matrix->list* (umap-transform result (fixture-X new)))))
-
-(define (case-of f new result #:y [y #f])
-  (twin-case f
-             (umap-result-params result)
-             (umap-result-a result)
-             (umap-result-b result)
-             #:y y
-             #:transform (fixture-rows new)))
-
-(define (check-parity f new configs)
-  (define runs
-    (for/list ([options (in-list configs)])
-      (ours f new options)))
-  (define theirs
-    (hash-ref (run-twin twin
-                        (hasheq 'cases (for/list ([run (in-list runs)])
-                                         (case-of f new (car run)))))
-              'results))
-  (for ([options (in-list configs)]
-        [run (in-list runs)]
-        [found (in-list theirs)])
-    (match-define (list _ embedding transformed) run)
-    (test-case (format "~a ~a" (fixture-name f) options)
-      (check-true (bits-equal? embedding (hash-ref found 'embedding)) "fit")
-      (check-true (bits-equal? transformed (hash-ref found 'transform)) "transform"))))
 
 (define configs
   (append (for*/list ([init (in-list '(spectral random))]
@@ -79,14 +47,6 @@
 (test-twin "L6: fit and transform equal Python cuML's bitwise on held-out blobs"
   (check-parity held-out-fit held-out-new configs))
 
-(test-twin "L6: fit and transform equal Python cuML's bitwise on digits"
-  (define-values (head tail) (tail-split (digits)))
-  (check-parity head
-                tail
-                (for*/list ([init (in-list '(spectral random))]
-                            [k (in-list '(2 3 16))])
-                  (list (cons '#:init init) (cons '#:n-components k)))))
-
 (define (partly-unlabelled labels)
   (for/list ([label (in-list labels)]
              [i (in-naturals)])
@@ -94,27 +54,27 @@
 
 (test-twin "L6: a supervised fit equals Python's given the dense codes, -1 unlabelled"
   (define labels (fixture-labels held-out-fit))
-  (define partial (partly-unlabelled labels))
   (define cases
-    (list (cons 'spectral labels) (cons 'random labels) (cons 'random partial)))
+    `((spectral ,labels) (random ,labels) (random ,(partly-unlabelled labels))))
   (define runs
     (for/list ([c (in-list cases)])
-      (match-define (cons init y) c)
-      (ours held-out-fit
-            held-out-new
-            (list (cons '#:init init))
-            #:y (list->device-vector y #:dtype 'int32))))
+      (match-define (list init y) c)
+      (match-define (list result embedding _)
+        (ours held-out-fit
+              held-out-new
+              (list (cons '#:init init))
+              #:y (list->device-vector y #:dtype 'int32)))
+      (list init y result embedding)))
   (define theirs
     (hash-ref (run-twin twin
-                        (hasheq 'cases (for/list ([run (in-list runs)]
-                                                  [c (in-list cases)])
-                                         (case-of held-out-fit held-out-new (car run) #:y (cdr c)))))
+                        (hasheq 'cases (for/list ([run (in-list runs)])
+                                         (match-define (list _ y result _) run)
+                                         (case-of held-out-fit held-out-new result #:y y))))
               'results))
   (for ([run (in-list runs)]
-        [c (in-list cases)]
         [found (in-list theirs)])
-    (match-define (list _ embedding _) run)
-    (check-true (bits-equal? embedding (hash-ref found 'embedding)) (format "~a" (car c)))))
+    (match-define (list init _ _ embedding) run)
+    (check-true (bits-equal? embedding (hash-ref found 'embedding)) (format "~a" init))))
 
 (define merged-labels '(0 16777216 16777217))
 

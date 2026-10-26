@@ -77,7 +77,8 @@ at most @racket[spread]. @racket[learning-rate] is at least
 transformed. @racket['spectral] needs more rows than components, and falls
 back to @racket['random] where cuML's spectral solve cannot run: at 600
 components on 800 rows the embedding is bitwise the @racket['random] one,
-while @racket[params] still say @racket['spectral]. @racket['nn-descent] needs 150 rows, supports only
+while @racket[params] still say @racket['spectral]. @racket['nn-descent]
+needs 150 rows, supports only
 @racket['euclidean], @racket['sqeuclidean] and @racket['cosine], and is not
 reproducible. A @racket[random-state] gives the same embedding on every run;
 @racket[#f] draws a seed from @racket[current-pseudo-random-generator].
@@ -96,7 +97,9 @@ the training rows and is optimised for a third of @racket[n-epochs] (100,
 or 30 above 10000 rows, when unset), at a quarter of the learning rate. The
 training rows themselves come out near, not at, their embedding. Both
 @racket[X] and @racket[result]'s training matrix are checked as
-@racket[umap-fit] checks its @racket[X].
+@racket[umap-fit] checks its @racket[X]. Where neighbour distances tie, as
+among the integer rows of scikit-learn's digits, two transforms of the same
+rows can differ, as they do in Python cuML.
 @examples[#:eval ev #:label #f
 (shape (umap-transform fitted X))
 ]}
