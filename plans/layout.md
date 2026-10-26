@@ -656,3 +656,14 @@ Follow-ups are GitHub issues.
   magnitude, cosine zero rows) before scanning the new X, at O(nd), since
   `umap-result` is exported and the X is kept by reference (B1 r0
   finding 8).
+- **B1-x.** Spectral init is refused unless n > 2(n-components + 1) (f26,
+  fit only; transform never runs the spectral solve). cuVS's spectral
+  embedding sizes its Lanczos basis at min(n − nev, max(2·nev + 1, 20)) with
+  nev = n-components + 1, and a basis no wider than nev makes its sgemm read
+  past the basis: compute-sanitizer counts 170 to 595 out-of-bounds reads in
+  ours and in Python cuML 26.08 at every measured n ≤ 2·nev (5 to 1600
+  rows), and none below. Under a pooled allocator the reads land in
+  neighbouring memory, which is where B1 r0's non-repeatable 600-component
+  transforms and the later `cudaErrorIllegalAddress` came from. Refused
+  rather than documented: the region is memory-unsafe, not just slow or
+  approximate (amended after B1 r0 fault).

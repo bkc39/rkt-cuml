@@ -53,9 +53,9 @@
               [supervised (in-list '(#f #t))])
     (list 'far-blobs metric init k supervised #f)))
 
-(define (wide-configs init)
+(define (wide-configs init k)
   (for/list ([supervised (in-list '(#f #t))])
-    (list 'held-out-fit 'euclidean init 600 supervised wide-epochs)))
+    (list 'held-out-fit 'euclidean init k supervised wide-epochs)))
 
 (define (check-repeatable configs)
   (define here (digests configs 3))

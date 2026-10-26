@@ -174,6 +174,9 @@ TEST(UmapFitRefusals, InputsInTableOrder) {
       {fit(&three, nullptr, {.n_components = 3, .init = 1}),
        "n-components: spectral init needs fewer components than the 3 rows, "
        "got 3"},
+      {fit(x.view(), nullptr, {.n_components = 3, .init = 1}),
+       "n-components: spectral init of 3 components needs more than 8 rows, "
+       "got 8"},
       {fit(&huge, nullptr, spectral),
        "n-components: spectral init of 1073741824 rows with 2 components "
        "needs 3221225472 entries, more than 2147483647"},

@@ -258,6 +258,13 @@ void require_spectral(const umap_request& r, int64_t n) {
         "got {}",
         n, r.n_components));
   }
+  const int64_t least_rows = 2 * (r.n_components + 1);
+  if (n <= least_rows) {
+    throw logic_error(std::format(
+        "n-components: spectral init of {} components needs more than {} "
+        "rows, got {}",
+        r.n_components, least_rows, n));
+  }
   const int64_t entries = n * (r.n_components + 1);
   if (entries > most_index) {
     throw logic_error(std::format(

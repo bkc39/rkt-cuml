@@ -153,6 +153,9 @@
              (cons (tiny-with '([(0 2) -inf.0])) #f))
         (row "f22" f22-message (cons (tiny-with large-row) #f))
         (row "f23" f23-message (cons (tiny-with zero-row) #f))
+        (row "f26"
+             "n-components: spectral init of 3 components needs more than 8 rows, got 8"
+             (cons (tiny-X) #f))
         (row "f12 before f14"
              "X: expected float32, got float64"
              (cons (rows->matrix '((1 2 3)) 'float64) #f))
@@ -174,6 +177,7 @@
     ["f19" (hasheq 'build-algo 'nn-descent)]
     [(or "f23" "f22 before f23") (hasheq 'metric 'cosine)]
     ["f14 before f17" (hasheq 'n-components 8)]
+    ["f26" (hasheq 'n-components 3)]
     [_ (hasheq)]))
 
 (define (fit-calls)

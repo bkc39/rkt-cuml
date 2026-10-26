@@ -11,12 +11,11 @@
          (only-in cuml/manifold/private/curve curve-parameters)
          (only-in cuml/metrics adjusted-rand-score)
          (only-in racket/flonum flsingle)
-         (only-in rackunit check-equal? check-true)
-         (only-in raft device-matrix->list* list*->device-matrix list->device-vector shape)
+         (only-in rackunit check-equal?)
+         (only-in raft list*->device-matrix list->device-vector shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/umap-data.rkt" fixture-X held-out-fit))
 
 (define (X)
@@ -56,8 +55,8 @@
   (check-equal? (shape (fit-transform (umap #:n-neighbors 10) (X))) '(60 2))
   (check-cuml-error 'logic "transform: umap is not fitted" (lambda () (transform (umap) (X)))))
 
-(test-gpu "the manual: spectral falls back to random at 600 components on 800 rows"
-  (define X (fixture-X held-out-fit))
-  (define (embedded init)
-    (~> X (umap-fit #:n-components 600 #:init init) umap-result-embedding device-matrix->list*))
-  (check-true (bits-equal? (embedded 'spectral) (embedded 'random))))
+(test-gpu "the manual: spectral needs more than 2(n-components + 1) rows"
+  (check-cuml-error
+   'logic
+   "umap-fit: n-components: spectral init of 399 components needs more than 800 rows, got 800"
+   (lambda () (umap-fit (fixture-X held-out-fit) #:n-components 399))))

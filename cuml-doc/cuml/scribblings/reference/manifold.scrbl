@@ -74,9 +74,9 @@ between 2@superscript{-126} and the largest float32, set the curve that
 at most @racket[spread]. @racket[learning-rate] is at least
 2@superscript{-126} once rounded to float32. @racket[n-epochs] defaults to
 500, or 200 above 10000 rows; a fit with @racket[n-epochs] 1 or 2 cannot be
-transformed. @racket['spectral] needs more rows than components, and falls
-back to @racket['random] where cuML's spectral solve cannot run: at 600
-components on 800 rows the embedding is bitwise the @racket['random] one,
+transformed. @racket['spectral] needs more than
+2(@racket[n-components] + 1) rows, below which cuML's eigensolver reads past
+its basis, and falls back to @racket['random] where the spectral solve fails,
 while @racket[params] still say @racket['spectral]. @racket['nn-descent]
 needs 150 rows, supports only
 @racket['euclidean], @racket['sqeuclidean] and @racket['cosine], and is not
