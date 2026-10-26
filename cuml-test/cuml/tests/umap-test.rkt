@@ -67,7 +67,7 @@
   (check-true (bits-equal? (device-matrix->list* X) (fixture-rows overlap)) "result X")
   (check-true (bits-equal? (device-matrix->list* (umap-result-embedding result)) before) "embedding"))
 
-(test-gpu "spectral init falls back to random on 12 identical rows, labels i mod 3"
+(test-gpu "spectral init starts from a random embedding on 12 identical rows, labels i mod 3"
   (define X (rows->matrix (make-list 12 '(1.0 2.0 3.0 4.0)) 'float32))
   (define y
     (list->device-vector (for/list ([i (in-range 12)])

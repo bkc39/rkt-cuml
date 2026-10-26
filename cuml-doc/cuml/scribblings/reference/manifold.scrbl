@@ -76,10 +76,10 @@ at most @racket[spread]. @racket[learning-rate] is at least
 500, or 200 above 10000 rows; a fit with @racket[n-epochs] 1 or 2 cannot be
 transformed. @racket['spectral] needs at least
 2(@racket[n-components] + 2) rows, below which cuML's eigensolver reads and
-writes past its basis or crashes. It falls back to @racket['random] where
-the spectral solve fails, as on 12 identical rows with labels i mod 3, one
-component and @racket[random-state] 1, while @racket[params] still say
-@racket['spectral]. On a degenerate supervised graph the spectral solve can
+writes past its basis or crashes. Where the spectral solve fails, as on 12
+identical rows with labels i mod 3, one component and @racket[random-state]
+1, the fit starts from a random embedding instead; @racket[params] still
+say @racket['spectral]. On a degenerate supervised graph the spectral solve can
 instead return NaN, which is refused; use @racket['random] there.
 @racket['nn-descent] needs 150 rows, supports only @racket['euclidean],
 @racket['sqeuclidean] and @racket['cosine], and is not
