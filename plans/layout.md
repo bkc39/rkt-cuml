@@ -600,6 +600,12 @@ Follow-ups are GitHub issues.
   Jacobi λ bound 8·d·u·λ₁; the L14 transform bound adds ‖e_μ‖₂, the mean
   bound's norm, scaled as the whitened transform scales; and the component
   check skips components with λᵢ ≤ 64·u·λ₁, which span the null space.
+- **A4-r.** X whose largest magnitude is below √(least normal)/ε (2⁻⁴⁰
+  float32, 2⁻⁴⁵⁹ float64) is fitted as X·2ᵉ, its largest magnitude in
+  [1, 2), in the transposed copy; components and ratio are kept, λ and noise
+  scaled by 2⁻²ᵉ, σ and the mean by 2⁻ᵉ, so XᵀX no longer underflows
+  (amended after A5 r0 finding 1). Other X has e = 0 and bitwise the same
+  fit. `scale_exponent` in `shim/common` is shared with truncated SVD.
 
 ## Decisions recorded in leg A5 (#48)
 

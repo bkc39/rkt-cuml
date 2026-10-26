@@ -30,6 +30,12 @@ __device__ float over(float a, float b) {
 __device__ double over(double a, double b) {
   return __ddiv_rn(a, b);
 }
+__device__ float scaled(float v, int exponent) {
+  return scalbnf(v, exponent);
+}
+__device__ double scaled(double v, int exponent) {
+  return scalbn(v, exponent);
+}
 __device__ float narrow(float, double v) {
   return __double2float_rn(v);
 }
@@ -56,11 +62,12 @@ struct column_major {
   T* out;
   int64_t n;
   int64_t d;
+  int exponent;
 
   __device__ void operator()(int64_t o) const {
     const int64_t j = o / n;
     const int64_t i = o - (j * n);
-    const T v = x[(i * d) + j];
+    const T v = scaled(x[(i * d) + j], exponent);
     out[o] = variance == nullptr ? v : times(v, root(variance[j]));
   }
 };
@@ -87,6 +94,7 @@ struct spectrum_totals {
   double* totals;
   int64_t m;
   int64_t k;
+  int exponent;
 
   __device__ void operator()(int64_t) const {
     double sum = 0;
@@ -102,7 +110,9 @@ struct spectrum_totals {
       }
     }
     totals[0] = sum;
-    totals[1] = k < m ? __ddiv_rn(rest, static_cast<double>(m - k)) : 0.0;
+    totals[1] = k < m ? scaled(__ddiv_rn(rest, static_cast<double>(m - k)),
+                               -2 * exponent)
+                      : 0.0;
   }
 };
 
@@ -112,14 +122,26 @@ struct kept_spectrum {
   const double* totals;
   fit_arrays<T> out;
   double dof;
+  int exponent;
 
   __device__ void operator()(int64_t i) const {
     const T v = variance[i];
     const auto wide = static_cast<double>(v);
-    out.variance[i] = v;
+    out.variance[i] = scaled(v, -2 * exponent);
     out.ratio[i] =
         totals[0] == 0 ? T{0} : narrow(T{}, __ddiv_rn(wide, totals[0]));
-    out.singular[i] = narrow(T{}, __dsqrt_rn(__dmul_rn(wide, dof)));
+    out.singular[i] =
+        narrow(T{}, scaled(__dsqrt_rn(__dmul_rn(wide, dof)), -exponent));
+  }
+};
+
+template <typename T>
+struct unscaled_mean {
+  T* mean;
+  int exponent;
+
+  __device__ void operator()(int64_t j) const {
+    mean[j] = scaled(mean[j], -exponent);
   }
 };
 
@@ -142,8 +164,8 @@ struct bounds_both {
 
 template <typename T>
 void to_columns(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
-                const T* variance, T* out) {
-  each(handle, n * d, column_major<T>{x, variance, out, n, d});
+                const T* variance, T* out, int exponent) {
+  each(handle, n * d, column_major<T>{x, variance, out, n, d, exponent});
 }
 
 template <typename T>
@@ -155,12 +177,14 @@ void to_rows(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
 template <typename T>
 void post_fit(const raft::handle_t& handle, const T* components, T* variance,
               int64_t m, int64_t k, int64_t d, int64_t n,
-              const fit_arrays<T>& out, double* totals) {
-  each(handle, 1, spectrum_totals<T>{variance, totals, m, k});
+              const fit_arrays<T>& out, double* totals, int exponent) {
+  each(handle, 1, spectrum_totals<T>{variance, totals, m, k, exponent});
   each(handle, k,
-       kept_spectrum<T>{variance, totals, out, static_cast<double>(n - 1)});
+       kept_spectrum<T>{variance, totals, out, static_cast<double>(n - 1),
+                        exponent});
   each(handle, k,
        signed_components<T>{components, out.components, m, d, nullptr});
+  each(handle, d, unscaled_mean<T>{out.mean, exponent});
 }
 
 template <typename T>
@@ -173,19 +197,19 @@ variance_bounds bounds_of(const raft::handle_t& handle, const T* variance,
 }
 
 template void to_columns<float>(const raft::handle_t&, const float*, int64_t,
-                                int64_t, const float*, float*);
+                                int64_t, const float*, float*, int);
 template void to_columns<double>(const raft::handle_t&, const double*, int64_t,
-                                 int64_t, const double*, double*);
+                                 int64_t, const double*, double*, int);
 template void to_rows<float>(const raft::handle_t&, const float*, int64_t,
                              int64_t, const float*, float*);
 template void to_rows<double>(const raft::handle_t&, const double*, int64_t,
                               int64_t, const double*, double*);
 template void post_fit<float>(const raft::handle_t&, const float*, float*,
                               int64_t, int64_t, int64_t, int64_t,
-                              const fit_arrays<float>&, double*);
+                              const fit_arrays<float>&, double*, int);
 template void post_fit<double>(const raft::handle_t&, const double*, double*,
                                int64_t, int64_t, int64_t, int64_t,
-                               const fit_arrays<double>&, double*);
+                               const fit_arrays<double>&, double*, int);
 template variance_bounds bounds_of<float>(const raft::handle_t&, const float*,
                                           int64_t);
 template variance_bounds bounds_of<double>(const raft::handle_t&, const double*,

@@ -28,9 +28,12 @@
          host-project
          host-reconstruct
          integer-fixture
+         magnitude-rows
          norm
          normal-fixture
          orthonormality-bound
+         over-bound
+         scaled-rows
          tie-rows
          wide-fixture)
 
@@ -105,6 +108,11 @@
             (on-axis 2 (* s c)))
           (list (on-axis -1 0.0))))
 
+(define magnitude-rows '((1.0 2.0 0.0) (2.0 4.5 1.0) (3.0 6.0 0.0) (4.0 8.0 1.5) (0.5 -1.0 2.0)))
+
+(define (scaled-rows rows by)
+  (map (lambda (row) (map (lambda (x) (* x by)) row)) rows))
+
 (define tie-rows '((1.0 -1.0) (-1.0 1.0) (2.0 -2.0) (-2.0 2.0) (0.5 0.5) (-0.5 -0.5)))
 
 (define (constant-column n d j value)
@@ -150,6 +158,9 @@
   (for/list ([a (in-list components)])
     (for/list ([b (in-list components)])
       (dot a b))))
+
+(define (over-bound what got want bound)
+  (and (> (abs (- got want)) bound) (format "~a: ~a vs ~a, bound ~a" what got want bound)))
 
 (define (orthonormality-bound solver d u)
   (* (if (eq? solver 'jacobi) 8 4) d u))

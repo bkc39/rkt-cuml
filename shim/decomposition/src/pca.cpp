@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "cumlrkt/decomposition.h"
+#include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
 #include "pca_device.hpp"
 #include "raftrkt/deposit.hpp"
@@ -39,6 +40,7 @@ using cumlrkt::require_float;
 using cumlrkt::require_magnitudes;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
+using cumlrkt::scale_exponent;
 using cumlrkt::settle;
 using cumlrkt::decomposition::bounds_of;
 using cumlrkt::decomposition::fit_arrays;
@@ -146,18 +148,19 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
   require_parameters(r, m);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_finite("X", x, stream);
-  require_magnitudes(
+  const double largest = require_magnitudes(
       "X", x,
       std::sqrt(most_value<T> / (overflow_margin * static_cast<double>(x.n) *
                                  static_cast<double>(x.d))),
       stream);
   require_distinct_rows(x, stream);
+  const int exponent = scale_exponent<T>(largest);
   const int64_t k = r.all_components ? m : r.n_components;
   auto outputs = std::make_unique<fit_outputs<T>>(k, x.d, stream);
   double noise_variance = 0;
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
-    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data());
+    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data(), exponent);
     buffer<T> components = scratch<T>(m * x.d, stream);
     buffer<T> variance = scratch<T>(m, stream);
     buffer<T> ratio = scratch<T>(m, stream);
@@ -173,11 +176,11 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
     ML::pcaFit(handle, columns.data(), components.data(), variance.data(),
                ratio.data(), singular.data(), outputs->mean.data(),
                noise.data(), p);
-    post_fit<T>(
-        handle, components.data(), variance.data(), m, k, x.d, x.n,
-        fit_arrays<T>{outputs->components.data(), outputs->variance.data(),
-                      outputs->ratio.data(), outputs->singular.data()},
-        totals.data());
+    post_fit<T>(handle, components.data(), variance.data(), m, k, x.d, x.n,
+                fit_arrays<T>{outputs->components.data(),
+                              outputs->variance.data(), outputs->ratio.data(),
+                              outputs->singular.data(), outputs->mean.data()},
+                totals.data(), exponent);
     noise_variance = cumlrkt::read_one(totals.data(), 1, stream);
   }
   settle(handle);
@@ -259,9 +262,9 @@ void apply_into(const raft::handle_t& handle, const operands<T>& in,
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
     to_columns<T>(handle, x.data, x.n, x.d, Inverse ? variance : nullptr,
-                  columns.data());
+                  columns.data(), 0);
     buffer<T> components = scratch<T>(k * d, stream);
-    to_columns<T>(handle, c.data, k, d, nullptr, components.data());
+    to_columns<T>(handle, c.data, k, d, nullptr, components.data(), 0);
     buffer<T> projected = scratch<T>(x.n * out_width, stream);
     const ML::paramsPCA p =
         pca_params({.rows = x.n, .cols = d, .components = k});

@@ -155,7 +155,7 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
       tsvd_shape{r.with_transform ? x.n : 0, x.d, k}, stream);
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
-    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data());
+    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data(), 0);
     buffer<T> components = scratch<T>(k * x.d, stream);
     buffer<T> singular = scratch<T>(k, stream);
     buffer<T> variance = scratch<T>(k, stream);
@@ -223,9 +223,9 @@ void apply_into(const raft::handle_t& handle, const operands<T>& o,
       std::make_unique<buffer<T>>(scratch<T>(x.n * out_width, stream));
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
-    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data());
+    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data(), 0);
     buffer<T> components = scratch<T>(k * d, stream);
-    to_columns<T>(handle, c.data, k, d, nullptr, components.data());
+    to_columns<T>(handle, c.data, k, d, nullptr, components.data(), 0);
     buffer<T> applied = scratch<T>(x.n * out_width, stream);
     const ML::paramsTSVD p = tsvd_params(tsvd_shape{x.n, d, k});
     if constexpr (Inverse) {

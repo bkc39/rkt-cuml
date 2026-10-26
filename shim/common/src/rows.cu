@@ -74,6 +74,19 @@ struct large {
 };
 
 template <typename T>
+struct magnitude {
+  __device__ double operator()(T v) const {
+    return fabs(static_cast<double>(v));
+  }
+};
+
+struct larger {
+  __device__ double operator()(double a, double b) const {
+    return isnan(a) || a > b ? a : b;
+  }
+};
+
+template <typename T>
 struct unlike_first {
   const T* x;
   int64_t d;
@@ -141,6 +154,13 @@ int64_t first_large_element(const T* x, int64_t count, double most,
 }
 
 template <typename T>
+double largest_magnitude(const T* x, int64_t count,
+                         rmm::cuda_stream_view stream) {
+  return thrust::transform_reduce(rmm::exec_policy(stream), x, x + count,
+                                  magnitude<T>{}, 0.0, larger{});
+}
+
+template <typename T>
 int64_t first_row_unlike_first(const T* x, int64_t n, int64_t d,
                                rmm::cuda_stream_view stream) {
   return first_index(1, n, unlike_first<T>{x, d}, stream);
@@ -162,6 +182,10 @@ template int64_t first_large_element<float>(const float*, int64_t, double,
                                             rmm::cuda_stream_view);
 template int64_t first_large_element<double>(const double*, int64_t, double,
                                              rmm::cuda_stream_view);
+template double largest_magnitude<float>(const float*, int64_t,
+                                         rmm::cuda_stream_view);
+template double largest_magnitude<double>(const double*, int64_t,
+                                          rmm::cuda_stream_view);
 template int64_t first_row_unlike_first<float>(const float*, int64_t, int64_t,
                                                rmm::cuda_stream_view);
 template int64_t first_row_unlike_first<double>(const double*, int64_t, int64_t,

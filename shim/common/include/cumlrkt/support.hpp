@@ -149,15 +149,17 @@ void require_finite(const char* name, const matrix<T, int64_t>& x,
 }
 
 template <typename T>
-void require_magnitudes(const char* name, const matrix<T, int64_t>& x,
-                        double most, rmm::cuda_stream_view stream) {
-  const int64_t i = first_large_element(x.data, x.n * x.d, most, stream);
-  if (i >= 0) {
+double require_magnitudes(const char* name, const matrix<T, int64_t>& x,
+                          double most, rmm::cuda_stream_view stream) {
+  const double largest = largest_magnitude(x.data, x.n * x.d, stream);
+  if (!(largest <= most)) {
+    const int64_t i = first_large_element(x.data, x.n * x.d, most, stream);
     const T got = read_one(x.data, i, stream);
     throw logic_error(std::format(
         "{}: row {}, column {}: expected a magnitude of at most {}, got {}",
         name, i / x.d, i % x.d, printed(most), printed<T>(got)));
   }
+  return largest;
 }
 
 inline void require_some(const char* name, const char* axis, int64_t extent,
