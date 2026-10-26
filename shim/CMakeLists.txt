@@ -99,9 +99,10 @@ cumlrkt_family(decomposition
 
 cumlrkt_family(manifold
   SOURCES common/src/transpose.cu manifold/src/manifold.cpp
-          manifold/src/manifold_support.cpp
+          manifold/src/manifold_support.cpp manifold/src/tsne.cpp
           manifold/src/umap.cpp manifold/src/umap_device.cu
-  TESTS manifold/tests/manifold_test.cpp manifold/tests/umap_test.cpp
+  TESTS manifold/tests/manifold_test.cpp manifold/tests/tsne_test.cpp
+        manifold/tests/tsne_refusal_test.cpp manifold/tests/umap_test.cpp
         manifold/tests/umap_spectral_test.cpp
         manifold/tests/umap_refusal_test.cpp
 )

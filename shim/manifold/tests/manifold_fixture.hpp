@@ -224,6 +224,34 @@ inline int umap_transform(const resources& res, const rr_view* x,
       o.negative_sample_rate, o.random_state, o.deterministic, o.metric);
 }
 
+struct tsne_options {
+  int64_t n_components = 2;
+  double perplexity = 5.0;
+  double early_exaggeration = 12.0;
+  double learning_rate = 200.0;
+  int64_t max_iter = 1000;
+  int64_t n_neighbors = 15;
+  int32_t method = CUML_MANIFOLD_TSNE_FFT;
+  int32_t metric = CUML_MANIFOLD_METRIC_EUCLIDEAN;
+  int32_t init = CUML_MANIFOLD_TSNE_INIT_RANDOM;
+  int64_t random_state = 0;
+};
+
+struct tsne_stats {
+  double kl_divergence = -1;
+  int64_t n_iter = -1;
+};
+
+inline int tsne_fit(const resources& res, const rr_view* x, record& out,
+                    const tsne_options& o = {}, tsne_stats* stats = nullptr) {
+  tsne_stats ignored;
+  tsne_stats* s = stats == nullptr ? &ignored : stats;
+  return cuml_manifold_tsne_fit(
+      res.handle, x, &out.r, o.n_components, o.perplexity, o.early_exaggeration,
+      o.learning_rate, o.max_iter, o.n_neighbors, o.method, o.metric, o.init,
+      o.random_state, &s->kl_divergence, &s->n_iter);
+}
+
 constexpr uint64_t blob_modulus = 7;
 constexpr float blob_gap = 10.0F;
 constexpr float blob_step = 0.01F;
