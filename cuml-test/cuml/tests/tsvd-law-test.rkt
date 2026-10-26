@@ -142,37 +142,30 @@
   (define total (apply + (popvars magnitude-rows)))
   (define (floor-at power)
     (unscaled (least-magnitude dt) by power))
-  (filter values
-          (append (for/list ([x (in-list c*)]
-                             [y (in-list c)]
-                             [g (in-list (~> (map sqr all-singular) gaps (take 2)))]
-                             [i (in-naturals)])
-                    (over-bound (format "component ~a" i)
-                                (worst-difference x y)
-                                0.0
-                                (/ bound g)))
-                  (for/list ([x (in-list s*)]
-                             [y (in-list s)]
-                             [i (in-naturals)])
-                    (over-bound (format "singular value ~a" i)
-                                (unscaled x by 1)
-                                y
-                                (+ (/ bound y) (floor-at 1))))
-                  (for/list ([x (in-list v*)]
-                             [y (in-list v)]
-                             [i (in-naturals)])
-                    (over-bound (format "variance ~a" i)
-                                (unscaled x by 2)
-                                y
-                                (+ (/ bound n) (floor-at 2))))
-                  (for/list ([x (in-list r*)]
-                             [y (in-list r)]
-                             [i (in-naturals)])
-                    (or (and (not (positive? x)) (format "ratio ~a is ~a" i x))
-                        (over-bound (format "ratio ~a" i) x y (/ bound (* n total)))))
-                  (list (and (not (bits-equal? (device-matrix->list* T*)
-                                               (device-matrix->list* (tsvd-transform small small-X))))
-                             "fit-transform's matrix is not tsvd-transform's")))))
+  (filter
+   values
+   (append
+    (for/list ([x (in-list c*)]
+               [y (in-list c)]
+               [g (in-list (~> (map sqr all-singular) gaps (take 2)))]
+               [i (in-naturals)])
+      (over-bound (format "component ~a" i) (worst-difference x y) 0.0 (/ bound g)))
+    (for/list ([x (in-list s*)]
+               [y (in-list s)]
+               [i (in-naturals)])
+      (over-bound (format "singular value ~a" i) (unscaled x by 1) y (+ (/ bound y) (floor-at 1))))
+    (for/list ([x (in-list v*)]
+               [y (in-list v)]
+               [i (in-naturals)])
+      (over-bound (format "variance ~a" i) (unscaled x by 2) y (+ (/ bound n) (floor-at 2))))
+    (for/list ([x (in-list r*)]
+               [y (in-list r)]
+               [i (in-naturals)])
+      (or (and (not (positive? x)) (format "ratio ~a is ~a" i x))
+          (over-bound (format "ratio ~a" i) x y (/ bound (* n total)))))
+    (list (and (not (bits-equal? (device-matrix->list* T*)
+                                 (device-matrix->list* (tsvd-transform small small-X))))
+               "fit-transform's matrix is not tsvd-transform's")))))
 
 (test-gpu "L24: tiny data, whose squares underflow, fits as the unit data scaled"
   (for* ([scale (in-list '((float32 1e-20) (float32 1e-25) (float64 1e-160) (float64 1e-165)))]

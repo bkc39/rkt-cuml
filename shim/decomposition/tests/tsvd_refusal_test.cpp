@@ -262,19 +262,17 @@ void expect_apply_refusals(const resources& res, tsvd_apply entry,
 TEST(TsvdTransformRefusals, EachConditionInTableOrder) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  expect_apply_refusals(res, cuml_decomposition_tsvd_transform,
-                        {.width = cols,
-                         .wrong_width = kept,
-                         .most = "2.8356862219877405e+37"});
+  expect_apply_refusals(
+      res, cuml_decomposition_tsvd_transform,
+      {.width = cols, .wrong_width = kept, .most = "2.8356862219877405e+37"});
 }
 
 TEST(TsvdInverseTransformRefusals, EachConditionInTableOrder) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  expect_apply_refusals(res, cuml_decomposition_tsvd_inverse_transform,
-                        {.width = kept,
-                         .wrong_width = cols,
-                         .most = "4.2535293329816107e+37"});
+  expect_apply_refusals(
+      res, cuml_decomposition_tsvd_inverse_transform,
+      {.width = kept, .wrong_width = cols, .most = "4.2535293329816107e+37"});
 }
 
 }  // namespace

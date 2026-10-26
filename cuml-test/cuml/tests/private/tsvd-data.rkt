@@ -115,10 +115,7 @@
       (map (lambda (v) (* s v)) row)))
   (define scale (/ 2.0 (dot a a)))
   (define w
-    (apply map
-           (lambda column
-             (for/sum ([ai (in-list a)] [x (in-list column)]) (* ai x)))
-           scaled))
+    (apply map (lambda column (for/sum ([ai (in-list a)] [x (in-list column)]) (* ai x))) scaled))
   (define padded (append scaled (make-list (- n d) (make-list d 0.0))))
   (define rows
     (for/list ([ai (in-list a)]

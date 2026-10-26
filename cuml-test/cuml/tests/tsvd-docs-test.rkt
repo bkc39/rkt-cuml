@@ -82,14 +82,15 @@
     ("inverse" ,(/ +max.0 (* 4 2)) ,(lambda (v) (tsvd-inverse-transform fitted (huge v 2))))))
 
 (test-gpu "the manual: the documented bounds are the refused ones"
-  (for-each (match-lambda
-              [(list what documented call)
-               (test-case what
-                 (check-cuml-error 'logic
-                                   #rx"expected a magnitude of at most|expected at most|expected a squared"
-                                   (lambda () (call (* documented (+ 1 slack)))))
-                 (check-false (raised (lambda () (call (* documented (- 1 slack)))))))])
-            (bound-cases (tsvd-fit (X) #:n-components 2))))
+  (for-each
+   (match-lambda
+     [(list what documented call)
+      (test-case what
+        (check-cuml-error 'logic
+                          #rx"expected a magnitude of at most|expected at most|expected a squared"
+                          (lambda () (call (* documented (+ 1 slack)))))
+        (check-false (raised (lambda () (call (* documented (- 1 slack)))))))])
+   (bound-cases (tsvd-fit (X) #:n-components 2))))
 
 (test-gpu "the manual: a hand-built result is checked only for dtypes and shapes"
   (define fitted (tsvd-fit (X) #:n-components 2))
