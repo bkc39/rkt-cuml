@@ -16,6 +16,7 @@
 #include <utility>
 
 #include "cumlrkt/decomposition.h"
+#include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
 #include "pca_device.hpp"
 #include "raftrkt/deposit.hpp"
@@ -24,47 +25,35 @@
 
 namespace {
 
+using cumlrkt::buffer;
 using cumlrkt::guarded;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
+using cumlrkt::most_columns;
 using cumlrkt::most_float;
 using cumlrkt::most_index;
 using cumlrkt::most_value;
 using cumlrkt::on_floats;
+using cumlrkt::overflow_margin;
 using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_finite;
 using cumlrkt::require_finite_non_negative;
 using cumlrkt::require_float;
 using cumlrkt::require_magnitudes;
+using cumlrkt::require_rows;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
+using cumlrkt::scale_exponent;
+using cumlrkt::scratch;
 using cumlrkt::settle;
+using cumlrkt::decomposition::bounds_of;
 using cumlrkt::decomposition::fit_arrays;
-using cumlrkt::decomposition::largest_root;
 using cumlrkt::decomposition::post_fit;
-using cumlrkt::decomposition::smallest_divisor;
 using cumlrkt::decomposition::to_columns;
 using cumlrkt::decomposition::to_rows;
 using raftrkt::any_extent;
 using raftrkt::layout;
-
-constexpr int64_t most_columns = 46340;
-constexpr double overflow_margin = 4.0;
-
-template <typename T>
-using buffer = rmm::device_uvector<T>;
-
-template <typename T>
-buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
-  return buffer<T>(static_cast<std::size_t>(count), stream);
-}
-
-void require_rows(int64_t n) {
-  if (n > most_index) {
-    throw logic_error(std::format("X: {} rows do not fit the index type", n));
-  }
-}
 
 struct fit_request {
   rr_deposit* out;
@@ -135,8 +124,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
               const fit_request& r) {
   const matrix<T, int64_t> x =
       rows_of<T, int64_t>(view, "X", any_extent, any_extent);
-  require_some("X", "rows", x.n, 2);
-  require_some("X", "columns", x.d, 2);
+  require_some("X", "row", x.n, 2);
+  require_some("X", "column", x.d, 2);
   require_rows(x.n);
   if (x.d > most_columns) {
     throw logic_error(std::format(
@@ -147,18 +136,19 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
   require_parameters(r, m);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_finite("X", x, stream);
-  require_magnitudes(
+  const double largest = require_magnitudes(
       "X", x,
       std::sqrt(most_value<T> / (overflow_margin * static_cast<double>(x.n) *
                                  static_cast<double>(x.d))),
       stream);
   require_distinct_rows(x, stream);
+  const int exponent = scale_exponent<T>(largest);
   const int64_t k = r.all_components ? m : r.n_components;
   auto outputs = std::make_unique<fit_outputs<T>>(k, x.d, stream);
   double noise_variance = 0;
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
-    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data());
+    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data(), exponent);
     buffer<T> components = scratch<T>(m * x.d, stream);
     buffer<T> variance = scratch<T>(m, stream);
     buffer<T> ratio = scratch<T>(m, stream);
@@ -174,11 +164,11 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
     ML::pcaFit(handle, columns.data(), components.data(), variance.data(),
                ratio.data(), singular.data(), outputs->mean.data(),
                noise.data(), p);
-    post_fit<T>(
-        handle, components.data(), variance.data(), m, k, x.d, x.n,
-        fit_arrays<T>{outputs->components.data(), outputs->variance.data(),
-                      outputs->ratio.data(), outputs->singular.data()},
-        totals.data());
+    post_fit<T>(handle, components.data(), variance.data(), m, k, x.d, x.n,
+                fit_arrays<T>{outputs->components.data(),
+                              outputs->variance.data(), outputs->ratio.data(),
+                              outputs->singular.data(), outputs->mean.data()},
+                totals.data(), exponent);
     noise_variance = cumlrkt::read_one(totals.data(), 1, stream);
   }
   settle(handle);
@@ -211,16 +201,19 @@ const T* explained_variance(const apply_views& v, int64_t k) {
   return raftrkt::vector_data<T>(v.variance, "explained-variance", k);
 }
 
-template <typename T, bool Inverse>
-double spread(const raft::handle_t& handle, const T* variance, int64_t k) {
-  if (variance == nullptr) {
-    return 1.0;
-  }
-  if constexpr (Inverse) {
-    return largest_root(handle, variance, k);
-  } else {
-    return 1.0 / smallest_divisor(handle, variance, k);
-  }
+template <typename T>
+double forward_spread(const raft::handle_t& handle, const T* variance,
+                      int64_t k) {
+  return variance == nullptr
+             ? 1.0
+             : 1.0 / bounds_of(handle, variance, k).smallest_divisor;
+}
+
+template <typename T>
+double inverse_spread(const raft::handle_t& handle, const T* variance,
+                      int64_t k) {
+  return variance == nullptr ? 1.0
+                             : bounds_of(handle, variance, k).largest_root;
 }
 
 template <typename T>
@@ -248,7 +241,8 @@ void apply_into(const raft::handle_t& handle, const operands<T>& in,
   require_magnitudes(
       "X", x,
       most_value<T> / (overflow_margin * static_cast<double>(width) *
-                       spread<T, Inverse>(handle, variance, k)),
+                       (Inverse ? inverse_spread(handle, variance, k)
+                                : forward_spread(handle, variance, k))),
       stream);
   const int64_t out_width = Inverse ? d : k;
   auto result =
@@ -256,9 +250,9 @@ void apply_into(const raft::handle_t& handle, const operands<T>& in,
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
     to_columns<T>(handle, x.data, x.n, x.d, Inverse ? variance : nullptr,
-                  columns.data());
+                  columns.data(), 0);
     buffer<T> components = scratch<T>(k * d, stream);
-    to_columns<T>(handle, c.data, k, d, nullptr, components.data());
+    to_columns<T>(handle, c.data, k, d, nullptr, components.data(), 0);
     buffer<T> projected = scratch<T>(x.n * out_width, stream);
     const ML::paramsPCA p =
         pca_params({.rows = x.n, .cols = d, .components = k});
@@ -305,7 +299,7 @@ int applied(void* handle, const apply_views& v) {
                        const matrix<C, int64_t> c = rows_of<C, int64_t>(
                            v.components, "components", any_extent, any_extent);
                        require_some("components", "row", c.n);
-                       require_some("components", "columns", c.d, 2);
+                       require_some("components", "column", c.d, 2);
                        if constexpr (std::is_same_v<X, C>) {
                          apply_into<C, Inverse>(h, operands<C>{x, c}, v);
                        } else {

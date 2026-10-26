@@ -8,6 +8,7 @@
                   pca
                   spectral-clustering
                   standard-scaler
+                  truncated-svd
                   umap)
          (only-in cuml/cluster
                   dbscan-fit
@@ -21,7 +22,13 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-params)
-         (only-in cuml/decomposition pca-fit pca-fit-transform pca-params)
+         (only-in cuml/decomposition
+                  pca-fit
+                  pca-fit-transform
+                  pca-params
+                  tsvd-fit
+                  tsvd-fit-transform
+                  tsvd-params)
          (only-in cuml/manifold umap-fit umap-fit-transform umap-params)
          (only-in cuml/preprocessing
                   standard-scaler-fit
@@ -53,7 +60,9 @@
                                                "preprocessing.scrbl"
                                                "decomposition.scrbl"
                                                "manifold.scrbl"
-                                               "estimators.scrbl"))))
+                                               "estimators.scrbl"
+                                               "pca-estimator.scrbl"
+                                               "truncated-svd-estimator.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -111,6 +120,8 @@
 (define standard-scaler-keys '(with-mean with-std))
 
 (define pca-keys '(n-components whiten solver tol iterations))
+
+(define tsvd-keys '(n-components solver tol iterations))
 
 (define umap-keys
   '(n-neighbors n-components
@@ -252,6 +263,12 @@
                          (fit-entry 'pca-fit pca-fit)
                          (fit-entry 'pca-fit-transform pca-fit-transform)
                          (estimator-entry 'pca pca)))
+   (table-bindings tsvd-params
+                   tsvd-keys
+                   (list (list 'tsvd-params tsvd-params '() (list (argument #f 'base #f)) '() '())
+                         (fit-entry 'tsvd-fit tsvd-fit)
+                         (fit-entry 'tsvd-fit-transform tsvd-fit-transform)
+                         (estimator-entry 'truncated-svd truncated-svd)))
    (table-bindings umap-params
                    umap-keys
                    (list (list 'umap-params umap-params '() (list (argument #f 'base #f)) '() '())

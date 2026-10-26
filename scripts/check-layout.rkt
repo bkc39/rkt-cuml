@@ -25,6 +25,7 @@
                              single-linkage
                              spectral-clustering
                              standard-scaler
+                             truncated-svd
                              umap))
 
 (define (dep-name dep)

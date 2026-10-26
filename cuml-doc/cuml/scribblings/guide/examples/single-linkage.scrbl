@@ -18,14 +18,15 @@ The iris measurements of @secref["getting-started"]:
 (define flowers
   (table->device-matrix (load-dataset-table 'iris) #:columns (features 'iris "species")))
 (define species (dataset-column 'iris "species"))
+(define species-ids (class-ids species))
 ]
 
 @section[#:tag "ex-single-linkage-two"]{Two clusters}
 
 @examples[#:eval ev #:label #f
-(define (single-linkage-table k)
-  (crosstab (labels-of (agglomerative-clustering #:n-clusters k) flowers) species))
-(single-linkage-table 2)
+(define (single-linkage-labels k)
+  (fit-predict (agglomerative-clustering #:n-clusters k) flowers))
+(counts-of species-ids (single-linkage-labels 2))
 ]
 
 A clear gap separates setosa from the other two species, and single linkage
@@ -37,16 +38,16 @@ Versicolor and virginica touch. Asking for three clusters does not split them;
 it cuts off two virginica flowers that lie apart from the rest:
 
 @examples[#:eval ev #:label #f
-(single-linkage-table 3)
-(agreement (single-linkage-table 3))
+(counts-of species-ids (single-linkage-labels 3))
+(rounded (adjusted-rand-score species-ids (single-linkage-labels 3)))
 ]
 
-Only 102 of 150 flowers are in a cluster whose majority is their species,
-against 134 for k-means in @secref["gs-species"]. More clusters peel off more
+Its adjusted Rand index is 0.564, against 0.73 for k-means in
+@secref["gs-species"]. More clusters peel off more
 outliers, and at six the touching pair is still one cluster:
 
 @examples[#:eval ev #:label #f
-(single-linkage-table 6)
+(counts-of species-ids (single-linkage-labels 6))
 ]
 
 The cuts by petal length and width. A cluster takes the colour of the species

@@ -27,11 +27,6 @@ template <typename T>
 using rows = std::vector<std::vector<T>>;
 
 template <typename T>
-T* data(const device_array& a) {
-  return static_cast<T*>(a.view.data);
-}
-
-template <typename T>
 std::vector<T> column_major(const rows<T>& components) {
   const std::size_t m = components.size();
   std::vector<T> out(m * cells);
@@ -52,25 +47,17 @@ rows<T> signed_rows(const rows<T>& components) {
   const device_array out(res.r, dtype_of<T>, {m, width});
   const device_array spectrum(res.r, dtype_of<T>, {spectra, m});
   const device_array totals(res.r, RR_DTYPE_FLOAT64, {2});
+  const filled<T> mean(res, std::vector<T>(cells, T{0}), {width});
   const raft::handle_t& handle = raftrkt::handle_of(res.handle);
   T* const s = data<T>(spectrum);
-  post_fit<T>(handle, data<T>(in.array), data<T>(variance.array), m, m, width,
-              samples, fit_arrays<T>{data<T>(out), s, s + m, s + (2 * m)},
-              data<double>(totals));
+  post_fit<T>(
+      handle, data<T>(in.array), data<T>(variance.array), m, m, width, samples,
+      fit_arrays<T>{data<T>(out), s, s + m, s + (2 * m), data<T>(mean.array)},
+      data<double>(totals), 0);
   EXPECT_EQ(
       cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),
       cudaSuccess);
-  std::vector<T> host(components.size() * cells);
-  EXPECT_EQ(cudaMemcpy(host.data(), out.view.data, host.size() * sizeof(T),
-                       cudaMemcpyDeviceToHost),
-            cudaSuccess);
-  rows<T> result;
-  for (std::size_t i = 0; i < components.size(); ++i) {
-    result.emplace_back(
-        host.begin() + static_cast<std::ptrdiff_t>(i * cells),
-        host.begin() + static_cast<std::ptrdiff_t>((i + 1) * cells));
-  }
-  return result;
+  return row_slices(out.read<T>(), cells);
 }
 
 template <typename T>

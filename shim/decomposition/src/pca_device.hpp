@@ -11,11 +11,12 @@ struct fit_arrays {
   T* variance;
   T* ratio;
   T* singular;
+  T* mean;
 };
 
 template <typename T>
 void to_columns(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
-                const T* variance, T* out);
+                const T* variance, T* out, int exponent);
 
 template <typename T>
 void to_rows(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
@@ -24,13 +25,15 @@ void to_rows(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
 template <typename T>
 void post_fit(const raft::handle_t& handle, const T* components, T* variance,
               int64_t m, int64_t k, int64_t d, int64_t n,
-              const fit_arrays<T>& out, double* totals);
+              const fit_arrays<T>& out, double* totals, int exponent);
+
+struct variance_bounds {
+  double smallest_divisor;
+  double largest_root;
+};
 
 template <typename T>
-double smallest_divisor(const raft::handle_t& handle, const T* variance,
-                        int64_t k);
-
-template <typename T>
-double largest_root(const raft::handle_t& handle, const T* variance, int64_t k);
+variance_bounds bounds_of(const raft::handle_t& handle, const T* variance,
+                          int64_t k);
 
 }  // namespace cumlrkt::decomposition

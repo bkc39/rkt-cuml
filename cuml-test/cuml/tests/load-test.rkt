@@ -3,7 +3,7 @@
 (require (only-in cuml) ;; noqa
          (only-in cuml/cluster kmeans-fit)
          (only-in cuml/cluster/private/native libcuml-version)
-         (only-in cuml/decomposition pca-fit)
+         (only-in cuml/decomposition pca-fit tsvd-fit)
          (only-in cuml/manifold umap-fit)
          (only-in cuml/preprocessing standard-scaler-fit)
          (only-in rackunit check-equal? check-false check-not-exn test-case)
@@ -49,6 +49,9 @@
 
 (test-case "cuml re-exports cuml/decomposition's principal component analysis"
   (check-equal? (dynamic-require 'cuml 'pca-fit) pca-fit))
+
+(test-case "L22: cuml re-exports cuml/decomposition's truncated SVD"
+  (check-equal? (dynamic-require 'cuml 'tsvd-fit) tsvd-fit))
 
 (test-case "L20: cuml/decomposition maps its own shim, and not the cluster, metrics or preprocessing shims"
   (check-equal?

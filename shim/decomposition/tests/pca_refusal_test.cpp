@@ -6,14 +6,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <format>
-#include <functional>
 #include <limits>
+#include <ranges>
 #include <string>
 #include <vector>
 
 #include "cumlrkt/decomposition.h"
 #include "decomposition_fixture.hpp"
 #include "raftrkt/c_api.h"
+#include "refusal_fixture.hpp"
 
 namespace cumlrkt::test {
 namespace {
@@ -34,39 +35,23 @@ constexpr float past_whitened_float = 1e36F;
 constexpr float wide_spread = 0.001F;
 constexpr float narrow_spread = 0.0005F;
 constexpr double margin = 4.0;
-constexpr std::size_t spread_modulus = 11;
+constexpr int64_t fit_width = 2;
+constexpr float small_scale = 0.01F;
 
-constexpr double inf = std::numeric_limits<double>::infinity();
-constexpr double nan = std::numeric_limits<double>::quiet_NaN();
-
-struct refusal {
-  std::function<int()> call;
-  std::string message;
-};
-
-void expect_refusals(const std::vector<refusal>& cases) {
-  for (const refusal& c : cases) {
-    const int status = c.call();
-    EXPECT_EQ(status, RR_ERROR) << c.message;
-    EXPECT_EQ(outcome(status), c.message);
-    EXPECT_EQ(cuml_decomposition_last_error_kind(), RR_ERROR_LOGIC)
-        << c.message;
-  }
+template <typename T>
+double smallest_divisor(const std::vector<T>& variance) {
+  return std::min(
+      1.0,
+      std::ranges::min(variance | std::views::transform([](T v) {
+                         return static_cast<double>(std::max(
+                             std::sqrt(v), std::numeric_limits<T>::epsilon()));
+                       })));
 }
 
 template <typename T>
-std::vector<T> spread(int64_t n, int64_t d) {
-  std::vector<T> host(static_cast<std::size_t>(n * d));
-  for (std::size_t i = 0; i < host.size(); ++i) {
-    host[i] = static_cast<T>((i * i) % spread_modulus);
-  }
-  return host;
-}
-
-template <typename T>
-std::vector<T> with(std::vector<T> host, std::size_t at, double value) {
-  host[at] = static_cast<T>(value);
-  return host;
+double whitened_transform_most(const std::vector<T>& variance, int64_t width) {
+  return std::numeric_limits<T>::max() / (margin * static_cast<double>(width) *
+                                          (1.0 / smallest_divisor(variance)));
 }
 
 template <typename T>
@@ -219,9 +204,17 @@ TEST(PcaFitRefusals, AllocateNothingButTheScans) {
   expect_untouched(c.out.out);
 }
 
+std::vector<float> scaled(std::vector<float> values, float scale) {
+  for (float& v : values) {
+    v *= scale;
+  }
+  return values;
+}
+
 struct apply_case {
-  explicit apply_case(const resources& res)
-      : x(res, spread<float>(rows + 1, cols), {rows + 1, cols}), fitted(res) {
+  apply_case(const resources& res, float scale)
+      : x(res, scaled(spread<float>(rows + 1, cols), scale), {rows + 1, cols}),
+        fitted(res) {
     EXPECT_EQ(pca_fit_into(res, x.view(), fitted,
                            {.all_components = 0, .n_components = kept}),
               "accepted");
@@ -234,11 +227,12 @@ struct apply_shapes {
   int64_t width;
   int64_t wrong_width;
   bool inverse;
+  float scale = 1.0F;
 };
 
 void expect_apply_refusals(const resources& res, pca_apply entry,
                            const apply_shapes& s) {
-  apply_case c(res);
+  apply_case c(res, s.scale);
   const pca_views v = fitted_views(c.fitted);
   const std::vector<float> variance = c.fitted.out.read<float>(1);
   const double largest = *std::max_element(variance.begin(), variance.end());
@@ -246,7 +240,7 @@ void expect_apply_refusals(const resources& res, pca_apply entry,
       s.inverse ? FLT_MAX / (margin * kept) : FLT_MAX / (margin * cols);
   const double whitened_most =
       s.inverse ? FLT_MAX / (margin * kept * std::max(1.0, std::sqrt(largest)))
-                : most;
+                : whitened_transform_most(variance, cols);
   const auto last = static_cast<std::size_t>(s.width - 1);
   const device_array ints(res.r, RR_DTYPE_INT32, {pool});
   const device_array floats(res.r, RR_DTYPE_FLOAT32, {pool});
@@ -354,6 +348,16 @@ TEST(PcaTransformRefusals, EachConditionInTableOrder) {
                         {.width = cols, .wrong_width = kept, .inverse = false});
 }
 
+TEST(PcaTransformRefusals, EachConditionInTableOrderUnderSmallVariance) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  expect_apply_refusals(res, cuml_decomposition_pca_transform,
+                        {.width = cols,
+                         .wrong_width = kept,
+                         .inverse = false,
+                         .scale = small_scale});
+}
+
 TEST(PcaInverseTransformRefusals, EachConditionInTableOrder) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -365,19 +369,14 @@ template <typename T>
 void expect_whitened_transform_bound(const std::vector<T>& fit_rows, T value,
                                      std::size_t column) {
   const resources res;
-  const auto n = static_cast<int64_t>(fit_rows.size() / 2);
-  const filled<T> x(res, fit_rows, {n, 2});
+  const auto n = static_cast<int64_t>(fit_rows.size()) / fit_width;
+  const filled<T> x(res, fit_rows, {n, fit_width});
   pca_fitted fitted(res);
   ASSERT_EQ(pca_fit_into(res, x.view(), fitted), "accepted");
-  double smallest = 1.0;
-  for (const T v : fitted.out.read<T>(1)) {
-    const T divisor = std::max(std::sqrt(v), std::numeric_limits<T>::epsilon());
-    smallest = std::min(smallest, static_cast<double>(divisor));
-  }
-  const double most =
-      std::numeric_limits<T>::max() / (margin * 2 * (1.0 / smallest));
-  const filled<T> large_x(res, with(std::vector<T>(2, T{0}), column, value),
-                          {1, 2});
+  const double most = whitened_transform_most(fitted.out.read<T>(1), fit_width);
+  const filled<T> large_x(res,
+                          with(std::vector<T>(fit_width, T{0}), column, value),
+                          {1, fit_width});
   record whitened(res);
   EXPECT_EQ(pca_apply_into(res, cuml_decomposition_pca_transform,
                            large_x.view(), fitted_views(fitted), whitened, 1),

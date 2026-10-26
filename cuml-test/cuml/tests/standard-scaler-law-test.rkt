@@ -23,6 +23,7 @@
                   round-to
                   rows->matrix
                   standardisation-errors
+                  transpose
                   ulp
                   unit-roundoff))
 
@@ -89,9 +90,6 @@
         (max w (/ (abs (- b x)) (* 1.01 u (+ (* 3 (abs (- x m))) (abs x)))))))
     (check-true (<= worst 1.0) (format "~a ~a: worst ratio ~a" dt size worst))))
 
-(define (columns rows)
-  (apply map list rows))
-
 (test-gpu "L6: standardised columns have mean 0 and sd 1, within the rounding of the statistics"
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((7 13) (256 64) (4099 13)))])
@@ -99,8 +97,8 @@
     (define X (rows->matrix (normal-rows (+ 5 n d) n d dt) dt))
     (define fitted (standard-scaler-fit X))
     (define T (standard-scaler-transform fitted X))
-    (for ([x-column (in-list (columns (device-matrix->list* X)))]
-          [t-column (in-list (columns (device-matrix->list* T)))]
+    (for ([x-column (in-list (transpose (device-matrix->list* X)))]
+          [t-column (in-list (transpose (device-matrix->list* T)))]
           [mean (in-list (device-vector->list (standard-scaler-result-mean fitted)))]
           [scale (in-list (device-vector->list (standard-scaler-result-scale fitted)))]
           [j (in-naturals)])

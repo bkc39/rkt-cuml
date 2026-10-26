@@ -18,21 +18,36 @@
                   cluster-plot
                   cluster-style
                   clusters-of
+                  columns-of
+                  cumulative
                   dataset-column
                   features
                   line-plot
                   matched-labels
                   renumbered
+                  rows->matrix
                   sizes
                   sweep-figure)
          (only-in datasets/core load-dataset-table)
          (only-in pict pict->bitmap pict-height pict-width pict?)
          (only-in racket/class send)
-         (only-in racket/function curry)
-         (only-in racket/list count first make-list range remove-duplicates rest second third)
+         (only-in racket/function curry curryr)
+         (only-in racket/list
+                  count
+                  first
+                  group-by
+                  last
+                  make-list
+                  range
+                  remove-duplicates
+                  rest
+                  second
+                  third)
          (only-in racket/match match-define)
+         (only-in racket/promise delay force)
          (only-in rackunit
                   check
+                  check-=
                   check-equal?
                   check-exn
                   check-false
@@ -43,7 +58,9 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/guide-data.rkt" scaled-matrix))
+         (only-in "private/guide-data.rkt" evaluated-chapter mismatches scaled-matrix)
+         (only-in "private/metrics-data.rkt" mean)
+         (only-in "private/scaler-data.rkt" float32-roundoff transpose))
 
 (match-define (list* blue orange _) cluster-colors)
 
@@ -144,6 +161,15 @@
    (pict?
     (class-figure '(0.0 1.0) '(0.0 1.0) (list (list "a" '(0 1))) '(0.0 1.0) #:class-title "x"))))
 
+(test-gpu "class-figure draws a two-column matrix by its columns"
+  (define clusterings (list (list "a" '(0 1 1))))
+  (check-equal?
+   (pixels (class-figure (rows->matrix '((0.0 1.0) (1.0 0.0) (2.0 2.0)))
+                         clusterings
+                         '(1 2 2)
+                         #:class-title "x"))
+   (pixels (class-figure '(0.0 1.0 2.0) '(1.0 0.0 2.0) clusterings '(1 2 2) #:class-title "x"))))
+
 (test-case "class-figure's legend keys every label a panel draws, leftover clusters and noise"
   (define matched (pict-height (four-figure (list (list "a" '(0 1 2 3))))))
   (check-equal? (pict-height (four-figure (list (list "a" '(0 1 2 4))))) (+ matched 22))
@@ -155,8 +181,8 @@
   (define ((named names) . arguments)
     (apply class-figure arguments #:class-title "x" #:names names))
   (define default (noisy (lambda arguments (apply class-figure arguments #:class-title "x"))))
-  (check-equal? default (noisy (named '("5" "7"))))
-  (check-not-equal? default (noisy (named '("-1" "5")))))
+  (check-equal? default (noisy (named '("x 5" "x 7"))))
+  (check-not-equal? default (noisy (named '("x -1" "x 5")))))
 
 (test-case "class-figure draws a clustering's centroids and keys them"
   (define plain (four-figure (list (list "a" '(0 1 2 3)))))
@@ -213,9 +239,6 @@
 (test-case "sweep-figure refuses a label past 7 as itself"
   (check-exn #rx"^sweep-figure: label ids run from 0 to 7\n  label: 8"
              (lambda () (sweep-figure (range 10) (range 10) '("k") (list past-seven)))))
-
-(define (mismatches labels classes)
-  (count (lambda (cluster class) (not (= cluster class))) labels (renumbered classes)))
 
 (define (span numbers)
   (list (apply min numbers) (apply max numbers)))
@@ -337,3 +360,38 @@
                               (and (= label 0) (= class 1) (< r malignant-min))))
                      clusterings)
                 '(8 2)))
+
+(define decomposition
+  (delay
+    (evaluated-chapter "decomposition.scrbl")))
+
+(define (centre points)
+  (map mean (transpose points)))
+
+(test-gpu "the figures: wine in the plane of two components"
+  (define-values (chapter blocks) (force decomposition))
+  (match-define (list* _ _ (list _ _ _ _ _ explained _) _) blocks)
+  (define shares (cumulative (chapter 'ratios)))
+  (check-equal? (size explained) '(320 240))
+  (check-true (apply <= shares))
+  (check-= (last shares) 1.0 (* (length shares) float32-roundoff))
+  (define projected (chapter 'projected))
+  (define cultivar (chapter 'cultivar))
+  (define truth (renumbered cultivar))
+  (match-define (list xs ys) (columns-of projected))
+  (match-define (list one two three)
+    (~> (map list truth xs ys)
+        (group-by car _)
+        (sort < #:key caar)
+        (map (compose centre (curry map cdr)) _)))
+  (check > (first one) 0.0)
+  (check > 0.0 (first three))
+  (check < (second two) (min (second one) (second three)))
+  (define clusterings
+    (for/list ([samples (in-list (list (chapter 'scaled) projected))])
+      (clusters-of (chapter 'clusterer) samples cultivar)))
+  (define (misplaced-in class labels)
+    (count (lambda (cluster id) (and (not (= cluster id)) (= id class))) labels truth))
+  (define misplaced (map (curryr mismatches cultivar) clusterings))
+  (check-equal? misplaced '(6 6))
+  (check-equal? (map (curry misplaced-in 1) clusterings) misplaced))

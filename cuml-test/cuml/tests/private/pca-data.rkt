@@ -6,13 +6,16 @@
                   pca-result-explained-variance-ratio
                   pca-result-mean
                   pca-result-singular-values)
-         (only-in racket/list argmax list-set make-list)
+         (only-in racket/function curryr)
+         (only-in racket/list argmax list-set make-list take)
+         (only-in racket/match match)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "scaler-data.rkt" generated-rows round-to rows->matrix))
+         (only-in "scaler-data.rkt" generated-rows round-to rows->matrix transpose))
 
 (provide (struct-out fitted)
          (struct-out fixture)
          axis-rows
+         centred
          column
          constant-column
          dot
@@ -27,9 +30,14 @@
          host-project
          host-reconstruct
          integer-fixture
+         magnitude-rows
+         non-increasing?
          norm
          normal-fixture
          orthonormality-bound
+         over-bound
+         product
+         scaled-rows
          tie-rows
          wide-fixture)
 
@@ -41,7 +49,7 @@
   z)
 
 (define (product a b)
-  (define columns (apply map list b))
+  (define columns (transpose b))
   (for/list ([row (in-list a)])
     (for/list ([c (in-list columns)])
       (for/sum ([x (in-list row)] [y (in-list c)]) (* x y)))))
@@ -81,13 +89,15 @@
    (fixture "low rank" (low-rank 17 1000 20 5))
    wide-fixture))
 
-(define (fixture-rows f dtype [count +inf.0])
+(define (fixture-rows f dtype [count #f])
   (define narrow (round-to dtype))
-  (for/list ([row (in-list (fixture-source f))]
-             [_ (in-range count)])
-    (map narrow row)))
+  (define rows (fixture-source f))
+  (map (lambda (row) (map narrow row))
+       (if count
+           (take rows (min count (length rows)))
+           rows)))
 
-(define (fixture-matrix f dtype [count +inf.0])
+(define (fixture-matrix f dtype [count #f])
   (rows->matrix (fixture-rows f dtype count) dtype))
 
 (define (axis-rows a b c permutation)
@@ -101,6 +111,11 @@
           (for/list ([s (in-list '(1.0 -1.0))])
             (on-axis 2 (* s c)))
           (list (on-axis -1 0.0))))
+
+(define magnitude-rows '((1.0 2.0 0.0) (2.0 4.5 1.0) (3.0 6.0 0.0) (4.0 8.0 1.5) (0.5 -1.0 2.0)))
+
+(define (scaled-rows rows by)
+  (map (lambda (row) (map (lambda (x) (* x by)) row)) rows))
 
 (define tie-rows '((1.0 -1.0) (-1.0 1.0) (2.0 -2.0) (-2.0 2.0) (0.5 0.5) (-0.5 -0.5)))
 
@@ -125,7 +140,7 @@
   (sqrt (dot xs xs)))
 
 (define (column rows j)
-  (map (lambda (row) (list-ref row j)) rows))
+  (map (curryr list-ref j) rows))
 
 (define (centred row mean)
   (map - row mean))
@@ -137,7 +152,7 @@
       (dot x c))))
 
 (define (host-reconstruct projections components mean)
-  (define columns (apply map list components))
+  (define columns (transpose components))
   (for/list ([t (in-list projections)])
     (for/list ([c (in-list columns)]
                [m (in-list mean)])
@@ -147,6 +162,14 @@
   (for/list ([a (in-list components)])
     (for/list ([b (in-list components)])
       (dot a b))))
+
+(define (over-bound what got want bound)
+  (and (not (<= (abs (- got want)) bound)) (format "~a: ~a vs ~a, bound ~a" what got want bound)))
+
+(define (non-increasing? xs)
+  (match xs
+    [(list* a (and more (list* b _))) (and (>= a b) (non-increasing? more))]
+    [_ #t]))
 
 (define (orthonormality-bound solver d u)
   (* (if (eq? solver 'jacobi) 8 4) d u))

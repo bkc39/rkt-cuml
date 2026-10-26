@@ -1,13 +1,19 @@
 #lang racket/base
 
-(require (only-in cuml/decomposition pca-fit pca-inverse-transform pca-transform)
+(require (only-in cuml/decomposition
+                  pca-fit
+                  pca-inverse-transform
+                  pca-result-noise-variance
+                  pca-transform)
          (only-in racket/list last take)
-         (only-in racket/match match match-define)
+         (only-in racket/match match-define)
+         (only-in racket/math sqr)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/pca-data.rkt"
                   axis-rows
+                  column
                   first-max-entries
                   fitted
                   fitted-of
@@ -16,9 +22,13 @@
                   fixtures
                   gaps
                   host-gram
+                  magnitude-rows
+                  non-increasing?
                   norm
                   normal-fixture
                   orthonormality-bound
+                  over-bound
+                  scaled-rows
                   tie-rows
                   wide-fixture)
          (only-in "private/scaler-data.rkt" bits-equal? rows->matrix unit-roundoff))
@@ -61,11 +71,6 @@
              ([(row i) (in-indexed gram)]
               [(g j) (in-indexed row)])
     (max worst (abs (- g (if (= i j) 1.0 0.0))))))
-
-(define (non-increasing? xs)
-  (match xs
-    [(list* a (and more (list* b _))) (and (>= a b) (non-increasing? more))]
-    [_ #t]))
 
 (define (spectrum-problems result-lists n k m u)
   (match-define (fitted _ variance ratio singular _) result-lists)
@@ -135,3 +140,105 @@
           (define gap (norm (map - c c-all)))
           (check-true (<= gap (/ (* 64 u largest) delta))
                       (format "k=~a: component ~a from the m-fit's, gap ~a" k gap delta)))))))
+
+(define (least-magnitude dt)
+  (if (eq? dt 'float32)
+      (expt 2 -149)
+      (expt 2 -1074)))
+
+(define (unscaled x by power)
+  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))
+
+(define (scaled-problems dt solver by)
+  (define unit-X (rows->matrix magnitude-rows dt))
+  (define small-X (rows->matrix (scaled-rows magnitude-rows by) dt))
+  (define unit (pca-fit unit-X #:n-components 2 #:solver solver))
+  (define small (pca-fit small-X #:n-components 2 #:solver solver))
+  (match-define (fitted c (and v (list* first-variance _)) (and r (list* first-ratio _)) s mean)
+    (fitted-of unit))
+  (match-define (fitted c* v* r* s* mean*) (fitted-of small))
+  (match-define (fitted _ all-variance _ _ _) (fitted-of (pca-fit unit-X #:solver solver)))
+  (match-define (list* largest _) all-variance)
+  (define u (unit-roundoff dt))
+  (define d (length mean))
+  (define n (length magnitude-rows))
+  (define spread (* 64 u largest))
+  (define variance-bound
+    (if (eq? solver 'jacobi)
+        (* 8 d u largest)
+        spread))
+  (define deltas (take (gaps all-variance) 2))
+  (define (floor-at power)
+    (unscaled (least-magnitude dt) by power))
+  (define mean-bounds
+    (for/list ([m (in-list mean)]
+               [j (in-naturals)])
+      (define xs (column magnitude-rows j))
+      (define sd (sqrt (/ (for/sum ([x (in-list xs)]) (sqr (- x m))) (sub1 n))))
+      (* 8 u 3 (+ (abs m) sd))))
+  (define T (device-matrix->list* (pca-transform unit unit-X)))
+  (define T* (device-matrix->list* (pca-transform small small-X)))
+  (define I (device-matrix->list* (pca-inverse-transform unit (rows->matrix T dt))))
+  (define I*
+    (device-matrix->list* (pca-inverse-transform small (rows->matrix (scaled-rows T by) dt))))
+  (define total (/ first-variance first-ratio))
+  (filter
+   values
+   (append
+    (for/list ([x (in-list c*)]
+               [y (in-list c)]
+               [delta (in-list deltas)]
+               [i (in-naturals)])
+      (over-bound (format "component ~a" i) (norm (map - x y)) 0 (/ spread delta)))
+    (for/list ([x (in-list v*)]
+               [y (in-list v)]
+               [i (in-naturals)])
+      (over-bound (format "variance ~a" i) (unscaled x by 2) y (+ variance-bound (floor-at 2))))
+    (for/list ([x (in-list s*)]
+               [y (in-list s)]
+               [i (in-naturals)])
+      (over-bound (format "singular value ~a" i)
+                  (unscaled x by 1)
+                  y
+                  (+ (/ (* (sub1 n) variance-bound) y) (* 2 u y) (floor-at 1))))
+    (for/list ([x (in-list r*)]
+               [y (in-list r)]
+               [i (in-naturals)])
+      (or (and (not (positive? x)) (format "ratio ~a is ~a" i x))
+          (over-bound (format "ratio ~a" i) x y (/ variance-bound total))))
+    (for/list ([x (in-list mean*)]
+               [y (in-list mean)]
+               [bound (in-list mean-bounds)]
+               [j (in-naturals)])
+      (over-bound (format "mean ~a" j) (unscaled x by 1) y (+ bound (floor-at 1))))
+    (list (over-bound "noise"
+                      (unscaled (pca-result-noise-variance small) by 2)
+                      (pca-result-noise-variance unit)
+                      (+ variance-bound (unscaled (least-magnitude 'float64) by 2))))
+    (for*/list ([(row row* x) (in-parallel (in-list T) (in-list T*) (in-list magnitude-rows))]
+                [(t t* delta j)
+                 (in-parallel (in-list row) (in-list row*) (in-list deltas) (in-naturals))])
+      (define bound
+        (+ (* (norm (map - x mean)) (+ (/ spread delta) (* 4 d u))) (norm mean-bounds) (floor-at 1)))
+      (over-bound (format "transform column ~a" j) (unscaled t* by 1) t bound))
+    (for*/list ([(row row* t) (in-parallel (in-list I) (in-list I*) (in-list T))]
+                [(y y* m bound j) (in-parallel (in-list row)
+                                               (in-list row*)
+                                               (in-list mean)
+                                               (in-list mean-bounds)
+                                               (in-naturals))])
+      (define size (norm t))
+      (define components-error (for/sum ([delta (in-list deltas)]) (/ spread delta)))
+      (over-bound (format "inverse column ~a" j)
+                  (unscaled y* by 1)
+                  y
+                  (+ (* size components-error) bound (* 4 d u (+ size (abs m))) (floor-at 1)))))))
+
+(test-gpu "L14: tiny data, whose squares underflow, fits as the unit data scaled"
+  (for* ([dt (in-list dtypes)]
+         [solver (in-list solvers)]
+         [by (in-list (if (eq? dt 'float32)
+                          '(1e-20 1e-25)
+                          '(1e-160 1e-165)))])
+    (test-case (format "~a ~a ~a" dt solver by)
+      (check-equal? (scaled-problems dt solver by) '()))))

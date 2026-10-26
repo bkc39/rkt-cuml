@@ -5,18 +5,29 @@
                   pca-fit
                   pca-inverse-transform
                   pca-params
+                  pca-result
                   pca-result-components
                   pca-result-explained-variance
                   pca-result-explained-variance-ratio
+                  pca-result-mean
                   pca-result-noise-variance
                   pca-result-singular-values
                   pca-transform)
-         (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
+         (only-in math/flonum +max.0)
+         (only-in racket/list make-list)
+         (only-in racket/match match-lambda)
+         (only-in racket/math nan?)
+         (only-in rackunit check-equal? check-false check-true test-case)
+         (only-in raft
+                  device-matrix->list*
+                  device-vector->list
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/cuml-error.rkt" check-cuml-error raised))
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/pca-data.rkt" magnitude-rows scaled-rows)
+         (only-in "private/scaler-data.rkt" rows->matrix))
 
 (define axes '((4 0) (-4 0) (0 1) (0 -1) (0 0)))
 (define exact-axes '((4.0 0.0) (-4.0 0.0) (0.0 1.0) (0.0 -1.0) (0.0 0.0)))
@@ -73,31 +84,61 @@
                      '((4.0) (-4.0) (0.0) (0.0) (0.0))))
   (check-cuml-error 'logic "transform: pca is not fitted" (lambda () (transform (pca) (X)))))
 
-(define (refused-bound thunk)
-  (match-define (list _ bound) (regexp-match #rx"at most ([^,]+), got" (exn-message (raised thunk))))
-  (string->number bound))
+(define most +max.0)
+(define margin-width (* 4 2))
+(define slack 1e-12)
+
+(define (bound-cases plain whitened)
+  (define (huge v)
+    (list*->device-matrix `((,v 0)) #:dtype 'float64))
+  `(("fit" ,(sqrt (/ most (* margin-width 2)))
+           ,(lambda (v) (pca-fit (list*->device-matrix `((,v 0) (0 0)) #:dtype 'float64))))
+    ("tol" 3.4028234663852886e+38 ,(lambda (v) (pca-fit (X) #:tol v)))
+    ("transform" ,(/ most margin-width) ,(lambda (v) (pca-transform plain (huge v))))
+    ("whitened transform" ,(* (/ most margin-width) (min 1 (sqrt 0.5)))
+                          ,(lambda (v) (pca-transform whitened (huge v))))
+    ("inverse" ,(/ most margin-width) ,(lambda (v) (pca-inverse-transform plain (huge v))))
+    ("whitened inverse" ,(/ (/ most margin-width) (max 1 (sqrt 8.0)))
+                        ,(lambda (v) (pca-inverse-transform whitened (huge v))))))
 
 (test-gpu "the manual: the documented bounds are the refused ones"
-  (define most 1.7976931348623157e308)
-  (define huge (list*->device-matrix '((1e308 0)) #:dtype 'float64))
-  (define plain (pca-fit (X)))
-  (define whitened (pca-fit (X) #:whiten #t))
-  (for ([c (in-list
-            (list (list "fit"
-                        (sqrt (/ most (* 4 2 2)))
-                        (lambda ()
-                          (pca-fit (list*->device-matrix '((1e308 0) (0 0)) #:dtype 'float64))))
-                  (list "tol" 3.4028234663852886e+38 (lambda () (pca-fit (X) #:tol 1e39)))
-                  (list "transform" (/ most (* 4 2)) (lambda () (pca-transform plain huge)))
-                  (list "whitened transform"
-                        (* (/ most (* 4 2)) (min 1 (sqrt 0.5)))
-                        (lambda () (pca-transform whitened huge)))
-                  (list "inverse" (/ most (* 4 2)) (lambda () (pca-inverse-transform plain huge)))
-                  (list "whitened inverse"
-                        (/ (/ most (* 4 2)) (max 1 (sqrt 8.0)))
-                        (lambda () (pca-inverse-transform whitened huge)))))])
-    (match-define (list what documented thunk) c)
-    (test-case what
-      (define refused (refused-bound thunk))
-      (check-true (<= (abs (- refused documented)) (* 1e-15 documented))
-                  (format "~a: refused above ~a, documented ~a" what refused documented)))))
+  (for-each (match-lambda
+              [(list what documented call)
+               (test-case what
+                 (check-cuml-error 'logic
+                                   #rx"expected a magnitude of at most|expected at most"
+                                   (lambda () (call (* documented (+ 1 slack)))))
+                 (check-false (raised (lambda () (call (* documented (- 1 slack)))))))])
+            (bound-cases (pca-fit (X)) (pca-fit (X) #:whiten #t))))
+
+(test-gpu "the manual: a hand-built result is checked only for dtypes and shapes"
+  (define fitted (pca-fit (X) #:whiten #t))
+  (define hand-built
+    (pca-result (pca-result-components fitted)
+                (list->device-vector '(-1.0 0.5) #:dtype 'float64)
+                (pca-result-explained-variance-ratio fitted)
+                (pca-result-singular-values fitted)
+                (pca-result-mean fitted)
+                0.0
+                5
+                #t))
+  (check-true (~> (pca-transform hand-built (list*->device-matrix '((1 1)) #:dtype 'float64))
+                  device-matrix->list*
+                  caar
+                  nan?)))
+
+(test-gpu "the manual: the whitened round trip needs every root of variance at least epsilon"
+  (define (round-trip rows)
+    (define M (rows->matrix rows 'float32))
+    (define fitted (pca-fit M #:whiten #t))
+    (values (~> (pca-transform fitted M) (pca-inverse-transform fitted _) device-matrix->list*)
+            (map sqrt (device-vector->list (pca-result-explained-variance fitted)))
+            (device-vector->list (pca-result-mean fitted))))
+  (define-values (unit unit-roots _unit-mean) (round-trip magnitude-rows))
+  (check-true (andmap (lambda (root) (>= root 1.1920928955078125e-07)) unit-roots))
+  (check-true (for*/and ([(row want) (in-parallel (in-list unit) (in-list magnitude-rows))]
+                         [(x y) (in-parallel (in-list row) (in-list want))])
+                (<= (abs (- x y)) 1e-5)))
+  (define-values (tiny tiny-roots tiny-mean) (round-trip (scaled-rows magnitude-rows 1e-25)))
+  (check-true (andmap (lambda (root) (< root 1.1920928955078125e-07)) tiny-roots))
+  (check-equal? tiny (make-list (length magnitude-rows) tiny-mean)))

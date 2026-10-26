@@ -20,6 +20,7 @@ labels to the host:
 (define measurements (features 'iris "species"))
 (define flowers (table->device-matrix iris #:columns measurements))
 (define species (dataset-column 'iris "species"))
+(define species-ids (class-ids species))
 (define (kmeans-labels result)
   (device-vector->list (kmeans-result-labels result)))
 ]
@@ -34,7 +35,10 @@ take only @racket['float32]:
 @examples[#:eval ev #:label #f
 (define flowers64 (table->device-matrix iris #:columns measurements #:dtype 'float64))
 (dtype flowers64)
-(~> (kmeans-fit flowers64 #:n-clusters 3) kmeans-labels (crosstab species))
+(~> (kmeans-fit flowers64 #:n-clusters 3)
+    kmeans-result-labels
+    (adjusted-rand-score species-ids _)
+    rounded)
 (eval:error (single-linkage-fit flowers64 #:n-clusters 3))
 ]
 
@@ -60,10 +64,12 @@ thread's at each call. @racket[with-device-resources] scopes a fresh set:
 @examples[#:eval ev #:label #f
 (with-device-resources ([r (device-resources)])
   (~> (kmeans-fit flowers #:n-clusters 3 #:resources r)
-      kmeans-labels
-      (crosstab species)
-      agreement))
+      kmeans-result-labels
+      (adjusted-rand-score species-ids _ #:resources r)
+      rounded))
 ]
+
+The same fit on fresh resources scores 0.73, as in @secref["gs-species"].
 
 @section[#:tag "concepts-estimators"]{Procedures and estimators}
 
@@ -99,7 +105,11 @@ such as @racket[current-batch-samples], or a constructor setting such as
 @examples[#:eval ev #:label #f
 (define base (kmeans-params #:n-init 3))
 (for/list ([k (in-range 2 5)])
-  (~> (fit (kmeans base #:n-clusters k) flowers) kmeans-model kmeans-labels (crosstab species) agreement))
+  (~> (fit (kmeans base #:n-clusters k) flowers)
+      kmeans-model
+      kmeans-result-labels
+      (adjusted-rand-score species-ids _)
+      rounded))
 (hash-ref (estimator-params (estimator-set-params (kmeans base) #:n-clusters 2)) 'n-init)
 (define (base-labels)
   (kmeans-labels (kmeans-fit flowers #:params base #:n-clusters 3)))
@@ -117,12 +127,12 @@ Two seeds can find the same partition under different numbers:
 
 @examples[#:eval ev #:label #f
 (define (labels-at seed)
-  (kmeans-labels (kmeans-fit flowers #:n-clusters 3 #:random-state seed)))
-(equal? (labels-at 0) (labels-at 1))
-(equal? (crosstab (labels-at 0) species) (crosstab (labels-at 1) species))
+  (kmeans-result-labels (kmeans-fit flowers #:n-clusters 3 #:random-state seed)))
+(equal? (device-vector->list (labels-at 0)) (device-vector->list (labels-at 1)))
+(adjusted-rand-score (labels-at 0) (labels-at 1))
 ]
 
-Compare partitions, as @racket[crosstab] does, not label values.
+Compare partitions, as @racket[adjusted-rand-score] does, not label values.
 
 @section[#:tag "concepts-refusals"]{Refusals}
 
@@ -159,9 +169,11 @@ k-means seeds its centroids, and spectral clustering its k-means, from
 another seed can renumber the clusters, or move a sample near a boundary:
 
 @examples[#:eval ev #:label #f
-(equal? (labels-at 2) (labels-at 2))
-(crosstab (labels-at 2) species)
+(equal? (device-vector->list (labels-at 2)) (device-vector->list (labels-at 2)))
+(rounded (adjusted-rand-score species-ids (labels-at 2)))
 ]
+
+At seed 2 one flower moves: 0.716 against 0.73.
 
 DBSCAN and single linkage take no seed, but are not always deterministic:
 which cluster a DBSCAN border sample joins can depend on the batching, and

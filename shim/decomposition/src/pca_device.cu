@@ -1,15 +1,12 @@
-#include <thrust/for_each.h>
 #include <thrust/functional.h>
-#include <thrust/iterator/counting_iterator.h>
 #include <thrust/transform_reduce.h>
 
 #include <cfloat>
 #include <cstdint>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cuda_stream.hpp>
-#include <rmm/exec_policy.hpp>
 
 #include "pca_device.hpp"
+#include "signs.cuh"
 
 namespace cumlrkt::decomposition {
 
@@ -59,11 +56,12 @@ struct column_major {
   T* out;
   int64_t n;
   int64_t d;
+  int exponent;
 
   __device__ void operator()(int64_t o) const {
     const int64_t j = o / n;
     const int64_t i = o - (j * n);
-    const T v = x[(i * d) + j];
+    const T v = scaled(x[(i * d) + j], exponent);
     out[o] = variance == nullptr ? v : times(v, root(variance[j]));
   }
 };
@@ -90,6 +88,7 @@ struct spectrum_totals {
   double* totals;
   int64_t m;
   int64_t k;
+  int exponent;
 
   __device__ void operator()(int64_t) const {
     double sum = 0;
@@ -105,7 +104,9 @@ struct spectrum_totals {
       }
     }
     totals[0] = sum;
-    totals[1] = k < m ? __ddiv_rn(rest, static_cast<double>(m - k)) : 0.0;
+    totals[1] = k < m ? scaled(__ddiv_rn(rest, static_cast<double>(m - k)),
+                               -2 * exponent)
+                      : 0.0;
   }
 };
 
@@ -115,67 +116,50 @@ struct kept_spectrum {
   const double* totals;
   fit_arrays<T> out;
   double dof;
+  int exponent;
 
   __device__ void operator()(int64_t i) const {
     const T v = variance[i];
     const auto wide = static_cast<double>(v);
-    out.variance[i] = v;
+    out.variance[i] = scaled(v, -2 * exponent);
     out.ratio[i] =
         totals[0] == 0 ? T{0} : narrow(T{}, __ddiv_rn(wide, totals[0]));
-    out.singular[i] = narrow(T{}, __dsqrt_rn(__dmul_rn(wide, dof)));
+    out.singular[i] =
+        narrow(T{}, scaled(__dsqrt_rn(__dmul_rn(wide, dof)), -exponent));
   }
 };
 
 template <typename T>
-struct signed_components {
-  const T* components;
-  T* out;
-  int64_t m;
-  int64_t d;
+struct unscaled_mean {
+  T* mean;
+  int exponent;
 
-  __device__ void operator()(int64_t i) const {
-    T best = components[i];
-    for (int64_t j = 1; j < d; ++j) {
-      const T c = components[i + (j * m)];
-      if (fabs(c) > fabs(best)) {
-        best = c;
-      }
-    }
-    const bool flip = best < 0;
-    for (int64_t j = 0; j < d; ++j) {
-      const T c = components[i + (j * m)];
-      out[(i * d) + j] = flip ? -c : c;
-    }
+  __device__ void operator()(int64_t j) const {
+    mean[j] = scaled(mean[j], -exponent);
   }
 };
 
 template <typename T>
-struct wide_divisor {
-  __device__ double operator()(T v) const {
-    return static_cast<double>(divisor(v));
+struct bounds_one {
+  __device__ variance_bounds operator()(T v) const {
+    return {static_cast<double>(divisor(v)), root(static_cast<double>(v))};
   }
 };
 
-template <typename T>
-struct wide_root {
-  __device__ double operator()(T v) const {
-    return __dsqrt_rn(static_cast<double>(v));
+struct bounds_both {
+  __host__ __device__ variance_bounds
+  operator()(const variance_bounds& a, const variance_bounds& b) const {
+    return {thrust::minimum<double>{}(a.smallest_divisor, b.smallest_divisor),
+            thrust::maximum<double>{}(a.largest_root, b.largest_root)};
   }
 };
-
-template <typename F>
-void each(const raft::handle_t& handle, int64_t count, F f) {
-  const auto stream = raft::resource::get_cuda_stream(handle);
-  thrust::for_each_n(rmm::exec_policy(stream),
-                     thrust::counting_iterator<int64_t>(0), count, f);
-}
 
 }  // namespace
 
 template <typename T>
 void to_columns(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
-                const T* variance, T* out) {
-  each(handle, n * d, column_major<T>{x, variance, out, n, d});
+                const T* variance, T* out, int exponent) {
+  each(handle, n * d, column_major<T>{x, variance, out, n, d, exponent});
 }
 
 template <typename T>
@@ -187,52 +171,42 @@ void to_rows(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
 template <typename T>
 void post_fit(const raft::handle_t& handle, const T* components, T* variance,
               int64_t m, int64_t k, int64_t d, int64_t n,
-              const fit_arrays<T>& out, double* totals) {
-  each(handle, 1, spectrum_totals<T>{variance, totals, m, k});
+              const fit_arrays<T>& out, double* totals, int exponent) {
+  each(handle, 1, spectrum_totals<T>{variance, totals, m, k, exponent});
   each(handle, k,
-       kept_spectrum<T>{variance, totals, out, static_cast<double>(n - 1)});
-  each(handle, k, signed_components<T>{components, out.components, m, d});
+       kept_spectrum<T>{variance, totals, out, static_cast<double>(n - 1),
+                        exponent});
+  each(handle, k,
+       signed_components<T>{components, out.components, m, d, nullptr});
+  each(handle, d, unscaled_mean<T>{out.mean, exponent});
 }
 
 template <typename T>
-double smallest_divisor(const raft::handle_t& handle, const T* variance,
-                        int64_t k) {
+variance_bounds bounds_of(const raft::handle_t& handle, const T* variance,
+                          int64_t k) {
   const auto stream = raft::resource::get_cuda_stream(handle);
   return thrust::transform_reduce(rmm::exec_policy(stream), variance,
-                                  variance + k, wide_divisor<T>{}, 1.0,
-                                  thrust::minimum<double>{});
-}
-
-template <typename T>
-double largest_root(const raft::handle_t& handle, const T* variance,
-                    int64_t k) {
-  const auto stream = raft::resource::get_cuda_stream(handle);
-  return thrust::transform_reduce(rmm::exec_policy(stream), variance,
-                                  variance + k, wide_root<T>{}, 1.0,
-                                  thrust::maximum<double>{});
+                                  variance + k, bounds_one<T>{},
+                                  variance_bounds{1.0, 1.0}, bounds_both{});
 }
 
 template void to_columns<float>(const raft::handle_t&, const float*, int64_t,
-                                int64_t, const float*, float*);
+                                int64_t, const float*, float*, int);
 template void to_columns<double>(const raft::handle_t&, const double*, int64_t,
-                                 int64_t, const double*, double*);
+                                 int64_t, const double*, double*, int);
 template void to_rows<float>(const raft::handle_t&, const float*, int64_t,
                              int64_t, const float*, float*);
 template void to_rows<double>(const raft::handle_t&, const double*, int64_t,
                               int64_t, const double*, double*);
 template void post_fit<float>(const raft::handle_t&, const float*, float*,
                               int64_t, int64_t, int64_t, int64_t,
-                              const fit_arrays<float>&, double*);
+                              const fit_arrays<float>&, double*, int);
 template void post_fit<double>(const raft::handle_t&, const double*, double*,
                                int64_t, int64_t, int64_t, int64_t,
-                               const fit_arrays<double>&, double*);
-template double smallest_divisor<float>(const raft::handle_t&, const float*,
-                                        int64_t);
-template double smallest_divisor<double>(const raft::handle_t&, const double*,
-                                         int64_t);
-template double largest_root<float>(const raft::handle_t&, const float*,
-                                    int64_t);
-template double largest_root<double>(const raft::handle_t&, const double*,
-                                     int64_t);
+                               const fit_arrays<double>&, double*, int);
+template variance_bounds bounds_of<float>(const raft::handle_t&, const float*,
+                                          int64_t);
+template variance_bounds bounds_of<double>(const raft::handle_t&, const double*,
+                                           int64_t);
 
 }  // namespace cumlrkt::decomposition

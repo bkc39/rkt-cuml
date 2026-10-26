@@ -28,6 +28,10 @@ int64_t first_large_element(const T* x, int64_t count, double most,
                             rmm::cuda_stream_view stream);
 
 template <typename T>
+double largest_magnitude(const T* x, int64_t count,
+                         rmm::cuda_stream_view stream);
+
+template <typename T>
 int64_t first_row_unlike_first(const T* x, int64_t n, int64_t d,
                                rmm::cuda_stream_view stream);
 

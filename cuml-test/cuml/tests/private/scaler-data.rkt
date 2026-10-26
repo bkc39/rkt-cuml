@@ -9,6 +9,7 @@
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in racket/math sqr)
+         (only-in racket/sequence in-slice sequence->list)
          (only-in raft
                   device-matrix?
                   device-vector->list
@@ -25,6 +26,7 @@
 (provide bits-equal?
          constant-rows
          dyadic-rows
+         float32-roundoff
          generated-rows
          host-inverse
          host-transform
@@ -32,8 +34,10 @@
          normal-rows
          round-to
          rows->matrix
+         rows-of
          standardisation-errors
          strided-vector
+         transpose
          ulp
          unit-roundoff
          vector-shape)
@@ -46,6 +50,14 @@
 
 (define (rows->matrix rows dtype)
   (list*->device-matrix rows #:dtype dtype))
+
+(define (transpose rows)
+  (if (null? rows)
+      '()
+      (apply map list rows)))
+
+(define (rows-of xs d)
+  (sequence->list (in-slice d xs)))
 
 (define (strided-vector n [dt 'float64])
   (define backing (list->device-vector (range (* 2 n)) #:dtype dt))
@@ -105,6 +117,8 @@
   (if (eq? dtype 'float32)
       (expt 2.0 -24)
       (expt 2.0 -53)))
+
+(define float32-roundoff (unit-roundoff 'float32))
 
 (define (round-to dtype)
   (if (eq? dtype 'float32) flsingle values))
