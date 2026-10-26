@@ -189,4 +189,133 @@ Whether @racket[v] is a UMAP estimator.}
 The @racket[umap-result] of the fit that made @racket[estimator], or
 @racket[#f] when it is unfitted.}
 
+@section[#:tag "tsne"]{t-SNE}
+
+@examples[#:eval ev
+(define embedded (tsne-fit X #:perplexity 10))
+(shape (tsne-result-embedding embedded))
+(~> embedded
+    tsne-result-embedding
+    (hdbscan-fit #:min-cluster-size 10)
+    hdbscan-result-labels
+    (adjusted-rand-score truth _))
+]
+
+@defstruct*[tsne-result
+            ([embedding device-matrix?]
+             [kl-divergence (or/c #f flonum?)]
+             [n-iter exact-positive-integer?]
+             [params hash?])]{
+The result of @racket[tsne-fit]: the n×2 @racket['float32] @racket[embedding];
+the Kullback–Leibler divergence of the last iteration, in float32, or
+@racket[#f] when the optimisation stopped before @racket[max-iter]; the
+iterations run; and the fit's @racket[params], where a derived
+@racket[n-neighbors] and a drawn seed stay @racket[#f].}
+
+@defproc[(tsne-fit [X device-matrix?]
+                   [#:n-components n-components 2 2]
+                   [#:perplexity perplexity (and/c real? (>/c 1)) 30.0]
+                   [#:early-exaggeration early-exaggeration (and/c real? (>=/c 1)) 12.0]
+                   [#:learning-rate learning-rate (and/c real? positive?) 200.0]
+                   [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                   [#:n-neighbors n-neighbors (or/c #f (integer-in 2 1023)) #f]
+                   [#:method method (or/c 'fft 'exact) 'fft]
+                   [#:metric metric (or/c 'euclidean 'sqeuclidean 'manhattan 'chebyshev 'cosine) 'euclidean]
+                   [#:init init (or/c 'random 'pca) 'random]
+                   [#:random-state random-state (or/c #f (integer-in 0 9223372036854775807)) 0]
+                   [#:params params (or/c #f hash?) #f]
+                   [#:resources resources device-resources? (current-device-resources)])
+         tsne-result?]{
+Embeds the rows of @racket[X], a row-major @racket['float32] matrix with at
+least two rows and two columns, not all rows equal, and finite rows of squared
+norm at most 2@superscript{125}, in two dimensions. Under @racket['cosine] a
+row of d columns needs a squared norm of at least d·2@superscript{-126}.
+Each row's neighbourhood is its @racket[n-neighbors] nearest rows, itself
+included: ⌈3·@racket[perplexity]⌉ by default, at least 2, at most 1023 and at
+most the row count; @racket[perplexity] is at most that count. The first 250
+iterations run at @racket[learning-rate] with attractions scaled by
+@racket[early-exaggeration], the rest at twice the rate. @racket['fft] runs
+every iteration, where Python cuML's default stops early and can collapse the
+embedding. @racket['fft] with a @racket[random-state] gives the same embedding
+on every run; @racket['exact] is O(n²) per iteration, takes at most 2097120
+rows, stops once the gradient norm falls below 10@superscript{-7}, and is not
+reproducible. @racket[#f] draws a seed from
+@racket[current-pseudo-random-generator]. An optimisation that diverges is an
+error.
+@examples[#:eval ev #:label #f
+(tsne-result-n-iter embedded)
+(eval:error (tsne-fit X #:perplexity 100))
+]}
+
+@defproc[(tsne-fit-transform [X device-matrix?]
+                             [#:n-components n-components 2 2]
+                             [#:perplexity perplexity (and/c real? (>/c 1)) 30.0]
+                             [#:early-exaggeration early-exaggeration (and/c real? (>=/c 1)) 12.0]
+                             [#:learning-rate learning-rate (and/c real? positive?) 200.0]
+                             [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                             [#:n-neighbors n-neighbors (or/c #f (integer-in 2 1023)) #f]
+                             [#:method method (or/c 'fft 'exact) 'fft]
+                             [#:metric metric (or/c 'euclidean 'sqeuclidean 'manhattan 'chebyshev 'cosine) 'euclidean]
+                             [#:init init (or/c 'random 'pca) 'random]
+                             [#:random-state random-state (or/c #f (integer-in 0 9223372036854775807)) 0]
+                             [#:params params (or/c #f hash?) #f]
+                             [#:resources resources device-resources? (current-device-resources)])
+         (values tsne-result? device-matrix?)]{
+@racket[tsne-fit], and the fit's embedding.}
+
+@defproc[(tsne-params [base (or/c #f hash?) #f]
+                      [#:n-components n-components 2 2]
+                      [#:perplexity perplexity (and/c real? (>/c 1)) 30.0]
+                      [#:early-exaggeration early-exaggeration (and/c real? (>=/c 1)) 12.0]
+                      [#:learning-rate learning-rate (and/c real? positive?) 200.0]
+                      [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                      [#:n-neighbors n-neighbors (or/c #f (integer-in 2 1023)) #f]
+                      [#:method method (or/c 'fft 'exact) 'fft]
+                      [#:metric metric (or/c 'euclidean 'sqeuclidean 'manhattan 'chebyshev 'cosine) 'euclidean]
+                      [#:init init (or/c 'random 'pca) 'random]
+                      [#:random-state random-state (or/c #f (integer-in 0 9223372036854775807)) 0])
+         (and/c hash? hash-eq? immutable?)]{
+The hyperparameters of @racket[tsne-fit] and @racket[tsne], as @racket[kmeans-params].
+@examples[#:eval ev #:label #f
+(hash-ref (tsne-params #:method 'exact) 'method)
+(eval:error (tsne-params (hasheq 'angle 0.5)))
+]}
+
+@section[#:tag "tsne-estimator"]{t-SNE estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(tsne [params (or/c #f hash?) #f]
+               [#:n-components n-components 2 2]
+               [#:perplexity perplexity (and/c real? (>/c 1)) 30.0]
+               [#:early-exaggeration early-exaggeration (and/c real? (>=/c 1)) 12.0]
+               [#:learning-rate learning-rate (and/c real? positive?) 200.0]
+               [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+               [#:n-neighbors n-neighbors (or/c #f (integer-in 2 1023)) #f]
+               [#:method method (or/c 'fft 'exact) 'fft]
+               [#:metric metric (or/c 'euclidean 'sqeuclidean 'manhattan 'chebyshev 'cosine) 'euclidean]
+               [#:init init (or/c 'random 'pca) 'random]
+               [#:random-state random-state (or/c #f (integer-in 0 9223372036854775807)) 0]
+               [#:resources resources (or/c #f device-resources?) #f])
+         tsne?]{
+
+An unfitted t-SNE with the hyperparameters @racket[(tsne-params params ...)]:
+an estimator and a transformer whose @racket[fit-transform] returns the
+embedding. @racket[fit] is @racket[tsne-fit]; there is no @racket[transform].
+A @racket[sample-weight] is refused. Errors name the generic.
+
+@examples[#:eval ev #:label #f
+(shape (fit-transform (tsne #:perplexity 10) X))
+(eval:error (transform (fit (tsne #:perplexity 10) X) X))
+]}
+
+@defproc[(tsne? [v any/c]) boolean?]{
+
+Whether @racket[v] is a t-SNE estimator.}
+
+@defproc[(tsne-model [estimator tsne?]) (or/c #f tsne-result?)]{
+
+The @racket[tsne-result] of the fit that made @racket[estimator], or
+@racket[#f] when it is unfitted.}
+
 @(close-eval ev)
