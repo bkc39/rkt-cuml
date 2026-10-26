@@ -58,7 +58,8 @@
                                                "preprocessing.scrbl"
                                                "decomposition.scrbl"
                                                "estimators.scrbl"
-                                               "decomposition-estimators.scrbl"))))
+                                               "pca-estimator.scrbl"
+                                               "truncated-svd-estimator.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 

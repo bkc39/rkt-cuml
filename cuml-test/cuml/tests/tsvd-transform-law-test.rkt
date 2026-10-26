@@ -8,7 +8,14 @@
          (only-in threading ~>)
          (only-in "private/pca-data.rkt" column fixture-name fixture-rows norm)
          (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff)
-         (only-in "private/tsvd-data.rkt" law-fixtures popvars squared-norm svd tsvd-of))
+         (only-in "private/tsvd-data.rkt"
+                  extents
+                  first-problems
+                  law-fixtures
+                  popvars
+                  squared-norm
+                  svd
+                  tsvd-of))
 
 (define (exact-product rows columns)
   (define exact-columns
@@ -30,7 +37,7 @@
   (/ (* m u) (- 1 (* m u))))
 
 (define (product-problems got a columns u what)
-  (define m (length (car columns)))
+  (define-values (_ m) (extents columns))
   (define want (exact-product a columns))
   (define scale (exact-product (absolute a) (absolute columns)))
   (define g (gamma m u))
@@ -45,19 +52,10 @@
               [f (in-list law-fixtures)])
     (list dt solver f)))
 
-(define (extents rows)
-  (match-define (cons first-row _) rows)
-  (values (length rows) (length first-row)))
-
 (define (tall-case? c)
   (match-define (list _ _ f) c)
   (define-values (n d) (extents (fixture-rows f 'float64)))
   (<= d n))
-
-(define (first-problems problems)
-  (for/list ([p (in-list problems)]
-             [_ (in-range 3)])
-    p))
 
 (test-gpu "L5, L6: transform and inverse are within gamma of the host products of the fit's own components"
   (for ([c (in-list (cases))])

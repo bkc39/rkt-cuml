@@ -3,7 +3,7 @@
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters define-hyperparameters)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt"
@@ -43,11 +43,15 @@
                                    iterations
                                    (if with-transform 1 0))
   (match-define (list* components singular variance ratio transformed) (deposit->list out))
-  (apply values (tsvd-result components variance ratio singular) transformed))
+  (values (tsvd-result components variance ratio singular)
+          (match transformed
+            [(list T) T]
+            ['() #f])))
 
 (define (applied job who result X resources)
+  (match-define (tsvd-result components _ _ _) result)
   (define out (deposit-for/who who resources))
-  (job who resources X (tsvd-result-components result) out)
+  (job who resources X components out)
   (match-define (list applied-X) (deposit->list out))
   applied-X)
 
@@ -55,7 +59,8 @@
                       X
                       #:hyperparameters tsvd-params
                       #:resources [resources (current-device-resources)])
-  (fitted who X n-components solver tol iterations #f resources))
+  (define-values (result _) (fitted who X n-components solver tol iterations #f resources))
+  result)
 
 (define/who (tsvd-transform who result X #:resources [resources (current-device-resources)])
   (applied cuml-decomposition-tsvd-transform-job who result X resources))

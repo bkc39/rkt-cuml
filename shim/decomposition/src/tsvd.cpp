@@ -16,6 +16,7 @@
 #include "cumlrkt/decomposition.h"
 #include "cumlrkt/limits.hpp"
 #include "cumlrkt/rows.hpp"
+#include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
 #include "pca_device.hpp"
 #include "raftrkt/deposit.hpp"
@@ -25,19 +26,28 @@
 
 namespace {
 
+using cumlrkt::buffer;
 using cumlrkt::guarded;
+using cumlrkt::largest_magnitude;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
+using cumlrkt::most_columns;
 using cumlrkt::most_index;
+using cumlrkt::most_value;
 using cumlrkt::on_floats;
+using cumlrkt::overflow_margin;
 using cumlrkt::printed;
 using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_finite;
 using cumlrkt::require_finite_non_negative;
 using cumlrkt::require_float;
+using cumlrkt::require_magnitudes;
+using cumlrkt::require_rows;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
+using cumlrkt::scale_exponent;
+using cumlrkt::scratch;
 using cumlrkt::settle;
 using cumlrkt::squared_norm_bound;
 using cumlrkt::decomposition::to_columns;
@@ -46,22 +56,6 @@ using cumlrkt::decomposition::tsvd_arrays;
 using cumlrkt::decomposition::tsvd_extents;
 using raftrkt::any_extent;
 using raftrkt::layout;
-
-constexpr int64_t most_columns = 46340;
-
-template <typename T>
-using buffer = rmm::device_uvector<T>;
-
-template <typename T>
-buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
-  return buffer<T>(static_cast<std::size_t>(count), stream);
-}
-
-void require_rows(int64_t n) {
-  if (n > most_index) {
-    throw logic_error(std::format("X: {} rows do not fit the index type", n));
-  }
-}
 
 void require_columns(int64_t d) {
   if (d > most_columns) {
@@ -148,6 +142,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_finite("X", x, stream);
   require_frobenius(handle, x);
+  const int exponent =
+      scale_exponent<T>(largest_magnitude(x.data, x.n * x.d, stream));
   const bool constant =
       cumlrkt::first_row_unlike_first(x.data, x.n, x.d, stream) < 0;
   const int64_t k = r.n_components;
@@ -155,7 +151,7 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
       tsvd_shape{r.with_transform ? x.n : 0, x.d, k}, stream);
   {
     buffer<T> columns = scratch<T>(x.n * x.d, stream);
-    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data(), 0);
+    to_columns<T>(handle, x.data, x.n, x.d, nullptr, columns.data(), exponent);
     buffer<T> components = scratch<T>(k * x.d, stream);
     buffer<T> singular = scratch<T>(k, stream);
     buffer<T> variance = scratch<T>(k, stream);
@@ -175,7 +171,7 @@ void fit_into(const raft::handle_t& handle, const rr_view* view,
         handle,
         tsvd_arrays<T>{components.data(), singular.data(), variance.data(),
                        ratio.data(), transform.data()},
-        tsvd_extents{x.n, x.d, k, constant}, flipped.data(),
+        tsvd_extents{x.n, x.d, k, constant, exponent}, flipped.data(),
         tsvd_arrays<T>{outputs->components.data(), outputs->singular.data(),
                        outputs->variance.data(), outputs->ratio.data(),
                        r.with_transform ? outputs->transform.data() : nullptr});
@@ -218,6 +214,9 @@ void apply_into(const raft::handle_t& handle, const operands<T>& o,
   }
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_finite("X", x, stream);
+  require_magnitudes(
+      "X", x, most_value<T> / (overflow_margin * static_cast<double>(width)),
+      stream);
   const int64_t out_width = Inverse ? d : k;
   auto result =
       std::make_unique<buffer<T>>(scratch<T>(x.n * out_width, stream));

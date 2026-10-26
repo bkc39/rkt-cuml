@@ -8,7 +8,8 @@
          (only-in racket/list argmax make-list take)
          (only-in racket/match match-define)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "pca-data.rkt" column dot fixture gaps)
+         (only-in threading ~>)
+         (only-in "pca-data.rkt" dot fixture gaps over-bound)
          (only-in "scaler-data.rkt" generated-rows unit-roundoff))
 
 (provide (struct-out exact)
@@ -17,6 +18,9 @@
          accuracy-problems
          duplicate-fixture
          exact-reference
+         extents
+         first-problems
+         geomspace
          householder-fixtures
          host-transform
          law-fixtures
@@ -30,6 +34,7 @@
          tsvd-of
          twos-fixture
          wide-fixture
+         worst-difference
          zeros-fixture)
 
 (struct svd (components variance ratio singular) #:transparent)
@@ -43,6 +48,19 @@
        (device-vector->list (tsvd-result-explained-variance result))
        (device-vector->list (tsvd-result-explained-variance-ratio result))
        (device-vector->list (tsvd-result-singular-values result))))
+
+(define (extents rows)
+  (match-define (cons first-row _) rows)
+  (values (length rows) (length first-row)))
+
+(define (first-problems problems)
+  (take problems (min 3 (length problems))))
+
+(define (worst-difference xs ys)
+  (for/fold ([worst 0.0])
+            ([x (in-list xs)]
+             [y (in-list ys)])
+    (max worst (abs (- x y)))))
 
 (define (normal-rows-of seed n d)
   (generated-rows seed n d 'float64 (lambda (z _u _j) z)))
@@ -97,17 +115,15 @@
       (map (lambda (v) (* s v)) row)))
   (define scale (/ 2.0 (dot a a)))
   (define w
-    (for/list ([j (in-range d)])
-      (for/sum ([ai (in-list a)] [row (in-list scaled)]) (* ai (list-ref row j)))))
+    (apply map
+           (lambda column
+             (for/sum ([ai (in-list a)] [x (in-list column)]) (* ai x)))
+           scaled))
+  (define padded (append scaled (make-list (- n d) (make-list d 0.0))))
   (define rows
     (for/list ([ai (in-list a)]
-               [i (in-naturals)])
-      (for/list ([wj (in-list w)]
-                 [j (in-naturals)])
-        (- (if (< i d)
-               (list-ref (list-ref scaled i) j)
-               0.0)
-           (* scale ai wj)))))
+               [row (in-list padded)])
+      (map (lambda (x wj) (- x (* scale ai wj))) row w)))
   (exact (fixture (format "householder ~a" top) rows) spectrum (map positive-largest vt)))
 
 (define householder-fixtures
@@ -131,21 +147,19 @@
   (real->double-flonum (/ (for/sum ([x (in-list exact-xs)]) (* (- x mean) (- x mean))) n)))
 
 (define (popvars rows)
-  (match-define (cons first-row _) rows)
-  (for/list ([j (in-range (length first-row))])
-    (popvar (column rows j))))
+  (apply map (lambda column (popvar column)) rows))
 
 (define (squared-norm rows)
   (for*/sum ([row (in-list rows)] [x (in-list row)]) (* x x)))
 
 (define (exact-reference rows spectrum components k)
-  (define variance (popvars (host-transform rows (take components k))))
+  (define variance (~> components (take k) (host-transform rows _) popvars))
   (define total (apply + (popvars rows)))
   (reference (take components k)
              variance
              (map (lambda (v) (/ v total)) variance)
              (take spectrum k)
-             (take (gaps (map (lambda (s) (* s s)) spectrum)) k)))
+             (~> (map (lambda (s) (* s s)) spectrum) gaps (take k))))
 
 (define (sign-matched ref got)
   (struct-copy reference
@@ -158,9 +172,6 @@
                      (reference-components ref)
                      (svd-components got))]))
 
-(define (over what got want bound)
-  (and (> (abs (- got want)) bound) (format "~a: ~a vs ~a, bound ~a" what got want bound)))
-
 (define (accuracy-problems got ref rows dt c)
   (match-define (svd components variance ratio singular) got)
   (define u (unit-roundoff dt))
@@ -171,22 +182,20 @@
           (append (for/list ([s (in-list singular)]
                              [s-ref (in-list (reference-singular ref))]
                              [i (in-naturals)])
-                    (over (format "singular value ~a squared" i) (* s s) (* s-ref s-ref) bound))
+                    (over-bound (format "singular value ~a squared" i) (* s s) (* s-ref s-ref) bound))
                   (for/list ([row (in-list components)]
                              [row-ref (in-list (reference-components ref))]
                              [g (in-list (reference-gaps ref))]
                              [i (in-naturals)])
-                    (define worst
-                      (for/fold ([worst 0.0])
-                                ([x (in-list row)]
-                                 [y (in-list row-ref)])
-                        (max worst (abs (- x y)))))
-                    (over (format "component ~a times its gap" i) (* worst g) 0.0 bound))
+                    (over-bound (format "component ~a times its gap" i)
+                                (* (worst-difference row row-ref) g)
+                                0.0
+                                bound))
                   (for/list ([v (in-list variance)]
                              [v-ref (in-list (reference-variance ref))]
                              [i (in-naturals)])
-                    (over (format "explained variance ~a" i) v v-ref (/ bound n)))
+                    (over-bound (format "explained variance ~a" i) v v-ref (/ bound n)))
                   (for/list ([r (in-list ratio)]
                              [r-ref (in-list (reference-ratio ref))]
                              [i (in-naturals)])
-                    (over (format "ratio ~a" i) r r-ref (/ bound (* n total)))))))
+                    (over-bound (format "ratio ~a" i) r r-ref (/ bound (* n total)))))))

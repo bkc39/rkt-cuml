@@ -14,6 +14,7 @@
                   pca-result-singular-values
                   pca-transform)
          (only-in math/flonum +max.0)
+         (only-in racket/list make-list)
          (only-in racket/match match-lambda)
          (only-in racket/math nan?)
          (only-in rackunit check-equal? check-false check-true test-case)
@@ -24,7 +25,9 @@
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/cuml-error.rkt" check-cuml-error raised))
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/pca-data.rkt" magnitude-rows scaled-rows)
+         (only-in "private/scaler-data.rkt" rows->matrix))
 
 (define axes '((4 0) (-4 0) (0 1) (0 -1) (0 0)))
 (define exact-axes '((4.0 0.0) (-4.0 0.0) (0.0 1.0) (0.0 -1.0) (0.0 0.0)))
@@ -123,3 +126,19 @@
                   device-matrix->list*
                   caar
                   nan?)))
+
+(test-gpu "the manual: the whitened round trip needs every root of variance at least epsilon"
+  (define (round-trip rows)
+    (define X (rows->matrix rows 'float32))
+    (define fitted (pca-fit X #:whiten #t))
+    (values (~> (pca-transform fitted X) (pca-inverse-transform fitted _) device-matrix->list*)
+            (map sqrt (device-vector->list (pca-result-explained-variance fitted)))
+            (device-vector->list (pca-result-mean fitted))))
+  (define-values (unit unit-roots _unit-mean) (round-trip magnitude-rows))
+  (check-true (andmap (lambda (root) (>= root 1.1920928955078125e-07)) unit-roots))
+  (check-true (for*/and ([(row want) (in-parallel (in-list unit) (in-list magnitude-rows))]
+                         [(x y) (in-parallel (in-list row) (in-list want))])
+                (<= (abs (- x y)) 1e-5)))
+  (define-values (tiny tiny-roots tiny-mean) (round-trip (scaled-rows magnitude-rows 1e-25)))
+  (check-true (andmap (lambda (root) (< root 1.1920928955078125e-07)) tiny-roots))
+  (check-equal? tiny (make-list (length magnitude-rows) tiny-mean)))

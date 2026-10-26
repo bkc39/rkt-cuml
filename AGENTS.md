@@ -404,7 +404,9 @@ kills the test outright.
   (`scribble/example`, never pasted output), each pinned in
   `cuml-test/cuml/tests/docs-test.rkt` (the reference;
   `preprocessing-docs-test.rkt` for `reference/preprocessing.scrbl`,
-  `decomposition-docs-test.rkt` for `reference/decomposition.scrbl`) or
+  `decomposition-docs-test.rkt` for PCA in `reference/decomposition.scrbl`
+  and `reference/pca-estimator.scrbl`, `tsvd-docs-test.rkt` for its
+  truncated SVD section and `reference/truncated-svd-estimator.scrbl`) or
   `guide-docs-test.rkt` (the guide).
 
 ## CI

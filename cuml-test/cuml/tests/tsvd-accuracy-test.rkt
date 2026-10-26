@@ -7,24 +7,24 @@
                   pca-result-explained-variance-ratio
                   pca-result-singular-values
                   tsvd-fit)
+         (only-in racket/list append*)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/pca-data.rkt" fixture-name fixture-rows)
-         (only-in "private/scaler-data.rkt" generated-rows round-to rows->matrix unit-roundoff)
+         (only-in "private/scaler-data.rkt" round-to rows->matrix unit-roundoff)
          (only-in "private/tsvd-data.rkt"
                   accuracy-problems
                   exact
                   exact-reference
+                  first-problems
+                  geomspace
                   householder-fixtures
+                  normal-rows-of
                   svd
-                  tsvd-of))
-
-(define (first-problems problems)
-  (for/list ([p (in-list problems)]
-             [_ (in-range 3)])
-    p))
+                  tsvd-of
+                  worst-difference))
 
 (test-gpu "L8: the fit is within c u F^2 of the Householder fixtures' exact SVD"
   (for* ([e (in-list householder-fixtures)]
@@ -41,25 +41,15 @@
         (accuracy-problems fitted (exact-reference rows spectrum components k) rows dt c))
        '()))))
 
-(define (geomspace top d)
-  (for/list ([i (in-range d)])
-    (expt top (/ (- d 1 i) (- d 1.0)))))
-
 (define (centred-rows seed n d dt)
   (define scales (geomspace 10.0 d))
-  (define rows (generated-rows seed n d 'float64 (lambda (z _u j) (+ 5.0 (* z (list-ref scales j))))))
-  (define means
-    (for/list ([j (in-range d)])
-      (/ (for/sum ([row (in-list rows)]) (list-ref row j)) n)))
+  (define rows
+    (for/list ([row (in-list (normal-rows-of seed n d))])
+      (map (lambda (z s) (+ 5.0 (* z s))) row scales)))
+  (define means (apply map (lambda column (/ (apply + column) n)) rows))
   (define narrow (round-to dt))
   (for/list ([row (in-list rows)])
     (map (lambda (x m) (narrow (- x m))) row means)))
-
-(define (worst-difference xs ys)
-  (for/fold ([worst 0.0])
-            ([x (in-list xs)]
-             [y (in-list ys)])
-    (max worst (abs (- x y)))))
 
 (test-gpu "L14: on centred X, the fit is pca-fit's, its variances scaled by (n - 1)/n"
   (for* ([shape (in-list '((500 12 5) (300 6 6)))]
@@ -72,10 +62,8 @@
       (define pca-variance (device-vector->list (pca-result-explained-variance pca)))
       (define u (unit-roundoff dt))
       (define worst-component
-        (for/fold ([worst 0.0])
-                  ([c (in-list components)]
-                   [p (in-list (device-matrix->list* (pca-result-components pca)))])
-          (max worst (worst-difference c p))))
+        (worst-difference (append* components)
+                          (append* (device-matrix->list* (pca-result-components pca)))))
       (check-true (<= worst-component (if (eq? dt 'float32) 1e-5 1e-12))
                   (format "components ~a" worst-component))
       (define pca-singular (device-vector->list (pca-result-singular-values pca)))

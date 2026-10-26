@@ -19,6 +19,7 @@ struct tsvd_extents {
   int64_t d;
   int64_t k;
   bool constant;
+  int exponent;
 };
 
 template <typename T>

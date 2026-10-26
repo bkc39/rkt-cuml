@@ -182,6 +182,7 @@ TEST(TsvdFitRefusals, AllocateNothingButTheScans) {
 struct apply_shapes {
   int64_t width;
   int64_t wrong_width;
+  const char* most;
 };
 
 void expect_apply_refusals(const resources& res, tsvd_apply entry,
@@ -210,6 +211,11 @@ void expect_apply_refusals(const resources& res, tsvd_apply entry,
   const rr_view narrow_components = shaped(floats.view, {kept, 1});
   const filled<float> nan_x(
       res, with(spread<float>(rows, s.width), s.width - 1, nan),
+      {rows, s.width});
+  const filled<float> huge_x(res, with(spread<float>(rows, s.width), 1, 1e38),
+                             {rows, s.width});
+  const filled<float> huge_nan_x(
+      res, with(with(spread<float>(rows, s.width), 0, 1e38), 1, nan),
       {rows, s.width});
   record out(res);
   expect_refusals({
@@ -240,6 +246,12 @@ void expect_apply_refusals(const resources& res, tsvd_apply entry,
       {[&] { return entry(res.handle, nan_x.view(), c, &out.r); },
        std::format("X: row 0, column {}: expected a finite value, got nan",
                    s.width - 1)},
+      {[&] { return entry(res.handle, huge_nan_x.view(), c, &out.r); },
+       "X: row 0, column 1: expected a finite value, got nan"},
+      {[&] { return entry(res.handle, huge_x.view(), c, &out.r); },
+       std::format(
+           "X: row 0, column 1: expected a magnitude of at most {}, got 1e+38",
+           s.most)},
       {[&] { return entry(res.handle, &no_rows, &int_components, &out.r); },
        "X: expected at least 1 row, got 0"},
       {[&] { return entry(res.handle, x.view(), c, nullptr); }, "out is NULL"},
@@ -251,14 +263,18 @@ TEST(TsvdTransformRefusals, EachConditionInTableOrder) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   expect_apply_refusals(res, cuml_decomposition_tsvd_transform,
-                        {.width = cols, .wrong_width = kept});
+                        {.width = cols,
+                         .wrong_width = kept,
+                         .most = "2.8356862219877405e+37"});
 }
 
 TEST(TsvdInverseTransformRefusals, EachConditionInTableOrder) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   expect_apply_refusals(res, cuml_decomposition_tsvd_inverse_transform,
-                        {.width = kept, .wrong_width = cols});
+                        {.width = kept,
+                         .wrong_width = cols,
+                         .most = "4.2535293329816107e+37"});
 }
 
 }  // namespace

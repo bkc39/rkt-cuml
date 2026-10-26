@@ -82,6 +82,8 @@ packet (§4) has the detail.
 | A5 #48 | XᵀX overflow is a silent NaN in every output | `linalg/detail/tsvd.cuh:349` (Gram gemm) | refused past a squared Frobenius norm of 2¹²⁵ (float32) / 2¹⁰²¹ (float64) |
 | A5 #48 | the ratio divides by the total variance unchecked: 0/0 is NaN | `linalg/detail/tsvd.cuh:522` | +0 when it is 0; near-constant noise documented |
 | A5 #48 | n_components in (min(n, d), d] is accepted: the tail is an arbitrary null-space basis with NaN σ | `linalg/detail/tsvd.cuh:342` | refused past min(n, d) |
+| A5 #48 | Gram underflow: below about 1e-19 (float32) or 1e-154 (float64) XᵀX is subnormal or 0, so σ, ev and ratio are 0 and the components arbitrary; at float32 1e-20 the subnormal total variance's reciprocal overflows and the ratio is 0 | `linalg/detail/tsvd.cuh` (Gram gemm, ratio) | X fitted at a power-of-two scale, results scaled back, as A4 #47 |
+| A5 #48 | `tsvdTransform` and `tsvdInverseTransform` overflow to ±inf on finite X | `linalg/detail/tsvd.cuh` (gemm) | refused past max/(4·d) and max/(4·k) |
 
 ## Python cuML
 

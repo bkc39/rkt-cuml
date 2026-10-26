@@ -1,6 +1,5 @@
 #lang scribble/manual
 @(require scribble/example
-          (only-in "decomposition-estimators.scrbl" decomposition-estimators)
           (for-label cuml
                      racket/base
                      racket/contract/base
@@ -450,7 +449,8 @@ Whether @racket[v] is a standard scaler estimator.}
 The @racket[standard-scaler-result] of the fit that made @racket[estimator],
 or @racket[#f] when it is unfitted.}
 
-@(decomposition-estimators)
+@include-section["pca-estimator.scrbl"]
+@include-section["truncated-svd-estimator.scrbl"]
 
 @(close-eval host-ev)
 @(close-eval ev)

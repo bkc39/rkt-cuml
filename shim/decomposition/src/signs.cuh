@@ -17,6 +17,13 @@ void each(const raft::handle_t& handle, int64_t count, F f) {
                      thrust::counting_iterator<int64_t>(0), count, f);
 }
 
+inline __device__ float scaled(float v, int exponent) {
+  return scalbnf(v, exponent);
+}
+inline __device__ double scaled(double v, int exponent) {
+  return scalbn(v, exponent);
+}
+
 template <typename T>
 struct signed_components {
   const T* components;

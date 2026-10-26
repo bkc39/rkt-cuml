@@ -10,22 +10,19 @@
                   tsvd-result-singular-values
                   tsvd-result?
                   tsvd-transform)
-         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/pca-data.rkt" fixture-name fixture-rows)
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix vector-shape)
-         (only-in "private/tsvd-data.rkt" law-fixtures))
+         (only-in "private/tsvd-data.rkt" extents law-fixtures))
 
 (test-gpu "L1: the result's fields have their shapes and X's dtype, and the outputs keep it"
   (for* ([dt (in-list '(float32 float64))]
          [f (in-list law-fixtures)]
          [k (in-list '(1 2))])
     (define rows (fixture-rows f dt))
-    (match-define (cons first-row _) rows)
-    (define n (length rows))
-    (define d (length first-row))
+    (define-values (n d) (extents rows))
     (test-case (format "~a ~a k=~a" dt (fixture-name f) k)
       (define X (rows->matrix rows dt))
       (define result (tsvd-fit X #:n-components k))

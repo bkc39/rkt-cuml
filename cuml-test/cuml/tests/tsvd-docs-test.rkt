@@ -5,15 +5,21 @@
                   tsvd-fit
                   tsvd-inverse-transform
                   tsvd-params
+                  tsvd-result
                   tsvd-result-components
+                  tsvd-result-explained-variance
                   tsvd-result-explained-variance-ratio
                   tsvd-result-singular-values
                   tsvd-transform)
-         (only-in rackunit check-equal? check-true)
+         (only-in math/flonum +max.0)
+         (only-in racket/list make-list)
+         (only-in racket/match match-lambda)
+         (only-in racket/math nan?)
+         (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/cuml-error.rkt" check-cuml-error))
+         (only-in "private/cuml-error.rkt" check-cuml-error raised))
 
 (define rows '((1 2 0) (2 4 1) (3 6 0) (4 8 1)))
 
@@ -62,3 +68,34 @@
   (check-cuml-error 'logic
                     "transform: truncated-svd is not fitted"
                     (lambda () (transform (truncated-svd) (X)))))
+
+(define slack 1e-12)
+
+(define (huge v d)
+  (list*->device-matrix (list (cons v (make-list (sub1 d) 0))) #:dtype 'float64))
+
+(define (bound-cases fitted)
+  `(("fit" ,(sqrt (expt 2.0 1021))
+           ,(lambda (v) (tsvd-fit (list*->device-matrix `((,v 0) (0 0)) #:dtype 'float64))))
+    ("tol" 3.4028234663852886e+38 ,(lambda (v) (tsvd-fit (X) #:tol v #:solver 'jacobi)))
+    ("transform" ,(/ +max.0 (* 4 3)) ,(lambda (v) (tsvd-transform fitted (huge v 3))))
+    ("inverse" ,(/ +max.0 (* 4 2)) ,(lambda (v) (tsvd-inverse-transform fitted (huge v 2))))))
+
+(test-gpu "the manual: the documented bounds are the refused ones"
+  (for-each (match-lambda
+              [(list what documented call)
+               (test-case what
+                 (check-cuml-error 'logic
+                                   #rx"expected a magnitude of at most|expected at most|expected a squared"
+                                   (lambda () (call (* documented (+ 1 slack)))))
+                 (check-false (raised (lambda () (call (* documented (- 1 slack)))))))])
+            (bound-cases (tsvd-fit (X) #:n-components 2))))
+
+(test-gpu "the manual: a hand-built result is checked only for dtypes and shapes"
+  (define fitted (tsvd-fit (X) #:n-components 2))
+  (define hand-built
+    (tsvd-result (list*->device-matrix '((+nan.0 0 0) (0 1 0)) #:dtype 'float64)
+                 (tsvd-result-explained-variance fitted)
+                 (tsvd-result-explained-variance-ratio fitted)
+                 (tsvd-result-singular-values fitted)))
+  (check-true (~> (tsvd-transform hand-built (X)) device-matrix->list* caar nan?)))

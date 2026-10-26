@@ -1,29 +1,39 @@
 #lang racket/base
 
-(require (only-in cuml/decomposition tsvd-fit)
-         (only-in racket/list drop)
+(require (only-in cuml/decomposition tsvd-fit tsvd-fit-transform tsvd-transform)
+         (only-in racket/list drop take)
          (only-in racket/match match match-define)
-         (only-in rackunit check-true test-case)
+         (only-in racket/math sqr)
+         (only-in rackunit check-equal? check-true test-case)
+         (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/pca-data.rkt" first-max-entries fixture-name fixture-rows host-gram)
-         (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff)
+         (only-in threading ~>)
+         (only-in "private/pca-data.rkt"
+                  first-max-entries
+                  fixture-name
+                  fixture-rows
+                  gaps
+                  host-gram
+                  magnitude-rows
+                  over-bound
+                  scaled-rows)
+         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix unit-roundoff)
          (only-in "private/tsvd-data.rkt"
                   duplicate-fixture
+                  extents
                   law-fixtures
+                  popvars
                   squared-norm
                   svd
                   tie-fixture
                   tsvd-of
                   twos-fixture
                   wide-fixture
+                  worst-difference
                   zeros-fixture))
 
 (define dtypes '(float32 float64))
 (define solvers '(full jacobi))
-
-(define (extents rows)
-  (match-define (cons first-row _) rows)
-  (values (length rows) (length first-row)))
 
 (define (non-increasing? xs)
   (match xs
@@ -110,3 +120,63 @@
       (match-define (svd _ twos-variance twos-ratio _) twos)
       (check-true (positive-zeros? twos-variance) (format "twos ~a" twos-variance))
       (check-true (positive-zeros? twos-ratio) (format "twos ~a" twos-ratio)))))
+
+(define (least-magnitude dt)
+  (if (eq? dt 'float32)
+      (expt 2 -149)
+      (expt 2 -1074)))
+
+(define (unscaled x by power)
+  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))
+
+(define (tiny-problems dt solver by)
+  (define unit-X (rows->matrix magnitude-rows dt))
+  (define small-X (rows->matrix (scaled-rows magnitude-rows by) dt))
+  (match-define (svd c v r s) (tsvd-of (tsvd-fit unit-X #:n-components 2 #:solver solver)))
+  (match-define (svd _ _ _ all-singular) (tsvd-of (tsvd-fit unit-X #:n-components 3 #:solver solver)))
+  (define-values (small T*) (tsvd-fit-transform small-X #:n-components 2 #:solver solver))
+  (match-define (svd c* v* r* s*) (tsvd-of small))
+  (define-values (n _) (extents magnitude-rows))
+  (define bound
+    (* 2 (if (eq? solver 'jacobi) 256 64) (unit-roundoff dt) (squared-norm magnitude-rows)))
+  (define total (apply + (popvars magnitude-rows)))
+  (define (floor-at power)
+    (unscaled (least-magnitude dt) by power))
+  (filter values
+          (append (for/list ([x (in-list c*)]
+                             [y (in-list c)]
+                             [g (in-list (~> (map sqr all-singular) gaps (take 2)))]
+                             [i (in-naturals)])
+                    (over-bound (format "component ~a" i)
+                                (worst-difference x y)
+                                0.0
+                                (/ bound g)))
+                  (for/list ([x (in-list s*)]
+                             [y (in-list s)]
+                             [i (in-naturals)])
+                    (over-bound (format "singular value ~a" i)
+                                (unscaled x by 1)
+                                y
+                                (+ (/ bound y) (floor-at 1))))
+                  (for/list ([x (in-list v*)]
+                             [y (in-list v)]
+                             [i (in-naturals)])
+                    (over-bound (format "variance ~a" i)
+                                (unscaled x by 2)
+                                y
+                                (+ (/ bound n) (floor-at 2))))
+                  (for/list ([x (in-list r*)]
+                             [y (in-list r)]
+                             [i (in-naturals)])
+                    (or (and (not (positive? x)) (format "ratio ~a is ~a" i x))
+                        (over-bound (format "ratio ~a" i) x y (/ bound (* n total)))))
+                  (list (and (not (bits-equal? (device-matrix->list* T*)
+                                               (device-matrix->list* (tsvd-transform small small-X))))
+                             "fit-transform's matrix is not tsvd-transform's")))))
+
+(test-gpu "L24: tiny data, whose squares underflow, fits as the unit data scaled"
+  (for* ([scale (in-list '((float32 1e-20) (float32 1e-25) (float64 1e-160) (float64 1e-165)))]
+         [solver (in-list solvers)])
+    (match-define (list dt by) scale)
+    (test-case (format "~a ~a ~a" dt solver by)
+      (check-equal? (tiny-problems dt solver by) '()))))

@@ -92,7 +92,10 @@ dtype and column count, a row, and finite elements of magnitude at most
 Maps n×k projections back: @racket[X], times each component's square root
 of variance when @racket[result] whitens, times the components, plus the
 mean. With every component kept, the round trip returns the data up to
-rounding. @racket[X] needs the fit's dtype, k columns, a row, and finite
+rounding; under whitening, a component whose square root of variance is
+below ε is divided by ε on the way in but multiplied by that root on the way
+back, as in scikit-learn, so the whitened round trip needs every root at
+least ε. @racket[X] needs the fit's dtype, k columns, a row, and finite
 elements of magnitude at most @italic{max}/(4·k), over the largest square
 root of variance when @racket[result] whitens and it is above 1.
 @examples[#:eval ev #:label #f
@@ -145,7 +148,9 @@ k×d @racket[components], the right singular vectors of @racket[X] as
 orthonormal rows, each signed so that its first entry of largest magnitude
 is positive; the population variance of each column of the transform, and
 its share of the summed column variances of @racket[X] (0 when every row
-is the same); and the k largest @racket[singular-values], descending.}
+is the same); and the k largest @racket[singular-values], descending. A
+hand-built result is checked only for dtypes and shapes, so non-finite or
+non-orthonormal components give unspecified, possibly non-finite output.}
 
 @defproc[(tsvd-fit [X device-matrix?]
                    [#:n-components n-components exact-positive-integer? 1]
@@ -161,8 +166,9 @@ rows, at least two columns and finite elements, without centring.
 @racket[n-components] is at most the smaller of @racket[X]'s row and column
 counts. The fit eigendecomposes XᵀX in @racket[X]'s dtype:
 @racket['jacobi] iterates at most @racket[iterations] sweeps to tolerance
-@racket[tol] (0 for machine precision); @racket['full] ignores both. A
-singular value below about √ε·‖X‖ is not resolved and reads as a small
+@racket[tol], finite and at most the float32 maximum (0 for machine
+precision), and stops silently when it runs out; @racket['full] ignores
+both. A singular value below about √ε·‖X‖ is not resolved and reads as a small
 number or 0. A matrix whose squared Frobenius norm exceeds 2¹²⁵ (float32)
 or 2¹⁰²¹ (float64) is refused, since XᵀX could overflow. On a matrix
 whose rows are all close, the variance ratios are rounding noise. The same
@@ -177,8 +183,9 @@ whose rows are all close, the variance ratios are rounding noise. The same
                          [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
 A new n×k matrix: @racket[X] times the transposed components.
-@racket[X] needs the fit's dtype and column count, a row and finite
-elements.}
+@racket[X] needs the fit's dtype and column count, a row, and finite
+elements of magnitude at most @italic{max}/(4·d), @italic{max} the dtype's
+largest value.}
 
 @defproc[(tsvd-inverse-transform [result tsvd-result?]
                                  [X device-matrix?]
@@ -186,6 +193,8 @@ elements.}
          device-matrix?]{
 A new n×d matrix: @racket[X], n×k, times the components. With every
 column's component kept, the round trip returns the data up to rounding.
+@racket[X] needs the fit's dtype, k columns, a row, and finite elements of
+magnitude at most @italic{max}/(4·k).
 @examples[#:eval ev #:label #f
 (define full (tsvd-fit X #:n-components 3))
 (~> (tsvd-transform full X) (tsvd-inverse-transform full _) device-matrix->list*)

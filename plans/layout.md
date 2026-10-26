@@ -637,3 +637,11 @@ Follow-ups are GitHub issues.
 - **A5-l.** One row or one column is refused, as A4-j; a constant matrix is
   accepted (unlike A4-i), since truncated SVD does not centre.
 - **A5-m.** `tol` crosses as `_double*`, as A4-p.
+- **A5-n.** X whose largest magnitude is below √(least normal)/ε is fitted
+  as X·2ᵉ in the transposed copy, A4-r's `scale_exponent`; σ and the
+  fit-transform matrix are scaled back by 2⁻ᵉ and the explained variance by
+  2⁻²ᵉ, components and ratio kept (amended after A5 r0 finding 1). Other X
+  has e = 0 and bitwise the same fit, so L18 is unchanged.
+- **A5-o.** Transform and inverse refuse an X element of magnitude above
+  max/(4·d) and max/(4·k), A4's bound without the whitening factor
+  (amended after A5 r0 finding 2).

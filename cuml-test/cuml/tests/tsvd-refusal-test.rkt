@@ -56,6 +56,9 @@
          (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
          (row "f5" "X: expected at least 2 columns, got 1" (rows->matrix '((1) (2) (3)) 'float64))
          (row "f4 before f5" "X: expected at least 2 rows, got 1" (rows->matrix '((1)) 'float32))
+         (row "f6"
+              "X: 46341 columns: a 46341x46341 Gram matrix does not fit the index type"
+              (blank-matrix 2 46341 'float32))
          (row "f14 nan"
               "X: row 3, column 1: expected a finite value, got nan"
               (grid-with '([(3 1) +nan.0])))
@@ -99,6 +102,11 @@
    (row "f8 before f10" "n-components: expected at most 3, got 4" (hasheq 'n-components 4 'tol -1))
    (row "f12 before f14" "iterations: expected at least 1, got 0" (hasheq 'iterations 0))))
 
+(define (parameter-X r)
+  (if (equal? (row-id r) "f12 before f14")
+      (grid-with '([(0 0) +nan.0]))
+      (grid-with '())))
+
 (define (fit-calls)
   (list (cons 'tsvd-fit (lambda (X options) (apply-options tsvd-fit options X)))
         (cons 'tsvd-fit-transform (lambda (X options) (apply-options tsvd-fit-transform options X)))
@@ -117,10 +125,7 @@
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (parameter-rows))])
     (match-define (cons who call) entry)
-    (define X
-      (if (equal? (row-id r) "f12 before f14")
-          (grid-with '([(0 0) +nan.0]))
-          (grid-with '())))
+    (define X (parameter-X r))
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call X (row-call r))))))
   (check-cuml-error 'logic
@@ -187,8 +192,21 @@
          "X: expected at least 1 row, got 0"
          (cons (hand-built (blank-matrix 2 3 'int32)) (blank-matrix 0 width 'float32))))))
 
+(define (t10-rows width float32-most float64-most)
+  (list (row "t10"
+             (format "X: row 0, column 1: expected a magnitude of at most ~a, got 1e+38" float32-most)
+             (cons (fitted) (narrowed width '([(0 1) 1e38]))))
+        (row "t10 float64"
+             (format "X: row 1, column 0: expected a magnitude of at most ~a, got 1e+308"
+                     float64-most)
+             (cons (fitted 'float64) (narrowed width '([(1 0) 1e308]) 'float64)))
+        (row "t9 before t10"
+             "X: row 1, column 1: expected a finite value, got nan"
+             (cons (fitted) (narrowed width '([(0 0) 1e38] [(1 1) +nan.0]))))))
+
 (define (transform-rows)
   (append (shared-rows 3)
+          (t10-rows 3 "2.8356862219877405e+37" "1.4980776123852632e+307")
           (list (row "t8" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
                 (row "L19 before t8"
                      "X: expected float32, got float64"
@@ -199,6 +217,7 @@
 
 (define (inverse-rows)
   (append (shared-rows 2)
+          (t10-rows 2 "4.2535293329816107e+37" "2.2471164185778946e+307")
           (list (row "t8 inverse" "X: expected 2 columns, got 3" (cons (fitted) (grid-with '()))))))
 
 (define (applied-calls)
@@ -253,6 +272,10 @@
   (for ([r (in-list (fit-X-rows))])
     (define X (row-call r))
     (unchanged (row-id r) (lambda () (check-row 'tsvd-fit r (lambda () (tsvd-fit X))))))
+  (for ([r (in-list (parameter-rows))])
+    (define X (parameter-X r))
+    (unchanged (row-id r)
+               (lambda () (check-row 'tsvd-fit r (lambda () (apply-options tsvd-fit (row-call r) X))))))
   (for ([entry (in-list (applied-calls))])
     (match-define (list who call rows) entry)
     (for ([r (in-list (rows))])

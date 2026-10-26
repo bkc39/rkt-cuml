@@ -6,7 +6,12 @@
          (only-in "private/pca-data.rkt" fixture-name)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows-of)
-         (only-in "private/tsvd-data.rkt" accuracy-problems exact-reference sign-matched tie-fixture)
+         (only-in "private/tsvd-data.rkt"
+                  accuracy-problems
+                  exact-reference
+                  first-problems
+                  sign-matched
+                  tie-fixture)
          (only-in "private/tsvd-twin-data.rkt"
                   ours
                   theirs-reference
@@ -20,11 +25,6 @@
   (if (eq? f tie-fixture)
       (sign-matched ref fitted)
       ref))
-
-(define (first-problems problems)
-  (for/list ([p (in-list problems)]
-             [_ (in-range 3)])
-    p))
 
 (test-twin "L8, L9: the fit is within c u F^2 of numpy's exact SVD and of sklearn's arpack fit"
   (define pairs

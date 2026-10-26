@@ -30,12 +30,6 @@ __device__ float over(float a, float b) {
 __device__ double over(double a, double b) {
   return __ddiv_rn(a, b);
 }
-__device__ float scaled(float v, int exponent) {
-  return scalbnf(v, exponent);
-}
-__device__ double scaled(double v, int exponent) {
-  return scalbn(v, exponent);
-}
 __device__ float narrow(float, double v) {
   return __double2float_rn(v);
 }
