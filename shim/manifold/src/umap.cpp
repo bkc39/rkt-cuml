@@ -312,7 +312,7 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
               rr_deposit* out, const rr_view* y, const umap_request& r) {
   require_fit_parameters(r);
   const matrix<float, int64_t> x = float_rows(x_view, "X");
-  require_some("X", "rows", x.n, 2);
+  require_some("X", "row", x.n, 2);
   require_some("X", "column", x.d, 1);
   require_rows_fit("X", x);
   require_spectral(r, x.n);
@@ -369,7 +369,7 @@ void transform_into(const raft::handle_t& handle, const transform_views& v,
   require_some("X", "row", x.n);
   require_rows_fit("X", x);
   const matrix<float, int64_t> train = float_rows(v.train_x, "result X");
-  require_some("result X", "rows", train.n, 2);
+  require_some("result X", "row", train.n, 2);
   require_rows_fit("result X", train);
   const matrix<float, int64_t> embedding = float_rows(v.embedding, "embedding");
   raftrkt::detail::require_extent("embedding", "rows", embedding.n, train.n);
