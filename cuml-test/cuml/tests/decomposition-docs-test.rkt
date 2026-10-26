@@ -129,9 +129,9 @@
 
 (test-gpu "the manual: the whitened round trip needs every root of variance at least epsilon"
   (define (round-trip rows)
-    (define X (rows->matrix rows 'float32))
-    (define fitted (pca-fit X #:whiten #t))
-    (values (~> (pca-transform fitted X) (pca-inverse-transform fitted _) device-matrix->list*)
+    (define M (rows->matrix rows 'float32))
+    (define fitted (pca-fit M #:whiten #t))
+    (values (~> (pca-transform fitted M) (pca-inverse-transform fitted _) device-matrix->list*)
             (map sqrt (device-vector->list (pca-result-explained-variance fitted)))
             (device-vector->list (pca-result-mean fitted))))
   (define-values (unit unit-roots _unit-mean) (round-trip magnitude-rows))
