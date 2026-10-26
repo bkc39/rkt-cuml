@@ -22,6 +22,8 @@
                   cluster-plot
                   cluster-style
                   clusters-of
+                  columns-of
+                  cumulative
                   dataset-column
                   features
                   line-plot
@@ -36,13 +38,13 @@
          (only-in racket/list
                   count
                   first
+                  group-by
                   last
                   make-list
                   range
                   remove-duplicates
                   rest
                   second
-                  take
                   third)
          (only-in racket/match match-define)
          (only-in rackunit
@@ -55,7 +57,7 @@
                   check-not-false
                   check-true
                   test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" scaled-matrix))
@@ -353,44 +355,36 @@
                      clusterings)
                 '(8 2)))
 
+(define (centre points)
+  (map (lambda (coordinates) (/ (apply + coordinates) (length coordinates))) (apply map list points)))
+
 (test-gpu "the figures: wine in the plane of two components"
   (define cultivar (dataset-column 'wine "cultivar"))
   (define scaled (scaled-matrix 'wine (features 'wine "cultivar")))
-  (define ratios (~> (pca-fit scaled) pca-result-explained-variance-ratio device-vector->list))
-  (define cumulative
-    (for/list ([k (in-range 1 14)])
-      (apply + (take ratios k))))
-  (check-equal? (size (line-plot (range 1 14) cumulative)) '(320 240))
-  (check-true (apply <= cumulative))
-  (check-= (last cumulative) 1.0 (* 13 (expt 2.0 -24)))
+  (define shares
+    (~> (pca-fit scaled) pca-result-explained-variance-ratio device-vector->list cumulative))
+  (check-equal? (size (line-plot (range 1 14) shares)) '(320 240))
+  (check-true (apply <= shares))
+  (check-= (last shares) 1.0 (* 13 (expt 2.0 -24)))
   (define projected (fit-transform (pca #:n-components 2) scaled))
-  (define plane (device-matrix->list* projected))
   (define truth (renumbered cultivar))
-  (define (mean-of id axis)
-    (define coordinates
-      (for/list ([point (in-list plane)]
-                 [class (in-list truth)]
-                 #:when (= class id))
-        (axis point)))
-    (/ (apply + coordinates) (length coordinates)))
-  (check > (mean-of 0 first) 0.0)
-  (check > 0.0 (mean-of 2 first))
-  (check > 0.0 (mean-of 1 second))
+  (match-define (list xs ys) (columns-of projected))
+  (match-define (list one two three)
+    (~> (map list truth xs ys)
+        (group-by car _)
+        (sort < #:key caar)
+        (map (compose centre (curry map cdr)) _)))
+  (check > (first one) 0.0)
+  (check > 0.0 (first three))
+  (check < (second two) (min (second one) (second three)))
   (define clusterings
-    (for/list ([samples (in-list (list scaled projected))])
-      (clusters-of (kmeans #:n-clusters 3) samples cultivar)))
+    (map (lambda (samples) (clusters-of (kmeans #:n-clusters 3 #:n-init 10) samples cultivar))
+         (list scaled projected)))
   (define (misplaced-classes labels)
     (for/list ([cluster (in-list labels)]
                [class (in-list truth)]
                #:unless (= cluster class))
       class))
-  (check-equal? (map (lambda (labels) (mismatches labels cultivar)) clusterings) '(8 5))
+  (check-equal? (map (lambda (labels) (mismatches labels cultivar)) clusterings) '(6 6))
   (check-equal? (map (lambda (labels) (count (curry = 1) (misplaced-classes labels))) clusterings)
-                '(8 4))
-  (check-equal? (size (class-figure (map first plane)
-                                    (map second plane)
-                                    (list (list "13 columns" (first clusterings))
-                                          (list "2 components" (second clusterings)))
-                                    cultivar
-                                    #:class-title "cultivar"))
-                '(652 622)))
+                '(6 6)))

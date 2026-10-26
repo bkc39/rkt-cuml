@@ -12,18 +12,25 @@
          threading)
 
 (provide class-figure
+         class-ids
          cluster-colors
          cluster-legend
          cluster-plot
          cluster-style
          clusters-of
+         columns-of
+         components-for
+         counts-of
+         cumulative
          dataset-column
          dataset-columns
          features
          labels-of
+         leading
          line-plot
          matched-labels
          renumbered
+         rounded
          rows
          rows->matrix
          sizes
@@ -66,6 +73,15 @@
                          [id (in-naturals)])
                 (values label id))))
 
+(define (class-ids classes)
+  (~> classes renumbered (list->device-vector #:dtype 'int32)))
+
+(define (counts-of ids labels)
+  (~> (contingency-matrix ids labels) contingency-table-counts device-matrix->list*))
+
+(define (rounded x)
+  (~r x #:precision 3))
+
 (define (matched-labels labels classes)
   (define clusters (distinct-clusters labels))
   (define names (distinct-clusters classes))
@@ -91,6 +107,23 @@
 
 (define (clusters-of estimator samples classes)
   (matched-labels (labels-of estimator samples) classes))
+
+(define (leading result names n)
+  (~> result
+      pca-result-components
+      device-matrix->list*
+      (map (lambda (component)
+             (~> (map cons component names) (sort > #:key (compose abs car)) (take n) (map cdr _)))
+           _)))
+
+(define (cumulative shares)
+  (map (lambda (k) (apply + (take shares k))) (inclusive-range 1 (length shares))))
+
+(define (components-for shares share)
+  (~> (cumulative shares) (index-where (curry <= share)) add1))
+
+(define (columns-of matrix)
+  (~> matrix device-matrix->list* (apply map list _)))
 
 (define (rgb hex)
   (for/list ([start (in-list '(1 3 5))])

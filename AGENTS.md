@@ -348,7 +348,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `tsvd-data` | the truncated SVD fixtures (`normal-fixture`, `offset-fixture`, `duplicate-fixture`, `wide-fixture`, `zeros-fixture`, `twos-fixture`, `tie-fixture`, `law-fixtures`, `normal-rows-of`, and `householder-fixtures` with known spectra, each an `exact`), `tsvd-of` (a result's arrays as host lists in an `svd` struct), `exact-reference` (the float64 SVD's `reference`), `accuracy-problems` (L8's bounds, the failures as strings), `sign-matched` (a reference with each component's sign matched to a fit's, for the tie fixture), and the host oracles `host-transform`, `popvars` and `squared-norm` |
 | `tsvd-twin-data` | the truncated SVD twin's cases (`twin-cases`, each a `twin-case` of at most 40k elements; `twin-results`, one Python run for a list of ops), `theirs-svd` and `theirs-reference` (a twin result as an `svd` or a `reference`), `float-bits`, and `ours` (our fit, transform and inverse of a case) |
 | `scaler-data` | the standard-scaler fixtures (`normal-rows`, `generated-rows`, `dyadic-rows`, `constant-rows`, `rows->matrix`, `rows-of` (a flat list in rows of a width), `strided-vector`), `ulp`, `bits-equal?`, `unit-roundoff`, `vector-shape` and `matrix-shape`, `round-to`, `standardisation-errors`, and the host oracles `host-transform` and `host-inverse` (float32 emulated with `flsingle`) |
-| `guide-data` | `scaled-matrix` (a dataset's columns standardized on the device), `class-ids` (class names, `renumbered`, as an `'int32` device vector), `table-ari` (the exact rational adjusted Rand index of a host table), `cluster-columns` (a contingency table's columns, sorted, so a renumbering moves no pin), `rounded` (three places, as the guide prints scores), `boundary-margin` (a number's distance to the nearest rounding boundary at some places) |
+| `guide-data` | `scaled-matrix` (a dataset's columns standardized on the device), `table-ari` (the exact rational adjusted Rand index of a host table), `cluster-columns` (a contingency table's columns, sorted, so a renumbering moves no pin), `host` (a device vector's first n values), `boundary-margin` (a number's distance to the nearest rounding boundary at some places); the guide's own `class-ids`, `counts-of` and `rounded` come from `guide/helpers.rkt` |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
@@ -395,8 +395,9 @@ kills the test outright.
   `datasets-core` is a dependency of cuml-lib.
 - The guide's helpers are one module, `guide/helpers.rkt`: Getting started
   shows its `require`, Examples its definitions, every guide sandbox
-  evaluates both (`utils.rkt` reads them from the file), and
-  `guide-docs-test.rkt` requires the module.
+  evaluates both (`utils.rkt` reads them from the file), and the guide
+  tests require the module, so a helper a chapter uses is never copied
+  into a test.
 - The guide's figures are picts from those helpers (`plot/no-gui`'s
   `plot-pict`), drawn live by the examples: no committed images.
   `guide-plots-test.rkt` pins the colours by label id, the sizes, and every

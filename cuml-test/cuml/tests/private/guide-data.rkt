@@ -1,18 +1,16 @@
 #lang racket/base
 
 (require (only-in cuml standard-scaler-fit-transform table->device-matrix)
-         (only-in cuml/scribblings/guide/helpers renumbered)
          (only-in datasets/core load-dataset-table)
-         (only-in racket/format ~r)
+         (only-in racket/list take)
          (only-in racket/match match*)
-         (only-in raft list->device-vector)
+         (only-in raft device-vector->list)
          (only-in threading ~>)
          (only-in "scaler-data.rkt" transpose))
 
 (provide boundary-margin
-         class-ids
          cluster-columns
-         rounded
+         host
          scaled-matrix
          table-ari)
 
@@ -22,9 +20,6 @@
         (table->device-matrix #:columns columns)
         standard-scaler-fit-transform))
   scaled)
-
-(define (class-ids classes)
-  (list->device-vector (renumbered classes) #:dtype 'int32))
 
 (define (pairs n)
   (/ (* n (sub1 n)) 2))
@@ -53,8 +48,8 @@
 (define (cluster-columns counts)
   (sort (transpose counts) before?))
 
-(define (rounded x)
-  (~r x #:precision 3))
+(define (host v n)
+  (take (device-vector->list v) n))
 
 (define (boundary-margin x places)
   (define scale (expt 10 places))

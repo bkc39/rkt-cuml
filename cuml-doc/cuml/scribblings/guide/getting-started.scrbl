@@ -61,20 +61,20 @@ fitted
 @section[#:tag "gs-species"]{Clusters and species}
 
 k-means never sees the species, and its cluster numbers are arbitrary.
-@racket[contingency-matrix] counts each species' flowers, one row per
+@racket[counts-of], a helper of @secref["examples"] over
+@racket[contingency-matrix], counts each species' flowers, one row per
 species, in each cluster, one column per cluster:
 
 @examples[#:eval ev #:label #f
-(define species-ids (list->device-vector (renumbered species) #:dtype 'int32))
+(define species-ids (class-ids species))
 (define cluster-labels (~> fitted kmeans-model kmeans-result-labels))
-(~> (contingency-matrix species-ids cluster-labels) contingency-table-counts device-matrix->list*)
-(~r (adjusted-rand-score species-ids cluster-labels) #:precision 3)
+(counts-of species-ids cluster-labels)
+(rounded (adjusted-rand-score species-ids cluster-labels))
 ]
 
 Setosa is a cluster of its own. Versicolor and virginica overlap in these
 measurements: 14 virginica flowers share the versicolor cluster, and 2
-versicolor the virginica one. @racket[adjusted-rand-score] sums it up as one
-number, 1 for the same partition and near 0 for chance: 0.73.
+versicolor the virginica one. The adjusted Rand index is 0.73.
 
 @racket[class-figure] draws the flowers by petal length and width, by cluster
 and by species. @racket[matched-labels] gives each cluster the colour and
@@ -125,7 +125,7 @@ cluster. @secref["ex-kmeans"] shows where k-means does less well.
 @section[#:tag "gs-not-yet"]{What is not there yet}
 
 Some conveniences have no binding yet, and each has an open issue: encoding
-class names as label numbers, which @racket[renumbered] stands in for, and a
+class names as label numbers, which @racket[class-ids] stands in for, and a
 spectral clustering example on clusters that are not convex.
 
 @(close-eval ev)

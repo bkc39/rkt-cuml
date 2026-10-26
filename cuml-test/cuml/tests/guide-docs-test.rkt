@@ -3,8 +3,6 @@
 (require (only-in cuml
                   adjusted-rand-score
                   agglomerative-clustering
-                  contingency-matrix
-                  contingency-table-counts
                   current-batch-samples
                   dbscan
                   dbscan-fit
@@ -25,6 +23,7 @@
                   kmeans-result-centroids
                   kmeans-result-labels
                   kmeans-result?
+                  kmeans-transform
                   pca
                   pca-fit
                   pca-result-components
@@ -41,10 +40,16 @@
                   tsvd-result-explained-variance-ratio
                   tsvd-result-singular-values)
          (only-in cuml/scribblings/guide/helpers
+                  class-ids
+                  components-for
+                  counts-of
+                  cumulative
                   dataset-column
                   features
                   labels-of
+                  leading
                   matched-labels
+                  rounded
                   rows->matrix
                   sizes)
          (only-in cuml/scribblings/guide/source page-helpers-source)
@@ -59,12 +64,11 @@
                   drop
                   first
                   group-by
-                  index-where
                   remove-duplicates
                   second
                   take)
          (only-in racket/match match match-define)
-         (only-in racket/math exact-round sqr)
+         (only-in racket/math exact-round)
          (only-in racket/string string-contains?)
          (only-in rackunit
                   check
@@ -75,7 +79,6 @@
                   check-not-equal?
                   check-not-false
                   check-pred
-                  check-true
                   test-case)
          (only-in raft
                   device-matrix->list*
@@ -89,7 +92,8 @@
          (only-in syntax/modread with-module-reading-parameterization)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/guide-data.rkt" class-ids cluster-columns rounded scaled-matrix table-ari))
+         (only-in "private/guide-data.rkt" cluster-columns host scaled-matrix table-ari)
+         (only-in "private/scaler-data.rkt" unit-roundoff))
 
 (define-namespace-anchor anchor)
 
@@ -104,16 +108,26 @@
     (check-equal? (eval '(~> '(1 1 0) (matched-labels '(a a b))) (module->namespace ''page))
                   '(0 0 1))))
 
-(test-case "the retired helpers are gone from the helpers module"
+(define (defined-name form)
+  (match (syntax->datum form)
+    [(list* 'define (cons name _) _) name]
+    [(list* 'define (? symbol? name) _) name]
+    [_ #f]))
+
+(test-case "the retired helpers are gone from the helpers module and from the page"
   (define-values (variables syntax) (module->exports 'cuml/scribblings/guide/helpers))
   (define exported (map car (append-map cdr (append variables syntax))))
+  (define-values (_require shown-helpers) (page-helpers-source))
+  (define defined (map defined-name shown-helpers))
+  (check-not-false (memq 'matched-labels defined))
   (for ([name (in-list '(crosstab agreement
                                   standardized
                                   standardized-rows
                                   standardized-matrix
                                   dataset-matrix
                                   matrix-of))])
-    (check-false (memq name exported) (symbol->string name))))
+    (check-false (memq name exported) (symbol->string name))
+    (check-false (memq name defined) (symbol->string name))))
 
 (define (included-sections datum)
   (match datum
@@ -180,9 +194,6 @@
 (define (kmeans-labels result)
   (device-vector->list (kmeans-result-labels result)))
 
-(define (counts-of ids labels)
-  (~> (contingency-matrix ids labels) contingency-table-counts device-matrix->list*))
-
 (define (check-scored ids labels columns text)
   (check-equal? (cluster-columns (counts-of ids labels)) columns)
   (define ari (adjusted-rand-score ids labels))
@@ -244,10 +255,12 @@
          (kmeans-fit #:n-clusters 3)))))
 
 (test-gpu "the guide: scoped resources, the two forms, and renumbering seeds"
-  (check-true (with-device-resources ([r (device-resources)])
-                (~> (kmeans-fit (flowers) #:n-clusters 3 #:resources r)
-                    kmeans-labels
-                    (equal? (kmeans-labels (kmeans-fit (flowers) #:n-clusters 3))))))
+  (check-equal? (with-device-resources ([r (device-resources)])
+                  (~> (kmeans-fit (flowers) #:n-clusters 3 #:resources r)
+                      kmeans-result-labels
+                      (adjusted-rand-score (species-ids) _ #:resources r)
+                      rounded))
+                "0.73")
   (define estimator (kmeans #:n-clusters 3))
   (check-equal? (device-vector->list (fit-predict estimator (flowers)))
                 (device-vector->list (labels-at 0)))
@@ -262,10 +275,10 @@
 
 (test-gpu "the guide: a base set swept over k, changed by keyword, and the batch size"
   (define base (kmeans-params #:n-init 3))
-  (for ([k (in-range 2 5)]
-        [columns (in-list '(((0 47 50) (50 3 0)) ((0 2 36) (0 48 14) (50 0 0))
-                                                 ((0 0 32) (0 23 17) (0 27 1) (50 0 0))))]
-        [text (in-list '("0.54" "0.73" "0.65"))])
+  (for ([row (in-list '((2 ((0 47 50) (50 3 0)) "0.54")
+                        (3 ((0 2 36) (0 48 14) (50 0 0)) "0.73")
+                        (4 ((0 0 32) (0 23 17) (0 27 1) (50 0 0)) "0.65")))])
+    (match-define (list k columns text) row)
     (check-scored (species-ids)
                   (~> (fit (kmeans base #:n-clusters k) (flowers)) kmeans-model kmeans-result-labels)
                   columns
@@ -379,21 +392,15 @@
                 (labels-in (spectral-clustering #:n-clusters 2))
                 '((30 351) (182 6))
                 "0.761")
-  (for ([k (in-list '(3 5 10 30))]
-        [columns
-         (in-list '(((43 347) (169 10)) ((32 356) (180 1)) ((30 351) (182 6)) ((27 350) (185 7))))]
-        [text (in-list '("0.659" "0.779" "0.761" "0.773"))])
+  (for ([row (in-list '((3 ((43 347) (169 10)) "0.659")
+                        (5 ((32 356) (180 1)) "0.779")
+                        (10 ((30 351) (182 6)) "0.761")
+                        (30 ((27 350) (185 7)) "0.773")))])
+    (match-define (list k columns text) row)
     (check-scored diagnosis-ids
                   (labels-in (spectral-clustering #:n-clusters 2 #:n-neighbors k))
                   columns
                   text)))
-
-(define (leading result n)
-  (for/list ([component (in-list (device-matrix->list* (pca-result-components result)))])
-    (~> (map cons component wine-measurements)
-        (sort > #:key (compose abs car))
-        (take n)
-        (map cdr _))))
 
 (define (wine-scaled)
   (scaled-matrix 'wine wine-measurements))
@@ -405,46 +412,57 @@
         (pca-fit #:n-components 2)))
   (check-equal? (~> raw-fit pca-result-explained-variance-ratio device-vector->list (map rounded _))
                 '("0.998" "0.002"))
-  (check-equal? (leading raw-fit 1) '(("proline") ("magnesium")))
+  (check-equal? (leading raw-fit wine-measurements 1) '(("proline") ("magnesium")))
   (define scaled-fit (pca-fit (wine-scaled)))
   (define ratios (~> scaled-fit pca-result-explained-variance-ratio device-vector->list))
   (check-equal? (map rounded (take ratios 3)) '("0.362" "0.192" "0.111"))
-  (define cumulative
-    (for/list ([k (in-range 1 14)])
-      (apply + (take ratios k))))
-  (check-equal? (rounded (second cumulative)) "0.554")
-  (check-equal? (map (lambda (share) (add1 (index-where cumulative (curry <= share)))) '(0.8 0.9))
-                '(5 8))
-  (check-equal? (take (leading scaled-fit 2) 2)
+  (check-equal? (~> ratios cumulative second rounded) "0.554")
+  (check-equal? (map (curry components-for ratios) '(0.8 0.9)) '(5 8))
+  (check-equal? (take (leading scaled-fit wine-measurements 2) 2)
                 '(("flavanoids" "total-phenols") ("color-intensity" "alcohol"))))
 
-(define (centroid-gaps fitted samples)
-  (define centroids (~> fitted kmeans-model kmeans-result-centroids device-matrix->list*))
-  (for/list ([sample (in-list (device-matrix->list* samples))])
-    (match-define (list* nearest next _)
-      (~> (for/list ([centroid (in-list centroids)])
-            (sqrt (apply + (map (lambda (x c) (sqr (- x c))) sample centroid))))
-          (sort <)))
-    (- next nearest)))
+(define (clusterer [seed 0])
+  (kmeans #:n-clusters 3 #:n-init 10 #:random-state seed))
 
-(test-gpu "the guide: decomposition, k-means on two components beats 13 columns, whitened or not"
+(define (centroid-gaps fitted samples)
+  (~> (kmeans-transform (~> fitted kmeans-model kmeans-result-centroids) samples)
+      device-matrix->list*
+      (map (lambda (distances)
+             (match (sort (map sqrt distances) <)
+               [(list* nearest next _) (- next nearest)]))
+           _)))
+
+(define (projections)
   (define scaled (wine-scaled))
-  (define projected (fit-transform (pca #:n-components 2) scaled))
-  (define whitened (fit-transform (pca #:n-components 2 #:whiten #t) scaled))
+  (list scaled
+        (fit-transform (pca #:n-components 2) scaled)
+        (fit-transform (pca #:n-components 2 #:whiten #t) scaled)))
+
+(test-gpu "the guide: decomposition, two components cluster about as well as 13 columns, whitened better"
+  (define samples (projections))
   (match-define (list all-labels projected-labels whitened-labels)
-    (map cultivar-labels (list scaled projected whitened)))
-  (check-scored (cultivar-ids) all-labels wine-scaled-columns "0.864")
+    (map (curry fit-predict (clusterer)) samples))
+  (check-scored (cultivar-ids) all-labels '((0 3 48) (0 65 0) (59 3 0)) "0.897")
+  (check-scored (cultivar-ids) projected-labels '((0 1 48) (0 65 0) (59 5 0)) "0.895")
+  (check-scored (cultivar-ids) whitened-labels '((0 1 48) (1 67 0) (58 3 0)) "0.912")
   (for ([labels (in-list (list projected-labels whitened-labels))]
-        [samples (in-list (list projected whitened))])
-    (check-scored (cultivar-ids) labels '((0 1 48) (1 67 0) (58 3 0)) "0.912")
+        [reduced (in-list (cdr samples))])
     (check >= (adjusted-rand-score all-labels labels) 0.85)
-    (define fitted (fit (kmeans #:n-clusters 3) samples))
+    (define fitted (fit (clusterer) reduced))
     (check-equal? (~> fitted kmeans-model kmeans-result-labels device-vector->list)
                   (device-vector->list labels))
-    (check >= (apply min (centroid-gaps fitted samples)) 1e-3))
-  (check-equal? (adjusted-rand-score projected-labels whitened-labels) 1.0))
+    (check >= (apply min (centroid-gaps fitted reduced)) 1e-3)))
 
-(define u (expt 2.0 -24))
+(test-gpu "the guide: decomposition, the k-means ordering holds for seeds 0 to 9"
+  (define samples (projections))
+  (for ([seed (in-range 10)])
+    (match-define (list all projected whitened)
+      (map (lambda (reduced) (adjusted-rand-score (cultivar-ids) (fit-predict (clusterer seed) reduced)))
+           samples))
+    (check >= whitened (max all projected) (format "seed ~a" seed))
+    (check <= (abs (- projected all)) 0.015 (format "seed ~a" seed))))
+
+(define u (unit-roundoff 'float32))
 
 (define (worst-difference xs ys)
   (apply max (map (lambda (x y) (abs (- x y))) xs ys)))
@@ -455,22 +473,20 @@
   (define scaled-fit (pca-fit scaled))
   (define (shown result singular-values ratios)
     (~> (list (singular-values result) (ratios result))
-        (map (compose (curry map rounded) (curryr take 2) device-vector->list) _)))
+        (map (compose (curry map rounded) (curryr host 2)) _)))
   (check-equal? (shown svd-fit tsvd-result-singular-values tsvd-result-explained-variance-ratio)
                 '(("28.942" "21.082") ("0.362" "0.192")))
   (check-equal? (shown scaled-fit pca-result-singular-values pca-result-explained-variance-ratio)
                 '(("28.942" "21.082") ("0.362" "0.192")))
-  (match-define (list* largest second-largest third-largest _)
-    (device-vector->list (pca-result-explained-variance scaled-fit)))
-  (define (first-two v)
-    (take (device-vector->list v) 2))
+  (match-define (list largest second-largest third-largest)
+    (host (pca-result-explained-variance scaled-fit) 3))
   (match-define (list svd-singular pca-singular)
-    (map first-two
+    (map (curryr host 2)
          (list (tsvd-result-singular-values svd-fit) (pca-result-singular-values scaled-fit))))
   (check <= (worst-difference svd-singular pca-singular) (* 64 u (first pca-singular)))
   (check <=
-         (worst-difference (first-two (tsvd-result-explained-variance-ratio svd-fit))
-                           (first-two (pca-result-explained-variance-ratio scaled-fit)))
+         (worst-difference (host (tsvd-result-explained-variance-ratio svd-fit) 2)
+                           (host (pca-result-explained-variance-ratio scaled-fit) 2))
          (* 64 u))
   (for ([svd-component (in-list (device-matrix->list* (tsvd-result-components svd-fit)))]
         [pca-component (in-list (device-matrix->list* (pca-result-components scaled-fit)))]

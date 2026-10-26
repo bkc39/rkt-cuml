@@ -28,8 +28,13 @@ setting, each with a legend; @racket[line-plot] draws one line.
 it shares the most samples with, largest overlap first, and numbers the rest
 after the classes; the classes can be another clustering's labels.
 @racket[clusters-of] fits an estimator and matches its labels to classes.
-Class names reach the metrics as numbers: @racket[renumbered] numbers them, and
-@racket[list->device-vector] copies them to the device.
+@racket[class-ids] copies class names to the device as the numbers
+@racket[renumbered] gives them, for the metrics; @racket[counts-of] counts
+each class's samples in each cluster, and @racket[rounded] prints a score to
+three places. @racket[leading] names each principal component's largest
+entries, @racket[cumulative] sums explained-variance ratios,
+@racket[components-for] counts the components that reach a share, and
+@racket[columns-of] copies a matrix's columns to the host.
 
 @local-table-of-contents[]
 

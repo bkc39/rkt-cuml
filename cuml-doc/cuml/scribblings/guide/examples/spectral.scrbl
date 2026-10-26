@@ -22,7 +22,7 @@ the rest:
 
 @examples[#:eval ev #:label #f
 (define diagnosis (dataset-column 'breast-cancer "diagnosis"))
-(define diagnosis-ids (list->device-vector (renumbered diagnosis) #:dtype 'int32))
+(define diagnosis-ids (class-ids diagnosis))
 (sizes diagnosis)
 (define-values (tumour-scaler tumours)
   (~> (load-dataset-table 'breast-cancer)
@@ -33,16 +33,13 @@ the rest:
 @section[#:tag "ex-spectral-fit"]{Against k-means}
 
 @examples[#:eval ev #:label #f
-(define (counts-of labels)
-  (~> (contingency-matrix diagnosis-ids labels) contingency-table-counts device-matrix->list*))
 (define (labels-in estimator)
   (fit-predict estimator tumours))
 (define kmeans-found (labels-in (kmeans #:n-clusters 2)))
 (define spectral-found (labels-in (spectral-clustering #:n-clusters 2)))
-(counts-of kmeans-found)
-(counts-of spectral-found)
-(map (lambda (labels) (~r (adjusted-rand-score diagnosis-ids labels) #:precision 3))
-     (list kmeans-found spectral-found))
+(counts-of diagnosis-ids kmeans-found)
+(counts-of diagnosis-ids spectral-found)
+(map (compose rounded (curry adjusted-rand-score diagnosis-ids)) (list kmeans-found spectral-found))
 ]
 
 The benign tumours are many and alike, the malignant ones fewer and more
@@ -84,7 +81,7 @@ on, the index changes little:
         (~> (spectral-clustering #:n-clusters 2 #:n-neighbors k)
             labels-in
             (adjusted-rand-score diagnosis-ids _)
-            (~r #:precision 3))))
+            rounded)))
 ]
 
 Spectral clustering differs most from k-means on clusters that are not

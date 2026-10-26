@@ -20,7 +20,7 @@ cultivars:
 (define wine (load-dataset-table 'wine))
 (define measurements (features 'wine "cultivar"))
 (define cultivar (dataset-column 'wine "cultivar"))
-(define cultivar-ids (list->device-vector (renumbered cultivar) #:dtype 'int32))
+(define cultivar-ids (class-ids cultivar))
 (sizes cultivar)
 ]
 
@@ -34,17 +34,14 @@ The measurements have very different ranges:
 
 @section[#:tag "ex-kmeans-raw"]{Raw measurements}
 
-@racket[labels-in] clusters wines into three, and @racket[counts-of] counts
-each cultivar's wines in each cluster:
+@racket[labels-in] clusters wines into three:
 
 @examples[#:eval ev #:label #f
 (define (labels-in wines)
   (fit-predict (kmeans #:n-clusters 3) wines))
-(define (counts-of labels)
-  (~> (contingency-matrix cultivar-ids labels) contingency-table-counts device-matrix->list*))
 (define raw-labels (labels-in (table->device-matrix wine #:columns measurements)))
-(counts-of raw-labels)
-(~r (adjusted-rand-score cultivar-ids raw-labels) #:precision 3)
+(counts-of cultivar-ids raw-labels)
+(rounded (adjusted-rand-score cultivar-ids raw-labels))
 ]
 
 The adjusted Rand index is 0.371. Proline, in the hundreds, decides the
@@ -63,8 +60,8 @@ and standard deviation 1, every measurement counts alike:
 (define-values (wine-scaler scaled)
   (standard-scaler-fit-transform (table->device-matrix wine #:columns measurements)))
 (define scaled-labels (labels-in scaled))
-(counts-of scaled-labels)
-(~r (adjusted-rand-score cultivar-ids scaled-labels) #:precision 3)
+(counts-of cultivar-ids scaled-labels)
+(rounded (adjusted-rand-score cultivar-ids scaled-labels))
 ]
 
 It rises to 0.864. Scale the features before k-means unless their units
