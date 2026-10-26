@@ -89,12 +89,7 @@
          (only-in syntax/modread with-module-reading-parameterization)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/guide-data.rkt"
-                  class-ids
-                  cluster-columns
-                  rounded
-                  scaled-matrix
-                  table-ari))
+         (only-in "private/guide-data.rkt" class-ids cluster-columns rounded scaled-matrix table-ari))
 
 (define-namespace-anchor anchor)
 
@@ -106,7 +101,8 @@
              ,(syntax->datum shown-require)
              ,@(map syntax->datum shown-helpers)))
     (dynamic-require ''page #f)
-    (check-equal? (eval '(~> '(1 1 0) (matched-labels '(a a b))) (module->namespace ''page)) '(0 0 1))))
+    (check-equal? (eval '(~> '(1 1 0) (matched-labels '(a a b))) (module->namespace ''page))
+                  '(0 0 1))))
 
 (test-case "the retired helpers are gone from the helpers module"
   (define-values (variables syntax) (module->exports 'cuml/scribblings/guide/helpers))
@@ -208,10 +204,7 @@
   (check-equal? (format "~v" fitted) "#<kmeans fitted #:n-clusters 3>")
   (define labels (~> fitted kmeans-model kmeans-labels))
   (check-equal? (length labels) 150)
-  (check-scored species-ids
-                (~> fitted kmeans-model kmeans-result-labels)
-                iris-kmeans-columns
-                "0.73")
+  (check-scored species-ids (~> fitted kmeans-model kmeans-result-labels) iris-kmeans-columns "0.73")
   (define cluster-species
     (for/hash ([label (in-list (remove-duplicates labels))])
       (define names
@@ -266,9 +259,8 @@
 (test-gpu "the guide: a base set swept over k, changed by keyword, and the batch size"
   (define base (kmeans-params #:n-init 3))
   (for ([k (in-range 2 5)]
-        [columns (in-list '(((0 47 50) (50 3 0))
-                            ((0 2 36) (0 48 14) (50 0 0))
-                            ((0 0 32) (0 23 17) (0 27 1) (50 0 0))))]
+        [columns (in-list '(((0 47 50) (50 3 0)) ((0 2 36) (0 48 14) (50 0 0))
+                                                 ((0 0 32) (0 23 17) (0 27 1) (50 0 0))))]
         [text (in-list '("0.54" "0.73" "0.65"))])
     (check-scored species-ids
                   (~> (fit (kmeans base #:n-clusters k) (flowers)) kmeans-model kmeans-result-labels)
@@ -310,7 +302,9 @@
                   (list name (apply min column) (apply max column)))
                 '(("proline" 278 1680) ("magnesium" 70 162) ("hue" 0.48 1.71)))
   (define raw-labels
-    (~> (load-dataset-table 'wine) (table->device-matrix #:columns wine-measurements) cultivar-labels))
+    (~> (load-dataset-table 'wine)
+        (table->device-matrix #:columns wine-measurements)
+        cultivar-labels))
   (check-scored cultivar-ids raw-labels '((0 50 19) (13 20 29) (46 1 0)) "0.371")
   (check-equal? (~> (load-dataset-table 'wine)
                     (table->device-matrix #:columns '("proline"))
@@ -381,10 +375,8 @@
                 '((30 351) (182 6))
                 "0.761")
   (for ([k (in-list '(3 5 10 30))]
-        [columns (in-list '(((43 347) (169 10))
-                            ((32 356) (180 1))
-                            ((30 351) (182 6))
-                            ((27 350) (185 7))))]
+        [columns
+         (in-list '(((43 347) (169 10)) ((32 356) (180 1)) ((30 351) (182 6)) ((27 350) (185 7))))]
         [text (in-list '("0.659" "0.779" "0.761" "0.773"))])
     (check-scored diagnosis-ids
                   (labels-in (spectral-clustering #:n-clusters 2 #:n-neighbors k))
@@ -403,7 +395,9 @@
 
 (test-gpu "the guide: decomposition, raw wine is proline and scaled wine needs five components for 80%"
   (define raw-fit
-    (~> (load-dataset-table 'wine) (table->device-matrix #:columns wine-measurements) (pca-fit #:n-components 2)))
+    (~> (load-dataset-table 'wine)
+        (table->device-matrix #:columns wine-measurements)
+        (pca-fit #:n-components 2)))
   (check-equal? (~> raw-fit pca-result-explained-variance-ratio device-vector->list (map rounded _))
                 '("0.998" "0.002"))
   (check-equal? (leading raw-fit 1) '(("proline") ("magnesium")))
@@ -466,10 +460,12 @@
   (define (first-two v)
     (take (device-vector->list v) 2))
   (match-define (list svd-singular pca-singular)
-    (map first-two (list (tsvd-result-singular-values svd-fit) (pca-result-singular-values scaled-fit))))
+    (map first-two
+         (list (tsvd-result-singular-values svd-fit) (pca-result-singular-values scaled-fit))))
   (check <= (worst-difference svd-singular pca-singular) (* 64 u (first pca-singular)))
-  (check <= (worst-difference (first-two (tsvd-result-explained-variance-ratio svd-fit))
-                              (first-two (pca-result-explained-variance-ratio scaled-fit)))
+  (check <=
+         (worst-difference (first-two (tsvd-result-explained-variance-ratio svd-fit))
+                           (first-two (pca-result-explained-variance-ratio scaled-fit)))
          (* 64 u))
   (for ([svd-component (in-list (device-matrix->list* (tsvd-result-components svd-fit)))]
         [pca-component (in-list (device-matrix->list* (pca-result-components scaled-fit)))]

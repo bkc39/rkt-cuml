@@ -42,8 +42,9 @@
   (define scaled (scaled-matrix 'wine measurements))
   (match-define (hash-table ('results (list raw-sk scaled-sk svd-sk)) ('version version))
     (run-twin twin
-              (hasheq 'cases
-                      (list (twin-case "pca" raw 2) (twin-case "pca" scaled 13) (twin-case "tsvd" scaled 2)))))
+              (hasheq 'cases (list (twin-case "pca" raw 2)
+                                   (twin-case "pca" scaled 13)
+                                   (twin-case "tsvd" scaled 2)))))
   (check-equal? version "1.8.0")
   (match-define (hash-table ('ratio raw-ratio)) raw-sk)
   (match-define (hash-table ('ratio ratio) ('singular_values singular) ('explained_variance variance))
