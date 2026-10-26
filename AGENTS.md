@@ -323,7 +323,7 @@ replace each when raft offers a public form:
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `table-refusal-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*` and `tsvd-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*` and `tsvd-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -348,6 +348,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `tsvd-data` | the truncated SVD fixtures (`normal-fixture`, `offset-fixture`, `duplicate-fixture`, `wide-fixture`, `zeros-fixture`, `twos-fixture`, `tie-fixture`, `law-fixtures`, `normal-rows-of`, and `householder-fixtures` with known spectra, each an `exact`), `tsvd-of` (a result's arrays as host lists in an `svd` struct), `exact-reference` (the float64 SVD's `reference`), `accuracy-problems` (L8's bounds, the failures as strings), `sign-matched` (a reference with each component's sign matched to a fit's, for the tie fixture), and the host oracles `host-transform`, `popvars` and `squared-norm` |
 | `tsvd-twin-data` | the truncated SVD twin's cases (`twin-cases`, each a `twin-case` of at most 40k elements; `twin-results`, one Python run for a list of ops), `theirs-svd` and `theirs-reference` (a twin result as an `svd` or a `reference`), `float-bits`, and `ours` (our fit, transform and inverse of a case) |
 | `scaler-data` | the standard-scaler fixtures (`normal-rows`, `generated-rows`, `dyadic-rows`, `constant-rows`, `rows->matrix`, `rows-of` (a flat list in rows of a width), `strided-vector`), `ulp`, `bits-equal?`, `unit-roundoff`, `vector-shape` and `matrix-shape`, `round-to`, `standardisation-errors`, and the host oracles `host-transform` and `host-inverse` (float32 emulated with `flsingle`) |
+| `guide-data` | `scaled-matrix` (a dataset's columns standardized on the device), `class-ids` (class names, `renumbered`, as an `'int32` device vector), `table-ari` (the exact rational adjusted Rand index of a host table), `cluster-columns` (a contingency table's columns, sorted, so a renumbering moves no pin), `rounded` (three places, as the guide prints scores), `boundary-margin` (a number's distance to the nearest rounding boundary at some places) |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
@@ -389,7 +390,7 @@ kills the test outright.
 - Two parts, after glmnet's: the guide (`guide.scrbl`, `guide/`: Getting
   started, Concepts with every `deftech` and the hyperparameter rule in
   `concepts-parameters`, and one `ex-*` chapter per
-  algorithm on real `datasets-core` data) and the reference
+  algorithm or family on real `datasets-core` data) and the reference
   (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
   `datasets-core` is a dependency of cuml-lib.
 - The guide's helpers are one module, `guide/helpers.rkt`: Getting started
@@ -399,7 +400,8 @@ kills the test outright.
 - The guide's figures are picts from those helpers (`plot/no-gui`'s
   `plot-pict`), drawn live by the examples: no committed images.
   `guide-plots-test.rkt` pins the colours by label id, the sizes, and every
-  count a figure's prose names.
+  count a figure's prose names; `guide-twin-test.rkt` checks the
+  Decomposition chapter's printed values against an sklearn twin.
 - Every exported name gets a Scribble entry with live examples
   (`scribble/example`, never pasted output), each pinned in
   `cuml-test/cuml/tests/docs-test.rkt` (the reference;
