@@ -823,3 +823,9 @@ Follow-ups are GitHub issues.
   at least 0, got -1"); the job takes it as `_int64`.
 - **B2-q.** L3 runs the small sweep at perplexity min(30, n), since f17
   refuses the default perplexity below 30 rows.
+- **B2-r.** The manual's example runs at perplexity 5: on its 60 rows FFT
+  at perplexity 10 ends at KL 5.41 and ARI 0.09 (2 and 3 are as bad,
+  20 gives 0.75 with min-cluster-size 5), where exact gives 1.0 at every
+  perplexity from 2 to 20.
+- **B2-s.** `tsne-sklearn-digits-twin-test` takes 55 s (sklearn's exact
+  t-SNE on digits, CPU-bound) and has a 180 s entry in `info.rkt`.
