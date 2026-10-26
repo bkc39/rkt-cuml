@@ -13,6 +13,7 @@
                  "cuml-lib"
                  "cuml-metrics-lib"
                  "cuml-preprocessing-lib"
+                 "data-lib"
                  "datasets-core"
                  "math-lib"
                  "pict-lib"

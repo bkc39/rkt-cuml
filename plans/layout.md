@@ -663,9 +663,9 @@ Follow-ups are GitHub issues.
 - **A6-d.** A score is `(rounded (adjusted-rand-score ids labels))`, a string
   from the guide helper `rounded`; each is pinned against the exact rational
   ARI of its pinned table (`table-ari`). `class-ids`, `counts-of`, `rounded`,
-  `leading`, `cumulative`, `components-for` and `columns-of` live in
-  `guide/helpers.rkt` once, and the tests import them (amended after A6 r0
-  style items 1, 2, 4, 5 and 13).
+  `leading`, `cumulative`, `components-for`, `columns-of` and `summary` live
+  in `guide/helpers.rkt` once, and the tests import them (amended after A6 r0
+  style items 1, 2, 4, 5 and 13, and A6 final style item 2).
 - **A6-e.** No reconstruction section until `mean-squared-error` is bound.
 - **A6-f.** float32, the guide's default. The k-means labels on the two
   components hold by a margin: every sample's nearest and second-nearest
@@ -687,7 +687,8 @@ Follow-ups are GitHub issues.
   so wine is introduced in `ex-kmeans` first.
 - **A6-j.** Every k-means fit in the Decomposition chapter, the figure's
   included, takes `#:n-init 10`, and the tests evaluate the chapter's own
-  `clusterer` form. Over seeds 0 to 99 the ARI ordering (whitened at least
+  examples, in order, in a sandbox, and pin the printed scores (amended after
+  A6 r2 finding 1). Over seeds 0 to 99 the ARI ordering (whitened at least
   both others) holds for 99 seeds and fails at seed 73; in misplaced wines it
   holds for all 100: whitened misplaces no more wines than either other
   clustering, and two components are within one wine of the 13 columns.

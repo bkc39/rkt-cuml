@@ -34,6 +34,7 @@
          rows
          rows->matrix
          sizes
+         summary
          sweep-figure)
 
 (define (sizes labels)
@@ -108,22 +109,33 @@
 (define (clusters-of estimator samples classes)
   (matched-labels (labels-of estimator samples) classes))
 
+(define (largest-entries entries names n)
+  (~> (map cons entries names) (sort > #:key (compose abs car)) (take n) (map cdr _)))
+
 (define (leading result names n)
-  (~> result
-      pca-result-components
-      device-matrix->list*
-      (map (lambda (component)
-             (~> (map cons component names) (sort > #:key (compose abs car)) (take n) (map cdr _)))
-           _)))
+  (~> result pca-result-components device-matrix->list* (map (curryr largest-entries names n) _)))
 
 (define (cumulative shares)
-  (map (lambda (k) (apply + (take shares k))) (inclusive-range 1 (length shares))))
+  (for/fold ([sums '()]
+             [total 0]
+             #:result (reverse sums))
+            ([share (in-list shares)])
+    (define sum (+ total share))
+    (values (cons sum sums) sum)))
 
 (define (components-for shares share)
   (~> (cumulative shares) (index-where (curry <= share)) add1))
 
 (define (columns-of matrix)
   (~> matrix device-matrix->list* (apply map list _)))
+
+(define (summary result n)
+  (~> (match result
+        [(? pca-result?)
+         (list (pca-result-singular-values result) (pca-result-explained-variance-ratio result))]
+        [(? tsvd-result?)
+         (list (tsvd-result-singular-values result) (tsvd-result-explained-variance-ratio result))])
+      (map (lambda (entries) (~> entries device-vector->list (take n) (map rounded _))) _)))
 
 (define (rgb hex)
   (for/list ([start (in-list '(1 3 5))])
@@ -299,14 +311,22 @@
     [(list _ _) '()]
     [(list _ _ centroids) centroids]))
 
-(define (class-figure xs
-                      ys
-                      clusterings
-                      classes
-                      #:class-title class-title
-                      #:names [names (map ~a (distinct-clusters classes))]
+(define (class-names classes title)
+  (for/list ([class (in-list (distinct-clusters classes))])
+    (if (number? class)
+        (format "~a ~a" title class)
+        (~a class))))
+
+(define (class-figure #:class-title class-title
+                      #:names [names #f]
                       #:x-label [x-label #f]
-                      #:y-label [y-label #f])
+                      #:y-label [y-label #f]
+                      . arguments)
+  (match-define (list xs ys clusterings classes)
+    (match arguments
+      [(list (? device-matrix? samples) clusterings classes)
+       (append (columns-of samples) (list clusterings classes))]
+      [_ arguments]))
   (define truth (renumbered classes))
   (define plots
     (for/list ([clustering (in-list (append clusterings (list (list class-title truth))))])
@@ -322,7 +342,7 @@
   (define centroids? (ormap pair? (map centroids-of clusterings)))
   (figure plots
           (cluster-legend (append truth (append-map second clusterings))
-                          #:names names
+                          #:names (or names (class-names classes class-title))
                           #:centroids? centroids?)))
 
 (define (sweep-figure xs

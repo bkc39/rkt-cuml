@@ -17,11 +17,9 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "private/guide-data.rkt" boundary-margin host scaled-matrix)
          (only-in "private/python-env.rkt" run-twin test-twin)
-         (only-in "private/scaler-data.rkt" unit-roundoff))
+         (only-in "private/scaler-data.rkt" [float32-roundoff u]))
 
 (define-runtime-path twin "python/guide_twin.py")
-
-(define u (unit-roundoff 'float32))
 
 (define (twin-case op samples k)
   (hasheq 'op op 'rows (device-matrix->list* samples) 'k k))

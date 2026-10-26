@@ -79,7 +79,6 @@ of the cultivar it shares the most wines with:
                     (list "standardized" (clusters-of (kmeans #:n-clusters 3) scaled cultivar)))
               cultivar
               #:class-title "cultivar"
-              #:names (map (curry format "cultivar ~a") (remove-duplicates cultivar))
               #:x-label "proline"
               #:y-label "flavanoids")
 ]

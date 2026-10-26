@@ -43,7 +43,10 @@ the components:
 (map rounded (take ratios 3))
 (~> ratios cumulative second rounded)
 (map (curry components-for ratios) '(0.8 0.9))
-(line-plot (range 1 14) (cumulative ratios) #:x-label "components" #:y-label "explained variance")
+(line-plot (inclusive-range 1 (length ratios))
+           (cumulative ratios)
+           #:x-label "components"
+           #:y-label "explained variance")
 (leading scaled-fit measurements 2)
 ]
 
@@ -74,14 +77,11 @@ The wines in the plane of the two components, each clustering in the colour of
 the cultivar it shares the most wines with:
 
 @examples[#:eval ev #:label #f
-(match-define (list first-component second-component) (columns-of projected))
-(class-figure first-component
-              second-component
+(class-figure projected
               (list (list "13 columns" (clusters-of clusterer scaled cultivar))
                     (list "2 components" (clusters-of clusterer projected cultivar)))
               cultivar
               #:class-title "cultivar"
-              #:names (map (curry format "cultivar ~a") (remove-duplicates cultivar))
               #:x-label "first component"
               #:y-label "second component")
 ]
@@ -98,10 +98,8 @@ and ratios:
 
 @examples[#:eval ev #:label #f
 (define svd-fit (tsvd-fit scaled #:n-components 2))
-(~> (list (tsvd-result-singular-values svd-fit) (tsvd-result-explained-variance-ratio svd-fit))
-    (map (compose (curry map rounded) device-vector->list) _))
-(~> (list (pca-result-singular-values scaled-fit) (pca-result-explained-variance-ratio scaled-fit))
-    (map (compose (curry map rounded) (curryr take 2) device-vector->list) _))
+(summary svd-fit 2)
+(summary scaled-fit 2)
 ]
 
 @(close-eval ev)

@@ -21,7 +21,8 @@ clusters.
 @racket[cluster-plot] draws samples by two columns, one colour and marker per
 label id 0 to 7, noise gray; with @racket[#:core], core samples are filled and
 the others hollow, and @racket[#:centroids] adds crosses. @racket[class-figure]
-draws clusterings beside the classes, @racket[sweep-figure] one clustering per
+draws clusterings beside the classes, by two columns or a two-column matrix,
+naming numeric classes after the class title; @racket[sweep-figure] one clustering per
 setting, each with a legend; @racket[line-plot] draws one line.
 @racket[renumbered] numbers values in the order they first appear, keeping
 @racket[-1]. @racket[matched-labels] gives each cluster the number of the class
@@ -34,8 +35,10 @@ each class's samples in each cluster, and @racket[rounded] prints a score to
 three places. @racket[leading] names each principal component's largest
 entries, @racket[cumulative] sums explained-variance ratios,
 @racket[components-for] gives the fewest leading components whose cumulative
-share reaches a share, and
-@racket[columns-of] copies a matrix's columns to the host.
+share reaches a share,
+@racket[columns-of] copies a matrix's columns to the host, and
+@racket[summary] rounds a PCA or truncated SVD fit's first singular values and
+explained-variance ratios.
 
 @local-table-of-contents[]
 
