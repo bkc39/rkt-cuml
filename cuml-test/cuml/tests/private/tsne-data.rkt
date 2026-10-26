@@ -122,10 +122,13 @@
   (trustworthiness (fixture-X f) (tsne-result-embedding result) #:n-neighbors 10))
 
 (define (fitted-cases method fixtures op)
-  (for/lists (results cases)
-             ([f (in-list fixtures)])
-             (define result (tsne-fit (fixture-X f) #:method method))
-             (values result (tsne-case f result #:op op))))
+  (define results
+    (for/list ([f (in-list fixtures)])
+      (tsne-fit (fixture-X f) #:method method)))
+  (values results
+          (for/list ([f (in-list fixtures)]
+                     [result (in-list results)])
+            (tsne-case f result #:op op))))
 
 (define (check-quality method fixtures)
   (define-values (results cases) (fitted-cases method fixtures "quality"))

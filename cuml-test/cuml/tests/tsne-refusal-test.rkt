@@ -73,9 +73,8 @@
         (hasheq 'max-iter (expt 2 31)))
    (row "random-state" "random-state: expected at least 0, got -1" (hasheq 'random-state -1))))
 
-(define one-row (rows->matrix '((1 2 3)) 'float32))
-
 (define (X-rows)
+  (define one-row (rows->matrix '((1 2 3)) 'float32))
   (list (row "f11" "X: expected float32, got float64" (tiny-with '() 'float64))
         (row "f12" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
         (row "f12 layout"
