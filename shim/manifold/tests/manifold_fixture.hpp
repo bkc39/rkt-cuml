@@ -252,6 +252,35 @@ inline int tsne_fit(const resources& res, const rr_view* x, record& out,
       o.random_state, &s->kl_divergence, &s->n_iter);
 }
 
+struct spectral_options {
+  int64_t n_components = 2;
+  int64_t n_neighbors = 4;
+  int32_t norm_laplacian = 1;
+  int32_t drop_first = 1;
+  uint64_t random_state = 0;
+};
+
+inline int spectral_fit(const resources& res, const rr_view* x, record& out,
+                        const spectral_options& o = {}) {
+  return cuml_manifold_spectral_embedding_fit(
+      res.handle, x, &out.r, o.n_components, o.n_neighbors, o.norm_laplacian,
+      o.drop_first, o.random_state);
+}
+
+struct graph_input {
+  const rr_view* rows;
+  const rr_view* cols;
+  const rr_view* vals;
+  int64_t n;
+};
+
+inline int spectral_fit_graph(const resources& res, const graph_input& g,
+                              record& out, const spectral_options& o = {}) {
+  return cuml_manifold_spectral_embedding_fit_graph(
+      res.handle, g.rows, g.cols, g.vals, g.n, &out.r, o.n_components,
+      o.norm_laplacian, o.drop_first, o.random_state);
+}
+
 constexpr uint64_t blob_modulus = 7;
 constexpr float blob_gap = 10.0F;
 constexpr float blob_step = 0.01F;

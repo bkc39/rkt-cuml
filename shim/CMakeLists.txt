@@ -57,7 +57,7 @@ cumlrkt_family(cluster
           cluster/src/hdbscan_predict.cpp cluster/src/kmeans.cpp
           cluster/src/linkage.cpp cluster/src/linkage_device.cu
           cluster/src/model_release.cpp
-          cluster/src/spectral.cpp cluster/src/spectral_device.cu
+          cluster/src/spectral.cpp common/src/graph.cu
   TESTS cluster/tests/cluster_test.cpp cluster/tests/dbscan_refusal_test.cpp
         cluster/tests/dbscan_test.cpp cluster/tests/hdbscan_refusal_test.cpp
         cluster/tests/hdbscan_test.cpp cluster/tests/kmeans_test.cpp
@@ -100,11 +100,15 @@ cumlrkt_family(decomposition
 cumlrkt_family(manifold
   SOURCES common/src/transpose.cu manifold/src/manifold.cpp
           manifold/src/manifold_support.cpp manifold/src/tsne.cpp
-          manifold/src/umap.cpp manifold/src/umap_device.cu
+          manifold/src/spectral_embedding.cpp common/src/graph.cu
+          common/src/signs.cu manifold/src/umap.cpp manifold/src/umap_device.cu
   TESTS manifold/tests/manifold_test.cpp manifold/tests/tsne_test.cpp
         manifold/tests/tsne_refusal_test.cpp manifold/tests/umap_test.cpp
         manifold/tests/umap_spectral_test.cpp
-        manifold/tests/umap_refusal_test.cpp common/src/rows.cu
+        manifold/tests/umap_refusal_test.cpp
+        manifold/tests/spectral_embedding_test.cpp
+        manifold/tests/spectral_embedding_refusal_test.cpp common/src/rows.cu
+        common/src/signs.cu
 )
 
 cumlrkt_family(probe TEST_ONLY

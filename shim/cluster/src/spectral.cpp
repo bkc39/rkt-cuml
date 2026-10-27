@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cfloat>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -11,20 +10,22 @@
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/device_uvector.hpp>
-#include <string>
 #include <utility>
 
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
+#include "cumlrkt/graph.hpp"
 #include "cumlrkt/support.hpp"
 #include "linkage_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
-#include "spectral_device.hpp"
 
 namespace {
 
+using cumlrkt::checked_graph;
+using cumlrkt::coo;
+using cumlrkt::graph_views;
 using cumlrkt::in_device_scope;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
@@ -32,17 +33,16 @@ using cumlrkt::most_float;
 using cumlrkt::most_index;
 using cumlrkt::on_float32_device;
 using cumlrkt::printed;
-using cumlrkt::read_one;
 using cumlrkt::require_at_least;
 using cumlrkt::require_basis;
 using cumlrkt::require_bounded_rows;
 using cumlrkt::require_index;
 using cumlrkt::require_non_negative;
+using cumlrkt::require_samples;
 using cumlrkt::require_some;
+using cumlrkt::require_sound_graph;
 using cumlrkt::rows_of;
 using cumlrkt::settle;
-using cumlrkt::cluster::graph_scan;
-using cumlrkt::cluster::scan_graph;
 using raftrkt::any_extent;
 
 constexpr int64_t least_samples = 4;
@@ -172,90 +172,10 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
   });
 }
 
-struct graph_views {
-  const rr_view* rows;
-  const rr_view* cols;
-  const rr_view* vals;
-};
-
-struct coo {
-  int32_t* rows;
-  int32_t* cols;
-  float* vals;
-  int64_t nnz;
-};
-
-void require_entries(const char* name, int64_t got, int64_t nnz) {
-  if (got != nnz) {
-    throw logic_error(std::format(
-        "{}: expected {} entries, as rows has, got {}", name, nnz, got));
-  }
-}
-
-coo checked_graph(const graph_views& g) {
-  coo c{raftrkt::vector_data<int32_t>(g.rows, "rows"),
-        raftrkt::vector_data<int32_t>(g.cols, "cols"),
-        raftrkt::vector_data<float>(g.vals, "vals"), g.rows->shape[0]};
-  require_entries("cols", g.cols->shape[0], c.nnz);
-  require_entries("vals", g.vals->shape[0], c.nnz);
-  return c;
-}
-
-void require_samples(int64_t n, int64_t nnz) {
-  require_at_least("n-samples", n, least_samples);
-  if (n > most_index) {
-    throw logic_error(
-        std::format("n-samples: expected at most {}, got {}", most_index, n));
-  }
-  if (nnz > most_index - n) {
-    throw logic_error(std::format(
-        "rows: {} entries and {} samples do not fit the index type", nnz, n));
-  }
-}
-
-std::string fault_message(const coo& c, int64_t i, int64_t n,
-                          rmm::cuda_stream_view stream) {
-  const int64_t r = read_one(c.rows, i, stream);
-  const int64_t col = read_one(c.cols, i, stream);
-  const double w = read_one(c.vals, i, stream);
-  if (r < 0 || r >= n || col < 0 || col >= n) {
-    const bool row = r < 0 || r >= n;
-    return std::format("{}: entry {}: expected an index in [0, {}), got {}",
-                       row ? "rows" : "cols", i, n, row ? r : col);
-  }
-  if (r == col) {
-    return std::format(
-        "rows: entry {}: self-loop at sample {}; leave the diagonal out", i, r);
-  }
-  if (w > 0 && w < FLT_MIN) {
-    return std::format(
-        "vals: entry {}: expected 0 or a weight of at least {}, got {}", i,
-        printed(FLT_MIN), printed(w));
-  }
-  return std::format(
-      "vals: entry {}: expected a finite weight of at least 0, got {}", i,
-      printed(w));
-}
-
-void require_sound_graph(const coo& c, int64_t n,
-                         rmm::cuda_stream_view stream) {
-  const graph_scan s = scan_graph(c.rows, c.cols, c.vals, c.nnz, n, stream);
-  if (s.first_fault >= 0) {
-    throw logic_error(fault_message(c, s.first_fault, n, stream));
-  }
-  if (s.total > most_float) {
-    throw logic_error(std::format("vals: the weights sum to {}, more than {}",
-                                  printed(s.total), printed(most_float)));
-  }
-  if (!s.any_positive) {
-    throw logic_error("vals: expected at least one positive weight, got none");
-  }
-}
-
 void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
                rr_deposit* out, const solver_options& o) {
   const coo c = checked_graph(g);
-  require_samples(n, c.nnz);
+  require_samples(n, c.nnz, least_samples);
   require_clusters(o.n_clusters, n, "n-samples");
   const int64_t n_components = components(o, n, "samples");
   require_basis(n, n_components, "n-samples", "samples");

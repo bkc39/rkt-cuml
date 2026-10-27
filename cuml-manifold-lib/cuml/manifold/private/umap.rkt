@@ -5,12 +5,12 @@
          (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
-         (only-in racket/match match match-define)
-         (only-in raft current-device-resources device-array? shape)
+         (only-in racket/match match-define)
+         (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "curve.rkt" curve-parameters)
          (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job)
-         (only-in "support.rkt" bound-params drawn-seed finite-real? metric-code))
+         (only-in "support.rkt" bound-params drawn-seed finite-real? flag metric-code rows-of))
 
 (provide (struct-out umap-result)
          umap-fit
@@ -82,14 +82,6 @@
                least-normal-float
                most-float
                v))
-
-(define (rows-of a)
-  (match (and (device-array? a) (shape a))
-    [(cons n _) n]
-    [_ 0]))
-
-(define (flag v)
-  (if v 1 0))
 
 (define (schedule n-epochs random-state rows)
   (values (flag n-epochs)

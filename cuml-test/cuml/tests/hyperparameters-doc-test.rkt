@@ -7,6 +7,7 @@
                   kmeans
                   pca
                   spectral-clustering
+                  spectral-embedding
                   standard-scaler
                   truncated-svd
                   tsne
@@ -31,6 +32,10 @@
                   tsvd-fit-transform
                   tsvd-params)
          (only-in cuml/manifold
+                  spectral-embedding-fit
+                  spectral-embedding-fit-graph
+                  spectral-embedding-fit-transform
+                  spectral-embedding-params
                   tsne-fit
                   tsne-fit-transform
                   tsne-params
@@ -154,6 +159,9 @@
                  metric
                  init
                  random-state))
+
+(define spectral-embedding-keys
+  '(n-components n-neighbors norm-laplacian drop-first random-state affinity))
 
 (define (estimator-entry name proc)
   (list name
@@ -298,7 +306,40 @@
                    (list (list 'tsne-params tsne-params '() (list (argument #f 'base #f)) '() '())
                          (fit-entry 'tsne-fit tsne-fit)
                          (fit-entry 'tsne-fit-transform tsne-fit-transform)
-                         (estimator-entry 'tsne tsne)))))
+                         (estimator-entry 'tsne tsne)))
+   (table-bindings spectral-embedding-params
+                   spectral-embedding-keys
+                   (list (list 'spectral-embedding-params
+                               spectral-embedding-params
+                               '()
+                               (list (argument #f 'base #f))
+                               '()
+                               '())
+                         (list 'spectral-embedding-fit
+                               spectral-embedding-fit
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '(affinity))
+                         (list 'spectral-embedding-fit-graph
+                               spectral-embedding-fit-graph
+                               '(#:params #:resources)
+                               (list (argument #f 'rows 'none)
+                                     (argument #f 'cols 'none)
+                                     (argument #f 'vals 'none)
+                                     (argument #f 'n-samples 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '(n-neighbors affinity))
+                         (list 'spectral-embedding-fit-transform
+                               spectral-embedding-fit-transform
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none))
+                               (list (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '(affinity))
+                         (estimator-entry 'spectral-embedding spectral-embedding)))))
 
 (define-namespace-anchor anchor)
 
