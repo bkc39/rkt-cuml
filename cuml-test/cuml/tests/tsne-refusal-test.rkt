@@ -144,10 +144,29 @@
 (define inside-pca (spread-rows (- (expt 2.0 61) (expt 2.0 37))))
 
 (define small-scale-message
-  "embedding: row 0, column 0: the optimisation diverged to nan; lower learning-rate, or rescale X")
+  (string-append "embedding: row 0, column 0: the optimisation diverged to nan;"
+                 " lower learning-rate, centre or rescale X, or raise n-neighbors"))
 
 (define (scaled-tiny k)
   (rows->matrix (map (lambda (r) (map (lambda (x) (* x k)) r)) (fixture-rows tiny)) 'float32))
+
+(define (offset-rows t0)
+  (for/list ([i (in-range 16)])
+    (list (+ t0 (* 3600.0 (modulo i 4))) (+ (modulo i 4) (* 0.01 i)) 0.0)))
+
+(define (centred rows)
+  (define means (map (lambda (c) (/ (apply + c) (length c))) (apply map list rows)))
+  (map (lambda (r) (map - r means)) rows))
+
+(define (duplicates k)
+  (rows->matrix (append (make-list k '(0 0)) (make-list k '(1 1))) 'float32))
+
+(define (line-rows largest)
+  (rows->matrix (for/list ([i (in-range 8)])
+                  (list (* i (/ largest 7)) 0.0))
+                'float32))
+
+(define limit-ratio 0.97)
 
 (define (X-row id message X [options small])
   (row id message (cons X options)))
@@ -207,6 +226,12 @@
           small-scale-message
           (scaled-tiny 1e-11)
           (hash-set sqeuclidean 'method 'exact))
+   (X-row "f23 offset" small-scale-message (rows->matrix (offset-rows 1.7e9) 'float32))
+   (X-row "f23 duplicates" small-scale-message (duplicates 40))
+   (X-row "f23 below 2^-64"
+          small-scale-message
+          (line-rows (* limit-ratio (expt 2.0 -64)))
+          (hash-set small 'metric 'manhattan))
    (X-row "f22" every-row-equal (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32))
    (X-row "f22 zeros" every-row-equal zeros)
    (X-row "f1 before f11"
@@ -223,7 +248,15 @@
    (X-row "f20 before f20c" large-message (tiny-with large-row) manhattan)
    (X-row "f20 before f20d" large-message (tiny-with large-row) (hash-set small 'init 'pca))
    (X-row "f20 before f21" large-message (tiny-with (append zero-row large-row)) cosine)
-   (X-row "f21 before f22" (normless-message 0) zeros cosine)))
+   (X-row "f21 before f22" (normless-message 0) zeros cosine)
+   (X-row "f21 before f20d"
+          (normless-message 0)
+          (rows->matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) 'float32)
+          (hash-set pca 'metric 'cosine))
+   (X-row "f21 before f20d exact"
+          (normless-message 0)
+          (rows->matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) 'float32)
+          (hash-set* pca 'metric 'cosine 'method 'exact))))
 
 (define (fit-calls)
   (list (cons 'tsne-fit (lambda (X options) (apply-options tsne-fit options X)))
@@ -268,6 +301,17 @@
                                (list "f20d"
                                      (rows->matrix inside-pca 'float32)
                                      (hasheq 'perplexity 3.0 'init 'pca))))]
+         [method (in-list '(fft exact))])
+    (match-define (list id X options) entry)
+    (define fitted (apply-options tsne-fit (hash-set options 'method method) X))
+    (check-true (finite-rows? (embedded fitted)) (format "~a ~a" id method))))
+
+(test-gpu "L11: f23's remedies fit: centred offset rows, more neighbours, a line just above 2^-64"
+  (for* ([entry (in-list (list (list "centred" (rows->matrix (centred (offset-rows 1.7e9)) 'float32) small)
+                               (list "n-neighbors" (duplicates 40) (hash-set small 'n-neighbors 60))
+                               (list "above 2^-64"
+                                     (line-rows (/ (expt 2.0 -64) limit-ratio))
+                                     (hash-set small 'metric 'manhattan))))]
          [method (in-list '(fft exact))])
     (match-define (list id X options) entry)
     (define fitted (apply-options tsne-fit (hash-set options 'method method) X))

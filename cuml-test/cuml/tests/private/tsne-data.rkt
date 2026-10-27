@@ -56,7 +56,7 @@
 (define (diverged-rx caller)
   (pregexp
    (format
-    "^~a: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate, or rescale X$"
+    "^~a: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate, centre or rescale X, or raise n-neighbors$"
     caller)))
 
 (define (check-small-sweep method init)

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -8,11 +9,14 @@
 #include <initializer_list>
 #include <limits>
 #include <numbers>
+#include <rmm/cuda_stream_view.hpp>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "cumlrkt/manifold.h"
+#include "cumlrkt/support.hpp"
 #include "manifold_fixture.hpp"
 #include "raftrkt/c_api.h"
 
@@ -37,6 +41,9 @@ constexpr double past_manhattan = 3.5e18;
 constexpr double past_pca = 5 * 0x1p60;
 constexpr int64_t pca_rows = 16;
 constexpr double rounds_to_one = 1.0 + 1e-9;
+constexpr int64_t copies = 16;
+constexpr const char* advice =
+    "; lower learning-rate, centre or rescale X, or raise n-neighbors";
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr double denormal = 1e-40;
@@ -264,8 +271,46 @@ TEST(TsneFitRefusals, ADivergedEmbeddingIsFreed) {
       tsne_fit(res, x.view(), out, {.learning_rate = divergent_rate});
   EXPECT_EQ(status, RR_ERROR);
   EXPECT_TRUE(outcome(status).starts_with("embedding: row "));
-  EXPECT_TRUE(outcome(status).ends_with("; lower learning-rate, or rescale X"));
+  EXPECT_TRUE(outcome(status).ends_with(advice));
   expect_untouched(out);
+}
+
+TEST(TsneFitRefusals, DuplicatesThatFillEveryNeighbourhoodDiverge) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  std::vector<float> host(copies * 4, 0.0F);
+  std::fill(host.begin() + (copies * 2), host.end(), 1.0F);
+  const filled<float> x(res, host, {copies * 2, 2});
+  record out(res);
+  EXPECT_EQ(outcome(tsne_fit(res, x.view(), out)),
+            std::string("embedding: row 0, column 0: the optimisation "
+                        "diverged to nan") +
+                advice);
+  expect_untouched(out);
+  record fitted(res);
+  EXPECT_EQ(
+      outcome(tsne_fit(res, x.view(), fitted, {.n_neighbors = copies * 2})),
+      "accepted");
+}
+
+std::string unlike_first_refusal(const std::vector<float>& host) {
+  const resources res;
+  const filled<float> y(res, host, {rows, 2});
+  try {
+    require_unlike_first("embedding",
+                         static_cast<const float*>(y.array.view.data), rows, 2,
+                         "constant", rmm::cuda_stream_view{});
+  } catch (const std::logic_error& e) {
+    return e.what();
+  }
+  return "";
+}
+
+TEST(TsneFitRefusals, AConstantEmbeddingIsRefusedAndASpreadOnePasses) {
+  CUMLRKT_REQUIRE_GPU();
+  EXPECT_EQ(unlike_first_refusal(std::vector<float>(rows * 2, 1.5F)),
+            "embedding: every row equals row 0; constant");
+  EXPECT_EQ(unlike_first_refusal(blobs(rows, 2)), "");
 }
 
 }  // namespace

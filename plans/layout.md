@@ -874,11 +874,15 @@ Follow-ups are GitHub issues.
   fit under both methods. Under `'euclidean` and `'chebyshev` the squared distance
   is at most 4·2¹²⁵ under f20 already, so they need no bound of their
   own; f20b and f20c are the two metrics where it is larger.
-- **B2-x.** f23's advice is "lower learning-rate, or rescale X": rows
-  whose neighbour distances are all tiny diverge too. cuML multiplies the
-  squared kNN distances by the reciprocal of their largest, which is inf
-  in float32 once that largest underflows: on `tiny` scaled by 10⁻¹¹ under
-  `'sqeuclidean` (finite at 10⁻¹⁰), and by 10⁻²¹ under the other metrics.
-  No pre-fit check catches it: two clusters 10 apart, each of 20 rows
-  within 10⁻¹⁰, diverge under `'sqeuclidean` though their total spread is
-  large.
+- **B2-x.** f23's advice is "lower learning-rate, centre or rescale X, or
+  raise n-neighbors". cuML multiplies the squared kNN distances by the
+  reciprocal of their largest. That is inf in float32 once the largest
+  neighbour distance under the metric is below 2⁻⁶⁴ (about 5·10⁻²⁰), and
+  0·inf is NaN once every computed distance is 0. Three inputs reach it:
+  rows whose largest neighbour distance is below 2⁻⁶⁴; rows far from the
+  origin, whose ‖x‖²+‖y‖²−2x·y cancels to 0 in float32 under `'euclidean`
+  and `'sqeuclidean` (a 1.7·10⁹ time column, which fits centred); and
+  duplicate rows that fill every row's neighbourhood (40×(0,0) and
+  40×(1,1) at perplexity 5, which fit at n-neighbors 60). No pre-fit check
+  catches them. The shim does not centre X: that would break bitwise parity
+  with Python cuML.

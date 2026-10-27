@@ -104,7 +104,7 @@ cumlrkt_family(manifold
   TESTS manifold/tests/manifold_test.cpp manifold/tests/tsne_test.cpp
         manifold/tests/tsne_refusal_test.cpp manifold/tests/umap_test.cpp
         manifold/tests/umap_spectral_test.cpp
-        manifold/tests/umap_refusal_test.cpp
+        manifold/tests/umap_refusal_test.cpp common/src/rows.cu
 )
 
 cumlrkt_family(probe TEST_ONLY

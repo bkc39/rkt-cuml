@@ -93,7 +93,9 @@ clustering and UMAP's spectral init share;
 `common/src/rows.cu`, linked into every family: `first_large_row`,
 `first_large_l1_row`, `total_spread`, `first_zero_row`, `first_non_finite`,
 `first_large_element` and `first_row_unlike_first`; `support.hpp`'s `require_finite` and
-`require_magnitudes` are the element scans with their messages;
+`require_magnitudes` are the element scans with their messages, and
+`require_unlike_first` refuses rows that all equal row 0 (the manifold gtest
+binary compiles `rows.cu` itself to call it);
 `transpose.hpp` with `common/src/transpose.cu`, linked into decomposition
 and manifold: `to_columns` and `to_rows`, the row-major and column-major
 copies; `device.cuh`: the `each` loop and its device helpers). The

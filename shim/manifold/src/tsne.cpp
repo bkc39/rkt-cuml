@@ -39,6 +39,7 @@ using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_float;
 using cumlrkt::require_some;
+using cumlrkt::require_unlike_first;
 using cumlrkt::scratch;
 using cumlrkt::settle;
 using cumlrkt::to_columns;
@@ -67,7 +68,7 @@ constexpr float euclidean_p = 2.0F;
 constexpr double most_sqeuclidean_norm = 0x1p61;
 constexpr double most_manhattan_norm = std::numbers::sqrt2 * 0x1p62;
 constexpr double most_pca_spread = 0x1p126;
-constexpr const char* divergence_advice = "lower learning-rate, or rescale X";
+constexpr const char* divergence_advice = "lower learning-rate, centre or rescale X, or raise n-neighbors";
 
 struct tsne_request {
   int64_t n_components;
@@ -212,23 +213,6 @@ void require_pca_spread(const matrix<float, int64_t>& x, int32_t init,
   }
 }
 
-void require_distinct(const matrix<float, int64_t>& x,
-                      rmm::cuda_stream_view stream) {
-  if (cumlrkt::first_row_unlike_first(x.data, x.n, x.d, stream) < 0) {
-    throw logic_error(
-        "X: every row equals row 0; t-SNE needs two distinct rows");
-  }
-}
-
-void require_spread_embedding(const float* y, int64_t n,
-                              rmm::cuda_stream_view stream) {
-  if (cumlrkt::first_row_unlike_first(y, n, embedding_dim, stream) < 0) {
-    throw logic_error(
-        "embedding: every row equals row 0; the embedding is constant, use "
-        "init 'random");
-  }
-}
-
 ML::TSNEParams tsne_params(const tsne_request& r, int64_t n) {
   ML::TSNEParams p;
   p.dim = static_cast<int>(embedding_dim);
@@ -278,7 +262,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
   require_scanned("X", x, r.metric, stream);
   require_distance_bound(x, r.metric, stream);
   require_pca_spread(x, r.init, stream);
-  require_distinct(x, stream);
+  require_unlike_first("X", x.data, x.n, x.d, "t-SNE needs two distinct rows",
+                       stream);
   ML::TSNEParams p = tsne_params(r, x.n);
   auto embedding = std::make_unique<buffer<float>>(
       scratch<float>(x.n * embedding_dim, stream));
@@ -298,7 +283,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
   }
   require_converged("embedding", embedding->data(), x.n, embedding_dim,
                     divergence_advice, stream);
-  require_spread_embedding(embedding->data(), x.n, stream);
+  require_unlike_first("embedding", embedding->data(), x.n, embedding_dim,
+                       "the embedding is constant, use init 'random", stream);
   settle(handle);
   const std::initializer_list<rr_view> regions{raftrkt::region(
       embedding->data(), x.n, embedding_dim, layout::row_major)};

@@ -179,6 +179,14 @@ double require_magnitudes(const char* name, const matrix<T, int64_t>& x,
 }
 
 template <typename T>
+void require_unlike_first(const char* name, const T* x, int64_t n, int64_t d,
+                          const char* why, rmm::cuda_stream_view stream) {
+  if (first_row_unlike_first(x, n, d, stream) < 0) {
+    throw logic_error(std::format("{}: every row equals row 0; {}", name, why));
+  }
+}
+
+template <typename T>
 using buffer = rmm::device_uvector<T>;
 
 template <typename T>
