@@ -11,7 +11,7 @@ arrays, resources and jobs, and its errors are raft's. cuML is GPU-only.
 Scope: clustering (k-means, DBSCAN, single-linkage agglomerative,
 spectral, HDBSCAN) and metrics (contingency, adjusted Rand, silhouette,
 trustworthiness), preprocessing (standard scaling), decomposition
-(PCA) and manifold (UMAP, t-SNE); epic #53 adds the rest of decomposition and
+(PCA) and manifold (UMAP, t-SNE, spectral embedding); epic #53 adds the rest of decomposition and
 manifold. `plans/layout.md` holds the owner's decisions;
 `plans/starting-notes.md` what rkt-raft established.
 
@@ -27,8 +27,8 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-metrics-lib/` | cuml-metrics-lib | `cuml/metrics` (`contingency-matrix` and its `contingency-table`, `adjusted-rand-score`, `silhouette-score`, `silhouette-samples`, `trustworthiness`), `cuml/metrics/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_metrics.so`) |
 | `cuml-preprocessing-lib/` | cuml-preprocessing-lib | `cuml/preprocessing` (`standard-scaler-params`, `standard-scaler-fit`, `standard-scaler-transform`, `standard-scaler-inverse-transform`, `standard-scaler-fit-transform`, and the `standard-scaler-result` struct), `cuml/preprocessing/private/` (the bodies, their `/who` forms, the private `current-scratch-elements`, and the loader of `libcumlrkt_preprocessing.so`) |
 | `cuml-decomposition-lib/` | cuml-decomposition-lib | `cuml/decomposition` (`pca-params`, `pca-fit`, `pca-transform`, `pca-inverse-transform`, `pca-fit-transform`, and the `pca-result` struct; `tsvd-params`, `tsvd-fit`, `tsvd-transform`, `tsvd-inverse-transform`, `tsvd-fit-transform`, and the `tsvd-result` struct), `cuml/decomposition/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_decomposition.so`) |
-| `cuml-manifold-lib/` | cuml-manifold-lib | `cuml/manifold` (`umap-params`, `umap-fit`, `umap-transform`, `umap-fit-transform`, the `umap-result` struct, `tsne-params`, `tsne-fit`, `tsne-fit-transform` and the `tsne-result` struct), `cuml/manifold/private/` (the bodies, their `/who` forms, `curve.rkt`'s a, b fit, `support.rkt`'s `bound-params`, `drawn-seed`, `finite-real?` and `metric-code`, shared by UMAP and t-SNE, and the loader of `libcumlrkt_manifold.so`) |
-| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, and `table.rkt`, the conversion's body) |
+| `cuml-manifold-lib/` | cuml-manifold-lib | `cuml/manifold` (`umap-params`, `umap-fit`, `umap-transform`, `umap-fit-transform`, the `umap-result` struct, `tsne-params`, `tsne-fit`, `tsne-fit-transform`, the `tsne-result` struct, `spectral-embedding-params`, `spectral-embedding-fit`, `spectral-embedding-fit-graph`, `spectral-embedding-fit-transform` and the `spectral-embedding-result` struct), `cuml/manifold/private/` (the bodies, their `/who` forms, `curve.rkt`'s a, b fit, `support.rkt`'s `bound-params`, `drawn-seed`, `finite-real?`, `metric-code`, `rows-of` and `flag`, shared by UMAP, t-SNE and spectral embedding, and the loader of `libcumlrkt_manifold.so`) |
+| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, `spectral-embedding`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
@@ -87,8 +87,16 @@ config needs Treelite and nvForest configs the prefix lacks). Shared C++
 lives in `shim/common/include/cumlrkt/` (`common.hpp`: the error slot,
 `check_abi`, `libcuml_release`, `on_floats`; `api.h`: `CUMLRKT_API`;
 `support.hpp`: `guarded`, `on_device`, `settle`, the shape and bound checks,
-and `require_basis`, the bound on raft Lanczos's n·ncv basis that spectral
-clustering and UMAP's spectral init share;
+`require_basis`, the bound on raft Lanczos's n·ncv basis, and
+`require_lanczos_rows`, the 2(nev + 1) rows below which cuVS's Lanczos
+reads past its basis, both shared by spectral clustering, UMAP's spectral
+init and spectral embedding;
+`graph.hpp` with `common/src/graph.cu`, linked into cluster and manifold:
+the COO graph checks of spectral clustering and spectral embedding
+(`checked_graph`, `require_samples`, `scan_graph`, `fault_message`,
+`require_sound_graph`);
+`signs.hpp` with `common/src/signs.cu`, linked into manifold:
+`columns_sign_rule`, sklearn's sign rule on a row-major matrix in place;
 `limits.hpp`: the index and squared-norm bounds; `rows.hpp` with
 `common/src/rows.cu`, linked into every family: `first_large_row`,
 `first_large_l1_row`, `total_spread`, `first_zero_row`, `first_non_finite`,
@@ -98,10 +106,11 @@ clustering and UMAP's spectral init share;
 binary compiles `rows.cu` itself to call it);
 `transpose.hpp` with `common/src/transpose.cu`, linked into decomposition
 and manifold: `to_columns` and `to_rows`, the row-major and column-major
-copies; `device.cuh`: the `each` loop and its device helpers). The
+copies, and `scaled_copy`, a copy times a power of two; `device.cuh`: the `each` loop and its device helpers). The
 manifold family's `manifold_support.{hpp,cpp}` holds the scans UMAP and
 t-SNE share (`float_rows`, `require_rows_fit`, `require_scanned`,
-`require_converged`).
+`require_converged`); `spectral_checks.hpp` holds spectral embedding's
+post-solve scans, header-only so the gtests reach them.
 
 Each family exports `cuml_<family>_last_error`, `_last_error_kind`,
 `_check_abi` and `_libcuml_version`, which the shared Racket loader binds by
@@ -331,8 +340,8 @@ replace each when raft offers a public form:
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
 | `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test`, `tsvd-memory-test`, `private/process-memory` |
 | `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test`, `tsvd-memory-test`, `private/process-memory` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `table-refusal-test`, `private/process-memory` |
-| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `table-refusal-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `spectral-embedding-graph-refusal-test`, `table-refusal-test`, `private/process-memory` |
+| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `spectral-embedding-graph-refusal-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
 | `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*` and `tsne-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
@@ -363,6 +372,9 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `umap-determinism-data` | L5's quoted program over `umap-data`'s fixtures: `narrow-configs metrics` (`far-blobs`, both inits, n-components 2, 3 and 16, with and without y), `wide-configs init` (600 components on `held-out-fit`, 30 epochs) `digest` (a matrix's float32 SHA-1, required by the quoted programs) and `check-repeatable configs [#:program]` (3 runs in one process, then 2 more processes; used by the five `umap-determinism-*test`s and, with its own program, by `tsne-determinism-data`) |
 | `tsne-determinism-data` | L4's quoted program over `umap-data`'s `far-blobs` and `digits`: `check-tsne-repeatable name metrics` (both inits; embedding digest, KL and n-iter equal in and across processes) |
 | `tsne-data` | `wide-blobs` (12000×50, five centres), `check-small-sweep method init` (L3: n = 2 to 40, finite or the divergence refusal), `embedded`, `derived-neighbours`, `tsne-case fixture result` (a case for `python/tsne_twin.py`), `check-tsne-parity fixture configs` (L5, L13: bitwise embedding, KL and n-iter against Python cuML) and `check-quality method fixtures` (L6: trustworthiness within Python cuML's 20-seed spread) and `check-sklearn fixtures` (L6: exact within 0.05 of sklearn's exact t-SNE) |
+| `spectral-embedding-data` | `sbm sizes p-in p-out seed [#:weighted?]` (a seeded planted-block `graph`, symmetric and sorted, and its truth), `rows-matrix`, `embedded` (a result's embedding as host rows), `embedded-graph g [options]` (`-fit-graph` on a `graph`, options through `apply-options`), `columns`, `sign-ruled?`, `column-gaps` (per column, max \|E − S\| / max \|S\|), `cosine-gaps`, `se-case` and `graph-case` (cases for `python/spectral_embedding_twin.py`), `check-se-parity` and `check-graph-parity` (L5: bitwise against Python cuML), and `twin` |
+| `spectral-embedding-determinism-data` | L4's quoted program over `blobs`, `digits`, `sbm` and `three-blocks`: `dense-configs name` (10 and 256 neighbours, drop-first × norm-laplacian), `graph-configs name` and `check-se-repeatable configs` (`check-repeatable` with that program) |
+| `spectral-embedding-twin-data` | `parity-configs [n-neighbors]`: n-components 2 and 8 × drop-first × norm-laplacian, shared by the L5 twin tests |
 | `manifold-refusal-data` | the refusal inputs UMAP and t-SNE share: `tiny-with cells` (`tiny` with cells replaced), `nan-row`, `large-row`, `zero-row`, their messages `nan-message`, `large-message`, `cosine-message`, and `listed-X` (a host list, for the view check) |
 | `blob-data` | `uniform-source seed` (a seeded uniform [0, 1) thunk on its own generator), `normal-source seed` (a seeded Box–Muller standard-normal thunk over it) and `centred-blobs centres per-group seed` (float32 Gaussian rows around each centre, and their group labels) |
 | `guide-data` | `evaluated-chapter name` (a guide example chapter's `examples` forms evaluated in order in a `make-cuml-eval` sandbox that shares `cuml`, `pict` and `raft` with the test; returns the evaluator and each block's values), `example-blocks` (the forms of each `examples` block of a read document), `read-document` (a `.scrbl` file read as a datum), `flattened-text` (a file's text with each whitespace run one space), `check-scored ids labels columns text` (a clustering's sorted table, its ARI against `table-ari`, both rounded to `text`), `mismatches` (labels that differ from the renumbered classes), `scaled-matrix` (a dataset's columns standardized on the device), `table-ari` (the exact rational adjusted Rand index of a host table), `cluster-columns` (a contingency table's columns, sorted, so a renumbering moves no pin), `host` (a device vector's first n values), `boundary-margin` (a number's distance to the nearest rounding boundary at some places); the guide's own `class-ids`, `counts-of` and `rounded` come from `guide/helpers.rkt` |
