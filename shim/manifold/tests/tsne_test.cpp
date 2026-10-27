@@ -84,11 +84,11 @@ TEST(TsneFit, OppositeRowsAtTheLargestSquarableNormAreFinite) {
   const filled<float> x(res, host, {rows, cols});
   for (const int32_t method :
        {CUML_MANIFOLD_TSNE_FFT, CUML_MANIFOLD_TSNE_EXACT}) {
-    EXPECT_TRUE(all_finite(fitted(
-        res, x.view(),
-        {.max_iter = short_run,
-         .method = method,
-         .metric = CUML_MANIFOLD_METRIC_SQEUCLIDEAN})))
+    EXPECT_TRUE(
+        all_finite(fitted(res, x.view(),
+                          {.max_iter = short_run,
+                           .method = method,
+                           .metric = CUML_MANIFOLD_METRIC_SQEUCLIDEAN})))
         << method;
   }
 }

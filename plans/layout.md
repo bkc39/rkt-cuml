@@ -836,3 +836,16 @@ Follow-ups are GitHub issues.
   `tiny`-shaped rows, both methods: 2⁶² and 2⁶²−2³⁵·⁸ give NaN, 2⁶²−2³⁷·⁵
   and 2⁶²−2³⁹ stay finite; one row alone stays finite at 1.5²·2⁶² and
   gives NaN at 2⁶⁴.
+- **B2-u.** L6's bounds are measured, not Python's seed spread or
+  upstream's digits-derived 0.05 (after B2 r0 M2 and L3). Exact: 40 fits
+  per fixture, trustworthiness at k = 10, floor = min − (max − min):
+  blobs 0.97176–0.97447 (floor 0.969), overlap 0.86713–0.88865 (0.845),
+  digits 0.99048–0.99208 (0.9888). Against sklearn (blobs 0.97687,
+  overlap 0.91393, digits 0.99237), bound = largest |ours − sklearn| +
+  (max − min): blobs 0.00512 → 0.008, overlap 0.04680 → 0.07, digits
+  0.00189 → 0.004. FFT seed 0 is bitwise Python's (L5), so a check
+  against Python's spread cannot fail; it gets an absolute floor, Python's
+  20-seed min − δ: blobs 0.96900 − 0.00369 → 0.965, overlap
+  0.84700 − 0.02085 → 0.826, digits 0.98827 − 0.00238 → 0.9858 (ours
+  0.97011, 0.85080, 0.98857). The blobs and overlap quality tests no
+  longer call Python and lost `twin` from their names.

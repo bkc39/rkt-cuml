@@ -134,9 +134,7 @@
              (cons (tiny-with '() 'float64) (hash-set small 'n-neighbors 1)))
         (row "f13 before f17" "X: expected at least 2 rows, got 1" (cons one-row (hasheq)))
         (row "f19 before f20" nan-message (cons (tiny-with (append nan-row large-row)) small))
-        (row "f20 before f20b"
-             large-message
-             (cons (tiny-with large-row) sqeuclidean))
+        (row "f20 before f20b" large-message (cons (tiny-with large-row) sqeuclidean))
         (row "f20 before f21" large-message (cons (tiny-with (append zero-row large-row)) cosine))
         (row "f21 before f22" (normless-message 0) (cons zeros cosine))))
 
@@ -151,7 +149,10 @@
          [r (in-list (parameter-rows))])
     (match-define (cons who call) entry)
     (test-case (format "~a ~a" who (row-id r))
-      (check-row who r (lambda () (call (tiny-X) (hash-union small (row-call r) #:combine (lambda (_ v) v)))))))
+      (check-row who
+                 r
+                 (lambda ()
+                   (call (tiny-X) (hash-union small (row-call r) #:combine (lambda (_ v) v)))))))
   (for ([bad (in-list (list (lambda () (tsne-fit (tiny-X) #:n-neighbors 2.5))
                             (lambda () (tsne-fit (tiny-X) #:learning-rate 'fast))
                             (lambda () (tsne-fit (tiny-X) #:perplexity 'high))))])

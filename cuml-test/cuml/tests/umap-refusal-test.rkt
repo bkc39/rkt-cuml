@@ -118,47 +118,62 @@
    (row "f10" "negative-sample-rate: expected at least 0, got -1" (hasheq 'negative-sample-rate -1))))
 
 (define (X-rows)
-  (list (row "f12" "X: expected float32, got float64" (list (tiny-with '() 'float64) #f (hasheq)))
-        (row "f13" "X: expected rank 2, got rank 1" (list (blank-vector 8 'float32) #f (hasheq)))
-        (row "f13 layout"
-             "X: expected row-major, got col-major 8x3"
-             (list (blank-matrix 8 3 'float32 #:layout 'col-major) #f (hasheq)))
-        (row "f14" "X: expected at least 2 rows, got 1" (list (rows->matrix '((1 2 3)) 'float32) #f (hasheq)))
-        (row "f15" "X: expected at least 1 column, got 0" (list (blank-matrix 8 0 'float32) #f (hasheq)))
-        (row "f19" "X: nn-descent needs at least 150 rows, got 8" (list (tiny-X) #f (hasheq 'build-algo 'nn-descent)))
-        (row "f20" "y: expected int32 or int64, got float32" (list (tiny-X) (labels 8 'float32) (hasheq)))
-        (row "f20 rank" "y: expected rank 1, got rank 2" (list (tiny-X) (blank-matrix 8 1 'int32) (hasheq)))
-        (row "f20 stride"
-             "y: expected contiguous elements, got stride 2"
-             (list (tiny-X) (strided-vector 8 'int64) (hasheq)))
-        (row "f20 length" "y: expected 8 elements, got 7" (list (tiny-X) (labels 7) (hasheq)))
-        (row "f21" nan-message (list (tiny-with nan-row) (labels 8) (hasheq)))
-        (row "f21 inf"
-             "X: row 0, column 2: expected a finite value, got -inf"
-             (list (tiny-with '([(0 2) -inf.0])) #f (hasheq)))
-        (row "f22" large-message (list (tiny-with large-row) #f (hasheq)))
-        (row "f23" cosine-message (list (tiny-with zero-row) #f (hasheq 'metric 'cosine)))
-        (row "f26"
-             "n-components: spectral init of 3 components needs at least 10 rows, got 8"
-             (list (tiny-X) #f (hasheq 'n-components 3)))
-        (row "f26 one short"
-             "n-components: spectral init of 3 components needs at least 10 rows, got 9"
-             (list (tiny-with '() 'float32 (cons '(5.0 5.0 5.0) (fixture-rows tiny))) #f (hasheq 'n-components 3)))
-        (row "f26 defaults"
-             "n-components: spectral init of 2 components needs at least 8 rows, got 7"
-             (list (tiny-with '() 'float32 (cdr (fixture-rows tiny))) #f (hasheq)))
-        (row "f29"
-             f29-message
-             (list (rows->matrix (take (fixture-rows tiny) 6) 'float32) (labels 6 'int32 3) (hasheq 'n-components 1 'n-epochs 20)))
-        (row "f12 before f14"
-             "X: expected float32, got float64"
-             (list (rows->matrix '((1 2 3)) 'float64) #f (hasheq)))
-        (row "f14 before f17"
-             "X: expected at least 2 rows, got 1"
-             (list (rows->matrix '((1 2 3)) 'float32) #f (hasheq 'n-components 8)))
-        (row "f20 before f21" "y: expected 8 elements, got 7" (list (tiny-with nan-row) (labels 7) (hasheq)))
-        (row "f21 before f22" nan-message (list (tiny-with (append nan-row '([(1 1) 1e20]))) #f (hasheq)))
-        (row "f22 before f23" large-message (list (tiny-with (append zero-row large-row)) #f (hasheq 'metric 'cosine)))))
+  (list
+   (row "f12" "X: expected float32, got float64" (list (tiny-with '() 'float64) #f (hasheq)))
+   (row "f13" "X: expected rank 2, got rank 1" (list (blank-vector 8 'float32) #f (hasheq)))
+   (row "f13 layout"
+        "X: expected row-major, got col-major 8x3"
+        (list (blank-matrix 8 3 'float32 #:layout 'col-major) #f (hasheq)))
+   (row "f14"
+        "X: expected at least 2 rows, got 1"
+        (list (rows->matrix '((1 2 3)) 'float32) #f (hasheq)))
+   (row "f15" "X: expected at least 1 column, got 0" (list (blank-matrix 8 0 'float32) #f (hasheq)))
+   (row "f19"
+        "X: nn-descent needs at least 150 rows, got 8"
+        (list (tiny-X) #f (hasheq 'build-algo 'nn-descent)))
+   (row "f20" "y: expected int32 or int64, got float32" (list (tiny-X) (labels 8 'float32) (hasheq)))
+   (row "f20 rank"
+        "y: expected rank 1, got rank 2"
+        (list (tiny-X) (blank-matrix 8 1 'int32) (hasheq)))
+   (row "f20 stride"
+        "y: expected contiguous elements, got stride 2"
+        (list (tiny-X) (strided-vector 8 'int64) (hasheq)))
+   (row "f20 length" "y: expected 8 elements, got 7" (list (tiny-X) (labels 7) (hasheq)))
+   (row "f21" nan-message (list (tiny-with nan-row) (labels 8) (hasheq)))
+   (row "f21 inf"
+        "X: row 0, column 2: expected a finite value, got -inf"
+        (list (tiny-with '([(0 2) -inf.0])) #f (hasheq)))
+   (row "f22" large-message (list (tiny-with large-row) #f (hasheq)))
+   (row "f23" cosine-message (list (tiny-with zero-row) #f (hasheq 'metric 'cosine)))
+   (row "f26"
+        "n-components: spectral init of 3 components needs at least 10 rows, got 8"
+        (list (tiny-X) #f (hasheq 'n-components 3)))
+   (row "f26 one short"
+        "n-components: spectral init of 3 components needs at least 10 rows, got 9"
+        (list (tiny-with '() 'float32 (cons '(5.0 5.0 5.0) (fixture-rows tiny)))
+              #f
+              (hasheq 'n-components 3)))
+   (row "f26 defaults"
+        "n-components: spectral init of 2 components needs at least 8 rows, got 7"
+        (list (tiny-with '() 'float32 (cdr (fixture-rows tiny))) #f (hasheq)))
+   (row "f29"
+        f29-message
+        (list (rows->matrix (take (fixture-rows tiny) 6) 'float32)
+              (labels 6 'int32 3)
+              (hasheq 'n-components 1 'n-epochs 20)))
+   (row "f12 before f14"
+        "X: expected float32, got float64"
+        (list (rows->matrix '((1 2 3)) 'float64) #f (hasheq)))
+   (row "f14 before f17"
+        "X: expected at least 2 rows, got 1"
+        (list (rows->matrix '((1 2 3)) 'float32) #f (hasheq 'n-components 8)))
+   (row "f20 before f21"
+        "y: expected 8 elements, got 7"
+        (list (tiny-with nan-row) (labels 7) (hasheq)))
+   (row "f21 before f22" nan-message (list (tiny-with (append nan-row '([(1 1) 1e20]))) #f (hasheq)))
+   (row "f22 before f23"
+        large-message
+        (list (tiny-with (append zero-row large-row)) #f (hasheq 'metric 'cosine)))))
 
 (define (fit-calls)
   (list (cons 'umap-fit (lambda (X y options) (apply-options umap-fit (hash-set options 'y y) X)))
@@ -322,7 +337,8 @@
     (match-define (list X y options) (row-call r))
     (unchanged
      (row-id r)
-     (lambda () (check-row 'umap-fit r (lambda () (apply-options umap-fit (hash-set options 'y y) X))))))
+     (lambda ()
+       (check-row 'umap-fit r (lambda () (apply-options umap-fit (hash-set options 'y y) X))))))
   (for ([r (in-list (transform-rows))])
     (match-define (cons result X) (row-call r))
     (unchanged (row-id r)
