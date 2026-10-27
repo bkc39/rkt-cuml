@@ -330,4 +330,151 @@ Whether @racket[v] is a t-SNE estimator.}
 The @racket[tsne-result] of the fit that made @racket[estimator], or
 @racket[#f] when it is unfitted.}
 
+@section[#:tag "spectral-embedding"]{Spectral embedding}
+
+@examples[#:eval ev
+(define spectral (spectral-embedding-fit X #:n-neighbors 10))
+(shape (spectral-embedding-result-embedding spectral))
+(~> spectral
+    spectral-embedding-result-embedding
+    (kmeans-fit #:n-clusters 3)
+    kmeans-result-labels
+    (adjusted-rand-score truth _))
+]
+
+@defstruct*[spectral-embedding-result
+            ([embedding device-matrix?]
+             [n-neighbors (or/c #f exact-positive-integer?)]
+             [params hash?])]{
+The result of @racket[spectral-embedding-fit] and
+@racket[spectral-embedding-fit-graph]: the n×k @racket['float32]
+@racket[embedding]; the neighbour count the graph used, or @racket[#f] for a
+given graph; and the fit's @racket[params], where a derived
+@racket[n-neighbors] and a drawn seed stay @racket[#f].}
+
+@defproc[(spectral-embedding-fit [X device-matrix?]
+                                 [#:n-components n-components exact-positive-integer? 2]
+                                 [#:n-neighbors n-neighbors (or/c #f (integer-in 2 2147483647)) #f]
+                                 [#:norm-laplacian norm-laplacian boolean? #t]
+                                 [#:drop-first drop-first boolean? #t]
+                                 [#:random-state random-state (or/c #f (integer-in 0 18446744073709551615)) 0]
+                                 [#:params params (or/c #f hash?) #f]
+                                 [#:resources resources device-resources? (current-device-resources)])
+         spectral-embedding-result?]{
+Embeds the rows of @racket[X], a row-major @racket['float32] matrix with at
+least two columns, not all rows equal, and finite rows of squared norm at most
+2@superscript{125}, in @racket[n-components] dimensions: the eigenvectors of
+the smallest eigenvalues of the graph Laplacian, normalized when
+@racket[norm-laplacian] and then divided by the square root of each degree,
+the constant first one dropped when @racket[drop-first]. The graph joins each
+row to its @racket[n-neighbors] nearest rows, itself included, with weight 1,
+made symmetric: min(256, max(2, ⌊n/10⌋)) by default, at most the row count.
+It needs at least 2(@racket[n-components] + 2) rows with @racket[drop-first],
+2(@racket[n-components] + 1) without, below which cuML's eigensolver reads and
+writes past its basis. Each column's largest entry is positive. A
+@racket[random-state] gives the same embedding on every run when
+@racket[n-neighbors] is at most 256; above that, ties among neighbours break
+differently between runs. @racket[#f] draws a seed from
+@racket[current-pseudo-random-generator]. The eigensolver stops at a residual
+of 10@superscript{-5}, so eigenvectors whose eigenvalues lie close together
+are only approximate. A graph in several pieces gives an arbitrary basis of
+their indicators. Distances are ‖x‖²+‖y‖²−2x·y in @racket['float32]: centre
+@racket[X] if it lies far from the origin. A graph with no eigenvector the
+solver can find, such as duplicated rows, too few neighbours, or every row
+joined to every other, is an error.
+@examples[#:eval ev #:label #f
+(spectral-embedding-result-n-neighbors spectral)
+(eval:error (spectral-embedding-fit X #:n-components 30))
+]}
+
+@defproc[(spectral-embedding-fit-graph [rows device-vector?]
+                                       [cols device-vector?]
+                                       [vals device-vector?]
+                                       [n-samples (integer-in 1 2147483647)]
+                                       [#:n-components n-components exact-positive-integer? 2]
+                                       [#:norm-laplacian norm-laplacian boolean? #t]
+                                       [#:drop-first drop-first boolean? #t]
+                                       [#:random-state random-state (or/c #f (integer-in 0 18446744073709551615)) 0]
+                                       [#:params params (or/c #f hash?) #f]
+                                       [#:resources resources device-resources? (current-device-resources)])
+         spectral-embedding-result?]{
+Embeds @racket[n-samples] samples from an affinity graph given as
+coordinates, as @racket[spectral-clustering-fit-graph] takes it: symmetric,
+without self-loops, finite weights of at least 0, duplicates adding. A graph
+that is not symmetric is used as given. Otherwise as
+@racket[spectral-embedding-fit], except that @racket[params]'s
+@racket[n-neighbors] and @racket[affinity] are ignored.
+@examples[#:eval ev #:label #f
+(define path-rows (list->device-vector (for*/list ([i 23] [j '(0 1)]) (+ i j)) #:dtype 'int32))
+(define path-cols (list->device-vector (for*/list ([i 23] [j '(1 0)]) (+ i j)) #:dtype 'int32))
+(define path-vals (list->device-vector (for/list ([_ 46]) 1.0) #:dtype 'float32))
+(~> (spectral-embedding-fit-graph path-rows path-cols path-vals 24 #:n-components 1)
+    spectral-embedding-result-embedding
+    shape)
+(eval:error (spectral-embedding-fit-graph path-rows path-rows path-vals 24))
+]}
+
+@defproc[(spectral-embedding-fit-transform [X device-matrix?]
+                                           [#:n-components n-components exact-positive-integer? 2]
+                                           [#:n-neighbors n-neighbors (or/c #f (integer-in 2 2147483647)) #f]
+                                           [#:norm-laplacian norm-laplacian boolean? #t]
+                                           [#:drop-first drop-first boolean? #t]
+                                           [#:random-state random-state (or/c #f (integer-in 0 18446744073709551615)) 0]
+                                           [#:params params (or/c #f hash?) #f]
+                                           [#:resources resources device-resources? (current-device-resources)])
+         (values spectral-embedding-result? device-matrix?)]{
+@racket[spectral-embedding-fit], and the fit's embedding.}
+
+@defproc[(spectral-embedding-params [base (or/c #f hash?) #f]
+                                    [#:n-components n-components exact-positive-integer? 2]
+                                    [#:n-neighbors n-neighbors (or/c #f (integer-in 2 2147483647)) #f]
+                                    [#:norm-laplacian norm-laplacian boolean? #t]
+                                    [#:drop-first drop-first boolean? #t]
+                                    [#:random-state random-state (or/c #f (integer-in 0 18446744073709551615)) 0]
+                                    [#:affinity affinity 'nearest-neighbors 'nearest-neighbors])
+         (and/c hash? hash-eq? immutable?)]{
+The hyperparameters of @racket[spectral-embedding-fit],
+@racket[spectral-embedding-fit-graph] and @racket[spectral-embedding], as
+@racket[kmeans-params] gives k-means'. @racket[affinity] is cuML's name for
+the graph built from @racket[X]; only @racket['nearest-neighbors] fits.
+@examples[#:eval ev #:label #f
+(hash-ref (spectral-embedding-params #:drop-first #f) 'drop-first)
+(eval:error (spectral-embedding-fit X #:params (spectral-embedding-params #:affinity 'precomputed)))
+]}
+
+@section[#:tag "spectral-embedding-estimator"]{Spectral embedding estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(spectral-embedding [params (or/c #f hash?) #f]
+                             [#:n-components n-components exact-positive-integer? 2]
+                             [#:n-neighbors n-neighbors (or/c #f (integer-in 2 2147483647)) #f]
+                             [#:norm-laplacian norm-laplacian boolean? #t]
+                             [#:drop-first drop-first boolean? #t]
+                             [#:random-state random-state (or/c #f (integer-in 0 18446744073709551615)) 0]
+                             [#:affinity affinity 'nearest-neighbors 'nearest-neighbors]
+                             [#:resources resources (or/c #f device-resources?) #f])
+         spectral-embedding?]{
+
+An unfitted spectral embedding with the hyperparameters
+@racket[(spectral-embedding-params params ...)]: an estimator and a
+transformer whose @racket[fit-transform] returns the embedding. @racket[fit]
+is @racket[spectral-embedding-fit]; there is no @racket[transform]. A
+@racket[sample-weight] is refused. Errors name the generic.
+
+@examples[#:eval ev #:label #f
+(shape (fit-transform (spectral-embedding #:n-neighbors 10) X))
+(eval:error (transform (fit (spectral-embedding #:n-neighbors 10) X) X))
+]}
+
+@defproc[(spectral-embedding? [v any/c]) boolean?]{
+
+Whether @racket[v] is a spectral embedding estimator.}
+
+@defproc[(spectral-embedding-model [estimator spectral-embedding?])
+         (or/c #f spectral-embedding-result?)]{
+
+The @racket[spectral-embedding-result] of the fit that made
+@racket[estimator], or @racket[#f] when it is unfitted.}
+
 @(close-eval ev)
