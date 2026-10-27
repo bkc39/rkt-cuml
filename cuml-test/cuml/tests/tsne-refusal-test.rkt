@@ -307,11 +307,12 @@
     (check-true (finite-rows? (embedded fitted)) (format "~a ~a" id method))))
 
 (test-gpu "L11: f23's remedies fit: centred offset rows, more neighbours, a line just above 2^-64"
-  (for* ([entry (in-list (list (list "centred" (rows->matrix (centred (offset-rows 1.7e9)) 'float32) small)
-                               (list "n-neighbors" (duplicates 40) (hash-set small 'n-neighbors 60))
-                               (list "above 2^-64"
-                                     (line-rows (/ (expt 2.0 -64) limit-ratio))
-                                     (hash-set small 'metric 'manhattan))))]
+  (for* ([entry (in-list
+                 (list (list "centred" (rows->matrix (centred (offset-rows 1.7e9)) 'float32) small)
+                       (list "n-neighbors" (duplicates 40) (hash-set small 'n-neighbors 60))
+                       (list "above 2^-64"
+                             (line-rows (/ (expt 2.0 -64) limit-ratio))
+                             (hash-set small 'metric 'manhattan))))]
          [method (in-list '(fft exact))])
     (match-define (list id X options) entry)
     (define fitted (apply-options tsne-fit (hash-set options 'method method) X))

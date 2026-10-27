@@ -68,7 +68,8 @@ constexpr float euclidean_p = 2.0F;
 constexpr double most_sqeuclidean_norm = 0x1p61;
 constexpr double most_manhattan_norm = std::numbers::sqrt2 * 0x1p62;
 constexpr double most_pca_spread = 0x1p126;
-constexpr const char* divergence_advice = "lower learning-rate, centre or rescale X, or raise n-neighbors";
+constexpr const char* divergence_advice =
+    "lower learning-rate, centre or rescale X, or raise n-neighbors";
 
 struct tsne_request {
   int64_t n_components;
