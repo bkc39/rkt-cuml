@@ -62,7 +62,7 @@ constexpr float min_gain = 0.01F;
 constexpr float pre_momentum = 0.5F;
 constexpr float post_momentum = 0.8F;
 constexpr float euclidean_p = 2.0F;
-constexpr double most_sqeuclidean_norm = 0x1.fffffep61;
+constexpr double most_sqeuclidean_norm = 0x1p61;
 
 struct tsne_request {
   int64_t n_components;
@@ -114,9 +114,9 @@ void require_numbers(const tsne_request& r) {
   require_at_most("n-neighbors", r.n_neighbors, most_neighbors);
   if (!std::isfinite(r.perplexity) || r.perplexity <= 1 ||
       (r.perplexity < 2 && static_cast<float>(r.perplexity) <= 1)) {
-    throw logic_error(
-        std::format("perplexity: expected a finite value above 1, got {}",
-                    printed(r.perplexity)));
+    throw logic_error(std::format(
+        "perplexity: expected a finite value above 1 in float32, got {}",
+        printed(r.perplexity)));
   }
   require_float("perplexity", r.perplexity);
   if (!std::isfinite(r.early_exaggeration) || r.early_exaggeration < 1) {

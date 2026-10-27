@@ -788,8 +788,8 @@ Follow-ups are GitHub issues.
 - **B2-d.** `#:n-neighbors` defaults to `#f`, meaning
   min(1023, max(2, ⌈3·perplexity⌉)), clamped to the row count; above
   1023 is refused (f6).
-- **B2-e.** perplexity is refused at or below 1 (f7) and above
-  min(n-neighbors, n) (f17).
+- **B2-e.** perplexity is refused at or below 1 in float32 (f7, its
+  message saying so after B2 r1 L1) and above min(n-neighbors, n) (f17).
 - **B2-f.** `define-estimator` gains a `[fit-transform proc]` entry: the
   estimator is `transformer?`, its `fit-transform` is `proc` of the fit's
   model, and its `transform` raises "transform: tsne has no transform; use
@@ -829,13 +829,18 @@ Follow-ups are GitHub issues.
   perplexity from 2 to 20.
 - **B2-s.** `tsne-sklearn-digits-twin-test` takes 55 s (sklearn's exact
   t-SNE on digits, CPU-bound) and has a 180 s entry in `info.rkt`.
-- **B2-t.** Under `'sqeuclidean` a row's squared norm is at most
-  2⁶²−2³⁸, the largest float32 below 2⁶² (f20b, after B2 r0 M3). cuML
-  squares the kNN distances, a fourth power under sqeuclidean; opposite
-  rows overflow it once their norm rounds to 2⁶² in float32. Measured on
-  `tiny`-shaped rows, both methods: 2⁶² and 2⁶²−2³⁵·⁸ give NaN, 2⁶²−2³⁷·⁵
-  and 2⁶²−2³⁹ stay finite; one row alone stays finite at 1.5²·2⁶² and
-  gives NaN at 2⁶⁴.
+- **B2-t.** Under `'sqeuclidean` a row's squared norm is at most 2⁶¹
+  (f20b, after B2 r0 M3 and B2 r1 M1). cuML squares the kNN distances, a
+  fourth power under sqeuclidean; opposite rows give a squared distance
+  of 4·|a|², at most 2⁶³ here, so its square stays at or below 2¹²⁶,
+  a factor of 4 under float32's maximum, whatever the rounding of
+  |a|²+|b|²−2a·b in float32. The old limit 2⁶²−2³⁸ let two-column rows
+  through whose float32 norm rounds to 2⁶²: (1807712000, 1159251072) and
+  7 other directions diverged under both methods. Measured at 2⁶¹ on
+  `tiny`-shaped opposite rows, both methods, all finite: those 8
+  directions rescaled to just inside 2⁶¹ (16 fits), and 24 random two-
+  and 24 random three-column directions at the limit, 37 of them with a
+  float32 norm that rounds to 2⁶¹ (96 fits).
 - **B2-u.** L6's bounds are measured, not Python's seed spread or
   upstream's digits-derived 0.05 (after B2 r0 M2 and L3). Exact: 40 fits
   per fixture, trustworthiness at k = 10, floor = min − (max − min):

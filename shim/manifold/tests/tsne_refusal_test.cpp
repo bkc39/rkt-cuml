@@ -25,7 +25,10 @@ constexpr int64_t past_exact = 2097121;
 constexpr double past_float = 1e39;
 constexpr double divergent_rate = 1e30;
 constexpr double large = 0x1p66;
-constexpr double unsquarable = 0x1p31;
+constexpr double half_sqeuclidean = 0x1p30;
+constexpr double past_sqeuclidean = 0x1p30 + 0x1p7;
+constexpr double diverging_x = 1807712000;
+constexpr double diverging_y = 1159251072;
 constexpr double least_above_one = 1.0 + 1e-9;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
@@ -88,13 +91,14 @@ TEST(TsneFitRefusals, ParametersInTableOrder) {
       {fit({.n_neighbors = 1024}),
        "n-neighbors: expected at most 1023, got 1024"},
       {fit({.perplexity = 1}),
-       "perplexity: expected a finite value above 1, got 1"},
+       "perplexity: expected a finite value above 1 in float32, got 1"},
       {fit({.perplexity = least_above_one}),
-       "perplexity: expected a finite value above 1, got 1.000000001"},
+       "perplexity: expected a finite value above 1 in float32, got "
+       "1.000000001"},
       {fit({.perplexity = nan}),
-       "perplexity: expected a finite value above 1, got nan"},
+       "perplexity: expected a finite value above 1 in float32, got nan"},
       {fit({.perplexity = inf}),
-       "perplexity: expected a finite value above 1, got inf"},
+       "perplexity: expected a finite value above 1 in float32, got inf"},
       {fit({.perplexity = past_float}),
        "perplexity: expected at most 3.4028234663852886e+38, got 1e+39"},
       {fit({.early_exaggeration = 0.5}),
@@ -147,9 +151,19 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
       res, with(zero_row(blobs(rows, cols), 3, cols), (4 * cols) + 1, large),
       {rows, cols});
   const filled<float> zero_x(res, zero_row(blobs(rows, 2), 3, 2), {rows, 2});
-  const filled<float> far_x(
+  const filled<float> far_x(res,
+                            with(with(zero_row(blobs(rows, cols), 4, cols),
+                                      (4 * cols) + 1, half_sqeuclidean),
+                                 (4 * cols) + 2, past_sqeuclidean),
+                            {rows, cols});
+  const filled<float> diverging_x_rows(
       res,
-      with(zero_row(blobs(rows, cols), 4, cols), (4 * cols) + 1, unsquarable),
+      with(with(with(with(zero_row(zero_row(blobs(rows, cols), 4, cols), 5,
+                                   cols),
+                          4 * cols, diverging_x),
+                     (4 * cols) + 1, diverging_y),
+                5 * cols, -diverging_x),
+           (5 * cols) + 1, -diverging_y),
       {rows, cols});
   const filled<float> zeros(res, std::vector<float>(rows * 2, 0.0F), {rows, 2});
   const filled<float> same(res, std::vector<float>(rows * cols, 1.5F),
@@ -188,8 +202,11 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
                    "4.253529586511731e+37, got {}",
                    large * large)},
       {fit(far_x.view(), sqeuclidean),
-       "X: row 4: expected a squared norm of at most 4611685743549480960 "
-       "under sqeuclidean, got 4611686018427387904"},
+       "X: row 4: expected a squared norm of at most 2305843009213693952 "
+       "under sqeuclidean, got 2305843284091617280"},
+      {fit(diverging_x_rows.view(), sqeuclidean),
+       "X: row 4: expected a squared norm of at most 2305843009213693952 "
+       "under sqeuclidean, got 4611685722877149184"},
       {fit(zero_x.view(), cosine),
        "X: row 3: expected a squared norm of at least 2.350988701644575e-38 "
        "under cosine, got 0"},

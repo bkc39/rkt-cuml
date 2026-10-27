@@ -52,11 +52,15 @@
    (row "f4" "n-components: expected 2, got 3" (hasheq 'n-components 3))
    (row "f5" "n-neighbors: expected at least 2, got 1" (hasheq 'n-neighbors 1))
    (row "f6" "n-neighbors: expected at most 1023, got 1024" (hasheq 'n-neighbors 1024))
-   (row "f7" "perplexity: expected a finite value above 1, got 1" (hasheq 'perplexity 1.0))
-   (row "f7 nan" "perplexity: expected a finite value above 1, got nan" (hasheq 'perplexity +nan.0))
-   (row "f7 inf" "perplexity: expected a finite value above 1, got inf" (hasheq 'perplexity +inf.0))
+   (row "f7" "perplexity: expected a finite value above 1 in float32, got 1" (hasheq 'perplexity 1.0))
+   (row "f7 nan"
+        "perplexity: expected a finite value above 1 in float32, got nan"
+        (hasheq 'perplexity +nan.0))
+   (row "f7 inf"
+        "perplexity: expected a finite value above 1 in float32, got inf"
+        (hasheq 'perplexity +inf.0))
    (row "f7 float"
-        "perplexity: expected a finite value above 1, got 1.000000001"
+        "perplexity: expected a finite value above 1 in float32, got 1.000000001"
         (hasheq 'perplexity (+ 1.0 1e-9)))
    (row "f7 most" (beyond-float 'perplexity "1e+39") (hasheq 'perplexity 1e39))
    (row "f8"
@@ -83,18 +87,19 @@
 
 (define every-row-equal "X: every row equals row 0; t-SNE needs two distinct rows")
 
-(define sqeuclidean-bound (- (expt 2 62) (expt 2 38)))
+(define sqeuclidean-bound (expt 2 61))
 
 (define (sqeuclidean-message got)
   (format "X: row 4: expected a squared norm of at most ~a under sqeuclidean, got ~a"
           sqeuclidean-bound
           got))
 
-(define (row-at-norm a)
-  `([(4 0) 0.0] [(4 1) ,a] [(4 2) 0.0]))
+(define past-sqeuclidean `([(4 0) 0.0] [(4 1) ,(expt 2.0 30)] [(4 2) ,(+ (expt 2.0 30) 128.0)]))
 
-(define (antipodal a)
-  `([(4 0) 0.0] [(4 1) ,a] [(4 2) 0.0] [(5 0) 0.0] [(5 1) ,(- a)] [(5 2) 0.0]))
+(define (antipodal x y)
+  `([(4 0) ,x] [(4 1) ,y] [(4 2) 0.0] [(5 0) ,(- x)] [(5 1) ,(- y)] [(5 2) 0.0]))
+
+(define diverging-pair (antipodal 1807712000.0 1159251072.0))
 
 (define (X-rows)
   (define one-row (rows->matrix '((1 2 3)) 'float32))
@@ -120,11 +125,14 @@
              (cons (tiny-with '([(0 2) -inf.0])) small))
         (row "f20" large-message (cons (tiny-with large-row) small))
         (row "f20b"
-             (sqeuclidean-message (expt 2 62))
-             (cons (tiny-with (row-at-norm (expt 2.0 31))) sqeuclidean))
+             (sqeuclidean-message (+ (expt 2 61) (expt 2 38) (expt 2 14)))
+             (cons (tiny-with past-sqeuclidean) sqeuclidean))
         (row "f20b exact"
-             (sqeuclidean-message (expt 2 62))
-             (cons (tiny-with (row-at-norm (expt 2.0 31))) (hash-set sqeuclidean 'method 'exact)))
+             (sqeuclidean-message (+ (expt 2 61) (expt 2 38) (expt 2 14)))
+             (cons (tiny-with past-sqeuclidean) (hash-set sqeuclidean 'method 'exact)))
+        (row "f20b float32 rounding"
+             (sqeuclidean-message (+ (expt 1807712000 2) (expt 1159251072 2)))
+             (cons (tiny-with diverging-pair) sqeuclidean))
         (row "f21" cosine-message (cons (tiny-with zero-row) cosine))
         (row "f22" every-row-equal (cons (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32) small))
         (row "f22 zeros" every-row-equal (cons zeros small))
@@ -172,8 +180,8 @@
   (match-define (cons X options) (row-call r))
   (check-row 'tsne-fit r (lambda () (apply-options tsne-fit options X))))
 
-(test-gpu "L11: f20b: opposite rows at the largest float32 squared norm below 2^62 fit"
-  (define X (tiny-with (antipodal (- (expt 2.0 31) (expt 2.0 7)))))
+(test-gpu "L11: f20b: opposite two-column rows just inside 2^61 fit"
+  (define X (tiny-with (antipodal 1278245504.0 819714240.0)))
   (for ([method (in-list '(fft exact))])
     (define fitted (tsne-fit X #:perplexity 5.0 #:metric 'sqeuclidean #:method method))
     (check-true (finite-rows? (embedded fitted)) (format "~a" method))))
