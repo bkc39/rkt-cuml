@@ -1,7 +1,9 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -87,21 +89,20 @@ void expect_finite_under_both_methods(const resources& res, const rr_view* x,
   }
 }
 
-std::vector<float> opposite_rows(float x, float y, float z) {
+std::vector<float> opposite_rows(const std::array<float, cols>& point) {
   std::vector<float> host = blobs(rows, cols);
-  host[0] = x;
-  host[1] = y;
-  host[2] = z;
-  host[cols] = -x;
-  host[cols + 1] = -y;
-  host[cols + 2] = -z;
+  const std::size_t width = point.size();
+  for (std::size_t j = 0; j < width; ++j) {
+    host[j] = point[j];
+    host[width + j] = -point[j];
+  }
   return host;
 }
 
 TEST(TsneFit, OppositeTwoColumnRowsJustInsideTheSqeuclideanLimitAreFinite) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const filled<float> x(res, opposite_rows(inside_x, inside_y, 0),
+  const filled<float> x(res, opposite_rows({inside_x, inside_y, 0}),
                         {rows, cols});
   expect_finite_under_both_methods(
       res, x.view(),
@@ -112,7 +113,8 @@ TEST(TsneFit, OppositeRowsJustInsideTheManhattanLimitAreFinite) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<float> x(
-      res, opposite_rows(inside_manhattan, inside_manhattan, inside_manhattan),
+      res,
+      opposite_rows({inside_manhattan, inside_manhattan, inside_manhattan}),
       {rows, cols});
   expect_finite_under_both_methods(
       res, x.view(),

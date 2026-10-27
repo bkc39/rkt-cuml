@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -21,6 +22,7 @@ namespace {
 constexpr int64_t rows = 8;
 constexpr int64_t cols = 3;
 constexpr int64_t pool = 64;
+constexpr std::size_t far_row = 4;
 constexpr int64_t past_index = int64_t{1} << 31;
 constexpr int64_t half_index = int64_t{1} << 30;
 constexpr int64_t past_exact = 2097121;
@@ -60,16 +62,14 @@ std::vector<float> with(
   return host;
 }
 
-std::vector<float> antipodal(double x, double y, double z) {
-  const auto at = [](int64_t row, int64_t col) {
-    return static_cast<std::size_t>((row * cols) + col);
-  };
-  return with(blobs(rows, cols), {{at(4, 0), x},
-                                  {at(4, 1), y},
-                                  {at(4, 2), z},
-                                  {at(5, 0), -x},
-                                  {at(5, 1), -y},
-                                  {at(5, 2), -z}});
+std::vector<float> antipodal(const std::array<double, cols>& point) {
+  std::vector<float> host = blobs(rows, cols);
+  const std::size_t width = point.size();
+  for (std::size_t j = 0; j < width; ++j) {
+    host[(far_row * width) + j] = static_cast<float>(point[j]);
+    host[((far_row + 1) * width) + j] = static_cast<float>(-point[j]);
+  }
+  return host;
 }
 
 std::vector<float> zero_row(std::vector<float> host, int64_t row, int64_t d) {
@@ -174,11 +174,12 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
       {rows, cols});
   const filled<float> zero_x(res, zero_row(blobs(rows, 2), 3, 2), {rows, 2});
   const filled<float> far_x(
-      res, antipodal(0, past_sqeuclidean_y, past_sqeuclidean_z), {rows, cols});
+      res, antipodal({0, past_sqeuclidean_y, past_sqeuclidean_z}),
+      {rows, cols});
   const filled<float> diverging_x_rows(
-      res, antipodal(diverging_x, diverging_y, 0), {rows, cols});
+      res, antipodal({diverging_x, diverging_y, 0}), {rows, cols});
   const filled<float> long_x(
-      res, antipodal(past_manhattan, past_manhattan, past_manhattan),
+      res, antipodal({past_manhattan, past_manhattan, past_manhattan}),
       {rows, cols});
   const filled<float> spread_x(res, spread_rows(past_pca), {pca_rows, cols});
   const filled<float> zeros(res, std::vector<float>(rows * 2, 0.0F), {rows, 2});
