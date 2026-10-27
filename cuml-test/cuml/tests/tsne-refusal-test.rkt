@@ -151,7 +151,7 @@
   (rows->matrix (map (lambda (r) (map (lambda (x) (* x k)) r)) (fixture-rows tiny)) 'float32))
 
 (define (offset-rows t0)
-  (for/list ([i (in-range 16)])
+  (for/list ([i (in-range 32)])
     (list (+ t0 (* 3600.0 (modulo i 4))) (+ (modulo i 4) (* 0.01 i)) 0.0)))
 
 (define (centred rows)
