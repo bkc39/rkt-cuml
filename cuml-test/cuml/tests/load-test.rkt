@@ -4,7 +4,7 @@
          (only-in cuml/cluster kmeans-fit)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in cuml/decomposition pca-fit tsvd-fit)
-         (only-in cuml/manifold tsne-fit umap-fit)
+         (only-in cuml/manifold spectral-embedding-fit spectral-embedding-fit-graph tsne-fit umap-fit)
          (only-in cuml/preprocessing standard-scaler-fit)
          (only-in rackunit check-equal? check-false check-not-exn test-case)
          (only-in raft raft-version)
@@ -66,9 +66,11 @@
                             (regexp-match? (regexp-quote library) maps)))))
    '(0 "(#t #f #f #f)" "")))
 
-(test-case "cuml re-exports cuml/manifold's UMAP and t-SNE"
+(test-case "cuml re-exports cuml/manifold's UMAP, t-SNE and spectral embedding"
   (check-equal? (dynamic-require 'cuml 'umap-fit) umap-fit)
-  (check-equal? (dynamic-require 'cuml 'tsne-fit) tsne-fit))
+  (check-equal? (dynamic-require 'cuml 'tsne-fit) tsne-fit)
+  (check-equal? (dynamic-require 'cuml 'spectral-embedding-fit) spectral-embedding-fit)
+  (check-equal? (dynamic-require 'cuml 'spectral-embedding-fit-graph) spectral-embedding-fit-graph))
 
 (test-case "L17: cuml/manifold maps its own shim, and no other family's"
   (check-equal?

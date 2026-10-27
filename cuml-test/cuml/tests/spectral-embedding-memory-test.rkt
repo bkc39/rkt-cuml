@@ -15,7 +15,7 @@
                   set-entry
                   sparse-blocks))
 
-(define blocks (sparse-blocks '(300 400 500) 0.05 0))
+(define-values (blocks _truth) (sparse-blocks '(300 400 500) 0.05 0))
 
 (define vectors (graph->vectors blocks))
 

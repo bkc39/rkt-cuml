@@ -20,6 +20,7 @@ namespace {
 
 constexpr int64_t rows = 40;
 constexpr int64_t cols = 3;
+constexpr int64_t neighbours = 8;
 constexpr int64_t path = 24;
 constexpr int tiny_exponent = -70;
 
@@ -60,8 +61,9 @@ TEST(SpectralEmbeddingFit, DenseIsSignRuledFiniteAndRepeatsBitwise) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<float> x(res, blobs(rows, cols), {rows, cols});
-  const spectral_options o{.n_neighbors = rows / 2};
+  const spectral_options o{.n_neighbors = neighbours};
   const std::vector<float> first = embedded(res, x.view(), rows, o);
+  ASSERT_EQ(first.size(), static_cast<std::size_t>(rows * 2));
   EXPECT_TRUE(all_finite(first));
   EXPECT_TRUE(sign_ruled(first, rows, 2));
   EXPECT_EQ(first, embedded(res, x.view(), rows, o));
@@ -96,7 +98,7 @@ TEST(SpectralEmbeddingFit, TinyXEmbedsAsItsRescaledCopy) {
   });
   const filled<float> x(res, host, {rows, cols});
   const filled<float> small(res, tiny, {rows, cols});
-  const spectral_options o{.n_neighbors = rows / 2};
+  const spectral_options o{.n_neighbors = neighbours};
   EXPECT_EQ(embedded(res, small.view(), rows, o),
             embedded(res, x.view(), rows, o));
   EXPECT_EQ(small.array.view.shape[1], cols);

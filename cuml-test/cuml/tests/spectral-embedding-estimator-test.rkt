@@ -33,7 +33,8 @@
           'n-neighbors 12
           'norm-laplacian #f
           'drop-first #f
-          'random-state 7))
+          'random-state 7
+          'affinity 'precomputed))
 
 (test-case "L14: the default parameters, and every keyword round-trips"
   (check-equal? (spectral-embedding-params)

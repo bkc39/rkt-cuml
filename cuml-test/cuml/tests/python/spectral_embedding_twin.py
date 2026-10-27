@@ -125,13 +125,6 @@ def params(case):
     }
 
 
-def digits(case):
-    from sklearn.datasets import load_digits
-
-    d = load_digits()
-    return {"X": d.data.tolist(), "y": d.target.tolist()}
-
-
 def versions():
     out = {}
     try:
@@ -155,7 +148,6 @@ def main():
         "sklearn": sklearn_graph,
         "sklearn-dense": sklearn_dense,
         "params": params,
-        "digits": digits,
     }
     results = [ops[case["op"]](case) for case in cases]
     with open(sys.argv[2], "w") as f:

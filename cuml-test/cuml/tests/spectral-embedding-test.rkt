@@ -15,9 +15,13 @@
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
          (only-in "private/spectral-data.rkt" graph->vectors graph-n three-blocks)
          (only-in "private/spectral-embedding-data.rkt" embedded embedded-graph rows-matrix)
-         (only-in "private/umap-data.rkt" blobs finite-rows? fixture-rows fixture-X far-blobs tiny))
+         (only-in "private/umap-data.rkt" blobs far-blobs finite-rows? fixture-rows fixture-X))
 
 (define-values (blocks _truth) (three-blocks))
+
+(define geometric
+  (rows-matrix (for/list ([i (in-range 25)])
+                 (list (expt 1.25 i) 0.0))))
 
 (test-gpu "L1: the embedding is a fresh n×k float32 matrix, with the neighbours used and the params"
   (for* ([k (in-list '(1 2 5))]
@@ -39,7 +43,7 @@
                                                #:norm-laplacian norm)))))
 
 (test-gpu "L1: the default neighbour count is min(256, max(2, ⌊n/10⌋)), and an explicit one wins"
-  (for ([entry (in-list (list (list (fixture-X tiny) #f 2)
+  (for ([entry (in-list (list (list geometric #f 2)
                               (list (fixture-X far-blobs) #f 30)
                               (list (fixture-X blobs) #f 100)
                               (list (fixture-X far-blobs) 7 7)))])

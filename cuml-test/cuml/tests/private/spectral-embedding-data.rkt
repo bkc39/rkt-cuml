@@ -17,7 +17,8 @@
          (only-in "scaler-data.rkt" bits-equal?)
          (only-in "spectral-data.rkt" graph graph->vectors graph-cols graph-n graph-rows graph-vals))
 
-(provide check-se-parity
+(provide check-graph-parity
+         check-se-parity
          column-gaps
          columns
          cosine-gaps
@@ -116,12 +117,20 @@
           'norm (hash-ref options 'norm-laplacian #t)
           'drop (hash-ref options 'drop-first #t)))
 
+(define (check-results name configs results cases)
+  (for ([options (in-list configs)]
+        [result (in-list results)]
+        [found (in-list (run-cases twin cases))])
+    (test-case (format "~a ~a" name options)
+      (check-true (bits-equal? (embedded result) (hash-ref found 'embedding)) "embedding"))))
+
 (define (check-se-parity name rows configs)
   (define X (rows-matrix rows))
   (define results (map (lambda (options) (apply-options spectral-embedding-fit options X)) configs))
-  (define theirs (run-cases twin (map (lambda (result) (se-case rows result)) results)))
-  (for ([options (in-list configs)]
-        [result (in-list results)]
-        [found (in-list theirs)])
-    (test-case (format "~a ~a" name options)
-      (check-true (bits-equal? (embedded result) (hash-ref found 'embedding)) "embedding"))))
+  (check-results name configs results (map (lambda (result) (se-case rows result)) results)))
+
+(define (check-graph-parity name g configs)
+  (check-results name
+                 configs
+                 (map (lambda (options) (embedded-graph g options)) configs)
+                 (map (lambda (options) (graph-case g options)) configs)))
