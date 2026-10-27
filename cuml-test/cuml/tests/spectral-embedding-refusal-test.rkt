@@ -249,8 +249,8 @@
 
 (define (with-vectors f)
   (lambda ()
-    (match (graph->vectors ring)
-      [(list rows cols vals) (f rows cols vals)])))
+    (match-define (list rows cols vals) (graph->vectors ring))
+    (f rows cols vals)))
 
 (define (index-message name entry got)
   (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))
@@ -305,8 +305,9 @@
    (row "g2 before g5"
         "n-components: 2 components with drop-first need at least 8 samples, got 7"
         (lambda ()
-          (match (graph->vectors (graph-edit ring #:cols (set-entry 12 6)))
-            [(list rows cols vals) (fit-vectors rows cols vals 7)])))
+          (match-define (list rows cols vals)
+            (graph->vectors (graph-edit ring #:cols (set-entry 12 6))))
+          (fit-vectors rows cols vals 7)))
    (row "g5 before g6"
         "vals: entry 1: expected a finite weight of at least 0, got -1"
         (fault (graph-edit (graph-map-vals ring past-sum) #:vals (set-entry 1 -1.0))))))
