@@ -36,7 +36,9 @@
   (lambda () (embedded-graph g options)))
 
 (define (with-vectors f)
-  (lambda () (match (graph->vectors ring) [(list rows cols vals) (f rows cols vals)])))
+  (lambda ()
+    (match (graph->vectors ring)
+      [(list rows cols vals) (f rows cols vals)])))
 
 (define (index-message name entry got)
   (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))
@@ -82,7 +84,9 @@
    (row "g6"
         "vals: the weights sum to 8.507059173023462e+38, more than 3.4028234663852886e+38"
         (fault (graph-map-vals ring past-sum)))
-   (row "g7" "vals: expected at least one positive weight, got none" (fault (graph-map-vals ring (const 0.0))))
+   (row "g7"
+        "vals: expected at least one positive weight, got none"
+        (fault (graph-map-vals ring (const 0.0))))
    (row "g1 before g2"
         "cols: expected 20 entries, as rows has, got 19"
         (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals 7))))
@@ -111,4 +115,5 @@
     (drain-finalizers!)
     (define before (probe-pool-used pool-device))
     (check-row 'spectral-embedding-fit-graph r)
+    (drain-finalizers!)
     (check-equal? (probe-pool-used pool-device) before (row-id r))))

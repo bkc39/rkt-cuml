@@ -6,13 +6,13 @@
          dense-configs
          graph-configs)
 
-(define (se-program configs repeats)
+(define ((se-program given) configs repeats)
   `(module m racket/base
      (require (only-in cuml/manifold spectral-embedding-fit spectral-embedding-result-embedding)
               (only-in cuml/tests/private/estimator-data apply-options)
               (only-in cuml/tests/private/spectral-data three-blocks)
               (only-in cuml/tests/private/spectral-embedding-data embedded-graph rows-matrix sbm)
-              (only-in cuml/tests/private/umap-data blobs digits fixture-rows)
+              (only-in cuml/tests/private/umap-data blobs fixture-rows)
               (only-in cuml/tests/private/umap-determinism-data digest)
               (only-in racket/match match-define))
      (define (planted)
@@ -23,7 +23,7 @@
        g)
      (define fixtures
        (hasheq 'blobs (lambda () (fixture-rows blobs))
-               'digits (lambda () (fixture-rows (digits)))
+               'given (lambda () ',given)
                'sbm planted
                'three-blocks blocks))
      (define (run config)
@@ -52,5 +52,5 @@
   (for/list ([options (in-list (settings))])
     (list 'graph name options)))
 
-(define (check-se-repeatable configs)
-  (check-repeatable configs #:program se-program))
+(define (check-se-repeatable configs #:given [given '()])
+  (check-repeatable configs #:program (se-program given)))

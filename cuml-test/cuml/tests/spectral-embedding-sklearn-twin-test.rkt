@@ -3,6 +3,7 @@
 (require (only-in cuml/manifold spectral-embedding-fit)
          (only-in racket/match match-define)
          (only-in rackunit check-true test-case)
+         (only-in "private/blob-data.rkt" centred-blobs)
          (only-in "private/python-env.rkt" run-cases test-twin)
          (only-in "private/spectral-embedding-data.rkt"
                   column-gaps
@@ -14,8 +15,7 @@
                   sbm
                   se-case
                   sign-ruled?
-                  twin)
-         (only-in "private/umap-data.rkt" blobs fixture-rows))
+                  twin))
 
 (define gap-bound 1e-4)
 
@@ -55,8 +55,8 @@
                       (list "drop-first #f" g (hasheq 'drop-first #f))
                       (list "norm-laplacian #f" g (hasheq 'norm-laplacian #f)))))
 
-(test-twin "L6: a dense fit on blobs at 10 neighbours is sklearn's within 1e-4"
-  (define rows (fixture-rows blobs))
+(test-twin "L6: a dense fit on overlapping blobs at 10 neighbours is sklearn's within 1e-4"
+  (define-values (rows _labels) (centred-blobs '((0 0 0 0) (3 3 0 0) (0 3 3 0)) 70 0))
   (define result (spectral-embedding-fit (rows-matrix rows) #:n-neighbors 10))
   (define theirs (run-cases twin (list (se-case rows result #:op "sklearn-dense"))))
-  (check-near "blobs" (embedded result) (hash-ref (car theirs) 'embedding)))
+  (check-near "overlapping blobs" (embedded result) (hash-ref (car theirs) 'embedding)))

@@ -1,7 +1,6 @@
-#include <cuml/manifold/spectral_embedding.hpp>
-
 #include <cstddef>
 #include <cstdint>
+#include <cuml/manifold/spectral_embedding.hpp>
 #include <format>
 #include <initializer_list>
 #include <memory>
@@ -20,10 +19,10 @@
 #include "cumlrkt/support.hpp"
 #include "cumlrkt/transpose.hpp"
 #include "manifold_support.hpp"
-#include "spectral_checks.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
+#include "spectral_checks.hpp"
 
 namespace {
 
@@ -48,8 +47,8 @@ using cumlrkt::scale_exponent;
 using cumlrkt::scratch;
 using cumlrkt::settle;
 using cumlrkt::manifold::float_rows;
-using cumlrkt::manifold::require_rows_fit;
 using cumlrkt::manifold::require_nonzero_columns;
+using cumlrkt::manifold::require_rows_fit;
 using cumlrkt::manifold::require_scanned;
 using cumlrkt::manifold::require_solved;
 using raftrkt::layout;
@@ -95,8 +94,8 @@ ML::SpectralEmbedding::params params_of(const embedding_request& r,
 using embedding_view = raft::device_matrix_view<float, int, raft::col_major>;
 
 template <typename Solve>
-void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n,
-           int64_t k, const char* advice, Solve&& solve) {
+void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n, int64_t k,
+           const char* advice, Solve&& solve) {
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   auto embedding =
       std::make_unique<buffer<float>>(scratch<float>(n * k, stream));
@@ -127,9 +126,8 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
   require_lanczos(r, x.n, "rows");
   require_basis(x.n, eigenvectors(r), "n-components", "rows", "eigenvectors");
   if (n_neighbors > x.n) {
-    throw logic_error(
-        std::format("n-neighbors: expected at most the {} rows, got {}", x.n,
-                    n_neighbors));
+    throw logic_error(std::format(
+        "n-neighbors: expected at most the {} rows, got {}", x.n, n_neighbors));
   }
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_scanned("X", x, CUML_MANIFOLD_METRIC_EUCLIDEAN, stream);
@@ -137,25 +135,23 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
                        "a spectral embedding needs two distinct rows", stream);
   const int exponent =
       scale_exponent<float>(largest_magnitude(x.data, x.n * x.d, stream));
-  embed(handle, out, x.n, r.n_components, zero_advice,
-        [&](embedding_view e) {
-          const auto solve = [&](float* data) {
-            ML::SpectralEmbedding::transform(
-                handle, params_of(r, n_neighbors),
-                raft::make_device_matrix_view<float, int, raft::row_major>(
-                    data, static_cast<int>(x.n),
-                    static_cast<int>(x.d)),
-                e);
-          };
-          if (exponent == 0) {
-            solve(x.data);
-            return;
-          }
-          buffer<float> scaled = scratch<float>(x.n * x.d, stream);
-          cumlrkt::scaled_copy<float>(handle, x.data, x.n * x.d,
-                                      scaled.data(), exponent);
-          solve(scaled.data());
-        });
+  embed(handle, out, x.n, r.n_components, zero_advice, [&](embedding_view e) {
+    const auto solve = [&](float* data) {
+      ML::SpectralEmbedding::transform(
+          handle, params_of(r, n_neighbors),
+          raft::make_device_matrix_view<float, int, raft::row_major>(
+              data, static_cast<int>(x.n), static_cast<int>(x.d)),
+          e);
+    };
+    if (exponent == 0) {
+      solve(x.data);
+      return;
+    }
+    buffer<float> scaled = scratch<float>(x.n * x.d, stream);
+    cumlrkt::scaled_copy<float>(handle, x.data, x.n * x.d, scaled.data(),
+                                exponent);
+    solve(scaled.data());
+  });
 }
 
 void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
@@ -164,8 +160,7 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
   const coo c = checked_graph(g);
   require_lanczos(r, n, "samples");
   require_samples(n, c.nnz, 1);
-  require_basis(n, eigenvectors(r), "n-components", "samples",
-                "eigenvectors");
+  require_basis(n, eigenvectors(r), "n-components", "samples", "eigenvectors");
   require_sound_graph(c, n, raft::resource::get_cuda_stream(handle));
   embed(handle, out, n, r.n_components, "", [&](embedding_view e) {
     ML::SpectralEmbedding::transform(

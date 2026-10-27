@@ -163,7 +163,7 @@ TEST(SpectralEmbeddingRefusals, GraphInTableOrder) {
   const device_graph ring_g(res, ring_graph());
   const device_graph loop(res, edited([](host_graph& g) {
                             g.cols[3] = g.rows[3];
-                            g.vals[1] = -1;
+                            g.vals[4] = -1;
                           }));
   const device_graph negative(res, edited([](host_graph& g) {
                                 g.vals[1] = -1;
@@ -238,8 +238,8 @@ std::string solved_refusal(const std::vector<float>& host, int64_t n,
   const resources res;
   const filled<float> e(res, host, {n, k});
   try {
-    manifold::require_solved(static_cast<const float*>(e.array.view.data), n,
-                             k, rmm::cuda_stream_view{});
+    manifold::require_solved(static_cast<const float*>(e.array.view.data), n, k,
+                             rmm::cuda_stream_view{});
   } catch (const std::logic_error& error) {
     return error.what();
   }

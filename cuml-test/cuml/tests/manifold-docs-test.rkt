@@ -96,9 +96,17 @@
                     (lambda () (transform (fit (tsne #:perplexity 5) (X)) (X)))))
 
 (define (path-graph)
-  (list (list->device-vector (for*/list ([i 23] [j '(0 1)]) (+ i j)) #:dtype 'int32)
-        (list->device-vector (for*/list ([i 23] [j '(1 0)]) (+ i j)) #:dtype 'int32)
-        (list->device-vector (for/list ([_ 46]) 1.0) #:dtype 'float32)))
+  (list (list->device-vector (for*/list ([i 23]
+                                         [j '(0 1)])
+                               (+ i j))
+                             #:dtype 'int32)
+        (list->device-vector (for*/list ([i 23]
+                                         [j '(1 0)])
+                               (+ i j))
+                             #:dtype 'int32)
+        (list->device-vector (for/list ([_ 46])
+                               1.0)
+                             #:dtype 'float32)))
 
 (test-gpu "the manual: the spectral embedding example, its fits and params"
   (define spectral (spectral-embedding-fit (X) #:n-neighbors 10))
@@ -132,7 +140,6 @@
 
 (test-gpu "the manual: the spectral embedding estimator"
   (check-equal? (shape (fit-transform (spectral-embedding #:n-neighbors 10) (X))) '(60 2))
-  (check-cuml-error
-   'logic
-   "transform: spectral-embedding has no transform; use fit-transform"
-   (lambda () (transform (fit (spectral-embedding #:n-neighbors 10) (X)) (X)))))
+  (check-cuml-error 'logic
+                    "transform: spectral-embedding has no transform; use fit-transform"
+                    (lambda () (transform (fit (spectral-embedding #:n-neighbors 10) (X)) (X)))))

@@ -37,10 +37,9 @@
       (check-false (eq? (spectral-embedding-result-embedding result) X))
       (check-true (finite-rows? (embedded result)))
       (check-equal? (spectral-embedding-result-n-neighbors result) 30)
-      (check-equal? (spectral-embedding-result-params result)
-                    (spectral-embedding-params #:n-components k
-                                               #:drop-first drop
-                                               #:norm-laplacian norm)))))
+      (check-equal?
+       (spectral-embedding-result-params result)
+       (spectral-embedding-params #:n-components k #:drop-first drop #:norm-laplacian norm)))))
 
 (test-gpu "L1: the default neighbour count is min(256, max(2, ⌊n/10⌋)), and an explicit one wins"
   (for ([entry (in-list (list (list geometric #f 2)

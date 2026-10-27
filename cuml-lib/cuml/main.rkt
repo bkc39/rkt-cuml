@@ -36,7 +36,7 @@
                        "private/kmeans-estimator.rkt"
                        "private/pca-estimator.rkt"
                        "private/spectral-embedding-estimator.rkt"
-         "private/spectral-estimator.rkt"
+                       "private/spectral-estimator.rkt"
                        "private/standard-scaler-estimator.rkt"
                        "private/truncated-svd-estimator.rkt"
                        "private/tsne-estimator.rkt"

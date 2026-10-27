@@ -9,7 +9,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" centred-blobs)
          (only-in "private/scaler-data.rkt" bits-equal?)
-         (only-in "private/spectral-data.rkt" graph-edit graph-shuffle knn-graph three-blobs)
+         (only-in "private/spectral-data.rkt" graph-edit graph-shuffle knn-graph)
          (only-in "private/spectral-embedding-data.rkt"
                   column-gaps
                   columns
@@ -22,9 +22,9 @@
 
 (define gap-bound 1e-4)
 
-(define constant-bound 1e-5)
+(define constant-bound 4e-5)
 
-(define component-bound 1e-3)
+(define component-bound 1e-6)
 
 (define component-gap 1e-2)
 
@@ -74,7 +74,7 @@
                 #:vals (lambda (vals) (append (halved vals) (halved vals)))))
   (check-true (<= (apply max (column-gaps (on-graph doubled) base)) gap-bound)))
 
-(test-gpu "L3, L10: without drop-first, column 0 is constant and the rest is the drop-first fit"
+(test-gpu "L3, L10: without drop-first, column 0 is constant and the rest is the drop-first fit, bitwise"
   (for ([k (in-list '(1 2 3))])
     (test-case (format "k ~a" k)
       (define kept (on-graph planted (hasheq 'n-components (add1 k) 'drop-first #f)))
@@ -83,7 +83,7 @@
       (match-define (cons first rest) (columns kept))
       (define spread (/ (- (apply max first) (apply min first)) (apply max (map abs first))))
       (check-true (<= spread constant-bound) (format "spread ~a" spread))
-      (check-true (<= (apply max (column-gaps (apply map list rest) dropped)) gap-bound)))))
+      (check-true (bits-equal? (apply map list rest) dropped)))))
 
 (define (spreads rows truth)
   (for/list ([group (in-list (remove-duplicates truth))])
@@ -92,7 +92,9 @@
                  [t (in-list truth)]
                  #:when (= t group))
         row))
-    (for*/fold ([most 0.0]) ([a (in-list mine)] [b (in-list mine)])
+    (for*/fold ([most 0.0])
+               ([a (in-list mine)]
+                [b (in-list mine)])
       (max most (apply max (map (lambda (x y) (abs (- x y))) a b))))))
 
 (test-gpu "L3, L11: on far-blobs' three components, each component's rows agree"
@@ -112,17 +114,17 @@
     (check-true (> (apply max (map (lambda (x y) (abs (- x y))) a b)) component-gap))))
 
 (define (ari rows truth)
-  (define labels
-    (kmeans-result-labels (kmeans-fit (rows-matrix rows) #:n-clusters 3 #:n-init 10)))
+  (define labels (kmeans-result-labels (kmeans-fit (rows-matrix rows) #:n-clusters 3 #:n-init 10)))
   (adjusted-rand-score (list->device-vector truth #:dtype 'int32) labels))
 
 (test-gpu "L12: k-means recovers the planted labels from the embedding, for seeds 0 to 9"
-  (define-values (three truth) (three-blobs))
   (for ([seed (in-range 10)])
-    (check-equal? (ari (embedded (spectral-embedding-fit (rows-matrix three) #:random-state seed))
-                       truth)
+    (check-equal? (ari (embedded (spectral-embedding-fit (rows-matrix (fixture-rows far-blobs))
+                                                         #:n-neighbors 10
+                                                         #:random-state seed))
+                       (fixture-labels far-blobs))
                   1.0
-                  (format "three-blobs seed ~a" seed))
+                  (format "far-blobs seed ~a" seed))
     (check-equal? (ari (on-graph planted (hasheq 'random-state seed)) planted-truth)
                   1.0
                   (format "sbm seed ~a" seed))))

@@ -57,8 +57,7 @@
     (sort (append* (for/list ([e (in-list edges)])
                      (match-define (list i j w) e)
                      (list (list i j w) (list j i w))))
-          (lambda (a b)
-            (or (< (car a) (car b)) (and (= (car a) (car b)) (< (cadr a) (cadr b)))))))
+          (lambda (a b) (or (< (car a) (car b)) (and (= (car a) (car b)) (< (cadr a) (cadr b)))))))
   (values (graph (map car both) (map cadr both) (map caddr both) n) truth))
 
 (define (rows-matrix rows)
@@ -68,7 +67,10 @@
   (device-matrix->list* (spectral-embedding-result-embedding result)))
 
 (define (embedded-graph g [options (hasheq)])
-  (apply apply-options spectral-embedding-fit-graph options (append (graph->vectors g) (list (graph-n g)))))
+  (apply apply-options
+         spectral-embedding-fit-graph
+         options
+         (append (graph->vectors g) (list (graph-n g)))))
 
 (define (columns rows)
   (apply map list rows))
@@ -84,7 +86,9 @@
 (define (column-gaps ours theirs)
   (for/list ([e (in-list (columns ours))]
              [s (in-list (columns theirs))])
-    (/ (for/fold ([gap 0.0]) ([a (in-list e)] [b (in-list s)])
+    (/ (for/fold ([gap 0.0])
+                 ([a (in-list e)]
+                  [b (in-list s)])
          (max gap (abs (- a b))))
        (largest s))))
 

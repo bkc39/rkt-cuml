@@ -6,8 +6,10 @@
                   spectral-embedding-fit-transform
                   spectral-embedding-params
                   spectral-embedding-result?)
+         (only-in racket/flonum flsingle)
          (only-in racket/list make-list take)
          (only-in racket/match match match-define)
+         (only-in racket/math sqr)
          (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
          (only-in raft exn:fail:raft? list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
@@ -26,7 +28,7 @@
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
          (only-in "private/spectral-embedding-data.rkt" sign-ruled? embedded)
-         (only-in "private/umap-data.rkt" finite-rows? fixture-X fixture-rows tiny))
+         (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
 
 (define small (hasheq 'n-neighbors 4))
 
@@ -34,6 +36,9 @@
 
 (define (tiny-X)
   (fixture-X tiny))
+
+(define (valid-X)
+  (fixture-X far-blobs))
 
 (define (line count [offset 0.0])
   (for/list ([i (in-range count)])
@@ -103,7 +108,8 @@
    (X-row "s7 before s9" (lanczos-message 2 #t 8 7) (line-X 7) (hasheq 'n-neighbors 9))
    (X-row "s10 before s11" nan-message (tiny-with (append nan-row large-row)))
    (X-row "s11 before s12"
-          "X: row 0: expected a squared norm of at most 4.253529586511731e+37, got 3e+40"
+          (format "X: row 0: expected a squared norm of at most 4.253529586511731e+37, got ~a"
+                  (* 3 (sqr (flsingle 1e20))))
           (rows->matrix (make-list 8 '(1e20 1e20 1e20)) 'float32))))
 
 (define (fit-calls)
@@ -125,7 +131,8 @@
   (for ([bad (in-list (list (lambda () (spectral-embedding-fit (tiny-X) #:n-neighbors 2.5))
                             (lambda () (spectral-embedding-fit (tiny-X) #:n-components 'two))
                             (lambda () (spectral-embedding-fit (tiny-X) #:random-state -1))
-                            (lambda () (spectral-embedding-fit (tiny-X) #:random-state (expt 2 64)))))])
+                            (lambda ()
+                              (spectral-embedding-fit (tiny-X) #:random-state (expt 2 64)))))])
     (check-exn exn:fail:contract? bad)))
 
 (test-case "L13: s0: an affinity other than nearest-neighbors in params is refused before X is read"
@@ -151,10 +158,12 @@
     (match-define (list k drop) entry)
     (define least (* 2 (+ k (if drop 1 0) 1)))
     (test-case (format "k ~a drop ~a" k drop)
-      (define options (hasheq 'n-components k 'drop-first drop 'n-neighbors (add1 (quotient least 2))))
-      (check-cuml-error 'logic
-                        (format "spectral-embedding-fit: ~a" (lanczos-message k drop least (sub1 least)))
-                        (lambda () (apply-options spectral-embedding-fit options (line-X (sub1 least)))))
+      (define options
+        (hasheq 'n-components k 'drop-first drop 'n-neighbors (add1 (quotient least 2))))
+      (check-cuml-error
+       'logic
+       (format "spectral-embedding-fit: ~a" (lanczos-message k drop least (sub1 least)))
+       (lambda () (apply-options spectral-embedding-fit options (line-X (sub1 least)))))
       (define rows (embedded (apply-options spectral-embedding-fit options (line-X least))))
       (check-true (and (finite-rows? rows) (sign-ruled? rows))))))
 
@@ -178,16 +187,18 @@
   (for ([seed (in-list '(0 #f))])
     (match (raised (lambda () (spectral-embedding-fit listed-X #:random-state seed)))
       [(? exn:fail:raft? e)
-       (check-equal? (exn-message e)
-                     (format "spectral-embedding-fit: expected a device array or #f for a view, given ~e"
-                             listed-X))]
+       (check-equal?
+        (exn-message e)
+        (format "spectral-embedding-fit: expected a device array or #f for a view, given ~e"
+                listed-X))]
       [other (fail (format "expected an exn:fail:raft, got ~e" other))])))
 
 (test-gpu "L13: the generics refuse with their own names"
   (define w (list->device-vector '(1 1 1 1 1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic
                     "transform: spectral-embedding has no transform; use fit-transform"
-                    (lambda () (transform (fit (spectral-embedding #:n-neighbors 4) (tiny-X)) (tiny-X))))
+                    (lambda ()
+                      (transform (fit (spectral-embedding #:n-neighbors 10) (valid-X)) (valid-X))))
   (check-cuml-error 'logic
                     "fit: spectral-embedding takes no sample-weight"
                     (lambda () (fit (spectral-embedding) (tiny-X) #:sample-weight w)))
@@ -199,7 +210,9 @@
   (for ([r (in-list (X-rows))]
         #:when (member (row-id r) '("s7" "s10" "s11" "s12" "s14 halves" "s14 offset")))
     (fit-row r)
-    (check-pred spectral-embedding-result? (spectral-embedding-fit (tiny-X) #:n-neighbors 4) (row-id r))))
+    (check-pred spectral-embedding-result?
+                (spectral-embedding-fit (valid-X) #:n-neighbors 10)
+                (row-id r))))
 
 (test-pools "L13: a refusal leaves the RMM pool where it was"
   (for ([r (in-list (X-rows))])

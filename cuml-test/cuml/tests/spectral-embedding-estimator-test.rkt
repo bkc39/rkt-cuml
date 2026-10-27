@@ -83,8 +83,7 @@
   (check-equal? (format "~v" e) "#<spectral-embedding fitted>")
   (check-true (spectral-embedding-result? (spectral-embedding-model e)))
   (check-true (bits-equal? (listed (spectral-embedding-result-embedding (spectral-embedding-model e)))
-                           (listed (spectral-embedding-result-embedding
-                                    (spectral-embedding-fit X)))))
+                           (listed (spectral-embedding-result-embedding (spectral-embedding-fit X)))))
   (check-cuml-error 'logic
                     "transform: spectral-embedding has no transform; use fit-transform"
                     (lambda () (transform e X))))

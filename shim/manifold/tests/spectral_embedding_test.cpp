@@ -23,6 +23,7 @@ constexpr int64_t cols = 3;
 constexpr int64_t neighbours = 8;
 constexpr int64_t path = 24;
 constexpr int tiny_exponent = -70;
+constexpr int unit_exponent = -3;
 
 bool all_finite(const std::vector<float>& host) {
   return std::ranges::all_of(host, [](float v) { return std::isfinite(v); });
@@ -91,11 +92,12 @@ TEST(SpectralEmbeddingFit, FitsAtTheLeastRowsForEachEigenvectorCount) {
 TEST(SpectralEmbeddingFit, TinyXEmbedsAsItsRescaledCopy) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const std::vector<float> host = blobs(rows, cols);
+  std::vector<float> host = blobs(rows, cols);
+  std::ranges::transform(host, host.begin(),
+                         [](float v) { return std::ldexp(v, unit_exponent); });
   std::vector<float> tiny(host.size());
-  std::ranges::transform(host, tiny.begin(), [](float v) {
-    return std::ldexp(v, tiny_exponent);
-  });
+  std::ranges::transform(host, tiny.begin(),
+                         [](float v) { return std::ldexp(v, tiny_exponent); });
   const filled<float> x(res, host, {rows, cols});
   const filled<float> small(res, tiny, {rows, cols});
   const spectral_options o{.n_neighbors = neighbours};
@@ -157,8 +159,7 @@ TEST(ColumnsSignRule, TheFirstLargestEntryOfEachColumnTurnsPositive) {
   CUMLRKT_REQUIRE_GPU();
   EXPECT_EQ(sign_ruled_copy({0, 3, -2, -3, 2, 1, 1, 0}, 4, 2),
             (std::vector<float>{0, 3, 2, -3, -2, 1, -1, 0}));
-  EXPECT_EQ(sign_ruled_copy({-1, -1, 1}, 3, 1),
-            (std::vector<float>{1, 1, -1}));
+  EXPECT_EQ(sign_ruled_copy({-1, -1, 1}, 3, 1), (std::vector<float>{1, 1, -1}));
   EXPECT_EQ(sign_ruled_copy({0, 0}, 2, 1), (std::vector<float>{0, 0}));
 }
 
