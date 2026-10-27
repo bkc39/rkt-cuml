@@ -149,7 +149,8 @@
                                #:resources 'unused))))
   (check-cuml-error 'logic
                     "fit: affinity: expected nearest-neighbors, got precomputed"
-                    (lambda () (fit (spectral-embedding #:affinity 'precomputed #:resources 'unused) 'X))))
+                    (lambda ()
+                      (fit (spectral-embedding #:affinity 'precomputed #:resources 'unused) 'X))))
 
 (define (fit-row r)
   (match-define (cons X options) (row-call r))
