@@ -121,58 +121,57 @@
   (row id message (list X y options)))
 
 (define (X-rows)
-  (list
-   (X-row "f12" "X: expected float32, got float64" (tiny-with '() 'float64))
-   (X-row "f13" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
-   (X-row "f13 layout"
-          "X: expected row-major, got col-major 8x3"
-          (blank-matrix 8 3 'float32 #:layout 'col-major))
-   (X-row "f14" "X: expected at least 2 rows, got 1" (rows->matrix '((1 2 3)) 'float32))
-   (X-row "f15" "X: expected at least 1 column, got 0" (blank-matrix 8 0 'float32))
-   (X-row "f19"
-          "X: nn-descent needs at least 150 rows, got 8"
-          (tiny-X)
-          #:options (hasheq 'build-algo 'nn-descent))
-   (X-row "f20" "y: expected int32 or int64, got float32" (tiny-X) #:y (labels 8 'float32))
-   (X-row "f20 rank" "y: expected rank 1, got rank 2" (tiny-X) #:y (blank-matrix 8 1 'int32))
-   (X-row "f20 stride"
-          "y: expected contiguous elements, got stride 2"
-          (tiny-X)
-          #:y (strided-vector 8 'int64))
-   (X-row "f20 length" "y: expected 8 elements, got 7" (tiny-X) #:y (labels 7))
-   (X-row "f21" nan-message (tiny-with nan-row) #:y (labels 8))
-   (X-row "f21 inf"
-          "X: row 0, column 2: expected a finite value, got -inf"
-          (tiny-with '([(0 2) -inf.0])))
-   (X-row "f22" large-message (tiny-with large-row))
-   (X-row "f23" cosine-message (tiny-with zero-row) #:options (hasheq 'metric 'cosine))
-   (X-row "f26"
-          "n-components: spectral init of 3 components needs at least 10 rows, got 8"
-          (tiny-X)
-          #:options (hasheq 'n-components 3))
-   (X-row "f26 one short"
-          "n-components: spectral init of 3 components needs at least 10 rows, got 9"
-          (tiny-with '() 'float32 (cons '(5.0 5.0 5.0) (fixture-rows tiny)))
-          #:options (hasheq 'n-components 3))
-   (X-row "f26 defaults"
-          "n-components: spectral init of 2 components needs at least 8 rows, got 7"
-          (tiny-with '() 'float32 (cdr (fixture-rows tiny))))
-   (X-row "f29"
-          f29-message
-          (rows->matrix (take (fixture-rows tiny) 6) 'float32)
-          #:y (labels 6 'int32 3)
-          #:options (hasheq 'n-components 1 'n-epochs 20))
-   (X-row "f12 before f14" "X: expected float32, got float64" (rows->matrix '((1 2 3)) 'float64))
-   (X-row "f14 before f17"
-          "X: expected at least 2 rows, got 1"
-          (rows->matrix '((1 2 3)) 'float32)
-          #:options (hasheq 'n-components 8))
-   (X-row "f20 before f21" "y: expected 8 elements, got 7" (tiny-with nan-row) #:y (labels 7))
-   (X-row "f21 before f22" nan-message (tiny-with (append nan-row '([(1 1) 1e20]))))
-   (X-row "f22 before f23"
-          large-message
-          (tiny-with (append zero-row large-row))
-          #:options (hasheq 'metric 'cosine))))
+  (list (X-row "f12" "X: expected float32, got float64" (tiny-with '() 'float64))
+        (X-row "f13" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
+        (X-row "f13 layout"
+               "X: expected row-major, got col-major 8x3"
+               (blank-matrix 8 3 'float32 #:layout 'col-major))
+        (X-row "f14" "X: expected at least 2 rows, got 1" (rows->matrix '((1 2 3)) 'float32))
+        (X-row "f15" "X: expected at least 1 column, got 0" (blank-matrix 8 0 'float32))
+        (X-row "f19"
+               "X: nn-descent needs at least 150 rows, got 8"
+               (tiny-X)
+               #:options (hasheq 'build-algo 'nn-descent))
+        (X-row "f20" "y: expected int32 or int64, got float32" (tiny-X) #:y (labels 8 'float32))
+        (X-row "f20 rank" "y: expected rank 1, got rank 2" (tiny-X) #:y (blank-matrix 8 1 'int32))
+        (X-row "f20 stride"
+               "y: expected contiguous elements, got stride 2"
+               (tiny-X)
+               #:y (strided-vector 8 'int64))
+        (X-row "f20 length" "y: expected 8 elements, got 7" (tiny-X) #:y (labels 7))
+        (X-row "f21" nan-message (tiny-with nan-row) #:y (labels 8))
+        (X-row "f21 inf"
+               "X: row 0, column 2: expected a finite value, got -inf"
+               (tiny-with '([(0 2) -inf.0])))
+        (X-row "f22" large-message (tiny-with large-row))
+        (X-row "f23" cosine-message (tiny-with zero-row) #:options (hasheq 'metric 'cosine))
+        (X-row "f26"
+               "n-components: spectral init of 3 components needs at least 10 rows, got 8"
+               (tiny-X)
+               #:options (hasheq 'n-components 3))
+        (X-row "f26 one short"
+               "n-components: spectral init of 3 components needs at least 10 rows, got 9"
+               (tiny-with '() 'float32 (cons '(5.0 5.0 5.0) (fixture-rows tiny)))
+               #:options (hasheq 'n-components 3))
+        (X-row "f26 defaults"
+               "n-components: spectral init of 2 components needs at least 8 rows, got 7"
+               (tiny-with '() 'float32 (cdr (fixture-rows tiny))))
+        (X-row "f29"
+               f29-message
+               (rows->matrix (take (fixture-rows tiny) 6) 'float32)
+               #:y (labels 6 'int32 3)
+               #:options (hasheq 'n-components 1 'n-epochs 20))
+        (X-row "f12 before f14" "X: expected float32, got float64" (rows->matrix '((1 2 3)) 'float64))
+        (X-row "f14 before f17"
+               "X: expected at least 2 rows, got 1"
+               (rows->matrix '((1 2 3)) 'float32)
+               #:options (hasheq 'n-components 8))
+        (X-row "f20 before f21" "y: expected 8 elements, got 7" (tiny-with nan-row) #:y (labels 7))
+        (X-row "f21 before f22" nan-message (tiny-with (append nan-row '([(1 1) 1e20]))))
+        (X-row "f22 before f23"
+               large-message
+               (tiny-with (append zero-row large-row))
+               #:options (hasheq 'metric 'cosine))))
 
 (define (fit-calls)
   (list (cons 'umap-fit (lambda (X y options) (apply-options umap-fit (hash-set options 'y y) X)))
