@@ -30,6 +30,8 @@
 
 (define small (hasheq 'perplexity 5.0))
 
+(define device 0)
+
 (define (tiny-X)
   (fixture-X tiny))
 
@@ -177,7 +179,6 @@
     (check-true (finite-rows? (embedded fitted)) (format "~a" method))))
 
 (test-pools "L11: f23: a diverged embedding is refused and freed, under every fit"
-  (define device 0)
   (define X (tiny-X))
   (for ([entry (in-list (fit-calls))])
     (match-define (cons who call) entry)
@@ -224,7 +225,6 @@
     (check-pred tsne-result? (tsne-fit (tiny-X) #:perplexity 5.0) (row-id r))))
 
 (test-pools "L11: a refusal leaves the RMM pool where it was"
-  (define device 0)
   (for ([r (in-list (X-rows))])
     (drain-finalizers!)
     (define before (probe-pool-used device))

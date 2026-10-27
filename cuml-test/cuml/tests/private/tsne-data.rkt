@@ -55,11 +55,11 @@
              (for/list ([_ (in-range n)])
                0))))
 
-(define (diverged who)
+(define (diverged caller)
   (pregexp
    (format
     "^~a: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
-    who)))
+    caller)))
 
 (define (check-small-sweep method init)
   (for ([f (in-list (small-sweep))])
