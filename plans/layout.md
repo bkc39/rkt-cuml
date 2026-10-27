@@ -935,4 +935,6 @@ Follow-ups are GitHub issues.
 - **B3-u.** The eigensolver's tolerance (1e-5) is not exposed.
 - **B3-v.** The shim takes the resolved n-neighbors from Racket and returns
   only the embedding; the graph path's zero-column refusal carries no
-  advice about X.
+  advice about X. The dense entry takes n-neighbors between `x` and `out`,
+  so clang-tidy's swappable-parameters check sees no adjacent integers that
+  are not used together.

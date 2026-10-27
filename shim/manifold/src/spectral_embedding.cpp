@@ -176,10 +176,10 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
 extern "C" {
 
 int cuml_manifold_spectral_embedding_fit(void* handle, const rr_view* x,
-                                         rr_deposit* out, int64_t n_components,
+                                         int64_t n_neighbors, rr_deposit* out,
+                                         int64_t n_components,
                                          int32_t norm_laplacian,
                                          int32_t drop_first,
-                                         int64_t n_neighbors,
                                          uint64_t random_state) {
   return guarded(handle, {{"X", x}}, [&](const raft::handle_t& h) {
     const embedding_request r{.n_components = n_components,

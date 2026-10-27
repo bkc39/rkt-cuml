@@ -79,7 +79,7 @@
 (define-job cuml-manifold-spectral-embedding-fit-job
             library
             "cuml_manifold_spectral_embedding_fit_job"
-            (handle view deposit _int64 _int32 _int32 _int64 _uint64)
+            (handle view _int64 deposit _int64 _int32 _int32 _uint64)
             #:exn exn:fail:cuml)
 
 (define-job cuml-manifold-spectral-embedding-fit-graph-job

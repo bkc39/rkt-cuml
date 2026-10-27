@@ -47,11 +47,11 @@
   (cuml-manifold-spectral-embedding-fit-job who
                                             resources
                                             X
+                                            used
                                             out
                                             n-components
                                             (flag norm-laplacian)
                                             (flag drop-first)
-                                            used
                                             (or random-state (drawn-seed)))
   (match-define (list embedding) (deposit->list out))
   (spectral-embedding-result embedding used params))

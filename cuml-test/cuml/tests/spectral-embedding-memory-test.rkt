@@ -6,6 +6,7 @@
                   spectral-embedding-fit-transform)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
+         (only-in racket/promise delay force)
          (only-in "private/process-memory.rkt" test-rounds-and-refusals)
          (only-in "private/scaler-data.rkt" normal-rows rows->matrix)
          (only-in "private/spectral-data.rkt"
