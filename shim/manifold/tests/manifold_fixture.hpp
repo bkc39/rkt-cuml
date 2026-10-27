@@ -263,8 +263,8 @@ struct spectral_options {
 inline int spectral_fit(const resources& res, const rr_view* x, record& out,
                         const spectral_options& o = {}) {
   return cuml_manifold_spectral_embedding_fit(
-      res.handle, x, &out.r, o.n_components, o.n_neighbors, o.norm_laplacian,
-      o.drop_first, o.random_state);
+      res.handle, x, &out.r, o.n_components, o.norm_laplacian, o.drop_first,
+      o.n_neighbors, o.random_state);
 }
 
 struct graph_input {

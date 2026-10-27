@@ -29,7 +29,8 @@ bool all_finite(const std::vector<float>& host) {
   return std::ranges::all_of(host, [](float v) { return std::isfinite(v); });
 }
 
-bool sign_ruled(const std::vector<float>& host, int64_t n, int64_t k) {
+bool sign_ruled(const std::vector<float>& host, int64_t k) {
+  const auto n = static_cast<int64_t>(host.size()) / k;
   for (int64_t c = 0; c < k; ++c) {
     float best = 0;
     for (int64_t r = 0; r < n; ++r) {
@@ -45,16 +46,20 @@ bool sign_ruled(const std::vector<float>& host, int64_t n, int64_t k) {
   return true;
 }
 
-std::vector<float> embedded(const resources& res, const rr_view* x, int64_t n,
-                            const spectral_options& o = {}) {
-  record out(res);
-  EXPECT_EQ(outcome(spectral_fit(res, x, out, o)), "accepted");
+void expect_matrix(const record& out, int64_t n, const spectral_options& o) {
   EXPECT_EQ(out.r.count, 1);
   EXPECT_EQ(out.r.regions[0].rank, 2);
   EXPECT_EQ(out.r.regions[0].dtype, RR_DTYPE_FLOAT32);
   EXPECT_EQ(out.r.regions[0].shape[0], n);
   EXPECT_EQ(out.r.regions[0].shape[1], o.n_components);
   EXPECT_EQ(out.r.regions[0].strides[0], o.n_components);
+}
+
+std::vector<float> embedded(const resources& res, const rr_view* x, int64_t n,
+                            const spectral_options& o = {}) {
+  record out(res);
+  EXPECT_EQ(outcome(spectral_fit(res, x, out, o)), "accepted");
+  expect_matrix(out, n, o);
   return out.r.count == 1 ? out.read<float>(0) : std::vector<float>{};
 }
 
@@ -66,7 +71,7 @@ TEST(SpectralEmbeddingFit, DenseIsSignRuledFiniteAndRepeatsBitwise) {
   const std::vector<float> first = embedded(res, x.view(), rows, o);
   ASSERT_EQ(first.size(), static_cast<std::size_t>(rows * 2));
   EXPECT_TRUE(all_finite(first));
-  EXPECT_TRUE(sign_ruled(first, rows, 2));
+  EXPECT_TRUE(sign_ruled(first, 2));
   EXPECT_EQ(first, embedded(res, x.view(), rows, o));
   EXPECT_EQ(x.array.view.shape[0], rows);
 }
@@ -135,7 +140,7 @@ TEST(SpectralEmbeddingFitGraph, APathIsMonotoneAndSignRuled) {
             "accepted");
   const std::vector<float> e = out.read<float>(0);
   ASSERT_EQ(e.size(), static_cast<std::size_t>(path));
-  EXPECT_TRUE(sign_ruled(e, path, 1));
+  EXPECT_TRUE(sign_ruled(e, 1));
   EXPECT_TRUE(std::ranges::is_sorted(e) ||
               std::ranges::is_sorted(e, std::ranges::greater{}));
 }

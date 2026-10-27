@@ -18,16 +18,18 @@
 
 (define-values (blocks _truth) (sparse-blocks '(300 400 500) 0.05 0))
 
-(define vectors (graph->vectors blocks))
+(define vectors
+  (delay
+    (graph->vectors blocks)))
 
-(define (fit-graph vectors [n-components 2])
-  (match-define (list rows cols vals) vectors)
+(define (fit-graph given [n-components 2])
+  (match-define (list rows cols vals) given)
   (spectral-embedding-fit-graph rows cols vals (graph-n blocks) #:n-components n-components))
 
 (define (one-round X)
   (spectral-embedding-fit X #:n-components 8)
   (spectral-embedding-fit-transform X #:n-neighbors 64)
-  (fit-graph vectors 4))
+  (fit-graph (force vectors) 4))
 
 (define (refusals _fitted)
   (define nan-row (rows->matrix (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) 'float32))

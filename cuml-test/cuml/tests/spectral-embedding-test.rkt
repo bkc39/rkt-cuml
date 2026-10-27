@@ -19,7 +19,7 @@
 
 (define-values (blocks _truth) (three-blocks))
 
-(define geometric
+(define (geometric)
   (rows-matrix (for/list ([i (in-range 25)])
                  (list (expt 1.25 i) 0.0))))
 
@@ -42,7 +42,7 @@
        (spectral-embedding-params #:n-components k #:drop-first drop #:norm-laplacian norm)))))
 
 (test-gpu "L1: the default neighbour count is min(256, max(2, ⌊n/10⌋)), and an explicit one wins"
-  (for ([entry (in-list (list (list geometric #f 2)
+  (for ([entry (in-list (list (list (geometric) #f 2)
                               (list (fixture-X far-blobs) #f 30)
                               (list (fixture-X blobs) #f 100)
                               (list (fixture-X far-blobs) 7 7)))])

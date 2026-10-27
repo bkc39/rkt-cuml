@@ -60,9 +60,11 @@
   (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph;"
                  " deduplicate or centre X, or change n-neighbors"))
 
-(define halves (rows->matrix (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0))) 'float32))
+(define (halves)
+  (rows->matrix (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0))) 'float32))
 
-(define offset (rows->matrix (line 64 1e9) 'float32))
+(define (offset)
+  (rows->matrix (line 64 1e9) 'float32))
 
 (define (X-row id message X [options small])
   (row id message (cons X options)))
@@ -93,8 +95,8 @@
    (X-row "s12"
           "X: every row equals row 0; a spectral embedding needs two distinct rows"
           (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32))
-   (X-row "s14 halves" zero-message halves (hasheq 'n-neighbors 10))
-   (X-row "s14 offset" zero-message offset (hasheq 'n-neighbors 10))
+   (X-row "s14 halves" zero-message (halves) (hasheq 'n-neighbors 10))
+   (X-row "s14 offset" zero-message (offset) (hasheq 'n-neighbors 10))
    (X-row "s14 every row a neighbour" zero-message (line-X 50) (hasheq 'n-neighbors 50))
    (X-row "s1 before s3"
           "n-components: expected at least 1, got 0"
@@ -179,7 +181,7 @@
     (define before (probe-pool-used pool-device))
     (check-cuml-error 'logic
                       (format "~a: ~a" who zero-message)
-                      (lambda () (call halves (hasheq 'n-neighbors 10))))
+                      (lambda () (call (halves) (hasheq 'n-neighbors 10))))
     (drain-finalizers!)
     (check-equal? (probe-pool-used pool-device) before (symbol->string who))))
 
