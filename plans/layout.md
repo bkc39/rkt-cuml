@@ -864,7 +864,8 @@ Follow-ups are GitHub issues.
   4·10³⁸, 40 at 3.6·10³⁸ and 4000 at about 4·10³⁸ do not. 2¹²⁶ leaves a
   factor of 4, as f20b does. After the fit an embedding whose rows all
   equal row 0 is refused ("the embedding is constant, use init 'random");
-  with f20d in place no input reaches it.
+  with f20d in place no input reaches it, so the gtest covers
+  `require_unlike_first` and not this call.
 - **B2-w.** Under `'manhattan` a row's L1 norm, summed in double, is at
   most 2^62.5 (f20c). cuML squares the kNN distances, so opposite rows give
   a squared L1 distance of at most 4·2¹²⁵ = 2¹²⁷. f20 does not cover it:
@@ -883,6 +884,7 @@ Follow-ups are GitHub issues.
   origin, whose ‖x‖²+‖y‖²−2x·y cancels to 0 in float32 under `'euclidean`
   and `'sqeuclidean` (a 1.7·10⁹ time column, which fits centred); and
   duplicate rows that fill every row's neighbourhood (40×(0,0) and
-  40×(1,1) at perplexity 5, which fit at n-neighbors 60). No pre-fit check
+  40×(1,1) at perplexity 5, which fit at n-neighbors 60; at 1023 or more
+  copies of every row no n-neighbors fits, so X is deduplicated). No pre-fit check
   catches them. The shim does not centre X: that would break bitwise parity
   with Python cuML.

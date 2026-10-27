@@ -237,8 +237,9 @@ under @racket['sqeuclidean] one of at most 2@superscript{61}, and under
 is below 2@superscript{-64} (about 5·10@superscript{-20}) diverges. Under
 @racket['euclidean] and @racket['sqeuclidean] the distances are
 ‖x‖²+‖y‖²−2x·y in @racket['float32]: centre @racket[X] if it lies far from
-the origin. Duplicate rows that fill a row's neighbourhood diverge: raise
-@racket[n-neighbors].
+the origin. Duplicate rows that fill every row's neighbourhood diverge: raise
+@racket[n-neighbors], or deduplicate @racket[X] once every row has 1023 or
+more copies.
 Each row's neighbourhood is its @racket[n-neighbors] nearest rows, itself
 included: ⌈3·@racket[perplexity]⌉ by default, at least 2, at most 1023 and at
 most the row count; @racket[perplexity] is above 1 in float32 and at most that

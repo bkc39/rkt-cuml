@@ -229,6 +229,10 @@
           (hash-set sqeuclidean 'method 'exact))
    (X-row "f23 offset" small-scale-message (rows->matrix (offset-rows 1.7e9) 'float32))
    (X-row "f23 duplicates" small-scale-message (duplicates 40))
+   (X-row "f23 duplicates past the n-neighbors cap"
+          small-scale-message
+          (duplicates 1100)
+          (hash-set small 'n-neighbors 1023))
    (X-row "f23 below 2^-64"
           small-scale-message
           (line-rows (* limit-ratio (expt 2.0 -64)))
