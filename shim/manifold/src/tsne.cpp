@@ -9,6 +9,8 @@
 #include <initializer_list>
 #include <limits>
 #include <memory>
+#include <numbers>
+#include <optional>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
@@ -63,6 +65,9 @@ constexpr float pre_momentum = 0.5F;
 constexpr float post_momentum = 0.8F;
 constexpr float euclidean_p = 2.0F;
 constexpr double most_sqeuclidean_norm = 0x1p61;
+constexpr double most_manhattan_norm = std::numbers::sqrt2 * 0x1p62;
+constexpr double most_pca_spread = 0x1p126;
+constexpr const char* divergence_advice = "lower learning-rate, or rescale X";
 
 struct tsne_request {
   int64_t n_components;
@@ -154,18 +159,56 @@ void require_shape(const tsne_request& r, const matrix<float, int64_t>& x) {
   }
 }
 
-void require_squarable(const matrix<float, int64_t>& x, int32_t metric,
-                       rmm::cuda_stream_view stream) {
-  if (metric != CUML_MANIFOLD_METRIC_SQEUCLIDEAN) {
+struct norm_bound {
+  const char* metric;
+  const char* norm;
+  double most;
+  bool l1;
+};
+
+std::optional<norm_bound> norm_bound_of(int32_t metric) {
+  switch (metric) {
+    case CUML_MANIFOLD_METRIC_SQEUCLIDEAN:
+      return norm_bound{.metric = "sqeuclidean",
+                        .norm = "a squared norm",
+                        .most = most_sqeuclidean_norm,
+                        .l1 = false};
+    case CUML_MANIFOLD_METRIC_MANHATTAN:
+      return norm_bound{.metric = "manhattan",
+                        .norm = "an L1 norm",
+                        .most = most_manhattan_norm,
+                        .l1 = true};
+    default:
+      return std::nullopt;
+  }
+}
+
+void require_distance_bound(const matrix<float, int64_t>& x, int32_t metric,
+                            rmm::cuda_stream_view stream) {
+  const std::optional<norm_bound> b = norm_bound_of(metric);
+  if (!b) {
     return;
   }
-  const auto [row, squared] =
-      cumlrkt::first_large_row(x.data, x.n, x.d, most_sqeuclidean_norm, stream);
+  const auto [row, norm] =
+      b->l1 ? cumlrkt::first_large_l1_row(x.data, x.n, x.d, b->most, stream)
+            : cumlrkt::first_large_row(x.data, x.n, x.d, b->most, stream);
   if (row >= 0) {
-    throw logic_error(std::format(
-        "X: row {}: expected a squared norm of at most {} under sqeuclidean, "
-        "got {}",
-        row, printed(most_sqeuclidean_norm), printed(squared)));
+    throw logic_error(
+        std::format("X: row {}: expected {} of at most {} under {}, got {}",
+                    row, b->norm, printed(b->most), b->metric, printed(norm)));
+  }
+}
+
+void require_pca_spread(const matrix<float, int64_t>& x, int32_t init,
+                        rmm::cuda_stream_view stream) {
+  const double spread = init == CUML_MANIFOLD_TSNE_INIT_PCA
+                            ? cumlrkt::total_spread(x.data, x.n, x.d, stream)
+                            : 0;
+  if (!(spread <= most_pca_spread)) {
+    throw logic_error(
+        std::format("X: expected a total squared distance from the mean of at "
+                    "most {} under pca init, got {}",
+                    printed(most_pca_spread), printed(spread)));
   }
 }
 
@@ -174,6 +217,15 @@ void require_distinct(const matrix<float, int64_t>& x,
   if (cumlrkt::first_row_unlike_first(x.data, x.n, x.d, stream) < 0) {
     throw logic_error(
         "X: every row equals row 0; t-SNE needs two distinct rows");
+  }
+}
+
+void require_spread_embedding(const float* y, int64_t n,
+                              rmm::cuda_stream_view stream) {
+  if (cumlrkt::first_row_unlike_first(y, n, embedding_dim, stream) < 0) {
+    throw logic_error(
+        "embedding: every row equals row 0; the embedding is constant, use "
+        "init 'random");
   }
 }
 
@@ -224,7 +276,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
   require_shape(r, x);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_scanned("X", x, r.metric, stream);
-  require_squarable(x, r.metric, stream);
+  require_distance_bound(x, r.metric, stream);
+  require_pca_spread(x, r.init, stream);
   require_distinct(x, stream);
   ML::TSNEParams p = tsne_params(r, x.n);
   auto embedding = std::make_unique<buffer<float>>(
@@ -244,7 +297,8 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
                    embedding->data());
   }
   require_converged("embedding", embedding->data(), x.n, embedding_dim,
-                    "lower learning-rate", stream);
+                    divergence_advice, stream);
+  require_spread_embedding(embedding->data(), x.n, stream);
   settle(handle);
   const std::initializer_list<rr_view> regions{raftrkt::region(
       embedding->data(), x.n, embedding_dim, layout::row_major)};

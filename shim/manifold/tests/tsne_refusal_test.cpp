@@ -4,7 +4,9 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <initializer_list>
 #include <limits>
+#include <numbers>
 #include <string>
 #include <utility>
 #include <vector>
@@ -25,11 +27,14 @@ constexpr int64_t past_exact = 2097121;
 constexpr double past_float = 1e39;
 constexpr double divergent_rate = 1e30;
 constexpr double large = 0x1p66;
-constexpr double half_sqeuclidean = 0x1p30;
-constexpr double past_sqeuclidean = 0x1p30 + 0x1p7;
+constexpr double past_sqeuclidean_y = 0x1p30;
+constexpr double past_sqeuclidean_z = 0x1p30 + 0x1p7;
 constexpr double diverging_x = 1807712000;
 constexpr double diverging_y = 1159251072;
-constexpr double least_above_one = 1.0 + 1e-9;
+constexpr double past_manhattan = 3.5e18;
+constexpr double past_pca = 5 * 0x1p60;
+constexpr int64_t pca_rows = 16;
+constexpr double rounds_to_one = 1.0 + 1e-9;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr double denormal = 1e-40;
@@ -46,9 +51,25 @@ void expect_refused(const resources& res,
   expect_untouched(out);
 }
 
-std::vector<float> with(std::vector<float> host, std::size_t at, double value) {
-  host[at] = static_cast<float>(value);
+std::vector<float> with(
+    std::vector<float> host,
+    std::initializer_list<std::pair<std::size_t, double>> cells) {
+  for (const auto& [at, value] : cells) {
+    host[at] = static_cast<float>(value);
+  }
   return host;
+}
+
+std::vector<float> antipodal(double x, double y, double z) {
+  const auto at = [](int64_t row, int64_t col) {
+    return static_cast<std::size_t>((row * cols) + col);
+  };
+  return with(blobs(rows, cols), {{at(4, 0), x},
+                                  {at(4, 1), y},
+                                  {at(4, 2), z},
+                                  {at(5, 0), -x},
+                                  {at(5, 1), -y},
+                                  {at(5, 2), -z}});
 }
 
 std::vector<float> zero_row(std::vector<float> host, int64_t row, int64_t d) {
@@ -92,7 +113,7 @@ TEST(TsneFitRefusals, ParametersInTableOrder) {
        "n-neighbors: expected at most 1023, got 1024"},
       {fit({.perplexity = 1}),
        "perplexity: expected a finite value above 1 in float32, got 1"},
-      {fit({.perplexity = least_above_one}),
+      {fit({.perplexity = rounds_to_one}),
        "perplexity: expected a finite value above 1 in float32, got "
        "1.000000001"},
       {fit({.perplexity = nan}),
@@ -145,32 +166,31 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
   const rr_view huge = shaped(p.floats.view, {half_index, 2});
   const rr_view exact_rows = shaped(p.floats.view, {past_exact, 2});
   const filled<float> nan_x(
-      res, with(with(blobs(rows, cols), 10, nan), (4 * cols) + 1, large),
+      res, with(blobs(rows, cols), {{10, nan}, {(4 * cols) + 1, large}}),
       {rows, cols});
   const filled<float> large_x(
-      res, with(zero_row(blobs(rows, cols), 3, cols), (4 * cols) + 1, large),
+      res,
+      with(zero_row(blobs(rows, cols), 3, cols), {{(4 * cols) + 1, large}}),
       {rows, cols});
   const filled<float> zero_x(res, zero_row(blobs(rows, 2), 3, 2), {rows, 2});
-  const filled<float> far_x(res,
-                            with(with(zero_row(blobs(rows, cols), 4, cols),
-                                      (4 * cols) + 1, half_sqeuclidean),
-                                 (4 * cols) + 2, past_sqeuclidean),
-                            {rows, cols});
+  const filled<float> far_x(
+      res, antipodal(0, past_sqeuclidean_y, past_sqeuclidean_z), {rows, cols});
   const filled<float> diverging_x_rows(
-      res,
-      with(with(with(with(zero_row(zero_row(blobs(rows, cols), 4, cols), 5,
-                                   cols),
-                          4 * cols, diverging_x),
-                     (4 * cols) + 1, diverging_y),
-                5 * cols, -diverging_x),
-           (5 * cols) + 1, -diverging_y),
+      res, antipodal(diverging_x, diverging_y, 0), {rows, cols});
+  const filled<float> long_x(
+      res, antipodal(past_manhattan, past_manhattan, past_manhattan),
       {rows, cols});
+  const filled<float> spread_x(res, spread_rows(past_pca), {pca_rows, cols});
   const filled<float> zeros(res, std::vector<float>(rows * 2, 0.0F), {rows, 2});
   const filled<float> same(res, std::vector<float>(rows * cols, 1.5F),
                            {rows, cols});
   const tsne_options cosine{.metric = CUML_MANIFOLD_METRIC_COSINE};
   const tsne_options exact{.method = CUML_MANIFOLD_TSNE_EXACT};
   const tsne_options sqeuclidean{.metric = CUML_MANIFOLD_METRIC_SQEUCLIDEAN};
+  const tsne_options manhattan{.metric = CUML_MANIFOLD_METRIC_MANHATTAN};
+  const tsne_options pca{.init = CUML_MANIFOLD_TSNE_INIT_PCA};
+  const tsne_options pca_exact{.method = CUML_MANIFOLD_TSNE_EXACT,
+                               .init = CUML_MANIFOLD_TSNE_INIT_PCA};
   const auto fit = [&](const rr_view* v, const tsne_options& o = {}) {
     return [&res, v, o](record& out) { return tsne_fit(res, v, out, o); };
   };
@@ -207,6 +227,17 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
       {fit(diverging_x_rows.view(), sqeuclidean),
        "X: row 4: expected a squared norm of at most 2305843009213693952 "
        "under sqeuclidean, got 4611685722877149184"},
+      {fit(long_x.view(), manhattan),
+       std::format("X: row 4: expected an L1 norm of at most {} under "
+                   "manhattan, got {}",
+                   std::numbers::sqrt2 * 0x1p62,
+                   3.0 * static_cast<float>(past_manhattan))},
+      {fit(spread_x.view(), pca),
+       "X: expected a total squared distance from the mean of at most "
+       "8.507059173023462e+37 under pca init, got 5.316911983433481e+38"},
+      {fit(spread_x.view(), pca_exact),
+       "X: expected a total squared distance from the mean of at most "
+       "8.507059173023462e+37 under pca init, got 5.316911983433481e+38"},
       {fit(zero_x.view(), cosine),
        "X: row 3: expected a squared norm of at least 2.350988701644575e-38 "
        "under cosine, got 0"},
@@ -232,7 +263,7 @@ TEST(TsneFitRefusals, ADivergedEmbeddingIsFreed) {
       tsne_fit(res, x.view(), out, {.learning_rate = divergent_rate});
   EXPECT_EQ(status, RR_ERROR);
   EXPECT_TRUE(outcome(status).starts_with("embedding: row "));
-  EXPECT_TRUE(outcome(status).ends_with("; lower learning-rate"));
+  EXPECT_TRUE(outcome(status).ends_with("; lower learning-rate, or rescale X"));
   expect_untouched(out);
 }
 

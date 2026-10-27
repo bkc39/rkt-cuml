@@ -91,8 +91,8 @@ and `require_basis`, the bound on raft Lanczos's n·ncv basis that spectral
 clustering and UMAP's spectral init share;
 `limits.hpp`: the index and squared-norm bounds; `rows.hpp` with
 `common/src/rows.cu`, linked into every family: `first_large_row`,
-`first_zero_row`, `first_non_finite`, `first_large_element` and
-`first_row_unlike_first`; `support.hpp`'s `require_finite` and
+`first_large_l1_row`, `total_spread`, `first_zero_row`, `first_non_finite`,
+`first_large_element` and `first_row_unlike_first`; `support.hpp`'s `require_finite` and
 `require_magnitudes` are the element scans with their messages;
 `transpose.hpp` with `common/src/transpose.cu`, linked into decomposition
 and manifold: `to_columns` and `to_rows`, the row-major and column-major

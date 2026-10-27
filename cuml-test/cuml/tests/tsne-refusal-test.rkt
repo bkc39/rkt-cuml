@@ -2,9 +2,11 @@
 
 (require (only-in cuml fit fit-transform transform tsne)
          (only-in cuml/manifold tsne-fit tsne-fit-transform tsne-result?)
+         (only-in racket/flonum flsingle)
          (only-in racket/hash hash-union)
          (only-in racket/list make-list take)
          (only-in racket/match match match-define)
+         (only-in racket/math sqr)
          (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
          (only-in raft exn:fail:raft? list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
@@ -25,12 +27,12 @@
                   zero-row)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
-         (only-in "private/tsne-data.rkt" diverged embedded)
+         (only-in "private/tsne-data.rkt" diverged-rx embedded)
          (only-in "private/umap-data.rkt" finite-rows? fixture-X fixture-rows tiny))
 
 (define small (hasheq 'perplexity 5.0))
 
-(define device 0)
+(define pool-device 0)
 
 (define (tiny-X)
   (fixture-X tiny))
@@ -87,66 +89,141 @@
 
 (define every-row-equal "X: every row equals row 0; t-SNE needs two distinct rows")
 
+(define (bound-message norm most metric got)
+  (format "X: row 4: expected ~a of at most ~a under ~a, got ~a" norm most metric got))
+
 (define sqeuclidean-bound (expt 2 61))
 
 (define (sqeuclidean-message got)
-  (format "X: row 4: expected a squared norm of at most ~a under sqeuclidean, got ~a"
-          sqeuclidean-bound
-          got))
+  (bound-message "a squared norm" sqeuclidean-bound 'sqeuclidean got))
 
-(define past-sqeuclidean `([(4 0) 0.0] [(4 1) ,(expt 2.0 30)] [(4 2) ,(+ (expt 2.0 30) 128.0)]))
+(define past-sqeuclidean-y (expt 2 30))
 
-(define (antipodal x y)
-  `([(4 0) ,x] [(4 1) ,y] [(4 2) 0.0] [(5 0) ,(- x)] [(5 1) ,(- y)] [(5 2) 0.0]))
+(define past-sqeuclidean-z (+ (expt 2 30) 128))
+
+(define past-sqeuclidean `([(4 0) 0.0] [(4 1) ,past-sqeuclidean-y] [(4 2) ,past-sqeuclidean-z]))
+
+(define past-sqeuclidean-norm (+ (sqr past-sqeuclidean-y) (sqr past-sqeuclidean-z)))
+
+(define manhattan-bound (* (sqrt 2.0) (expt 2.0 62)))
+
+(define (manhattan-message got)
+  (bound-message "an L1 norm" (inexact->exact manhattan-bound) 'manhattan (inexact->exact got)))
+
+(define (antipodal x y [z 0.0])
+  `([(4 0) ,x] [(4 1) ,y] [(4 2) ,z] [(5 0) ,(- x)] [(5 1) ,(- y)] [(5 2) ,(- z)]))
 
 (define diverging-pair (antipodal 1807712000.0 1159251072.0))
+
+(define past-manhattan (flsingle 3.5e18))
+
+(define inside-manhattan (flsingle 2.1739693712846356e18))
+
+(define pca-bound (expt 2.0 126))
+
+(define (pca-message got)
+  (format "X: expected a total squared distance from the mean of at most ~a under pca init, got ~a"
+          pca-bound
+          (exact->inexact got)))
+
+(define (spread-rows a)
+  (for/list ([i (in-range 16)])
+    (list (if (even? i)
+              a
+              (- a))
+          (* (quotient i 2) (expt 2.0 44))
+          (* (modulo i 3) (expt 2.0 44)))))
+
+(define (spread-of rows)
+  (for/sum ([column (in-list (apply map list rows))])
+           (define mean (/ (apply + (map inexact->exact column)) (length column)))
+           (for/sum ([x (in-list column)]) (sqr (- (inexact->exact x) mean)))))
+
+(define past-pca (spread-rows (* 5 (expt 2.0 60))))
+
+(define inside-pca (spread-rows (- (expt 2.0 61) (expt 2.0 37))))
+
+(define small-scale-message
+  "embedding: row 0, column 0: the optimisation diverged to nan; lower learning-rate, or rescale X")
+
+(define (scaled-tiny k)
+  (rows->matrix (map (lambda (r) (map (lambda (x) (* x k)) r)) (fixture-rows tiny)) 'float32))
+
+(define (X-row id message X [options small])
+  (row id message (cons X options)))
 
 (define (X-rows)
   (define one-row (rows->matrix '((1 2 3)) 'float32))
   (define zeros (rows->matrix (make-list 8 '(0 0 0)) 'float32))
   (define cosine (hash-set small 'metric 'cosine))
   (define sqeuclidean (hash-set small 'metric 'sqeuclidean))
-  (list (row "f11" "X: expected float32, got float64" (cons (tiny-with '() 'float64) small))
-        (row "f12" "X: expected rank 2, got rank 1" (cons (blank-vector 8 'float32) small))
-        (row "f12 layout"
-             "X: expected row-major, got col-major 8x3"
-             (cons (blank-matrix 8 3 'float32 #:layout 'col-major) small))
-        (row "f13" "X: expected at least 2 rows, got 1" (cons one-row small))
-        (row "f14"
-             "X: expected at least 2 columns, got 1"
-             (cons (rows->matrix (map (lambda (r) (take r 1)) (fixture-rows tiny)) 'float32) small))
-        (row "f17" "perplexity: expected at most the 8 neighbours, got 30" (cons (tiny-X) (hasheq)))
-        (row "f17 neighbours"
-             "perplexity: expected at most the 4 neighbours, got 5"
-             (cons (tiny-X) (hasheq 'perplexity 5.0 'n-neighbors 4)))
-        (row "f19" nan-message (cons (tiny-with nan-row) small))
-        (row "f19 inf"
-             "X: row 0, column 2: expected a finite value, got -inf"
-             (cons (tiny-with '([(0 2) -inf.0])) small))
-        (row "f20" large-message (cons (tiny-with large-row) small))
-        (row "f20b"
-             (sqeuclidean-message (+ (expt 2 61) (expt 2 38) (expt 2 14)))
-             (cons (tiny-with past-sqeuclidean) sqeuclidean))
-        (row "f20b exact"
-             (sqeuclidean-message (+ (expt 2 61) (expt 2 38) (expt 2 14)))
-             (cons (tiny-with past-sqeuclidean) (hash-set sqeuclidean 'method 'exact)))
-        (row "f20b float32 rounding"
-             (sqeuclidean-message (+ (expt 1807712000 2) (expt 1159251072 2)))
-             (cons (tiny-with diverging-pair) sqeuclidean))
-        (row "f21" cosine-message (cons (tiny-with zero-row) cosine))
-        (row "f22" every-row-equal (cons (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32) small))
-        (row "f22 zeros" every-row-equal (cons zeros small))
-        (row "f1 before f11"
-             "method: expected fft or exact"
-             (cons (tiny-with '() 'float64) (hash-set small 'method 'bh)))
-        (row "f5 before f11"
-             "n-neighbors: expected at least 2, got 1"
-             (cons (tiny-with '() 'float64) (hash-set small 'n-neighbors 1)))
-        (row "f13 before f17" "X: expected at least 2 rows, got 1" (cons one-row (hasheq)))
-        (row "f19 before f20" nan-message (cons (tiny-with (append nan-row large-row)) small))
-        (row "f20 before f20b" large-message (cons (tiny-with large-row) sqeuclidean))
-        (row "f20 before f21" large-message (cons (tiny-with (append zero-row large-row)) cosine))
-        (row "f21 before f22" (normless-message 0) (cons zeros cosine))))
+  (define manhattan (hash-set small 'metric 'manhattan))
+  (define pca (hasheq 'perplexity 3.0 'init 'pca))
+  (list
+   (X-row "f11" "X: expected float32, got float64" (tiny-with '() 'float64))
+   (X-row "f12" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
+   (X-row "f12 layout"
+          "X: expected row-major, got col-major 8x3"
+          (blank-matrix 8 3 'float32 #:layout 'col-major))
+   (X-row "f13" "X: expected at least 2 rows, got 1" one-row)
+   (X-row "f14"
+          "X: expected at least 2 columns, got 1"
+          (rows->matrix (map (lambda (r) (take r 1)) (fixture-rows tiny)) 'float32))
+   (X-row "f17" "perplexity: expected at most the 8 neighbours, got 30" (tiny-X) (hasheq))
+   (X-row "f17 neighbours"
+          "perplexity: expected at most the 4 neighbours, got 5"
+          (tiny-X)
+          (hasheq 'perplexity 5.0 'n-neighbors 4))
+   (X-row "f19" nan-message (tiny-with nan-row))
+   (X-row "f19 inf"
+          "X: row 0, column 2: expected a finite value, got -inf"
+          (tiny-with '([(0 2) -inf.0])))
+   (X-row "f20" large-message (tiny-with large-row))
+   (X-row "f20b" (sqeuclidean-message past-sqeuclidean-norm) (tiny-with past-sqeuclidean) sqeuclidean)
+   (X-row "f20b exact"
+          (sqeuclidean-message past-sqeuclidean-norm)
+          (tiny-with past-sqeuclidean)
+          (hash-set sqeuclidean 'method 'exact))
+   (X-row "f20b float32 rounding"
+          (sqeuclidean-message (+ (sqr 1807712000) (sqr 1159251072)))
+          (tiny-with diverging-pair)
+          sqeuclidean)
+   (X-row "f20c"
+          (manhattan-message (* 3 past-manhattan))
+          (tiny-with (antipodal past-manhattan past-manhattan past-manhattan))
+          manhattan)
+   (X-row "f20c exact"
+          (manhattan-message (* 3 past-manhattan))
+          (tiny-with (antipodal past-manhattan past-manhattan past-manhattan))
+          (hash-set manhattan 'method 'exact))
+   (X-row "f20d" (pca-message (spread-of past-pca)) (rows->matrix past-pca 'float32) pca)
+   (X-row "f20d exact"
+          (pca-message (spread-of past-pca))
+          (rows->matrix past-pca 'float32)
+          (hash-set pca 'method 'exact))
+   (X-row "f21" cosine-message (tiny-with zero-row) cosine)
+   (X-row "f23 small scale" small-scale-message (scaled-tiny 1e-11) sqeuclidean)
+   (X-row "f23 small scale exact"
+          small-scale-message
+          (scaled-tiny 1e-11)
+          (hash-set sqeuclidean 'method 'exact))
+   (X-row "f22" every-row-equal (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32))
+   (X-row "f22 zeros" every-row-equal zeros)
+   (X-row "f1 before f11"
+          "method: expected fft or exact"
+          (tiny-with '() 'float64)
+          (hash-set small 'method 'bh))
+   (X-row "f5 before f11"
+          "n-neighbors: expected at least 2, got 1"
+          (tiny-with '() 'float64)
+          (hash-set small 'n-neighbors 1))
+   (X-row "f13 before f17" "X: expected at least 2 rows, got 1" one-row (hasheq))
+   (X-row "f19 before f20" nan-message (tiny-with (append nan-row large-row)))
+   (X-row "f20 before f20b" large-message (tiny-with large-row) sqeuclidean)
+   (X-row "f20 before f20c" large-message (tiny-with large-row) manhattan)
+   (X-row "f20 before f20d" large-message (tiny-with large-row) (hash-set small 'init 'pca))
+   (X-row "f20 before f21" large-message (tiny-with (append zero-row large-row)) cosine)
+   (X-row "f21 before f22" (normless-message 0) zeros cosine)))
 
 (define (fit-calls)
   (list (cons 'tsne-fit (lambda (X options) (apply-options tsne-fit options X)))
@@ -180,25 +257,35 @@
   (match-define (cons X options) (row-call r))
   (check-row 'tsne-fit r (lambda () (apply-options tsne-fit options X))))
 
-(test-gpu "L11: f20b: opposite two-column rows just inside 2^61 fit"
-  (define X (tiny-with (antipodal 1278245504.0 819714240.0)))
-  (for ([method (in-list '(fft exact))])
-    (define fitted (tsne-fit X #:perplexity 5.0 #:metric 'sqeuclidean #:method method))
-    (check-true (finite-rows? (embedded fitted)) (format "~a" method))))
+(test-gpu "L11: rows just inside the sqeuclidean, manhattan and pca init bounds fit"
+  (for* ([entry (in-list (list (list "f20b"
+                                     (tiny-with (antipodal 1278245504.0 819714240.0))
+                                     (hasheq 'perplexity 5.0 'metric 'sqeuclidean))
+                               (list "f20c"
+                                     (tiny-with
+                                      (antipodal inside-manhattan inside-manhattan inside-manhattan))
+                                     (hasheq 'perplexity 5.0 'metric 'manhattan))
+                               (list "f20d"
+                                     (rows->matrix inside-pca 'float32)
+                                     (hasheq 'perplexity 3.0 'init 'pca))))]
+         [method (in-list '(fft exact))])
+    (match-define (list id X options) entry)
+    (define fitted (apply-options tsne-fit (hash-set options 'method method) X))
+    (check-true (finite-rows? (embedded fitted)) (format "~a ~a" id method))))
 
 (test-pools "L11: f23: a diverged embedding is refused and freed, under every fit"
   (define X (tiny-X))
   (for ([entry (in-list (fit-calls))])
     (match-define (cons who call) entry)
     (drain-finalizers!)
-    (define before (probe-pool-used device))
+    (define before (probe-pool-used pool-device))
     (check-cuml-error 'logic
-                      (diverged who)
+                      (diverged-rx who)
                       (lambda () (call X (hasheq 'perplexity 5.0 'learning-rate 1e30))))
     (drain-finalizers!)
-    (check-equal? (probe-pool-used device) before (format "~a" who)))
+    (check-equal? (probe-pool-used pool-device) before (symbol->string who)))
   (check-cuml-error 'logic
-                    (diverged 'tsne-fit)
+                    (diverged-rx 'tsne-fit)
                     (lambda ()
                       (tsne-fit (rows->matrix (take (fixture-rows tiny) 2) 'float32)
                                 #:perplexity 2.0
@@ -226,15 +313,15 @@
                     "fit-transform: tsne takes no sample-weight"
                     (lambda () (fit-transform (tsne) (tiny-X) #:sample-weight w))))
 
-(test-gpu "L11: after a refused NaN, large, constant or cosine zero row, a valid call succeeds"
+(test-gpu "L11: after a refused NaN, large, spread, constant or cosine zero row, a valid call succeeds"
   (for ([r (in-list (X-rows))]
-        #:when (member (row-id r) '("f19" "f20" "f20b" "f21" "f22")))
+        #:when (member (row-id r) '("f19" "f20" "f20b" "f20c" "f20d" "f21" "f22")))
     (fit-row r)
     (check-pred tsne-result? (tsne-fit (tiny-X) #:perplexity 5.0) (row-id r))))
 
 (test-pools "L11: a refusal leaves the RMM pool where it was"
   (for ([r (in-list (X-rows))])
     (drain-finalizers!)
-    (define before (probe-pool-used device))
+    (define before (probe-pool-used pool-device))
     (fit-row r)
-    (check-equal? (probe-pool-used device) before (row-id r))))
+    (check-equal? (probe-pool-used pool-device) before (row-id r))))

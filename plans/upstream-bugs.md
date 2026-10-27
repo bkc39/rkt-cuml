@@ -72,6 +72,9 @@ packet (§4) has the detail.
 | B2 #51 | perplexity_max_iter 0 leaves P uninitialised; cufftDestroy skipped on a throw (source) | `exact_kernels.cuh:42`, `fft_tsne.cuh` | unreachable / documented |
 | B2 #51 | a seeded FFT run is 1.3–1.9× slower than random_state=None (blobs 1000×10 0.35 s against 0.18 s, digits 0.355 against 0.21, 12000×50 0.705 against 0.56; P4) | `fft_tsne.cuh` deterministic path | seeds always drawn (B2-l) |
 | B2 #51 | `square_distances` squares the kNN distances before normalising them, so under `L2Expanded` (sqeuclidean) it takes a fourth power, which overflows float32 to NaN once opposite rows reach a float32 squared norm of 2⁶²: 2⁶² and 2⁶²−2³⁵·⁸ give NaN (B2 r0 M3), and so do two-column rows of exact squared norm 2⁶²−2³⁸−2³⁴·³ whose float32 norm rounds up to 2⁶² (B2 r1 M1) | `tsne_runner.cuh:210-217` | refused past 2⁶¹ under sqeuclidean (f20b) |
+| B2 #51 | PCA init divides Y by its float32 standard deviation; once n·var passes float32's maximum the sum of y² is inf, exact returns an all-zero embedding without error and FFT gives NaN (16 rows at 4·10³⁸, 4000 at about 4·10³⁸; random init fits the same rows) | `tsne_runner.cuh:141-145` | refused past a total squared distance from the mean of 2¹²⁶ under pca init (f20d); constant embedding refused after the fit |
+| B2 #51 | `square_distances` squares the L1 distance under manhattan, which overflows float32 for rows inside the 2¹²⁵ squared-norm bound: ±(3.5·10¹⁸)×3 gives NaN under FFT and exact | `tsne_runner.cuh:210-217` | refused past an L1 norm of 2^62.5 under manhattan (f20c) |
+| B2 #51 | the squared kNN distances are scaled by 1/max, inf in float32 once the largest underflows: `tiny`×10⁻¹¹ under sqeuclidean, ×10⁻²¹ under the other metrics, gives NaN | `distances.cuh:147` | f23 after the fit, advising "or rescale X"; documented |
 
 ## cuVS
 

@@ -808,7 +808,7 @@ Follow-ups are GitHub issues.
 - **B2-l.** a `#f` random-state draws the seed in Racket, so FFT is always
   reproducible under `(random-seed k)`; P4 measured the deterministic FFT
   path at 1.3–1.9× the time of `random_state=None`.
-- **B2-m.** f23 reuses B1's "lower learning-rate" advice.
+- **B2-m.** f23's message has B1's shape, with the advice of B2-x.
 - **B2-n.** KL divergence and the iteration count come back as host
   out-parameters of the job (PCA's shape), not deposit regions. cuML
   computes KL at iteration max_iter − 1 before its break check and returns
@@ -854,3 +854,31 @@ Follow-ups are GitHub issues.
   0.84700 − 0.02085 → 0.826, digits 0.98827 − 0.00238 → 0.9858 (ours
   0.97011, 0.85080, 0.98857). The blobs and overlap quality tests do not
   call Python, and their names carry no `twin`.
+- **B2-v.** Under `'pca` init the rows' squared distances from their mean,
+  summed in double, are at most 2¹²⁶ (f20d). cuML rescales the PCA
+  projection by its standard deviation, whose float32 sum of y² over all
+  rows is bounded by that total; past float32's maximum it is inf and Y/inf
+  is 0, so exact returns an all-zero embedding without error and FFT
+  diverges, at any learning rate. The failure tracks the total, not the
+  row count: 16 rows at 2.56·10³⁸ and 40 rows at 1.6·10³⁸ fit, 16 rows at
+  4·10³⁸, 40 at 3.6·10³⁸ and 4000 at about 4·10³⁸ do not. 2¹²⁶ leaves a
+  factor of 4, as f20b does. After the fit an embedding whose rows all
+  equal row 0 is refused ("the embedding is constant, use init 'random");
+  with f20d in place no input reaches it.
+- **B2-w.** Under `'manhattan` a row's L1 norm, summed in double, is at
+  most 2^62.5 (f20c). cuML squares the kNN distances, so opposite rows give
+  a squared L1 distance of at most 4·2¹²⁵ = 2¹²⁷. f20 does not cover it:
+  (3.5·10¹⁸)×3 has a squared norm inside 2¹²⁵ and a squared L1 distance
+  of 4.41·10³⁸. The bound keeps a factor of 2, so (3·10¹⁸)×3, which cuML
+  fits, is refused; rows ±v×3 at the largest float32 v with 3v ≤ 2^62.5
+  fit under both methods. Under `'euclidean` and `'chebyshev` the squared distance
+  is at most 4·2¹²⁵ under f20 already, so they need no bound of their
+  own; f20b and f20c are the two metrics where it is larger.
+- **B2-x.** f23's advice is "lower learning-rate, or rescale X": rows
+  whose neighbour distances are all tiny diverge too. cuML multiplies the
+  squared kNN distances by the reciprocal of their largest, which is inf
+  in float32 once that largest underflows: on `tiny` scaled by 10⁻¹¹ under
+  `'sqeuclidean` (finite at 10⁻¹⁰), and by 10⁻²¹ under the other metrics.
+  No pre-fit check catches it: two clusters 10 apart, each of 20 rows
+  within 10⁻¹⁰, diverge under `'sqeuclidean` though their total spread is
+  large.

@@ -229,8 +229,13 @@ iterations run; and the fit's @racket[params], where a derived
 Embeds the rows of @racket[X], a row-major @racket['float32] matrix with at
 least two rows and two columns, not all rows equal, and finite rows of squared
 norm at most 2@superscript{125}, in two dimensions. Under @racket['cosine] a
-row of d columns needs a squared norm of at least d·2@superscript{-126}, and
-under @racket['sqeuclidean] one of at most 2@superscript{61}.
+row of d columns needs a squared norm of at least d·2@superscript{-126},
+under @racket['sqeuclidean] one of at most 2@superscript{61}, and under
+@racket['manhattan] an L1 norm of at most 2@superscript{62.5}. Under
+@racket['pca] init the rows' squared distances from their mean sum to at most
+2@superscript{126}. A fit whose neighbour distances are all below about
+10@superscript{-10} under @racket['sqeuclidean], or 10@superscript{-21}
+under the other metrics, diverges.
 Each row's neighbourhood is its @racket[n-neighbors] nearest rows, itself
 included: ⌈3·@racket[perplexity]⌉ by default, at least 2, at most 1023 and at
 most the row count; @racket[perplexity] is above 1 in float32 and at most that

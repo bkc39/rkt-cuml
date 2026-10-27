@@ -270,4 +270,21 @@ inline std::vector<float> blobs(int64_t n, int64_t d) {
   return host;
 }
 
+constexpr double spread_step = 0x1p44;
+
+inline std::vector<float> spread_rows(double a) {
+  constexpr int64_t n = 16;
+  constexpr int64_t d = 3;
+  constexpr int64_t thirds = 3;
+  std::vector<float> host(static_cast<std::size_t>(n * d));
+  for (int64_t i = 0; i < n; ++i) {
+    const auto at = static_cast<std::size_t>(i * d);
+    host[at] = static_cast<float>(i % 2 == 0 ? a : -a);
+    host[at + 1] = static_cast<float>(static_cast<double>(i / 2) * spread_step);
+    host[at + 2] =
+        static_cast<float>(static_cast<double>(i % thirds) * spread_step);
+  }
+  return host;
+}
+
 }  // namespace cumlrkt::test

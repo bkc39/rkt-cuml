@@ -9,6 +9,7 @@
                   tsne-result-n-iter
                   tsne-result?)
          (only-in cuml/metrics trustworthiness)
+         (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in racket/math exact-ceiling)
          racket/runtime-path
@@ -25,7 +26,7 @@
          check-small-sweep
          check-tsne-parity
          derived-neighbours
-         diverged
+         diverged-rx
          embedded
          tsne-case
          twin
@@ -49,16 +50,13 @@
               [seed (in-range 8)])
     (define next (uniform-source (+ 1000 (* 8 n) seed)))
     (fixture (format "sweep n=~a seed=~a" n seed)
-             (for/list ([_ (in-range n)])
-               (for/list ([_ (in-range 4)])
-                 (next)))
-             (for/list ([_ (in-range n)])
-               0))))
+             (build-list n (lambda (_) (build-list 4 (lambda (_) (next)))))
+             (make-list n 0))))
 
-(define (diverged caller)
+(define (diverged-rx caller)
   (pregexp
    (format
-    "^~a: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
+    "^~a: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate, or rescale X$"
     caller)))
 
 (define (check-small-sweep method init)
@@ -70,7 +68,7 @@
     (test-case (format "~a ~a ~a" method init (fixture-name f))
       (cond
         [(tsne-result? outcome) (check-true (finite-rows? (embedded outcome)))]
-        [else (check-regexp-match (diverged 'tsne-fit) (exn-message outcome))])))
+        [else (check-regexp-match (diverged-rx 'tsne-fit) (exn-message outcome))])))
   (check-true (finite-rows? (embedded (tsne-fit (fixture-X far-blobs) #:method method #:init init)))
               "a valid call after the sweep"))
 
@@ -97,13 +95,8 @@
           'seed (given 'random-state)))
 
 (define (check-tsne-parity f configs #:neighbours [k #f])
-  (define results
-    (for/list ([options (in-list configs)])
-      (apply-options tsne-fit options (fixture-X f))))
-  (define theirs
-    (run-cases twin
-               (for/list ([result (in-list results)])
-                 (tsne-case f result #:neighbours k))))
+  (define results (map (lambda (options) (apply-options tsne-fit options (fixture-X f))) configs))
+  (define theirs (run-cases twin (map (lambda (result) (tsne-case f result #:neighbours k)) results)))
   (for ([options (in-list configs)]
         [result (in-list results)]
         [found (in-list theirs)])
@@ -130,14 +123,9 @@
       (check-true (>= t least) (format "~a: ~a below ~a" name t least)))))
 
 (define (check-sklearn fixtures)
-  (define results
-    (for/list ([f (in-list fixtures)])
-      (tsne-fit (fixture-X f) #:method 'exact)))
+  (define results (map (lambda (f) (tsne-fit (fixture-X f) #:method 'exact)) fixtures))
   (define references
-    (run-cases twin
-               (for/list ([f (in-list fixtures)]
-                          [result (in-list results)])
-                 (tsne-case f result #:op "sklearn"))))
+    (run-cases twin (map (lambda (f result) (tsne-case f result #:op "sklearn")) fixtures results)))
   (for ([f (in-list fixtures)]
         [result (in-list results)]
         [reference (in-list references)])
