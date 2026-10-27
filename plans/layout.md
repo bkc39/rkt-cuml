@@ -788,8 +788,8 @@ Follow-ups are GitHub issues.
 - **B2-d.** `#:n-neighbors` defaults to `#f`, meaning
   min(1023, max(2, ⌈3·perplexity⌉)), clamped to the row count; above
   1023 is refused (f6).
-- **B2-e.** perplexity is refused at or below 1 in float32 (f7, its
-  message saying so after B2 r1 L1) and above min(n-neighbors, n) (f17).
+- **B2-e.** perplexity is refused at or below 1 in float32 (f7, whose
+  message says "in float32") and above min(n-neighbors, n) (f17).
 - **B2-f.** `define-estimator` gains a `[fit-transform proc]` entry: the
   estimator is `transformer?`, its `fit-transform` is `proc` of the fit's
   model, and its `transform` raises "transform: tsne has no transform; use
@@ -830,19 +830,19 @@ Follow-ups are GitHub issues.
 - **B2-s.** `tsne-sklearn-digits-twin-test` takes 55 s (sklearn's exact
   t-SNE on digits, CPU-bound) and has a 180 s entry in `info.rkt`.
 - **B2-t.** Under `'sqeuclidean` a row's squared norm is at most 2⁶¹
-  (f20b, after B2 r0 M3 and B2 r1 M1). cuML squares the kNN distances, a
+  (f20b). cuML squares the kNN distances, a
   fourth power under sqeuclidean; opposite rows give a squared distance
   of 4·|a|², at most 2⁶³ here, so its square stays at or below 2¹²⁶,
   a factor of 4 under float32's maximum, whatever the rounding of
-  |a|²+|b|²−2a·b in float32. The old limit 2⁶²−2³⁸ let two-column rows
-  through whose float32 norm rounds to 2⁶²: (1807712000, 1159251072) and
-  7 other directions diverged under both methods. Measured at 2⁶¹ on
+  |a|²+|b|²−2a·b in float32. Two-column rows inside 2⁶²−2³⁸ whose float32
+  norm rounds to 2⁶² diverge under both methods: (1807712000, 1159251072)
+  and 7 other directions. Measured at 2⁶¹ on
   `tiny`-shaped opposite rows, both methods, all finite: those 8
   directions rescaled to just inside 2⁶¹ (16 fits), and 24 random two-
   and 24 random three-column directions at the limit, 37 of them with a
   float32 norm that rounds to 2⁶¹ (96 fits).
 - **B2-u.** L6's bounds are measured, not Python's seed spread or
-  upstream's digits-derived 0.05 (after B2 r0 M2 and L3). Exact: 40 fits
+  upstream's digits-derived 0.05. Exact: 40 fits
   per fixture, trustworthiness at k = 10, floor = min − (max − min):
   blobs 0.97176–0.97447 (floor 0.969), overlap 0.86713–0.88865 (0.845),
   digits 0.99048–0.99208 (0.9888). Against sklearn (blobs 0.97687,
@@ -852,5 +852,5 @@ Follow-ups are GitHub issues.
   against Python's spread cannot fail; it gets an absolute floor, Python's
   20-seed min − δ: blobs 0.96900 − 0.00369 → 0.965, overlap
   0.84700 − 0.02085 → 0.826, digits 0.98827 − 0.00238 → 0.9858 (ours
-  0.97011, 0.85080, 0.98857). The blobs and overlap quality tests no
-  longer call Python and lost `twin` from their names.
+  0.97011, 0.85080, 0.98857). The blobs and overlap quality tests do not
+  call Python, and their names carry no `twin`.

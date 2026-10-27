@@ -54,8 +54,6 @@
             #:early-exaggeration 1.0
             #:max-iter max-iter))
 
-(define settled-stop 261)
-
 (test-gpu "L1: exact stops on a small gradient at a checked iteration, without a KL"
   (define result (settled-fit 1000))
   (define n-iter (tsne-result-n-iter result))
@@ -64,8 +62,9 @@
   (check-false (tsne-result-kl-divergence result)))
 
 (test-gpu "L1: a stop on the last iteration counts as a full run, with its KL"
-  (define result (settled-fit settled-stop))
-  (check-equal? (tsne-result-n-iter result) settled-stop)
+  (define stop (tsne-result-n-iter (settled-fit 1000)))
+  (define result (settled-fit stop))
+  (check-equal? (tsne-result-n-iter result) stop)
   (check-pred single? (tsne-result-kl-divergence result)))
 
 (test-gpu "L1: params keep a derived n-neighbors and a drawn seed as #f"
