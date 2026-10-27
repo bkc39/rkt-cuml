@@ -6,7 +6,7 @@
                   spectral-embedding-result-embedding
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params)
-         (only-in racket/list append* argmax)
+         (only-in racket/list append* argmax second)
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-true test-case)
@@ -17,17 +17,18 @@
          (only-in "scaler-data.rkt" bits-equal?)
          (only-in "spectral-data.rkt" graph graph->vectors graph-cols graph-n graph-rows graph-vals))
 
-(provide check-graph-parity
-         check-se-parity
+(provide check-twins
          column-gaps
          columns
          cosine-gaps
          embedded
          embedded-graph
          graph-case
+         graph-checks
          rows-matrix
          sbm
          se-case
+         se-checks
          sign-ruled?
          twin)
 
@@ -121,20 +122,24 @@
           'norm (hash-ref options 'norm-laplacian #t)
           'drop (hash-ref options 'drop-first #t)))
 
-(define (check-results name configs results cases)
-  (for ([options (in-list configs)]
-        [result (in-list results)]
-        [found (in-list (run-cases twin cases))])
-    (test-case (format "~a ~a" name options)
-      (check-true (bits-equal? (embedded result) (hash-ref found 'embedding)) "embedding"))))
+(define ((bitwise ours) theirs)
+  (check-true (bits-equal? ours theirs) "embedding"))
 
-(define (check-se-parity name rows configs)
+(define (se-checks name rows configs)
   (define X (rows-matrix rows))
-  (define results (map (lambda (options) (apply-options spectral-embedding-fit options X)) configs))
-  (check-results name configs results (map (lambda (result) (se-case rows result)) results)))
+  (for/list ([options (in-list configs)])
+    (define result (apply-options spectral-embedding-fit options X))
+    (list (format "~a ~a" name options) (se-case rows result) (bitwise (embedded result)))))
 
-(define (check-graph-parity name g configs)
-  (check-results name
-                 configs
-                 (map (lambda (options) (embedded-graph g options)) configs)
-                 (map (lambda (options) (graph-case g options)) configs)))
+(define (graph-checks name g configs)
+  (for/list ([options (in-list configs)])
+    (list (format "~a ~a" name options)
+          (graph-case g options)
+          (bitwise (embedded (embedded-graph g options))))))
+
+(define (check-twins entries)
+  (for ([entry (in-list entries)]
+        [found (in-list (run-cases twin (map second entries)))])
+    (match-define (list label _ check) entry)
+    (test-case label
+      (check (hash-ref found 'embedding)))))

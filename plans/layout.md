@@ -938,3 +938,10 @@ Follow-ups are GitHub issues.
   advice about X. The dense entry takes n-neighbors between `x` and `out`,
   so clang-tidy's swappable-parameters check sees no adjacent integers that
   are not used together.
+- **B3-w.** The GPU suite's 1800 s budget holds by test-program count, not
+  fit time: a spectral fit takes milliseconds, a test process 2-6 s. B3's
+  laws live in six files (L1-L3 and L7-L12 in `-law-test`, dense and graph
+  L13 in `-refusal-test`, L4 in `-determinism-test`, L5 and L6 in one
+  `-twin-test` with one Python run), and `test-twin` probes `import cuml`
+  on first use rather than when `python-env` loads, which saved about 3.5 s
+  in every process that loads it without running a twin.
