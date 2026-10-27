@@ -25,7 +25,12 @@
          (only-in "private/estimator-data.rkt" listed printed round-trips)
          (only-in "private/python-env.rkt" run-cases test-twin twin-params)
          (only-in "private/scaler-data.rkt" bits-equal?)
-         (only-in "private/spectral-embedding-data.rkt" column-gaps embedded embedded-graph sbm twin)
+         (only-in "private/spectral-embedding-data.rkt"
+                  column-gaps
+                  embedded
+                  embedded-graph
+                  stochastic-graph
+                  twin)
          (only-in "private/umap-data.rkt" far-blobs fixture-X))
 
 (define changed
@@ -89,7 +94,7 @@
                     (lambda () (transform e X))))
 
 (test-gpu "L14: (random-seed 7) repeats a drawn seed; seeds 0 and 1 differ in bits, not in the bound"
-  (define-values (g _truth) (sbm '(40 60 80) 0.3 0.01 0))
+  (define g (stochastic-graph))
   (define (drawn)
     (random-seed 7)
     (embedded (embedded-graph g (hasheq 'random-state #f))))

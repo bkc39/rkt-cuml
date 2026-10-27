@@ -55,14 +55,7 @@
 (define (line-X count)
   (rows->matrix (line count) 'float32))
 
-(define (lanczos-message k drop least got)
-  (format "n-components: ~a component~a~a need~a at least ~a rows, got ~a"
-          k
-          (if (= k 1) "" "s")
-          (if drop " with drop-first" "")
-          (if (= k 1) "s" "")
-          least
-          got))
+(define two-message "n-components: 2 components with drop-first need at least 8 rows, got 7")
 
 (define zero-message
   (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph;"
@@ -88,12 +81,15 @@
           "X: expected row-major, got col-major 8x3"
           (blank-matrix 8 3 'float32 #:layout 'col-major))
    (X-row "s5" "X: expected at least 2 columns, got 1" one-column)
-   (X-row "s7" (lanczos-message 2 #t 8 7) (line-X 7) (hasheq 'n-neighbors 2))
+   (X-row "s7" two-message (line-X 7) (hasheq 'n-neighbors 2))
    (X-row "s7 drop-first #f"
-          (lanczos-message 2 #f 6 5)
+          "n-components: 2 components need at least 6 rows, got 5"
           (line-X 5)
           (hasheq 'n-neighbors 2 'drop-first #f))
-   (X-row "s7 one component" (lanczos-message 1 #t 6 5) (line-X 5) (hasheq 'n-components 1))
+   (X-row "s7 one component"
+          "n-components: 1 component with drop-first needs at least 6 rows, got 5"
+          (line-X 5)
+          (hasheq 'n-components 1))
    (X-row "s9" "n-neighbors: expected at most the 8 rows, got 9" (tiny-X) (hasheq 'n-neighbors 9))
    (X-row "s10" nan-message (tiny-with nan-row))
    (X-row "s10 inf"
@@ -115,7 +111,7 @@
           (tiny-with '() 'float64)
           (hasheq 'n-neighbors 1))
    (X-row "s5 before s7" "X: expected at least 2 columns, got 1" (blank-matrix 3 1 'float32))
-   (X-row "s7 before s9" (lanczos-message 2 #t 8 7) (line-X 7) (hasheq 'n-neighbors 9))
+   (X-row "s7 before s9" two-message (line-X 7) (hasheq 'n-neighbors 9))
    (X-row "s10 before s11" nan-message (tiny-with (append nan-row large-row)))
    (X-row "s11 before s12"
           (format "X: row 0: expected a squared norm of at most 4.253529586511731e+37, got ~a"
@@ -165,16 +161,20 @@
   (check-row 'spectral-embedding-fit r (lambda () (apply-options spectral-embedding-fit options X))))
 
 (test-gpu "L13: s7: the least rows fit for every probed (n-components, drop-first)"
-  (for ([entry (in-list '((1 #t) (2 #t) (2 #f) (8 #t) (19 #t)))])
-    (match-define (list k drop) entry)
-    (define least (* 2 (+ k (if drop 1 0) 1)))
+  (for ([entry (in-list '((1 #f 4 "1 component needs at least 4 rows, got 3")
+                          (1 #t 6 "1 component with drop-first needs at least 6 rows, got 5")
+                          (2 #t 8 "2 components with drop-first need at least 8 rows, got 7")
+                          (2 #f 6 "2 components need at least 6 rows, got 5")
+                          (8 #t 20 "8 components with drop-first need at least 20 rows, got 19")
+                          (19 #t 42 "19 components with drop-first need at least 42 rows, got 41")))])
+    (match-define (list k drop least message) entry)
     (test-case (format "k ~a drop ~a" k drop)
       (define options
         (hasheq 'n-components k 'drop-first drop 'n-neighbors (add1 (quotient least 2))))
-      (check-cuml-error
-       'logic
-       (format "spectral-embedding-fit: ~a" (lanczos-message k drop least (sub1 least)))
-       (lambda () (apply-options spectral-embedding-fit options (line-X (sub1 least)))))
+      (check-cuml-error 'logic
+                        (string-append "spectral-embedding-fit: n-components: " message)
+                        (lambda ()
+                          (apply-options spectral-embedding-fit options (line-X (sub1 least)))))
       (define rows (embedded (apply-options spectral-embedding-fit options (line-X least))))
       (check-true (and (finite-rows? rows) (sign-ruled? rows))))))
 
@@ -234,12 +234,14 @@
 
 (define ring-n 10)
 
-(define ring
-  (let ([pairs (for*/list ([i (in-range ring-n)]
-                           [e (in-list (list (cons i (modulo (add1 i) ring-n))
-                                             (cons (modulo (add1 i) ring-n) i)))])
-                 e)])
-    (graph (map car pairs) (map cdr pairs) (make-list (length pairs) 1.0) ring-n)))
+(define (ring-of n)
+  (define pairs
+    (for*/list ([i (in-range n)]
+                [e (in-list (list (cons i (modulo (add1 i) n)) (cons (modulo (add1 i) n) i)))])
+      e))
+  (graph (map car pairs) (map cdr pairs) (make-list (length pairs) 1.0) n))
+
+(define ring (ring-of ring-n))
 
 (define (fit-vectors rows cols vals [n ring-n])
   (spectral-embedding-fit-graph rows cols vals n))
@@ -321,7 +323,13 @@
   (for ([r (in-list (graph-rows-of))])
     (check-row 'spectral-embedding-fit-graph r)
     (check-pred spectral-embedding-result? ((fault ring)) (row-id r)))
-  (check-pred spectral-embedding-result? ((fault ring (hasheq 'n-components 3 'drop-first #f)))))
+  (for ([entry (in-list (list (list (ring-of 8) (hasheq))
+                              (list (ring-of 4) (hasheq 'n-components 1 'drop-first #f))
+                              (list (ring-of 6) (hasheq 'n-components 1))
+                              (list ring (hasheq 'n-components 3 'drop-first #f))))])
+    (match-define (list g options) entry)
+    (define rows (embedded (embedded-graph g options)))
+    (check-true (and (finite-rows? rows) (sign-ruled? rows)) (format "~a samples" (length rows)))))
 
 (test-pools "L13: a graph refusal leaves the RMM pool where it was"
   (for ([r (in-list (graph-rows-of))])

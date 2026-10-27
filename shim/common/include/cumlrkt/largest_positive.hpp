@@ -6,7 +6,7 @@
 namespace cumlrkt {
 
 template <typename T>
-void columns_sign_rule(const raft::handle_t& handle, T* x, int64_t n,
-                       int64_t k);
+void make_largest_positive(const raft::handle_t& handle, T* x, int64_t n,
+                           int64_t k);
 
 }  // namespace cumlrkt

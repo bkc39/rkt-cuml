@@ -11,20 +11,20 @@
      (require (only-in cuml/manifold spectral-embedding-fit spectral-embedding-result-embedding)
               (only-in cuml/tests/private/estimator-data apply-options)
               (only-in cuml/tests/private/spectral-data three-blocks)
-              (only-in cuml/tests/private/spectral-embedding-data embedded-graph rows-matrix sbm)
+              (only-in cuml/tests/private/spectral-embedding-data
+                       embedded-graph
+                       rows-matrix
+                       stochastic-graph)
               (only-in cuml/tests/private/umap-data blobs fixture-rows)
               (only-in cuml/tests/private/umap-determinism-data digest)
               (only-in racket/match match-define))
-     (define (planted)
-       (define-values (g _truth) (sbm '(40 60 80) 0.3 0.01 0))
-       g)
      (define (blocks)
        (define-values (g _truth) (three-blocks))
        g)
      (define fixtures
        (hasheq 'blobs (lambda () (fixture-rows blobs))
                'given (lambda () ',given)
-               'sbm planted
+               'sbm stochastic-graph
                'three-blocks blocks))
      (define (run config)
        (match-define (list kind name options) config)

@@ -13,7 +13,7 @@
 #include <rmm/exec_policy.hpp>
 
 #include "cumlrkt/device.cuh"
-#include "cumlrkt/signs.hpp"
+#include "cumlrkt/largest_positive.hpp"
 
 namespace cumlrkt {
 
@@ -71,8 +71,8 @@ struct sign_ruled {
 }  // namespace
 
 template <typename T>
-void columns_sign_rule(const raft::handle_t& handle, T* x, int64_t n,
-                       int64_t k) {
+void make_largest_positive(const raft::handle_t& handle, T* x, int64_t n,
+                           int64_t k) {
   const auto stream = raft::resource::get_cuda_stream(handle);
   rmm::device_uvector<entry<T>> largest(static_cast<std::size_t>(k), stream);
   const thrust::counting_iterator<int64_t> entries(0);
@@ -86,7 +86,7 @@ void columns_sign_rule(const raft::handle_t& handle, T* x, int64_t n,
   each(handle, n * k, sign_ruled<T>{x, largest.data(), k});
 }
 
-template void columns_sign_rule<float>(const raft::handle_t&, float*, int64_t,
-                                       int64_t);
+template void make_largest_positive<float>(const raft::handle_t&, float*,
+                                           int64_t, int64_t);
 
 }  // namespace cumlrkt

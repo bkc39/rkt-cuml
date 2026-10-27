@@ -905,7 +905,7 @@ Follow-ups are GitHub issues.
   records the count used and the params keep `#f`. Counts above 256 are
   accepted and documented as not repeatable.
 - **B3-e.** The shim applies sklearn's sign rule: each column's first entry
-  of largest magnitude is positive (`columns_sign_rule`). The Python twin
+  of largest magnitude is positive (`make_largest_positive`). The Python twin
   applies the same rule to cuML's output.
 - **B3-f.** `#:norm-laplacian` and `#:drop-first` are keywords, both `#t`
   by default, shared with the estimator.
@@ -925,23 +925,24 @@ Follow-ups are GitHub issues.
 - **B3-q.** A given graph keeps leg 5's bound: entries plus samples at most
   2³¹−1 (g3).
 - **B3-r.** Leg 5's graph checks live in `shim/common/graph.{hpp,cu}`, the
-  2(nev + 1) Lanczos bound in `require_lanczos_rows`, and the sign rule in
-  `shim/common/signs.{hpp,cu}`; spectral clustering's and UMAP's messages
-  and bits are unchanged. PCA's sign kernel writes a transposed output and
-  stays where it is.
-- **B3-s.** `spectral-clustering-result` is unchanged.
+  2(nev + 1) Lanczos bound in `require_lanczos_rows`, and the sign rule on a
+  row-major matrix in `shim/common/largest_positive.{hpp,cu}`. PCA's sign
+  kernel, which writes a transposed output, lives in
+  `shim/decomposition/src/signs.cuh`.
+- **B3-s.** Spectral clustering's result carries labels only; its
+  embedding comes from `spectral-embedding-fit-graph`.
 - **B3-t.** X is not centred; the manual says to centre X far from the
   origin.
 - **B3-u.** The eigensolver's tolerance (1e-5) is not exposed.
-- **B3-v.** The shim takes the resolved n-neighbors from Racket and returns
-  only the embedding; the graph path's zero-column refusal carries no
-  advice about X. The dense entry takes n-neighbors between `x` and `out`,
-  so clang-tidy's swappable-parameters check sees no adjacent integers that
-  are not used together.
-- **B3-w.** The GPU suite's 1800 s budget holds by test-program count, not
-  fit time: a spectral fit takes milliseconds, a test process 2-6 s. B3's
-  laws live in six files (L1-L3 and L7-L12 in `-law-test`, dense and graph
-  L13 in `-refusal-test`, L4 in `-determinism-test`, L5 and L6 in one
-  `-twin-test` with one Python run), and `test-twin` probes `import cuml`
-  on first use rather than when `python-env` loads, which saved about 3.5 s
-  in every process that loads it without running a twin.
+- **B3-v.** Racket resolves n-neighbors and passes the count to the shim,
+  which returns only the embedding; the graph path's zero-column refusal
+  carries no advice about X.
+- **B3-w.** The GPU suite's 1800 s budget is spent per test program, so B3's
+  laws live in six files: L1-L3 and L7-L12 in `-law-test`, dense and graph
+  L13 in `-refusal-test`, L4 in `-determinism-test`, and L5-L7's twins in
+  one `-twin-test` with one Python run. `test-twin` probes `import cuml` on
+  first use, not when `python-env` loads.
+- **B3-x.** Without norm-laplacian, a given graph is embedded as an exact
+  power-of-two-scaled copy whose largest weight is in [1, 2), so the
+  embedding is bitwise invariant to the scale of the weights; with it, the
+  embedding scales as 1/√s on its own.

@@ -10,28 +10,28 @@
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params
                   spectral-embedding-result?)
-         (only-in racket/list append* remove-duplicates)
+         (only-in racket/list remove-duplicates)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list* device-vector->list list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/blob-data.rkt" centred-blobs)
-         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
+         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape scaled-rows transpose)
          (only-in "private/spectral-data.rkt"
                   graph->vectors
                   graph-edit
+                  graph-map-vals
                   graph-n
                   graph-shuffle
                   knn-graph
                   three-blocks)
          (only-in "private/spectral-embedding-data.rkt"
                   column-gaps
-                  columns
                   embedded
                   embedded-graph
+                  quantised
                   rows-matrix
-                  sbm
-                  sign-ruled?)
+                  sign-ruled?
+                  stochastic-blocks)
          (only-in "private/umap-data.rkt"
                   blobs
                   far-blobs
@@ -92,9 +92,7 @@
 
 (test-gpu "L2: the fits leave X and the graph bitwise unchanged, on the rescale path too"
   (for ([rows (in-list (list (fixture-rows far-blobs)
-                             (for/list ([row (in-list (fixture-rows far-blobs))])
-                               (for/list ([x (in-list row)])
-                                 (* x (expt 2.0 -70))))))])
+                             (scaled-rows (fixture-rows far-blobs) (expt 2.0 -70))))])
     (define X (rows-matrix rows))
     (define before (device-matrix->list* X))
     (spectral-embedding-fit X #:n-neighbors 10)
@@ -112,7 +110,7 @@
 
 (define component-gap 1e-2)
 
-(define-values (planted planted-truth) (sbm '(40 60 80) 0.3 0.01 0))
+(define-values (stochastic stochastic-truth) (stochastic-blocks '(40 60 80) 0.3 0.01 0))
 
 (define (dense rows n-neighbors)
   (embedded (spectral-embedding-fit (rows-matrix rows) #:n-neighbors n-neighbors)))
@@ -120,22 +118,26 @@
 (define (on-graph g [options (hasheq)])
   (embedded (embedded-graph g options)))
 
-(define quantised
-  (let-values ([(rows _labels) (centred-blobs '((0 0 0) (1 1 0) (0 1 1)) 40 7)])
-    (define most (apply max (map abs (append* rows))))
-    (for/list ([row (in-list rows)])
-      (for/list ([x (in-list row)])
-        (/ (round (* (/ x most) 1.5 (expt 2 20))) (expt 2.0 20))))))
-
 (test-gpu "L3, L7: 2^k X embeds bitwise as X for k from -120 to 60, sign-ruled"
   (define base (dense quantised 10))
   (check-true (sign-ruled? base))
   (for ([k (in-list '(-120 -70 -45 -30 -1 1 30 60))])
-    (define scaled
-      (for/list ([row (in-list quantised)])
-        (for/list ([x (in-list row)])
-          (* x (expt 2.0 k)))))
-    (check-true (bits-equal? (dense scaled 10) base) (format "k ~a" k))))
+    (check-true (bits-equal? (dense (scaled-rows quantised (expt 2.0 k)) 10) base)
+                (format "k ~a" k))))
+
+(test-gpu "L3, L7: 2^k weights embed bitwise as the graph without norm-laplacian, and as 2^(-k/2) times it with"
+  (for ([norm (in-list '(#f #t))])
+    (define options (hasheq 'norm-laplacian norm))
+    (define base (on-graph stochastic options))
+    (check-true (sign-ruled? base))
+    (for ([k (in-list '(-40 -20 -17 60 100))]
+          #:unless (and norm (odd? k)))
+      (define scaled (graph-map-vals stochastic (lambda (w) (* w (expt 2.0 k)))))
+      (define expected
+        (if norm
+            (scaled-rows base (expt 2.0 (- (quotient k 2))))
+            base))
+      (check-true (bits-equal? (on-graph scaled options) expected) (format "norm ~a k ~a" norm k)))))
 
 (test-gpu "L3, L8: a dense fit is the fit of its host kNN graph"
   (define rows (fixture-rows blobs))
@@ -145,14 +147,15 @@
   (check-true (bits-equal? ours theirs) (format "column gaps ~a" (column-gaps ours theirs))))
 
 (test-gpu "L3, L9: shuffling the entries keeps the embedding, and doubled half-weight entries stay near"
-  (define base (on-graph planted))
+  (define base (on-graph stochastic))
   (check-true (sign-ruled? base))
   (for ([seed (in-range 5)])
-    (check-true (bits-equal? (on-graph (graph-shuffle planted seed)) base) (format "seed ~a" seed)))
+    (check-true (bits-equal? (on-graph (graph-shuffle stochastic seed)) base)
+                (format "seed ~a" seed)))
   (define (halved vals)
     (map (lambda (w) (/ w 2.0)) vals))
   (define doubled
-    (graph-edit planted
+    (graph-edit stochastic
                 #:rows (lambda (rows) (append rows rows))
                 #:cols (lambda (cols) (append cols cols))
                 #:vals (lambda (vals) (append (halved vals) (halved vals)))))
@@ -161,13 +164,13 @@
 (test-gpu "L3, L10: without drop-first, column 0 is constant and the rest is the drop-first fit, bitwise"
   (for ([k (in-list '(1 2 3))])
     (test-case (format "k ~a" k)
-      (define kept (on-graph planted (hasheq 'n-components (add1 k) 'drop-first #f)))
-      (define dropped (on-graph planted (hasheq 'n-components k)))
+      (define kept (on-graph stochastic (hasheq 'n-components (add1 k) 'drop-first #f)))
+      (define dropped (on-graph stochastic (hasheq 'n-components k)))
       (check-true (sign-ruled? kept))
-      (match-define (cons first rest) (columns kept))
+      (match-define (cons first rest) (transpose kept))
       (define spread (/ (- (apply max first) (apply min first)) (apply max (map abs first))))
       (check-true (<= spread constant-bound) (format "spread ~a" spread))
-      (check-true (bits-equal? (apply map list rest) dropped)))))
+      (check-true (bits-equal? (transpose rest) dropped)))))
 
 (define (spreads rows truth)
   (for/list ([group (in-list (remove-duplicates truth))])
@@ -209,6 +212,6 @@
                        (fixture-labels far-blobs))
                   1.0
                   (format "far-blobs seed ~a" seed))
-    (check-equal? (ari (on-graph planted (hasheq 'random-state seed)) planted-truth)
+    (check-equal? (ari (on-graph stochastic (hasheq 'random-state seed)) stochastic-truth)
                   1.0
                   (format "sbm seed ~a" seed))))

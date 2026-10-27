@@ -107,6 +107,7 @@ packet (§4) has the detail.
 | B3 #27 | precomputed graphs are not symmetrised (sklearn symmetrises) | transform(coo) | documented (B3-l) |
 | B3 #27 | duplicate self-loops make compute_graph_laplacian under-allocate its diagonal entries | raft `laplacian.cuh` | self-loops refused (g5) |
 | B3 #27 | eigen tolerance fixed at 1e-5: sklearn agreement 7e-2 on a 400-node path, 0.81 on one overlapping-blob graph | lanczos | documented; L6 on gapped graphs |
+| B3 #27 | the 1e-5 tolerance is an absolute residual, so an unnormalised Laplacian with weights scaled by 2^-17 to 2^-20 gives a finite wrong embedding (gap 2.4 against sklearn), by 2^-30 or less an all-zero one, and by 2^80 or more "couldn't converge" | `lanczos.cuh` | weights rescaled to [1, 2) without norm-laplacian (B3-x) |
 
 ## raft
 

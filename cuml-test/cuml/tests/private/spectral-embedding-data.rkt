@@ -11,30 +11,32 @@
          racket/runtime-path
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix)
+         (only-in "blob-data.rkt" centred-blobs)
          (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
          (only-in "python-env.rkt" run-cases)
-         (only-in "scaler-data.rkt" bits-equal?)
+         (only-in "scaler-data.rkt" bits-equal? dot transpose)
          (only-in "spectral-data.rkt" graph graph->vectors graph-cols graph-n graph-rows graph-vals))
 
 (provide check-twins
          column-gaps
-         columns
          cosine-gaps
          embedded
          embedded-graph
+         embedding-case
+         embedding-checks
          graph-case
          graph-checks
+         quantised
          rows-matrix
-         sbm
-         se-case
-         se-checks
          sign-ruled?
+         stochastic-blocks
+         stochastic-graph
          twin)
 
 (define-runtime-path twin "../python/spectral_embedding_twin.py")
 
-(define (sbm sizes p-in p-out seed #:weighted? [weighted? #f])
+(define (stochastic-blocks sizes p-in p-out seed #:weighted? [weighted? #f])
   (define truth
     (append* (for/list ([s (in-list sizes)]
                         [g (in-naturals)])
@@ -61,6 +63,17 @@
           (lambda (a b) (or (< (car a) (car b)) (and (= (car a) (car b)) (< (cadr a) (cadr b)))))))
   (values (graph (map car both) (map cadr both) (map caddr both) n) truth))
 
+(define (stochastic-graph [sizes '(40 60 80)] [seed 0] #:weighted? [weighted? #f])
+  (define-values (g _truth) (stochastic-blocks sizes 0.3 0.01 seed #:weighted? weighted?))
+  g)
+
+(define quantised
+  (let-values ([(rows _labels) (centred-blobs '((0 0 0) (1 1 0) (0 1 1)) 40 7)])
+    (define most (apply max (map abs (append* rows))))
+    (for/list ([row (in-list rows)])
+      (for/list ([x (in-list row)])
+        (/ (round (* (/ x most) 1.5 (expt 2 20))) (expt 2.0 20))))))
+
 (define (rows-matrix rows)
   (list*->device-matrix rows #:dtype 'float32))
 
@@ -73,35 +86,25 @@
          options
          (append (graph->vectors g) (list (graph-n g)))))
 
-(define (columns rows)
-  (apply map list rows))
-
 (define (sign-ruled? rows)
-  (for/and ([column (in-list (columns rows))])
+  (for/and ([column (in-list (transpose rows))])
     (> (argmax abs column) 0.0)))
 
-(define (largest column)
-  (for/fold ([best 0.0]) ([x (in-list column)])
-    (max best (abs x))))
-
 (define (column-gaps ours theirs)
-  (for/list ([e (in-list (columns ours))]
-             [s (in-list (columns theirs))])
+  (for/list ([e (in-list (transpose ours))]
+             [s (in-list (transpose theirs))])
     (/ (for/fold ([gap 0.0])
                  ([a (in-list e)]
                   [b (in-list s)])
          (max gap (abs (- a b))))
-       (largest s))))
-
-(define (dot a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (* x y)))
+       (abs (argmax abs s)))))
 
 (define (cosine-gaps ours theirs)
-  (for/list ([e (in-list (columns ours))]
-             [s (in-list (columns theirs))])
+  (for/list ([e (in-list (transpose ours))]
+             [s (in-list (transpose theirs))])
     (- 1.0 (/ (abs (dot e s)) (sqrt (* (dot e e) (dot s s)))))))
 
-(define (se-case X result #:op [op "embed"])
+(define (embedding-case X result #:op [op "embed"])
   (define params (spectral-embedding-result-params result))
   (hasheq 'op op
           'X X
@@ -125,11 +128,11 @@
 (define ((bitwise ours) theirs)
   (check-true (bits-equal? ours theirs) "embedding"))
 
-(define (se-checks name rows configs)
+(define (embedding-checks name rows configs)
   (define X (rows-matrix rows))
   (for/list ([options (in-list configs)])
     (define result (apply-options spectral-embedding-fit options X))
-    (list (format "~a ~a" name options) (se-case rows result) (bitwise (embedded result)))))
+    (list (format "~a ~a" name options) (embedding-case rows result) (bitwise (embedded result)))))
 
 (define (graph-checks name g configs)
   (for/list ([options (in-list configs)])

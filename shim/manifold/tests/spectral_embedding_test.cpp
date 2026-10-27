@@ -9,8 +9,8 @@
 #include <raft/core/resource/cuda_stream.hpp>
 #include <vector>
 
+#include "cumlrkt/largest_positive.hpp"
 #include "cumlrkt/manifold.h"
-#include "cumlrkt/signs.hpp"
 #include "manifold_fixture.hpp"
 #include "raftrkt/c_api.h"
 #include "raftrkt/view.hpp"
@@ -112,18 +112,23 @@ TEST(SpectralEmbeddingFit, TinyXEmbedsAsItsRescaledCopy) {
 }
 
 struct path_graph {
-  explicit path_graph(const resources& res)
-      : rows(res, ends(true), {2 * (path - 1)}),
-        cols(res, ends(false), {2 * (path - 1)}),
-        vals(res, std::vector<float>(2 * (path - 1), 1.0F), {2 * (path - 1)}) {}
-  static std::vector<int32_t> ends(bool first) {
+  path_graph(const resources& res, int64_t n)
+      : n(n),
+        rows(res, ends(n, true), {2 * (n - 1)}),
+        cols(res, ends(n, false), {2 * (n - 1)}),
+        vals(res, std::vector<float>(2 * (n - 1), 1.0F), {2 * (n - 1)}) {}
+  static std::vector<int32_t> ends(int64_t n, bool first) {
     std::vector<int32_t> out;
-    for (int32_t i = 0; i + 1 < path; ++i) {
+    for (int32_t i = 0; i + 1 < n; ++i) {
       out.push_back(first ? i : i + 1);
       out.push_back(first ? i + 1 : i);
     }
     return out;
   }
+  graph_input input() const {
+    return {rows.view(), cols.view(), vals.view(), n};
+  }
+  int64_t n;
   filled<int32_t> rows;
   filled<int32_t> cols;
   filled<float> vals;
@@ -132,12 +137,11 @@ struct path_graph {
 TEST(SpectralEmbeddingFitGraph, APathIsMonotoneAndSignRuled) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const path_graph g(res);
+  const path_graph g(res, path);
   record out(res);
-  EXPECT_EQ(outcome(spectral_fit_graph(
-                res, {g.rows.view(), g.cols.view(), g.vals.view(), path}, out,
-                {.n_components = 1})),
-            "accepted");
+  EXPECT_EQ(
+      outcome(spectral_fit_graph(res, g.input(), out, {.n_components = 1})),
+      "accepted");
   const std::vector<float> e = out.read<float>(0);
   ASSERT_EQ(e.size(), static_cast<std::size_t>(path));
   EXPECT_TRUE(sign_ruled(e, 1));
@@ -145,12 +149,29 @@ TEST(SpectralEmbeddingFitGraph, APathIsMonotoneAndSignRuled) {
               std::ranges::is_sorted(e, std::ranges::greater{}));
 }
 
+TEST(SpectralEmbeddingFitGraph, FitsAtTheLeastSamplesForEachEigenvectorCount) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const std::vector<spectral_options> cases{
+      {.n_components = 1, .drop_first = 0},
+      {.n_components = 1, .drop_first = 1},
+      {.n_components = 2, .drop_first = 1}};
+  for (const spectral_options& o : cases) {
+    const int64_t n = 2 * (o.n_components + o.drop_first + 1);
+    SCOPED_TRACE(n);
+    const path_graph g(res, n);
+    record out(res);
+    EXPECT_EQ(outcome(spectral_fit_graph(res, g.input(), out, o)), "accepted");
+    EXPECT_TRUE(all_finite(out.read<float>(0)));
+  }
+}
+
 std::vector<float> sign_ruled_copy(const std::vector<float>& host, int64_t n,
                                    int64_t k) {
   const resources res;
   const filled<float> x(res, host, {n, k});
   const raft::handle_t& h = raftrkt::handle_of(res.handle);
-  columns_sign_rule<float>(h, static_cast<float*>(x.array.view.data), n, k);
+  make_largest_positive<float>(h, static_cast<float*>(x.array.view.data), n, k);
   EXPECT_EQ(cudaStreamSynchronize(raft::resource::get_cuda_stream(h).value()),
             cudaSuccess);
   std::vector<float> back(host.size());
@@ -160,7 +181,7 @@ std::vector<float> sign_ruled_copy(const std::vector<float>& host, int64_t n,
   return back;
 }
 
-TEST(ColumnsSignRule, TheFirstLargestEntryOfEachColumnTurnsPositive) {
+TEST(MakeLargestPositive, TheFirstLargestEntryOfEachColumnTurnsPositive) {
   CUMLRKT_REQUIRE_GPU();
   EXPECT_EQ(sign_ruled_copy({0, 3, -2, -3, 2, 1, 1, 0}, 4, 2),
             (std::vector<float>{0, 3, 2, -3, -2, 1, -1, 0}));

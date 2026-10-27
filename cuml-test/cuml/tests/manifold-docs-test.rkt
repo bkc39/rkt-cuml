@@ -95,18 +95,16 @@
                     "transform: tsne has no transform; use fit-transform"
                     (lambda () (transform (fit (tsne #:perplexity 5) (X)) (X)))))
 
+(define path-n 24)
+
 (define (path-graph)
-  (list (list->device-vector (for*/list ([i 23]
-                                         [j '(0 1)])
-                               (+ i j))
-                             #:dtype 'int32)
-        (list->device-vector (for*/list ([i 23]
-                                         [j '(1 0)])
-                               (+ i j))
-                             #:dtype 'int32)
-        (list->device-vector (for/list ([_ 46])
-                               1.0)
-                             #:dtype 'float32)))
+  (define path
+    (for*/list ([i (sub1 path-n)]
+                [e (list (cons i (add1 i)) (cons (add1 i) i))])
+      e))
+  (list (list->device-vector (map car path) #:dtype 'int32)
+        (list->device-vector (map cdr path) #:dtype 'int32)
+        (list->device-vector (map (lambda (_) 1.0) path) #:dtype 'float32)))
 
 (test-gpu "the manual: the spectral embedding example, its fits and params"
   (define spectral (spectral-embedding-fit (X) #:n-neighbors 10))
@@ -123,14 +121,14 @@
    "spectral-embedding-fit: n-components: 30 components with drop-first need at least 64 rows, got 60"
    (lambda () (spectral-embedding-fit (X) #:n-components 30)))
   (match-define (list rows cols vals) (path-graph))
-  (check-equal? (~> (spectral-embedding-fit-graph rows cols vals 24 #:n-components 1)
+  (check-equal? (~> (spectral-embedding-fit-graph rows cols vals path-n #:n-components 1)
                     spectral-embedding-result-embedding
                     shape)
                 '(24 1))
   (check-cuml-error
    'logic
    "spectral-embedding-fit-graph: rows: entry 0: self-loop at sample 0; leave the diagonal out"
-   (lambda () (spectral-embedding-fit-graph rows rows vals 24)))
+   (lambda () (spectral-embedding-fit-graph rows rows vals path-n)))
   (check-equal? (hash-ref (spectral-embedding-params #:drop-first #f) 'drop-first) #f)
   (check-cuml-error
    'logic

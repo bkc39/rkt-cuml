@@ -12,10 +12,10 @@
 #include <utility>
 
 #include "cumlrkt/graph.hpp"
+#include "cumlrkt/largest_positive.hpp"
 #include "cumlrkt/manifold.h"
 #include "cumlrkt/rows.hpp"
 #include "cumlrkt/scale.hpp"
-#include "cumlrkt/signs.hpp"
 #include "cumlrkt/support.hpp"
 #include "cumlrkt/transpose.hpp"
 #include "manifold_support.hpp"
@@ -33,6 +33,7 @@ using cumlrkt::graph_views;
 using cumlrkt::guarded;
 using cumlrkt::largest_magnitude;
 using cumlrkt::logic_error;
+using cumlrkt::make_largest_positive;
 using cumlrkt::matrix;
 using cumlrkt::most_index;
 using cumlrkt::require_at_least;
@@ -44,8 +45,11 @@ using cumlrkt::require_some;
 using cumlrkt::require_sound_graph;
 using cumlrkt::require_unlike_first;
 using cumlrkt::scale_exponent;
+using cumlrkt::scaled_copy;
 using cumlrkt::scratch;
 using cumlrkt::settle;
+using cumlrkt::to_rows;
+using cumlrkt::unit_exponent;
 using cumlrkt::manifold::float_rows;
 using cumlrkt::manifold::require_nonzero_columns;
 using cumlrkt::manifold::require_rows_fit;
@@ -64,6 +68,14 @@ struct embedding_request {
   int32_t drop_first;
   uint64_t random_state;
 };
+
+embedding_request request_of(int64_t n_components, int32_t norm_laplacian,
+                             int32_t drop_first, uint64_t random_state) {
+  return {.n_components = n_components,
+          .norm_laplacian = norm_laplacian,
+          .drop_first = drop_first,
+          .random_state = random_state};
+}
 
 int64_t eigenvectors(const embedding_request& r) {
   return r.n_components + (r.drop_first != 0 ? 1 : 0);
@@ -103,16 +115,28 @@ void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n, int64_t k,
     buffer<float> columns = scratch<float>(n * k, stream);
     solve(raft::make_device_matrix_view<float, int, raft::col_major>(
         columns.data(), static_cast<int>(n), static_cast<int>(k)));
-    cumlrkt::to_rows<float>(handle, columns.data(), n, k, nullptr,
-                            embedding->data());
+    to_rows<float>(handle, columns.data(), n, k, nullptr, embedding->data());
     require_solved(embedding->data(), n, k, stream);
     require_nonzero_columns(columns.data(), n, k, advice, stream);
   }
-  cumlrkt::columns_sign_rule<float>(handle, embedding->data(), n, k);
+  make_largest_positive<float>(handle, embedding->data(), n, k);
   settle(handle);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(embedding->data(), n, k, layout::row_major)};
   raftrkt::deposit(out, "out", handle, std::move(embedding), regions);
+}
+
+template <typename Solve>
+void on_scaled(const raft::handle_t& handle, float* data, int64_t count,
+               int exponent, Solve&& solve) {
+  if (exponent == 0) {
+    solve(data);
+  } else {
+    buffer<float> scaled =
+        scratch<float>(count, raft::resource::get_cuda_stream(handle));
+    scaled_copy<float>(handle, data, count, scaled.data(), exponent);
+    solve(scaled.data());
+  }
 }
 
 void fit_dense(const raft::handle_t& handle, const rr_view* view,
@@ -136,21 +160,13 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
   const int exponent =
       scale_exponent<float>(largest_magnitude(x.data, x.n * x.d, stream));
   embed(handle, out, x.n, r.n_components, zero_advice, [&](embedding_view e) {
-    const auto solve = [&](float* data) {
+    on_scaled(handle, x.data, x.n * x.d, exponent, [&](float* data) {
       ML::SpectralEmbedding::transform(
           handle, params_of(r, n_neighbors),
           raft::make_device_matrix_view<float, int, raft::row_major>(
               data, static_cast<int>(x.n), static_cast<int>(x.d)),
           e);
-    };
-    if (exponent == 0) {
-      solve(x.data);
-      return;
-    }
-    buffer<float> scaled = scratch<float>(x.n * x.d, stream);
-    cumlrkt::scaled_copy<float>(handle, x.data, x.n * x.d, scaled.data(),
-                                exponent);
-    solve(scaled.data());
+    });
   });
 }
 
@@ -161,13 +177,20 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
   require_lanczos(r, n, "samples");
   require_samples(n, c.nnz, 1);
   require_basis(n, eigenvectors(r), "n-components", "samples", "eigenvectors");
-  require_sound_graph(c, n, raft::resource::get_cuda_stream(handle));
+  const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
+  require_sound_graph(c, n, stream);
+  const int exponent =
+      r.norm_laplacian != 0
+          ? 0
+          : unit_exponent(largest_magnitude(c.vals, c.nnz, stream));
   embed(handle, out, n, r.n_components, "", [&](embedding_view e) {
-    ML::SpectralEmbedding::transform(
-        handle, params_of(r, 0),
-        raft::make_device_vector_view<int, int64_t>(c.rows, c.nnz),
-        raft::make_device_vector_view<int, int64_t>(c.cols, c.nnz),
-        raft::make_device_vector_view<float, int64_t>(c.vals, c.nnz), e);
+    on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
+      ML::SpectralEmbedding::transform(
+          handle, params_of(r, 0),
+          raft::make_device_vector_view<int, int64_t>(c.rows, c.nnz),
+          raft::make_device_vector_view<int, int64_t>(c.cols, c.nnz),
+          raft::make_device_vector_view<float, int64_t>(vals, c.nnz), e);
+    });
   });
 }
 
@@ -182,11 +205,10 @@ int cuml_manifold_spectral_embedding_fit(void* handle, const rr_view* x,
                                          int32_t drop_first,
                                          uint64_t random_state) {
   return guarded(handle, {{"X", x}}, [&](const raft::handle_t& h) {
-    const embedding_request r{.n_components = n_components,
-                              .norm_laplacian = norm_laplacian,
-                              .drop_first = drop_first,
-                              .random_state = random_state};
-    fit_dense(h, x, raftrkt::require(out, "out"), r, n_neighbors);
+    fit_dense(
+        h, x, raftrkt::require(out, "out"),
+        request_of(n_components, norm_laplacian, drop_first, random_state),
+        n_neighbors);
   });
 }
 
@@ -196,15 +218,13 @@ int cuml_manifold_spectral_embedding_fit_graph(
     void* handle, const rr_view* rows, const rr_view* cols, const rr_view* vals,
     int64_t n_samples, rr_deposit* out, int64_t n_components,
     int32_t norm_laplacian, int32_t drop_first, uint64_t random_state) {
-  return guarded(handle, {{"rows", rows}, {"cols", cols}, {"vals", vals}},
-                 [&](const raft::handle_t& h) {
-                   const embedding_request r{.n_components = n_components,
-                                             .norm_laplacian = norm_laplacian,
-                                             .drop_first = drop_first,
-                                             .random_state = random_state};
-                   fit_graph(h, {rows, cols, vals}, n_samples,
-                             raftrkt::require(out, "out"), r);
-                 });
+  return guarded(
+      handle, {{"rows", rows}, {"cols", cols}, {"vals", vals}},
+      [&](const raft::handle_t& h) {
+        fit_graph(
+            h, {rows, cols, vals}, n_samples, raftrkt::require(out, "out"),
+            request_of(n_components, norm_laplacian, drop_first, random_state));
+      });
 }
 
 CUMLRKT_JOB(cuml_manifold_spectral_embedding_fit_graph)

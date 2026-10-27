@@ -10,7 +10,7 @@
          (only-in raft/unsafe deposit->list)
          (only-in "curve.rkt" curve-parameters)
          (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job)
-         (only-in "support.rkt" bound-params drawn-seed finite-real? flag metric-code rows-of))
+         (only-in "support.rkt" bound-params drawn-seed finite-real? flag metric-code rows-or-zero))
 
 (provide (struct-out umap-result)
          umap-fit
@@ -106,7 +106,7 @@
     params)
   (define-values (a b) (curve who min-dist spread given-a given-b))
   (define-values (epochs-given epochs seed deterministic)
-    (schedule n-epochs random-state (rows-of X)))
+    (schedule n-epochs random-state (rows-or-zero X)))
   (define out (deposit-for/who who resources))
   (cuml-manifold-umap-fit-job who
                               resources
@@ -155,7 +155,7 @@
                             ['random-state random-state])
     params)
   (define-values (epochs-given epochs seed deterministic)
-    (schedule n-epochs random-state (max (rows-of train-X) (rows-of X))))
+    (schedule n-epochs random-state (max (rows-or-zero train-X) (rows-or-zero X))))
   (define out (deposit-for/who who resources))
   (cuml-manifold-umap-transform-job who
                                     resources

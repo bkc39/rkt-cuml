@@ -9,7 +9,7 @@
          (only-in "native.rkt"
                   cuml-manifold-spectral-embedding-fit-graph-job
                   cuml-manifold-spectral-embedding-fit-job)
-         (only-in "support.rkt" bound-params drawn-seed flag rows-of))
+         (only-in "support.rkt" bound-params drawn-seed flag rows-or-zero))
 
 (provide (struct-out spectral-embedding-result)
          spectral-embedding-fit
@@ -30,31 +30,36 @@
   [random-state 0]
   [affinity 'nearest-neighbors #:fixed])
 
-(define most-default-neighbors 256)
+(define most-derived-neighbors 256)
 
-(define (neighbours n-neighbors X)
-  (or n-neighbors (min most-default-neighbors (max 2 (quotient (rows-of X) 10)))))
+(define (derived-neighbors X)
+  (min most-derived-neighbors (max 2 (quotient (rows-or-zero X) 10))))
 
-(define (fitted who X params resources)
+(define (embedded who resources params n-neighbors job inputs)
   (match-define (hash-table ['n-components n-components]
-                            ['n-neighbors n-neighbors]
                             ['norm-laplacian norm-laplacian]
                             ['drop-first drop-first]
                             ['random-state random-state])
     params)
   (define out (deposit-for/who who resources))
-  (define used (neighbours n-neighbors X))
-  (cuml-manifold-spectral-embedding-fit-job who
-                                            resources
-                                            X
-                                            used
-                                            out
-                                            n-components
-                                            (flag norm-laplacian)
-                                            (flag drop-first)
-                                            (or random-state (drawn-seed)))
+  (apply
+   job
+   who
+   resources
+   (append
+    inputs
+    (list out n-components (flag norm-laplacian) (flag drop-first) (or random-state (drawn-seed)))))
   (match-define (list embedding) (deposit->list out))
-  (spectral-embedding-result embedding used params))
+  (spectral-embedding-result embedding n-neighbors params))
+
+(define (fitted who X params resources)
+  (define n-neighbors (or (hash-ref params 'n-neighbors) (derived-neighbors X)))
+  (embedded who
+            resources
+            params
+            n-neighbors
+            cuml-manifold-spectral-embedding-fit-job
+            (list X n-neighbors)))
 
 (define/who (spectral-embedding-fit who
                                     X
@@ -70,25 +75,12 @@
                                           #:hyperparameters spectral-embedding-params
                                           #:ignoring (n-neighbors affinity)
                                           #:resources [resources (current-device-resources)])
-  (define out (deposit-for/who who resources))
-  (cuml-manifold-spectral-embedding-fit-graph-job who
-                                                  resources
-                                                  rows
-                                                  cols
-                                                  vals
-                                                  n-samples
-                                                  out
-                                                  n-components
-                                                  (flag norm-laplacian)
-                                                  (flag drop-first)
-                                                  (or random-state (drawn-seed)))
-  (match-define (list embedding) (deposit->list out))
-  (spectral-embedding-result embedding
-                             #f
-                             (spectral-embedding-params #:n-components n-components
-                                                        #:norm-laplacian norm-laplacian
-                                                        #:drop-first drop-first
-                                                        #:random-state random-state)))
+  (embedded who
+            resources
+            (bound-params spectral-embedding-params #:ignoring (n-neighbors affinity))
+            #f
+            cuml-manifold-spectral-embedding-fit-graph-job
+            (list rows cols vals n-samples)))
 
 (define/who (spectral-embedding-fit-transform who
                                               X

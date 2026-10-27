@@ -52,7 +52,15 @@ def embed(case):
 def raw_tiny(case):
     X = np.ldexp(rows(case), -70).astype(np.float32)
     E = cuml_embedding(X, case, "nearest_neighbors", case["n_neighbors"])
-    return {"embedding": listed(E)}
+    return {"embedding": listed(sign_rule(E))}
+
+
+def unit_scaled(case):
+    vals = np.asarray(case["vals"], dtype=np.float32)
+    if case["norm"]:
+        return vals
+    _, e = np.frexp(np.max(vals))
+    return np.ldexp(vals, 1 - e).astype(np.float32)
 
 
 def device_graph(case):
@@ -62,7 +70,7 @@ def device_graph(case):
     n = case["n"]
     return cps.coo_matrix(
         (
-            cp.asarray(case["vals"], dtype=cp.float32),
+            cp.asarray(unit_scaled(case)),
             (
                 cp.asarray(case["rows"], dtype=cp.int32),
                 cp.asarray(case["cols"], dtype=cp.int32),

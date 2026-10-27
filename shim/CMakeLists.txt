@@ -101,14 +101,14 @@ cumlrkt_family(manifold
   SOURCES common/src/transpose.cu manifold/src/manifold.cpp
           manifold/src/manifold_support.cpp manifold/src/tsne.cpp
           manifold/src/spectral_embedding.cpp common/src/graph.cu
-          common/src/signs.cu manifold/src/umap.cpp manifold/src/umap_device.cu
+          common/src/largest_positive.cu manifold/src/umap.cpp manifold/src/umap_device.cu
   TESTS manifold/tests/manifold_test.cpp manifold/tests/tsne_test.cpp
         manifold/tests/tsne_refusal_test.cpp manifold/tests/umap_test.cpp
         manifold/tests/umap_spectral_test.cpp
         manifold/tests/umap_refusal_test.cpp
         manifold/tests/spectral_embedding_test.cpp
         manifold/tests/spectral_embedding_refusal_test.cpp common/src/rows.cu
-        common/src/signs.cu
+        common/src/largest_positive.cu
 )
 
 cumlrkt_family(probe TEST_ONLY

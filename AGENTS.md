@@ -95,8 +95,9 @@ init and spectral embedding;
 the COO graph checks of spectral clustering and spectral embedding
 (`checked_graph`, `require_samples`, `scan_graph`, `fault_message`,
 `require_sound_graph`);
-`signs.hpp` with `common/src/signs.cu`, linked into manifold:
-`columns_sign_rule`, sklearn's sign rule on a row-major matrix in place;
+`largest_positive.hpp` with `common/src/largest_positive.cu`, linked into
+manifold: `make_largest_positive`, sklearn's sign rule on a row-major matrix
+in place;
 `limits.hpp`: the index and squared-norm bounds; `rows.hpp` with
 `common/src/rows.cu`, linked into every family: `first_large_row`,
 `first_large_l1_row`, `total_spread`, `first_zero_row`, `first_non_finite`,
