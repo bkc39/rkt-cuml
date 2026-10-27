@@ -178,6 +178,7 @@
   (define sqeuclidean (hash-set small 'metric 'sqeuclidean))
   (define manhattan (hash-set small 'metric 'manhattan))
   (define pca (hasheq 'perplexity 3.0 'init 'pca))
+  (define normless-pca (rows->matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) 'float32))
   (list
    (X-row "f11" "X: expected float32, got float64" (tiny-with '() 'float64))
    (X-row "f12" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
@@ -249,13 +250,10 @@
    (X-row "f20 before f20d" large-message (tiny-with large-row) (hash-set small 'init 'pca))
    (X-row "f20 before f21" large-message (tiny-with (append zero-row large-row)) cosine)
    (X-row "f21 before f22" (normless-message 0) zeros cosine)
-   (X-row "f21 before f20d"
-          (normless-message 0)
-          (rows->matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) 'float32)
-          (hash-set pca 'metric 'cosine))
+   (X-row "f21 before f20d" (normless-message 0) normless-pca (hash-set pca 'metric 'cosine))
    (X-row "f21 before f20d exact"
           (normless-message 0)
-          (rows->matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) 'float32)
+          normless-pca
           (hash-set* pca 'metric 'cosine 'method 'exact))))
 
 (define (fit-calls)
