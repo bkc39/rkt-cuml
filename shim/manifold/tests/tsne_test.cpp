@@ -16,6 +16,7 @@ constexpr int64_t rows = 40;
 constexpr int64_t cols = 3;
 constexpr int64_t few_rows = 10;
 constexpr int64_t short_run = 300;
+constexpr float squarable = 0x1p31F - 0x1p7F;
 
 bool all_finite(const std::vector<float>& host) {
   return std::ranges::all_of(host, [](float v) { return std::isfinite(v); });
@@ -70,6 +71,25 @@ TEST(TsneFit, ExactAndEveryMetricAreFinite) {
                  {.max_iter = short_run, .method = method, .metric = metric})))
           << metric << " " << method;
     }
+  }
+}
+
+TEST(TsneFit, OppositeRowsAtTheLargestSquarableNormAreFinite) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  std::vector<float> host = blobs(rows, cols);
+  std::fill_n(host.begin(), 2 * cols, 0.0F);
+  host[0] = squarable;
+  host[cols] = -squarable;
+  const filled<float> x(res, host, {rows, cols});
+  for (const int32_t method :
+       {CUML_MANIFOLD_TSNE_FFT, CUML_MANIFOLD_TSNE_EXACT}) {
+    EXPECT_TRUE(all_finite(fitted(
+        res, x.view(),
+        {.max_iter = short_run,
+         .method = method,
+         .metric = CUML_MANIFOLD_METRIC_SQEUCLIDEAN})))
+        << method;
   }
 }
 

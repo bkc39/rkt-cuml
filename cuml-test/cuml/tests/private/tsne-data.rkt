@@ -33,6 +33,7 @@
          check-small-sweep
          check-tsne-parity
          derived-neighbours
+         diverged
          embedded
          tsne-case
          twin
@@ -62,8 +63,11 @@
              (for/list ([_ (in-range n)])
                0))))
 
-(define diverged
-  #rx"^tsne-fit: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$")
+(define (diverged who)
+  (pregexp
+   (format
+    "^~a: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
+    who)))
 
 (define (check-small-sweep method init)
   (for ([f (in-list (small-sweep))])
@@ -74,7 +78,7 @@
     (test-case (format "~a ~a ~a" method init (fixture-name f))
       (cond
         [(tsne-result? outcome) (check-true (finite-rows? (embedded outcome)))]
-        [else (check-regexp-match diverged (exn-message outcome))])))
+        [else (check-regexp-match (diverged 'tsne-fit) (exn-message outcome))])))
   (check-true (finite-rows? (embedded (tsne-fit (fixture-X far-blobs) #:method method #:init init)))
               "a valid call after the sweep"))
 

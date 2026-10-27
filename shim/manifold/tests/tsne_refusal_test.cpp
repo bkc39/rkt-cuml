@@ -25,6 +25,8 @@ constexpr int64_t past_exact = 2097121;
 constexpr double past_float = 1e39;
 constexpr double divergent_rate = 1e30;
 constexpr double large = 0x1p66;
+constexpr double unsquarable = 0x1p31;
+constexpr double least_above_one = 1.0 + 1e-9;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr double denormal = 1e-40;
@@ -87,6 +89,8 @@ TEST(TsneFitRefusals, ParametersInTableOrder) {
        "n-neighbors: expected at most 1023, got 1024"},
       {fit({.perplexity = 1}),
        "perplexity: expected a finite value above 1, got 1"},
+      {fit({.perplexity = least_above_one}),
+       "perplexity: expected a finite value above 1, got 1.000000001"},
       {fit({.perplexity = nan}),
        "perplexity: expected a finite value above 1, got nan"},
       {fit({.perplexity = inf}),
@@ -143,11 +147,15 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
       res, with(zero_row(blobs(rows, cols), 3, cols), (4 * cols) + 1, large),
       {rows, cols});
   const filled<float> zero_x(res, zero_row(blobs(rows, 2), 3, 2), {rows, 2});
+  const filled<float> far_x(
+      res, with(zero_row(blobs(rows, cols), 4, cols), (4 * cols) + 1, unsquarable),
+      {rows, cols});
   const filled<float> zeros(res, std::vector<float>(rows * 2, 0.0F), {rows, 2});
   const filled<float> same(res, std::vector<float>(rows * cols, 1.5F),
                            {rows, cols});
   const tsne_options cosine{.metric = CUML_MANIFOLD_METRIC_COSINE};
   const tsne_options exact{.method = CUML_MANIFOLD_TSNE_EXACT};
+  const tsne_options sqeuclidean{.metric = CUML_MANIFOLD_METRIC_SQEUCLIDEAN};
   const auto fit = [&](const rr_view* v, const tsne_options& o = {}) {
     return [&res, v, o](record& out) { return tsne_fit(res, v, out, o); };
   };
@@ -174,6 +182,13 @@ TEST(TsneFitRefusals, InputsInTableOrder) {
        std::format("X: row 4: expected a squared norm of at most "
                    "4.253529586511731e+37, got {}",
                    large * large)},
+      {fit(large_x.view(), sqeuclidean),
+       std::format("X: row 4: expected a squared norm of at most "
+                   "4.253529586511731e+37, got {}",
+                   large * large)},
+      {fit(far_x.view(), sqeuclidean),
+       "X: row 4: expected a squared norm of at most 4611685743549480960 "
+       "under sqeuclidean, got 4611686018427387904"},
       {fit(zero_x.view(), cosine),
        "X: row 3: expected a squared norm of at least 2.350988701644575e-38 "
        "under cosine, got 0"},

@@ -229,16 +229,19 @@ iterations run; and the fit's @racket[params], where a derived
 Embeds the rows of @racket[X], a row-major @racket['float32] matrix with at
 least two rows and two columns, not all rows equal, and finite rows of squared
 norm at most 2@superscript{125}, in two dimensions. Under @racket['cosine] a
-row of d columns needs a squared norm of at least d·2@superscript{-126}.
+row of d columns needs a squared norm of at least d·2@superscript{-126}, and
+under @racket['sqeuclidean] one of at most 2@superscript{62}−2@superscript{38}.
 Each row's neighbourhood is its @racket[n-neighbors] nearest rows, itself
 included: ⌈3·@racket[perplexity]⌉ by default, at least 2, at most 1023 and at
-most the row count; @racket[perplexity] is at most that count. The first 250
+most the row count; @racket[perplexity] is above 1 in float32 and at most that
+count. The first 250
 iterations run at @racket[learning-rate] with attractions scaled by
 @racket[early-exaggeration], the rest at twice the rate. @racket['fft] runs
 every iteration, where Python cuML's default stops early and can collapse the
 embedding. @racket['fft] with a @racket[random-state] gives the same embedding
 on every run; @racket['exact] is O(n²) per iteration, takes at most 2097120
-rows, stops once the gradient norm falls below 10@superscript{-7}, and is not
+rows, stops once the gradient norm falls below 10@superscript{-7}, checked
+every 10th iteration after the first 250, and is not
 reproducible. @racket[#f] draws a seed from
 @racket[current-pseudo-random-generator]. An optimisation that diverges is an
 error.

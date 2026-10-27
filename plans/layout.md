@@ -829,3 +829,10 @@ Follow-ups are GitHub issues.
   perplexity from 2 to 20.
 - **B2-s.** `tsne-sklearn-digits-twin-test` takes 55 s (sklearn's exact
   t-SNE on digits, CPU-bound) and has a 180 s entry in `info.rkt`.
+- **B2-t.** Under `'sqeuclidean` a row's squared norm is at most
+  2⁶²−2³⁸, the largest float32 below 2⁶² (f20b, after B2 r0 M3). cuML
+  squares the kNN distances, a fourth power under sqeuclidean; opposite
+  rows overflow it once their norm rounds to 2⁶² in float32. Measured on
+  `tiny`-shaped rows, both methods: 2⁶² and 2⁶²−2³⁵·⁸ give NaN, 2⁶²−2³⁷·⁵
+  and 2⁶²−2³⁹ stay finite; one row alone stays finite at 1.5²·2⁶² and
+  gives NaN at 2⁶⁴.

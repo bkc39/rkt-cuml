@@ -11,6 +11,7 @@
          listed-X
          nan-message
          nan-row
+         normless-message
          tiny-with
          zero-row)
 
@@ -38,8 +39,11 @@
   (format "X: row 4: expected a squared norm of at most 4.253529586511731e+37, got ~a"
           (* large large)))
 
-(define cosine-message
-  (format "X: row 3: expected a squared norm of at least ~a under cosine, got 0"
+(define (normless-message row)
+  (format "X: row ~a: expected a squared norm of at least ~a under cosine, got 0"
+          row
           (* 3 (expt 2.0 -126))))
+
+(define cosine-message (normless-message 3))
 
 (define listed-X '((0.125 0.0 0.0) (0.5 0.25 0.0)))

@@ -14,7 +14,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
          (only-in "private/tsne-data.rkt" embedded)
-         (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows overlap))
+         (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows overlap tiny))
 
 (define (single? x)
   (and (flonum? x) (eqv? x (flsingle x))))
@@ -44,6 +44,28 @@
 (test-gpu "L1: an FFT run is never cut short; its KL is cuML's float32 value"
   (define result (tsne-fit (fixture-X far-blobs) #:max-iter 300))
   (check-equal? (tsne-result-n-iter result) 300)
+  (check-pred single? (tsne-result-kl-divergence result)))
+
+(define (settled-fit max-iter)
+  (tsne-fit (fixture-X tiny)
+            #:method 'exact
+            #:perplexity 5.0
+            #:learning-rate 1.0
+            #:early-exaggeration 1.0
+            #:max-iter max-iter))
+
+(define settled-stop 261)
+
+(test-gpu "L1: exact stops on a small gradient at a checked iteration, without a KL"
+  (define result (settled-fit 1000))
+  (define n-iter (tsne-result-n-iter result))
+  (check-true (< 251 n-iter 1000) (format "n-iter ~a" n-iter))
+  (check-equal? (modulo (sub1 n-iter) 10) 0 (format "n-iter ~a" n-iter))
+  (check-false (tsne-result-kl-divergence result)))
+
+(test-gpu "L1: a stop on the last iteration counts as a full run, with its KL"
+  (define result (settled-fit settled-stop))
+  (check-equal? (tsne-result-n-iter result) settled-stop)
   (check-pred single? (tsne-result-kl-divergence result)))
 
 (test-gpu "L1: params keep a derived n-neighbors and a drawn seed as #f"

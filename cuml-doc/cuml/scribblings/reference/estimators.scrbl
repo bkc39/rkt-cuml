@@ -113,7 +113,9 @@ them.}
 
 @defproc[(transform [transformer transformer?] [X any/c]) any/c]{
 
-The samples @racket[X] mapped to the features @racket[transformer] learned.}
+The samples @racket[X] mapped to the features @racket[transformer] learned. A
+transformer that only fits and transforms together, such as @racket[tsne],
+raises @racket[exn:fail:cuml] instead.}
 
 @defproc[(fit-transform [transformer transformer?]
                         [X any/c]

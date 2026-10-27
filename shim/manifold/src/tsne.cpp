@@ -62,6 +62,7 @@ constexpr float min_gain = 0.01F;
 constexpr float pre_momentum = 0.5F;
 constexpr float post_momentum = 0.8F;
 constexpr float euclidean_p = 2.0F;
+constexpr double most_sqeuclidean_norm = 0x1.fffffep61;
 
 struct tsne_request {
   int64_t n_components;
@@ -111,7 +112,8 @@ void require_numbers(const tsne_request& r) {
   }
   require_at_least("n-neighbors", r.n_neighbors, 2);
   require_at_most("n-neighbors", r.n_neighbors, most_neighbors);
-  if (!std::isfinite(r.perplexity) || r.perplexity <= 1) {
+  if (!std::isfinite(r.perplexity) || r.perplexity <= 1 ||
+      (r.perplexity < 2 && static_cast<float>(r.perplexity) <= 1)) {
     throw logic_error(
         std::format("perplexity: expected a finite value above 1, got {}",
                     printed(r.perplexity)));
@@ -149,6 +151,21 @@ void require_shape(const tsne_request& r, const matrix<float, int64_t>& x) {
     throw logic_error(
         std::format("method: exact supports at most {} rows, got {}",
                     most_exact_rows, x.n));
+  }
+}
+
+void require_squarable(const matrix<float, int64_t>& x, int32_t metric,
+                       rmm::cuda_stream_view stream) {
+  if (metric != CUML_MANIFOLD_METRIC_SQEUCLIDEAN) {
+    return;
+  }
+  const auto [row, squared] =
+      cumlrkt::first_large_row(x.data, x.n, x.d, most_sqeuclidean_norm, stream);
+  if (row >= 0) {
+    throw logic_error(std::format(
+        "X: row {}: expected a squared norm of at most {} under sqeuclidean, "
+        "got {}",
+        row, printed(most_sqeuclidean_norm), printed(squared)));
   }
 }
 
@@ -207,6 +224,7 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
   require_shape(r, x);
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   require_scanned("X", x, r.metric, stream);
+  require_squarable(x, r.metric, stream);
   require_distinct(x, stream);
   ML::TSNEParams p = tsne_params(r, x.n);
   auto embedding = std::make_unique<buffer<float>>(

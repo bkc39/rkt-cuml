@@ -71,6 +71,7 @@ packet (§4) has the detail.
 | B2 #51 | exact and Barnes-Hut are not reproducible for a fixed seed | atomics | Q-D oracles |
 | B2 #51 | perplexity_max_iter 0 leaves P uninitialised; cufftDestroy skipped on a throw (source) | `exact_kernels.cuh:42`, `fft_tsne.cuh` | unreachable / documented |
 | B2 #51 | a seeded FFT run is 1.3–1.9× slower than random_state=None (blobs 1000×10 0.35 s against 0.18 s, digits 0.355 against 0.21, 12000×50 0.705 against 0.56; P4) | `fft_tsne.cuh` deterministic path | seeds always drawn (B2-l) |
+| B2 #51 | `square_distances` squares the kNN distances before normalising them, so under `L2Expanded` (sqeuclidean) it takes a fourth power, which overflows float32 to NaN once opposite rows reach a float32 squared norm of 2⁶²: 2⁶² and 2⁶²−2³⁵·⁸ give NaN, 2⁶²−2³⁷·⁵ and 2⁶²−2³⁹ are finite (B2 r0 M3) | `tsne_runner.cuh:210-217` | refused past 2⁶²−2³⁸ under sqeuclidean (f20b) |
 
 ## cuVS
 
