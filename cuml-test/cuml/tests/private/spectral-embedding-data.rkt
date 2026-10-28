@@ -72,7 +72,7 @@
                      (list (list i j w) (list j i w))))
           (match-lambda**
             [((list i j _) (list k l _)) (or (< i k) (and (= i k) (< j l)))])))
-  (match-define (list (list rows cols vals) ...) both)
+  (match-define (list rows cols vals) (apply map list both))
   (values (graph rows cols vals n) truth))
 
 (define (stochastic-graph [sizes '(40 60 80)] [seed 0] #:weighted? [weighted? #f])

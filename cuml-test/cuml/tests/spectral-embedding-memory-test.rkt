@@ -40,7 +40,7 @@
     (rows->matrix (for/list ([i (in-range 5)])
                     (list (exact->inexact i) 1.0))
                   'float32))
-  (match-define (list _ _ _ row₃ _ ...) (graph-rows blocks))
+  (match-define (list-rest _ _ _ row₃ _) (graph-rows blocks))
   (define looped (edited-vectors blocks #:cols (set-entry 3 row₃)))
   (list (lambda () (spectral-embedding-fit nan-row))
         (lambda () (spectral-embedding-fit halves #:n-neighbors 10))
