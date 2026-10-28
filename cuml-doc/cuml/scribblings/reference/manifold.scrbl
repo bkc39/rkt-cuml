@@ -374,11 +374,14 @@ squared norm at most 2@superscript{125}. It needs 2(@racket[n-components] + 2)
 rows with @racket[drop-first], 2(@racket[n-components] + 1) without.
 Each column's largest entry is positive. A @racket[random-state] repeats
 bitwise when @racket[n-neighbors] is at most 256; @racket[#f] draws one from
-@racket[current-pseudo-random-generator]. A graph of identical pieces can be an
-error with @racket[norm-laplacian]; use another @racket[random-state] or turn
-it off. Centre @racket[X] if it lies far from the origin. A graph whose
-eigenvectors the solver cannot find, such as one from duplicated rows, is an
-error.
+@racket[current-pseudo-random-generator]. The eigensolver's tolerance is
+fixed, so eigenvectors of close eigenvalues are approximate. A graph whose
+Laplacian repeats eigenvalues (rings, grids, complete graphs, stars, identical
+pieces) can give a wrong embedding or an error, with either Laplacian;
+@racket[spectral-embedding-fit-graph] refuses the wrong columns it detects, and
+this procedure cannot check. Centre @racket[X] if it lies far from the origin.
+A graph whose eigenvectors the solver cannot find, such as one from duplicated
+rows, is an error.
 @examples[#:eval ev #:label #f
 (spectral-embedding-result-n-neighbors spectral)
 (eval:error (spectral-embedding-fit X #:n-components 30))
@@ -403,7 +406,10 @@ Without @racket[norm-laplacian] the embedding does not depend on the scale of
 the weights. With it, divided by the square root of each degree, it scales by
 1/√c when the weights scale by c. Without @racket[norm-laplacian], weights
 spanning orders of magnitude can give a wrong embedding or an error, by an
-amount that depends on the graph; use @racket[norm-laplacian]. Otherwise as
+amount that depends on the graph; use @racket[norm-laplacian]. A column u whose
+residual ‖Lu − ρu‖/‖u‖ passes 10@superscript{-3} times the largest degree is
+an error (with @racket[norm-laplacian], the normalised Laplacian's on √d·u past
+10@superscript{-3}), as is a constant column with @racket[drop-first]. Otherwise as
 @racket[spectral-embedding-fit], except that @racket[params]'s
 @racket[n-neighbors] and @racket[affinity] are ignored.
 @examples[#:eval ev #:label #f

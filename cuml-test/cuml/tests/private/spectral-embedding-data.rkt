@@ -8,7 +8,7 @@
                   spectral-embedding-result-params)
          (only-in racket/list append* argmax second)
          (only-in racket/match match-define match-lambda**)
-         (only-in racket/math pi)
+         (only-in racket/math pi sqr)
          racket/runtime-path
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix)
@@ -29,6 +29,7 @@
 (provide check-twins
          column-gaps
          cosine-gaps
+         eigen-residuals
          embedded
          embedded-graph
          embedding-case
@@ -38,6 +39,7 @@
          heavy-pair
          polygons
          quantised
+         residual-bound
          rows-matrix
          sign-ruled?
          stochastic-blocks
@@ -111,6 +113,49 @@
          spectral-embedding-fit-graph
          options
          (append (graph->vectors g) (list (graph-n g)))))
+
+(define (degrees g)
+  (define d (make-vector (graph-n g) 0.0))
+  (for ([r (in-list (graph-rows g))]
+        [w (in-list (graph-vals g))])
+    (vector-set! d r (+ (vector-ref d r) w)))
+  d)
+
+(define (laplacian-times g u)
+  (define out (make-vector (graph-n g) 0.0))
+  (for ([r (in-list (graph-rows g))]
+        [c (in-list (graph-cols g))]
+        [w (in-list (graph-vals g))])
+    (vector-set! out r (+ (vector-ref out r) (* w (- (vector-ref u r) (vector-ref u c))))))
+  out)
+
+(define residual-bound 1e-3)
+
+(define (eigen-residuals g rows #:norm-laplacian [norm #t])
+  (define d (degrees g))
+  (define most
+    (for/fold ([m 0.0]) ([x (in-vector d)])
+      (max m x)))
+  (define (mass i)
+    (if norm
+        (vector-ref d i)
+        1.0))
+  (define live
+    (for/list ([i (in-range (graph-n g))]
+               #:when (> (mass i) 0.0))
+      i))
+  (for/list ([column (in-list (transpose rows))])
+    (define u (list->vector column))
+    (define lu (laplacian-times g u))
+    (define uu (for/sum ([i (in-list live)]) (* (mass i) (sqr (vector-ref u i)))))
+    (define rho (/ (for/sum ([i (in-list live)]) (* (vector-ref u i) (vector-ref lu i))) uu))
+    (define off
+      (for/sum ([i (in-list live)])
+               (/ (sqr (- (vector-ref lu i) (* rho (mass i) (vector-ref u i)))) (mass i))))
+    (/ (sqrt (/ off uu))
+       (if norm
+           1.0
+           most))))
 
 (define (sign-ruled? rows)
   (for/and ([column (in-list (transpose rows))])

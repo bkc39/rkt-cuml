@@ -24,13 +24,16 @@
                   graph-shuffle
                   knn-graph
                   three-blocks
-                  unit-rings)
+                  unit-rings
+                  unit-rings-of)
          (only-in "private/spectral-embedding-data.rkt"
                   column-gaps
+                  eigen-residuals
                   embedded
                   embedded-graph
                   polygons
                   quantised
+                  residual-bound
                   rows-matrix
                   sign-ruled?
                   stochastic-blocks
@@ -206,16 +209,23 @@
          #:unless (eq? a b))
     (check-true (> (apply max (map (lambda (x y) (abs (- x y))) a b)) component-gap))))
 
-(test-gpu "L11: two identical rings, as a graph or as polygons' 3-neighbour graph, embed finite and sign-ruled without norm-laplacian"
-  (define ring-rows
-    (embedded (embedded-graph (unit-rings 2 30) (hasheq 'norm-laplacian #f 'random-state 1))))
-  (define polygon-rows
+(test-gpu "L11: rings of 30 and 40 embed as eigenvectors, with either Laplacian, at seeds 0 to 4"
+  (define g (unit-rings-of '(30 40)))
+  (for* ([norm (in-list '(#t #f))]
+         [seed (in-range 5)])
+    (define rows (embedded (embedded-graph g (hasheq 'norm-laplacian norm 'random-state seed))))
+    (define residuals (eigen-residuals g rows #:norm-laplacian norm))
+    (check-true (< (apply max residuals) residual-bound)
+                (format "norm ~a seed ~a residuals ~a" norm seed residuals))))
+
+(test-gpu "L11: upstream, unchecked: the dense fit of two identical polygons at 3 neighbours is no eigenvector"
+  (define rows
     (embedded (spectral-embedding-fit (rows-matrix (polygons 2 30))
                                       #:n-neighbors 3
                                       #:norm-laplacian #f
                                       #:random-state 1)))
-  (for ([rows (in-list (list ring-rows polygon-rows))])
-    (check-true (and (finite-rows? rows) (sign-ruled? rows)))))
+  (define residuals (eigen-residuals (unit-rings 2 30) rows #:norm-laplacian #f))
+  (check-true (> (apply max residuals) 0.5) (format "residuals ~a" residuals)))
 
 (define (ari rows truth)
   (define labels (kmeans-result-labels (kmeans-fit (rows-matrix rows) #:n-clusters 3 #:n-init 10)))

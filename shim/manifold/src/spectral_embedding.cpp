@@ -10,6 +10,7 @@
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "cumlrkt/graph.hpp"
 #include "cumlrkt/largest_positive.hpp"
@@ -23,6 +24,7 @@
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
 #include "spectral_checks.hpp"
+#include "spectral_residual.hpp"
 
 namespace {
 
@@ -50,22 +52,29 @@ using cumlrkt::scratch;
 using cumlrkt::settle;
 using cumlrkt::to_rows;
 using cumlrkt::unit_exponent;
+using cumlrkt::manifold::column_fit;
+using cumlrkt::manifold::column_fits;
 using cumlrkt::manifold::float_rows;
 using cumlrkt::manifold::require_nonzero_columns;
 using cumlrkt::manifold::require_rows_fit;
 using cumlrkt::manifold::require_scanned;
 using cumlrkt::manifold::require_solved;
+using cumlrkt::manifold::weight_span;
 using raftrkt::layout;
 
 constexpr int64_t least_neighbors = 2;
 constexpr int64_t least_columns = 2;
 constexpr const char* zero_advice =
     "; deduplicate or centre X, or change n-neighbors";
+constexpr const char* solver_advice =
+    "; graphs whose Laplacian repeats eigenvalues (rings, grids, complete "
+    "graphs, stars, identical pieces) are beyond cuML's eigensolver";
 constexpr const char* spread_advice =
-    "; weights spanning many orders of magnitude need norm-laplacian";
-constexpr const char* piece_advice =
-    "; a graph of identical pieces needs another random-state or "
-    "norm-laplacian off";
+    "; these weights span orders of magnitude and need norm-laplacian";
+
+constexpr double residual_bound = 1e-3;
+constexpr double constant_spread = 1e-3;
+constexpr double heavy_span = 0x1p8;
 
 struct embedding_request {
   int64_t n_components;
@@ -110,9 +119,9 @@ ML::SpectralEmbedding::params params_of(const embedding_request& r,
 
 using embedding_view = raft::device_matrix_view<float, int, raft::col_major>;
 
-template <typename Solve>
+template <typename Solve, typename Check>
 void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n, int64_t k,
-           const char* advice, Solve&& solve) {
+           const char* advice, Solve&& solve, Check&& check) {
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   auto embedding =
       std::make_unique<buffer<float>>(scratch<float>(n * k, stream));
@@ -123,12 +132,36 @@ void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n, int64_t k,
     to_rows<float>(handle, columns.data(), n, k, nullptr, embedding->data());
     require_solved(embedding->data(), n, k, stream);
     require_nonzero_columns(columns.data(), n, k, advice, stream);
+    check(columns.data());
   }
   make_largest_positive<float>(handle, embedding->data(), n, k);
   settle(handle);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(embedding->data(), n, k, layout::row_major)};
   raftrkt::deposit(out, "out", handle, std::move(embedding), regions);
+}
+
+std::string graph_advice(const coo& c, const embedding_request& r,
+                         rmm::cuda_stream_view stream) {
+  const bool heavy =
+      r.norm_laplacian == 0 && weight_span(c, stream) >= heavy_span;
+  return std::string(solver_advice) + (heavy ? spread_advice : "");
+}
+
+void require_accurate(const raft::handle_t& handle, const coo& c, int64_t n,
+                      const float* columns, const embedding_request& r,
+                      const std::string& advice) {
+  const std::vector<column_fit> fits =
+      column_fits(handle, c, n, columns, r.n_components, r.norm_laplacian != 0);
+  for (std::size_t j = 0; j < fits.size(); ++j) {
+    const bool constant = r.drop_first != 0 && fits[j].spread < constant_spread;
+    if (fits[j].residual > residual_bound || constant) {
+      throw logic_error(
+          std::format("embedding: column {}{}: the eigensolver's eigenvectors "
+                      "are inaccurate on this graph{}",
+                      j, constant ? " is constant" : "", advice));
+    }
+  }
 }
 
 template <typename Solve>
@@ -164,19 +197,18 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
                        "a spectral embedding needs two distinct rows", stream);
   const int exponent =
       scale_exponent<float>(largest_magnitude(x.data, x.n * x.d, stream));
-  const std::string advice = r.norm_laplacian != 0
-                                 ? std::string(zero_advice) + piece_advice
-                                 : std::string(zero_advice);
-  embed(handle, out, x.n, r.n_components, advice.c_str(),
-        [&](embedding_view e) {
-          on_scaled(handle, x.data, x.n * x.d, exponent, [&](float* data) {
-            ML::SpectralEmbedding::transform(
-                handle, params_of(r, n_neighbors),
-                raft::make_device_matrix_view<float, int, raft::row_major>(
-                    data, static_cast<int>(x.n), static_cast<int>(x.d)),
-                e);
-          });
+  embed(
+      handle, out, x.n, r.n_components, zero_advice,
+      [&](embedding_view e) {
+        on_scaled(handle, x.data, x.n * x.d, exponent, [&](float* data) {
+          ML::SpectralEmbedding::transform(
+              handle, params_of(r, n_neighbors),
+              raft::make_device_matrix_view<float, int, raft::row_major>(
+                  data, static_cast<int>(x.n), static_cast<int>(x.d)),
+              e);
         });
+      },
+      [](const float*) {});
 }
 
 void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
@@ -192,16 +224,21 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
       r.norm_laplacian != 0
           ? 0
           : unit_exponent(largest_magnitude(c.vals, c.nnz, stream));
-  const char* advice = r.norm_laplacian != 0 ? piece_advice : spread_advice;
-  embed(handle, out, n, r.n_components, advice, [&](embedding_view e) {
-    on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
-      ML::SpectralEmbedding::transform(
-          handle, params_of(r, 0),
-          raft::make_device_vector_view<int, int64_t>(c.rows, c.nnz),
-          raft::make_device_vector_view<int, int64_t>(c.cols, c.nnz),
-          raft::make_device_vector_view<float, int64_t>(vals, c.nnz), e);
-    });
-  });
+  const std::string advice = graph_advice(c, r, stream);
+  embed(
+      handle, out, n, r.n_components, advice.c_str(),
+      [&](embedding_view e) {
+        on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
+          ML::SpectralEmbedding::transform(
+              handle, params_of(r, 0),
+              raft::make_device_vector_view<int, int64_t>(c.rows, c.nnz),
+              raft::make_device_vector_view<int, int64_t>(c.cols, c.nnz),
+              raft::make_device_vector_view<float, int64_t>(vals, c.nnz), e);
+        });
+      },
+      [&](const float* columns) {
+        require_accurate(handle, c, n, columns, r, advice);
+      });
 }
 
 }  // namespace

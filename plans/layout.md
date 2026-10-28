@@ -918,11 +918,12 @@ Follow-ups are GitHub issues.
   all-zero column (s14) are refused with the outputs freed.
 - **B3-k.** Self-loops in a given graph are refused (g5), as leg 5 does.
 - **B3-l.** A graph that is not symmetric is used as given and documented.
-- **B3-m.** Disconnected graphs are not refused (L11). Identical pieces with
-  repeated eigenvalues of their own, such as rings, can give a zero column
-  with norm-laplacian, on the dense path (regular polygons at 3 neighbours)
-  and the graph path alike. That column is refused, and the refusal and the
-  manual say to use another random-state or turn norm-laplacian off.
+- **B3-m.** Disconnected graphs are not refused (L11). A graph whose
+  Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,
+  identical pieces) can give a wrong embedding or a zero column, with either
+  Laplacian, on both paths. The graph path refuses what B3-y detects; the
+  dense path cannot check, and L11 pins its departure on two identical
+  polygons. Neither the refusals nor the manual offer a remedy.
 - **B3-n.** `#:random-state #f` draws its seed in Racket.
 - **B3-o.** n-neighbors above the row count is refused (s9).
 - **B3-p.** X needs at least 2 columns (s5).
@@ -940,14 +941,17 @@ Follow-ups are GitHub issues.
 - **B3-u.** The eigensolver's tolerance (1e-5) is not exposed. It is an
   absolute residual, so without norm-laplacian weights spanning orders of
   magnitude can give a wrong embedding or a zero column, by an amount that
-  depends on the graph (`upstream-bugs.md`). The manual says to use
-  norm-laplacian for such graphs, the zero-column refusal advises it, and the
-  twin pins a departure on the stochastic graph and on a path.
+  depends on the graph (`upstream-bugs.md`). B3-y's residual does not see it.
+  The manual says to use norm-laplacian for such graphs; the graph path's
+  zero-column refusal advises it only without norm-laplacian and when the
+  largest positive weight is at least 2⁸ times the smallest; the twin pins a
+  departure on the stochastic graph and on a path.
 - **B3-v.** Racket resolves n-neighbors and passes the count to the shim,
-  which returns only the embedding. With norm-laplacian on, both paths'
-  zero-column refusals add the identical-pieces advice (another random-state
-  or norm-laplacian off). With it off, the graph path's advises
-  norm-laplacian and the dense path's keeps its own.
+  which returns only the embedding. The dense path's zero-column refusal
+  advises deduplicating or centring X, or changing n-neighbors. The graph
+  path's zero-column and B3-y refusals say that graphs whose Laplacian
+  repeats eigenvalues are beyond cuML's eigensolver, plus B3-u's weight
+  advice.
 - **B3-w.** The GPU suite's 1800 s budget is spent per test program, so B3's
   laws live in six files: L1-L3 and L7-L12 in `-law-test`, dense and graph
   L13 in `-refusal-test`, L4 in `-determinism-test`, and L5-L7's twins in
@@ -956,3 +960,9 @@ Follow-ups are GitHub issues.
   power-of-two-scaled copy whose largest weight is in [1, 2), so the
   embedding is bitwise invariant to the scale of the weights; with it, the
   embedding scales as 1/√s on its own.
+- **B3-y.** After a graph fit, the shim measures each column u on the
+  device: ‖Lu − ρu‖/‖u‖ with ρ = uᵀLu/uᵀu and L = D − A, over the largest
+  degree; with norm-laplacian, the normalised Laplacian on √d·u. A column
+  past 10⁻³ is refused, and with drop-first so is a constant one (spread
+  (max − min)/max|u| below 10⁻³). Both bounds sit between the measured
+  correct and wrong fits (`upstream-bugs.md`).

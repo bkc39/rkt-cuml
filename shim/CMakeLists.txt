@@ -100,7 +100,8 @@ cumlrkt_family(decomposition
 cumlrkt_family(manifold
   SOURCES common/src/transpose.cu manifold/src/manifold.cpp
           manifold/src/manifold_support.cpp manifold/src/tsne.cpp
-          manifold/src/spectral_embedding.cpp common/src/graph.cu
+          manifold/src/spectral_embedding.cpp manifold/src/spectral_residual.cu
+          common/src/graph.cu
           common/src/largest_positive.cu manifold/src/umap.cpp manifold/src/umap_device.cu
   TESTS manifold/tests/manifold_test.cpp manifold/tests/tsne_test.cpp
         manifold/tests/tsne_refusal_test.cpp manifold/tests/umap_test.cpp
@@ -108,7 +109,7 @@ cumlrkt_family(manifold
         manifold/tests/umap_refusal_test.cpp
         manifold/tests/spectral_embedding_test.cpp
         manifold/tests/spectral_embedding_refusal_test.cpp common/src/rows.cu
-        common/src/largest_positive.cu
+        common/src/largest_positive.cu manifold/src/spectral_residual.cu
 )
 
 cumlrkt_family(probe TEST_ONLY

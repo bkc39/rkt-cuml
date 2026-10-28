@@ -44,7 +44,9 @@
          three-blocks
          truth-of
          unit-path
-         unit-rings)
+         unit-rings
+         unit-rings-of
+         unit-star)
 
 (struct graph (rows cols vals n) #:transparent)
 
@@ -65,11 +67,19 @@
                 (cons i (add1 i)))
               n))
 
-(define (unit-rings count n)
-  (unit-edges (for*/list ([b (in-range count)]
+(define (unit-rings-of sizes)
+  (unit-edges (for*/list ([(n o) (in-parallel (in-list sizes) (in-list (block-starts sizes)))]
                           [i (in-range n)])
-                (cons (+ (* b n) i) (+ (* b n) (modulo (add1 i) n))))
-              (* count n)))
+                (cons (+ o i) (+ o (modulo (add1 i) n))))
+              (apply + sizes)))
+
+(define (unit-rings count n)
+  (unit-rings-of (make-list count n)))
+
+(define (unit-star n)
+  (unit-edges (for/list ([i (in-range 1 n)])
+                (cons 0 i))
+              n))
 
 (define (planted name data truth k #:options [options (hasheq)] #:compare [compare 'labels])
   (fit-case name data truth k options compare))

@@ -12,7 +12,7 @@
          (only-in racket/list make-list take)
          (only-in racket/match match match-define)
          (only-in racket/math sqr)
-         (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
+         (only-in rackunit check-equal? check-exn check-false check-pred check-true fail test-case)
          (only-in raft exn:fail:raft? list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
@@ -34,12 +34,16 @@
                   graph-edit
                   graph-map-vals
                   set-entry
-                  unit-rings)
+                  unit-path
+                  unit-rings
+                  unit-star)
          (only-in "private/spectral-embedding-data.rkt"
+                  eigen-residuals
                   embedded
                   embedded-graph
                   heavy-pair
                   polygons
+                  residual-bound
                   rows-matrix
                   sign-ruled?)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
@@ -63,12 +67,9 @@
 
 (define two-message "n-components: 2 components with drop-first need at least 8 rows, got 7")
 
-(define piece-advice "; a graph of identical pieces needs another random-state or norm-laplacian off")
+(define zero-text "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph")
 
-(define zero-message
-  (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph;"
-                 " deduplicate or centre X, or change n-neighbors"
-                 piece-advice))
+(define zero-message (string-append zero-text "; deduplicate or centre X, or change n-neighbors"))
 
 (define (halves)
   (rows->matrix (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0))) 'float32))
@@ -249,6 +250,35 @@
 
 (define ring (unit-rings 1 ring-n))
 
+(define path (unit-path ring-n))
+
+(define solver-advice
+  (string-append "; graphs whose Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,"
+                 " identical pieces) are beyond cuML's eigensolver"))
+
+(define spread-advice "; these weights span orders of magnitude and need norm-laplacian")
+
+(define (inaccurate column [what ""])
+  (format "embedding: column ~a~a: the eigensolver's eigenvectors are inaccurate on this graph~a"
+          column
+          what
+          solver-advice))
+
+(define (zero-row id g options)
+  (row id (string-append zero-text solver-advice) (fault g options)))
+
+(define (unit-weight-rows)
+  (list (zero-row "zero column, one ring" (unit-rings 1 30) (hasheq))
+        (zero-row "zero column, star" (unit-star 30) (hasheq))
+        (zero-row "zero column, unit-weight star" (unit-star 30) (hasheq 'norm-laplacian #f))))
+
+(define (eigen-rows)
+  (list (row "inaccurate, two rings" (inaccurate 0) (fault (unit-rings 2 30)))
+        (row "inaccurate, two rings without norm-laplacian"
+             (inaccurate 0)
+             (fault (unit-rings 2 30) (hasheq 'norm-laplacian #f 'random-state 1)))
+        (row "constant, one ring" (inaccurate 0 " is constant") (fault ring))))
+
 (define (fit-vectors rows cols vals [n ring-n])
   (spectral-embedding-fit-graph rows cols vals n))
 
@@ -266,7 +296,8 @@
 (define past-sum (const (exact->inexact (expt 2 125))))
 
 (define (graph-rows-of)
-  (list
+  (append
+   (list
    (row "s1" "n-components: expected at least 1, got 0" (fault ring (hasheq 'n-components 0)))
    (row "g1 rows float32"
         "rows: expected int32, got float32"
@@ -307,16 +338,10 @@
    (row "g7"
         "vals: expected at least one positive weight, got none"
         (fault (graph-map-vals ring (const 0.0))))
-   (row
-    "zero column"
-    (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph;"
-                   " weights spanning many orders of magnitude need norm-laplacian")
-    (fault (heavy-pair 24) (hasheq 'norm-laplacian #f)))
-   (row
-    "zero column, identical pieces"
-    (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph"
-                   piece-advice)
-    (fault (unit-rings 2 30) (hasheq 'random-state 1)))
+   (row "zero column"
+        (string-append zero-text solver-advice spread-advice)
+        (fault (heavy-pair 24) (hasheq 'norm-laplacian #f)))
+   (zero-row "zero column, two rings" (unit-rings 2 30) (hasheq 'random-state 1))
    (row "g1 before g2"
         "cols: expected 20 entries, as rows has, got 19"
         (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals 7))))
@@ -328,7 +353,9 @@
           (fit-vectors rows cols vals 7)))
    (row "g5 before g6"
         "vals: entry 1: expected a finite weight of at least 0, got -1"
-        (fault (graph-edit (graph-map-vals ring past-sum) #:vals (set-entry 1 -1.0))))))
+        (fault (graph-edit (graph-map-vals ring past-sum) #:vals (set-entry 1 -1.0)))))
+   (unit-weight-rows)
+   (eigen-rows)))
 
 (test-gpu "L13: fit-graph refuses each bad graph with its message, the first refusal winning"
   (for ([r (in-list (graph-rows-of))])
@@ -338,14 +365,22 @@
 (test-gpu "L13: g2: the least samples fit, and a valid call succeeds after a refusal"
   (for ([r (in-list (graph-rows-of))])
     (check-row 'spectral-embedding-fit-graph r)
-    (check-pred spectral-embedding-result? ((fault ring)) (row-id r)))
-  (for ([entry (in-list (list (list (unit-rings 1 8) (hasheq))
-                              (list (unit-rings 1 4) (hasheq 'n-components 1 'drop-first #f))
-                              (list (unit-rings 1 6) (hasheq 'n-components 1))
-                              (list ring (hasheq 'n-components 3 'drop-first #f))))])
+    (check-pred spectral-embedding-result? ((fault path)) (row-id r)))
+  (for ([entry (in-list (list (list (unit-path 8) (hasheq))
+                              (list (unit-path 4) (hasheq 'n-components 1 'drop-first #f))
+                              (list (unit-path 6) (hasheq 'n-components 1))
+                              (list path (hasheq 'n-components 3 'drop-first #f))))])
     (match-define (list g options) entry)
     (define rows (embedded (embedded-graph g options)))
-    (check-true (and (finite-rows? rows) (sign-ruled? rows)) (format "~a samples" (length rows)))))
+    (check-true (and (finite-rows? rows) (sign-ruled? rows)) (format "~a samples" (length rows)))
+    (check-true (< (apply max (eigen-residuals g rows)) residual-bound)
+                (format "~a samples" (length rows)))))
+
+(test-gpu "L13: a graph refusal names no remedy, and heavy weights only where the weights span 2^8"
+  (for ([r (in-list (append (unit-weight-rows) (eigen-rows)))])
+    (check-false (regexp-match? #rx"random-state|norm-laplacian off|orders of magnitude"
+                                (exn-message (raised (row-call r))))
+                 (row-id r))))
 
 (test-pools "L13: a graph refusal leaves the RMM pool where it was"
   (for ([r (in-list (graph-rows-of))])

@@ -1,20 +1,25 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <format>
 #include <functional>
 #include <limits>
+#include <numbers>
 #include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "cumlrkt/graph.hpp"
 #include "cumlrkt/manifold.h"
 #include "manifold_fixture.hpp"
 #include "raftrkt/c_api.h"
+#include "raftrkt/view.hpp"
 #include "spectral_checks.hpp"
+#include "spectral_residual.hpp"
 
 namespace cumlrkt::test {
 namespace {
@@ -279,6 +284,42 @@ TEST(SpectralEmbeddingRefusals, TheFirstZeroColumnIsRefused) {
             "embedding: column 0 is zero: the eigensolver found no "
             "eigenvector of this graph; advice");
   EXPECT_EQ(zero_column_refusal({0, 0, -1e-30F, 0, 1, 0}, 3, 2), "");
+}
+
+std::vector<manifold::column_fit> ring_fits(const std::vector<float>& columns,
+                                            int64_t k, bool normalised) {
+  const resources res;
+  const device_graph g(res, ring_graph());
+  const filled<float> e(res, columns, {k, ring});
+  const coo c{static_cast<int32_t*>(g.rows.array.view.data),
+              static_cast<int32_t*>(g.cols.array.view.data),
+              static_cast<float*>(g.vals.array.view.data), ring_entries};
+  return manifold::column_fits(raftrkt::handle_of(res.handle), c, ring,
+                               static_cast<const float*>(e.array.view.data), k,
+                               normalised);
+}
+
+TEST(SpectralEmbeddingRefusals, ColumnFitsMeasureTheEigenResidual) {
+  CUMLRKT_REQUIRE_GPU();
+  std::vector<float> columns(3 * ring, 0.0F);
+  for (int64_t i = 0; i < ring; ++i) {
+    columns[i] = 1.0F;
+    columns[ring + i] = static_cast<float>(
+        std::cos(2 * std::numbers::pi * static_cast<double>(i) / ring));
+  }
+  columns[2 * ring] = 1.0F;
+  for (const bool normalised : {false, true}) {
+    SCOPED_TRACE(normalised);
+    const std::vector<manifold::column_fit> fits =
+        ring_fits(columns, 3, normalised);
+    ASSERT_EQ(fits.size(), 3U);
+    EXPECT_LT(fits[0].residual, 1e-12);
+    EXPECT_EQ(fits[0].spread, 0.0);
+    EXPECT_LT(fits[1].residual, 1e-6);
+    EXPECT_NEAR(fits[1].spread, 2.0, 1e-6);
+    EXPECT_NEAR(fits[2].residual, std::sqrt(0.5), 1e-12);
+    EXPECT_EQ(fits[2].spread, 1.0);
+  }
 }
 
 }  // namespace
