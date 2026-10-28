@@ -26,8 +26,8 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/pca-data.rkt" magnitude-rows scaled-rows)
-         (only-in "private/scaler-data.rkt" rows->matrix))
+         (only-in "private/pca-data.rkt" magnitude-rows)
+         (only-in "private/scaler-data.rkt" rows->matrix scaled-rows))
 
 (define axes '((4 0) (-4 0) (0 1) (0 -1) (0 0)))
 (define exact-axes '((4.0 0.0) (-4.0 0.0) (0.0 1.0) (0.0 -1.0) (0.0 0.0)))

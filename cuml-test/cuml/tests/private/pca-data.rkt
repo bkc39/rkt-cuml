@@ -10,7 +10,7 @@
          (only-in racket/list argmax list-set make-list take)
          (only-in racket/match match)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "scaler-data.rkt" dot generated-rows round-to rows->matrix scaled-rows transpose))
+         (only-in "scaler-data.rkt" dot generated-rows round-to rows->matrix transpose))
 
 (provide (struct-out fitted)
          (struct-out fixture)
@@ -18,7 +18,6 @@
          centred
          column
          constant-column
-         dot
          duplicate-rows
          first-max-entries
          fitted-of
@@ -37,7 +36,6 @@
          orthonormality-bound
          over-bound
          product
-         scaled-rows
          tie-rows
          wide-fixture)
 

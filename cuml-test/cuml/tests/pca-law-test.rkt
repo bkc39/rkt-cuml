@@ -28,10 +28,9 @@
                   normal-fixture
                   orthonormality-bound
                   over-bound
-                  scaled-rows
                   tie-rows
                   wide-fixture)
-         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix unit-roundoff))
+         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix scaled-rows unit-roundoff))
 
 (define dtypes '(float32 float64))
 (define solvers '(full jacobi))

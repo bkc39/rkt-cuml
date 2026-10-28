@@ -9,8 +9,8 @@
          (only-in racket/match match-define)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
-         (only-in "pca-data.rkt" dot fixture gaps over-bound)
-         (only-in "scaler-data.rkt" generated-rows transpose unit-roundoff))
+         (only-in "pca-data.rkt" fixture gaps over-bound)
+         (only-in "scaler-data.rkt" dot generated-rows transpose unit-roundoff))
 
 (provide (struct-out exact)
          (struct-out reference)
