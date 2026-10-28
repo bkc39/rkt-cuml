@@ -133,7 +133,7 @@
 
 (define (eigen-residuals g rows #:norm-laplacian [norm #t])
   (define d (degrees g))
-  (define most
+  (define heaviest
     (for/fold ([m 0.0]) ([x (in-vector d)])
       (max m x)))
   (define (mass i)
@@ -152,10 +152,7 @@
     (define off
       (for/sum ([i (in-list live)])
                (/ (sqr (- (vector-ref lu i) (* rho (mass i) (vector-ref u i)))) (mass i))))
-    (/ (sqrt (/ off uu))
-       (if norm
-           1.0
-           most))))
+    (/ (sqrt (/ off uu)) (if norm 1.0 heaviest))))
 
 (define (sign-ruled? rows)
   (for/and ([column (in-list (transpose rows))])
