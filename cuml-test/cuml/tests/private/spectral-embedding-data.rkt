@@ -7,7 +7,8 @@
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params)
          (only-in racket/list append* argmax second)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define match-lambda**)
+         (only-in racket/math pi)
          racket/runtime-path
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix)
@@ -35,6 +36,7 @@
          graph-case
          graph-checks
          heavy-pair
+         polygons
          quantised
          rows-matrix
          sign-ruled?
@@ -68,19 +70,28 @@
     (sort (append* (for/list ([e (in-list edges)])
                      (match-define (list i j w) e)
                      (list (list i j w) (list j i w))))
-          (lambda (a b) (or (< (car a) (car b)) (and (= (car a) (car b)) (< (cadr a) (cadr b)))))))
-  (values (graph (map car both) (map cadr both) (map caddr both) n) truth))
+          (match-lambda**
+            [((list i j _) (list k l _)) (or (< i k) (and (= i k) (< j l)))])))
+  (match-define (list (list rows cols vals) ...) both)
+  (values (graph rows cols vals n) truth))
 
 (define (stochastic-graph [sizes '(40 60 80)] [seed 0] #:weighted? [weighted? #f])
   (define-values (g _truth) (stochastic-blocks sizes 0.3 0.01 seed #:weighted? weighted?))
   g)
 
-(define (heavy-pair exponent)
+(define (heavy-pair exponent #:graph [g (stochastic-graph)] #:between [ends '(0 1)])
   (define w (expt 2.0 exponent))
-  (graph-edit (stochastic-graph)
-              #:rows (lambda (rows) (append rows '(0 1)))
-              #:cols (lambda (cols) (append cols '(1 0)))
+  (match-define (list i j) ends)
+  (graph-edit g
+              #:rows (lambda (rows) (append rows (list i j)))
+              #:cols (lambda (cols) (append cols (list j i)))
               #:vals (lambda (vals) (append vals (list w w)))))
+
+(define (polygons count m)
+  (for*/list ([b (in-range count)]
+              [i (in-range m)])
+    (define t (/ (* 2 pi i) m))
+    (list (+ (* 1000.0 b) (* 10.0 (cos t))) (* 10.0 (sin t)) 0.0)))
 
 (define quantised
   (let-values ([(rows _labels) (centred-blobs '((0 0 0) (1 1 0) (0 1 1)) 40 7)])

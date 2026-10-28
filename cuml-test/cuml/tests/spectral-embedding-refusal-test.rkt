@@ -30,15 +30,17 @@
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
          (only-in "private/spectral-data.rkt"
-                  graph
                   graph->vectors
                   graph-edit
                   graph-map-vals
-                  set-entry)
+                  set-entry
+                  unit-rings)
          (only-in "private/spectral-embedding-data.rkt"
                   embedded
                   embedded-graph
                   heavy-pair
+                  polygons
+                  rows-matrix
                   sign-ruled?)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
 
@@ -61,9 +63,12 @@
 
 (define two-message "n-components: 2 components with drop-first need at least 8 rows, got 7")
 
+(define piece-advice "; a graph of identical pieces needs another random-state or norm-laplacian off")
+
 (define zero-message
   (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph;"
-                 " deduplicate or centre X, or change n-neighbors"))
+                 " deduplicate or centre X, or change n-neighbors"
+                 piece-advice))
 
 (define (halves)
   (rows->matrix (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0))) 'float32))
@@ -106,6 +111,10 @@
    (X-row "s14 halves" zero-message (halves) (hasheq 'n-neighbors 10))
    (X-row "s14 offset" zero-message (offset) (hasheq 'n-neighbors 10))
    (X-row "s14 every row a neighbour" zero-message (line-X 50) (hasheq 'n-neighbors 50))
+   (X-row "s14 identical pieces"
+          zero-message
+          (rows-matrix (polygons 2 30))
+          (hasheq 'n-neighbors 3 'random-state 1))
    (X-row "s1 before s3"
           "n-components: expected at least 1, got 0"
           (tiny-with '() 'float64)
@@ -238,14 +247,7 @@
 
 (define ring-n 10)
 
-(define (ring-of n)
-  (define pairs
-    (for*/list ([i (in-range n)]
-                [e (in-list (list (cons i (modulo (add1 i) n)) (cons (modulo (add1 i) n) i)))])
-      e))
-  (graph (map car pairs) (map cdr pairs) (make-list (length pairs) 1.0) n))
-
-(define ring (ring-of ring-n))
+(define ring (unit-rings 1 ring-n))
 
 (define (fit-vectors rows cols vals [n ring-n])
   (spectral-embedding-fit-graph rows cols vals n))
@@ -310,6 +312,11 @@
     (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph;"
                    " weights spanning many orders of magnitude need norm-laplacian")
     (fault (heavy-pair 24) (hasheq 'norm-laplacian #f)))
+   (row
+    "zero column, identical pieces"
+    (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph"
+                   piece-advice)
+    (fault (unit-rings 2 30) (hasheq 'random-state 1)))
    (row "g1 before g2"
         "cols: expected 20 entries, as rows has, got 19"
         (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals 7))))
@@ -332,9 +339,9 @@
   (for ([r (in-list (graph-rows-of))])
     (check-row 'spectral-embedding-fit-graph r)
     (check-pred spectral-embedding-result? ((fault ring)) (row-id r)))
-  (for ([entry (in-list (list (list (ring-of 8) (hasheq))
-                              (list (ring-of 4) (hasheq 'n-components 1 'drop-first #f))
-                              (list (ring-of 6) (hasheq 'n-components 1))
+  (for ([entry (in-list (list (list (unit-rings 1 8) (hasheq))
+                              (list (unit-rings 1 4) (hasheq 'n-components 1 'drop-first #f))
+                              (list (unit-rings 1 6) (hasheq 'n-components 1))
                               (list ring (hasheq 'n-components 3 'drop-first #f))))])
     (match-define (list g options) entry)
     (define rows (embedded (embedded-graph g options)))

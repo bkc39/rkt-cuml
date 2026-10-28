@@ -23,11 +23,13 @@
                   graph-n
                   graph-shuffle
                   knn-graph
-                  three-blocks)
+                  three-blocks
+                  unit-rings)
          (only-in "private/spectral-embedding-data.rkt"
                   column-gaps
                   embedded
                   embedded-graph
+                  polygons
                   quantised
                   rows-matrix
                   sign-ruled?
@@ -203,6 +205,17 @@
          [b (in-list firsts)]
          #:unless (eq? a b))
     (check-true (> (apply max (map (lambda (x y) (abs (- x y))) a b)) component-gap))))
+
+(test-gpu "L11: two identical rings, as a graph or as polygons' 3-neighbour graph, embed finite and sign-ruled without norm-laplacian"
+  (define ring-rows
+    (embedded (embedded-graph (unit-rings 2 30) (hasheq 'norm-laplacian #f 'random-state 1))))
+  (define polygon-rows
+    (embedded (spectral-embedding-fit (rows-matrix (polygons 2 30))
+                                      #:n-neighbors 3
+                                      #:norm-laplacian #f
+                                      #:random-state 1)))
+  (for ([rows (in-list (list ring-rows polygon-rows))])
+    (check-true (and (finite-rows? rows) (sign-ruled? rows)))))
 
 (define (ari rows truth)
   (define labels (kmeans-result-labels (kmeans-fit (rows-matrix rows) #:n-clusters 3 #:n-init 10)))

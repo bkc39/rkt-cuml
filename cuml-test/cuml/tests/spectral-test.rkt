@@ -6,7 +6,7 @@
                   spectral-clustering-result-labels
                   spectral-clustering-result?)
          (only-in racket/function curry)
-         (only-in racket/list append-map make-list range)
+         (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype shape)
@@ -29,7 +29,8 @@
                   repeat-each
                   set-entry
                   three-blobs-matrix
-                  three-blocks))
+                  three-blocks
+                  unit-path))
 
 (define eigensolver #rx"^spectral-clustering-fit(-graph)?: .*eigensolver couldn't converge")
 
@@ -78,14 +79,7 @@
          '(1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 1.0 0.01 0.01)
          6))
 
-(define (path n)
-  (define starts (range (sub1 n)))
-  (graph (append-map (lambda (i) (list i (add1 i))) starts)
-         (append-map (lambda (i) (list (add1 i) i)) starts)
-         (make-list (* 2 (sub1 n)) 1.0)
-         n))
-
-(define four-path (path 4))
+(define four-path (unit-path 4))
 
 (test-gpu "SC13: below 7 samples the automatic embedding has one component"
   (for* ([g (in-list (list two-triangles four-path))]
@@ -95,7 +89,7 @@
       (check-equal? (graph-labels g #:n-clusters k #:random-state seed)
                     (graph-labels g #:n-clusters k #:random-state seed #:n-components 1))))
   (test-case "a connected graph, split into pieces that are not connected"
-    (check-equal? (graph-labels (path 5) #:n-clusters 2 #:random-state 0) '(1 1 1 0 1)))
+    (check-equal? (graph-labels (unit-path 5) #:n-clusters 2 #:random-state 0) '(1 1 1 0 1)))
   (test-case "a connected graph, fewer clusters than asked"
     (check-equal? (graph-labels four-path #:n-clusters 2 #:random-state 0) '(0 0 0 0)))
   (define-values (triangle-and-point truth) (cliques '(3 1)))

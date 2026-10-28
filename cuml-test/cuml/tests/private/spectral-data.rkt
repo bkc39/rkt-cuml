@@ -5,7 +5,7 @@
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
          (only-in racket/flonum flsingle)
-         (only-in racket/list append* list-set make-list range take)
+         (only-in racket/list append* append-map list-set make-list range take)
          (only-in racket/match match-lambda)
          (only-in racket/math pi)
          (only-in raft device-vector->list list->device-vector)
@@ -42,11 +42,34 @@
          three-blobs
          three-blobs-matrix
          three-blocks
-         truth-of)
+         truth-of
+         unit-path
+         unit-rings)
 
 (struct graph (rows cols vals n) #:transparent)
 
 (struct fit-case (name data truth k options compare))
+
+(define (unit-edges edges n)
+  (graph (append-map (match-lambda
+                       [(cons i j) (list i j)])
+                     edges)
+         (append-map (match-lambda
+                       [(cons i j) (list j i)])
+                     edges)
+         (make-list (* 2 (length edges)) 1.0)
+         n))
+
+(define (unit-path n)
+  (unit-edges (for/list ([i (in-range (sub1 n))])
+                (cons i (add1 i)))
+              n))
+
+(define (unit-rings count n)
+  (unit-edges (for*/list ([b (in-range count)]
+                          [i (in-range n)])
+                (cons (+ (* b n) i) (+ (* b n) (modulo (add1 i) n))))
+              (* count n)))
 
 (define (planted name data truth k #:options [options (hasheq)] #:compare [compare 'labels])
   (fit-case name data truth k options compare))

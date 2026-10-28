@@ -364,18 +364,19 @@ given graph; and the fit's @racket[params], where a derived
 Embeds the rows of @racket[X], a row-major @racket['float32] matrix, in
 @racket[n-components] dimensions: the eigenvectors of the smallest eigenvalues
 of the graph Laplacian, normalized when @racket[norm-laplacian] and then
-divided by the square root of each degree, the constant first one dropped when
-@racket[drop-first]. The graph joins each row to its
-@racket[n-neighbors] nearest rows, itself included, with weight 1, made
-symmetric; by default min(256, max(2, ⌊n/10⌋)), and at most the row count.
-@racket[X] needs at least two columns, two distinct rows, finite rows of
-squared norm at most 2@superscript{125}, and 2(@racket[n-components] + 2) rows
-with @racket[drop-first], 2(@racket[n-components] + 1) without. Each column's
-largest entry is positive. A @racket[random-state] repeats bitwise when
-@racket[n-neighbors] is at most 256; @racket[#f] draws one from
-@racket[current-pseudo-random-generator]. Eigenvectors of close eigenvalues
-are approximate. A graph in several pieces gives an arbitrary basis of their
-indicators. Centre @racket[X] if it lies far from the origin. A graph whose
+divided by the square root of each degree. The constant first one is dropped
+when @racket[drop-first].
+The graph joins each row to its @racket[n-neighbors] nearest rows, itself
+included, with weight 1, made symmetric. @racket[n-neighbors] defaults to
+min(256, max(2, ⌊n/10⌋)) and is at most the row count.
+@racket[X] needs at least two columns, two distinct rows, and finite rows of
+squared norm at most 2@superscript{125}. It needs 2(@racket[n-components] + 2)
+rows with @racket[drop-first], 2(@racket[n-components] + 1) without.
+Each column's largest entry is positive. A @racket[random-state] repeats
+bitwise when @racket[n-neighbors] is at most 256; @racket[#f] draws one from
+@racket[current-pseudo-random-generator]. A graph of identical pieces can be an
+error with @racket[norm-laplacian]; use another @racket[random-state] or turn
+it off. Centre @racket[X] if it lies far from the origin. A graph whose
 eigenvectors the solver cannot find, such as one from duplicated rows, is an
 error.
 @examples[#:eval ev #:label #f
@@ -397,14 +398,12 @@ error.
 Embeds @racket[n-samples] samples from an affinity graph given as
 coordinates, as @racket[spectral-clustering-fit-graph] takes it: symmetric,
 without self-loops, finite weights of at least 0, duplicates adding. A graph
-that is not symmetric is used as given. Without @racket[norm-laplacian] the
-embedding does not depend on the scale of the weights; with it, divided by the
-square root of each degree, it scales by 1/√c when the weights scale by c.
-Without @racket[norm-laplacian] the eigensolver's fixed absolute tolerance
-makes the eigenvectors approximate when the weights span many orders of
-magnitude (one weight 2@superscript{12} times the rest moves the embedding,
-and from about 2@superscript{23} the fit is an error), so use
-@racket[norm-laplacian] for such graphs. Otherwise as
+that is not symmetric is used as given.
+Without @racket[norm-laplacian] the embedding does not depend on the scale of
+the weights. With it, divided by the square root of each degree, it scales by
+1/√c when the weights scale by c. Without @racket[norm-laplacian], weights
+spanning orders of magnitude can give a wrong embedding or an error, by an
+amount that depends on the graph; use @racket[norm-laplacian]. Otherwise as
 @racket[spectral-embedding-fit], except that @racket[params]'s
 @racket[n-neighbors] and @racket[affinity] are ignored.
 @examples[#:eval ev #:label #f

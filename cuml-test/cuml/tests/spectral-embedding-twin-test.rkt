@@ -4,7 +4,7 @@
          (only-in rackunit check-true)
          (only-in "private/blob-data.rkt" centred-blobs)
          (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/spectral-data.rkt" graph-map-vals three-blocks)
+         (only-in "private/spectral-data.rkt" graph-map-vals three-blocks unit-path)
          (only-in "private/spectral-embedding-data.rkt"
                   check-twins
                   column-gaps
@@ -43,10 +43,12 @@
 
 (define tiny-gap 0.1)
 
-(define ((departs ours) theirs)
+(define (sign-free-gaps ours theirs)
+  (map min (column-gaps ours theirs) (column-gaps ours (map (lambda (row) (map - row)) theirs))))
+
+(define ((departs ours #:gaps [gaps column-gaps]) theirs)
   (check-true (sign-ruled? theirs))
-  (check-true (> (apply max (column-gaps ours theirs)) tiny-gap)
-              (format "column gaps ~a" (column-gaps ours theirs))))
+  (check-true (> (apply max (gaps ours theirs)) tiny-gap) (format "gaps ~a" (gaps ours theirs))))
 
 (define (raw-tiny)
   (define result (spectral-embedding-fit (rows-matrix quantised) #:n-neighbors 10))
@@ -54,11 +56,18 @@
         (embedding-case quantised result #:op "raw-tiny")
         (departs (embedded result))))
 
+(define heavy-options (hasheq 'norm-laplacian #f))
+
 (define (heavy-departs)
-  (define options (hasheq 'norm-laplacian #f))
   (list "L6 sklearn at a 2^16 pair without norm-laplacian"
-        (graph-case (heavy-pair 16) options #:op "sklearn")
-        (departs (embedded (embedded-graph (heavy-pair 16) options)))))
+        (graph-case (heavy-pair 16) heavy-options #:op "sklearn")
+        (departs (embedded (embedded-graph (heavy-pair 16) heavy-options)))))
+
+(define (path-departs)
+  (define g (heavy-pair 16 #:graph (unit-path 24) #:between '(5 6)))
+  (list "L6 sklearn at a 2^16 pair on a 24-node path without norm-laplacian, sign-free"
+        (graph-case g heavy-options #:op "sklearn")
+        (departs (embedded (embedded-graph g heavy-options)) #:gaps sign-free-gaps)))
 
 (define (cuml-twins)
   (define blob-rows (fixture-rows blobs))
@@ -88,7 +97,8 @@
                    (hasheq 'norm-laplacian #f))
     (sklearn-graph "L6 2^16 pair" (heavy-pair 16) (hasheq))
     (heavy-departs)
+    (path-departs)
     (sklearn-dense "L6 overlapping blobs" rows))))
 
-(test-twin "L5, L6, L7: fits are Python cuML's bitwise and sklearn's within 1e-4 but at a 2^16 pair without norm-laplacian; Python cuML on 2^-70 X is not"
+(test-twin "L5, L6, L7: fits are Python cuML's bitwise and sklearn's within 1e-4 but at 2^16 pairs without norm-laplacian; Python cuML on 2^-70 X is not"
   (check-twins (append (cuml-twins) (sklearn-twins) (list (raw-tiny)))))

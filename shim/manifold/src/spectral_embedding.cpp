@@ -63,6 +63,9 @@ constexpr const char* zero_advice =
     "; deduplicate or centre X, or change n-neighbors";
 constexpr const char* spread_advice =
     "; weights spanning many orders of magnitude need norm-laplacian";
+constexpr const char* piece_advice =
+    "; a graph of identical pieces needs another random-state or "
+    "norm-laplacian off";
 
 struct embedding_request {
   int64_t n_components;
@@ -161,15 +164,19 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
                        "a spectral embedding needs two distinct rows", stream);
   const int exponent =
       scale_exponent<float>(largest_magnitude(x.data, x.n * x.d, stream));
-  embed(handle, out, x.n, r.n_components, zero_advice, [&](embedding_view e) {
-    on_scaled(handle, x.data, x.n * x.d, exponent, [&](float* data) {
-      ML::SpectralEmbedding::transform(
-          handle, params_of(r, n_neighbors),
-          raft::make_device_matrix_view<float, int, raft::row_major>(
-              data, static_cast<int>(x.n), static_cast<int>(x.d)),
-          e);
-    });
-  });
+  const std::string advice = r.norm_laplacian != 0
+                                 ? std::string(zero_advice) + piece_advice
+                                 : std::string(zero_advice);
+  embed(handle, out, x.n, r.n_components, advice.c_str(),
+        [&](embedding_view e) {
+          on_scaled(handle, x.data, x.n * x.d, exponent, [&](float* data) {
+            ML::SpectralEmbedding::transform(
+                handle, params_of(r, n_neighbors),
+                raft::make_device_matrix_view<float, int, raft::row_major>(
+                    data, static_cast<int>(x.n), static_cast<int>(x.d)),
+                e);
+          });
+        });
 }
 
 void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
@@ -185,7 +192,7 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
       r.norm_laplacian != 0
           ? 0
           : unit_exponent(largest_magnitude(c.vals, c.nnz, stream));
-  const char* advice = r.norm_laplacian != 0 ? "" : spread_advice;
+  const char* advice = r.norm_laplacian != 0 ? piece_advice : spread_advice;
   embed(handle, out, n, r.n_components, advice, [&](embedding_view e) {
     on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
       ML::SpectralEmbedding::transform(

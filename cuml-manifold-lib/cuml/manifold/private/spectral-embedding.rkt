@@ -35,7 +35,7 @@
 (define (derived-neighbors X)
   (min most-derived-neighbors (max 2 (quotient (rows-or-zero X) 10))))
 
-(define (embedded who resources params n-neighbors job inputs)
+(define (run-fit who resources params n-neighbors job inputs)
   (match-define (hash-table ['n-components n-components]
                             ['norm-laplacian norm-laplacian]
                             ['drop-first drop-first]
@@ -54,12 +54,12 @@
 
 (define (fitted who X params resources)
   (define n-neighbors (or (hash-ref params 'n-neighbors) (derived-neighbors X)))
-  (embedded who
-            resources
-            params
-            n-neighbors
-            cuml-manifold-spectral-embedding-fit-job
-            (list X n-neighbors)))
+  (run-fit who
+           resources
+           params
+           n-neighbors
+           cuml-manifold-spectral-embedding-fit-job
+           (list X n-neighbors)))
 
 (define/who (spectral-embedding-fit who
                                     X
@@ -75,12 +75,12 @@
                                           #:hyperparameters spectral-embedding-params
                                           #:ignoring (n-neighbors affinity)
                                           #:resources [resources (current-device-resources)])
-  (embedded who
-            resources
-            (bound-params spectral-embedding-params #:ignoring (n-neighbors affinity))
-            #f
-            cuml-manifold-spectral-embedding-fit-graph-job
-            (list rows cols vals n-samples)))
+  (run-fit who
+           resources
+           (bound-params spectral-embedding-params #:ignoring (n-neighbors affinity))
+           #f
+           cuml-manifold-spectral-embedding-fit-graph-job
+           (list rows cols vals n-samples)))
 
 (define/who (spectral-embedding-fit-transform who
                                               X

@@ -893,7 +893,7 @@ Follow-ups are GitHub issues.
 
 - **B3-a.** Spectral embedding lives in `cuml/manifold` over
   `ML::SpectralEmbedding::transform`; `spectral-clustering-result` stays one
-  field, and #27 is met here.
+  field.
 - **B3-b.** The procedures are `spectral-embedding-fit`, `-fit-graph`,
   `-fit-transform`, `-params` and the `spectral-embedding-result` struct;
   the estimator is `spectral-embedding`, whose `fit-transform` is the
@@ -918,7 +918,11 @@ Follow-ups are GitHub issues.
   all-zero column (s14) are refused with the outputs freed.
 - **B3-k.** Self-loops in a given graph are refused (g5), as leg 5 does.
 - **B3-l.** A graph that is not symmetric is used as given and documented.
-- **B3-m.** Disconnected graphs are documented, not refused (L11).
+- **B3-m.** Disconnected graphs are not refused (L11). Identical pieces with
+  repeated eigenvalues of their own, such as rings, can give a zero column
+  with norm-laplacian, on the dense path (regular polygons at 3 neighbours)
+  and the graph path alike. That column is refused, and the refusal and the
+  manual say to use another random-state or turn norm-laplacian off.
 - **B3-n.** `#:random-state #f` draws its seed in Racket.
 - **B3-o.** n-neighbors above the row count is refused (s9).
 - **B3-p.** X needs at least 2 columns (s5).
@@ -934,24 +938,20 @@ Follow-ups are GitHub issues.
 - **B3-t.** X is not centred; the manual says to centre X far from the
   origin.
 - **B3-u.** The eigensolver's tolerance (1e-5) is not exposed. It is an
-  absolute residual, so without norm-laplacian one heavy weight still beats
-  the [1, 2) rescale of B3-x: the stochastic graph plus a pair (0, 1)/(1, 0)
-  at 2^e is within 1.2e-5 of sklearn at e ≤ 8, 5.5e-4 and 3.1e-3 at 12,
-  9.0e-3 at 14, 0.37 and 2.1 at 16, 0.67 and 4.3 at 20, 1.5 and 4.7 at 22,
-  and refused for a zero column from 23; with norm-laplacian it stays within
-  1e-5 through 30. No ratio of largest to typical weight separates good fits
-  from bad (log-uniform weights over 2⁻²⁰..1 already miss by 5.1e-4), so the
-  manual documents the case, the zero-column refusal advises norm-laplacian,
-  and the twin pins the 2¹⁶ departure.
+  absolute residual, so without norm-laplacian weights spanning orders of
+  magnitude can give a wrong embedding or a zero column, by an amount that
+  depends on the graph (`upstream-bugs.md`). The manual says to use
+  norm-laplacian for such graphs, the zero-column refusal advises it, and the
+  twin pins a departure on the stochastic graph and on a path.
 - **B3-v.** Racket resolves n-neighbors and passes the count to the shim,
-  which returns only the embedding; without norm-laplacian the graph
-  path's zero-column refusal advises norm-laplacian, and with it carries no
-  advice.
+  which returns only the embedding. With norm-laplacian on, both paths'
+  zero-column refusals add the identical-pieces advice (another random-state
+  or norm-laplacian off). With it off, the graph path's advises
+  norm-laplacian and the dense path's keeps its own.
 - **B3-w.** The GPU suite's 1800 s budget is spent per test program, so B3's
   laws live in six files: L1-L3 and L7-L12 in `-law-test`, dense and graph
   L13 in `-refusal-test`, L4 in `-determinism-test`, and L5-L7's twins in
-  one `-twin-test` with one Python run. `test-twin` probes `import cuml` on
-  first use, not when `python-env` loads.
+  one `-twin-test` with one Python run.
 - **B3-x.** Without norm-laplacian, a given graph is embedded as an exact
   power-of-two-scaled copy whose largest weight is in [1, 2), so the
   embedding is bitwise invariant to the scale of the weights; with it, the

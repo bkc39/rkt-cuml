@@ -2,11 +2,11 @@
 
 (require (only-in "umap-determinism-data.rkt" check-repeatable))
 
-(provide check-se-repeatable
+(provide check-spectral-embedding-repeatable
          dense-configs
          graph-configs)
 
-(define ((se-program given) configs repeats)
+(define ((spectral-embedding-program given) configs repeats)
   `(module m racket/base
      (require (only-in cuml/manifold spectral-embedding-fit spectral-embedding-result-embedding)
               (only-in cuml/tests/private/estimator-data apply-options)
@@ -52,5 +52,5 @@
   (for/list ([options (in-list (settings))])
     (list 'graph name options)))
 
-(define (check-se-repeatable configs #:given [given '()])
-  (check-repeatable configs #:program (se-program given)))
+(define (check-spectral-embedding-repeatable configs #:given [given '()])
+  (check-repeatable configs #:program (spectral-embedding-program given)))
