@@ -933,10 +933,20 @@ Follow-ups are GitHub issues.
   embedding comes from `spectral-embedding-fit-graph`.
 - **B3-t.** X is not centred; the manual says to centre X far from the
   origin.
-- **B3-u.** The eigensolver's tolerance (1e-5) is not exposed.
+- **B3-u.** The eigensolver's tolerance (1e-5) is not exposed. It is an
+  absolute residual, so without norm-laplacian one heavy weight still beats
+  the [1, 2) rescale of B3-x: the stochastic graph plus a pair (0, 1)/(1, 0)
+  at 2^e is within 1.2e-5 of sklearn at e ≤ 8, 5.5e-4 and 3.1e-3 at 12,
+  9.0e-3 at 14, 0.37 and 2.1 at 16, 0.67 and 4.3 at 20, 1.5 and 4.7 at 22,
+  and refused for a zero column from 23; with norm-laplacian it stays within
+  1e-5 through 30. No ratio of largest to typical weight separates good fits
+  from bad (log-uniform weights over 2⁻²⁰..1 already miss by 5.1e-4), so the
+  manual documents the case, the zero-column refusal advises norm-laplacian,
+  and the twin pins the 2¹⁶ departure.
 - **B3-v.** Racket resolves n-neighbors and passes the count to the shim,
-  which returns only the embedding; the graph path's zero-column refusal
-  carries no advice about X.
+  which returns only the embedding; without norm-laplacian the graph
+  path's zero-column refusal advises norm-laplacian, and with it carries no
+  advice.
 - **B3-w.** The GPU suite's 1800 s budget is spent per test program, so B3's
   laws live in six files: L1-L3 and L7-L12 in `-law-test`, dense and graph
   L13 in `-refusal-test`, L4 in `-determinism-test`, and L5-L7's twins in

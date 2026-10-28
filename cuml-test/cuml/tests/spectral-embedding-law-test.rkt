@@ -31,7 +31,8 @@
                   quantised
                   rows-matrix
                   sign-ruled?
-                  stochastic-blocks)
+                  stochastic-blocks
+                  stochastic-graph)
          (only-in "private/umap-data.rkt"
                   blobs
                   far-blobs
@@ -97,10 +98,13 @@
     (define before (device-matrix->list* X))
     (spectral-embedding-fit X #:n-neighbors 10)
     (check-true (bits-equal? (device-matrix->list* X) before)))
-  (define vectors (graph->vectors blocks))
-  (define before (map device-vector->list vectors))
-  (apply spectral-embedding-fit-graph (append vectors (list (graph-n blocks))))
-  (check-equal? (map device-vector->list vectors) before))
+  (define tiny (graph-map-vals (stochastic-graph #:weighted? #t) (lambda (w) (* w (expt 2.0 -20)))))
+  (for ([entry (in-list (list (list blocks #t) (list tiny #f)))])
+    (match-define (list g norm) entry)
+    (define vectors (graph->vectors g))
+    (define before (map device-vector->list vectors))
+    (apply spectral-embedding-fit-graph (append vectors (list (graph-n g))) #:norm-laplacian norm)
+    (check-equal? (map device-vector->list vectors) before (format "norm-laplacian ~a" norm))))
 
 (define gap-bound 1e-4)
 

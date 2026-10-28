@@ -35,7 +35,11 @@
                   graph-edit
                   graph-map-vals
                   set-entry)
-         (only-in "private/spectral-embedding-data.rkt" embedded embedded-graph sign-ruled?)
+         (only-in "private/spectral-embedding-data.rkt"
+                  embedded
+                  embedded-graph
+                  heavy-pair
+                  sign-ruled?)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
 
 (define small (hasheq 'n-neighbors 4))
@@ -301,6 +305,11 @@
    (row "g7"
         "vals: expected at least one positive weight, got none"
         (fault (graph-map-vals ring (const 0.0))))
+   (row
+    "zero column"
+    (string-append "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph;"
+                   " weights spanning many orders of magnitude need norm-laplacian")
+    (fault (heavy-pair 24) (hasheq 'norm-laplacian #f)))
    (row "g1 before g2"
         "cols: expected 20 entries, as rows has, got 19"
         (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals 7))))

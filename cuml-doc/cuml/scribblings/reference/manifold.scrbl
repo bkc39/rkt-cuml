@@ -363,8 +363,9 @@ given graph; and the fit's @racket[params], where a derived
          spectral-embedding-result?]{
 Embeds the rows of @racket[X], a row-major @racket['float32] matrix, in
 @racket[n-components] dimensions: the eigenvectors of the smallest eigenvalues
-of the graph Laplacian, normalized when @racket[norm-laplacian], the constant
-first one dropped when @racket[drop-first]. The graph joins each row to its
+of the graph Laplacian, normalized when @racket[norm-laplacian] and then
+divided by the square root of each degree, the constant first one dropped when
+@racket[drop-first]. The graph joins each row to its
 @racket[n-neighbors] nearest rows, itself included, with weight 1, made
 symmetric; by default min(256, max(2, ⌊n/10⌋)), and at most the row count.
 @racket[X] needs at least two columns, two distinct rows, finite rows of
@@ -397,7 +398,13 @@ Embeds @racket[n-samples] samples from an affinity graph given as
 coordinates, as @racket[spectral-clustering-fit-graph] takes it: symmetric,
 without self-loops, finite weights of at least 0, duplicates adding. A graph
 that is not symmetric is used as given. Without @racket[norm-laplacian] the
-embedding does not depend on the scale of the weights. Otherwise as
+embedding does not depend on the scale of the weights; with it, divided by the
+square root of each degree, it scales by 1/√c when the weights scale by c.
+Without @racket[norm-laplacian] the eigensolver's fixed absolute tolerance
+makes the eigenvectors approximate when the weights span many orders of
+magnitude (one weight 2@superscript{12} times the rest moves the embedding,
+and from about 2@superscript{23} the fit is an error), so use
+@racket[norm-laplacian] for such graphs. Otherwise as
 @racket[spectral-embedding-fit], except that @racket[params]'s
 @racket[n-neighbors] and @racket[affinity] are ignored.
 @examples[#:eval ev #:label #f

@@ -16,7 +16,14 @@
          (only-in "estimator-data.rkt" apply-options)
          (only-in "python-env.rkt" run-cases)
          (only-in "scaler-data.rkt" bits-equal? dot transpose)
-         (only-in "spectral-data.rkt" graph graph->vectors graph-cols graph-n graph-rows graph-vals))
+         (only-in "spectral-data.rkt"
+                  graph
+                  graph->vectors
+                  graph-cols
+                  graph-edit
+                  graph-n
+                  graph-rows
+                  graph-vals))
 
 (provide check-twins
          column-gaps
@@ -27,6 +34,7 @@
          embedding-checks
          graph-case
          graph-checks
+         heavy-pair
          quantised
          rows-matrix
          sign-ruled?
@@ -66,6 +74,13 @@
 (define (stochastic-graph [sizes '(40 60 80)] [seed 0] #:weighted? [weighted? #f])
   (define-values (g _truth) (stochastic-blocks sizes 0.3 0.01 seed #:weighted? weighted?))
   g)
+
+(define (heavy-pair exponent)
+  (define w (expt 2.0 exponent))
+  (graph-edit (stochastic-graph)
+              #:rows (lambda (rows) (append rows '(0 1)))
+              #:cols (lambda (cols) (append cols '(1 0)))
+              #:vals (lambda (vals) (append vals (list w w)))))
 
 (define quantised
   (let-values ([(rows _labels) (centred-blobs '((0 0 0) (1 1 0) (0 1 1)) 40 7)])

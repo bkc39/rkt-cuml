@@ -15,6 +15,7 @@
                   embedding-checks
                   graph-case
                   graph-checks
+                  heavy-pair
                   quantised
                   rows-matrix
                   sign-ruled?
@@ -53,6 +54,12 @@
         (embedding-case quantised result #:op "raw-tiny")
         (departs (embedded result))))
 
+(define (heavy-departs)
+  (define options (hasheq 'norm-laplacian #f))
+  (list "L6 sklearn at a 2^16 pair without norm-laplacian"
+        (graph-case (heavy-pair 16) options #:op "sklearn")
+        (departs (embedded (embedded-graph (heavy-pair 16) options)))))
+
 (define (cuml-twins)
   (define blob-rows (fixture-rows blobs))
   (define digit-rows (fixture-rows (digits)))
@@ -79,7 +86,9 @@
     (sklearn-graph "L6 norm-laplacian #f at 2^-20 weights"
                    (graph-map-vals g (lambda (w) (* w (expt 2.0 -20))))
                    (hasheq 'norm-laplacian #f))
+    (sklearn-graph "L6 2^16 pair" (heavy-pair 16) (hasheq))
+    (heavy-departs)
     (sklearn-dense "L6 overlapping blobs" rows))))
 
-(test-twin "L5, L6, L7: fits are Python cuML's bitwise and sklearn's within 1e-4; Python cuML on 2^-70 X is not"
+(test-twin "L5, L6, L7: fits are Python cuML's bitwise and sklearn's within 1e-4 but at a 2^16 pair without norm-laplacian; Python cuML on 2^-70 X is not"
   (check-twins (append (cuml-twins) (sklearn-twins) (list (raw-tiny)))))

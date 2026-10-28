@@ -61,6 +61,8 @@ constexpr int64_t least_neighbors = 2;
 constexpr int64_t least_columns = 2;
 constexpr const char* zero_advice =
     "; deduplicate or centre X, or change n-neighbors";
+constexpr const char* spread_advice =
+    "; weights spanning many orders of magnitude need norm-laplacian";
 
 struct embedding_request {
   int64_t n_components;
@@ -183,7 +185,8 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
       r.norm_laplacian != 0
           ? 0
           : unit_exponent(largest_magnitude(c.vals, c.nnz, stream));
-  embed(handle, out, n, r.n_components, "", [&](embedding_view e) {
+  const char* advice = r.norm_laplacian != 0 ? "" : spread_advice;
+  embed(handle, out, n, r.n_components, advice, [&](embedding_view e) {
     on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
       ML::SpectralEmbedding::transform(
           handle, params_of(r, 0),

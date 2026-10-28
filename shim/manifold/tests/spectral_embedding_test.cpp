@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
+#include <string>
 #include <vector>
 
 #include "cumlrkt/largest_positive.hpp"
@@ -24,6 +25,7 @@ constexpr int64_t neighbours = 8;
 constexpr int64_t path = 24;
 constexpr int tiny_exponent = -70;
 constexpr int unit_exponent = -3;
+constexpr int tiny_weight_exponent = -40;
 
 bool all_finite(const std::vector<float>& host) {
   return std::ranges::all_of(host, [](float v) { return std::isfinite(v); });
@@ -112,11 +114,11 @@ TEST(SpectralEmbeddingFit, TinyXEmbedsAsItsRescaledCopy) {
 }
 
 struct path_graph {
-  path_graph(const resources& res, int64_t n)
+  path_graph(const resources& res, int64_t n, float weight = 1.0F)
       : n(n),
         rows(res, ends(n, true), {2 * (n - 1)}),
         cols(res, ends(n, false), {2 * (n - 1)}),
-        vals(res, std::vector<float>(2 * (n - 1), 1.0F), {2 * (n - 1)}) {}
+        vals(res, std::vector<float>(2 * (n - 1), weight), {2 * (n - 1)}) {}
   static std::vector<int32_t> ends(int64_t n, bool first) {
     std::vector<int32_t> out;
     for (int32_t i = 0; i + 1 < n; ++i) {
@@ -164,6 +166,23 @@ TEST(SpectralEmbeddingFitGraph, FitsAtTheLeastSamplesForEachEigenvectorCount) {
     EXPECT_EQ(outcome(spectral_fit_graph(res, g.input(), out, o)), "accepted");
     EXPECT_TRUE(all_finite(out.read<float>(0)));
   }
+}
+
+std::vector<float> graph_embedded(const resources& res, const path_graph& g,
+                                  const spectral_options& o) {
+  record out(res);
+  const std::string got = outcome(spectral_fit_graph(res, g.input(), out, o));
+  EXPECT_EQ(got, "accepted");
+  return got == "accepted" ? out.read<float>(0) : std::vector<float>{};
+}
+
+TEST(SpectralEmbeddingFitGraph, TinyWeightsEmbedAsTheirRescaledCopy) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const path_graph unit(res, path);
+  const path_graph tiny(res, path, std::ldexp(1.0F, tiny_weight_exponent));
+  const spectral_options o{.norm_laplacian = 0};
+  EXPECT_EQ(graph_embedded(res, tiny, o), graph_embedded(res, unit, o));
 }
 
 std::vector<float> sign_ruled_copy(const std::vector<float>& host, int64_t n,
