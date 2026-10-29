@@ -917,14 +917,9 @@ Follow-ups are GitHub issues.
 - **B3-j.** After the solve, a non-finite entry (s13, gtest only) and an
   all-zero column (s14) are refused with the outputs freed.
 - **B3-k.** Self-loops in a given graph are refused (g5), as leg 5 does.
-- **B3-l.** A graph that is not symmetric is used as given and documented.
-  When the non-finite, zero-column or B3-y check refuses a graph fit, the
-  shim tests symmetry in float32 (a device sort of the entries, duplicates
-  summed in double and rounded to float) and, for a graph that is not
-  symmetric, says so in place of B3-v's advice. The test runs only on the
-  refusal path. cuML's eigensolver can instead fail to converge on such a
-  graph; that error passes through as cuML raises it, and the manual says a
-  graph that is not symmetric can do either.
+- **B3-l.** A graph that is not symmetric is used as given and documented. A
+  refused graph fit names the asymmetry in place of B3-v's advice; cuML's
+  failure to converge on such a graph passes through as cuML raises it.
 - **B3-m.** Disconnected graphs are not refused (L11). A graph whose
   Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,
   identical pieces) can give a wrong embedding or a zero column, with either
@@ -945,42 +940,27 @@ Follow-ups are GitHub issues.
   embedding comes from `spectral-embedding-fit-graph`.
 - **B3-t.** X is not centred; the manual says to centre X far from the
   origin.
-- **B3-u.** The eigensolver's tolerance (1e-5) is not exposed. It is an
-  absolute residual, so without norm-laplacian weights spanning orders of
-  magnitude can give a wrong embedding or a zero column, by an amount that
-  depends on the graph (`upstream-bugs.md`). B3-y's residual does not see it.
-  The manual says to use norm-laplacian for such graphs; the graph path's
-  zero-column refusal advises it only without norm-laplacian and when the
-  largest positive weight, duplicates summed, is at least 2⁸ times the
-  smallest; the twin pins a
-  departure on the stochastic graph and on a path.
+- **B3-u.** The eigensolver's tolerance (1e-5) is not exposed. Without
+  norm-laplacian, weights spanning orders of magnitude can give a wrong
+  embedding or a zero column that B3-y does not see; the manual says to use
+  norm-laplacian for such graphs, and the refusal advises it (B3-v).
 - **B3-v.** Racket resolves n-neighbors and passes the count to the shim,
-  which returns only the embedding. The dense path's zero-column refusal
-  advises deduplicating or centring X, or changing n-neighbors. The graph
-  path's non-finite, zero-column and B3-y refusals say that graphs whose
-  Laplacian repeats eigenvalues are beyond cuML's eigensolver, plus, with
-  norm-laplacian and a sample of degree 0, that samples without edges can
-  displace the graph's eigenvectors, plus B3-u's weight advice, or, for a
-  graph that is not symmetric, only that (B3-l). The degree-0 test runs only
-  on the refusal path.
-- **B3-w.** The GPU suite's 1800 s budget is spent per test program, so B3's
-  laws live in six files: L1-L3 and L7-L12 in `-law-test`, dense and graph
-  L13 in `-refusal-test`, L4 in `-determinism-test`, and L5-L7's twins in
-  one `-twin-test` with one Python run.
+  which returns only the embedding. A refusal after the solve names the likely
+  cause: on the dense path, duplicated or uncentred X or n-neighbors; on the
+  graph path, graphs whose Laplacian repeats eigenvalues; plus samples without
+  edges, with norm-laplacian when there are at least as many as eigenvectors
+  asked for and without it when there is any; plus norm-laplacian when,
+  without it, the summed weights span 2⁸ or more; for a graph that is not
+  symmetric, only that.
+- **B3-w.** B3's tests split per seam: L1-L3 and L7-L12 in `-law-test`, L4
+  in `-determinism-test`, L5-L7's twins in `-twin-test`, and L13 in
+  `-refusal-test` (dense X), `-graph-refusal-test` (the graph's shape) and
+  `-eigen-refusal-test` (the eigensolver's refusals).
 - **B3-x.** Without norm-laplacian, a given graph is embedded as an exact
   power-of-two-scaled copy whose largest weight is in [1, 2), so the
   embedding is bitwise invariant to the scale of the weights; with it, the
   embedding scales as 1/√s on its own.
-- **B3-y.** After a graph fit, the shim measures each column u on the
-  device: ‖Lu − ρu‖/‖u‖ with ρ = uᵀLu/uᵀu and L = D − A, over the largest
-  degree; with norm-laplacian, cuVS's normalised Laplacian on √d·u, which
-  takes d = 1 and a unit diagonal at a sample of degree 0. A column whose
-  residual is not at most 10⁻³ (NaN included) is refused, and with drop-first
-  so is a constant one (spread (max − min)/max|u| below 10⁻³, with
-  norm-laplacian over the samples of positive degree; a column zero on all of
-  them is not constant). Both bounds sit between the measured
-  correct and wrong fits (`upstream-bugs.md`). A column on samples of
-  degree 0 alone has eigenvalue 1 with norm-laplacian and passes; when many
-  such samples displace the graph's eigenvectors, that wrong eigenvalue is
-  not detected and the fit is not refused; the manual says so and L11 pins
-  it.
+- **B3-y.** After a graph fit, the shim refuses a column whose eigen-residual,
+  over the largest degree (the normalised Laplacian's with norm-laplacian), is
+  above 10⁻³ or NaN, and with drop-first a constant column. A fit displaced by
+  samples without edges can be returned without an error.

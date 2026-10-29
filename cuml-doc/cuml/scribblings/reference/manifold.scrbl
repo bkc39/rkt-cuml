@@ -374,13 +374,15 @@ squared norm at most 2@superscript{125}. It needs 2(@racket[n-components] + 2)
 rows with @racket[drop-first], 2(@racket[n-components] + 1) without.
 Each column's largest entry is positive. A @racket[random-state] repeats
 bitwise when @racket[n-neighbors] is at most 256; @racket[#f] draws one from
-@racket[current-pseudo-random-generator]. The eigensolver's tolerance is
-fixed, so eigenvectors of close eigenvalues are approximate. A graph whose
-Laplacian repeats eigenvalues (rings, grids, complete graphs, stars, identical
-pieces) can give a wrong embedding or an error, with either Laplacian;
-@racket[spectral-embedding-fit-graph] refuses the wrong columns it detects, and
-this procedure cannot check. Centre @racket[X] if it lies far from the origin.
-A graph whose eigenvectors the solver cannot find, such as one from duplicated
+@racket[current-pseudo-random-generator].
+Eigenvectors of close eigenvalues are approximate.
+A graph whose Laplacian repeats eigenvalues (rings, grids, complete graphs,
+stars, identical pieces) can give a wrong embedding or an error, with either
+Laplacian.
+This procedure cannot check its eigenvectors;
+@racket[spectral-embedding-fit-graph] refuses the inaccurate ones it detects.
+Centre @racket[X] if it lies far from the origin.
+An eigensolver result with a NaN or a zero column, such as from duplicated
 rows, is an error.
 @examples[#:eval ev #:label #f
 (spectral-embedding-result-n-neighbors spectral)
@@ -404,17 +406,16 @@ without self-loops, finite weights of at least 0, duplicates adding. A graph
 that is not symmetric is used as given: it can be refused, the error saying
 the graph is not symmetric, or make cuML's eigensolver fail to converge.
 Without @racket[norm-laplacian] the embedding does not depend on the scale of
-the weights. With it, divided by the square root of each degree, it scales by
-1/√c when the weights scale by c. Without @racket[norm-laplacian], weights
-spanning orders of magnitude can give a wrong embedding or an error, by an
-amount that depends on the graph; use @racket[norm-laplacian]. A column u whose
-residual ‖Lu − ρu‖/‖u‖ passes 10@superscript{-3} times the largest degree is
-an error (with @racket[norm-laplacian], the normalised Laplacian's on √d·u past
-10@superscript{-3}, with a unit diagonal at samples without edges), as is a
-constant column with @racket[drop-first] (with @racket[norm-laplacian], constant
-over the samples with edges). With @racket[norm-laplacian], a sample without
-edges has eigenvalue 1, and many such samples can displace the graph's
-eigenvectors; such a fit is not refused. Otherwise as
+the weights; with it, it scales by 1/√c when the weights scale by c.
+Without @racket[norm-laplacian], weights spanning orders of magnitude can give
+a wrong embedding or an error; use @racket[norm-laplacian].
+An inaccurate eigenvector is an error, as is a constant one with
+@racket[drop-first].
+With @racket[norm-laplacian] a sample without edges has eigenvalue 1, and many
+such samples can displace the graph's eigenvectors.
+Without @racket[norm-laplacian] a sample without edges has eigenvalue 0, as
+any separate piece does, and takes a leading column.
+Such a fit can be returned without an error. Otherwise as
 @racket[spectral-embedding-fit], except that @racket[params]'s
 @racket[n-neighbors] and @racket[affinity] are ignored.
 @examples[#:eval ev #:label #f
