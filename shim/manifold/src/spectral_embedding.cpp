@@ -119,9 +119,9 @@ ML::SpectralEmbedding::params params_of(const embedding_request& r,
 
 using embedding_view = raft::device_matrix_view<float, int, raft::col_major>;
 
-template <typename Advice, typename Solve, typename Check>
+template <typename Unsolved, typename Advice, typename Solve, typename Check>
 void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n, int64_t k,
-           Advice&& advice, Solve&& solve, Check&& check) {
+           Unsolved&& unsolved, Advice&& advice, Solve&& solve, Check&& check) {
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
   auto embedding =
       std::make_unique<buffer<float>>(scratch<float>(n * k, stream));
@@ -130,7 +130,7 @@ void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n, int64_t k,
     solve(raft::make_device_matrix_view<float, int, raft::col_major>(
         columns.data(), static_cast<int>(n), static_cast<int>(k)));
     to_rows<float>(handle, columns.data(), n, k, nullptr, embedding->data());
-    require_solved(embedding->data(), n, k, stream);
+    require_solved(embedding->data(), n, k, unsolved, stream);
     require_nonzero_columns(columns.data(), n, k, advice, stream);
     check(columns.data());
   }
@@ -200,7 +200,8 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
   const int exponent =
       scale_exponent<float>(largest_magnitude(x.data, x.n * x.d, stream));
   embed(
-      handle, out, x.n, r.n_components, [] { return zero_advice; },
+      handle, out, x.n, r.n_components, [] { return ""; },
+      [] { return zero_advice; },
       [&](embedding_view e) {
         on_scaled(handle, x.data, x.n * x.d, exponent, [&](float* data) {
           ML::SpectralEmbedding::transform(
@@ -228,7 +229,7 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
           : unit_exponent(largest_magnitude(c.vals, c.nnz, stream));
   const auto advice = [&] { return graph_advice(handle, c, n, r); };
   embed(
-      handle, out, n, r.n_components, advice,
+      handle, out, n, r.n_components, advice, advice,
       [&](embedding_view e) {
         on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
           ML::SpectralEmbedding::transform(

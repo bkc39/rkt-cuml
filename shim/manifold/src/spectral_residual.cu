@@ -130,7 +130,8 @@ struct widened {
 
 struct signed_by_direction {
   __device__ double operator()(int64_t key, double w) const {
-    return key % 2 != 0 ? -w : w;
+    const double single = static_cast<float>(w);
+    return key % 2 != 0 ? -single : single;
   }
 };
 

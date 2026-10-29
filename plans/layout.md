@@ -918,10 +918,11 @@ Follow-ups are GitHub issues.
   all-zero column (s14) are refused with the outputs freed.
 - **B3-k.** Self-loops in a given graph are refused (g5), as leg 5 does.
 - **B3-l.** A graph that is not symmetric is used as given and documented.
-  When the zero-column or B3-y check refuses a graph fit, the shim tests
-  symmetry (a device sort of the entries, duplicates summed) and, for a graph
-  that is not symmetric, says so in place of B3-v's advice. The test runs
-  only on the refusal path.
+  When the non-finite, zero-column or B3-y check refuses a graph fit, the
+  shim tests symmetry in float32 (a device sort of the entries, duplicates
+  summed in double and rounded to float) and, for a graph that is not
+  symmetric, says so in place of B3-v's advice. The test runs only on the
+  refusal path.
 - **B3-m.** Disconnected graphs are not refused (L11). A graph whose
   Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,
   identical pieces) can give a wrong embedding or a zero column, with either
@@ -954,9 +955,9 @@ Follow-ups are GitHub issues.
 - **B3-v.** Racket resolves n-neighbors and passes the count to the shim,
   which returns only the embedding. The dense path's zero-column refusal
   advises deduplicating or centring X, or changing n-neighbors. The graph
-  path's zero-column and B3-y refusals say that graphs whose Laplacian
-  repeats eigenvalues are beyond cuML's eigensolver, plus B3-u's weight
-  advice, or, for a graph that is not symmetric, only that (B3-l).
+  path's non-finite, zero-column and B3-y refusals say that graphs whose
+  Laplacian repeats eigenvalues are beyond cuML's eigensolver, plus B3-u's
+  weight advice, or, for a graph that is not symmetric, only that (B3-l).
 - **B3-w.** The GPU suite's 1800 s budget is spent per test program, so B3's
   laws live in six files: L1-L3 and L7-L12 in `-law-test`, dense and graph
   L13 in `-refusal-test`, L4 in `-determinism-test`, and L5-L7's twins in
@@ -973,4 +974,7 @@ Follow-ups are GitHub issues.
   so is a constant one (spread (max − min)/max|u| below 10⁻³, with
   norm-laplacian over the samples of positive degree; a column zero on all of
   them is not constant). Both bounds sit between the measured
-  correct and wrong fits (`upstream-bugs.md`).
+  correct and wrong fits (`upstream-bugs.md`). A column on samples of
+  degree 0 alone has eigenvalue 1 with norm-laplacian and passes; when many
+  such samples displace the graph's eigenvectors, that wrong eigenvalue is
+  not detected, the manual says so and L11 pins it.

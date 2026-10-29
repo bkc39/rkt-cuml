@@ -37,6 +37,9 @@ constexpr double exact = 1e-12;
 constexpr double single = 1e-6;
 constexpr double cosine_spread = 2.0;
 constexpr float half_heavy = 0x1p7F;
+constexpr float split_first = 0.1F;
+constexpr float split_second = 0.2F;
+constexpr float split_whole = 0.3F;
 constexpr double large = 0x1p66;
 constexpr double past_sum_weight = 0x1p125;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -249,8 +252,9 @@ std::string solved_refusal(const std::vector<float>& host, int64_t n,
   const resources res;
   const filled<float> e(res, host, {n, k});
   try {
-    manifold::require_solved(static_cast<const float*>(e.array.view.data), n, k,
-                             rmm::cuda_stream_view{});
+    manifold::require_solved(
+        static_cast<const float*>(e.array.view.data), n, k, [] { return ""; },
+        rmm::cuda_stream_view{});
   } catch (const std::logic_error& error) {
     return error.what();
   }
@@ -404,6 +408,20 @@ TEST(SpectralEmbeddingRefusals, TheGraphShapeSumsDuplicates) {
   EXPECT_FALSE(shape_with([](host_graph& g) {
                  add_entry(g, {.row = 0, .col = 1, .weight = half_heavy});
                }).symmetric);
+}
+
+TEST(SpectralEmbeddingRefusals, TheGraphShapeComparesSummedWeightsInFloat32) {
+  CUMLRKT_REQUIRE_GPU();
+  const auto split = [](float back) {
+    return shape_with([back](host_graph& g) {
+      std::ranges::fill(g.vals, split_whole);
+      g.vals[0] = split_first;
+      g.vals[1] = back;
+      add_entry(g, {.row = 0, .col = 1, .weight = split_second});
+    });
+  };
+  EXPECT_TRUE(split(split_whole).symmetric);
+  EXPECT_FALSE(split(std::nextafter(split_whole, 1.0F)).symmetric);
 }
 
 }  // namespace

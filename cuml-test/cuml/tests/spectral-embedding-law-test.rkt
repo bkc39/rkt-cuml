@@ -10,7 +10,7 @@
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params
                   spectral-embedding-result?)
-         (only-in racket/list remove-duplicates)
+         (only-in racket/list last remove-duplicates take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list* device-vector->list list->device-vector)
@@ -24,10 +24,12 @@
                   graph-shuffle
                   knn-graph
                   three-blocks
+                  unit-path
                   unit-rings
                   unit-rings-of)
          (only-in "private/spectral-embedding-data.rkt"
                   column-gaps
+                  edge-shares
                   eigen-residuals
                   embedded
                   embedded-graph
@@ -37,7 +39,8 @@
                   rows-matrix
                   sign-ruled?
                   stochastic-blocks
-                  stochastic-graph)
+                  stochastic-graph
+                  with-isolated)
          (only-in "private/umap-data.rkt"
                   blobs
                   far-blobs
@@ -226,6 +229,20 @@
                                       #:random-state 1)))
   (define residuals (eigen-residuals (unit-rings 2 30) rows #:norm-laplacian #f))
   (check-true (> (apply max residuals) 0.5) (format "residuals ~a" residuals)))
+
+(test-gpu "L11: a path of 12 and 8 samples without edges embeds the path, then one sample alone"
+  (define g (with-isolated (unit-path 12) 8))
+  (define rows (embedded (embedded-graph g (hasheq 'n-components 6))))
+  (define residuals (eigen-residuals g rows))
+  (check-true (< (apply max residuals) residual-bound) (format "residuals ~a" residuals))
+  (define shares (edge-shares g rows))
+  (check-true (and (andmap (lambda (s) (> s 0.999)) (take shares 5)) (< (last shares) 1e-9))
+              (format "shares on the path ~a" shares)))
+
+(test-gpu "L11: upstream, unchecked: with 30 samples without edges, no column is on the path of 12"
+  (define g (with-isolated (unit-path 12) 30))
+  (define shares (edge-shares g (embedded (embedded-graph g (hasheq 'n-components 6)))))
+  (check-true (andmap (lambda (s) (< s 1e-9)) shares) (format "shares on the path ~a" shares)))
 
 (define (ari rows truth)
   (define labels (kmeans-result-labels (kmeans-fit (rows-matrix rows) #:n-clusters 3 #:n-init 10)))

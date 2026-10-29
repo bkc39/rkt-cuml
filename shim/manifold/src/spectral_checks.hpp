@@ -9,14 +9,15 @@
 
 namespace cumlrkt::manifold {
 
-inline void require_solved(const float* e, int64_t n, int64_t k,
-                           rmm::cuda_stream_view stream) {
+template <typename Advice>
+void require_solved(const float* e, int64_t n, int64_t k, Advice&& advice,
+                    rmm::cuda_stream_view stream) {
   const int64_t i = first_non_finite(e, n * k, stream);
   if (i >= 0) {
     const float got = read_one(e, i, stream);
-    throw logic_error(
-        std::format("embedding: row {}, column {}: the eigensolver returned {}",
-                    i / k, i % k, printed(static_cast<double>(got))));
+    throw logic_error(std::format(
+        "embedding: row {}, column {}: the eigensolver returned {}{}", i / k,
+        i % k, printed(static_cast<double>(got)), advice()));
   }
 }
 

@@ -60,11 +60,11 @@
 
 (define (heavy-departs)
   (list "L6 sklearn at a 2^16 pair without norm-laplacian"
-        (graph-case (heavy-pair 16) heavy-options #:op "sklearn")
-        (departs (embedded (embedded-graph (heavy-pair 16) heavy-options)))))
+        (graph-case (heavy-pair (expt 2.0 16)) heavy-options #:op "sklearn")
+        (departs (embedded (embedded-graph (heavy-pair (expt 2.0 16)) heavy-options)))))
 
 (define (path-departs)
-  (define g (heavy-pair 16 #:graph (unit-path 24) #:between '(5 6)))
+  (define g (heavy-pair (expt 2.0 16) #:graph (unit-path 24) #:between '(5 6)))
   (list "L6 sklearn at a 2^16 pair on a 24-node path without norm-laplacian, sign-free"
         (graph-case g heavy-options #:op "sklearn")
         (departs (embedded (embedded-graph g heavy-options)) #:gaps sign-free-gaps)))
@@ -95,7 +95,7 @@
     (sklearn-graph "L6 norm-laplacian #f at 2^-20 weights"
                    (graph-map-vals g (lambda (w) (* w (expt 2.0 -20))))
                    (hasheq 'norm-laplacian #f))
-    (sklearn-graph "L6 2^16 pair" (heavy-pair 16) (hasheq))
+    (sklearn-graph "L6 2^16 pair" (heavy-pair (expt 2.0 16)) (hasheq))
     (heavy-departs)
     (path-departs)
     (sklearn-dense "L6 overlapping blobs" rows))))

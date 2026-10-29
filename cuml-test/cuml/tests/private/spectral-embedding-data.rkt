@@ -29,6 +29,7 @@
 (provide check-twins
          column-gaps
          cosine-gaps
+         edge-shares
          eigen-residuals
          embedded
          embedded-graph
@@ -44,7 +45,8 @@
          sign-ruled?
          stochastic-blocks
          stochastic-graph
-         twin)
+         twin
+         with-isolated)
 
 (define-runtime-path twin "../python/spectral_embedding_twin.py")
 
@@ -81,13 +83,15 @@
   (define-values (g _truth) (stochastic-blocks sizes 0.3 0.01 seed #:weighted? weighted?))
   g)
 
-(define (heavy-pair exponent #:graph [g (stochastic-graph)] #:between [ends '(0 1)])
-  (define w (expt 2.0 exponent))
+(define (heavy-pair w #:graph [g (stochastic-graph)] #:between [ends '(0 1)])
   (match-define (list i j) ends)
   (graph-edit g
               #:rows (lambda (rows) (append rows (list i j)))
               #:cols (lambda (cols) (append cols (list j i)))
               #:vals (lambda (vals) (append vals (list w w)))))
+
+(define (with-isolated g count)
+  (graph (graph-rows g) (graph-cols g) (graph-vals g) (+ (graph-n g) count)))
 
 (define (polygons count m)
   (for*/list ([b (in-range count)]
@@ -155,6 +159,12 @@
     (define off
       (for/sum ([(x i) (in-indexed u)]) (/ (sqr (- (vector-ref lu i) (* rho (mass i) x))) (mass i))))
     (/ (sqrt (/ off uu)) (if norm 1.0 heaviest))))
+
+(define (edge-shares g rows)
+  (define d (degrees g))
+  (for/list ([column (in-list (transpose rows))])
+    (/ (for/sum ([(x i) (in-indexed column)] #:when (positive? (vector-ref d i))) (sqr x))
+       (for/sum ([x (in-list column)]) (sqr x)))))
 
 (define (sign-ruled? rows)
   (for/and ([column (in-list (transpose rows))])

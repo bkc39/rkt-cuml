@@ -30,15 +30,10 @@
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
          (only-in "private/spectral-data.rkt"
-                  graph
                   graph->vectors
-                  graph-cols
                   graph-edit
                   graph-map-vals
-                  graph-n
-                  graph-rows
                   graph-upper
-                  graph-vals
                   set-entry
                   unit-path
                   unit-rings
@@ -52,7 +47,8 @@
                   residual-bound
                   rows-matrix
                   sign-ruled?
-                  stochastic-graph)
+                  stochastic-graph
+                  with-isolated)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
 
 (define small (hasheq 'n-neighbors 4))
@@ -273,11 +269,14 @@
           what
           advice))
 
-(define (with-isolated g count)
-  (graph (graph-rows g) (graph-cols g) (graph-vals g) (+ (graph-n g) count)))
+(define (heavy-star w [g (unit-star 30)])
+  (heavy-pair w #:graph g #:between '(0 1)))
 
-(define (heavy-star exponent [g (unit-star 30)])
-  (heavy-pair exponent #:graph g #:between '(0 1)))
+(define split-ring
+  (graph-edit (graph-map-vals ring (const 0.3))
+              #:rows (lambda (rows) (append rows '(0)))
+              #:cols (lambda (cols) (append cols '(1)))
+              #:vals (lambda (vals) (append ((set-entry 0 0.1) vals) '(0.2)))))
 
 (define (zero-row id g options)
   (row id (string-append zero-text solver-advice) (fault g options)))
@@ -295,7 +294,10 @@
         (row "constant, one ring" (inaccurate 0 " is constant") (fault ring))
         (row "constant, one ring and an isolated sample"
              (inaccurate 0 " is constant")
-             (fault (with-isolated ring 1)))))
+             (fault (with-isolated ring 1)))
+        (row "constant, a ring whose (0, 1) is 0.1 + 0.2 and (1, 0) is 0.3"
+             (inaccurate 0 " is constant")
+             (fault split-ring))))
 
 (define (asymmetric-rows)
   (list (row "asymmetric, upper triangle"
@@ -306,19 +308,26 @@
              (fault (graph-upper (stochastic-graph)) (hasheq 'norm-laplacian #f)))
         (row "asymmetric, upper path"
              (inaccurate 0 "" asymmetric-advice)
-             (fault (graph-upper path) (hasheq 'random-state 1)))))
+             (fault (graph-upper path) (hasheq 'random-state 1)))
+        (row "asymmetric, upper path, the eigensolver returning nan"
+             (string-append "embedding: row 0, column 0: the eigensolver returned nan"
+                            asymmetric-advice)
+             (fault (graph-upper path)))))
 
 (define heavy-text (string-append zero-text solver-advice spread-advice))
 
 (define (heavy-rows)
-  (list (zero-row "heavy, star with a pair at 2^7" (heavy-star 7) (hasheq 'norm-laplacian #f))
+  (list (zero-row "heavy, star with a pair at 2^7" (heavy-star 128.0) (hasheq 'norm-laplacian #f))
         (row "heavy, star with a pair at 2^8"
              heavy-text
-             (fault (heavy-star 8) (hasheq 'norm-laplacian #f)))
-        (zero-row "heavy, star with a pair at 2^12 and norm-laplacian" (heavy-star 12) (hasheq))
+             (fault (heavy-star 256.0) (hasheq 'norm-laplacian #f)))
+        (zero-row "heavy, star with a pair at 2^12 and norm-laplacian" (heavy-star 4096.0) (hasheq))
         (row "heavy, star with a pair at 2^7 twice"
              heavy-text
-             (fault (heavy-star 7 (heavy-star 7)) (hasheq 'norm-laplacian #f)))))
+             (fault (heavy-star 128.0 (heavy-star 128.0)) (hasheq 'norm-laplacian #f)))
+        (row "heavy, star with a pair summing to 2^8"
+             heavy-text
+             (fault (heavy-star 255.0) (hasheq 'norm-laplacian #f)))))
 
 (define (fit-vectors rows cols vals [n ring-n])
   (spectral-embedding-fit-graph rows cols vals n))
@@ -381,7 +390,7 @@
          (fault (graph-map-vals ring (const 0.0))))
     (row "zero column"
          (string-append zero-text solver-advice spread-advice)
-         (fault (heavy-pair 24) (hasheq 'norm-laplacian #f)))
+         (fault (heavy-pair (expt 2.0 24)) (hasheq 'norm-laplacian #f)))
     (zero-row "zero column, two rings" (unit-rings 2 30) (hasheq 'random-state 1))
     (row "g1 before g2"
          "cols: expected 20 entries, as rows has, got 19"
@@ -427,7 +436,7 @@
 
 (test-gpu "L13: the heavy-weight advice needs summed weights spanning 2^8, without norm-laplacian"
   (for ([r (in-list (heavy-rows))]
-        [advised? (in-list '(#f #t #f #t))])
+        [advised? (in-list '(#f #t #f #t #t))])
     (check-equal? (regexp-match? #rx"orders of magnitude" (exn-message (raised (row-call r))))
                   advised?
                   (row-id r))))
@@ -437,13 +446,6 @@
     (define message (exn-message (raised (row-call r))))
     (check-true (regexp-match? #rx"; the graph is not symmetric$" message) (row-id r))
     (check-false (regexp-match? #rx"repeats eigenvalues" message) (row-id r))))
-
-(test-gpu "L13: a column on samples without edges is an eigenvector of the unit diagonal, and fits"
-  (define g (with-isolated (unit-path 12) 30))
-  (define rows (embedded (embedded-graph g (hasheq 'n-components 6))))
-  (define residuals (eigen-residuals g rows))
-  (check-true (and (finite-rows? rows) (< (apply max residuals) residual-bound))
-              (format "residuals ~a" residuals)))
 
 (test-pools "L13: a graph refusal leaves the RMM pool where it was"
   (for ([r (in-list (graph-rows-of))])
