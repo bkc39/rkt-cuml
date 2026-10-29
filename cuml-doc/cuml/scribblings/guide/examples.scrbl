@@ -18,10 +18,10 @@ order the classes first appear, with the rows sorted by their largest column;
 @racket[agreement] sums each row's largest count; @racket[sizes] lists the
 cluster sizes, largest first. All three leave out noise, label @racket[-1].
 @racket[standardized] rescales each column to mean 0 and standard deviation 1,
-and leaves a constant column at 0. @racket[dataset-matrix] and
-@racket[standardized-matrix] copy a dataset's columns to the GPU, one sample
-per row. @racket[labels-of] fits an estimator and copies its labels to the
-host. No number in the prose depends on how a run numbers its clusters.
+and leaves a constant column at 0. @racket[standardized-matrix] copies the
+standardized columns to the GPU, one sample per row. @racket[labels-of] fits an
+estimator and copies its labels to the host. No number in the prose depends on
+how a run numbers its clusters.
 
 @racket[cluster-plot] draws samples by two columns, one colour and marker per
 label id 0 to 7, noise gray; with @racket[#:core], core samples are filled and

@@ -17,6 +17,7 @@ under CC BY 4.0) holds 13 chemical measurements of 178 wines from three
 cultivars:
 
 @examples[#:eval ev #:label #f
+(define wine (load-dataset-table 'wine))
 (define measurements (features 'wine "cultivar"))
 (define cultivar (dataset-column 'wine "cultivar"))
 (sizes cultivar)
@@ -38,7 +39,7 @@ cultivars:
 @examples[#:eval ev #:label #f
 (define (table-of wines)
   (crosstab (labels-of (kmeans #:n-clusters 3) wines) cultivar))
-(define raw-table (table-of (dataset-matrix 'wine measurements)))
+(define raw-table (table-of (table->device-matrix wine #:columns measurements)))
 raw-table
 (agreement raw-table)
 ]
@@ -48,7 +49,7 @@ Proline, in the hundreds, decides the distances: on proline alone, k-means
 finds the same clusters.
 
 @examples[#:eval ev #:label #f
-(equal? raw-table (table-of (dataset-matrix 'wine '("proline"))))
+(equal? raw-table (table-of (table->device-matrix wine #:columns '("proline"))))
 ]
 
 @section[#:tag "ex-kmeans-standardized"]{Standardized measurements}
@@ -72,7 +73,7 @@ of the cultivar it shares the most wines with:
 @examples[#:eval ev #:label #f
 (define proline (dataset-column 'wine "proline"))
 (define flavanoids (dataset-column 'wine "flavanoids"))
-(define raw (dataset-matrix 'wine measurements))
+(define raw (table->device-matrix wine #:columns measurements))
 (class-figure proline flavanoids
               (list (list "raw" (clusters-of (kmeans #:n-clusters 3) raw cultivar))
                     (list "standardized" (clusters-of (kmeans #:n-clusters 3) scaled cultivar)))

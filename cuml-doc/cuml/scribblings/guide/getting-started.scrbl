@@ -27,19 +27,13 @@ require and the helpers in @secref["examples"]:
 The iris data (R. A. Fisher, 1936, from the UCI Machine Learning Repository,
 @hyperlink["https://doi.org/10.24432/C56C76"]{doi:10.24432/C56C76}, under
 CC BY 4.0) measures 150 flowers of three species, 50 each, in four columns.
-@racket[load-dataset-table] gives the measurements as columns;
-@racket[list*->device-matrix] copies their rows to the GPU as a
+@racket[load-dataset-table] loads the table, and @racket[table->device-matrix]
+copies its measurement columns to the GPU as a @racket['float32]
 @tech{sample matrix}, one flower per row:
 
 @examples[#:eval ev #:label #f
 (define measurements '("sepal-length" "sepal-width" "petal-length" "petal-width"))
-(define flowers
-  (~> (load-dataset-table 'iris #:columns measurements)
-      dataset-table-columns
-      vector->list
-      (map vector->list _)
-      (apply map list _)
-      (list*->device-matrix #:dtype 'float32)))
+(define flowers (table->device-matrix (load-dataset-table 'iris) #:columns measurements))
 (shape flowers)
 ]
 
@@ -128,10 +122,9 @@ cluster. @secref["ex-kmeans"] shows where k-means does less well.
 
 @section[#:tag "gs-not-yet"]{What is not there yet}
 
-Some conveniences have no binding yet, and each has an open issue: a
-conversion from a @tt{datasets} table to a device matrix, feature scaling,
-clustering metrics, and a spectral clustering example on clusters that are
-not convex. Until then the guide's helpers, in @secref["examples"], stand in
-for the first three.
+Some conveniences have no binding yet, and each has an open issue: feature
+scaling, clustering metrics, and a spectral clustering example on clusters
+that are not convex. Until then the guide's helpers, in @secref["examples"],
+stand in for the first two.
 
 @(close-eval ev)

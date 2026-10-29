@@ -8,8 +8,9 @@ the code.
 Racket bindings to NVIDIA cuML (RAPIDS 26.08), built on
 [rkt-raft](https://github.com/bkc39/rkt-raft): cuML runs on raft's device
 arrays, resources and jobs, and its errors are raft's. cuML is GPU-only.
-Scope for now: clustering (k-means, DBSCAN, single-linkage agglomerative,
-spectral, HDBSCAN). `plans/layout.md` holds the owner's decisions;
+Scope: clustering now (k-means, DBSCAN, single-linkage agglomerative,
+spectral, HDBSCAN); epic #53 adds metrics, preprocessing, decomposition and
+manifold. `plans/layout.md` holds the owner's decisions;
 `plans/starting-notes.md` what rkt-raft established.
 
 ## Layout
@@ -21,7 +22,7 @@ A multi-package repository in typed-racket's style: every package is
 |---|---|---|
 | `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging; `logic-error.rkt`, the one `'logic` raise; `define-hyperparameters` and `define-codes` in `hyperparameters.rkt`, `define/who` in `define-who.rkt`; `model.rkt`, the native models: `native-model`, `deposit->native-model`, `live-anchor`, `native-model-release!`, `with-native-models`; `release.rkt`, `call-with-release` and `with-release`, restated from raft) |
 | `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`; HDBSCAN: `hdbscan-params`, `hdbscan-fit`, `hdbscan-approximate-predict`, `hdbscan-membership-vector`, `hdbscan-all-points-membership-vectors`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, and the loader of `libcumlrkt_cluster.so`) |
-| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator` and every family; `cuml/private/` (`define-estimator` in `estimator-support.rkt`, and the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`) |
+| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
@@ -32,7 +33,8 @@ A multi-package repository in typed-racket's style: every package is
 Why several packages: a user who needs clustering installs and loads only
 the clustering shim, and each family's native dependencies stay its own. A
 family package depends only on base, raft and cuml-core-lib (and what it
-truly needs), never on cuml-lib or another family; `scripts/check-layout.rkt`
+truly needs), never on cuml-lib or another family. cuml-lib may also depend
+on datasets-core, which no family or core may. `scripts/check-layout.rkt`
 and `scripts/pkg-deps.sh` (`raco setup --check-pkg-deps --unused-pkg-deps`,
 red on an unused dependency too) gate it. Family packages
 export algorithm-specific procedures (`kmeans-fit`); bare algorithm names
@@ -304,10 +306,10 @@ replace each when raft offers a public form:
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
 | `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
 | `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `private/process-memory` |
-| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `table-refusal-test`, `private/process-memory` |
+| `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*` and `hdbscan-*` tests, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*` and `table-*` tests, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -324,7 +326,8 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `refusal-rows` | the refusal tables' `row` struct (id, message, call), `check-row name row`, and the squared-norm cases' `with-row` and `norm-message` |
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back |
 | `hdbscan-data` | the HDBSCAN fixtures (`dataset` by name from `dataset-names`, the seed-0 numpy normals in `normals-0.rktd` behind b50, b10 and one-blob, `dup`), `fitted-of` and `fit-lists` (a fit as host lists in a `fitted` struct), `same-fit?` and `persistence-close?` (equal but for persistence within 1e-5), and the host oracles `structure-problems` and `descent-problems` |
-| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`, `hdbscan-refusal-test`, `hdbscan-law-test`) |
+| `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`, `hdbscan-refusal-test`, `hdbscan-law-test`, `table-test`) |
+| `table-data` | `synthetic-table names columns` (a `dataset-table` built by reflection: datasets-core has no public constructor, so this depends on its struct staying `#:transparent`), `numeric-selections` (each bundled dataset with its all-real columns, as `selection` structs), `host-rows`, and the edge values `edge-table` (float64) and `edge-table32` |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
@@ -368,8 +371,7 @@ kills the test outright.
   `concepts-parameters`, and one `ex-*` chapter per
   algorithm on real `datasets-core` data) and the reference
   (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
-  `datasets-core` is a build-dep of cuml-doc only; cuml-test gets it through
-  cuml-doc.
+  `datasets-core` is a dependency of cuml-lib.
 - The guide's helpers are one module, `guide/helpers.rkt`: Getting started
   shows its `require`, Examples its definitions, every guide sandbox
   evaluates both (`utils.rkt` reads them from the file), and

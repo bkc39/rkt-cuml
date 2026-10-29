@@ -4,7 +4,11 @@
 
 (define collection 'multi)
 (define version "0.1")
-(define deps '("base" "cuml-core-lib" "cuml-cluster-lib"))
+(define deps
+  '("base" ("raft" #:version "0.2")
+           "cuml-core-lib"
+           "cuml-cluster-lib"
+           ("datasets-core" #:version "0.1")))
 (define implies '("cuml-core-lib" "cuml-cluster-lib"))
 (define pkg-desc "Racket bindings to NVIDIA cuML (no documentation)")
 (define pkg-authors '(bkc))
