@@ -230,14 +230,15 @@
   (define residuals (eigen-residuals (unit-rings 2 30) rows #:norm-laplacian #f))
   (check-true (> (apply max residuals) 0.5) (format "residuals ~a" residuals)))
 
-(test-gpu "L11: a path of 12 and 8 samples without edges embeds the path, then one sample alone"
-  (define g (with-isolated (unit-path 12) 8))
-  (define rows (embedded (embedded-graph g (hasheq 'n-components 6))))
-  (define residuals (eigen-residuals g rows))
-  (check-true (< (apply max residuals) residual-bound) (format "residuals ~a" residuals))
-  (define shares (edge-shares g rows))
-  (check-true (and (andmap (lambda (s) (> s 0.999)) (take shares 5)) (< (last shares) 1e-9))
-              (format "shares on the path ~a" shares)))
+(test-gpu "L11: a path of 12 and 4 samples without edges embeds the path, then one sample alone, for seeds 0 to 9"
+  (define g (with-isolated (unit-path 12) 4))
+  (for ([seed (in-range 10)])
+    (define rows (embedded (embedded-graph g (hasheq 'n-components 6 'random-state seed))))
+    (define residuals (eigen-residuals g rows))
+    (check-true (< (apply max residuals) residual-bound) (format "seed ~a residuals ~a" seed residuals))
+    (define shares (edge-shares g rows))
+    (check-true (and (andmap (lambda (s) (> s 0.999)) (take shares 5)) (< (last shares) 1e-9))
+                (format "seed ~a shares on the path ~a" seed shares))))
 
 (test-gpu "L11: upstream, unchecked: with 30 samples without edges, no column is on the path of 12"
   (define g (with-isolated (unit-path 12) 30))

@@ -922,7 +922,9 @@ Follow-ups are GitHub issues.
   shim tests symmetry in float32 (a device sort of the entries, duplicates
   summed in double and rounded to float) and, for a graph that is not
   symmetric, says so in place of B3-v's advice. The test runs only on the
-  refusal path.
+  refusal path. cuML's eigensolver can instead fail to converge on such a
+  graph; that error passes through as cuML raises it, and the manual says a
+  graph that is not symmetric can do either.
 - **B3-m.** Disconnected graphs are not refused (L11). A graph whose
   Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,
   identical pieces) can give a wrong embedding or a zero column, with either
@@ -977,4 +979,5 @@ Follow-ups are GitHub issues.
   correct and wrong fits (`upstream-bugs.md`). A column on samples of
   degree 0 alone has eigenvalue 1 with norm-laplacian and passes; when many
   such samples displace the graph's eigenvectors, that wrong eigenvalue is
-  not detected, the manual says so and L11 pins it.
+  not detected and the fit is not refused; the manual says so and L11 pins
+  it.

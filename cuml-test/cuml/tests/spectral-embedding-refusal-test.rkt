@@ -30,6 +30,7 @@
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
          (only-in "private/spectral-data.rkt"
+                  cliques
                   graph->vectors
                   graph-edit
                   graph-map-vals
@@ -263,6 +264,10 @@
 
 (define asymmetric-advice "; the graph is not symmetric")
 
+(define nan-text "embedding: row 0, column 0: the eigensolver returned nan")
+
+(define-values (k10 _k10-truth) (cliques '(10)))
+
 (define (inaccurate column [what ""] [advice solver-advice])
   (format "embedding: column ~a~a: the eigensolver's eigenvectors are inaccurate on this graph~a"
           column
@@ -297,7 +302,10 @@
              (fault (with-isolated ring 1)))
         (row "constant, a ring whose (0, 1) is 0.1 + 0.2 and (1, 0) is 0.3"
              (inaccurate 0 " is constant")
-             (fault split-ring))))
+             (fault split-ring))
+        (row "non-finite, K10 without norm-laplacian"
+             (string-append nan-text solver-advice)
+             (fault k10 (hasheq 'norm-laplacian #f 'random-state 3)))))
 
 (define (asymmetric-rows)
   (list (row "asymmetric, upper triangle"
@@ -310,8 +318,7 @@
              (inaccurate 0 "" asymmetric-advice)
              (fault (graph-upper path) (hasheq 'random-state 1)))
         (row "asymmetric, upper path, the eigensolver returning nan"
-             (string-append "embedding: row 0, column 0: the eigensolver returned nan"
-                            asymmetric-advice)
+             (string-append nan-text asymmetric-advice)
              (fault (graph-upper path)))))
 
 (define heavy-text (string-append zero-text solver-advice spread-advice))
@@ -446,6 +453,11 @@
     (define message (exn-message (raised (row-call r))))
     (check-true (regexp-match? #rx"; the graph is not symmetric$" message) (row-id r))
     (check-false (regexp-match? #rx"repeats eigenvalues" message) (row-id r))))
+
+(test-gpu "L13: a graph that is not symmetric can instead fail cuML's eigensolver, passed through"
+  (check-cuml-error 'generic
+                    #rx"^spectral-embedding-fit-graph: .*eigensolver couldn't converge"
+                    (fault (graph-upper (unit-rings 1 30)) (hasheq 'norm-laplacian #f 'random-state 1))))
 
 (test-pools "L13: a graph refusal leaves the RMM pool where it was"
   (for ([r (in-list (graph-rows-of))])
