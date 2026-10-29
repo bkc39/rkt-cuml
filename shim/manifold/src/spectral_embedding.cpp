@@ -165,7 +165,8 @@ std::string graph_advice(const raft::handle_t& handle, const coo& c, int64_t n,
     return asymmetric_advice;
   }
   const bool heavy = r.norm_laplacian == 0 && s.span >= heavy_span;
-  const bool edgeless = r.norm_laplacian != 0 && s.edgeless;
+  const bool edgeless =
+      s.edgeless >= (r.norm_laplacian != 0 ? eigenvectors(r) : 1);
   return std::string(solver_advice) + (edgeless ? edgeless_advice : "") +
          (heavy ? spread_advice : "");
 }

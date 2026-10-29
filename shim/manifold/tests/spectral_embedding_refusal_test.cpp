@@ -413,15 +413,17 @@ TEST(SpectralEmbeddingRefusals, TheGraphShapeSumsDuplicates) {
 
 TEST(SpectralEmbeddingRefusals, TheGraphShapeFindsSamplesWithoutEdges) {
   CUMLRKT_REQUIRE_GPU();
-  EXPECT_FALSE(shape_with([](host_graph&) {}).edgeless);
-  EXPECT_TRUE(shape_with([](host_graph&) {}, ring + 1).edgeless);
-  EXPECT_TRUE(shape_with([](host_graph& g) {
-                for (std::size_t e = 0; e < g.rows.size(); ++e) {
-                  if (g.rows[e] == 0 || g.cols[e] == 0) {
-                    g.vals[e] = 0.0F;
-                  }
+  EXPECT_EQ(shape_with([](host_graph&) {}).edgeless, 0);
+  EXPECT_EQ(shape_with([](host_graph&) {}, ring + 1).edgeless, 1);
+  EXPECT_EQ(shape_with([](host_graph&) {}, ring + 3).edgeless, 3);
+  EXPECT_EQ(shape_with([](host_graph& g) {
+              for (std::size_t e = 0; e < g.rows.size(); ++e) {
+                if (g.rows[e] == 0 || g.cols[e] == 0) {
+                  g.vals[e] = 0.0F;
                 }
-              }).edgeless);
+              }
+            }).edgeless,
+            1);
 }
 
 TEST(SpectralEmbeddingRefusals, TheGraphShapeComparesSummedWeightsInFloat32) {

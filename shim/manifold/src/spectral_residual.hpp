@@ -30,7 +30,7 @@ std::optional<refusal> first_refused(const std::vector<column_fit>& fits,
 struct graph_shape {
   bool symmetric;
   double span;
-  bool edgeless;
+  int64_t edgeless;
 };
 
 graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n);

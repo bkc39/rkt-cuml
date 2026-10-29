@@ -1,3 +1,4 @@
+#include <thrust/count.h>
 #include <thrust/fill.h>
 #include <thrust/functional.h>
 #include <thrust/iterator/counting_iterator.h>
@@ -257,8 +258,8 @@ graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n) {
   const bool symmetric =
       thrust::none_of(policy, weights.begin(), nets.second, nonzero{});
   const rmm::device_uvector<double> degree = degrees(handle, c, n);
-  const bool edgeless =
-      thrust::any_of(policy, degree.begin(), degree.end(), without_edges{});
+  const int64_t edgeless =
+      thrust::count_if(policy, degree.begin(), degree.end(), without_edges{});
   return {.symmetric = symmetric,
           .span = ends.second / ends.first,
           .edgeless = edgeless};

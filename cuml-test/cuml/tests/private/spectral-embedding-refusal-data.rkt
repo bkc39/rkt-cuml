@@ -174,7 +174,7 @@
              (fault (unit-rings 2 30) (hasheq 'norm-laplacian #f 'random-state 1)))
         (row "constant, one ring" (inaccurate 0 " is constant") (fault ring))
         (row "constant, one ring and an isolated sample"
-             (inaccurate 0 " is constant" edgeless)
+             (inaccurate 0 " is constant")
              (fault (with-isolated ring 1)))
         (row "constant, a ring whose (0, 1) is 0.1 + 0.2 and (1, 0) is 0.3"
              (inaccurate 0 " is constant")
@@ -182,6 +182,10 @@
         (row "constant, a path of 12 and 9 samples without edges"
              (inaccurate 0 " is constant" edgeless)
              (fault (with-isolated (unit-path 12) 9) (hasheq 'n-components 6)))
+        (row "zero column, a path of 12 and 9 samples without edges, without norm-laplacian"
+             (string-append zero-text edgeless)
+             (fault (with-isolated (unit-path 12) 9)
+                    (hasheq 'n-components 6 'norm-laplacian #f 'random-state 0)))
         (row "non-finite, K10 without norm-laplacian"
              (string-append nan-text solver-advice)
              (fault (clique-graph 10) (hasheq 'norm-laplacian #f 'random-state 3)))))
