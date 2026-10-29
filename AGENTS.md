@@ -8,8 +8,9 @@ the code.
 Racket bindings to NVIDIA cuML (RAPIDS 26.08), built on
 [rkt-raft](https://github.com/bkc39/rkt-raft): cuML runs on raft's device
 arrays, resources and jobs, and its errors are raft's. cuML is GPU-only.
-Scope: clustering now (k-means, DBSCAN, single-linkage agglomerative,
-spectral, HDBSCAN); epic #53 adds metrics, preprocessing, decomposition and
+Scope: clustering (k-means, DBSCAN, single-linkage agglomerative,
+spectral, HDBSCAN) and metrics (contingency, adjusted Rand, silhouette,
+trustworthiness); epic #53 adds preprocessing, decomposition and
 manifold. `plans/layout.md` holds the owner's decisions;
 `plans/starting-notes.md` what rkt-raft established.
 
@@ -20,8 +21,9 @@ A multi-package repository in typed-racket's style: every package is
 
 | Path | Package | Holds |
 |---|---|---|
-| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging; `logic-error.rkt`, the one `'logic` raise; `define-hyperparameters` and `define-codes` in `hyperparameters.rkt`, `define/who` in `define-who.rkt`; `model.rkt`, the native models: `native-model`, `deposit->native-model`, `live-anchor`, `native-model-release!`, `with-native-models`; `release.rkt`, `call-with-release` and `with-release`, restated from raft) |
+| `cuml-core-lib/` | cuml-core-lib | `cuml/core` (`exn:fail:cuml`), `cuml/estimator` (the estimator generics, loading nothing native), `cuml/core/private/` (the shared loader and staging; `logic-error.rkt`, the one `'logic` raise; `define-hyperparameters` and `define-codes` in `hyperparameters.rkt`, `define/who` in `define-who.rkt`, `deposit-for/who` in `deposit.rkt`; `model.rkt`, the native models: `native-model`, `deposit->native-model`, `live-anchor`, `native-model-release!`, `with-native-models`; `release.rkt`, `call-with-release` and `with-release`, restated from raft) |
 | `cuml-cluster-lib/` | cuml-cluster-lib | `cuml/cluster` (k-means: `kmeans-params`, `current-batch-samples`, `kmeans-fit`, `kmeans-predict`, `kmeans-transform`, `kmeans-score`; DBSCAN: `dbscan-params`, `dbscan-fit`; single linkage: `single-linkage-params`, `single-linkage-fit`; spectral: `spectral-clustering-params`, `spectral-clustering-fit`, `spectral-clustering-fit-graph`; HDBSCAN: `hdbscan-params`, `hdbscan-fit`, `hdbscan-approximate-predict`, `hdbscan-membership-vector`, `hdbscan-all-points-membership-vectors`), `cuml/cluster/private/` (the bodies, their `/who` forms for the estimator wrappers, and the loader of `libcumlrkt_cluster.so`) |
+| `cuml-metrics-lib/` | cuml-metrics-lib | `cuml/metrics` (`contingency-matrix` and its `contingency-table`, `adjusted-rand-score`, `silhouette-score`, `silhouette-samples`, `trustworthiness`), `cuml/metrics/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_metrics.so`) |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
@@ -78,7 +80,11 @@ GNU-unique symbols stay exported, rkt-raft #10), its gtest binary, and adds
 both to the `tidy` target. libcuml is an IMPORTED target (cuml's own CMake
 config needs Treelite and nvForest configs the prefix lacks). Shared C++
 lives in `shim/common/include/cumlrkt/` (`common.hpp`: the error slot,
-`check_abi`, `libcuml_release`, `on_floats`; `api.h`: `CUMLRKT_API`).
+`check_abi`, `libcuml_release`, `on_floats`; `api.h`: `CUMLRKT_API`;
+`support.hpp`: `guarded`, `on_device`, `settle`, the shape and bound checks;
+`limits.hpp`: the index and squared-norm bounds; `rows.hpp` with
+`common/src/rows.cu`, linked into every family: `first_large_row` and
+`first_zero_row`).
 
 Each family exports `cuml_<family>_last_error`, `_last_error_kind`,
 `_check_abi` and `_libcuml_version`, which the shared Racket loader binds by
@@ -267,10 +273,11 @@ runner: run `docs` before any push that touches the scribblings.
 `pkg-deps` skips cuml-doc's `racket-doc` and `threading-doc` (`doc_only`:
 under `--no-docs` setup cannot see the manual's links), so it never
 reports either as unused; drop one by hand when the manual stops linking
-into it. `bindings` runs the census `scripts/check-bindings.rkt`: every
-`cuml_cluster_` export of the staged library is bound once (a `_job`'s body
-excepted), every binding is exported, and `scripts/cluster-bindings.rktd`,
-keyed by issue, plans each export; a leg flips its planned entries to due.
+into it. `bindings` runs the census `scripts/check-bindings.rkt`, per family (its `families` list):
+every `cuml_<family>_` export of the staged library is bound once (a
+`_job`'s body excepted), every binding is exported, and
+`scripts/<family>-bindings.rktd`, keyed by issue, plans each export; a leg
+flips its planned entries to due.
 `sanitizers` builds the `shim-sanitizers` flake check (ASAN and UBSAN; without
 a GPU only Abi and Version run, and the GPU suite runs the sanitized gtests
 on the device). An LSan leak rooted only in libcuml or libcuda frames goes in
@@ -304,12 +311,12 @@ replace each when raft offers a public form:
 | Module | Bindings | Used by |
 |---|---|---|
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
-| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
-| `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test` |
-| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `table-refusal-test`, `private/process-memory` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test` |
+| `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test` |
+| `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `table-refusal-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*` and `table-*` tests, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-plots-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*` and `trustworthiness-*` tests, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -328,6 +335,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `hdbscan-data` | the HDBSCAN fixtures (`dataset` by name from `dataset-names`, the seed-0 numpy normals in `normals-0.rktd` behind b50, b10 and one-blob, `dup`), `fitted-of` and `fit-lists` (a fit as host lists in a `fitted` struct), `same-fit?` and `persistence-close?` (equal but for persistence within 1e-5), and the host oracles `structure-problems` and `descent-problems` |
 | `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`, `hdbscan-refusal-test`, `hdbscan-law-test`, `table-test`) |
 | `table-data` | `synthetic-table names columns` (a `dataset-table` built by reflection: datasets-core has no public constructor, so this depends on its struct staying `#:transparent`), `numeric-selections` (each bundled dataset with its all-real columns, as `selection` structs), `host-rows`, and the edge values `edge-table` (float64) and `edge-table32` |
+| `metrics-data` | the metrics fixtures (seeded `labels` and `label-pair`, `labels-of`, the `overlap` blobs and their `overlap-labels`, `three-groups`, the tie-free `projection`, `grid-20`), the relabellings (`monotone-maps`, `bijection`), `permute` and `random-permutation`, and the host oracles `sorted-distinct` and `host-counts` |
 | `python-env` | `run-twin script input` (in.json to out.json), `test-twin`, `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables

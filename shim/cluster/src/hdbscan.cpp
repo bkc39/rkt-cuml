@@ -14,37 +14,37 @@
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
 #include "cumlrkt/model.hpp"
+#include "cumlrkt/support.hpp"
 #include "hdbscan_model.hpp"
 #include "limits.hpp"
 #include "linkage_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
-#include "support.hpp"
 
 namespace {
 
+using cumlrkt::guarded;
 using cumlrkt::logic_error;
+using cumlrkt::matrix;
+using cumlrkt::most_index;
+using cumlrkt::require_at_least;
+using cumlrkt::require_at_most;
+using cumlrkt::require_bounded_rows;
+using cumlrkt::require_float;
+using cumlrkt::require_index;
+using cumlrkt::require_non_negative;
+using cumlrkt::require_positive;
+using cumlrkt::require_some;
+using cumlrkt::rows_of;
+using cumlrkt::settle;
 using cumlrkt::cluster::ascending_pairs;
-using cumlrkt::cluster::guarded;
 using cumlrkt::cluster::hdbscan_least_cluster_size;
 using cumlrkt::cluster::hdbscan_least_rows;
 using cumlrkt::cluster::hdbscan_model;
 using cumlrkt::cluster::hdbscan_most_min_samples;
 using cumlrkt::cluster::hdbscan_most_rows;
 using cumlrkt::cluster::hdbscan_shape;
-using cumlrkt::cluster::matrix;
-using cumlrkt::cluster::most_index;
-using cumlrkt::cluster::require_at_least;
-using cumlrkt::cluster::require_at_most;
-using cumlrkt::cluster::require_bounded_rows;
-using cumlrkt::cluster::require_float;
-using cumlrkt::cluster::require_index;
-using cumlrkt::cluster::require_non_negative;
-using cumlrkt::cluster::require_positive;
-using cumlrkt::cluster::require_some;
-using cumlrkt::cluster::rows_of;
-using cumlrkt::cluster::settle;
 using raftrkt::any_extent;
 
 namespace common = ML::HDBSCAN::Common;

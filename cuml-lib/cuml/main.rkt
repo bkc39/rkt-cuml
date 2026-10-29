@@ -5,6 +5,7 @@
 (require cuml/cluster
          cuml/core
          cuml/estimator
+         cuml/metrics
          cuml/table
          "private/agglomerative-estimator.rkt"
          "private/dbscan-estimator.rkt"
@@ -15,6 +16,7 @@
 (provide (all-from-out cuml/cluster
                        cuml/core
                        cuml/estimator
+                       cuml/metrics
                        cuml/table
                        "private/agglomerative-estimator.rkt"
                        "private/dbscan-estimator.rkt"

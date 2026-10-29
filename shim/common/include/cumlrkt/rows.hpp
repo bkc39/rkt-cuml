@@ -1,0 +1,18 @@
+#pragma once
+
+#include <cstdint>
+#include <rmm/cuda_stream_view.hpp>
+#include <utility>
+
+namespace cumlrkt {
+
+template <typename T>
+std::pair<int64_t, double> first_large_row(const T* x, int64_t n, int64_t d,
+                                           double most,
+                                           rmm::cuda_stream_view stream);
+
+template <typename T>
+int64_t first_zero_row(const T* x, int64_t n, int64_t d,
+                       rmm::cuda_stream_view stream);
+
+}  // namespace cumlrkt

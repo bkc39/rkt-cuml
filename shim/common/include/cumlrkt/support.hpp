@@ -11,17 +11,18 @@
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #include "cumlrkt/common.hpp"
-#include "limits.hpp"
-#include "linkage_device.hpp"
+#include "cumlrkt/limits.hpp"
+#include "cumlrkt/rows.hpp"
 #include "raftrkt/array.h"
 #include "raftrkt/error.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
 
-namespace cumlrkt::cluster {
+namespace cumlrkt {
 
 template <typename T, typename Index = int>
 struct matrix {
@@ -51,7 +52,8 @@ inline void require_at_least(const std::string& what, int64_t got,
   }
 }
 
-inline std::string printed(double got) {
+template <typename T = double>
+std::string printed(std::type_identity_t<T> got) {
   if (std::isnan(got)) {
     return "nan";
   }
@@ -114,15 +116,15 @@ T read_one(const T* data, int64_t i, rmm::cuda_stream_view stream) {
   return value;
 }
 
-inline void require_bounded_rows(const char* name,
-                                 const matrix<float, int64_t>& x,
-                                 rmm::cuda_stream_view stream) {
-  const auto [row, squared] =
-      first_large_row(x.data, x.n, x.d, most_squared_norm, stream);
+template <typename T>
+void require_bounded_rows(const char* name, const matrix<T, int64_t>& x,
+                          rmm::cuda_stream_view stream) {
+  const double most = squared_norm_bound<T>;
+  const auto [row, squared] = first_large_row(x.data, x.n, x.d, most, stream);
   if (row >= 0) {
     throw logic_error(
         std::format("{}: row {}: expected a squared norm of at most {}, got {}",
-                    name, row, printed(most_squared_norm), printed(squared)));
+                    name, row, printed(most), printed(squared)));
   }
 }
 
@@ -182,7 +184,7 @@ void on_float32_device(
   });
 }
 
-}  // namespace cumlrkt::cluster
+}  // namespace cumlrkt
 
 #define CUMLRKT_JOB(entry)                                                 \
   void entry##_job(void* args, size_t args_len, rr_job_outcome* outcome) { \

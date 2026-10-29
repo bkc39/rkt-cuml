@@ -16,31 +16,31 @@
 
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
+#include "cumlrkt/support.hpp"
 #include "linkage_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
 #include "spectral_device.hpp"
-#include "support.hpp"
 
 namespace {
 
+using cumlrkt::in_device_scope;
 using cumlrkt::logic_error;
+using cumlrkt::matrix;
+using cumlrkt::most_index;
+using cumlrkt::on_float32_device;
+using cumlrkt::printed;
+using cumlrkt::read_one;
+using cumlrkt::require_at_least;
+using cumlrkt::require_bounded_rows;
+using cumlrkt::require_index;
+using cumlrkt::require_non_negative;
+using cumlrkt::require_some;
+using cumlrkt::rows_of;
+using cumlrkt::settle;
 using cumlrkt::cluster::graph_scan;
-using cumlrkt::cluster::in_device_scope;
-using cumlrkt::cluster::matrix;
-using cumlrkt::cluster::most_index;
-using cumlrkt::cluster::on_float32_device;
-using cumlrkt::cluster::printed;
-using cumlrkt::cluster::read_one;
-using cumlrkt::cluster::require_at_least;
-using cumlrkt::cluster::require_bounded_rows;
-using cumlrkt::cluster::require_index;
-using cumlrkt::cluster::require_non_negative;
-using cumlrkt::cluster::require_some;
-using cumlrkt::cluster::rows_of;
 using cumlrkt::cluster::scan_graph;
-using cumlrkt::cluster::settle;
 using raftrkt::any_extent;
 
 constexpr int64_t least_samples = 4;

@@ -1,12 +1,12 @@
 #lang racket/base
 
 (require (only-in cuml/core/private/define-who define/who)
+         (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
          (only-in cuml/core/private/model deposit->native-model/who live-anchor/who)
          (only-in racket/match match-define match-define-values)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
-         (only-in "deposit.rkt" deposit-for/who)
          (only-in "native.rkt"
                   cuml-cluster-hdbscan-all-points-membership-vectors-job
                   cuml-cluster-hdbscan-approximate-predict-job

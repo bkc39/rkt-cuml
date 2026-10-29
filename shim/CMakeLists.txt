@@ -67,6 +67,14 @@ cumlrkt_family(cluster
         cluster/tests/spectral_test.cpp
 )
 
+cumlrkt_family(metrics
+  SOURCES metrics/src/metrics.cpp metrics/src/labels.cu metrics/src/contingency.cpp
+          metrics/src/contingency_device.cu metrics/src/norms.cu
+          metrics/src/silhouette.cpp
+          metrics/src/trustworthiness.cpp
+  TESTS metrics/tests/metrics_test.cpp metrics/tests/metrics_refusal_test.cpp
+)
+
 cumlrkt_family(probe TEST_ONLY
   SOURCES probe/src/probe.cpp
   TESTS probe/tests/model_test.cpp

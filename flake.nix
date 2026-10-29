@@ -30,7 +30,10 @@
         export CMAKE_BUILD_PARALLEL_LEVEL=$NIX_BUILD_CORES
       '';
 
-      families = [ "cluster" ];
+      families = [
+        "cluster"
+        "metrics"
+      ];
       cumlPackages = map (f: "cuml-${f}-lib") families ++ [
         "cuml-core-lib"
         "cuml-lib"

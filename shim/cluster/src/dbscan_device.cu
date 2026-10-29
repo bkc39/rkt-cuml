@@ -13,22 +13,6 @@ namespace cumlrkt::cluster {
 namespace {
 
 template <typename T>
-struct zero_row {
-  const T* x;
-  int64_t d;
-
-  __device__ bool operator()(int64_t i) const {
-    const T* row = x + i * d;
-    for (int64_t j = 0; j < d; ++j) {
-      if (row[j] != 0) {
-        return false;
-      }
-    }
-    return true;
-  }
-};
-
-template <typename T>
 struct unit_row {
   T* x;
   int64_t d;
@@ -54,15 +38,6 @@ struct unit_row {
 }  // namespace
 
 template <typename T>
-int64_t first_zero_row(const T* x, int64_t n, int64_t d,
-                       rmm::cuda_stream_view stream) {
-  const thrust::counting_iterator<int64_t> rows(0);
-  const int64_t i = *thrust::find_if(rmm::exec_policy(stream), rows, rows + n,
-                                     zero_row<T>{x, d});
-  return i == n ? -1 : i;
-}
-
-template <typename T>
 void unit_rows(T* x, int64_t n, int64_t d, rmm::cuda_stream_view stream) {
   const thrust::counting_iterator<int64_t> rows(0);
   thrust::for_each(rmm::exec_policy(stream), rows, rows + n, unit_row<T>{x, d});
@@ -74,10 +49,6 @@ int64_t core_count(const Index* core, int64_t n, rmm::cuda_stream_view stream) {
          core;
 }
 
-template int64_t first_zero_row<float>(const float*, int64_t, int64_t,
-                                       rmm::cuda_stream_view);
-template int64_t first_zero_row<double>(const double*, int64_t, int64_t,
-                                        rmm::cuda_stream_view);
 template void unit_rows<float>(float*, int64_t, int64_t, rmm::cuda_stream_view);
 template void unit_rows<double>(double*, int64_t, int64_t,
                                 rmm::cuda_stream_view);

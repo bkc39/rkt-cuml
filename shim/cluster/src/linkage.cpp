@@ -14,24 +14,24 @@
 
 #include "cumlrkt/cluster.h"
 #include "cumlrkt/common.hpp"
+#include "cumlrkt/support.hpp"
 #include "linkage_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
-#include "support.hpp"
 
 namespace {
 
 using cumlrkt::logic_error;
+using cumlrkt::matrix;
+using cumlrkt::most_index;
+using cumlrkt::on_float32_device;
+using cumlrkt::require_at_least;
+using cumlrkt::require_bounded_rows;
+using cumlrkt::require_index;
+using cumlrkt::require_some;
+using cumlrkt::rows_of;
+using cumlrkt::settle;
 using cumlrkt::cluster::ascending_pairs;
-using cumlrkt::cluster::matrix;
-using cumlrkt::cluster::most_index;
-using cumlrkt::cluster::on_float32_device;
-using cumlrkt::cluster::require_at_least;
-using cumlrkt::cluster::require_bounded_rows;
-using cumlrkt::cluster::require_index;
-using cumlrkt::cluster::require_some;
-using cumlrkt::cluster::rows_of;
-using cumlrkt::cluster::settle;
 using raftrkt::any_extent;
 
 constexpr int64_t most_pairwise_rows = 46340;

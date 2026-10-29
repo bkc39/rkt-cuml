@@ -36,7 +36,11 @@ function(cumlrkt_family family)
     return()
   endif()
   set(lib cumlrkt_${family})
-  add_library(${lib} SHARED ${arg_SOURCES})
+  set(common_sources)
+  if(NOT arg_TEST_ONLY)
+    set(common_sources common/src/rows.cu)
+  endif()
+  add_library(${lib} SHARED ${arg_SOURCES} ${common_sources})
   set_target_properties(${lib} PROPERTIES
     LINKER_LANGUAGE CXX
     CXX_VISIBILITY_PRESET hidden
