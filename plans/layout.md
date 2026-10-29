@@ -958,10 +958,13 @@ Follow-ups are GitHub issues.
   `-refusal-test` (dense X), `-graph-refusal-test` (the graph's shape) and
   `-eigen-refusal-test` (the eigensolver's refusals).
 - **B3-x.** Without norm-laplacian, a given graph is embedded as an exact
-  power-of-two-scaled copy whose largest weight is in [1, 2), so the
+  power-of-two-scaled copy whose largest summed weight is in [1, 2), so the
   embedding is bitwise invariant to the scale of the weights; with it, the
   embedding scales as 1/√s on its own.
 - **B3-y.** After a graph fit, the shim refuses a column whose eigen-residual,
   over the largest degree (the normalised Laplacian's with norm-laplacian), is
   above 10⁻³ or NaN, and with drop-first a constant column. A fit displaced by
   samples without edges can be returned without an error.
+- **B3-z.** Duplicate entries of a given graph add, as in Python cuML: the
+  shim sums them on the device before the solve, so a graph split into
+  duplicates embeds bitwise as its sum.

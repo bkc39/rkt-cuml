@@ -6,6 +6,7 @@
                   spectral-embedding-result-embedding
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params)
+         (only-in racket/flonum flsingle)
          (only-in racket/list append* argmax make-list second)
          (only-in racket/match match match-define match-lambda)
          (only-in racket/math pi sqr)
@@ -22,6 +23,7 @@
                   graph->vectors
                   graph-cols
                   graph-edit
+                  graph-map-vals
                   graph-n
                   graph-rows
                   graph-vals))
@@ -38,13 +40,17 @@
          embedding-checks
          graph-case
          graph-checks
+         halves
          heavy-pair
          polygons
          quantised
          rows-matrix
          sign-ruled?
+         split-entries
          stochastic-blocks
          stochastic-graph
+         summed-entries
+         thirds
          twin
          with-isolated)
 
@@ -90,6 +96,23 @@
               #:rows (lambda (rows) (append rows (list i j)))
               #:cols (lambda (cols) (append cols (list j i)))
               #:vals (lambda (vals) (append vals (list w w)))))
+
+(define (halves w)
+  (list (/ w 2.0) (/ w 2.0)))
+
+(define (thirds w)
+  (define a (flsingle (/ w 3.0)))
+  (list a (flsingle (- w a))))
+
+(define (split-entries g parts)
+  (define split (map parts (graph-vals g)))
+  (graph-edit g
+              #:rows (lambda (rows) (append rows rows))
+              #:cols (lambda (cols) (append cols cols))
+              #:vals (lambda (_) (append (map car split) (map cadr split)))))
+
+(define (summed-entries g parts)
+  (graph-map-vals g (lambda (w) (flsingle (apply + (parts w))))))
 
 (define (with-isolated g count)
   (graph (graph-rows g) (graph-cols g) (graph-vals g) (+ (graph-n g) count)))

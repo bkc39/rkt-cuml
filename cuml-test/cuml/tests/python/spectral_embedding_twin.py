@@ -59,7 +59,12 @@ def unit_scaled(case):
     vals = np.asarray(case["vals"], dtype=np.float32)
     if case["norm"]:
         return vals
-    _, e = np.frexp(np.max(vals))
+    rows = np.asarray(case["rows"], dtype=np.int64)
+    keys = rows * case["n"] + np.asarray(case["cols"])
+    _, entry = np.unique(keys, return_inverse=True)
+    sums = np.zeros(entry.max() + 1)
+    np.add.at(sums, entry, vals)
+    _, e = np.frexp(np.max(sums.astype(np.float32)))
     return np.ldexp(vals, 1 - e).astype(np.float32)
 
 

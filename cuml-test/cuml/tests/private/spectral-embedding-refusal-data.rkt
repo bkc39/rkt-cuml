@@ -183,8 +183,8 @@
         (row "constant, one ring and an isolated sample"
              (inaccurate 0 " is constant")
              (fault (with-isolated ring 1)))
-        (row "constant, a ring whose (0, 1) is 0.1 + 0.2 and (1, 0) is 0.3"
-             (inaccurate 0 " is constant")
+        (row "inaccurate, a ring whose (0, 1) is 0.1 + 0.2 and (1, 0) is 0.3"
+             (inaccurate 0)
              (fault split-ring))
         (row "constant, a path of 12 and 9 samples without edges"
              (inaccurate 0 " is constant" edgeless)

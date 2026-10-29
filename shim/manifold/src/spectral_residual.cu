@@ -139,6 +139,30 @@ struct signed_by_direction {
   }
 };
 
+struct row_of {
+  int64_t n;
+
+  __device__ int32_t operator()(int64_t key) const {
+    const int64_t pair = key / 2;
+    return static_cast<int32_t>(key % 2 != 0 ? pair % n : pair / n);
+  }
+};
+
+struct col_of {
+  int64_t n;
+
+  __device__ int32_t operator()(int64_t key) const {
+    const int64_t pair = key / 2;
+    return static_cast<int32_t>(key % 2 != 0 ? pair / n : pair % n);
+  }
+};
+
+struct narrowed {
+  __device__ float operator()(double w) const {
+    return static_cast<float>(w);
+  }
+};
+
 struct unordered_pair {
   __device__ int64_t operator()(int64_t key) const {
     return key / 2;
@@ -228,14 +252,14 @@ std::optional<refusal> first_refused(const std::vector<column_fit>& fits,
   return std::nullopt;
 }
 
-graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n) {
+summed_entries summed(const raft::handle_t& handle, const coo& c, int64_t n) {
   const auto stream = raft::resource::get_cuda_stream(handle);
   const auto policy = rmm::exec_policy(stream);
   const auto count = static_cast<std::size_t>(c.nnz);
   rmm::device_uvector<int64_t> keys(count, stream);
   rmm::device_uvector<double> weights(count, stream);
-  rmm::device_uvector<int64_t> pairs(count, stream);
-  rmm::device_uvector<double> summed(count, stream);
+  summed_entries e{.keys = rmm::device_uvector<int64_t>(count, stream),
+                   .sums = rmm::device_uvector<double>(count, stream)};
   const thrust::counting_iterator<int64_t> entries(0);
   thrust::transform(policy, entries, entries + c.nnz, keys.begin(),
                     directed_pair{c, n});
@@ -243,20 +267,54 @@ graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n) {
   thrust::sort_by_key(policy, keys.begin(), keys.end(), weights.begin());
   const auto distinct =
       thrust::reduce_by_key(policy, keys.begin(), keys.end(), weights.begin(),
-                            pairs.begin(), summed.begin())
-          .first;
-  const auto last = summed.begin() + (distinct - pairs.begin());
+                            e.keys.begin(), e.sums.begin())
+          .first -
+      e.keys.begin();
+  e.keys.resize(static_cast<std::size_t>(distinct), stream);
+  e.sums.resize(static_cast<std::size_t>(distinct), stream);
+  return e;
+}
+
+coo summed_coo::view() {
+  return {.rows = rows.data(),
+          .cols = cols.data(),
+          .vals = vals.data(),
+          .nnz = static_cast<int64_t>(vals.size())};
+}
+
+summed_coo coalesced(const raft::handle_t& handle, const coo& c, int64_t n) {
+  const auto stream = raft::resource::get_cuda_stream(handle);
+  const auto policy = rmm::exec_policy(stream);
+  const summed_entries e = summed(handle, c, n);
+  const std::size_t count = e.keys.size();
+  summed_coo out{.rows = rmm::device_uvector<int32_t>(count, stream),
+                 .cols = rmm::device_uvector<int32_t>(count, stream),
+                 .vals = rmm::device_uvector<float>(count, stream)};
+  thrust::transform(policy, e.keys.begin(), e.keys.end(), out.rows.begin(),
+                    row_of{n});
+  thrust::transform(policy, e.keys.begin(), e.keys.end(), out.cols.begin(),
+                    col_of{n});
+  thrust::transform(policy, e.sums.begin(), e.sums.end(), out.vals.begin(),
+                    narrowed{});
+  return out;
+}
+
+graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n) {
+  const auto stream = raft::resource::get_cuda_stream(handle);
+  const auto policy = rmm::exec_policy(stream);
+  summed_entries e = summed(handle, c, n);
+  rmm::device_uvector<double> nets(e.sums.size(), stream);
   const thrust::pair<double, double> ends = thrust::transform_reduce(
-      policy, summed.begin(), last, weight_ends{},
+      policy, e.sums.begin(), e.sums.end(), weight_ends{},
       thrust::pair<double, double>{DBL_MAX, 0.0}, widest{});
-  thrust::transform(policy, pairs.begin(), distinct, summed.begin(),
-                    summed.begin(), signed_by_direction{});
-  const auto nets = thrust::reduce_by_key(
-      policy, thrust::make_transform_iterator(pairs.begin(), unordered_pair{}),
-      thrust::make_transform_iterator(distinct, unordered_pair{}),
-      summed.begin(), thrust::make_discard_iterator(), weights.begin());
+  thrust::transform(policy, e.keys.begin(), e.keys.end(), e.sums.begin(),
+                    e.sums.begin(), signed_by_direction{});
+  const auto netted = thrust::reduce_by_key(
+      policy, thrust::make_transform_iterator(e.keys.begin(), unordered_pair{}),
+      thrust::make_transform_iterator(e.keys.end(), unordered_pair{}),
+      e.sums.begin(), thrust::make_discard_iterator(), nets.begin());
   const bool symmetric =
-      thrust::none_of(policy, weights.begin(), nets.second, nonzero{});
+      thrust::none_of(policy, nets.begin(), netted.second, nonzero{});
   const rmm::device_uvector<double> degree = degrees(handle, c, n);
   const int64_t edgeless =
       thrust::count_if(policy, degree.begin(), degree.end(), without_edges{});

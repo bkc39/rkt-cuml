@@ -19,7 +19,9 @@
                   quantised
                   rows-matrix
                   sign-ruled?
-                  stochastic-graph)
+                  split-entries
+                  stochastic-graph
+                  thirds)
          (only-in "private/spectral-embedding-twin-data.rkt" parity-configs)
          (only-in "private/umap-data.rkt" blobs digits fixture-rows))
 
@@ -79,7 +81,10 @@
           (embedding-checks "L5 digits" digit-rows (parity-configs 256))
           (graph-checks "L5 sbm" (stochastic-graph) (parity-configs))
           (graph-checks "L5 sbm weighted" (stochastic-graph #:weighted? #t) (parity-configs))
-          (graph-checks "L5 three-blocks" blocks (parity-configs))))
+          (graph-checks "L5 three-blocks" blocks (parity-configs))
+          (graph-checks "L5 sbm weighted, split duplicates"
+                        (split-entries (stochastic-graph #:weighted? #t) thirds)
+                        (parity-configs))))
 
 (define (sklearn-twins)
   (define g (stochastic-graph))

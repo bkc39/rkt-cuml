@@ -31,6 +31,7 @@
                   check-residuals
                   column-gaps
                   edge-shares
+                  halves
                   eigen-residuals
                   embedded
                   embedded-graph
@@ -38,8 +39,11 @@
                   quantised
                   rows-matrix
                   sign-ruled?
+                  split-entries
                   stochastic-blocks
                   stochastic-graph
+                  summed-entries
+                  thirds
                   with-isolated)
          (only-in "private/umap-data.rkt"
                   blobs
@@ -114,8 +118,6 @@
     (apply spectral-embedding-fit-graph (append vectors (list (graph-n g))) #:norm-laplacian norm)
     (check-equal? (map device-vector->list vectors) before (format "norm-laplacian ~a" norm))))
 
-(define gap-bound 1e-4)
-
 (define constant-bound 4e-5)
 
 (define component-bound 1e-6)
@@ -158,20 +160,22 @@
   (check-true (sign-ruled? ours))
   (check-true (bits-equal? ours theirs) (format "column gaps ~a" (column-gaps ours theirs))))
 
-(test-gpu "L3, L9: shuffling the entries keeps the embedding, and doubled half-weight entries stay near"
+(test-gpu "L3, L9: shuffling the entries keeps the embedding, bitwise"
   (define base (on-graph stochastic))
   (check-true (sign-ruled? base))
   (for ([seed (in-range 5)])
     (check-true (bits-equal? (on-graph (graph-shuffle stochastic seed)) base)
-                (format "seed ~a" seed)))
-  (define (halved vals)
-    (map (lambda (w) (/ w 2.0)) vals))
-  (define doubled
-    (graph-edit stochastic
-                #:rows (lambda (rows) (append rows rows))
-                #:cols (lambda (cols) (append cols cols))
-                #:vals (lambda (vals) (append (halved vals) (halved vals)))))
-  (check-true (<= (apply max (column-gaps (on-graph doubled) base)) gap-bound)))
+                (format "seed ~a" seed))))
+
+(test-gpu "L3, L9: duplicate entries add, bitwise, at either Laplacian"
+  (define weighted (stochastic-graph #:weighted? #t))
+  (for* ([g (in-list (list stochastic weighted))]
+         [parts (in-list (list halves thirds))]
+         [norm (in-list '(#t #f))])
+    (define options (hasheq 'norm-laplacian norm))
+    (check-true (bits-equal? (on-graph (split-entries g parts) options)
+                             (on-graph (summed-entries g parts) options))
+                (format "n ~a ~a norm ~a" (graph-n g) (object-name parts) norm))))
 
 (test-gpu "L3, L10: without drop-first, column 0 is constant and the rest is the drop-first fit, bitwise"
   (for ([k (in-list '(1 2 3))])

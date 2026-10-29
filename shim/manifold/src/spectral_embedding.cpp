@@ -51,6 +51,7 @@ using cumlrkt::scratch;
 using cumlrkt::settle;
 using cumlrkt::to_rows;
 using cumlrkt::unit_exponent;
+using cumlrkt::manifold::coalesced;
 using cumlrkt::manifold::column_fits;
 using cumlrkt::manifold::first_refused;
 using cumlrkt::manifold::float_rows;
@@ -61,6 +62,7 @@ using cumlrkt::manifold::require_rows_fit;
 using cumlrkt::manifold::require_scanned;
 using cumlrkt::manifold::require_solved;
 using cumlrkt::manifold::shape_of;
+using cumlrkt::manifold::summed_coo;
 using raftrkt::layout;
 
 constexpr int64_t least_neighbors = 2;
@@ -236,12 +238,14 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
 void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
                rr_deposit* out, const embedding_request& r) {
   require_components(r);
-  const coo c = checked_graph(g);
+  const coo given = checked_graph(g);
   require_lanczos(r, n, "samples");
-  require_samples(n, c.nnz, 1);
+  require_samples(n, given.nnz, 1);
   require_basis(n, eigenvectors(r), "n-components", "samples", "eigenvectors");
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
-  require_sound_graph(c, n, stream);
+  require_sound_graph(given, n, stream);
+  summed_coo whole = coalesced(handle, given, n);
+  const coo c = whole.view();
   const int exponent =
       r.norm_laplacian != 0
           ? 0

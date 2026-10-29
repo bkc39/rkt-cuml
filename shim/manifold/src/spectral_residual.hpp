@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <raft/core/handle.hpp>
+#include <rmm/device_uvector.hpp>
 #include <vector>
 
 #include "cumlrkt/graph.hpp"
@@ -32,6 +33,23 @@ struct graph_shape {
   double span;
   int64_t edgeless;
 };
+
+struct summed_entries {
+  rmm::device_uvector<int64_t> keys;
+  rmm::device_uvector<double> sums;
+};
+
+summed_entries summed(const raft::handle_t& handle, const coo& c, int64_t n);
+
+struct summed_coo {
+  rmm::device_uvector<int32_t> rows;
+  rmm::device_uvector<int32_t> cols;
+  rmm::device_uvector<float> vals;
+
+  coo view();
+};
+
+summed_coo coalesced(const raft::handle_t& handle, const coo& c, int64_t n);
 
 graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n);
 
