@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml
+                  adjusted-rand-score
                   agglomerative-clustering
                   current-batch-samples
                   dbscan
@@ -20,31 +21,58 @@
                   kmeans-params
                   kmeans-result-labels
                   kmeans-result?
+                  pca-fit
+                  pca-result-components
+                  pca-result-explained-variance
+                  pca-result-explained-variance-ratio
+                  pca-result-singular-values
                   predict
                   score
                   single-linkage-fit
                   spectral-clustering
-                  table->device-matrix)
+                  table->device-matrix
+                  tsvd-fit
+                  tsvd-result-components
+                  tsvd-result-explained-variance-ratio
+                  tsvd-result-singular-values)
          (only-in cuml/scribblings/guide/helpers
-                  agreement
-                  crosstab
+                  class-ids
+                  columns-of
+                  components-for
+                  counts-of
+                  cumulative
                   dataset-column
                   features
                   labels-of
+                  leading
+                  matched-labels
+                  rounded
                   rows->matrix
-                  sizes)
+                  sizes
+                  spectrum)
          (only-in cuml/scribblings/guide/source page-helpers-source)
          (only-in datasets/core load-dataset-table)
          (only-in pkg/lib pkg-directory)
-         (only-in racket/file file->string)
          (only-in racket/function curry)
-         (only-in racket/list append-map argmax count drop first group-by remove-duplicates take)
+         (only-in racket/list
+                  append-map
+                  argmax
+                  count
+                  drop
+                  first
+                  group-by
+                  remove-duplicates
+                  second
+                  take)
          (only-in racket/match match match-define)
-         (only-in racket/math exact-round)
+         (only-in racket/math exact-round sqr)
          (only-in racket/string string-contains?)
          (only-in rackunit
+                  check
+                  check-=
                   check-equal?
                   check-exn
+                  check-false
                   check-not-equal?
                   check-not-false
                   check-pred
@@ -58,10 +86,17 @@
                   shape
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in syntax/modread with-module-reading-parameterization)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/guide-data.rkt" scaled-matrix))
+         (only-in "private/guide-data.rkt"
+                  check-scored
+                  cluster-columns
+                  flattened-text
+                  host
+                  read-document
+                  scaled-matrix)
+         (only-in "private/metrics-data.rkt" mean worst)
+         (only-in "private/scaler-data.rkt" [float32-roundoff u]))
 
 (define-namespace-anchor anchor)
 
@@ -73,17 +108,35 @@
              ,(syntax->datum shown-require)
              ,@(map syntax->datum shown-helpers)))
     (dynamic-require ''page #f)
-    (check-equal? (eval '(~> '(0 0 1) (crosstab '(a a b)) agreement) (module->namespace ''page)) 3)))
+    (check-equal? (eval '(~> '(1 1 0) (matched-labels '(a a b))) (module->namespace ''page))
+                  '(0 0 1))))
+
+(define (defined-name form)
+  (match (syntax->datum form)
+    [(list* 'define (cons name _) _) name]
+    [(list* 'define (? symbol? name) _) name]
+    [_ #f]))
+
+(test-case "the retired helpers are gone from the helpers module and from the page"
+  (define-values (variables syntax) (module->exports 'cuml/scribblings/guide/helpers))
+  (define exported (map car (append-map cdr (append variables syntax))))
+  (define-values (_require shown-helpers) (page-helpers-source))
+  (define defined (map defined-name shown-helpers))
+  (check-not-false (memq 'matched-labels defined))
+  (for ([name (in-list '(crosstab agreement
+                                  standardized
+                                  standardized-rows
+                                  standardized-matrix
+                                  dataset-matrix
+                                  matrix-of))])
+    (check-false (memq name exported) (symbol->string name))
+    (check-false (memq name defined) (symbol->string name))))
 
 (define (included-sections datum)
   (match datum
     [(list 'include-section (? string? section)) (list section)]
     [(cons head tail) (append (included-sections head) (included-sections tail))]
     [_ '()]))
-
-(define (read-document file)
-  (call-with-input-file file
-                        (lambda (in) (with-module-reading-parameterization (lambda () (read in))))))
 
 (define (guide-chapters [file (collection-file-path "guide.scrbl" "cuml" "scribblings")])
   (define-values (dir _name _directory?) (split-path file))
@@ -97,9 +150,6 @@
     (wine ("doi:10.24432/C5PC7J" "CC BY 4.0") "doi:10.24432/C5PC7J. CC BY 4.0")
     (faithful ("R 4.3.3" "GPL-2 or GPL-3") "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
     (breast-cancer ("doi:10.24432/C5DW2B" "CC BY 4.0") "doi:10.24432/C5DW2B. CC BY 4.0")))
-
-(define (flattened-text path)
-  (regexp-replace* #px"\\s+" (file->string path) " "))
 
 (define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
@@ -127,10 +177,6 @@
                        (format "~a: ~a" chapter text)))))
 
 (test-case "the helpers leave out noise, label -1"
-  (define labels '(0 0 -1 1 1 -1))
-  (define classes '(a a a b b b))
-  (check-equal? (crosstab labels classes) '((2 0) (0 2)))
-  (check-equal? (agreement (crosstab labels classes)) 4)
   (check-equal? (sizes '(-1 0 0 1 -1)) '(2 1))
   (check-equal? (sizes '("B" "M" "B")) '(2 1)))
 
@@ -144,7 +190,7 @@
 (define (kmeans-labels result)
   (device-vector->list (kmeans-result-labels result)))
 
-(define iris-kmeans-table '((50 0 0) (0 48 14) (0 2 36)))
+(define iris-kmeans-columns '((0 2 36) (0 48 14) (50 0 0)))
 
 (test-gpu "the guide: iris on the device, and its three species"
   (check-equal? (features 'iris "species") measurements)
@@ -156,8 +202,10 @@
   (check-equal? (format "~v" fitted) "#<kmeans fitted #:n-clusters 3>")
   (define labels (~> fitted kmeans-model kmeans-labels))
   (check-equal? (length labels) 150)
-  (check-equal? (crosstab labels species) iris-kmeans-table)
-  (check-equal? (agreement (crosstab labels species)) 134)
+  (check-scored (class-ids species)
+                (~> fitted kmeans-model kmeans-result-labels)
+                iris-kmeans-columns
+                "0.73")
   (define cluster-species
     (for/hash ([label (in-list (remove-duplicates labels))])
       (define names
@@ -173,13 +221,15 @@
                 '("Iris-setosa" "Iris-versicolor" "Iris-virginica")))
 
 (define (labels-at seed)
-  (kmeans-labels (kmeans-fit (flowers) #:n-clusters 3 #:random-state seed)))
+  (kmeans-result-labels (kmeans-fit (flowers) #:n-clusters 3 #:random-state seed)))
 
 (test-gpu "the guide: float64 for k-means, refused by single linkage, and col-major refused"
   (define flowers64 (flowers 'float64))
   (check-equal? (dtype flowers64) 'float64)
-  (check-equal? (~> (kmeans-fit flowers64 #:n-clusters 3) kmeans-labels (crosstab species))
-                iris-kmeans-table)
+  (check-scored (class-ids species)
+                (kmeans-result-labels (kmeans-fit flowers64 #:n-clusters 3))
+                iris-kmeans-columns
+                "0.73")
   (check-cuml-error 'logic
                     "single-linkage-fit: X: expected float32, got float64"
                     (lambda () (single-linkage-fit flowers64 #:n-clusters 3)))
@@ -193,30 +243,32 @@
 (test-gpu "the guide: scoped resources, the two forms, and renumbering seeds"
   (check-equal? (with-device-resources ([r (device-resources)])
                   (~> (kmeans-fit (flowers) #:n-clusters 3 #:resources r)
-                      kmeans-labels
-                      (crosstab species)
-                      agreement))
-                134)
+                      kmeans-result-labels
+                      (adjusted-rand-score (class-ids species) _ #:resources r)
+                      rounded))
+                "0.73")
   (define estimator (kmeans #:n-clusters 3))
-  (check-equal? (device-vector->list (fit-predict estimator (flowers))) (labels-at 0))
+  (check-equal? (device-vector->list (fit-predict estimator (flowers)))
+                (device-vector->list (labels-at 0)))
   (check-equal? (hash-ref (estimator-params estimator) 'n-clusters) 3)
   (check-equal? (format "~v" (estimator-set-params estimator #:n-clusters 2))
                 "#<kmeans #:n-clusters 2>")
   (check-pred kmeans-result? (kmeans-model (fit estimator (flowers))))
-  (check-not-equal? (labels-at 0) (labels-at 1))
-  (check-equal? (crosstab (labels-at 0) species) (crosstab (labels-at 1) species))
-  (check-equal? (labels-at 2) (labels-at 2))
-  (check-equal? (crosstab (labels-at 2) species) '((50 0 0) (0 47 14) (0 3 36))))
+  (check-not-equal? (device-vector->list (labels-at 0)) (device-vector->list (labels-at 1)))
+  (check-equal? (adjusted-rand-score (labels-at 0) (labels-at 1)) 1.0)
+  (check-equal? (device-vector->list (labels-at 2)) (device-vector->list (labels-at 2)))
+  (check-scored (class-ids species) (labels-at 2) '((0 3 36) (0 47 14) (50 0 0)) "0.716"))
 
 (test-gpu "the guide: a base set swept over k, changed by keyword, and the batch size"
   (define base (kmeans-params #:n-init 3))
-  (check-equal? (for/list ([k (in-range 2 5)])
-                  (~> (fit (kmeans base #:n-clusters k) (flowers))
-                      kmeans-model
-                      kmeans-labels
-                      (crosstab species)
-                      agreement))
-                '(100 134 132))
+  (for ([row (in-list '((2 ((0 47 50) (50 3 0)) "0.54") (3 ((0 2 36) (0 48 14) (50 0 0)) "0.73")
+                                                        (4 ((0 0 32) (0 23 17) (0 27 1) (50 0 0))
+                                                           "0.65")))])
+    (match-define (list k columns text) row)
+    (check-scored (class-ids species)
+                  (~> (fit (kmeans base #:n-clusters k) (flowers)) kmeans-model kmeans-result-labels)
+                  columns
+                  text))
   (check-equal? (hash-ref (estimator-params (estimator-set-params (kmeans base) #:n-clusters 2))
                           'n-init)
                 3)
@@ -238,8 +290,10 @@
 (define wine-measurements (features 'wine "cultivar"))
 (define cultivar (dataset-column 'wine "cultivar"))
 
-(define (cultivar-table wines)
-  (crosstab (labels-of (kmeans #:n-clusters 3) wines) cultivar))
+(define (cultivar-labels wines)
+  (fit-predict (kmeans #:n-clusters 3) wines))
+
+(define wine-scaled-columns '((0 3 48) (0 63 0) (59 5 0)))
 
 (test-gpu "the guide: k-means on raw wine follows proline, on scaled wine the cultivars"
   (check-equal? (length wine-measurements) 13)
@@ -248,17 +302,18 @@
                   (define column (dataset-column 'wine name))
                   (list name (apply min column) (apply max column)))
                 '(("proline" 278 1680) ("magnesium" 70 162) ("hue" 0.48 1.71)))
-  (define raw-table
-    (~> (load-dataset-table 'wine) (table->device-matrix #:columns wine-measurements) cultivar-table))
-  (check-equal? raw-table '((46 1 0) (0 50 19) (13 20 29)))
-  (check-equal? (agreement raw-table) 125)
-  (check-equal?
-   (~> (load-dataset-table 'wine) (table->device-matrix #:columns '("proline")) cultivar-table)
-   raw-table)
+  (define raw-labels
+    (~> (load-dataset-table 'wine)
+        (table->device-matrix #:columns wine-measurements)
+        cultivar-labels))
+  (check-scored (class-ids cultivar) raw-labels '((0 50 19) (13 20 29) (46 1 0)) "0.371")
+  (check-equal? (~> (load-dataset-table 'wine)
+                    (table->device-matrix #:columns '("proline"))
+                    cultivar-labels
+                    (adjusted-rand-score raw-labels _))
+                1.0)
   (define scaled (scaled-matrix 'wine wine-measurements))
-  (define scaled-table (cultivar-table scaled))
-  (check-equal? scaled-table '((59 5 0) (0 63 0) (0 3 48)))
-  (check-equal? (agreement scaled-table) 170)
+  (check-scored (class-ids cultivar) (cultivar-labels scaled) wine-scaled-columns "0.864")
   (define scores
     (for/list ([k (in-range 1 7)])
       (exact-round (score (fit (kmeans #:n-clusters k #:n-init 10) scaled) scaled))))
@@ -296,12 +351,12 @@
                 252))
 
 (test-gpu "the guide: single linkage finds setosa, then chains versicolor and virginica"
-  (define (single-linkage-table k)
-    (crosstab (labels-of (agglomerative-clustering #:n-clusters k) (flowers)) species))
-  (check-equal? (single-linkage-table 2) '((50 0 0) (0 50 50)))
-  (check-equal? (single-linkage-table 3) '((50 0 0) (0 50 48) (0 0 2)))
-  (check-equal? (agreement (single-linkage-table 3)) 102)
-  (define six (single-linkage-table 6))
+  (define (single-linkage-labels k)
+    (fit-predict (agglomerative-clustering #:n-clusters k) (flowers)))
+  (check-equal? (cluster-columns (counts-of (class-ids species) (single-linkage-labels 2)))
+                '((0 50 50) (50 0 0)))
+  (check-scored (class-ids species) (single-linkage-labels 3) '((0 0 2) (0 50 48) (50 0 0)) "0.564")
+  (define six (cluster-columns (counts-of (class-ids species) (single-linkage-labels 6))))
   (check-equal? (length six) 6)
   (check-not-false (member '(0 46 46) six)))
 
@@ -312,13 +367,77 @@
   (check-equal? (length tumour-measurements) 30)
   (check-equal? (sizes diagnosis) '(357 212))
   (define tumours (scaled-matrix 'breast-cancer tumour-measurements))
-  (define (table-of estimator)
-    (crosstab (labels-of estimator tumours) diagnosis))
-  (define kmeans-table (table-of (kmeans #:n-clusters 2)))
-  (define spectral-table (table-of (spectral-clustering #:n-clusters 2)))
-  (check-equal? kmeans-table '((176 18) (36 339)))
-  (check-equal? spectral-table '((182 6) (30 351)))
-  (check-equal? (map agreement (list kmeans-table spectral-table)) '(515 533))
-  (check-equal? (for/list ([k (in-list '(3 5 10 30))])
-                  (~> (spectral-clustering #:n-clusters 2 #:n-neighbors k) table-of agreement))
-                '(516 536 533 535)))
+  (define diagnosis-ids (class-ids diagnosis))
+  (define (labels-in estimator)
+    (fit-predict estimator tumours))
+  (check-scored diagnosis-ids (labels-in (kmeans #:n-clusters 2)) '((36 339) (176 18)) "0.654")
+  (check-scored diagnosis-ids
+                (labels-in (spectral-clustering #:n-clusters 2))
+                '((30 351) (182 6))
+                "0.761")
+  (for ([row (in-list '((3 ((43 347) (169 10)) "0.659") (5 ((32 356) (180 1)) "0.779")
+                                                        (10 ((30 351) (182 6)) "0.761")
+                                                        (30 ((27 350) (185 7)) "0.773")))])
+    (match-define (list k columns text) row)
+    (check-scored diagnosis-ids
+                  (labels-in (spectral-clustering #:n-clusters 2 #:n-neighbors k))
+                  columns
+                  text)))
+
+(define (wine-scaled)
+  (scaled-matrix 'wine wine-measurements))
+
+(define (variance xs)
+  (define m (mean xs))
+  (mean (map (lambda (x) (sqr (- x m))) xs)))
+
+(test-gpu "the guide: decomposition, raw and standardized PCA"
+  (define raw (table->device-matrix (load-dataset-table 'wine) #:columns wine-measurements))
+  (check-equal? (~> (map cons (map variance (columns-of raw)) wine-measurements)
+                    (sort > #:key car)
+                    (take 2)
+                    (map cdr _))
+                '("proline" "magnesium"))
+  (define raw-fit (pca-fit raw #:n-components 2))
+  (check-equal? (~> raw-fit pca-result-explained-variance-ratio device-vector->list (map rounded _))
+                '("0.998" "0.002"))
+  (check-equal? (leading raw-fit wine-measurements 1) '(("proline") ("magnesium")))
+  (define scaled-fit (pca-fit (wine-scaled)))
+  (define ratios (~> scaled-fit pca-result-explained-variance-ratio device-vector->list))
+  (check-equal? (map rounded (take ratios 3)) '("0.362" "0.192" "0.111"))
+  (check-equal? (~> ratios cumulative second rounded) "0.554")
+  (check-equal? (map (curry components-for ratios) '(0.8 0.9)) '(5 8))
+  (check-equal? (take (leading scaled-fit wine-measurements 2) 2)
+                '(("flavanoids" "total-phenols") ("color-intensity" "alcohol"))))
+
+(define (check-within name ours theirs bound)
+  (check <= (worst ours theirs) bound name))
+
+(test-gpu "the guide: decomposition, truncated SVD is PCA on centred wines"
+  (define scaled (wine-scaled))
+  (define svd-fit (tsvd-fit scaled #:n-components 2))
+  (define scaled-fit (pca-fit scaled))
+  (check-equal? (spectrum svd-fit 2) '(("28.942" "21.082") ("0.362" "0.192")))
+  (check-equal? (spectrum scaled-fit 2) '(("28.942" "21.082") ("0.362" "0.192")))
+  (match-define (list largest second-largest third-largest)
+    (host (pca-result-explained-variance scaled-fit) 3))
+  (define first-gap (- largest second-largest))
+  (define second-gap (min first-gap (- second-largest third-largest)))
+  (match-define (list first-svd second-svd) (device-matrix->list* (tsvd-result-components svd-fit)))
+  (match-define (list* first-pca second-pca _)
+    (device-matrix->list* (pca-result-components scaled-fit)))
+  (define pca-singular (host (pca-result-singular-values scaled-fit) 2))
+  (for ([row (in-list
+              (list
+               (list "singular values"
+                     (host (tsvd-result-singular-values svd-fit) 2)
+                     pca-singular
+                     (* 64 u (first pca-singular)))
+               (list "ratios"
+                     (host (tsvd-result-explained-variance-ratio svd-fit) 2)
+                     (host (pca-result-explained-variance-ratio scaled-fit) 2)
+                     (* 64 u))
+               (list "first component" first-svd first-pca (/ (* 64 u largest) first-gap))
+               (list "second component" second-svd second-pca (/ (* 64 u largest) second-gap))))])
+    (match-define (list name ours theirs bound) row)
+    (check-within name ours theirs bound)))

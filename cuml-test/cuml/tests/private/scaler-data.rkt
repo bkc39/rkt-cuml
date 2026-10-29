@@ -25,6 +25,7 @@
 (provide bits-equal?
          constant-rows
          dyadic-rows
+         float32-roundoff
          generated-rows
          host-inverse
          host-transform
@@ -128,6 +129,8 @@
   (if (eq? dtype 'float32)
       (expt 2.0 -24)
       (expt 2.0 -53)))
+
+(define float32-roundoff (unit-roundoff 'float32))
 
 (define (round-to dtype)
   (if (eq? dtype 'float32) flsingle values))

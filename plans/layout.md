@@ -647,3 +647,51 @@ Follow-ups are GitHub issues.
 - **A5-o.** Transform and inverse refuse an X element of magnitude above
   max/(4·d) and max/(4·k), A4's bound without the whitening factor
   (amended after A5 r0 finding 2).
+
+## Decisions recorded in leg A6 (#49)
+
+- **A6-a.** The Decomposition chapter runs on wine, as #49 says; digits waits
+  for bkc39/datasets#10 and the embeddings chapter (B4).
+- **A6-b.** `crosstab` and `agreement` are retired from the helpers and from
+  all five chapters that printed them, with `guide-docs-test` and the
+  `check-doc-links` self-test.
+- **A6-c.** A table is `counts-of` (a guide helper over `contingency-matrix`)
+  of the class ids against the device labels: rows the classes in order of
+  first appearance, columns the clusters in the run's numbering. The tests pin
+  its columns as a sorted multiset (`cluster-columns`), so a renumbering moves
+  no pin.
+- **A6-d.** A score is `(rounded (adjusted-rand-score ids labels))`, a string
+  from the guide helper `rounded`; each is pinned against the exact rational
+  ARI of its pinned table (`table-ari`). `class-ids`, `counts-of`, `rounded`,
+  `leading`, `cumulative`, `components-for`, `columns-of` and `spectrum` live
+  in `guide/helpers.rkt` once, and the tests import them (amended after A6 r0
+  style items 1, 2, 4, 5 and 13, and A6 final style item 2).
+- **A6-e.** No reconstruction section until `mean-squared-error` is bound.
+- **A6-f.** float32, the guide's default. The k-means labels on the two
+  components hold by a margin: every sample's nearest and second-nearest
+  centroids differ by at least 0.071 (whitened 0.126), the bounds
+  `guide-decomposition-test` checks.
+- **A6-g.** The decomposition values are oracle-checked by an sklearn twin
+  (`guide-twin-test`, `python/guide_twin.py`) on the device's float32 rows.
+  The ratios sit at least 10 parity bounds (A4 L14's 64·u·λ₁ over Σλ) from a
+  rounding boundary at 3 places; the singular values only 8.4 and 3.3
+  bounds (σ's bound derived from L14's λ bound), so the twin asserts one
+  bound for them, plus G4's 64·u·σ₁ for truncated SVD's.
+- **A6-h.** Whitening is in the k-means comparison. Two components cluster
+  about as well as the 13 columns (ARI 0.895 against 0.897) and whitened
+  better (0.912), as in sklearn's example (0.896 / 0.912). The two clusterings
+  are not the same partition (ARI 0.946 between them); no prose claims they
+  are. Corrected after A6 r0 finding 1: the earlier "0.912 against 0.864, the
+  same clusters" held only for seed 0 with one init.
+- **A6-i.** `ex-decomposition` is the last Examples chapter, after HDBSCAN,
+  so wine is introduced in `ex-kmeans` first.
+- **A6-j.** Every k-means fit in the Decomposition chapter, the figure's
+  included, takes `#:n-init 10`, and the tests evaluate the chapter's own
+  examples, in order, in a sandbox, and pin the printed scores (amended after
+  A6 r2 finding 1). Over seeds 0 to 99 the ARI ordering (whitened at least
+  both others) holds for 99 seeds and fails at seed 73; in misplaced wines it
+  holds for all 100: whitened misplaces no more wines than either other
+  clustering, and two components are within one wine of the 13 columns.
+  `guide-decomposition-test` checks the wine counts over seeds 0 to 9 and
+  73. The other chapters' k-means comparisons hold for every k-means seed 0
+  to 9 with one init and stay as they are.
