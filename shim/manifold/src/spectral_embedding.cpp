@@ -73,6 +73,8 @@ constexpr const char* solver_advice =
 constexpr const char* spread_advice =
     "; these weights span orders of magnitude and need norm-laplacian";
 constexpr const char* asymmetric_advice = "; the graph is not symmetric";
+constexpr const char* edgeless_advice =
+    "; samples without edges can displace the graph's eigenvectors";
 
 constexpr double heavy_span = 0x1p8;
 
@@ -148,7 +150,9 @@ std::string graph_advice(const raft::handle_t& handle, const coo& c, int64_t n,
     return asymmetric_advice;
   }
   const bool heavy = r.norm_laplacian == 0 && s.span >= heavy_span;
-  return std::string(solver_advice) + (heavy ? spread_advice : "");
+  const bool edgeless = r.norm_laplacian != 0 && s.edgeless;
+  return std::string(solver_advice) + (edgeless ? edgeless_advice : "") +
+         (heavy ? spread_advice : "");
 }
 
 template <typename Advice>

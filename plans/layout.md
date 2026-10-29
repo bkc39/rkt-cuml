@@ -958,8 +958,11 @@ Follow-ups are GitHub issues.
   which returns only the embedding. The dense path's zero-column refusal
   advises deduplicating or centring X, or changing n-neighbors. The graph
   path's non-finite, zero-column and B3-y refusals say that graphs whose
-  Laplacian repeats eigenvalues are beyond cuML's eigensolver, plus B3-u's
-  weight advice, or, for a graph that is not symmetric, only that (B3-l).
+  Laplacian repeats eigenvalues are beyond cuML's eigensolver, plus, with
+  norm-laplacian and a sample of degree 0, that samples without edges can
+  displace the graph's eigenvectors, plus B3-u's weight advice, or, for a
+  graph that is not symmetric, only that (B3-l). The degree-0 test runs only
+  on the refusal path.
 - **B3-w.** The GPU suite's 1800 s budget is spent per test program, so B3's
   laws live in six files: L1-L3 and L7-L12 in `-law-test`, dense and graph
   L13 in `-refusal-test`, L4 in `-determinism-test`, and L5-L7's twins in

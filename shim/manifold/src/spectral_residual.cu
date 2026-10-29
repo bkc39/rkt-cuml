@@ -150,6 +150,12 @@ struct nonzero {
 constexpr double residual_bound = 1e-3;
 constexpr double constant_spread = 1e-3;
 
+struct without_edges {
+  __device__ bool operator()(double d) const {
+    return !(d > 0);
+  }
+};
+
 struct column_of {
   int64_t n;
 
@@ -243,7 +249,14 @@ graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n) {
       summed.begin(), thrust::make_discard_iterator(), weights.begin());
   const bool symmetric =
       thrust::none_of(policy, weights.begin(), nets.second, nonzero{});
-  return {.symmetric = symmetric, .span = ends.second / ends.first};
+  rmm::device_uvector<double> degree(static_cast<std::size_t>(n), stream);
+  thrust::fill_n(policy, degree.data(), n, 0.0);
+  each(handle, c.nnz, degree_sum{c.rows, c.vals, degree.data()});
+  const bool edgeless =
+      thrust::any_of(policy, degree.begin(), degree.end(), without_edges{});
+  return {.symmetric = symmetric,
+          .span = ends.second / ends.first,
+          .edgeless = edgeless};
 }
 
 }  // namespace cumlrkt::manifold

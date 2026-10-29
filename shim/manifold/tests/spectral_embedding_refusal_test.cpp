@@ -375,10 +375,11 @@ TEST(SpectralEmbeddingRefusals, ANanResidualIsRefused) {
                    .has_value());
 }
 
-manifold::graph_shape shape_with(const std::function<void(host_graph&)>& edit) {
+manifold::graph_shape shape_with(const std::function<void(host_graph&)>& edit,
+                                 int64_t n = ring) {
   const resources res;
   const device_graph g(res, edited(edit));
-  return manifold::shape_of(raftrkt::handle_of(res.handle), coo_of(g), ring);
+  return manifold::shape_of(raftrkt::handle_of(res.handle), coo_of(g), n);
 }
 
 struct entry {
@@ -408,6 +409,19 @@ TEST(SpectralEmbeddingRefusals, TheGraphShapeSumsDuplicates) {
   EXPECT_FALSE(shape_with([](host_graph& g) {
                  add_entry(g, {.row = 0, .col = 1, .weight = half_heavy});
                }).symmetric);
+}
+
+TEST(SpectralEmbeddingRefusals, TheGraphShapeFindsSamplesWithoutEdges) {
+  CUMLRKT_REQUIRE_GPU();
+  EXPECT_FALSE(shape_with([](host_graph&) {}).edgeless);
+  EXPECT_TRUE(shape_with([](host_graph&) {}, ring + 1).edgeless);
+  EXPECT_TRUE(shape_with([](host_graph& g) {
+                for (std::size_t e = 0; e < g.rows.size(); ++e) {
+                  if (g.rows[e] == 0 || g.cols[e] == 0) {
+                    g.vals[e] = 0.0F;
+                  }
+                }
+              }).edgeless);
 }
 
 TEST(SpectralEmbeddingRefusals, TheGraphShapeComparesSummedWeightsInFloat32) {
