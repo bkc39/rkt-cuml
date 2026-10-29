@@ -463,7 +463,8 @@
 (test-gpu "L13: a graph that is not symmetric can instead fail cuML's eigensolver, passed through"
   (check-cuml-error 'generic
                     #rx"^spectral-embedding-fit-graph: .*eigensolver couldn't converge"
-                    (fault (graph-upper (unit-rings 1 30)) (hasheq 'norm-laplacian #f 'random-state 1))))
+                    (fault (graph-upper (unit-rings 1 30))
+                           (hasheq 'norm-laplacian #f 'random-state 1))))
 
 (test-pools "L13: a graph refusal leaves the RMM pool where it was"
   (for ([r (in-list (graph-rows-of))])
