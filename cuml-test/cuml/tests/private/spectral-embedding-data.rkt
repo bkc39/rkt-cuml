@@ -6,8 +6,8 @@
                   spectral-embedding-result-embedding
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params)
-         (only-in racket/list append* argmax second)
-         (only-in racket/match match-define match-lambda**)
+         (only-in racket/list append* argmax make-list second)
+         (only-in racket/match match match-define match-lambda)
          (only-in racket/math pi sqr)
          racket/runtime-path
          (only-in rackunit check-true test-case)
@@ -26,7 +26,8 @@
                   graph-rows
                   graph-vals))
 
-(provide check-twins
+(provide check-residuals
+         check-twins
          column-gaps
          cosine-gaps
          edge-shares
@@ -40,7 +41,6 @@
          heavy-pair
          polygons
          quantised
-         residual-bound
          rows-matrix
          sign-ruled?
          stochastic-blocks
@@ -54,8 +54,7 @@
   (define truth
     (append* (for/list ([s (in-list sizes)]
                         [g (in-naturals)])
-               (for/list ([_ (in-range s)])
-                 g))))
+               (make-list s g))))
   (define n (length truth))
   (define groups (list->vector truth))
   (define edges
@@ -71,11 +70,13 @@
                           (+ 0.5 (* 1.5 (random)))
                           1.0))))))
   (define both
-    (sort (append* (for/list ([e (in-list edges)])
-                     (match-define (list i j w) e)
-                     (list (list i j w) (list j i w))))
-          (match-lambda**
-            [((list i j _) (list k l _)) (or (< i k) (and (= i k) (< j l)))])))
+    (sort (for*/list ([e (in-list edges)]
+                      [directed (in-list (match e
+                                           [(list i j w) (list e (list j i w))]))])
+            directed)
+          <
+          #:key (match-lambda
+                  [(list i j _) (+ (* i n) j)])))
   (match-define (list rows cols vals) (apply map list both))
   (values (graph rows cols vals n) truth))
 
@@ -135,30 +136,39 @@
 
 (define residual-bound 1e-3)
 
+(define (column-residual g isolated mass column)
+  (define u (list->vector column))
+  (define lu
+    (for/vector #:length (graph-n g)
+                ([y (in-vector (laplacian-times g u))]
+                 [x (in-vector u)]
+                 [alone? (in-vector isolated)])
+      (if alone? x y)))
+  (define uu (for/sum ([x (in-vector u)] [m (in-vector mass)]) (* m (sqr x))))
+  (define rho (/ (for/sum ([x (in-vector u)] [y (in-vector lu)]) (* x y)) uu))
+  (define off
+    (for/sum ([x (in-vector u)] [y (in-vector lu)] [m (in-vector mass)])
+             (/ (sqr (- y (* rho m x))) m)))
+  (sqrt (/ off uu)))
+
 (define (eigen-residuals g rows #:norm-laplacian [norm #t])
   (define d (degrees g))
-  (define heaviest
-    (for/fold ([m 0.0]) ([x (in-vector d)])
-      (max m x)))
-  (define (isolated? i)
-    (and norm (zero? (vector-ref d i))))
-  (define (mass i)
-    (if (and norm (not (isolated? i)))
-        (vector-ref d i)
-        1.0))
+  (define isolated
+    (for/vector ([x (in-vector d)])
+      (and norm (zero? x))))
+  (define mass
+    (for/vector ([x (in-vector d)])
+      (if (and norm (positive? x)) x 1.0)))
+  (define scale
+    (if norm
+        1.0
+        (apply max 0.0 (vector->list d))))
   (for/list ([column (in-list (transpose rows))])
-    (define u (list->vector column))
-    (define lu
-      (for/vector #:length (graph-n g)
-                  ([(y i) (in-indexed (laplacian-times g u))])
-        (if (isolated? i)
-            (vector-ref u i)
-            y)))
-    (define uu (for/sum ([(x i) (in-indexed u)]) (* (mass i) (sqr x))))
-    (define rho (/ (for/sum ([x (in-vector u)] [y (in-vector lu)]) (* x y)) uu))
-    (define off
-      (for/sum ([(x i) (in-indexed u)]) (/ (sqr (- (vector-ref lu i) (* rho (mass i) x))) (mass i))))
-    (/ (sqrt (/ off uu)) (if norm 1.0 heaviest))))
+    (/ (column-residual g isolated mass column) scale)))
+
+(define (check-residuals g rows label #:norm-laplacian [norm #t])
+  (define residuals (eigen-residuals g rows #:norm-laplacian norm))
+  (check-true (< (apply max residuals) residual-bound) (format "~a residuals ~a" label residuals)))
 
 (define (edge-shares g rows)
   (define d (degrees g))

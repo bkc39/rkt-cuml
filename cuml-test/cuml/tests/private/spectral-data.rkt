@@ -17,6 +17,7 @@
          (struct-out graph)
          blobs
          circles
+         clique-graph
          cliques
          float32-rows
          edited-vectors
@@ -208,6 +209,10 @@
          [j (in-range (add1 i) s)])
     (set-edge! edges (+ o i) (+ o j) 1.0))
   (values (edges->graph edges (apply + sizes)) (truth-of sizes)))
+
+(define (clique-graph n)
+  (define-values (g _truth) (cliques (list n)))
+  g)
 
 (define (graph-dense g)
   (define n (graph-n g))

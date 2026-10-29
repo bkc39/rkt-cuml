@@ -28,6 +28,7 @@
                   unit-rings
                   unit-rings-of)
          (only-in "private/spectral-embedding-data.rkt"
+                  check-residuals
                   column-gaps
                   edge-shares
                   eigen-residuals
@@ -35,7 +36,6 @@
                   embedded-graph
                   polygons
                   quantised
-                  residual-bound
                   rows-matrix
                   sign-ruled?
                   stochastic-blocks
@@ -217,9 +217,7 @@
   (for* ([norm (in-list '(#t #f))]
          [seed (in-range 5)])
     (define rows (embedded (embedded-graph g (hasheq 'norm-laplacian norm 'random-state seed))))
-    (define residuals (eigen-residuals g rows #:norm-laplacian norm))
-    (check-true (< (apply max residuals) residual-bound)
-                (format "norm ~a seed ~a residuals ~a" norm seed residuals))))
+    (check-residuals g rows (format "norm ~a seed ~a" norm seed) #:norm-laplacian norm)))
 
 (test-gpu "L11: upstream, unchecked: the dense fit of two identical polygons at 3 neighbours is no eigenvector"
   (define rows
@@ -234,9 +232,7 @@
   (define g (with-isolated (unit-path 12) 4))
   (for ([seed (in-range 10)])
     (define rows (embedded (embedded-graph g (hasheq 'n-components 6 'random-state seed))))
-    (define residuals (eigen-residuals g rows))
-    (check-true (< (apply max residuals) residual-bound)
-                (format "seed ~a residuals ~a" seed residuals))
+    (check-residuals g rows (format "seed ~a" seed))
     (define shares (edge-shares g rows))
     (check-true (and (andmap (lambda (s) (> s 0.999)) (take shares 5)) (< (last shares) 1e-9))
                 (format "seed ~a shares on the path ~a" seed shares))))

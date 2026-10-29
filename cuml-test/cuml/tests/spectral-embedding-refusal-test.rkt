@@ -3,20 +3,17 @@
 (require (only-in cuml fit fit-transform spectral-embedding transform)
          (only-in cuml/manifold
                   spectral-embedding-fit
-                  spectral-embedding-fit-graph
                   spectral-embedding-fit-transform
                   spectral-embedding-params
                   spectral-embedding-result?)
          (only-in racket/flonum flsingle)
-         (only-in racket/function const)
          (only-in racket/list make-list take)
          (only-in racket/match match match-define)
          (only-in racket/math sqr)
-         (only-in rackunit check-equal? check-exn check-false check-pred check-true fail test-case)
+         (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
          (only-in raft exn:fail:raft? list->device-vector)
-         (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in raft/tests/private/probe probe-pool-used test-pools)
+         (only-in raft/tests/private/probe test-pools)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
@@ -29,32 +26,13 @@
                   tiny-with)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
-         (only-in "private/spectral-data.rkt"
-                  cliques
-                  graph->vectors
-                  graph-edit
-                  graph-map-vals
-                  graph-upper
-                  set-entry
-                  unit-path
-                  unit-rings
-                  unit-star)
-         (only-in "private/spectral-embedding-data.rkt"
-                  eigen-residuals
-                  embedded
-                  embedded-graph
-                  heavy-pair
-                  polygons
-                  residual-bound
-                  rows-matrix
-                  sign-ruled?
-                  stochastic-graph
-                  with-isolated)
+         (only-in "private/spectral-embedding-data.rkt" embedded polygons rows-matrix sign-ruled?)
+         (only-in "private/spectral-embedding-refusal-data.rkt" check-pool-kept zero-text)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
 
-(define small (hasheq 'n-neighbors 4))
+(struct X-case row (retry?))
 
-(define pool-device 0)
+(define small (hasheq 'n-neighbors 4))
 
 (define (tiny-X)
   (fixture-X tiny))
@@ -71,8 +49,6 @@
 
 (define two-message "n-components: 2 components with drop-first need at least 8 rows, got 7")
 
-(define zero-text "embedding: column 0 is zero: the eigensolver found no eigenvector of this graph")
-
 (define zero-message (string-append zero-text "; deduplicate or centre X, or change n-neighbors"))
 
 (define (halves)
@@ -81,8 +57,8 @@
 (define (offset)
   (rows->matrix (line 64 1e9) 'float32))
 
-(define (X-row id message X [options small])
-  (row id message (cons X options)))
+(define (X-row id message X [options small] #:retry? [retry? #f])
+  (X-case id message (cons X options) retry?))
 
 (define (X-rows)
   (define one-column (rows->matrix (map (lambda (r) (take r 1)) (fixture-rows tiny)) 'float32))
@@ -95,7 +71,7 @@
           "X: expected row-major, got col-major 8x3"
           (blank-matrix 8 3 'float32 #:layout 'col-major))
    (X-row "s5" "X: expected at least 2 columns, got 1" one-column)
-   (X-row "s7" two-message (line-X 7) (hasheq 'n-neighbors 2))
+   (X-row "s7" two-message (line-X 7) (hasheq 'n-neighbors 2) #:retry? #t)
    (X-row "s7 drop-first #f"
           "n-components: 2 components need at least 6 rows, got 5"
           (line-X 5)
@@ -105,16 +81,17 @@
           (line-X 5)
           (hasheq 'n-components 1))
    (X-row "s9" "n-neighbors: expected at most the 8 rows, got 9" (tiny-X) (hasheq 'n-neighbors 9))
-   (X-row "s10" nan-message (tiny-with nan-row))
+   (X-row "s10" nan-message (tiny-with nan-row) #:retry? #t)
    (X-row "s10 inf"
           "X: row 0, column 2: expected a finite value, got -inf"
           (tiny-with '([(0 2) -inf.0])))
-   (X-row "s11" large-message (tiny-with large-row))
+   (X-row "s11" large-message (tiny-with large-row) #:retry? #t)
    (X-row "s12"
           "X: every row equals row 0; a spectral embedding needs two distinct rows"
-          (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32))
-   (X-row "s14 halves" zero-message (halves) (hasheq 'n-neighbors 10))
-   (X-row "s14 offset" zero-message (offset) (hasheq 'n-neighbors 10))
+          (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32)
+          #:retry? #t)
+   (X-row "s14 halves" zero-message (halves) (hasheq 'n-neighbors 10) #:retry? #t)
+   (X-row "s14 offset" zero-message (offset) (hasheq 'n-neighbors 10) #:retry? #t)
    (X-row "s14 every row a neighbour" zero-message (line-X 50) (hasheq 'n-neighbors 50))
    (X-row "s14 identical pieces"
           zero-message
@@ -145,6 +122,24 @@
         (cons 'fit-transform
               (lambda (X options) (fit-transform (apply-options spectral-embedding options) X)))))
 
+(define (fit-thunk r)
+  (match-define (cons X options) (row-call r))
+  (lambda () (apply-options spectral-embedding-fit options X)))
+
+(define contract-options
+  (list (hasheq 'n-neighbors 2.5)
+        (hasheq 'n-components 'two)
+        (hasheq 'random-state -1)
+        (hasheq 'random-state (expt 2 64))))
+
+(define least-rows
+  '((1 #f 4 "1 component needs at least 4 rows, got 3")
+    (1 #t 6 "1 component with drop-first needs at least 6 rows, got 5")
+    (2 #t 8 "2 components with drop-first need at least 8 rows, got 7")
+    (2 #f 6 "2 components need at least 6 rows, got 5")
+    (8 #t 20 "8 components with drop-first need at least 20 rows, got 19")
+    (19 #t 42 "19 components with drop-first need at least 42 rows, got 41")))
+
 (test-gpu "L13: the fits refuse each bad X or parameter with its message, the first refusal winning"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (X-rows))])
@@ -152,12 +147,9 @@
     (test-case (format "~a ~a" who (row-id r))
       (match-define (cons X options) (row-call r))
       (check-row who r (lambda () (call X options)))))
-  (for ([bad (in-list (list (lambda () (spectral-embedding-fit (tiny-X) #:n-neighbors 2.5))
-                            (lambda () (spectral-embedding-fit (tiny-X) #:n-components 'two))
-                            (lambda () (spectral-embedding-fit (tiny-X) #:random-state -1))
-                            (lambda ()
-                              (spectral-embedding-fit (tiny-X) #:random-state (expt 2 64)))))])
-    (check-exn exn:fail:contract? bad)))
+  (for ([options (in-list contract-options)])
+    (check-exn exn:fail:contract?
+               (lambda () (apply-options spectral-embedding-fit options (tiny-X))))))
 
 (test-case "L13: s0: an affinity other than nearest-neighbors in params is refused before X is read"
   (for ([affinity (in-list '(precomputed rbf))])
@@ -174,17 +166,8 @@
                     (lambda ()
                       (fit (spectral-embedding #:affinity 'precomputed #:resources 'unused) 'X))))
 
-(define (fit-row r)
-  (match-define (cons X options) (row-call r))
-  (check-row 'spectral-embedding-fit r (lambda () (apply-options spectral-embedding-fit options X))))
-
 (test-gpu "L13: s7: the least rows fit for every probed (n-components, drop-first)"
-  (for ([entry (in-list '((1 #f 4 "1 component needs at least 4 rows, got 3")
-                          (1 #t 6 "1 component with drop-first needs at least 6 rows, got 5")
-                          (2 #t 8 "2 components with drop-first need at least 8 rows, got 7")
-                          (2 #f 6 "2 components need at least 6 rows, got 5")
-                          (8 #t 20 "8 components with drop-first need at least 20 rows, got 19")
-                          (19 #t 42 "19 components with drop-first need at least 42 rows, got 41")))])
+  (for ([entry (in-list least-rows)])
     (match-define (list k drop least message) entry)
     (test-case (format "k ~a drop ~a" k drop)
       (define options
@@ -204,13 +187,9 @@
 (test-pools "L13: s14: a zero column is refused and freed, under every fit"
   (for ([entry (in-list (fit-calls))])
     (match-define (cons who call) entry)
-    (drain-finalizers!)
-    (define before (probe-pool-used pool-device))
-    (check-cuml-error 'logic
-                      (format "~a: ~a" who zero-message)
-                      (lambda () (call (halves) (hasheq 'n-neighbors 10))))
-    (drain-finalizers!)
-    (check-equal? (probe-pool-used pool-device) before (symbol->string who))))
+    (check-pool-kept
+     (row (symbol->string who) zero-message (lambda () (call (halves) (hasheq 'n-neighbors 10))))
+     #:who who)))
 
 (test-gpu "L13: a non-array X is refused by the view check, under any seed"
   (for ([seed (in-list '(0 #f))])
@@ -237,239 +216,12 @@
 
 (test-gpu "L13: after a refused s7, s10, s11, s12 or s14, a valid call succeeds"
   (for ([r (in-list (X-rows))]
-        #:when (member (row-id r) '("s7" "s10" "s11" "s12" "s14 halves" "s14 offset")))
-    (fit-row r)
+        #:when (X-case-retry? r))
+    (check-row 'spectral-embedding-fit r (fit-thunk r))
     (check-pred spectral-embedding-result?
                 (spectral-embedding-fit (valid-X) #:n-neighbors 10)
                 (row-id r))))
 
 (test-pools "L13: a refusal leaves the RMM pool where it was"
   (for ([r (in-list (X-rows))])
-    (drain-finalizers!)
-    (define before (probe-pool-used pool-device))
-    (fit-row r)
-    (check-equal? (probe-pool-used pool-device) before (row-id r))))
-
-(define ring-n 10)
-
-(define ring (unit-rings 1 ring-n))
-
-(define path (unit-path ring-n))
-
-(define solver-advice
-  (string-append "; graphs whose Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,"
-                 " identical pieces) are beyond cuML's eigensolver"))
-
-(define spread-advice "; these weights span orders of magnitude and need norm-laplacian")
-
-(define asymmetric-advice "; the graph is not symmetric")
-
-(define edgeless
-  (string-append solver-advice "; samples without edges can displace the graph's eigenvectors"))
-
-(define nan-text "embedding: row 0, column 0: the eigensolver returned nan")
-
-(define-values (k10 _k10-truth) (cliques '(10)))
-
-(define (inaccurate column [what ""] [advice solver-advice])
-  (format "embedding: column ~a~a: the eigensolver's eigenvectors are inaccurate on this graph~a"
-          column
-          what
-          advice))
-
-(define (heavy-star w [g (unit-star 30)])
-  (heavy-pair w #:graph g #:between '(0 1)))
-
-(define split-ring
-  (graph-edit (graph-map-vals ring (const 0.3))
-              #:rows (lambda (rows) (append rows '(0)))
-              #:cols (lambda (cols) (append cols '(1)))
-              #:vals (lambda (vals) (append ((set-entry 0 0.1) vals) '(0.2)))))
-
-(define (zero-row id g options)
-  (row id (string-append zero-text solver-advice) (fault g options)))
-
-(define (unit-weight-rows)
-  (list (zero-row "zero column, one ring" (unit-rings 1 30) (hasheq))
-        (zero-row "zero column, star" (unit-star 30) (hasheq))
-        (zero-row "zero column, unit-weight star" (unit-star 30) (hasheq 'norm-laplacian #f))))
-
-(define (eigen-rows)
-  (list (row "inaccurate, two rings" (inaccurate 0) (fault (unit-rings 2 30)))
-        (row "inaccurate, two rings without norm-laplacian"
-             (inaccurate 0)
-             (fault (unit-rings 2 30) (hasheq 'norm-laplacian #f 'random-state 1)))
-        (row "constant, one ring" (inaccurate 0 " is constant") (fault ring))
-        (row "constant, one ring and an isolated sample"
-             (inaccurate 0 " is constant" edgeless)
-             (fault (with-isolated ring 1)))
-        (row "constant, a ring whose (0, 1) is 0.1 + 0.2 and (1, 0) is 0.3"
-             (inaccurate 0 " is constant")
-             (fault split-ring))
-        (row "constant, a path of 12 and 9 samples without edges"
-             (inaccurate 0 " is constant" edgeless)
-             (fault (with-isolated (unit-path 12) 9) (hasheq 'n-components 6)))
-        (row "non-finite, K10 without norm-laplacian"
-             (string-append nan-text solver-advice)
-             (fault k10 (hasheq 'norm-laplacian #f 'random-state 3)))))
-
-(define (asymmetric-rows)
-  (list (row "asymmetric, upper triangle"
-             (inaccurate 0 "" asymmetric-advice)
-             (fault (graph-upper (stochastic-graph))))
-        (row "asymmetric, upper triangle without norm-laplacian"
-             (inaccurate 0 "" asymmetric-advice)
-             (fault (graph-upper (stochastic-graph)) (hasheq 'norm-laplacian #f)))
-        (row "asymmetric, upper path"
-             (inaccurate 0 "" asymmetric-advice)
-             (fault (graph-upper path) (hasheq 'random-state 1)))
-        (row "asymmetric, upper path, the eigensolver returning nan"
-             (string-append nan-text asymmetric-advice)
-             (fault (graph-upper path)))))
-
-(define heavy-text (string-append zero-text solver-advice spread-advice))
-
-(define (heavy-rows)
-  (list (zero-row "heavy, star with a pair at 2^7" (heavy-star 128.0) (hasheq 'norm-laplacian #f))
-        (row "heavy, star with a pair at 2^8"
-             heavy-text
-             (fault (heavy-star 256.0) (hasheq 'norm-laplacian #f)))
-        (zero-row "heavy, star with a pair at 2^12 and norm-laplacian" (heavy-star 4096.0) (hasheq))
-        (row "heavy, star with a pair at 2^7 twice"
-             heavy-text
-             (fault (heavy-star 128.0 (heavy-star 128.0)) (hasheq 'norm-laplacian #f)))
-        (row "heavy, star with a pair summing to 2^8"
-             heavy-text
-             (fault (heavy-star 255.0) (hasheq 'norm-laplacian #f)))))
-
-(define (fit-vectors rows cols vals [n ring-n])
-  (spectral-embedding-fit-graph rows cols vals n))
-
-(define (fault g [options (hasheq)])
-  (lambda () (embedded-graph g options)))
-
-(define (with-vectors f)
-  (lambda ()
-    (match-define (list rows cols vals) (graph->vectors ring))
-    (f rows cols vals)))
-
-(define (index-message name entry got)
-  (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))
-
-(define past-sum (const (exact->inexact (expt 2 125))))
-
-(define (graph-rows-of)
-  (append
-   (list
-    (row "s1" "n-components: expected at least 1, got 0" (fault ring (hasheq 'n-components 0)))
-    (row "g1 rows float32"
-         "rows: expected int32, got float32"
-         (with-vectors (lambda (_ cols vals) (fit-vectors (blank-vector 20 'float32) cols vals))))
-    (row "g1 vals float64"
-         "vals: expected float32, got float64"
-         (with-vectors (lambda (rows cols _) (fit-vectors rows cols (blank-vector 20 'float64)))))
-    (row "g1 rank"
-         "rows: expected rank 1, got rank 2"
-         (with-vectors (lambda (_ cols vals) (fit-vectors (blank-matrix 20 1 'int32) cols vals))))
-    (row "g1 cols"
-         "cols: expected 20 entries, as rows has, got 19"
-         (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals))))
-    (row "g2"
-         "n-components: 2 components with drop-first need at least 8 samples, got 7"
-         (with-vectors (lambda (rows cols vals) (fit-vectors rows cols vals 7))))
-    (row "g2 most"
-         "n-samples: expected at most 2147483647, got 2147483648"
-         (with-vectors (lambda (rows cols vals) (fit-vectors rows cols vals (expt 2 31)))))
-    (row "g5 index" (index-message "rows" 7 10) (fault (graph-edit ring #:rows (set-entry 7 10))))
-    (row "g5 index -1" (index-message "cols" 7 -1) (fault (graph-edit ring #:cols (set-entry 7 -1))))
-    (row "g5 self-loop"
-         "rows: entry 12: self-loop at sample 6; leave the diagonal out"
-         (fault (graph-edit ring #:cols (set-entry 12 6))))
-    (row "g5 negative"
-         "vals: entry 1: expected a finite weight of at least 0, got -1"
-         (fault (graph-edit ring #:vals (set-entry 1 -1.0))))
-    (row "g5 nan"
-         "vals: entry 3: expected a finite weight of at least 0, got nan"
-         (fault (graph-edit ring #:vals (set-entry 3 +nan.0))))
-    (row "g5 subnormal"
-         (string-append "vals: entry 3: expected 0 or a weight of at least 1.1754943508222875e-38,"
-                        " got 9.80908925027372e-45")
-         (fault (graph-edit ring #:vals (set-entry 3 1e-44))))
-    (row "g6"
-         "vals: the weights sum to 8.507059173023462e+38, more than 3.4028234663852886e+38"
-         (fault (graph-map-vals ring past-sum)))
-    (row "g7"
-         "vals: expected at least one positive weight, got none"
-         (fault (graph-map-vals ring (const 0.0))))
-    (row "zero column"
-         (string-append zero-text solver-advice spread-advice)
-         (fault (heavy-pair (expt 2.0 24)) (hasheq 'norm-laplacian #f)))
-    (zero-row "zero column, two rings" (unit-rings 2 30) (hasheq 'random-state 1))
-    (row "g1 before g2"
-         "cols: expected 20 entries, as rows has, got 19"
-         (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals 7))))
-    (row "g2 before g5"
-         "n-components: 2 components with drop-first need at least 8 samples, got 7"
-         (lambda ()
-           (match-define (list rows cols vals)
-             (graph->vectors (graph-edit ring #:cols (set-entry 12 6))))
-           (fit-vectors rows cols vals 7)))
-    (row "g5 before g6"
-         "vals: entry 1: expected a finite weight of at least 0, got -1"
-         (fault (graph-edit (graph-map-vals ring past-sum) #:vals (set-entry 1 -1.0)))))
-   (unit-weight-rows)
-   (eigen-rows)
-   (asymmetric-rows)
-   (heavy-rows)))
-
-(test-gpu "L13: fit-graph refuses each bad graph with its message, the first refusal winning"
-  (for ([r (in-list (graph-rows-of))])
-    (test-case (row-id r)
-      (check-row 'spectral-embedding-fit-graph r))))
-
-(test-gpu "L13: g2: the least samples fit, and a valid call succeeds after a refusal"
-  (for ([r (in-list (graph-rows-of))])
-    (check-row 'spectral-embedding-fit-graph r)
-    (check-pred spectral-embedding-result? ((fault path)) (row-id r)))
-  (for ([entry (in-list (list (list (unit-path 8) (hasheq))
-                              (list (unit-path 4) (hasheq 'n-components 1 'drop-first #f))
-                              (list (unit-path 6) (hasheq 'n-components 1))
-                              (list path (hasheq 'n-components 3 'drop-first #f))))])
-    (match-define (list g options) entry)
-    (define rows (embedded (embedded-graph g options)))
-    (check-true (and (finite-rows? rows) (sign-ruled? rows)) (format "~a samples" (length rows)))
-    (check-true (< (apply max (eigen-residuals g rows)) residual-bound)
-                (format "~a samples" (length rows)))))
-
-(test-gpu "L13: a unit-weight graph refusal names no remedy"
-  (for ([r (in-list (append (unit-weight-rows) (eigen-rows)))])
-    (check-false (regexp-match? #rx"random-state|norm-laplacian off|orders of magnitude"
-                                (exn-message (raised (row-call r))))
-                 (row-id r))))
-
-(test-gpu "L13: the heavy-weight advice needs summed weights spanning 2^8, without norm-laplacian"
-  (for ([r (in-list (heavy-rows))]
-        [advised? (in-list '(#f #t #f #t #t))])
-    (check-equal? (regexp-match? #rx"orders of magnitude" (exn-message (raised (row-call r))))
-                  advised?
-                  (row-id r))))
-
-(test-gpu "L13: a refused graph that is not symmetric is named so, not blamed on repeated eigenvalues"
-  (for ([r (in-list (asymmetric-rows))])
-    (define message (exn-message (raised (row-call r))))
-    (check-true (regexp-match? #rx"; the graph is not symmetric$" message) (row-id r))
-    (check-false (regexp-match? #rx"repeats eigenvalues" message) (row-id r))))
-
-(test-gpu "L13: a graph that is not symmetric can instead fail cuML's eigensolver, passed through"
-  (check-cuml-error 'generic
-                    #rx"^spectral-embedding-fit-graph: .*eigensolver couldn't converge"
-                    (fault (graph-upper (unit-rings 1 30))
-                           (hasheq 'norm-laplacian #f 'random-state 1))))
-
-(test-pools "L13: a graph refusal leaves the RMM pool where it was"
-  (for ([r (in-list (graph-rows-of))])
-    (drain-finalizers!)
-    (define before (probe-pool-used pool-device))
-    (check-row 'spectral-embedding-fit-graph r)
-    (drain-finalizers!)
-    (check-equal? (probe-pool-used pool-device) before (row-id r))))
+    (check-pool-kept r #:who 'spectral-embedding-fit #:call (fit-thunk r))))
