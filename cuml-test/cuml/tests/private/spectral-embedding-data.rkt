@@ -136,22 +136,24 @@
   (define heaviest
     (for/fold ([m 0.0]) ([x (in-vector d)])
       (max m x)))
+  (define (isolated? i)
+    (and norm (zero? (vector-ref d i))))
   (define (mass i)
-    (if norm
+    (if (and norm (not (isolated? i)))
         (vector-ref d i)
         1.0))
-  (define live
-    (for/list ([i (in-range (graph-n g))]
-               #:when (> (mass i) 0.0))
-      i))
   (for/list ([column (in-list (transpose rows))])
     (define u (list->vector column))
-    (define lu (laplacian-times g u))
-    (define uu (for/sum ([i (in-list live)]) (* (mass i) (sqr (vector-ref u i)))))
-    (define rho (/ (for/sum ([i (in-list live)]) (* (vector-ref u i) (vector-ref lu i))) uu))
+    (define lu
+      (for/vector #:length (graph-n g)
+                  ([(y i) (in-indexed (laplacian-times g u))])
+        (if (isolated? i)
+            (vector-ref u i)
+            y)))
+    (define uu (for/sum ([(x i) (in-indexed u)]) (* (mass i) (sqr x))))
+    (define rho (/ (for/sum ([x (in-vector u)] [y (in-vector lu)]) (* x y)) uu))
     (define off
-      (for/sum ([i (in-list live)])
-               (/ (sqr (- (vector-ref lu i) (* rho (mass i) (vector-ref u i)))) (mass i))))
+      (for/sum ([(x i) (in-indexed u)]) (/ (sqr (- (vector-ref lu i) (* rho (mass i) x))) (mass i))))
     (/ (sqrt (/ off uu)) (if norm 1.0 heaviest))))
 
 (define (sign-ruled? rows)

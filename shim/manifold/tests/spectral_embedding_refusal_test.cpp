@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -7,6 +8,7 @@
 #include <functional>
 #include <limits>
 #include <numbers>
+#include <optional>
 #include <rmm/cuda_stream_view.hpp>
 #include <stdexcept>
 #include <string>
@@ -34,6 +36,7 @@ constexpr int64_t ring_entries = 2 * ring;
 constexpr double exact = 1e-12;
 constexpr double single = 1e-6;
 constexpr double cosine_spread = 2.0;
+constexpr float half_heavy = 0x1p7F;
 constexpr double large = 0x1p66;
 constexpr double past_sum_weight = 0x1p125;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -260,8 +263,8 @@ std::string zero_column_refusal(const std::vector<float>& columns, int64_t n,
   const filled<float> e(res, columns, {k, n});
   try {
     manifold::require_nonzero_columns(
-        static_cast<const float*>(e.array.view.data), n, k, "; advice",
-        rmm::cuda_stream_view{});
+        static_cast<const float*>(e.array.view.data), n, k,
+        [] { return "; advice"; }, rmm::cuda_stream_view{});
   } catch (const std::logic_error& error) {
     return error.what();
   }
@@ -289,15 +292,20 @@ TEST(SpectralEmbeddingRefusals, TheFirstZeroColumnIsRefused) {
   EXPECT_EQ(zero_column_refusal({0, 0, -1e-30F, 0, 1, 0}, 3, 2), "");
 }
 
+coo coo_of(const device_graph& g) {
+  return {static_cast<int32_t*>(g.rows.array.view.data),
+          static_cast<int32_t*>(g.cols.array.view.data),
+          static_cast<float*>(g.vals.array.view.data),
+          g.rows.array.view.shape[0]};
+}
+
 std::vector<manifold::column_fit> ring_fits(const std::vector<float>& columns,
-                                            int64_t k, bool normalised) {
+                                            int64_t k, bool normalised,
+                                            int64_t n = ring) {
   const resources res;
   const device_graph g(res, ring_graph());
-  const filled<float> e(res, columns, {k, ring});
-  const coo c{static_cast<int32_t*>(g.rows.array.view.data),
-              static_cast<int32_t*>(g.cols.array.view.data),
-              static_cast<float*>(g.vals.array.view.data), ring_entries};
-  return manifold::column_fits(raftrkt::handle_of(res.handle), c, ring,
+  const filled<float> e(res, columns, {k, n});
+  return manifold::column_fits(raftrkt::handle_of(res.handle), coo_of(g), n,
                                static_cast<const float*>(e.array.view.data), k,
                                normalised);
 }
@@ -335,6 +343,67 @@ TEST(SpectralEmbeddingRefusals, ColumnFitsMeasureTheEigenResidual) {
     expect_fit(fits[2], {.residual = 1.0 / std::numbers::sqrt2, .spread = 1.0},
                {.residual = exact, .spread = 0.0});
   }
+}
+
+TEST(SpectralEmbeddingRefusals, AnIsolatedSampleHasTheUnitDiagonal) {
+  CUMLRKT_REQUIRE_GPU();
+  std::vector<float> columns(2 * (ring + 1), 0.0F);
+  std::fill_n(columns.begin(), ring, 1.0F);
+  columns.back() = 1.0F;
+  const std::vector<manifold::column_fit> fits =
+      ring_fits(columns, 2, true, ring + 1);
+  ASSERT_EQ(fits.size(), 2U);
+  expect_fit(fits[0], {.residual = 0.0, .spread = 0.0},
+             {.residual = exact, .spread = 0.0});
+  expect_fit(fits[1], {.residual = 0.0, .spread = 1.0},
+             {.residual = exact, .spread = 0.0});
+}
+
+TEST(SpectralEmbeddingRefusals, ANanResidualIsRefused) {
+  const manifold::refusal refused =
+      manifold::first_refused(
+          {{.residual = 0.0, .spread = 1.0}, {.residual = nan, .spread = 1.0}},
+          false)
+          .value_or(manifold::refusal{.column = 0, .constant = true});
+  EXPECT_EQ(refused.column, 1U);
+  EXPECT_FALSE(refused.constant);
+  EXPECT_FALSE(manifold::first_refused({{.residual = 0.0, .spread = 1.0}}, true)
+                   .has_value());
+}
+
+manifold::graph_shape shape_with(const std::function<void(host_graph&)>& edit) {
+  const resources res;
+  const device_graph g(res, edited(edit));
+  return manifold::shape_of(raftrkt::handle_of(res.handle), coo_of(g), ring);
+}
+
+struct entry {
+  int32_t row;
+  int32_t col;
+  float weight;
+};
+
+void add_entry(host_graph& g, const entry& e) {
+  g.rows.push_back(e.row);
+  g.cols.push_back(e.col);
+  g.vals.push_back(e.weight);
+}
+
+TEST(SpectralEmbeddingRefusals, TheGraphShapeSumsDuplicates) {
+  CUMLRKT_REQUIRE_GPU();
+  const manifold::graph_shape ring_shape = shape_with([](host_graph&) {});
+  EXPECT_TRUE(ring_shape.symmetric);
+  EXPECT_DOUBLE_EQ(ring_shape.span, 1.0);
+  const manifold::graph_shape split = shape_with([](host_graph& g) {
+    add_entry(g, {.row = 0, .col = 1, .weight = half_heavy});
+    add_entry(g, {.row = 0, .col = 1, .weight = half_heavy});
+    add_entry(g, {.row = 1, .col = 0, .weight = 2 * half_heavy});
+  });
+  EXPECT_TRUE(split.symmetric);
+  EXPECT_DOUBLE_EQ(split.span, 1.0 + (2 * half_heavy));
+  EXPECT_FALSE(shape_with([](host_graph& g) {
+                 add_entry(g, {.row = 0, .col = 1, .weight = half_heavy});
+               }).symmetric);
 }
 
 }  // namespace

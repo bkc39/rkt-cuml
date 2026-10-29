@@ -30,9 +30,15 @@
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
          (only-in "private/spectral-data.rkt"
+                  graph
                   graph->vectors
+                  graph-cols
                   graph-edit
                   graph-map-vals
+                  graph-n
+                  graph-rows
+                  graph-upper
+                  graph-vals
                   set-entry
                   unit-path
                   unit-rings
@@ -45,7 +51,8 @@
                   polygons
                   residual-bound
                   rows-matrix
-                  sign-ruled?)
+                  sign-ruled?
+                  stochastic-graph)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
 
 (define small (hasheq 'n-neighbors 4))
@@ -258,11 +265,19 @@
 
 (define spread-advice "; these weights span orders of magnitude and need norm-laplacian")
 
-(define (inaccurate column [what ""])
+(define asymmetric-advice "; the graph is not symmetric")
+
+(define (inaccurate column [what ""] [advice solver-advice])
   (format "embedding: column ~a~a: the eigensolver's eigenvectors are inaccurate on this graph~a"
           column
           what
-          solver-advice))
+          advice))
+
+(define (with-isolated g count)
+  (graph (graph-rows g) (graph-cols g) (graph-vals g) (+ (graph-n g) count)))
+
+(define (heavy-star exponent [g (unit-star 30)])
+  (heavy-pair exponent #:graph g #:between '(0 1)))
 
 (define (zero-row id g options)
   (row id (string-append zero-text solver-advice) (fault g options)))
@@ -277,7 +292,33 @@
         (row "inaccurate, two rings without norm-laplacian"
              (inaccurate 0)
              (fault (unit-rings 2 30) (hasheq 'norm-laplacian #f 'random-state 1)))
-        (row "constant, one ring" (inaccurate 0 " is constant") (fault ring))))
+        (row "constant, one ring" (inaccurate 0 " is constant") (fault ring))
+        (row "constant, one ring and an isolated sample"
+             (inaccurate 0 " is constant")
+             (fault (with-isolated ring 1)))))
+
+(define (asymmetric-rows)
+  (list (row "asymmetric, upper triangle"
+             (inaccurate 0 "" asymmetric-advice)
+             (fault (graph-upper (stochastic-graph))))
+        (row "asymmetric, upper triangle without norm-laplacian"
+             (inaccurate 0 "" asymmetric-advice)
+             (fault (graph-upper (stochastic-graph)) (hasheq 'norm-laplacian #f)))
+        (row "asymmetric, upper path"
+             (inaccurate 0 "" asymmetric-advice)
+             (fault (graph-upper path) (hasheq 'random-state 1)))))
+
+(define heavy-text (string-append zero-text solver-advice spread-advice))
+
+(define (heavy-rows)
+  (list (zero-row "heavy, star with a pair at 2^7" (heavy-star 7) (hasheq 'norm-laplacian #f))
+        (row "heavy, star with a pair at 2^8"
+             heavy-text
+             (fault (heavy-star 8) (hasheq 'norm-laplacian #f)))
+        (zero-row "heavy, star with a pair at 2^12 and norm-laplacian" (heavy-star 12) (hasheq))
+        (row "heavy, star with a pair at 2^7 twice"
+             heavy-text
+             (fault (heavy-star 7 (heavy-star 7)) (hasheq 'norm-laplacian #f)))))
 
 (define (fit-vectors rows cols vals [n ring-n])
   (spectral-embedding-fit-graph rows cols vals n))
@@ -355,7 +396,9 @@
          "vals: entry 1: expected a finite weight of at least 0, got -1"
          (fault (graph-edit (graph-map-vals ring past-sum) #:vals (set-entry 1 -1.0)))))
    (unit-weight-rows)
-   (eigen-rows)))
+   (eigen-rows)
+   (asymmetric-rows)
+   (heavy-rows)))
 
 (test-gpu "L13: fit-graph refuses each bad graph with its message, the first refusal winning"
   (for ([r (in-list (graph-rows-of))])
@@ -376,11 +419,31 @@
     (check-true (< (apply max (eigen-residuals g rows)) residual-bound)
                 (format "~a samples" (length rows)))))
 
-(test-gpu "L13: a graph refusal names no remedy, and heavy weights only where the weights span 2^8"
+(test-gpu "L13: a unit-weight graph refusal names no remedy"
   (for ([r (in-list (append (unit-weight-rows) (eigen-rows)))])
     (check-false (regexp-match? #rx"random-state|norm-laplacian off|orders of magnitude"
                                 (exn-message (raised (row-call r))))
                  (row-id r))))
+
+(test-gpu "L13: the heavy-weight advice needs summed weights spanning 2^8, without norm-laplacian"
+  (for ([r (in-list (heavy-rows))]
+        [advised? (in-list '(#f #t #f #t))])
+    (check-equal? (regexp-match? #rx"orders of magnitude" (exn-message (raised (row-call r))))
+                  advised?
+                  (row-id r))))
+
+(test-gpu "L13: a refused graph that is not symmetric is named so, not blamed on repeated eigenvalues"
+  (for ([r (in-list (asymmetric-rows))])
+    (define message (exn-message (raised (row-call r))))
+    (check-true (regexp-match? #rx"; the graph is not symmetric$" message) (row-id r))
+    (check-false (regexp-match? #rx"repeats eigenvalues" message) (row-id r))))
+
+(test-gpu "L13: a column on samples without edges is an eigenvector of the unit diagonal, and fits"
+  (define g (with-isolated (unit-path 12) 30))
+  (define rows (embedded (embedded-graph g (hasheq 'n-components 6))))
+  (define residuals (eigen-residuals g rows))
+  (check-true (and (finite-rows? rows) (< (apply max residuals) residual-bound))
+              (format "residuals ~a" residuals)))
 
 (test-pools "L13: a graph refusal leaves the RMM pool where it was"
   (for ([r (in-list (graph-rows-of))])

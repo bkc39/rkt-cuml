@@ -20,15 +20,15 @@ inline void require_solved(const float* e, int64_t n, int64_t k,
   }
 }
 
-inline void require_nonzero_columns(const float* columns, int64_t n, int64_t k,
-                                    const char* advice,
-                                    rmm::cuda_stream_view stream) {
+template <typename Advice>
+void require_nonzero_columns(const float* columns, int64_t n, int64_t k,
+                             Advice&& advice, rmm::cuda_stream_view stream) {
   const int64_t c = first_zero_row(columns, k, n, stream);
   if (c >= 0) {
     throw logic_error(
         std::format("embedding: column {} is zero: the eigensolver found no "
                     "eigenvector of this graph{}",
-                    c, advice));
+                    c, advice()));
   }
 }
 
