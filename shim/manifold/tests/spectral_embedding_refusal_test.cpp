@@ -299,8 +299,7 @@ std::vector<manifold::column_fit> ring_fits(const std::vector<float>& columns,
                                normalised);
 }
 
-TEST(SpectralEmbeddingRefusals, ColumnFitsMeasureTheEigenResidual) {
-  CUMLRKT_REQUIRE_GPU();
+std::vector<float> ones_cosine_and_first() {
   std::vector<float> columns(3 * ring, 0.0F);
   for (int64_t i = 0; i < ring; ++i) {
     columns[i] = 1.0F;
@@ -308,17 +307,30 @@ TEST(SpectralEmbeddingRefusals, ColumnFitsMeasureTheEigenResidual) {
         std::cos(2 * std::numbers::pi * static_cast<double>(i) / ring));
   }
   columns[2 * ring] = 1.0F;
+  return columns;
+}
+
+void expect_fit(const manifold::column_fit& found,
+                const manifold::column_fit& expected,
+                const manifold::column_fit& tolerance) {
+  EXPECT_NEAR(found.residual, expected.residual, tolerance.residual);
+  EXPECT_NEAR(found.spread, expected.spread, tolerance.spread);
+}
+
+TEST(SpectralEmbeddingRefusals, ColumnFitsMeasureTheEigenResidual) {
+  CUMLRKT_REQUIRE_GPU();
+  const std::vector<float> columns = ones_cosine_and_first();
   for (const bool normalised : {false, true}) {
     SCOPED_TRACE(normalised);
     const std::vector<manifold::column_fit> fits =
         ring_fits(columns, 3, normalised);
     ASSERT_EQ(fits.size(), 3U);
-    EXPECT_LT(fits[0].residual, 1e-12);
-    EXPECT_EQ(fits[0].spread, 0.0);
-    EXPECT_LT(fits[1].residual, 1e-6);
-    EXPECT_NEAR(fits[1].spread, 2.0, 1e-6);
-    EXPECT_NEAR(fits[2].residual, std::sqrt(0.5), 1e-12);
-    EXPECT_EQ(fits[2].spread, 1.0);
+    expect_fit(fits[0], {.residual = 0.0, .spread = 0.0},
+               {.residual = 1e-12, .spread = 0.0});
+    expect_fit(fits[1], {.residual = 0.0, .spread = 2.0},
+               {.residual = 1e-6, .spread = 1e-6});
+    expect_fit(fits[2], {.residual = std::sqrt(0.5), .spread = 1.0},
+               {.residual = 1e-12, .spread = 0.0});
   }
 }
 
