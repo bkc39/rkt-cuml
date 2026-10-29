@@ -28,6 +28,7 @@ namespace {
 using cumlrkt::in_device_scope;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
+using cumlrkt::most_float;
 using cumlrkt::most_index;
 using cumlrkt::on_float32_device;
 using cumlrkt::printed;
@@ -48,7 +49,7 @@ constexpr int64_t least_neighbours = 2;
 constexpr int64_t components_per_sample = 3;
 constexpr int64_t least_basis = 20;
 constexpr int64_t least_trials = 2;
-constexpr double most_tol = FLT_MAX;
+constexpr double most_tol = most_float;
 
 struct solver_options {
   int64_t n_clusters;
@@ -254,9 +255,9 @@ void require_sound_graph(const coo& c, int64_t n,
   if (s.first_fault >= 0) {
     throw logic_error(fault_message(c, s.first_fault, n, stream));
   }
-  if (s.total > FLT_MAX) {
+  if (s.total > most_float) {
     throw logic_error(std::format("vals: the weights sum to {}, more than {}",
-                                  printed(s.total), printed(FLT_MAX)));
+                                  printed(s.total), printed(most_float)));
   }
   if (!s.any_positive) {
     throw logic_error("vals: expected at least one positive weight, got none");

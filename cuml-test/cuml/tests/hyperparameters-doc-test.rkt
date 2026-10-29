@@ -5,6 +5,7 @@
                   dbscan
                   hdbscan
                   kmeans
+                  pca
                   spectral-clustering
                   standard-scaler)
          (only-in cuml/cluster
@@ -19,6 +20,7 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-params)
+         (only-in cuml/decomposition pca-fit pca-fit-transform pca-params)
          (only-in cuml/preprocessing
                   standard-scaler-fit
                   standard-scaler-fit-transform
@@ -42,11 +44,13 @@
     [_ '()]))
 
 (define documented
-  (append-map
-   defprocs
-   (append-map
-    manual-forms
-    '("clustering.scrbl" "spectral.scrbl" "hdbscan.scrbl" "preprocessing.scrbl" "estimators.scrbl"))))
+  (append-map defprocs
+              (append-map manual-forms
+                          '("clustering.scrbl" "spectral.scrbl"
+                                               "hdbscan.scrbl"
+                                               "preprocessing.scrbl"
+                                               "decomposition.scrbl"
+                                               "estimators.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -96,7 +100,17 @@
 
 (define standard-scaler-keys '(with-mean with-std))
 
-(define (scaler-fit-entry name proc)
+(define pca-keys '(n-components whiten solver tol iterations))
+
+(define (estimator-entry name proc)
+  (list name
+        proc
+        '(#:resources)
+        (list (argument #f 'params #f))
+        (list (argument '#:resources 'resources #f))
+        '()))
+
+(define (fit-entry name proc)
   (list name
         proc
         '(#:params #:resources)
@@ -137,12 +151,7 @@
                                (list (argument '#:params 'params #f)
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '())
-                         (list 'dbscan
-                               dbscan
-                               '(#:resources)
-                               (list (argument #f 'params #f))
-                               (list (argument '#:resources 'resources #f))
-                               '())))
+                         (estimator-entry 'dbscan dbscan)))
    (table-bindings
     single-linkage-params
     single-linkage-keys
@@ -155,12 +164,7 @@
            (list (argument '#:params 'params #f)
                  (argument '#:resources 'resources '(current-device-resources)))
            '(linkage))
-     (list 'agglomerative-clustering
-           agglomerative-clustering
-           '(#:resources)
-           (list (argument #f 'params #f))
-           (list (argument '#:resources 'resources #f))
-           '())))
+     (estimator-entry 'agglomerative-clustering agglomerative-clustering)))
    (table-bindings spectral-clustering-params
                    spectral-clustering-keys
                    (list (list 'spectral-clustering-params
@@ -186,12 +190,7 @@
                                (list (argument '#:params 'params #f)
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '(n-neighbors affinity))
-                         (list 'spectral-clustering
-                               spectral-clustering
-                               '(#:resources)
-                               (list (argument #f 'params #f))
-                               (list (argument '#:resources 'resources #f))
-                               '())))
+                         (estimator-entry 'spectral-clustering spectral-clustering)))
    (table-bindings
     hdbscan-params
     hdbscan-keys
@@ -203,25 +202,21 @@
                 (list (argument '#:params 'params #f)
                       (argument '#:resources 'resources '(current-device-resources)))
                 '(metric build-algo))
-          (list 'hdbscan
-                hdbscan
-                '(#:resources)
-                (list (argument #f 'params #f))
-                (list (argument '#:resources 'resources #f))
-                '())))
+          (estimator-entry 'hdbscan hdbscan)))
    (table-bindings
     standard-scaler-params
     standard-scaler-keys
     (list
      (list 'standard-scaler-params standard-scaler-params '() (list (argument #f 'base #f)) '() '())
-     (scaler-fit-entry 'standard-scaler-fit standard-scaler-fit)
-     (scaler-fit-entry 'standard-scaler-fit-transform standard-scaler-fit-transform)
-     (list 'standard-scaler
-           standard-scaler
-           '(#:resources)
-           (list (argument #f 'params #f))
-           (list (argument '#:resources 'resources #f))
-           '())))))
+     (fit-entry 'standard-scaler-fit standard-scaler-fit)
+     (fit-entry 'standard-scaler-fit-transform standard-scaler-fit-transform)
+     (estimator-entry 'standard-scaler standard-scaler)))
+   (table-bindings pca-params
+                   pca-keys
+                   (list (list 'pca-params pca-params '() (list (argument #f 'base #f)) '() '())
+                         (fit-entry 'pca-fit pca-fit)
+                         (fit-entry 'pca-fit-transform pca-fit-transform)
+                         (estimator-entry 'pca pca)))))
 
 (define-namespace-anchor anchor)
 

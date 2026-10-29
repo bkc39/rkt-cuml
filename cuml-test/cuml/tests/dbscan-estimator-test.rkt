@@ -28,14 +28,11 @@
                   mat
                   result->lists
                   vec)
-         (only-in "private/estimator-data.rkt" apply-options round-trips)
+         (only-in "private/estimator-data.rkt" apply-options printed round-trips)
          (only-in "private/kmeans-data.rkt" dtypes))
 
 (define changed
   (hasheq 'eps 0.3 'min-samples 10 'metric 'cosine 'out-dtype 'int64 'max-mbytes-per-batch 4))
-
-(define (printed v)
-  (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "L19: the default parameters, and every keyword round-trips"
   (check-equal?

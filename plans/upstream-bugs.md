@@ -1,6 +1,6 @@
 # Upstream bugs
 
-Found by the cluster arc (#5) and the metrics leg (A2, #34) against libcuml 26.08.00, cuVS 26.08.01 and raft
+Found by the cluster arc (#5), the metrics leg (A2, #34) and the PCA leg (A4, #47) against libcuml 26.08.00, cuVS 26.08.01 and raft
 26.08. None is filed upstream (owner, 2026-10-20: log locally). Each is refused,
 worked around or documented by the shim, and a test pins it; the leg's PR
 packet (§4) has the detail.
@@ -33,6 +33,15 @@ packet (§4) has the detail.
 | A2 #34 | ARI sizes its table by the label range, not the label count: labels {0, 10⁵} ask for 80 GB, {0, 2⁴⁰} int64 for 17.6 TB | `metrics/adjusted_rand_index` | labels remapped to dense codes |
 | A2 #34 | ARI on labels {0, 46341} is an illegal address (context poisoned): the table index is 32-bit | `metrics/adjusted_rand_index` | refused past 46340 distinct labels |
 | A2 #34 | raw silhouette with labels outside [0, n_labels) is silent garbage (scores above 1) | `metrics/silhouette_score` | labels remapped to dense codes |
+| A4 #47 | whitened transform and inverse scale by the call's own row count: 1 row is all zeros, 10 rows ×0.095 | `raft/linalg/detail/pca.cuh` `pca_transform`, `pca_inverse_transform` | whiten never passed; the shim scales |
+| A4 #47 | noise variance averages d − k eigenvalues, null ones included, when n < d | `pca.cuh` `trunc_comp_exp_vars` | fit min(n, d) components; mean of λ[k:m] |
+| A4 #47 | float32 explained variances go negative; singular values clamp, variances don't | `pca.cuh` | clamped to 0 |
+| A4 #47 | covariance overflow (float32 3e38, float64 1e160) is NaN everywhere; float32 1e19 is garbage | `pca.cuh` (covariance gemm) | refused past √(max/(4nd)) |
+| A4 #47 | covariance underflow: below about 1e-19 (float32) or 1e-154 (float64) XᵀX is subnormal or 0, so λ and σ are 0, the components arbitrary, and Jacobi returns NaN components (float32 1e-20, float64 1e-160) | `pca.cuh` (covariance gemm), `eigJacobi` | X fitted at a power-of-two scale, results scaled back |
+| A4 #47 | n_components above n_rows accepted: arbitrary null-space components | `pca.cuh` `pca_fit` | refused past min(n, d) |
+| A4 #47 | the column mean is not reproducible run to run | `raft::stats::mean` | documented; tolerance laws |
+| A4 #47 | Jacobi: 0 sweeps means cusolver's default, 2³¹ wraps to int, non-convergence is silent; `syevd`'s dev_info is unread | `raft/linalg/detail/eig.cuh` | 0 and above 2³¹−1 refused; non-convergence documented |
+| A4 #47 | `pcaFit` and `pcaTransform` write to their input | `pca.cuh` | the shim works on a copy |
 
 ## cuVS
 

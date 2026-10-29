@@ -23,7 +23,7 @@
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" mat)
-         (only-in "private/estimator-data.rkt" apply-options round-trips)
+         (only-in "private/estimator-data.rkt" apply-options printed round-trips)
          (only-in "private/kmeans-data.rkt" blank-vector)
          (only-in "private/spectral-data.rkt"
                   blobs
@@ -41,9 +41,6 @@
           'n-init 4
           'eigen-tol 1e-5
           'affinity 'precomputed))
-
-(define (printed v)
-  (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "the default parameters, and every keyword round-trips"
   (check-equal? (spectral-clustering-params)

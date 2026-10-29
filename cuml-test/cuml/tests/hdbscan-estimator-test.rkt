@@ -25,7 +25,7 @@
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" mat vec)
-         (only-in "private/estimator-data.rkt" apply-options hash-remove* round-trips)
+         (only-in "private/estimator-data.rkt" apply-options hash-remove* printed round-trips)
          (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?))
 
 (define changed
@@ -38,9 +38,6 @@
           'allow-single-cluster #t
           'metric 'euclidean
           'build-algo 'brute-force))
-
-(define (printed v)
-  (list (format "~a" v) (format "~s" v) (format "~v" v)))
 
 (test-case "the default parameters, and every keyword round-trips"
   (check-equal? (hdbscan-params)

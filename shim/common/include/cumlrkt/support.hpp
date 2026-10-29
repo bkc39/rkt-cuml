@@ -78,6 +78,14 @@ inline void require_non_negative(const char* what, double got) {
   }
 }
 
+inline void require_finite_non_negative(const char* what, double got) {
+  if (!std::isfinite(got) || got < 0) {
+    throw logic_error(
+        std::format("{}: expected a finite value of at least 0, got {}", what,
+                    printed(got)));
+  }
+}
+
 inline void require_at_most(const char* what, int64_t got, int64_t most) {
   if (got > most) {
     throw logic_error(
@@ -128,10 +136,37 @@ void require_bounded_rows(const char* name, const matrix<T, int64_t>& x,
   }
 }
 
-inline void require_some(const char* name, const char* axis, int64_t extent) {
-  if (extent == 0) {
-    throw logic_error(std::string(name) + ": expected at least 1 " + axis +
-                      ", got 0");
+template <typename T>
+void require_finite(const char* name, const matrix<T, int64_t>& x,
+                    rmm::cuda_stream_view stream) {
+  const int64_t i = first_non_finite(x.data, x.n * x.d, stream);
+  if (i >= 0) {
+    const T got = read_one(x.data, i, stream);
+    throw logic_error(
+        std::format("{}: row {}, column {}: expected a finite value, got {}",
+                    name, i / x.d, i % x.d, printed(static_cast<double>(got))));
+  }
+}
+
+template <typename T>
+double require_magnitudes(const char* name, const matrix<T, int64_t>& x,
+                          double most, rmm::cuda_stream_view stream) {
+  const double largest = largest_magnitude(x.data, x.n * x.d, stream);
+  if (!(largest <= most)) {
+    const int64_t i = first_large_element(x.data, x.n * x.d, most, stream);
+    const T got = read_one(x.data, i, stream);
+    throw logic_error(std::format(
+        "{}: row {}, column {}: expected a magnitude of at most {}, got {}",
+        name, i / x.d, i % x.d, printed(most), printed<T>(got)));
+  }
+  return largest;
+}
+
+inline void require_some(const char* name, const char* axis, int64_t extent,
+                         int64_t least = 1) {
+  if (extent < least) {
+    throw logic_error(std::format("{}: expected at least {} {}{}, got {}", name,
+                                  least, axis, least == 1 ? "" : "s", extent));
   }
 }
 

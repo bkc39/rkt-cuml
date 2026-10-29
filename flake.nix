@@ -32,6 +32,7 @@
 
       families = [
         "cluster"
+        "decomposition"
         "metrics"
         "preprocessing"
       ];

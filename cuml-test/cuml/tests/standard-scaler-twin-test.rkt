@@ -14,7 +14,8 @@
          (only-in racket/match match-define match-lambda)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list*)
+         (only-in "private/estimator-data.rkt" listed)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
          (only-in "private/scaler-data.rkt"
                   constant-rows
@@ -69,9 +70,6 @@
   (standard-scaler-fit (rows->matrix (dataset-rows data) dt)
                        #:with-mean with-mean
                        #:with-std with-std))
-
-(define (listed v)
-  (and v (device-vector->list v)))
 
 (define (theirs-vector result key)
   (define v (hash-ref result key))

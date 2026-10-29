@@ -3,6 +3,7 @@
 (require (only-in cuml) ;; noqa
          (only-in cuml/cluster kmeans-fit)
          (only-in cuml/cluster/private/native libcuml-version)
+         (only-in cuml/decomposition pca-fit)
          (only-in cuml/preprocessing standard-scaler-fit)
          (only-in rackunit check-equal? check-false check-not-exn test-case)
          (only-in raft raft-version)
@@ -44,3 +45,19 @@
                                                                       "libcuml.so"))])
                                          (regexp-match? (regexp-quote library) maps)))))
                 '(0 "(#t #f #f)" "")))
+
+(test-case "cuml re-exports cuml/decomposition's principal component analysis"
+  (check-equal? (dynamic-require 'cuml 'pca-fit) pca-fit))
+
+(test-case "L20: cuml/decomposition maps its own shim, and not the cluster, metrics or preprocessing shims"
+  (check-equal?
+   (run-program `(module m racket/base
+                   (require cuml/decomposition
+                            (only-in racket/file file->string))
+                   (define maps (file->string "/proc/self/maps"))
+                   (write (for/list ([library (in-list '("libcumlrkt_decomposition.so"
+                                                         "libcumlrkt_cluster.so"
+                                                         "libcumlrkt_metrics.so"
+                                                         "libcumlrkt_preprocessing.so"))])
+                            (regexp-match? (regexp-quote library) maps)))))
+   '(0 "(#t #f #f #f)" "")))

@@ -3,8 +3,8 @@
 (require (only-in racket/list make-list remove-duplicates)
          (only-in racket/match match-define)
          (only-in racket/math pi)
-         (only-in racket/sequence in-slice sequence->list)
-         (only-in raft list*->device-matrix list->device-vector))
+         (only-in raft list*->device-matrix list->device-vector)
+         (only-in "scaler-data.rkt" rows-of))
 
 (provide bijection
          choose2
@@ -71,9 +71,6 @@
        (define v (random g))
        (define r (sqrt (* -2.0 (log u))))
        (loop (- left 2) (list* (* r (sin (* 2.0 pi v))) (* r (cos (* 2.0 pi v))) acc))])))
-
-(define (rows-of xs d)
-  (sequence->list (in-slice d xs)))
 
 (define (normal-rows n d seed)
   (rows-of (normals (* n d) seed) d))

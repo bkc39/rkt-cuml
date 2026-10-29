@@ -552,3 +552,57 @@ Follow-ups are GitHub issues.
   own field declarations (`name :`), wherever the header renders them. Any
   unlinked use of the name outside that box, a bare identifier on a code-block
   line included, is still a finding.
+
+## Decisions recorded in leg A4 (#47)
+
+- **A4-a.** PCA is libcuml's `pcaFit`, `pcaTransform` and
+  `pcaInverseTransform` on transposed column-major copies, with the shim's
+  post-fit and scaling kernels; `libcumlrkt_decomposition.so` links libcuml.
+  The copies also keep the caller's X intact, since the entries write to
+  their input.
+- **A4-b.** The results are in X's dtype; float32 is not widened.
+- **A4-c.** cuML's column mean is not reproducible run to run, so there is
+  no bitwise law for fits: transform and inverse of one result, and fits of
+  exact-sum data, are bitwise; the rest is the twin's tolerances. The manual
+  says two fits may differ in the last bits.
+- **A4-d.** The shim applies sklearn's sign rule exactly: the first index of
+  largest magnitude is made positive. cuML 26.08 already returns these signs
+  on every input probed, ties included, so the kernel is a guard against an
+  upstream change; a gtest pins it on hand-built components.
+- **A4-e.** The shim fits min(n, d) components and reports sklearn's
+  definitions: noise is the mean of λ[k:m], λ is clamped at 0, and the ratio
+  is λ/Σλ[:m], 0 when the sum is 0.
+- **A4-f.** `n-components` is in [1, min(n, d)]; `#f` means min(n, d).
+- **A4-g.** Whitening is the shim's, never cuML's: the transform divides by
+  max(√λ, ε) of the fit, the inverse multiplies by √λ.
+- **A4-h.** Elements above √(max/(4·n·d)) are refused at fit, above
+  max/(4·d) at transform, times min(1, minⱼ max(√λⱼ, ε)) when whitening, and
+  above max/(4·k·max(1, √λmax)) (whitened) or max/(4·k) at inverse, before
+  any allocation.
+- **A4-i.** A matrix whose rows are all equal is refused.
+- **A4-j.** One row or one column is refused.
+- **A4-k.** The Jacobi defaults are `#:tol 0.0` and `#:iterations 15`; 0
+  iterations are refused. The names stay `#:solver` and `#:iterations`; the
+  twin maps `svd_solver` and `iterated_power`.
+- **A4-l.** Transform and inverse refuse X in another dtype than the fit's.
+- **A4-m.** `pcaFitTransform` is not bound: `pca-fit-transform` is fit,
+  then transform, and returns `(values result matrix)`.
+- **A4-n.** `pca-result` holds components, explained-variance,
+  explained-variance-ratio, singular-values, mean, noise-variance,
+  n-samples and whiten.
+- **A4-o.** A3's finiteness scan moves into `shim/common` as
+  `first_non_finite` and `require_finite`, beside the new element-magnitude
+  and distinct-row scans; preprocessing calls the shared code.
+- **A4-p.** `tol` crosses as `_double*`, so an exact real such as `0` or
+  `-1` reaches the shim's check (the documented contract is `real?`).
+- **A4-q.** Four laws were amended against measurements (disputes D1–D4):
+  L4 allows 8·d·u for Jacobi (4·d·u full); Jacobi noise and ratio take the
+  Jacobi λ bound 8·d·u·λ₁; the L14 transform bound adds ‖e_μ‖₂, the mean
+  bound's norm, scaled as the whitened transform scales; and the component
+  check skips components with λᵢ ≤ 64·u·λ₁, which span the null space.
+- **A4-r.** X whose largest magnitude is below √(least normal)/ε (2⁻⁴⁰
+  float32, 2⁻⁴⁵⁹ float64) is fitted as X·2ᵉ, its largest magnitude in
+  [1, 2), in the transposed copy; components and ratio are kept, λ and noise
+  scaled by 2⁻²ᵉ, σ and the mean by 2⁻ᵉ, so XᵀX no longer underflows
+  (amended after A5 r0 finding 1). Other X has e = 0 and bitwise the same
+  fit. `scale_exponent` in `shim/common` is shared with truncated SVD.

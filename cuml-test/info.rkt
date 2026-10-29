@@ -8,11 +8,13 @@
 (define build-deps
   '("at-exp-lib" "cuml-cluster-lib"
                  "cuml-core-lib"
+                 "cuml-decomposition-lib"
                  "cuml-doc"
                  "cuml-lib"
                  "cuml-metrics-lib"
                  "cuml-preprocessing-lib"
                  "datasets-core"
+                 "math-lib"
                  "pict-lib"
                  ("raft" #:version "0.2")
                  "rackunit-lib"

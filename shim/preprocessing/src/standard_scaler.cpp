@@ -25,14 +25,11 @@ using cumlrkt::logic_error;
 using cumlrkt::matrix;
 using cumlrkt::most_index;
 using cumlrkt::on_floats;
-using cumlrkt::printed;
-using cumlrkt::read_one;
 using cumlrkt::require_at_least;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
 using cumlrkt::settle;
 using cumlrkt::preprocessing::column_statistics;
-using cumlrkt::preprocessing::first_non_finite;
 using cumlrkt::preprocessing::scales_of;
 using cumlrkt::preprocessing::standardized;
 using cumlrkt::preprocessing::unstandardized;
@@ -48,13 +45,7 @@ matrix<T, int64_t> samples(const rr_view* x) {
 
 template <typename T>
 void require_finite(const raft::handle_t& handle, const matrix<T, int64_t>& x) {
-  const int64_t i = first_non_finite(x.data, x.n * x.d, handle);
-  if (i >= 0) {
-    const T got = read_one(x.data, i, raft::resource::get_cuda_stream(handle));
-    throw logic_error(
-        std::format("X: row {}, column {}: expected a finite value, got {}",
-                    i / x.d, i % x.d, printed(static_cast<double>(got))));
-  }
+  cumlrkt::require_finite("X", x, raft::resource::get_cuda_stream(handle));
 }
 
 struct statistics {

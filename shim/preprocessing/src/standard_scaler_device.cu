@@ -1,4 +1,3 @@
-#include <thrust/find.h>
 #include <thrust/for_each.h>
 #include <thrust/iterator/counting_iterator.h>
 
@@ -17,15 +16,6 @@
 namespace cumlrkt::preprocessing {
 
 namespace {
-
-template <typename T>
-struct non_finite {
-  const T* x;
-
-  __device__ bool operator()(int64_t i) const {
-    return !isfinite(x[i]);
-  }
-};
 
 template <typename T>
 struct widened_column {
@@ -140,16 +130,6 @@ void apply(const raft::handle_t& handle, const T* x, const double* mean,
 }  // namespace
 
 template <typename T>
-int64_t first_non_finite(const T* x, int64_t count,
-                         const raft::handle_t& handle) {
-  const auto stream = raft::resource::get_cuda_stream(handle);
-  const thrust::counting_iterator<int64_t> elements(0);
-  const int64_t i = *thrust::find_if(rmm::exec_policy(stream), elements,
-                                     elements + count, non_finite<T>{x});
-  return i == count ? -1 : i;
-}
-
-template <typename T>
 void column_statistics(const raft::handle_t& handle, const T* x, int64_t n,
                        int64_t d, int64_t chunk, double* scratch,
                        double* residual, double* mean, double* var) {
@@ -198,10 +178,6 @@ void unstandardized(const raft::handle_t& handle, const T* x,
   apply<T, true>(handle, x, mean, scale, out, n, d);
 }
 
-template int64_t first_non_finite<float>(const float*, int64_t,
-                                         const raft::handle_t&);
-template int64_t first_non_finite<double>(const double*, int64_t,
-                                          const raft::handle_t&);
 template void column_statistics<float>(const raft::handle_t&, const float*,
                                        int64_t, int64_t, int64_t, double*,
                                        double*, double*, double*);

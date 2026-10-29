@@ -83,6 +83,17 @@ cumlrkt_family(preprocessing NO_LIBCUML
         preprocessing/tests/standard_scaler_refusal_test.cpp
 )
 
+cumlrkt_family(decomposition
+  SOURCES decomposition/src/decomposition.cpp decomposition/src/pca.cpp
+          decomposition/src/pca_device.cu
+  TESTS decomposition/tests/decomposition_test.cpp
+        decomposition/tests/pca_test.cpp
+        decomposition/tests/pca_refusal_test.cpp
+        decomposition/tests/pca_sign_test.cpp
+        decomposition/tests/scale_test.cpp
+        decomposition/src/pca_device.cu
+)
+
 cumlrkt_family(probe TEST_ONLY
   SOURCES probe/src/probe.cpp
   TESTS probe/tests/model_test.cpp
