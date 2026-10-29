@@ -16,7 +16,10 @@ groups of different densities, which no single DBSCAN radius fits.
 The eruptions are those of @secref["ex-dbscan"], standardized:
 
 @examples[#:eval ev #:label #f
-(define eruptions (standardized-matrix 'faithful '("eruptions" "waiting")))
+(define-values (faithful-scaler eruptions)
+  (~> (load-dataset-table 'faithful)
+      (table->device-matrix #:columns '("eruptions" "waiting"))
+      standard-scaler-fit-transform))
 (define labels (labels-of (hdbscan) eruptions))
 (list (sizes labels) (count negative? labels))
 ]
@@ -41,7 +44,7 @@ A fit keeps what @racket[hdbscan-approximate-predict] needs to place new
 samples without refitting. Fit the first 200 eruptions and place the last 72:
 
 @examples[#:eval ev #:label #f
-(define scaled (rows (standardized (dataset-columns 'faithful '("eruptions" "waiting")))))
+(define scaled (device-matrix->list* eruptions))
 (define first-200 (hdbscan-fit (rows->matrix (take scaled 200))))
 (define placed
   (~> (hdbscan-approximate-predict first-200 (rows->matrix (drop scaled 200)))

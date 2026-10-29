@@ -19,6 +19,7 @@
          transformer?
          transform
          fit-transform
+         inverse-transform
          gen:scorer
          scorer?
          score)
@@ -44,11 +45,14 @@
 (define-generics transformer
                  (transform transformer X)
                  (fit-transform transformer X [y] #:sample-weight [sample-weight])
+                 (inverse-transform transformer X)
                  #:requires (transform)
                  #:fallbacks
                  [(define/generic generic-transform transform)
                   (define (fit-transform transformer X [y #f] #:sample-weight [sample-weight #f])
-                    (generic-transform (fit transformer X y #:sample-weight sample-weight) X))])
+                    (generic-transform (fit transformer X y #:sample-weight sample-weight) X))
+                  (define (inverse-transform transformer _X)
+                    (raise-support-error 'inverse-transform transformer))])
 
 (define-generics scorer (score scorer X [y] #:sample-weight [sample-weight]) #:requires (score))
 

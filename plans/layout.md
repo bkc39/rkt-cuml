@@ -501,3 +501,54 @@ Follow-ups are GitHub issues.
   cluster is rewired with no behaviour change.
 - **A2-k.** No hyperparameter tables and no estimators: the metrics are
   plain `define/who` procedures.
+
+## Decisions recorded in leg A3 (#33)
+
+- **A3-a.** `standard-scaler-result` holds mean, var, scale, n-samples,
+  n-features, with-mean and with-std: sklearn keeps `mean_` under
+  `with_mean=False`, and the column check needs n-features with both flags
+  off.
+- **A3-b.** The statistics come from raft's column-major
+  `meanvar<double>` over a float64 column-major scratch, a chunk of columns
+  at a time: the mean from one pass, the variance from a second over the
+  centred scratch (one pass was 8.7e-7 off sklearn on a 1e-4 spread over
+  1e6). Deterministic, and within about 1e-14 of sklearn. Raft's
+  row-major `meanvar` is rejected: its last bits change from run to run and
+  its float32 variances are up to 8.7e-4 off sklearn's (probes F14, F15).
+  The owner accepted the two-pass variance in round 1.
+- **A3-c.** The scratch is capped by the private parameter
+  `current-scratch-elements`, default 2²⁶ (512 MiB); chunking changes no bit.
+- **A3-d.** The statistics are float64 whatever X's dtype; the transforms
+  round them to X's dtype. Integer and float16 X stay refused.
+- **A3-e.** NaN and infinities are refused at fit, transform and inverse,
+  with the location; sklearn ignores NaN at fit and passes it through at
+  transform. The fit's entry says so.
+- **A3-f.** A column gets scale 1 by sklearn's `_is_constant_feature` mask,
+  var ≤ n·ε·var + (n·mean·ε)² in float64 (probes F7, F18), not only at an
+  exact zero.
+- **A3-g.** `gen:transformer` gains an optional `inverse-transform`, whose
+  fallback raises `exn:fail:support`.
+- **A3-h.** `define-estimator`'s `#:labels` is optional (no `gen:clusterer`
+  without it), and it takes an `[inverse-transform proc]` entry.
+- **A3-i.** `cumlrkt_family` takes `NO_LIBCUML`: `libcumlrkt_preprocessing.so`
+  links `raftrkt::headers` only, and loading `cuml/preprocessing` maps no
+  libcuml.
+- **A3-j.** Sample weights are refused (`#:no-sample-weight`) pending a
+  follow-up; raft has no weighted variance.
+- **A3-k.** `standard-scaler-fit-transform` returns `(values result
+  transformed)`; the generic `fit-transform` returns the matrix.
+- **A3-l.** The guide's chapters scale with `standard-scaler-fit-transform`;
+  `standardized` and `standardized-matrix` retire.
+- **A3-m.** The census finds `preprocessing` from `cuml-preprocessing-lib`, as
+  A2's derivation finds every family from its package.
+- **A3-n.** L6 asserts both bounds (decided in round 1): with exact host
+  moments and u = 2⁻²⁴ or 2⁻⁵³, |mean t − (x̄ − T(m))/T(s)| ≤ u checks the
+  transform's arithmetic, |mean t| ≤ 4u·(|m|/s + 1) checks the mean statistic,
+  and |sd t − 1| ≤ 4u. Fixed bounds were unreachable for |m|/s up to 1e5.
+- **A3-o.** A scale that rounds to 0 in X's dtype gives non-finite output, as
+  sklearn's does, and the inverse refuses it. The transform's entry says so.
+- **A3-p.** The doc link check skips a struct field's name only inside that
+  struct's definition box: each `boxed RBoxed` table skips the names of its
+  own field declarations (`name :`), wherever the header renders them. Any
+  unlinked use of the name outside that box, a bare identifier on a code-block
+  line included, is still a finding.

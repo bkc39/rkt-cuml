@@ -33,6 +33,7 @@
       families = [
         "cluster"
         "metrics"
+        "preprocessing"
       ];
       cumlPackages = map (f: "cuml-${f}-lib") families ++ [
         "cuml-core-lib"

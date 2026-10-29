@@ -18,7 +18,7 @@
   (no-noqa        ("scripts/no-noqa.sh" #:shell ""))
   (gpu-suite-signals ("scripts/gpu-suite-signals.sh" #:shell ""))
   (layout         "racket scripts/check-layout.rkt")
-  (pkg-deps       "scripts/pkg-deps.sh cuml-core-lib cuml-cluster-lib cuml-metrics-lib cuml-lib cuml-doc cuml-test cuml")
+  (pkg-deps       "scripts/pkg-deps.sh cuml-core-lib cuml-cluster-lib cuml-metrics-lib cuml-preprocessing-lib cuml-lib cuml-doc cuml-test cuml")
   (review         "scripts/review.sh")
   (compile        "raco make -v cuml-lib/cuml/main.rkt cuml-doc/cuml/scribblings/cuml.scrbl scripts/check-layout.rkt scripts/check-bindings.rkt scripts/check-doc-links.rkt")
   (test           "raco test --process --timeout 45 cuml-test lint scripts/check-layout.rkt scripts/check-bindings.rkt scripts/check-doc-links.rkt")

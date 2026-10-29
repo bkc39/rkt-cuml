@@ -31,7 +31,7 @@ function(cumlrkt_apply_nix_cflags target)
 endfunction()
 
 function(cumlrkt_family family)
-  cmake_parse_arguments(PARSE_ARGV 1 arg "TEST_ONLY" "" "SOURCES;TESTS")
+  cmake_parse_arguments(PARSE_ARGV 1 arg "TEST_ONLY;NO_LIBCUML" "" "SOURCES;TESTS")
   if(arg_TEST_ONLY AND NOT BUILD_TESTING)
     return()
   endif()
@@ -54,7 +54,12 @@ function(cumlrkt_family family)
     PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/${family}/src
   )
-  target_link_libraries(${lib} PRIVATE raftrkt::headers cuml_runtime)
+  if(arg_NO_LIBCUML)
+    target_include_directories(${lib} PRIVATE ${CUML_INCLUDE_DIR})
+    target_link_libraries(${lib} PRIVATE raftrkt::headers)
+  else()
+    target_link_libraries(${lib} PRIVATE raftrkt::headers cuml_runtime)
+  endif()
   target_link_options(${lib} PRIVATE "LINKER:--exclude-libs,ALL"
     "$<$<NOT:$<BOOL:${CUMLRKT_SANITIZE}>>:LINKER:--no-undefined>")
   cumlrkt_enable_warnings(${lib})

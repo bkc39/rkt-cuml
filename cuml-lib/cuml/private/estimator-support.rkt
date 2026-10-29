@@ -1,6 +1,8 @@
 #lang racket/base
 
 (require (for-syntax racket/base
+                     (only-in racket/list append-map group-by)
+                     (only-in racket/match match-define)
                      (only-in racket/syntax format-id)
                      syntax/parse/pre)
          (only-in cuml/core/private/define-who define-checked)
@@ -58,23 +60,32 @@
 
 (begin-for-syntax
   (define-syntax-class applied
-    #:attributes ([clause 1])
-    #:datum-literals (predict score transform)
+    #:attributes (generic [method 1])
+    #:datum-literals (inverse-transform predict score transform)
     (pattern [predict proc:expr]
-      #:with (clause ...) #'(#:methods gen:predictor
-                                       [(define (predict e X)
-                                          (on-model proc 'predict e X))]))
+      #:with generic #'gen:predictor
+      #:with (method ...) #'((define (predict e X)
+                               (on-model proc 'predict e X))))
     (pattern [transform proc:expr]
-      #:with (clause ...) #'(#:methods gen:transformer
-                                       [(define (transform e X)
-                                          (on-model proc 'transform e X))
-                                        (define (fit-transform e X [_y #f] #:sample-weight [w #f])
-                                          (on-fit proc 'fit-transform e X w))]))
+      #:with generic #'gen:transformer
+      #:with (method ...) #'((define (transform e X)
+                               (on-model proc 'transform e X))
+                             (define (fit-transform e X [_y #f] #:sample-weight [w #f])
+                               (on-fit proc 'fit-transform e X w))))
+    (pattern [inverse-transform proc:expr]
+      #:with generic #'gen:transformer
+      #:with (method ...) #'((define (inverse-transform e X)
+                               (on-model proc 'inverse-transform e X))))
     (pattern [score proc:expr (~optional (~and weighted #:sample-weight))]
       #:attr weight (and (attribute weighted) #'w)
-      #:with (clause ...) #'(#:methods gen:scorer
-                             [(define (score e X [_y #f] #:sample-weight [w #f])
-                                (on-model proc 'score e X (~? weight (unweighted 'score w))))])))
+      #:with generic #'gen:scorer
+      #:with (method ...) #'((define (score e X [_y #f] #:sample-weight [w #f])
+                               (on-model proc 'score e X (~? weight (unweighted 'score w)))))))
+
+  (define (grouped generics methods)
+    (for/list ([group (in-list (group-by car (map cons generics methods) free-identifier=?))])
+      (match-define (cons (cons generic _) _) group)
+      (cons generic (append-map cdr group))))
 
   (define-splicing-syntax-class method-clause
                                 #:attributes ([clause 1])
@@ -91,10 +102,11 @@
 (define-syntax-parse-rule (define-estimator name:id
                             #:hyperparameters table:table-id
                             #:fit fit/who:id
-                            #:labels labels:expr
+                            (~optional (~seq #:labels labels:expr))
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
-                            (~optional (~seq #:apply model->argument:expr entry:applied ...+))
+                            (~optional (~seq #:apply model->argument:expr entry:applied ...+)
+                                       #:defaults ([(entry.generic 1) '()] [(entry.method 2) '()]))
                             extra:method-clause ...)
   #:with name* (format-id #'name "~a*" #'name)
   #:with (field ...) (for/list ([field (in-list '(hyperparameters settings model))])
@@ -106,6 +118,7 @@
   #:with (key-name ...) (attribute table.keys)
   #:with (keyword ...) (map key->keyword (attribute table.keys))
   #:with (setting-keyword ...) (map key->keyword (syntax->datum #'(setting ...)))
+  #:with ((generic method ...) ...) (grouped (attribute entry.generic) (attribute entry.method))
   #:with weighted? (cond
                      [(attribute no-weight) #'#f]
                      [else #'#t])
@@ -138,10 +151,10 @@
          (name* (table.update 'estimator-set-params 'name (hyperparameters-of e) changes)
                 (settings-of e)
                 #f))]
-      #:methods gen:clusterer
-      [(define (fit-predict e X [_y #f] #:sample-weight [w #f])
-         (labels (fitted 'fit-predict e X w)))]
-      (~? (~@ entry.clause ... ...))
+      (~? (~@ #:methods gen:clusterer
+              [(define (fit-predict e X [_y #f] #:sample-weight [w #f])
+                 (labels (fitted 'fit-predict e X w)))]))
+      (~@ #:methods generic [method ...]) ...
       extra.clause ...
       ...
       #:methods gen:equal+hash

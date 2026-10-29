@@ -8,7 +8,6 @@
          racket/function
          racket/list
          racket/match
-         racket/math
          raft
          threading)
 
@@ -30,8 +29,6 @@
          rows
          rows->matrix
          sizes
-         standardized
-         standardized-matrix
          sweep-figure)
 
 (define (crosstab labels classes)
@@ -51,17 +48,6 @@
 (define (sizes labels)
   (~> (remove* '(-1) labels) (group-by values _) (map length _) (sort >)))
 
-(define (standardized columns)
-  (define (standardize column)
-    (define n (length column))
-    (define mean (/ (apply + column) n))
-    (define sd (sqrt (/ (for/sum ([v (in-list column)]) (sqr (- v mean))) n)))
-    (define spread (if (zero? sd) 1 sd))
-    (map (lambda (v) (~> v (- mean) (/ spread) exact->inexact)) column))
-  (match (memf (negate real?) (append* columns))
-    [(cons value _) (raise-argument-error 'standardized "real?" value)]
-    [#f (map standardize columns)]))
-
 (define (rows columns)
   (apply map list columns))
 
@@ -80,9 +66,6 @@
 
 (define (features name . excluded)
   (~> (load-dataset-table name) dataset-table-names (remove* excluded _)))
-
-(define (standardized-matrix name columns)
-  (~> (dataset-columns name columns) standardized rows rows->matrix))
 
 (define (labels-of estimator samples)
   (device-vector->list (fit-predict estimator samples)))

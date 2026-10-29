@@ -54,8 +54,9 @@ it raises @racket[exn:fail:support] without fitting.}
 @defthing[gen:transformer any/c]{
 
 An estimator that maps samples to new features: the methods
-@racket[transform], required, and @racket[fit-transform], whose fallback is
-@racket[transform] after @racket[fit].}
+@racket[transform], required; @racket[fit-transform], whose fallback is
+@racket[transform] after @racket[fit]; and @racket[inverse-transform],
+optional; its fallback raises @racket[exn:fail:support].}
 
 @defthing[gen:scorer any/c]{
 
@@ -121,6 +122,11 @@ The samples @racket[X] mapped to the features @racket[transformer] learned.}
 
 The samples @racket[X] transformed after fitting @racket[transformer] on
 them.}
+
+@defproc[(inverse-transform [transformer transformer?] [X any/c]) any/c]{
+
+The samples whose @racket[transform] is @racket[X], for a transformer
+that can undo its mapping.}
 
 @defproc[(score [scorer scorer?]
                 [X any/c]
@@ -408,6 +414,39 @@ Whether @racket[v] is an HDBSCAN estimator.}
 
 The @racket[hdbscan-result] of the fit that made @racket[estimator], or
 @racket[#f] when it is unfitted.}
+
+@section[#:tag "standard-scaler-estimator"]{Standard scaler estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(standard-scaler [params (or/c #f hash?) #f]
+                          [#:with-mean with-mean boolean? #t]
+                          [#:with-std with-std boolean? #t]
+                          [#:resources resources (or/c #f device-resources?) #f])
+         standard-scaler?]{
+
+An unfitted standard scaler with the hyperparameters
+@racket[(standard-scaler-params params ...)]: an estimator and a transformer.
+@racket[fit] is @racket[standard-scaler-fit]; @racket[transform],
+@racket[inverse-transform] and @racket[fit-transform] are the procedures of
+the same name on the fit. @racket[y] is ignored and a @racket[sample-weight]
+refused. Errors name the generic.
+
+@examples[#:eval ev
+(define S (list*->device-matrix '((1 10) (3 10) (1 14) (3 14)) #:dtype 'float64))
+(define s (fit (standard-scaler) S))
+(device-matrix->list* (transform s S))
+(eval:error (transform (standard-scaler) S))
+]}
+
+@defproc[(standard-scaler? [v any/c]) boolean?]{
+
+Whether @racket[v] is a standard scaler estimator.}
+
+@defproc[(standard-scaler-model [estimator standard-scaler?]) (or/c #f standard-scaler-result?)]{
+
+The @racket[standard-scaler-result] of the fit that made @racket[estimator],
+or @racket[#f] when it is unfitted.}
 
 @(close-eval host-ev)
 @(close-eval ev)
