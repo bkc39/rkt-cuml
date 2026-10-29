@@ -32,6 +32,9 @@ namespace cumlrkt::manifold {
 
 namespace {
 
+constexpr double residual_bound = 1e-3;
+constexpr double constant_spread = 1e-3;
+
 struct degree_sum {
   const int32_t* rows;
   const float* vals;
@@ -147,9 +150,6 @@ struct nonzero {
   }
 };
 
-constexpr double residual_bound = 1e-3;
-constexpr double constant_spread = 1e-3;
-
 struct without_edges {
   __device__ bool operator()(double d) const {
     return !(d > 0);
@@ -164,18 +164,25 @@ struct column_of {
   }
 };
 
+rmm::device_uvector<double> degrees(const raft::handle_t& handle, const coo& c,
+                                    int64_t n) {
+  const auto stream = raft::resource::get_cuda_stream(handle);
+  rmm::device_uvector<double> degree(static_cast<std::size_t>(n), stream);
+  thrust::fill_n(rmm::exec_policy(stream), degree.data(), n, 0.0);
+  each(handle, c.nnz, degree_sum{c.rows, c.vals, degree.data()});
+  return degree;
+}
+
 }  // namespace
 
 std::vector<column_fit> column_fits(const raft::handle_t& handle, const coo& c,
                                     int64_t n, const float* columns, int64_t k,
                                     bool normalised) {
   const auto stream = raft::resource::get_cuda_stream(handle);
-  rmm::device_uvector<double> degree(static_cast<std::size_t>(n), stream);
+  const rmm::device_uvector<double> degree = degrees(handle, c, n);
   rmm::device_uvector<double> lu(static_cast<std::size_t>(n * k), stream);
   rmm::device_uvector<sums> found(static_cast<std::size_t>(k), stream);
-  thrust::fill_n(rmm::exec_policy(stream), degree.data(), n, 0.0);
   thrust::fill_n(rmm::exec_policy(stream), lu.data(), n * k, 0.0);
-  each(handle, c.nnz, degree_sum{c.rows, c.vals, degree.data()});
   each(handle, c.nnz * k, laplacian_sum{c, columns, lu.data(), n});
   const thrust::counting_iterator<int64_t> entries(0);
   thrust::reduce_by_key(
@@ -249,9 +256,7 @@ graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n) {
       summed.begin(), thrust::make_discard_iterator(), weights.begin());
   const bool symmetric =
       thrust::none_of(policy, weights.begin(), nets.second, nonzero{});
-  rmm::device_uvector<double> degree(static_cast<std::size_t>(n), stream);
-  thrust::fill_n(policy, degree.data(), n, 0.0);
-  each(handle, c.nnz, degree_sum{c.rows, c.vals, degree.data()});
+  const rmm::device_uvector<double> degree = degrees(handle, c, n);
   const bool edgeless =
       thrust::any_of(policy, degree.begin(), degree.end(), without_edges{});
   return {.symmetric = symmetric,

@@ -121,21 +121,36 @@ ML::SpectralEmbedding::params params_of(const embedding_request& r,
 
 using embedding_view = raft::device_matrix_view<float, int, raft::col_major>;
 
-template <typename Unsolved, typename Advice, typename Solve, typename Check>
-void embed(const raft::handle_t& handle, rr_deposit* out, int64_t n, int64_t k,
-           Unsolved&& unsolved, Advice&& advice, Solve&& solve, Check&& check) {
+enum class failure : uint8_t { unsolved, zero, inaccurate };
+
+std::string dense_advice(failure f) {
+  return f == failure::zero ? zero_advice : "";
+}
+
+struct solution {
+  buffer<float> columns;
+  std::unique_ptr<buffer<float>> rows;
+};
+
+template <typename Advice, typename Solve>
+solution solved(const raft::handle_t& handle, int64_t n, int64_t k,
+                Advice&& advice, Solve&& solve) {
   const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
-  auto embedding =
-      std::make_unique<buffer<float>>(scratch<float>(n * k, stream));
-  {
-    buffer<float> columns = scratch<float>(n * k, stream);
-    solve(raft::make_device_matrix_view<float, int, raft::col_major>(
-        columns.data(), static_cast<int>(n), static_cast<int>(k)));
-    to_rows<float>(handle, columns.data(), n, k, nullptr, embedding->data());
-    require_solved(embedding->data(), n, k, unsolved, stream);
-    require_nonzero_columns(columns.data(), n, k, advice, stream);
-    check(columns.data());
-  }
+  solution s{
+      .columns = scratch<float>(n * k, stream),
+      .rows = std::make_unique<buffer<float>>(scratch<float>(n * k, stream))};
+  solve(raft::make_device_matrix_view<float, int, raft::col_major>(
+      s.columns.data(), static_cast<int>(n), static_cast<int>(k)));
+  to_rows<float>(handle, s.columns.data(), n, k, nullptr, s.rows->data());
+  require_solved(
+      s.rows->data(), n, k, [&] { return advice(failure::unsolved); }, stream);
+  require_nonzero_columns(
+      s.columns.data(), n, k, [&] { return advice(failure::zero); }, stream);
+  return s;
+}
+
+void deposit_embedding(const raft::handle_t& handle, rr_deposit* out, int64_t n,
+                       int64_t k, std::unique_ptr<buffer<float>> embedding) {
   make_largest_positive<float>(handle, embedding->data(), n, k);
   settle(handle);
   const std::initializer_list<rr_view> regions{
@@ -163,10 +178,11 @@ void require_accurate(const raft::handle_t& handle, const coo& c, int64_t n,
       column_fits(handle, c, n, columns, r.n_components, r.norm_laplacian != 0),
       r.drop_first != 0);
   if (refused) {
-    throw logic_error(std::format(
-        "embedding: column {}{}: the eigensolver's eigenvectors "
-        "are inaccurate on this graph{}",
-        refused->column, refused->constant ? " is constant" : "", advice()));
+    throw logic_error(
+        std::format("embedding: column {}{}: the eigensolver's eigenvectors "
+                    "are inaccurate on this graph{}",
+                    refused->column, refused->constant ? " is constant" : "",
+                    advice(failure::inaccurate)));
   }
 }
 
@@ -203,10 +219,8 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
                        "a spectral embedding needs two distinct rows", stream);
   const int exponent =
       scale_exponent<float>(largest_magnitude(x.data, x.n * x.d, stream));
-  embed(
-      handle, out, x.n, r.n_components, [] { return ""; },
-      [] { return zero_advice; },
-      [&](embedding_view e) {
+  std::unique_ptr<buffer<float>> embedding =
+      solved(handle, x.n, r.n_components, dense_advice, [&](embedding_view e) {
         on_scaled(handle, x.data, x.n * x.d, exponent, [&](float* data) {
           ML::SpectralEmbedding::transform(
               handle, params_of(r, n_neighbors),
@@ -214,8 +228,8 @@ void fit_dense(const raft::handle_t& handle, const rr_view* view,
                   data, static_cast<int>(x.n), static_cast<int>(x.d)),
               e);
         });
-      },
-      [](const float*) {});
+      }).rows;
+  deposit_embedding(handle, out, x.n, r.n_components, std::move(embedding));
 }
 
 void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
@@ -231,21 +245,18 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
       r.norm_laplacian != 0
           ? 0
           : unit_exponent(largest_magnitude(c.vals, c.nnz, stream));
-  const auto advice = [&] { return graph_advice(handle, c, n, r); };
-  embed(
-      handle, out, n, r.n_components, advice, advice,
-      [&](embedding_view e) {
-        on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
-          ML::SpectralEmbedding::transform(
-              handle, params_of(r, 0),
-              raft::make_device_vector_view<int, int64_t>(c.rows, c.nnz),
-              raft::make_device_vector_view<int, int64_t>(c.cols, c.nnz),
-              raft::make_device_vector_view<float, int64_t>(vals, c.nnz), e);
-        });
-      },
-      [&](const float* columns) {
-        require_accurate(handle, c, n, columns, r, advice);
-      });
+  const auto advice = [&](failure) { return graph_advice(handle, c, n, r); };
+  solution s = solved(handle, n, r.n_components, advice, [&](embedding_view e) {
+    on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
+      ML::SpectralEmbedding::transform(
+          handle, params_of(r, 0),
+          raft::make_device_vector_view<int, int64_t>(c.rows, c.nnz),
+          raft::make_device_vector_view<int, int64_t>(c.cols, c.nnz),
+          raft::make_device_vector_view<float, int64_t>(vals, c.nnz), e);
+    });
+  });
+  require_accurate(handle, c, n, s.columns.data(), r, advice);
+  deposit_embedding(handle, out, n, r.n_components, std::move(s.rows));
 }
 
 }  // namespace
