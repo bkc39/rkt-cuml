@@ -332,8 +332,7 @@ TEST(SpectralEmbeddingRefusals, ColumnFitsMeasureTheEigenResidual) {
                {.residual = exact, .spread = 0.0});
     expect_fit(fits[1], {.residual = 0.0, .spread = cosine_spread},
                {.residual = single, .spread = single});
-    expect_fit(fits[2],
-               {.residual = std::numbers::inv_sqrt2, .spread = 1.0},
+    expect_fit(fits[2], {.residual = std::numbers::inv_sqrt2, .spread = 1.0},
                {.residual = exact, .spread = 0.0});
   }
 }
