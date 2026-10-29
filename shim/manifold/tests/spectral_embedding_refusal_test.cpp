@@ -31,6 +31,9 @@ constexpr int64_t past_index = int64_t{1} << 31;
 constexpr int64_t basis_rows = int64_t{1} << 27;
 constexpr int64_t ring = 10;
 constexpr int64_t ring_entries = 2 * ring;
+constexpr double exact = 1e-12;
+constexpr double single = 1e-6;
+constexpr double cosine_spread = 2.0;
 constexpr double large = 0x1p66;
 constexpr double past_sum_weight = 0x1p125;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -326,11 +329,12 @@ TEST(SpectralEmbeddingRefusals, ColumnFitsMeasureTheEigenResidual) {
         ring_fits(columns, 3, normalised);
     ASSERT_EQ(fits.size(), 3U);
     expect_fit(fits[0], {.residual = 0.0, .spread = 0.0},
-               {.residual = 1e-12, .spread = 0.0});
-    expect_fit(fits[1], {.residual = 0.0, .spread = 2.0},
-               {.residual = 1e-6, .spread = 1e-6});
-    expect_fit(fits[2], {.residual = std::sqrt(0.5), .spread = 1.0},
-               {.residual = 1e-12, .spread = 0.0});
+               {.residual = exact, .spread = 0.0});
+    expect_fit(fits[1], {.residual = 0.0, .spread = cosine_spread},
+               {.residual = single, .spread = single});
+    expect_fit(fits[2],
+               {.residual = std::numbers::inv_sqrt2, .spread = 1.0},
+               {.residual = exact, .spread = 0.0});
   }
 }
 
