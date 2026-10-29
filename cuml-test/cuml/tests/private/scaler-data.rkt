@@ -35,6 +35,7 @@
          rows-of
          standardisation-errors
          strided-vector
+         transpose
          ulp
          unit-roundoff
          vector-shape)
@@ -47,6 +48,11 @@
 
 (define (rows->matrix rows dtype)
   (list*->device-matrix rows #:dtype dtype))
+
+(define (transpose rows)
+  (if (null? rows)
+      '()
+      (apply map list rows)))
 
 (define (rows-of xs d)
   (sequence->list (in-slice d xs)))

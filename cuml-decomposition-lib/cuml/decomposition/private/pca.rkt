@@ -2,14 +2,15 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters define-hyperparameters)
          (only-in racket/match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt"
                   cuml-decomposition-pca-fit-job
                   cuml-decomposition-pca-inverse-transform-job
-                  cuml-decomposition-pca-transform-job))
+                  cuml-decomposition-pca-transform-job)
+         (only-in "solver.rkt" solver-code))
 
 (provide (struct-out pca-result)
          pca-fit
@@ -37,8 +38,6 @@
   [solver 'full]
   [tol 0.0]
   [iterations 15])
-
-(define-codes solver-code [full 0] [jacobi 1])
 
 (define (fitted who X n-components whiten solver tol iterations resources)
   (define out (deposit-for/who who resources))

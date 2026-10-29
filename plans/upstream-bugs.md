@@ -1,6 +1,7 @@
 # Upstream bugs
 
-Found by the cluster arc (#5), the metrics leg (A2, #34) and the PCA leg (A4, #47) against libcuml 26.08.00, cuVS 26.08.01 and raft
+Found by the cluster arc (#5), the metrics leg (A2, #34), the PCA leg (A4, #47) and the truncated SVD leg
+(A5, #48) against libcuml 26.08.00, cuVS 26.08.01 and raft
 26.08. None is filed upstream (owner, 2026-10-20: log locally). Each is refused,
 worked around or documented by the shim, and a test pins it; the leg's PR
 packet (§4) has the detail.
@@ -77,6 +78,12 @@ packet (§4) has the detail.
 | A2 #34 | trustworthiness with a NaN, Inf or 1e20 entry in X or X-embedded is an illegal address (context poisoned) | `stats/detail/trustworthiness_score.cuh` | refused past a squared norm of 2¹²⁵ |
 | A2 #34 | trustworthiness at n-neighbors ≥ n is an illegal address; 2k ≥ n is outside the formula's domain | `stats/detail/trustworthiness_score.cuh` | refused at 2k ≥ n |
 | A2 #34 | trustworthiness's batch loop never ends at a batch size of 0, and n·(k+1), batch·n and n·k are `int` | `stats/detail/trustworthiness_score.cuh` | refused below 1 and past 2³¹−1 |
+| A5 #48 | rank-deficient X gives NaN singular values: √ of negative rounding eigenvalues | `linalg/detail/tsvd.cuh:382` `weighted_sqrt` | NaN mapped to +0 |
+| A5 #48 | XᵀX overflow is a silent NaN in every output | `linalg/detail/tsvd.cuh:349` (Gram gemm) | refused past a squared Frobenius norm of 2¹²⁵ (float32) / 2¹⁰²¹ (float64) |
+| A5 #48 | the ratio divides by the total variance unchecked: 0/0 is NaN | `linalg/detail/tsvd.cuh:522` | +0 when it is 0; near-constant noise documented |
+| A5 #48 | n_components in (min(n, d), d] is accepted: the tail is an arbitrary null-space basis with NaN σ | `linalg/detail/tsvd.cuh:342` | refused past min(n, d) |
+| A5 #48 | Gram underflow: below about 1e-19 (float32) or 1e-154 (float64) XᵀX is subnormal or 0, so σ, ev and ratio are 0 and the components arbitrary; at float32 1e-20 the subnormal total variance's reciprocal overflows and the ratio is 0 | `linalg/detail/tsvd.cuh` (Gram gemm, ratio) | X fitted at a power-of-two scale, results scaled back, as A4 #47; fit-transform's matrix is the transform of the unscaled X |
+| A5 #48 | `tsvdTransform` and `tsvdInverseTransform` overflow to ±inf on finite X | `linalg/detail/tsvd.cuh` (gemm) | refused past max/(4·d) and max/(4·k) |
 
 ## Python cuML
 

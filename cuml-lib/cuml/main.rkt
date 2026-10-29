@@ -15,7 +15,8 @@
          "private/kmeans-estimator.rkt"
          "private/pca-estimator.rkt"
          "private/spectral-estimator.rkt"
-         "private/standard-scaler-estimator.rkt")
+         "private/standard-scaler-estimator.rkt"
+         "private/truncated-svd-estimator.rkt")
 
 (provide (all-from-out cuml/cluster
                        cuml/core
@@ -30,4 +31,5 @@
                        "private/kmeans-estimator.rkt"
                        "private/pca-estimator.rkt"
                        "private/spectral-estimator.rkt"
-                       "private/standard-scaler-estimator.rkt"))
+                       "private/standard-scaler-estimator.rkt"
+                       "private/truncated-svd-estimator.rkt"))

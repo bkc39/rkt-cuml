@@ -7,7 +7,8 @@
                   kmeans
                   pca
                   spectral-clustering
-                  standard-scaler)
+                  standard-scaler
+                  truncated-svd)
          (only-in cuml/cluster
                   dbscan-fit
                   dbscan-params
@@ -20,7 +21,13 @@
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-params)
-         (only-in cuml/decomposition pca-fit pca-fit-transform pca-params)
+         (only-in cuml/decomposition
+                  pca-fit
+                  pca-fit-transform
+                  pca-params
+                  tsvd-fit
+                  tsvd-fit-transform
+                  tsvd-params)
          (only-in cuml/preprocessing
                   standard-scaler-fit
                   standard-scaler-fit-transform
@@ -50,7 +57,9 @@
                                                "hdbscan.scrbl"
                                                "preprocessing.scrbl"
                                                "decomposition.scrbl"
-                                               "estimators.scrbl"))))
+                                               "estimators.scrbl"
+                                               "pca-estimator.scrbl"
+                                               "truncated-svd-estimator.scrbl"))))
 
 (struct argument (keyword name default) #:transparent)
 
@@ -101,6 +110,8 @@
 (define standard-scaler-keys '(with-mean with-std))
 
 (define pca-keys '(n-components whiten solver tol iterations))
+
+(define tsvd-keys '(n-components solver tol iterations))
 
 (define (estimator-entry name proc)
   (list name
@@ -216,7 +227,13 @@
                    (list (list 'pca-params pca-params '() (list (argument #f 'base #f)) '() '())
                          (fit-entry 'pca-fit pca-fit)
                          (fit-entry 'pca-fit-transform pca-fit-transform)
-                         (estimator-entry 'pca pca)))))
+                         (estimator-entry 'pca pca)))
+   (table-bindings tsvd-params
+                   tsvd-keys
+                   (list (list 'tsvd-params tsvd-params '() (list (argument #f 'base #f)) '() '())
+                         (fit-entry 'tsvd-fit tsvd-fit)
+                         (fit-entry 'tsvd-fit-transform tsvd-fit-transform)
+                         (estimator-entry 'truncated-svd truncated-svd)))))
 
 (define-namespace-anchor anchor)
 

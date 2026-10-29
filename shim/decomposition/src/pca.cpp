@@ -25,22 +25,27 @@
 
 namespace {
 
+using cumlrkt::buffer;
 using cumlrkt::guarded;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
+using cumlrkt::most_columns;
 using cumlrkt::most_float;
 using cumlrkt::most_index;
 using cumlrkt::most_value;
 using cumlrkt::on_floats;
+using cumlrkt::overflow_margin;
 using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_finite;
 using cumlrkt::require_finite_non_negative;
 using cumlrkt::require_float;
 using cumlrkt::require_magnitudes;
+using cumlrkt::require_rows;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
 using cumlrkt::scale_exponent;
+using cumlrkt::scratch;
 using cumlrkt::settle;
 using cumlrkt::decomposition::bounds_of;
 using cumlrkt::decomposition::fit_arrays;
@@ -49,23 +54,6 @@ using cumlrkt::decomposition::to_columns;
 using cumlrkt::decomposition::to_rows;
 using raftrkt::any_extent;
 using raftrkt::layout;
-
-constexpr int64_t most_columns = 46340;
-constexpr double overflow_margin = 4.0;
-
-template <typename T>
-using buffer = rmm::device_uvector<T>;
-
-template <typename T>
-buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
-  return buffer<T>(static_cast<std::size_t>(count), stream);
-}
-
-void require_rows(int64_t n) {
-  if (n > most_index) {
-    throw logic_error(std::format("X: {} rows do not fit the index type", n));
-  }
-}
 
 struct fit_request {
   rr_deposit* out;

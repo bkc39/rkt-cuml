@@ -8,12 +8,14 @@
                   pca-result-singular-values)
          (only-in racket/function curryr)
          (only-in racket/list argmax list-set make-list take)
+         (only-in racket/match match)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "scaler-data.rkt" generated-rows round-to rows->matrix))
+         (only-in "scaler-data.rkt" generated-rows round-to rows->matrix transpose))
 
 (provide (struct-out fitted)
          (struct-out fixture)
          axis-rows
+         centred
          column
          constant-column
          dot
@@ -29,10 +31,12 @@
          host-reconstruct
          integer-fixture
          magnitude-rows
+         non-increasing?
          norm
          normal-fixture
          orthonormality-bound
          over-bound
+         product
          scaled-rows
          tie-rows
          wide-fixture)
@@ -45,7 +49,7 @@
   z)
 
 (define (product a b)
-  (define columns (apply map list b))
+  (define columns (transpose b))
   (for/list ([row (in-list a)])
     (for/list ([c (in-list columns)])
       (for/sum ([x (in-list row)] [y (in-list c)]) (* x y)))))
@@ -148,7 +152,7 @@
       (dot x c))))
 
 (define (host-reconstruct projections components mean)
-  (define columns (apply map list components))
+  (define columns (transpose components))
   (for/list ([t (in-list projections)])
     (for/list ([c (in-list columns)]
                [m (in-list mean)])
@@ -160,7 +164,12 @@
       (dot a b))))
 
 (define (over-bound what got want bound)
-  (and (> (abs (- got want)) bound) (format "~a: ~a vs ~a, bound ~a" what got want bound)))
+  (and (not (<= (abs (- got want)) bound)) (format "~a: ~a vs ~a, bound ~a" what got want bound)))
+
+(define (non-increasing? xs)
+  (match xs
+    [(list* a (and more (list* b _))) (and (>= a b) (non-increasing? more))]
+    [_ #t]))
 
 (define (orthonormality-bound solver d u)
   (* (if (eq? solver 'jacobi) 8 4) d u))

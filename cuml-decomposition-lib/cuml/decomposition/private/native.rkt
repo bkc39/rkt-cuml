@@ -13,6 +13,9 @@
 (provide cuml-decomposition-pca-fit-job
          cuml-decomposition-pca-inverse-transform-job
          cuml-decomposition-pca-transform-job
+         cuml-decomposition-tsvd-fit-job
+         cuml-decomposition-tsvd-inverse-transform-job
+         cuml-decomposition-tsvd-transform-job
          libcuml-version)
 
 (define-runtime-path native-libs-dir "../native-libs")
@@ -37,4 +40,22 @@
             library
             "cuml_decomposition_pca_inverse_transform_job"
             (handle view view view view deposit _int32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-decomposition-tsvd-fit-job
+            library
+            "cuml_decomposition_tsvd_fit_job"
+            (handle view deposit _int64 _int32 _double* _int64 _int32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-decomposition-tsvd-transform-job
+            library
+            "cuml_decomposition_tsvd_transform_job"
+            (handle view view deposit)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-decomposition-tsvd-inverse-transform-job
+            library
+            "cuml_decomposition_tsvd_inverse_transform_job"
+            (handle view view deposit)
             #:exn exn:fail:cuml)

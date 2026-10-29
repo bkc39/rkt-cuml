@@ -24,7 +24,8 @@
                              pca
                              single-linkage
                              spectral-clustering
-                             standard-scaler))
+                             standard-scaler
+                             truncated-svd))
 
 (define (dep-name dep)
   (match dep

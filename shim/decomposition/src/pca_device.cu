@@ -1,15 +1,12 @@
-#include <thrust/for_each.h>
 #include <thrust/functional.h>
-#include <thrust/iterator/counting_iterator.h>
 #include <thrust/transform_reduce.h>
 
 #include <cfloat>
 #include <cstdint>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cuda_stream.hpp>
-#include <rmm/exec_policy.hpp>
 
 #include "pca_device.hpp"
+#include "signs.cuh"
 
 namespace cumlrkt::decomposition {
 
@@ -32,12 +29,6 @@ __device__ float over(float a, float b) {
 }
 __device__ double over(double a, double b) {
   return __ddiv_rn(a, b);
-}
-__device__ float scaled(float v, int exponent) {
-  return scalbnf(v, exponent);
-}
-__device__ double scaled(double v, int exponent) {
-  return scalbn(v, exponent);
 }
 __device__ float narrow(float, double v) {
   return __double2float_rn(v);
@@ -149,29 +140,6 @@ struct unscaled_mean {
 };
 
 template <typename T>
-struct signed_components {
-  const T* components;
-  T* out;
-  int64_t m;
-  int64_t d;
-
-  __device__ void operator()(int64_t i) const {
-    T best = components[i];
-    for (int64_t j = 1; j < d; ++j) {
-      const T c = components[i + (j * m)];
-      if (fabs(c) > fabs(best)) {
-        best = c;
-      }
-    }
-    const bool flip = best < 0;
-    for (int64_t j = 0; j < d; ++j) {
-      const T c = components[i + (j * m)];
-      out[(i * d) + j] = flip ? -c : c;
-    }
-  }
-};
-
-template <typename T>
 struct bounds_one {
   __device__ variance_bounds operator()(T v) const {
     return {static_cast<double>(divisor(v)), root(static_cast<double>(v))};
@@ -185,13 +153,6 @@ struct bounds_both {
             thrust::maximum<double>{}(a.largest_root, b.largest_root)};
   }
 };
-
-template <typename F>
-void each(const raft::handle_t& handle, int64_t count, F f) {
-  const auto stream = raft::resource::get_cuda_stream(handle);
-  thrust::for_each_n(rmm::exec_policy(stream),
-                     thrust::counting_iterator<int64_t>(0), count, f);
-}
 
 }  // namespace
 
@@ -215,7 +176,8 @@ void post_fit(const raft::handle_t& handle, const T* components, T* variance,
   each(handle, k,
        kept_spectrum<T>{variance, totals, out, static_cast<double>(n - 1),
                         exponent});
-  each(handle, k, signed_components<T>{components, out.components, m, d});
+  each(handle, k,
+       signed_components<T>{components, out.components, m, d, nullptr});
   each(handle, d, unscaled_mean<T>{out.mean, exponent});
 }
 

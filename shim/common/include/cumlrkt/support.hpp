@@ -10,6 +10,7 @@
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
+#include <rmm/device_uvector.hpp>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -160,6 +161,20 @@ double require_magnitudes(const char* name, const matrix<T, int64_t>& x,
         name, i / x.d, i % x.d, printed(most), printed<T>(got)));
   }
   return largest;
+}
+
+template <typename T>
+using buffer = rmm::device_uvector<T>;
+
+template <typename T>
+buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
+  return buffer<T>(static_cast<std::size_t>(count), stream);
+}
+
+inline void require_rows(int64_t n) {
+  if (n > most_index) {
+    throw logic_error(std::format("X: {} rows do not fit the index type", n));
+  }
 }
 
 inline void require_some(const char* name, const char* axis, int64_t extent,
