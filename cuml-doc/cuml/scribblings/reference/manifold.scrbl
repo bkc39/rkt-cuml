@@ -403,8 +403,9 @@ rows, is an error.
 Embeds @racket[n-samples] samples from an affinity graph given as
 coordinates, as @racket[spectral-clustering-fit-graph] takes it: symmetric,
 without self-loops, finite weights of at least 0, duplicates adding. A graph
-that is not symmetric is used as given: it can be refused, the error saying
-the graph is not symmetric, or make cuML's eigensolver fail to converge.
+that is not symmetric is used as given: an inaccurate or NaN eigenvector is
+refused, the error saying the graph is not symmetric, and cuML's eigensolver
+can fail to converge or return a zero column.
 Without @racket[norm-laplacian] the embedding does not depend on the scale of
 the weights; with it, it scales by 1/√c when the weights scale by c.
 Without @racket[norm-laplacian], weights spanning orders of magnitude can give

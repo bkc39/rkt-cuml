@@ -918,8 +918,9 @@ Follow-ups are GitHub issues.
   all-zero column (s14) are refused with the outputs freed.
 - **B3-k.** Self-loops in a given graph are refused (g5), as leg 5 does.
 - **B3-l.** A graph that is not symmetric is used as given and documented. A
-  refused graph fit names the asymmetry in place of B3-v's advice; cuML's
-  failure to converge on such a graph passes through as cuML raises it.
+  graph fit refused for an inaccurate or NaN eigenvector names the asymmetry
+  in place of B3-v's advice; a zero column keeps B3-v's advice; cuML's failure
+  to converge passes through as cuML raises it.
 - **B3-m.** Disconnected graphs are not refused (L11). A graph whose
   Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,
   identical pieces) can give a wrong embedding or a zero column, with either
@@ -950,8 +951,8 @@ Follow-ups are GitHub issues.
   graph path, graphs whose Laplacian repeats eigenvalues; plus samples without
   edges, with norm-laplacian when there are at least as many as eigenvectors
   asked for and without it when there is any; plus norm-laplacian when,
-  without it, the summed weights span 2⁸ or more; for a graph that is not
-  symmetric, only that.
+  without it, the summed weights span 2⁸ or more; for an inaccurate or NaN
+  eigenvector of a graph that is not symmetric, only that.
 - **B3-w.** B3's tests split per seam: L1-L3 and L7-L12 in `-law-test`, L4
   in `-determinism-test`, L5-L7's twins in `-twin-test`, and L13 in
   `-refusal-test` (dense X), `-graph-refusal-test` (the graph's shape) and

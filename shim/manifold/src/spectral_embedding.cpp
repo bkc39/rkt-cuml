@@ -159,9 +159,9 @@ void deposit_embedding(const raft::handle_t& handle, rr_deposit* out, int64_t n,
 }
 
 std::string graph_advice(const raft::handle_t& handle, const coo& c, int64_t n,
-                         const embedding_request& r) {
+                         const embedding_request& r, failure f) {
   const graph_shape s = shape_of(handle, c, n);
-  if (!s.symmetric) {
+  if (!s.symmetric && f != failure::zero) {
     return asymmetric_advice;
   }
   const bool heavy = r.norm_laplacian == 0 && s.span >= heavy_span;
@@ -246,7 +246,9 @@ void fit_graph(const raft::handle_t& handle, const graph_views& g, int64_t n,
       r.norm_laplacian != 0
           ? 0
           : unit_exponent(largest_magnitude(c.vals, c.nnz, stream));
-  const auto advice = [&](failure) { return graph_advice(handle, c, n, r); };
+  const auto advice = [&](failure f) {
+    return graph_advice(handle, c, n, r, f);
+  };
   solution s = solved(handle, n, r.n_components, advice, [&](embedding_view e) {
     on_scaled(handle, c.vals, c.nnz, exponent, [&](float* vals) {
       ML::SpectralEmbedding::transform(
