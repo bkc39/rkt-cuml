@@ -5,7 +5,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <cuml/common/distance_type.hpp>
 #include <cuml/manifold/umap.hpp>
 #include <format>
 #include <initializer_list>
@@ -22,6 +21,7 @@
 
 #include "cumlrkt/manifold.h"
 #include "cumlrkt/support.hpp"
+#include "manifold_support.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
@@ -36,22 +36,20 @@ using cumlrkt::most_float;
 using cumlrkt::most_index;
 using cumlrkt::on_labels;
 using cumlrkt::printed;
-using cumlrkt::read_one;
 using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_basis;
-using cumlrkt::require_bounded_rows;
-using cumlrkt::require_finite;
 using cumlrkt::require_float;
-using cumlrkt::require_rows;
 using cumlrkt::require_some;
-using cumlrkt::rows_of;
 using cumlrkt::settle;
+using cumlrkt::manifold::distance_of;
 using cumlrkt::manifold::float_codes;
+using cumlrkt::manifold::float_rows;
 using cumlrkt::manifold::label_codes;
-using raftrkt::any_extent;
+using cumlrkt::manifold::require_converged;
+using cumlrkt::manifold::require_rows_fit;
+using cumlrkt::manifold::require_scanned;
 using raftrkt::layout;
-using DistanceType = ML::distance::DistanceType;
 
 constexpr int64_t least_nn_descent_rows = 150;
 constexpr int64_t least_transform_epochs = 3;
@@ -79,25 +77,6 @@ struct umap_request {
   int32_t build_algo;
   int32_t metric;
 };
-
-DistanceType distance_of(int32_t metric) {
-  switch (metric) {
-    case CUML_MANIFOLD_METRIC_EUCLIDEAN:
-      return DistanceType::L2SqrtExpanded;
-    case CUML_MANIFOLD_METRIC_SQEUCLIDEAN:
-      return DistanceType::L2Expanded;
-    case CUML_MANIFOLD_METRIC_MANHATTAN:
-      return DistanceType::L1;
-    case CUML_MANIFOLD_METRIC_CHEBYSHEV:
-      return DistanceType::Linf;
-    case CUML_MANIFOLD_METRIC_COSINE:
-      return DistanceType::CosineExpanded;
-    default:
-      throw logic_error(
-          "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or "
-          "cosine");
-  }
-}
 
 const char* metric_name(int32_t metric) {
   return metric == CUML_MANIFOLD_METRIC_MANHATTAN ? "manhattan" : "chebyshev";
@@ -201,54 +180,6 @@ ML::UMAPParams umap_params(const umap_request& r, int64_t n_neighbors,
   return p;
 }
 
-matrix<float, int64_t> float_rows(const rr_view* view, const char* name) {
-  const rr_view& v = *raftrkt::require(view, name);
-  if (v.dtype != RR_DTYPE_FLOAT32) {
-    throw logic_error(std::format("{}: expected float32, got {}", name,
-                                  raftrkt::dtype_name(v.dtype)));
-  }
-  return rows_of<float, int64_t>(view, name, any_extent, any_extent);
-}
-
-void require_rows_fit(const char* name, const matrix<float, int64_t>& x) {
-  require_rows(x.n, name);
-  if (x.d > most_index) {
-    throw logic_error(
-        std::format("{}: {} columns do not fit the index type", name, x.d));
-  }
-}
-
-void require_scanned(const char* name, const matrix<float, int64_t>& x,
-                     int32_t metric, rmm::cuda_stream_view stream) {
-  require_finite(name, x, stream);
-  require_bounded_rows(name, x, stream);
-  if (metric == CUML_MANIFOLD_METRIC_COSINE) {
-    const float least = static_cast<float>(x.d) * least_float;
-    const auto [row, squared] =
-        cumlrkt::first_normless_row(x.data, x.n, x.d, least, stream);
-    if (row >= 0) {
-      throw logic_error(std::format(
-          "{}: row {}: expected a squared norm of at least {} under cosine, "
-          "got {}",
-          name, row, printed(least), printed<float>(squared)));
-    }
-  }
-}
-
-void require_converged(const char* name, const float* out, int64_t rows,
-                       int64_t cols, bool spectral,
-                       rmm::cuda_stream_view stream) {
-  const int64_t i = cumlrkt::first_non_finite(out, rows * cols, stream);
-  if (i >= 0) {
-    const float got = read_one(out, i, stream);
-    throw logic_error(std::format(
-        "{}: row {}, column {}: the optimisation diverged to {}; lower "
-        "learning-rate{}",
-        name, i / cols, i % cols, printed(static_cast<double>(got)),
-        spectral ? " or use init 'random" : ""));
-  }
-}
-
 void require_spectral(const umap_request& r, int64_t n) {
   if (r.init != CUML_MANIFOLD_INIT_SPECTRAL) {
     return;
@@ -339,7 +270,10 @@ void fit_into(const raft::handle_t& handle, const rr_view* x_view,
   }
   auto* data = static_cast<float*>(embedding->data());
   require_converged("embedding", data, x.n, r.n_components,
-                    r.init == CUML_MANIFOLD_INIT_SPECTRAL, stream);
+                    r.init == CUML_MANIFOLD_INIT_SPECTRAL
+                        ? "lower learning-rate or use init 'random"
+                        : "lower learning-rate",
+                    stream);
   settle(handle);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(data, x.n, r.n_components, layout::row_major)};
@@ -402,8 +336,8 @@ void transform_into(const raft::handle_t& handle, const transform_views& v,
                       static_cast<int>(x.d), train.data,
                       static_cast<int>(train.n), embedding.data,
                       static_cast<int>(train.n), &p, result->data());
-  require_converged("output", result->data(), x.n, r.n_components, false,
-                    stream);
+  require_converged("output", result->data(), x.n, r.n_components,
+                    "lower learning-rate", stream);
   settle(handle);
   const std::initializer_list<rr_view> regions{
       raftrkt::region(result->data(), x.n, r.n_components, layout::row_major)};

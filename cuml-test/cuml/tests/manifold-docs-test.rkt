@@ -1,8 +1,12 @@
 #lang racket/base
 
-(require (only-in cuml fit-transform transform umap)
+(require (only-in cuml fit fit-transform transform tsne umap)
          (only-in cuml/cluster hdbscan-fit hdbscan-result-labels)
          (only-in cuml/manifold
+                  tsne-fit
+                  tsne-params
+                  tsne-result-embedding
+                  tsne-result-n-iter
                   umap-fit
                   umap-params
                   umap-result-a
@@ -60,3 +64,27 @@
    'logic
    "umap-fit: n-components: spectral init of 399 components needs at least 802 rows, got 800"
    (lambda () (umap-fit (fixture-X held-out-fit) #:n-components 399))))
+
+(test-gpu "the manual: the t-SNE example, tsne-fit and tsne-params"
+  (define embedded (tsne-fit (X) #:perplexity 5))
+  (check-equal? (shape (tsne-result-embedding embedded)) '(60 2))
+  (check-equal? (~> embedded
+                    tsne-result-embedding
+                    (hdbscan-fit #:min-cluster-size 10)
+                    hdbscan-result-labels
+                    (adjusted-rand-score (list->device-vector truth #:dtype 'int32) _))
+                1.0)
+  (check-equal? (tsne-result-n-iter embedded) 1000)
+  (check-cuml-error 'logic
+                    "tsne-fit: perplexity: expected at most the 60 neighbours, got 100"
+                    (lambda () (tsne-fit (X) #:perplexity 100)))
+  (check-equal? (hash-ref (tsne-params #:method 'exact) 'method) 'exact)
+  (check-cuml-error 'logic
+                    "tsne-params: tsne has no parameter angle"
+                    (lambda () (tsne-params (hasheq 'angle 0.5)))))
+
+(test-gpu "the manual: the t-SNE estimator"
+  (check-equal? (shape (fit-transform (tsne #:perplexity 5) (X))) '(60 2))
+  (check-cuml-error 'logic
+                    "transform: tsne has no transform; use fit-transform"
+                    (lambda () (transform (fit (tsne #:perplexity 5) (X)) (X)))))

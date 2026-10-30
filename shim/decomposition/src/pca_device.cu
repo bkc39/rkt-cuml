@@ -1,7 +1,6 @@
 #include <thrust/functional.h>
 #include <thrust/transform_reduce.h>
 
-#include <cfloat>
 #include <cstdint>
 #include <raft/core/handle.hpp>
 
@@ -12,75 +11,12 @@ namespace cumlrkt::decomposition {
 
 namespace {
 
-__device__ float root(float v) {
-  return __fsqrt_rn(v);
-}
-__device__ double root(double v) {
-  return __dsqrt_rn(v);
-}
-__device__ float times(float a, float b) {
-  return __fmul_rn(a, b);
-}
-__device__ double times(double a, double b) {
-  return __dmul_rn(a, b);
-}
-__device__ float over(float a, float b) {
-  return __fdiv_rn(a, b);
-}
-__device__ double over(double a, double b) {
-  return __ddiv_rn(a, b);
-}
 __device__ float narrow(float, double v) {
   return __double2float_rn(v);
 }
 __device__ double narrow(double, double v) {
   return v;
 }
-__device__ float epsilon(float) {
-  return FLT_EPSILON;
-}
-__device__ double epsilon(double) {
-  return DBL_EPSILON;
-}
-
-template <typename T>
-__device__ T divisor(T variance) {
-  const T scale = root(variance);
-  return scale < epsilon(T{}) ? epsilon(T{}) : scale;
-}
-
-template <typename T>
-struct column_major {
-  const T* x;
-  const T* variance;
-  T* out;
-  int64_t n;
-  int64_t d;
-  int exponent;
-
-  __device__ void operator()(int64_t o) const {
-    const int64_t j = o / n;
-    const int64_t i = o - (j * n);
-    const T v = scaled(x[(i * d) + j], exponent);
-    out[o] = variance == nullptr ? v : times(v, root(variance[j]));
-  }
-};
-
-template <typename T>
-struct row_major {
-  const T* x;
-  const T* variance;
-  T* out;
-  int64_t n;
-  int64_t d;
-
-  __device__ void operator()(int64_t o) const {
-    const int64_t i = o / d;
-    const int64_t j = o - (i * d);
-    const T v = x[i + (j * n)];
-    out[o] = variance == nullptr ? v : over(v, divisor(variance[j]));
-  }
-};
 
 template <typename T>
 struct spectrum_totals {
@@ -157,18 +93,6 @@ struct bounds_both {
 }  // namespace
 
 template <typename T>
-void to_columns(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
-                const T* variance, T* out, int exponent) {
-  each(handle, n * d, column_major<T>{x, variance, out, n, d, exponent});
-}
-
-template <typename T>
-void to_rows(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
-             const T* variance, T* out) {
-  each(handle, n * d, row_major<T>{x, variance, out, n, d});
-}
-
-template <typename T>
 void post_fit(const raft::handle_t& handle, const T* components, T* variance,
               int64_t m, int64_t k, int64_t d, int64_t n,
               const fit_arrays<T>& out, double* totals, int exponent) {
@@ -190,14 +114,6 @@ variance_bounds bounds_of(const raft::handle_t& handle, const T* variance,
                                   variance_bounds{1.0, 1.0}, bounds_both{});
 }
 
-template void to_columns<float>(const raft::handle_t&, const float*, int64_t,
-                                int64_t, const float*, float*, int);
-template void to_columns<double>(const raft::handle_t&, const double*, int64_t,
-                                 int64_t, const double*, double*, int);
-template void to_rows<float>(const raft::handle_t&, const float*, int64_t,
-                             int64_t, const float*, float*);
-template void to_rows<double>(const raft::handle_t&, const double*, int64_t,
-                              int64_t, const double*, double*);
 template void post_fit<float>(const raft::handle_t&, const float*, float*,
                               int64_t, int64_t, int64_t, int64_t,
                               const fit_arrays<float>&, double*, int);

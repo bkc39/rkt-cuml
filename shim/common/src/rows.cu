@@ -1,11 +1,14 @@
 #include <thrust/find.h>
 #include <thrust/functional.h>
 #include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/discard_iterator.h>
 #include <thrust/iterator/transform_iterator.h>
+#include <thrust/reduce.h>
 #include <thrust/transform_reduce.h>
 
 #include <cstdint>
 #include <rmm/cuda_stream_view.hpp>
+#include <rmm/device_uvector.hpp>
 #include <rmm/exec_policy.hpp>
 #include <utility>
 
@@ -27,6 +30,54 @@ struct squared_norm {
       sum += static_cast<double>(row[j]) * static_cast<double>(row[j]);
     }
     return sum;
+  }
+};
+
+template <typename T>
+struct l1_norm {
+  const T* x;
+  int64_t d;
+
+  __device__ double operator()(int64_t i) const {
+    const T* row = x + i * d;
+    double sum{0};
+    for (int64_t j = 0; j < d; ++j) {
+      sum += fabs(static_cast<double>(row[j]));
+    }
+    return sum;
+  }
+};
+
+struct column_of {
+  int64_t n;
+
+  __device__ int64_t operator()(int64_t k) const {
+    return k / n;
+  }
+};
+
+template <typename T>
+struct by_column {
+  const T* x;
+  int64_t n;
+  int64_t d;
+
+  __device__ double operator()(int64_t k) const {
+    const int64_t j = k / n;
+    return static_cast<double>(x[((k - (j * n)) * d) + j]);
+  }
+};
+
+template <typename T>
+struct squared_deviation {
+  const T* x;
+  const double* sum;
+  double n;
+  int64_t d;
+
+  __device__ double operator()(int64_t k) const {
+    const double v = static_cast<double>(x[k]) - (sum[k % d] / n);
+    return v * v;
   }
 };
 
@@ -135,14 +186,10 @@ int64_t first_index(int64_t start, int64_t end, Predicate p,
   return i == end ? -1 : i;
 }
 
-}  // namespace
-
-template <typename T>
-std::pair<int64_t, double> first_large_row(const T* x, int64_t n, int64_t d,
-                                           double most,
-                                           rmm::cuda_stream_view stream) {
+template <typename Norm>
+std::pair<int64_t, double> first_past(Norm norm, int64_t n, double most,
+                                      rmm::cuda_stream_view stream) {
   const thrust::counting_iterator<int64_t> rows(0);
-  const squared_norm<T> norm{x, d};
   const auto norms = thrust::make_transform_iterator(rows, norm);
   const int64_t i =
       thrust::find_if(rmm::exec_policy(stream), norms, norms + n, past{most}) -
@@ -154,6 +201,39 @@ std::pair<int64_t, double> first_large_row(const T* x, int64_t n, int64_t d,
       thrust::transform_reduce(rmm::exec_policy(stream), rows + i, rows + i + 1,
                                norm, 0.0, thrust::plus<double>{});
   return {i, s};
+}
+
+}  // namespace
+
+template <typename T>
+std::pair<int64_t, double> first_large_row(const T* x, int64_t n, int64_t d,
+                                           double most,
+                                           rmm::cuda_stream_view stream) {
+  return first_past(squared_norm<T>{x, d}, n, most, stream);
+}
+
+template <typename T>
+std::pair<int64_t, double> first_large_l1_row(const T* x, int64_t n, int64_t d,
+                                              double most,
+                                              rmm::cuda_stream_view stream) {
+  return first_past(l1_norm<T>{x, d}, n, most, stream);
+}
+
+template <typename T>
+double total_spread(const T* x, int64_t n, int64_t d,
+                    rmm::cuda_stream_view stream) {
+  const thrust::counting_iterator<int64_t> cells(0);
+  rmm::device_uvector<double> sums(d, stream);
+  thrust::reduce_by_key(
+      rmm::exec_policy(stream),
+      thrust::make_transform_iterator(cells, column_of{n}),
+      thrust::make_transform_iterator(cells + (n * d), column_of{n}),
+      thrust::make_transform_iterator(cells, by_column<T>{x, n, d}),
+      thrust::make_discard_iterator(), sums.begin());
+  return thrust::transform_reduce(
+      rmm::exec_policy(stream), cells, cells + (n * d),
+      squared_deviation<T>{x, sums.data(), static_cast<double>(n), d}, 0.0,
+      thrust::plus<double>{});
 }
 
 template <typename T>
@@ -213,6 +293,10 @@ template std::pair<int64_t, double> first_large_row<float>(
     const float*, int64_t, int64_t, double, rmm::cuda_stream_view);
 template std::pair<int64_t, double> first_large_row<double>(
     const double*, int64_t, int64_t, double, rmm::cuda_stream_view);
+template std::pair<int64_t, double> first_large_l1_row<float>(
+    const float*, int64_t, int64_t, double, rmm::cuda_stream_view);
+template double total_spread<float>(const float*, int64_t, int64_t,
+                                    rmm::cuda_stream_view);
 template std::pair<int64_t, float> first_normless_row<float>(
     const float*, int64_t, int64_t, float, rmm::cuda_stream_view);
 template std::pair<int64_t, double> first_normless_row<double>(

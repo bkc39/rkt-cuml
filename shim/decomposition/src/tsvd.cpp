@@ -18,7 +18,7 @@
 #include "cumlrkt/rows.hpp"
 #include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
-#include "pca_device.hpp"
+#include "cumlrkt/transpose.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
@@ -50,8 +50,8 @@ using cumlrkt::scale_exponent;
 using cumlrkt::scratch;
 using cumlrkt::settle;
 using cumlrkt::squared_norm_bound;
-using cumlrkt::decomposition::to_columns;
-using cumlrkt::decomposition::to_rows;
+using cumlrkt::to_columns;
+using cumlrkt::to_rows;
 using cumlrkt::decomposition::tsvd_arrays;
 using cumlrkt::decomposition::tsvd_extents;
 using raftrkt::any_extent;

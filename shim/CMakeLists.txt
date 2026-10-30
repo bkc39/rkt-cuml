@@ -84,9 +84,9 @@ cumlrkt_family(preprocessing NO_LIBCUML
 )
 
 cumlrkt_family(decomposition
-  SOURCES decomposition/src/decomposition.cpp decomposition/src/pca.cpp
-          decomposition/src/pca_device.cu decomposition/src/tsvd.cpp
-          decomposition/src/tsvd_device.cu
+  SOURCES common/src/transpose.cu decomposition/src/decomposition.cpp
+          decomposition/src/pca.cpp decomposition/src/pca_device.cu
+          decomposition/src/tsvd.cpp decomposition/src/tsvd_device.cu
   TESTS decomposition/tests/decomposition_test.cpp
         decomposition/tests/pca_test.cpp
         decomposition/tests/pca_refusal_test.cpp
@@ -98,11 +98,13 @@ cumlrkt_family(decomposition
 )
 
 cumlrkt_family(manifold
-  SOURCES manifold/src/manifold.cpp manifold/src/umap.cpp
-          manifold/src/umap_device.cu
-  TESTS manifold/tests/manifold_test.cpp manifold/tests/umap_test.cpp
+  SOURCES common/src/transpose.cu manifold/src/manifold.cpp
+          manifold/src/manifold_support.cpp manifold/src/tsne.cpp
+          manifold/src/umap.cpp manifold/src/umap_device.cu
+  TESTS manifold/tests/manifold_test.cpp manifold/tests/tsne_test.cpp
+        manifold/tests/tsne_refusal_test.cpp manifold/tests/umap_test.cpp
         manifold/tests/umap_spectral_test.cpp
-        manifold/tests/umap_refusal_test.cpp
+        manifold/tests/umap_refusal_test.cpp common/src/rows.cu
 )
 
 cumlrkt_family(probe TEST_ONLY

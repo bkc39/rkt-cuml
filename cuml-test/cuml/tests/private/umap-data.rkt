@@ -20,6 +20,7 @@
          case-of
          check-parity
          check-quality
+         check-within
          digits
          far-blobs
          finite-rows?

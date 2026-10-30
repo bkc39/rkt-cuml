@@ -65,13 +65,15 @@
 
 (begin-for-syntax
   (define-syntax-class applied
-    #:attributes (generic [method 1])
-    #:datum-literals (inverse-transform predict score transform)
+    #:attributes (generic kind [method 1])
+    #:datum-literals (fit-transform inverse-transform predict score transform)
     (pattern [predict proc:expr]
+      #:attr kind #f
       #:with generic #'gen:predictor
       #:with (method ...) #'((define (predict e X)
                                (on-model proc 'predict e X))))
     (pattern [transform proc:expr (~optional (~seq #:fit-transform result->matrix:expr))]
+      #:attr kind 'transform
       #:with generic #'gen:transformer
       #:with fit-transformed (cond
                                [(attribute result->matrix)
@@ -81,11 +83,20 @@
                                (on-model proc 'transform e X))
                              (define (fit-transform e X [y #f] #:sample-weight [w #f])
                                fit-transformed)))
+    (pattern [fit-transform result->matrix:expr]
+      #:attr kind 'fit-transform
+      #:with generic #'gen:transformer
+      #:with (method ...) #'((define (transform _e _X)
+                               (no-transform 'transform))
+                             (define (fit-transform e X [y #f] #:sample-weight [w #f])
+                               (result->matrix (argument-of (fitted 'fit-transform e X y w))))))
     (pattern [inverse-transform proc:expr]
+      #:attr kind #f
       #:with generic #'gen:transformer
       #:with (method ...) #'((define (inverse-transform e X)
                                (on-model proc 'inverse-transform e X))))
     (pattern [score proc:expr (~optional (~and weighted #:sample-weight))]
+      #:attr kind #f
       #:attr weight (and (attribute weighted) #'w)
       #:with generic #'gen:scorer
       #:with (method ...) #'((define (score e X [_y #f] #:sample-weight [w #f])
@@ -116,8 +127,12 @@
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
                             (~optional (~seq #:apply model->argument:expr entry:applied ...+)
-                                       #:defaults ([(entry.generic 1) '()] [(entry.method 2) '()]))
+                                       #:defaults ([(entry.generic 1) '()] [(entry.kind 1) '()]
+                                                                           [(entry.method 2) '()]))
                             extra:method-clause ...)
+  #:fail-when
+  (and (memq 'fit-transform (attribute entry.kind)) (memq 'transform (attribute entry.kind)) #'name)
+  "fit-transform without transform cannot be given with transform"
   #:with name* (format-id #'name "~a*" #'name)
   #:with (field ...) (for/list ([field (in-list '(hyperparameters settings model))])
                        (datum->syntax #'name field #'name))
@@ -158,6 +173,8 @@
       (call-applied proc who (argument-of (fitted who e X y sample-weight)) X (settings-of e)))
     (define (unweighted who sample-weight)
       (refuse-weight who 'name sample-weight))
+    (define (no-transform who)
+      (logic-error "~a: ~a has no transform; use fit-transform" who 'name))
     (struct name (field ...)
       #:constructor-name name*
       #:omit-define-syntaxes

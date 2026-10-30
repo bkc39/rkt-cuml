@@ -59,6 +59,23 @@ packet (§4) has the detail.
 | B1 #50 | the optimisation diverges silently: learning-rate 1e35 gives an all-NaN (or inf) embedding (P10) | `optimize_batch_kernel` | non-finite scan after fit and transform |
 | B1 #50 | transform picks its index width from the new rows alone, and init_transform reads `embeddings[indices[i+j] * n_components + d]` as an int product, so a training set with n·n-components past 2³¹−1 is read out of bounds | `umap.cu:138` `dispatch_to_uint64_t`, `runner.cuh:72` | refused past 2³¹−1 at transform (t10) |
 | B1 #50 | learning-rate 1e-50 rounds `initial_alpha` to 0 in float32, and the fit silently returns the initial layout (B1 r0 p1) | `runner.cuh`, `optimize_batch_kernel` | refused below 2⁻¹²⁶ in float32 (f9) |
+| B2 #51 | FFT t-SNE stops on mean \|x-step\|/2 (y ignored), checked from iteration 0: at learning rate 200, n ≥ 12000 stops at iteration 16–19, collapsed embedding (std 3e-6), kl 0 | `fft_tsne.cuh:729-760` | min_grad_norm 0 for fft (B2-b); L8 pins Python's collapse |
+| B2 #51 | KL divergence computed only on the last iteration: 0 after an early stop; n_iter is one short after an early stop | `exact_tsne.cuh`, `fft_tsne.cuh` | kl #f, n-iter corrected |
+| B2 #51 | Barnes-Hut spins forever once coordinates are non-finite (learning rate 1e30, early exaggeration 1e30, 1e19 rows, constant X, cosine zero row) | `barnes_hut_kernels.cuh` | not exposed (B2-a) |
+| B2 #51 | NaN embedding without error (constant X, 1e19/1e20 rows, cosine zero row, n_neighbors 1, divergence, n ≤ 12), KL finite beside it | `distances.cuh` `normalize_distances`, integration | refused before (f5, f19–f22) and after (f23) |
+| B2 #51 | init='pca' writes to X (≤ 9.5e-7) and builds the kNN from the written X | `tsne_runner.cuh:115` | shim works on a copy |
+| B2 #51 | exact grid y = ⌈n/32⌉ exceeds 65535 past 2,097,120 rows: n = 2,097,121 raises cudaErrorInvalidValue at `exact_kernels.cuh:384` after 127 s of kNN (P5; n = 2,097,120 did not finish its kNN in 900 s) | `exact_kernels.cuh:369` | refused (f18) |
+| B2 #51 | random_vector takes int size: n·2 narrows past 2³¹−1 (source) | `utils.cuh:53` | refused (f16) |
+| B2 #51 | perplexity above n_neighbors is unreachable and acts as n_neighbors | `sigmas_kernel` | refused (f17) |
+| B2 #51 | FFT at perplexity 5 with 90 neighbours: trustworthiness 0.507 against exact 0.967 | `fft_tsne` | n-neighbors defaults to 3·perplexity |
+| B2 #51 | exact and Barnes-Hut are not reproducible for a fixed seed | atomics | Q-D oracles |
+| B2 #51 | perplexity_max_iter 0 leaves P uninitialised; cufftDestroy skipped on a throw (source) | `exact_kernels.cuh:42`, `fft_tsne.cuh` | unreachable / documented |
+| B2 #51 | a seeded FFT run is 1.3–1.9× slower than random_state=None (blobs 1000×10 0.35 s against 0.18 s, digits 0.355 against 0.21, 12000×50 0.705 against 0.56; P4) | `fft_tsne.cuh` deterministic path | seeds always drawn (B2-l) |
+| B2 #51 | `square_distances` squares the kNN distances before normalising them, so under `L2Expanded` (sqeuclidean) it takes a fourth power, which overflows float32 to NaN once opposite rows reach a float32 squared norm of 2⁶²: 2⁶² and 2⁶²−2³⁵·⁸ give NaN, and so do two-column rows of exact squared norm 2⁶²−2³⁸−2³⁴·³ whose float32 norm rounds up to 2⁶² | `tsne_runner.cuh:210-217` | refused past 2⁶¹ under sqeuclidean (f20b) |
+| B2 #51 | PCA init divides Y by its float32 standard deviation; once n·var passes float32's maximum the sum of y² is inf, exact returns an all-zero embedding without error and FFT gives NaN (16 rows at 4·10³⁸, 4000 at about 4·10³⁸; random init fits the same rows) | `tsne_runner.cuh:141-145` | refused past a total squared distance from the mean of 2¹²⁶ under pca init (f20d); constant embedding refused after the fit |
+| B2 #51 | `square_distances` squares the L1 distance under manhattan, which overflows float32 for rows inside the 2¹²⁵ squared-norm bound: ±(3.5·10¹⁸)×3 gives NaN under FFT and exact | `tsne_runner.cuh:210-217` | refused past an L1 norm of 2^62.5 under manhattan (f20c) |
+| B2 #51 | the squared kNN distances are scaled by 1/max, inf in float32 once the largest neighbour distance under the metric is below 2⁻⁶⁴, which gives NaN | `distances.cuh:147` | f23 after the fit; documented |
+| B2 #51 | the same scaling is 0·inf = NaN when every computed kNN distance is 0: rows far from the origin, whose ‖x‖²+‖y‖²−2x·y cancels in float32 (a 1.7·10⁹ time column under euclidean), or duplicates filling every neighbourhood (40×(0,0), 40×(1,1), perplexity 5) | `distances.cuh:147` | f23 after the fit, advising "centre or rescale X, or raise n-neighbors"; documented |
 
 ## cuVS
 
@@ -113,3 +130,4 @@ packet (§4) has the detail.
 | A2 #34 | `silhouette_score` lets a 1e20 float32 row through and returns NaN, where sklearn gives 0.593 | refused |
 | A2 #34 | `trustworthiness` passes a 1e20 float32 entry into the illegal address above | refused |
 | B1 #50 | transform is not bitwise repeatable where neighbour distances tie: three transforms of digits' last 360 rows differ in Python, and ours differ in 54 rows by up to 0.345; a 0.01 jitter makes both repeatable | brute-force knn tie order | documented; L6 checks the digits transform on jittered rows (B1 r0) |
+| B2 #51 | learning_rate_method='adaptive' (the default) silently overrides n_neighbors and early_exaggeration | `cuml/manifold/t_sne.pyx` | 'auto' not offered (B2-c) |

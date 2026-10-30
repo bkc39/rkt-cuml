@@ -1,28 +1,10 @@
 #pragma once
 
-#include <thrust/for_each.h>
-#include <thrust/iterator/counting_iterator.h>
-
 #include <cstdint>
-#include <raft/core/handle.hpp>
-#include <raft/core/resource/cuda_stream.hpp>
-#include <rmm/exec_policy.hpp>
+
+#include "cumlrkt/device.cuh"
 
 namespace cumlrkt::decomposition {
-
-template <typename F>
-void each(const raft::handle_t& handle, int64_t count, F f) {
-  const auto stream = raft::resource::get_cuda_stream(handle);
-  thrust::for_each_n(rmm::exec_policy(stream),
-                     thrust::counting_iterator<int64_t>(0), count, f);
-}
-
-inline __device__ float scaled(float v, int exponent) {
-  return scalbnf(v, exponent);
-}
-inline __device__ double scaled(double v, int exponent) {
-  return scalbn(v, exponent);
-}
 
 template <typename T>
 struct signed_components {

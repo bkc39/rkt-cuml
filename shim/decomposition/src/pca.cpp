@@ -18,6 +18,7 @@
 #include "cumlrkt/decomposition.h"
 #include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
+#include "cumlrkt/transpose.hpp"
 #include "pca_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
@@ -47,11 +48,11 @@ using cumlrkt::rows_of;
 using cumlrkt::scale_exponent;
 using cumlrkt::scratch;
 using cumlrkt::settle;
+using cumlrkt::to_columns;
+using cumlrkt::to_rows;
 using cumlrkt::decomposition::bounds_of;
 using cumlrkt::decomposition::fit_arrays;
 using cumlrkt::decomposition::post_fit;
-using cumlrkt::decomposition::to_columns;
-using cumlrkt::decomposition::to_rows;
 using raftrkt::any_extent;
 using raftrkt::layout;
 

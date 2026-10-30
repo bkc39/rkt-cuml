@@ -774,3 +774,117 @@ Follow-ups are GitHub issues.
   corrected after B1 r1 finding 1). Spectral init also refuses an n·ncv
   basis past 2³¹ − 1 elements through the shared `require_basis` (f27,
   B1 r1 finding 2).
+
+## Decisions recorded in leg B2 (#51)
+
+- **B2-a.** `#:method` takes `'fft` and `'exact` only; Barnes-Hut is not
+  exposed (it spins forever once coordinates go non-finite).
+- **B2-b.** `min_grad_norm` is 0 for `'fft` and 1e-7 for `'exact`, with no
+  keyword. cuML's FFT early stop reads mean |x-step|/2 from iteration 0
+  and collapses the embedding on 12000 rows at learning rate 200; L8 pins
+  Python's collapse beside our full run.
+- **B2-c.** learning-rate defaults to 200 with cuML's "none" rule (r
+  before the exaggeration ends, 2r after); `'auto` is not offered.
+- **B2-d.** `#:n-neighbors` defaults to `#f`, meaning
+  min(1023, max(2, ⌈3·perplexity⌉)), clamped to the row count; above
+  1023 is refused (f6).
+- **B2-e.** perplexity is refused at or below 1 in float32 (f7, whose
+  message says "in float32") and above min(n-neighbors, n) (f17).
+- **B2-f.** `define-estimator` gains a `[fit-transform proc]` entry: the
+  estimator is `transformer?`, its `fit-transform` is `proc` of the fit's
+  model, and its `transform` raises "transform: tsne has no transform; use
+  fit-transform". It cannot be combined with `[transform ...]` (a syntax
+  error). Existing estimators expand unchanged.
+- **B2-g.** distances are squared (`square_distances` true), as Python's
+  default.
+- **B2-h.** n-components is kept and accepts only 2 (f4).
+- **B2-i.** the keyword is `#:max-iter`; `n-iter` is the result field.
+- **B2-j.** `tsne-fit` returns a `tsne-result` (embedding, kl-divergence,
+  n-iter, params). `tsne-fit-transform` returns `(values result
+  embedding)`, as every other `X-fit-transform` (A3-k, B1-b), not the
+  matrix alone as the spec proposed.
+- **B2-k.** a kNN of all-zero distances without every row equal is caught
+  by f23 after the fit.
+- **B2-l.** a `#f` random-state draws the seed in Racket, so FFT is always
+  reproducible under `(random-seed k)`; P4 measured the deterministic FFT
+  path at 1.3–1.9× the time of `random_state=None`.
+- **B2-m.** f23's message has B1's shape, with the advice of B2-x.
+- **B2-n.** KL divergence and the iteration count come back as host
+  out-parameters of the job (PCA's shape), not deposit regions. cuML
+  computes KL at iteration max_iter − 1 before its break check and returns
+  the last iteration's index, so n-iter = min(iter + 1, max-iter) and
+  kl-divergence is `#f` unless n-iter = max-iter.
+- **B2-o.** `to_columns` and `to_rows` moved to `shim/common`
+  (`transpose.{hpp,cu}`, `device.cuh`), UMAP's scans to
+  `manifold_support.{hpp,cpp}`; PCA, tSVD and UMAP results are bitwise
+  unchanged. `bound-params`, `drawn-seed`, `finite-real?` and
+  `metric-code` moved to `cuml/manifold/private/support.rkt`.
+- **B2-p.** random-state is checked in the shim ("random-state: expected
+  at least 0, got -1"); the job takes it as `_int64`.
+- **B2-q.** L3 runs the small sweep at perplexity min(30, n), since f17
+  refuses the default perplexity below 30 rows.
+- **B2-r.** The manual's example runs at perplexity 5: on its 60 rows FFT
+  at perplexity 10 ends at KL 5.41 and ARI 0.09 (2 and 3 are as bad,
+  20 gives 0.75 with min-cluster-size 5), where exact gives 1.0 at every
+  perplexity from 2 to 20.
+- **B2-s.** `tsne-sklearn-digits-twin-test` takes 55 s (sklearn's exact
+  t-SNE on digits, CPU-bound) and has a 180 s entry in `info.rkt`.
+- **B2-t.** Under `'sqeuclidean` a row's squared norm is at most 2⁶¹
+  (f20b). cuML squares the kNN distances, a
+  fourth power under sqeuclidean; opposite rows give a squared distance
+  of 4·|a|², at most 2⁶³ here, so its square stays at or below 2¹²⁶,
+  a factor of 4 under float32's maximum, whatever the rounding of
+  |a|²+|b|²−2a·b in float32. Two-column rows inside 2⁶²−2³⁸ whose float32
+  norm rounds to 2⁶² diverge under both methods: (1807712000, 1159251072)
+  and 7 other directions. Measured at 2⁶¹ on
+  `tiny`-shaped opposite rows, both methods, all finite: those 8
+  directions rescaled to just inside 2⁶¹ (16 fits), and 24 random two-
+  and 24 random three-column directions at the limit, 37 of them with a
+  float32 norm that rounds to 2⁶¹ (96 fits).
+- **B2-u.** L6's bounds are measured, not Python's seed spread or
+  upstream's digits-derived 0.05. Exact: 40 fits
+  per fixture, trustworthiness at k = 10, floor = min − (max − min):
+  blobs 0.97176–0.97447 (floor 0.969), overlap 0.86713–0.88865 (0.845),
+  digits 0.99048–0.99208 (0.9888). Against sklearn (blobs 0.97687,
+  overlap 0.91393, digits 0.99237), bound = largest |ours − sklearn| +
+  (max − min): blobs 0.00512 → 0.008, overlap 0.04680 → 0.07, digits
+  0.00189 → 0.004. FFT seed 0 is bitwise Python's (L5), so a check
+  against Python's spread cannot fail; it gets an absolute floor, Python's
+  20-seed min − δ: blobs 0.96900 − 0.00369 → 0.965, overlap
+  0.84700 − 0.02085 → 0.826, digits 0.98827 − 0.00238 → 0.9858 (ours
+  0.97011, 0.85080, 0.98857). The blobs and overlap quality tests do not
+  call Python, and their names carry no `twin`.
+- **B2-v.** Under `'pca` init the rows' squared distances from their mean,
+  summed in double, are at most 2¹²⁶ (f20d). cuML rescales the PCA
+  projection by its standard deviation, whose float32 sum of y² over all
+  rows is bounded by that total; past float32's maximum it is inf and Y/inf
+  is 0, so exact returns an all-zero embedding without error and FFT
+  diverges, at any learning rate. The failure tracks the total, not the
+  row count: 16 rows at 2.56·10³⁸ and 40 rows at 1.6·10³⁸ fit, 16 rows at
+  4·10³⁸, 40 at 3.6·10³⁸ and 4000 at about 4·10³⁸ do not. 2¹²⁶ leaves a
+  factor of 4, as f20b does. After the fit an embedding whose rows all
+  equal row 0 is refused ("the embedding is constant, use init 'random");
+  with f20d in place no input reaches it, so the gtest covers
+  `require_unlike_first` and not this call.
+- **B2-w.** Under `'manhattan` a row's L1 norm, summed in double, is at
+  most 2^62.5 (f20c). cuML squares the kNN distances, so opposite rows give
+  a squared L1 distance of at most 4·2¹²⁵ = 2¹²⁷. f20 does not cover it:
+  (3.5·10¹⁸)×3 has a squared norm inside 2¹²⁵ and a squared L1 distance
+  of 4.41·10³⁸. The bound keeps a factor of 2, so (3·10¹⁸)×3, which cuML
+  fits, is refused; rows ±v×3 at the largest float32 v with 3v ≤ 2^62.5
+  fit under both methods. Under `'euclidean` and `'chebyshev` the squared distance
+  is at most 4·2¹²⁵ under f20 already, so they need no bound of their
+  own; f20b and f20c are the two metrics where it is larger.
+- **B2-x.** f23's advice is "lower learning-rate, centre or rescale X, or
+  raise n-neighbors". cuML multiplies the squared kNN distances by the
+  reciprocal of their largest. That is inf in float32 once the largest
+  neighbour distance under the metric is below 2⁻⁶⁴ (about 5·10⁻²⁰), and
+  0·inf is NaN once every computed distance is 0. Three inputs reach it:
+  rows whose largest neighbour distance is below 2⁻⁶⁴; rows far from the
+  origin, whose ‖x‖²+‖y‖²−2x·y cancels to 0 in float32 under `'euclidean`
+  and `'sqeuclidean` (a 1.7·10⁹ time column, which fits centred); and
+  duplicate rows that fill every row's neighbourhood (40×(0,0) and
+  40×(1,1) at perplexity 5, which fit at n-neighbors 60; at 1023 or more
+  copies of every row no n-neighbors fits, so X is deduplicated). No pre-fit check
+  catches them. The shim does not centre X: that would break bitwise parity
+  with Python cuML.
