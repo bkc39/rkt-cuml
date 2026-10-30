@@ -10,6 +10,11 @@
     rkt-raft.url = "github:bkc39/rkt-raft/36b118de999c298851e97b9c4199c0555fa42af4";
     rkt-raft.inputs.nixpkgs.follows = "nixpkgs";
     rkt-raft.inputs.treefmt-nix.follows = "treefmt-nix";
+    # Ahead of rkt-raft's pin: the guide's digits are in datasets-uci.
+    rkt-raft.inputs.datasets-src = {
+      url = "github:bkc39/datasets/7c95ced319b8d76a0f437e070c3e8ffad6d30e56";
+      flake = false;
+    };
   };
 
   outputs =
@@ -159,8 +164,8 @@
           ${racketTools.sources}/threading-lib
       '';
 
-      # rkt-raft's recipe at rkt-raft's pins: raft's build-deps (polars,
-      # datasets) installed offline, so raft installs with --deps fail;
+      # rkt-raft's recipe at rkt-raft's pins, datasets aside: raft's build-deps
+      # (polars, datasets) installed offline, so raft installs with --deps fail;
       # datasets-core is also cuml-lib's runtime dependency.
       installDocsDeps = skip: ''
         raco pkg install --batch -j 4 --copy --no-docs --scope user ${skip} \
@@ -177,6 +182,10 @@
           --name data-frame ${raftInputs.data-frame-src}
         raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
           --name datasets-core ${raftInputs.datasets-src}/datasets-core
+        for _datasets_pkg in datasets-r datasets-uci datasets-islr datasets-fetch; do
+          raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
+            --name "$_datasets_pkg" "${raftInputs.datasets-src}/$_datasets_pkg"
+        done
         raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
           --name datasets ${raftInputs.datasets-src}/datasets
       '';
