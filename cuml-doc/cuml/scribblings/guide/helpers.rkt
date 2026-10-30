@@ -33,6 +33,7 @@
          rounded
          rows
          rows->matrix
+         scored
          sizes
          spectrum
          sweep-figure)
@@ -109,6 +110,11 @@
 (define (clusters-of estimator samples classes)
   (matched-labels (labels-of estimator samples) classes))
 
+(define (scored estimator ids samples)
+  (define labels (fit-predict estimator samples))
+  (define found (device-vector->list labels))
+  (list (rounded (adjusted-rand-score ids labels)) (sizes found) (count negative? found)))
+
 (define (largest-entries entries names n)
   (~> (map cons entries names) (sort > #:key (compose abs car)) (take n) (map cdr _)))
 
@@ -142,7 +148,7 @@
     (string->number (substring hex start (+ start 2)) 16)))
 
 (define cluster-colors
-  (map rgb '("#2a78d6" "#eb6834" "#1baf7a" "#eda100" "#e87ba4" "#008300" "#6250d6" "#e34948")))
+  (map rgb '("#2a78d6" "#eb6834" "#1baf7a" "#eda100" "#e87ba4" "#008300" "#6250d6" "#e34948" "#8c564b" "#17becf")))
 
 (define cluster-shapes
   (list '(fullcircle circle)
@@ -152,13 +158,15 @@
         '(fulltriangledown triangledown)
         '(full5star 5star)
         '(fulltriangleright triangleright)
-        '(full4star 4star)))
+        '(full4star 4star)
+        '(fulltriangleleft triangleleft)
+        '(full6star 6star)))
 
 (define (cluster-style label [who 'cluster-style])
   (cond
     [(and (exact-nonnegative-integer? label) (< label (length cluster-colors)))
      (cons (list-ref cluster-colors label) (list-ref cluster-shapes label))]
-    [else (raise-arguments-error who "label ids run from 0 to 7" "label" label)]))
+    [else (raise-arguments-error who "label ids run from 0 to 9" "label" label)]))
 
 (define noise-color (rgb "#898781"))
 
