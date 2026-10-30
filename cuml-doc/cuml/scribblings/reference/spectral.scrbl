@@ -82,8 +82,9 @@ coordinates: entry @racket[i] joins sample @racket[(rows i)] to sample
 @racket[cols] are @racket['int32] and @racket[vals] is @racket['float32], all
 of one length. The graph must be symmetric, without self-loops, each entry 0
 or a finite weight of at least the smallest normal @racket['float32],
-duplicates then adding. A sample with no edges gets some label. Otherwise as @racket[spectral-clustering-fit], except that
-@racket[params]'s @racket[n-neighbors] and @racket[affinity] are ignored.
+duplicates then adding. A sample with no edges gets some label. Otherwise as
+@racket[spectral-clustering-fit], except that @racket[params]'s
+@racket[n-neighbors] and @racket[affinity] are ignored.
 
 @racket[G]'s groups, joined within each group to the samples at most two away:
 
