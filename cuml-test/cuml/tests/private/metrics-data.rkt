@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/list make-list remove-duplicates)
-         (only-in racket/match match-define)
+(require (only-in racket/list drop make-list remove-duplicates)
+         (only-in racket/match match match-define)
          (only-in racket/math pi)
          (only-in raft list*->device-matrix list->device-vector)
          (only-in "scaler-data.rkt" rows-of))
@@ -16,6 +16,7 @@
          labels
          labels-of
          mean
+         median
          monotone-maps
          normals
          overlap
@@ -198,6 +199,15 @@
 
 (define (mean xs)
   (/ (apply + xs) (length xs)))
+
+(define (median xs)
+  (define sorted (sort xs <))
+  (define n (length sorted))
+  (match (drop sorted (quotient (sub1 n) 2))
+    [(list* lo hi _)
+     #:when (even? n)
+     (/ (+ lo hi) 2)]
+    [(cons middle _) middle]))
 
 (define (worst xs ys)
   (for/fold ([w 0.0])

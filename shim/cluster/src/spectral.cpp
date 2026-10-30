@@ -34,6 +34,7 @@ using cumlrkt::on_float32_device;
 using cumlrkt::printed;
 using cumlrkt::read_one;
 using cumlrkt::require_at_least;
+using cumlrkt::require_basis;
 using cumlrkt::require_bounded_rows;
 using cumlrkt::require_index;
 using cumlrkt::require_non_negative;
@@ -47,7 +48,6 @@ using raftrkt::any_extent;
 constexpr int64_t least_samples = 4;
 constexpr int64_t least_neighbours = 2;
 constexpr int64_t components_per_sample = 3;
-constexpr int64_t least_basis = 20;
 constexpr int64_t least_trials = 2;
 constexpr double most_tol = most_float;
 
@@ -91,18 +91,6 @@ int64_t components(const solver_options& o, int64_t n, const char* unit) {
                     n, unit, o.n_components));
   }
   return o.n_components;
-}
-
-void require_basis(int64_t n, int64_t n_components, const char* subject,
-                   const char* unit) {
-  const int64_t ncv =
-      std::min(n - n_components, std::max((2 * n_components) + 1, least_basis));
-  if (n * ncv > most_index) {
-    throw logic_error(std::format(
-        "{}: {} {} and {} components need a {}x{} eigensolver basis, more "
-        "than {} elements",
-        subject, n, unit, n_components, n, ncv, most_index));
-  }
 }
 
 void require_solver(const solver_options& o) {

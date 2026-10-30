@@ -102,6 +102,30 @@ struct unlike_first {
   }
 };
 
+template <typename T>
+struct native_squared_norm {
+  const T* x;
+  int64_t d;
+
+  __device__ T operator()(int64_t i) const {
+    const T* row = x + i * d;
+    T sum{0};
+    for (int64_t j = 0; j < d; ++j) {
+      sum += row[j] * row[j];
+    }
+    return sum;
+  }
+};
+
+template <typename T>
+struct below {
+  T least;
+
+  __device__ bool operator()(T sum) const {
+    return !(sum >= least);
+  }
+};
+
 template <typename Predicate>
 int64_t first_index(int64_t start, int64_t end, Predicate p,
                     rmm::cuda_stream_view stream) {
@@ -129,6 +153,25 @@ std::pair<int64_t, double> first_large_row(const T* x, int64_t n, int64_t d,
   const double s =
       thrust::transform_reduce(rmm::exec_policy(stream), rows + i, rows + i + 1,
                                norm, 0.0, thrust::plus<double>{});
+  return {i, s};
+}
+
+template <typename T>
+std::pair<int64_t, T> first_normless_row(const T* x, int64_t n, int64_t d,
+                                         T least,
+                                         rmm::cuda_stream_view stream) {
+  const thrust::counting_iterator<int64_t> rows(0);
+  const native_squared_norm<T> norm{x, d};
+  const auto norms = thrust::make_transform_iterator(rows, norm);
+  const int64_t i = thrust::find_if(rmm::exec_policy(stream), norms, norms + n,
+                                    below<T>{least}) -
+                    norms;
+  if (i == n) {
+    return {-1, T{0}};
+  }
+  const T s =
+      thrust::transform_reduce(rmm::exec_policy(stream), rows + i, rows + i + 1,
+                               norm, T{0}, thrust::plus<T>{});
   return {i, s};
 }
 
@@ -169,6 +212,10 @@ int64_t first_row_unlike_first(const T* x, int64_t n, int64_t d,
 template std::pair<int64_t, double> first_large_row<float>(
     const float*, int64_t, int64_t, double, rmm::cuda_stream_view);
 template std::pair<int64_t, double> first_large_row<double>(
+    const double*, int64_t, int64_t, double, rmm::cuda_stream_view);
+template std::pair<int64_t, float> first_normless_row<float>(
+    const float*, int64_t, int64_t, float, rmm::cuda_stream_view);
+template std::pair<int64_t, double> first_normless_row<double>(
     const double*, int64_t, int64_t, double, rmm::cuda_stream_view);
 template int64_t first_zero_row<float>(const float*, int64_t, int64_t,
                                        rmm::cuda_stream_view);

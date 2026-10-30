@@ -7,6 +7,7 @@
 (define deps '("base"))
 (define build-deps
   '("cuml-lib" "cuml-decomposition-lib"
+               "cuml-manifold-lib"
                "cuml-preprocessing-lib"
                "datasets-core"
                ("raft" #:version "0.2")

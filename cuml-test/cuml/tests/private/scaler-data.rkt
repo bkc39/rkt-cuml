@@ -6,9 +6,9 @@
                   standard-scaler-result-with-mean
                   standard-scaler-result-with-std)
          (only-in racket/flonum fl* fl+ fl- fl/ flsingle)
-         (only-in racket/list make-list)
+         (only-in racket/list make-list range)
          (only-in racket/match match-define)
-         (only-in racket/math pi sqr)
+         (only-in racket/math sqr)
          (only-in racket/sequence in-slice sequence->list)
          (only-in raft
                   device-matrix?
@@ -20,7 +20,8 @@
                   list->device-vector
                   shape)
          (only-in raft/private/array buffer->device-array device-array-buffer)
-         (only-in threading ~>))
+         (only-in threading ~>)
+         (only-in "blob-data.rkt" normal-source))
 
 (provide bits-equal?
          constant-rows
@@ -58,22 +59,9 @@
 (define (rows-of xs d)
   (sequence->list (in-slice d xs)))
 
-(define (strided-vector n)
-  (define backing
-    (list->device-vector (for/list ([i (in-range (* 2 n))])
-                           (exact->inexact i))
-                         #:dtype 'float64))
-  (buffer->device-array (device-array-buffer backing) 0 (list n) '(2) 'float64 'device))
-
-(define (normal-source seed)
-  (define g (make-pseudo-random-generator))
-  (parameterize ([current-pseudo-random-generator g])
-    (random-seed seed))
-  (lambda ()
-    (parameterize ([current-pseudo-random-generator g])
-      (define u (- 1.0 (random)))
-      (define v (random))
-      (* (sqrt (* -2.0 (log u))) (cos (* 2.0 pi v))))))
+(define (strided-vector n [dt 'float64])
+  (define backing (list->device-vector (range (* 2 n)) #:dtype dt))
+  (buffer->device-array (device-array-buffer backing) 0 (list n) '(2) dt 'device))
 
 (define (column-shape seed d)
   (define g (make-pseudo-random-generator))

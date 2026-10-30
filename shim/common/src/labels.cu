@@ -10,9 +10,9 @@
 #include <rmm/exec_policy.hpp>
 #include <utility>
 
-#include "labels.hpp"
+#include "cumlrkt/labels.hpp"
 
-namespace cumlrkt::metrics {
+namespace cumlrkt {
 
 template <typename T>
 dense_labels<T> dense_codes(const T* labels, int64_t n,
@@ -40,4 +40,4 @@ template dense_labels<int32_t> dense_codes<int32_t>(const int32_t*, int64_t,
 template dense_labels<int64_t> dense_codes<int64_t>(const int64_t*, int64_t,
                                                     rmm::cuda_stream_view);
 
-}  // namespace cumlrkt::metrics
+}  // namespace cumlrkt

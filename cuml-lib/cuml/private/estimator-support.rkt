@@ -42,8 +42,13 @@
     [sample-weight (logic-error "~a: ~a takes no sample-weight" who owner)]
     [else absent]))
 
-(define (call-fit proc who owner X hyperparameters settings weighted? sample-weight)
-  (define named (cons (cons '#:params hyperparameters) (setting-arguments settings)))
+(define (call-fit proc who owner X y hyperparameters settings weighted? sample-weight)
+  (define named
+    (append (list (cons '#:params hyperparameters))
+            (cond
+              [(eq? y absent) '()]
+              [else (list (cons '#:y y))])
+            (setting-arguments settings)))
   (cond
     [weighted? (keyword-call proc (list who X) (cons (cons '#:sample-weight sample-weight) named))]
     [else
@@ -66,12 +71,16 @@
       #:with generic #'gen:predictor
       #:with (method ...) #'((define (predict e X)
                                (on-model proc 'predict e X))))
-    (pattern [transform proc:expr]
+    (pattern [transform proc:expr (~optional (~seq #:fit-transform result->matrix:expr))]
       #:with generic #'gen:transformer
+      #:with fit-transformed (cond
+                               [(attribute result->matrix)
+                                #'(result->matrix (argument-of (fitted 'fit-transform e X y w)))]
+                               [else #'(on-fit proc 'fit-transform e X y w)])
       #:with (method ...) #'((define (transform e X)
                                (on-model proc 'transform e X))
-                             (define (fit-transform e X [_y #f] #:sample-weight [w #f])
-                               (on-fit proc 'fit-transform e X w))))
+                             (define (fit-transform e X [y #f] #:sample-weight [w #f])
+                               fit-transformed)))
     (pattern [inverse-transform proc:expr]
       #:with generic #'gen:transformer
       #:with (method ...) #'((define (inverse-transform e X)
@@ -103,6 +112,7 @@
                             #:hyperparameters table:table-id
                             #:fit fit/who:id
                             (~optional (~seq #:labels labels:expr))
+                            (~optional (~and supervised #:supervised))
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
                             (~optional (~seq #:apply model->argument:expr entry:applied ...+)
@@ -119,13 +129,24 @@
   #:with (keyword ...) (map key->keyword (attribute table.keys))
   #:with (setting-keyword ...) (map key->keyword (syntax->datum #'(setting ...)))
   #:with ((generic method ...) ...) (grouped (attribute entry.generic) (attribute entry.method))
+  #:with given-y (cond
+                   [(attribute supervised) #'y]
+                   [else #'absent])
   #:with weighted? (cond
                      [(attribute no-weight) #'#f]
                      [else #'#t])
   (begin
     (define argument-of (~? model->argument values))
-    (define (fitted who e X sample-weight)
-      (call-fit fit/who who 'name X (hyperparameters-of e) (settings-of e) weighted? sample-weight))
+    (define (fitted who e X y sample-weight)
+      (call-fit fit/who
+                who
+                'name
+                X
+                given-y
+                (hyperparameters-of e)
+                (settings-of e)
+                weighted?
+                sample-weight))
     (define (on-model proc who e X [sample-weight absent])
       (call-applied proc
                     who
@@ -133,16 +154,16 @@
                     X
                     (settings-of e)
                     sample-weight))
-    (define (on-fit proc who e X sample-weight)
-      (call-applied proc who (argument-of (fitted who e X sample-weight)) X (settings-of e)))
+    (define (on-fit proc who e X y sample-weight)
+      (call-applied proc who (argument-of (fitted who e X y sample-weight)) X (settings-of e)))
     (define (unweighted who sample-weight)
       (refuse-weight who 'name sample-weight))
     (struct name (field ...)
       #:constructor-name name*
       #:omit-define-syntaxes
       #:methods gen:estimator
-      [(define (fit e X [_y #f] #:sample-weight [w #f])
-         (name* (hyperparameters-of e) (settings-of e) (fitted 'fit e X w)))
+      [(define (fit e X [y #f] #:sample-weight [w #f])
+         (name* (hyperparameters-of e) (settings-of e) (fitted 'fit e X y w)))
        (define (fitted? e)
          (and (model-of e) #t))
        (define (estimator-params e)
@@ -152,8 +173,8 @@
                 (settings-of e)
                 #f))]
       (~? (~@ #:methods gen:clusterer
-              [(define (fit-predict e X [_y #f] #:sample-weight [w #f])
-                 (labels (fitted 'fit-predict e X w)))]))
+              [(define (fit-predict e X [y #f] #:sample-weight [w #f])
+                 (labels (fitted 'fit-predict e X y w)))]))
       (~@ #:methods generic [method ...]) ...
       extra.clause ...
       ...

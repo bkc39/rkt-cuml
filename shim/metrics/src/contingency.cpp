@@ -11,23 +11,23 @@
 
 #include "checks.hpp"
 #include "contingency_device.hpp"
+#include "cumlrkt/labels.hpp"
 #include "cumlrkt/metrics.h"
 #include "cumlrkt/support.hpp"
-#include "labels.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 
 namespace {
 
+using cumlrkt::dense_codes;
+using cumlrkt::dense_labels;
 using cumlrkt::guarded;
 using cumlrkt::logic_error;
+using cumlrkt::on_labels;
 using cumlrkt::settle;
 using cumlrkt::metrics::count_pairs;
-using cumlrkt::metrics::dense_codes;
-using cumlrkt::metrics::dense_labels;
 using cumlrkt::metrics::labels_of;
 using cumlrkt::metrics::most_distinct_labels;
-using cumlrkt::metrics::on_labels;
 
 template <typename T>
 dense_labels<T> distinct(const T* labels, int64_t n, const char* name,

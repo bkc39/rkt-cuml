@@ -68,8 +68,8 @@ cumlrkt_family(cluster
 )
 
 cumlrkt_family(metrics
-  SOURCES metrics/src/metrics.cpp metrics/src/labels.cu metrics/src/contingency.cpp
-          metrics/src/contingency_device.cu metrics/src/norms.cu
+  SOURCES metrics/src/metrics.cpp metrics/src/contingency.cpp
+          metrics/src/contingency_device.cu
           metrics/src/silhouette.cpp
           metrics/src/trustworthiness.cpp
   TESTS metrics/tests/metrics_test.cpp metrics/tests/metrics_refusal_test.cpp
@@ -95,6 +95,14 @@ cumlrkt_family(decomposition
         decomposition/tests/tsvd_test.cpp
         decomposition/tests/tsvd_refusal_test.cpp
         decomposition/src/pca_device.cu
+)
+
+cumlrkt_family(manifold
+  SOURCES manifold/src/manifold.cpp manifold/src/umap.cpp
+          manifold/src/umap_device.cu
+  TESTS manifold/tests/manifold_test.cpp manifold/tests/umap_test.cpp
+        manifold/tests/umap_spectral_test.cpp
+        manifold/tests/umap_refusal_test.cpp
 )
 
 cumlrkt_family(probe TEST_ONLY

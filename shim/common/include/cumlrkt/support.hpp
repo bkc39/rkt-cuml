@@ -2,6 +2,7 @@
 
 #include <cuda_runtime_api.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -108,6 +109,20 @@ inline void require_index(const char* name, int64_t rows, int64_t cols) {
   }
 }
 
+inline constexpr int64_t least_basis = 20;
+
+inline void require_basis(int64_t n, int64_t nev, const char* subject,
+                          const char* unit,
+                          const char* vectors = "components") {
+  const int64_t ncv = std::min(n - nev, std::max((2 * nev) + 1, least_basis));
+  if (n * ncv > most_index) {
+    throw logic_error(std::format(
+        "{}: {} {} and {} {} need a {}x{} eigensolver basis, more than {} "
+        "elements",
+        subject, n, unit, nev, vectors, n, ncv, most_index));
+  }
+}
+
 inline void settle(const raft::handle_t& handle) {
   raftrkt::cuda_check(
       cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),
@@ -171,9 +186,10 @@ buffer<T> scratch(int64_t count, rmm::cuda_stream_view stream) {
   return buffer<T>(static_cast<std::size_t>(count), stream);
 }
 
-inline void require_rows(int64_t n) {
+inline void require_rows(int64_t n, const char* name = "X") {
   if (n > most_index) {
-    throw logic_error(std::format("X: {} rows do not fit the index type", n));
+    throw logic_error(
+        std::format("{}: {} rows do not fit the index type", name, n));
   }
 }
 

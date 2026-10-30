@@ -8,7 +8,8 @@
                   pca
                   spectral-clustering
                   standard-scaler
-                  truncated-svd)
+                  truncated-svd
+                  umap)
          (only-in cuml/cluster
                   dbscan-fit
                   dbscan-params
@@ -28,6 +29,7 @@
                   tsvd-fit
                   tsvd-fit-transform
                   tsvd-params)
+         (only-in cuml/manifold umap-fit umap-fit-transform umap-params)
          (only-in cuml/preprocessing
                   standard-scaler-fit
                   standard-scaler-fit-transform
@@ -57,6 +59,7 @@
                                                "hdbscan.scrbl"
                                                "preprocessing.scrbl"
                                                "decomposition.scrbl"
+                                               "manifold.scrbl"
                                                "estimators.scrbl"
                                                "pca-estimator.scrbl"
                                                "truncated-svd-estimator.scrbl"))))
@@ -78,9 +81,16 @@
 
 (define (table-bindings table keys entries)
   (for/list ([entry (in-list entries)])
-    (match-define (list name proc extra positional others omitted) entry)
+    (match-define (list* name proc extra positional others omitted leading) entry)
     (define taken (filter (lambda (key) (not (memq key omitted))) keys))
-    (binding name proc table keys taken (append (map keyword-of taken) extra) positional others)))
+    (binding name
+             proc
+             table
+             keys
+             taken
+             (append leading (map keyword-of taken) extra)
+             positional
+             others)))
 
 (define kmeans-keys
   '(init n-clusters
@@ -113,6 +123,20 @@
 
 (define tsvd-keys '(n-components solver tol iterations))
 
+(define umap-keys
+  '(n-neighbors n-components
+                metric
+                n-epochs
+                learning-rate
+                min-dist
+                spread
+                a
+                b
+                init
+                negative-sample-rate
+                random-state
+                build-algo))
+
 (define (estimator-entry name proc)
   (list name
         proc
@@ -129,6 +153,17 @@
         (list (argument '#:params 'params #f)
               (argument '#:resources 'resources '(current-device-resources)))
         '()))
+
+(define (supervised-fit-entry name proc)
+  (list name
+        proc
+        '(#:params #:resources)
+        (list (argument #f 'X 'none))
+        (list (argument '#:y 'y #f)
+              (argument '#:params 'params #f)
+              (argument '#:resources 'resources '(current-device-resources)))
+        '()
+        '#:y))
 
 (define bindings
   (append
@@ -233,7 +268,13 @@
                    (list (list 'tsvd-params tsvd-params '() (list (argument #f 'base #f)) '() '())
                          (fit-entry 'tsvd-fit tsvd-fit)
                          (fit-entry 'tsvd-fit-transform tsvd-fit-transform)
-                         (estimator-entry 'truncated-svd truncated-svd)))))
+                         (estimator-entry 'truncated-svd truncated-svd)))
+   (table-bindings umap-params
+                   umap-keys
+                   (list (list 'umap-params umap-params '() (list (argument #f 'base #f)) '() '())
+                         (supervised-fit-entry 'umap-fit umap-fit)
+                         (supervised-fit-entry 'umap-fit-transform umap-fit-transform)
+                         (estimator-entry 'umap umap)))))
 
 (define-namespace-anchor anchor)
 
