@@ -64,6 +64,23 @@ CUMLRKT_API int cuml_manifold_tsne_fit(
 CUMLRKT_API void cuml_manifold_tsne_fit_job(void* args, size_t args_len,
                                             rr_job_outcome* outcome);
 
+/* Region 0 of out is the n x n_components row-major float32 embedding. */
+CUMLRKT_API int cuml_manifold_spectral_embedding_fit(
+    void* handle, const rr_view* x, int64_t n_neighbors, rr_deposit* out,
+    int64_t n_components, int32_t norm_laplacian, int32_t drop_first,
+    uint64_t random_state);
+CUMLRKT_API void cuml_manifold_spectral_embedding_fit_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
+/* rows and cols int32 and vals float32, of one length; region 0 of out as
+   above. */
+CUMLRKT_API int cuml_manifold_spectral_embedding_fit_graph(
+    void* handle, const rr_view* rows, const rr_view* cols, const rr_view* vals,
+    int64_t n_samples, rr_deposit* out, int64_t n_components,
+    int32_t norm_laplacian, int32_t drop_first, uint64_t random_state);
+CUMLRKT_API void cuml_manifold_spectral_embedding_fit_graph_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
 #ifdef __cplusplus
 }
 #endif

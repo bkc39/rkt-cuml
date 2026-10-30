@@ -17,14 +17,13 @@
                   fitted-of
                   fitted-ratio
                   fitted-variance
-                  dot
                   fixture-name
                   fixture-rows
                   fixtures
                   norm
                   over-bound)
          (only-in "python-env.rkt" run-twin)
-         (only-in "scaler-data.rkt" rows->matrix rows-of unit-roundoff))
+         (only-in "scaler-data.rkt" dot rows->matrix rows-of unit-roundoff))
 
 (provide (struct-out ours)
          check-against-cuml

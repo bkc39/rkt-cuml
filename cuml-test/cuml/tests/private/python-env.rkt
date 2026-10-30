@@ -5,6 +5,7 @@
          (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/match == match)
          (only-in racket/port open-output-nowhere)
+         (only-in racket/promise delay force)
          (only-in racket/string string-replace)
          (only-in racket/system system*)
          (only-in raft/private/resource with-release)
@@ -40,11 +41,12 @@
                                (system* python "-c" (format "import ~a" module)))))))
 
 (define twin-skip ;; noqa
-  (or gpu-skip
-      (cond
-        [(not python) "no Python twin (python3 is not on PATH)"]
-        [(not (python-imports? "cuml")) "no Python twin (import cuml failed)"]
-        [else #f])))
+  (delay
+    (or gpu-skip
+        (cond
+          [(not python) "no Python twin (python3 is not on PATH)"]
+          [(not (python-imports? "cuml")) "no Python twin (import cuml failed)"]
+          [else #f]))))
 
 (define (run-twin script input)
   (with-release ([dir
@@ -68,7 +70,7 @@
   (hash-ref (run-twin script (hasheq 'cases cases)) 'results))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
-  (test-unless-skipped twin-skip name body ...))
+  (test-unless-skipped (force twin-skip) name body ...))
 
 (define unbound-twin-params '(verbose output-type))
 

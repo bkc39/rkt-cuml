@@ -888,3 +888,85 @@ Follow-ups are GitHub issues.
   copies of every row no n-neighbors fits, so X is deduplicated). No pre-fit check
   catches them. The shim does not centre X: that would break bitwise parity
   with Python cuML.
+
+## Decisions recorded in leg B3 (#27)
+
+- **B3-a.** Spectral embedding lives in `cuml/manifold` over
+  `ML::SpectralEmbedding::transform`; `spectral-clustering-result` stays one
+  field.
+- **B3-b.** The procedures are `spectral-embedding-fit`, `-fit-graph`,
+  `-fit-transform`, `-params` and the `spectral-embedding-result` struct;
+  the estimator is `spectral-embedding`, whose `fit-transform` is the
+  one-call form and whose `transform` raises.
+- **B3-c.** Dense X takes a fixed `'nearest-neighbors` affinity (s0 refuses
+  any other in `#:params`); a COO graph goes through `-fit-graph`. No
+  `'rbf`, dense precomputed or precomputed-nearest-neighbors input (#28).
+- **B3-d.** `#:n-neighbors #f` means min(256, max(2, ⌊n/10⌋)); the result
+  records the count used and the params keep `#f`. Counts above 256 are
+  accepted and documented as not repeatable.
+- **B3-e.** The shim applies sklearn's sign rule: each column's first entry
+  of largest magnitude is positive (`make_largest_positive`). The Python twin
+  applies the same rule to cuML's output.
+- **B3-f.** `#:norm-laplacian` and `#:drop-first` are keywords, both `#t`
+  by default, shared with the estimator.
+- **B3-g.** n-components defaults to 2.
+- **B3-h.** X whose largest magnitude is below 2⁻⁴⁰ is embedded as an exact
+  power-of-two-scaled copy, so the embedding is bitwise scale-invariant
+  (L7).
+- **B3-i.** Squared row norms past 2¹²⁵ are refused (s11).
+- **B3-j.** After the solve, a non-finite entry (s13, gtest only) and an
+  all-zero column (s14) are refused with the outputs freed.
+- **B3-k.** Self-loops in a given graph are refused (g5), as leg 5 does.
+- **B3-l.** A graph that is not symmetric is used as given and documented. A
+  graph fit refused for an inaccurate or NaN eigenvector names the asymmetry
+  in place of B3-v's advice; a zero column keeps B3-v's advice; cuML's failure
+  to converge passes through as cuML raises it.
+- **B3-m.** Disconnected graphs are not refused (L11). A graph whose
+  Laplacian repeats eigenvalues (rings, grids, complete graphs, stars,
+  identical pieces) can give a wrong embedding or a zero column, with either
+  Laplacian, on both paths. The graph path refuses what B3-y detects; the
+  dense path cannot check, and L11 pins its departure on two identical
+  polygons. Neither the refusals nor the manual offer a remedy.
+- **B3-n.** `#:random-state #f` draws its seed in Racket.
+- **B3-o.** n-neighbors above the row count is refused (s9).
+- **B3-p.** X needs at least 2 columns (s5).
+- **B3-q.** A given graph keeps leg 5's bound: entries plus samples at most
+  2³¹−1 (g3).
+- **B3-r.** Leg 5's graph checks live in `shim/common/graph.{hpp,cu}`, the
+  2(nev + 1) Lanczos bound in `require_lanczos_rows`, and the sign rule on a
+  row-major matrix in `shim/common/largest_positive.{hpp,cu}`. PCA's sign
+  kernel, which writes a transposed output, lives in
+  `shim/decomposition/src/signs.cuh`.
+- **B3-s.** Spectral clustering's result carries labels only; its
+  embedding comes from `spectral-embedding-fit-graph`.
+- **B3-t.** X is not centred; the manual says to centre X far from the
+  origin.
+- **B3-u.** The eigensolver's tolerance (1e-5) is not exposed. Without
+  norm-laplacian, weights spanning orders of magnitude can give a wrong
+  embedding or a zero column that B3-y does not see; the manual says to use
+  norm-laplacian for such graphs, and the refusal advises it (B3-v).
+- **B3-v.** Racket resolves n-neighbors and passes the count to the shim,
+  which returns only the embedding. A refusal after the solve names the likely
+  cause: on the dense path, duplicated or uncentred X or n-neighbors; on the
+  graph path, graphs whose Laplacian repeats eigenvalues; plus samples without
+  edges, with norm-laplacian when there are at least as many as eigenvectors
+  asked for and without it when there is any; plus norm-laplacian when,
+  without it, the summed weights span 2⁸ or more; for an inaccurate or NaN
+  eigenvector of a graph that is not symmetric, only that.
+- **B3-w.** B3's tests split per seam: L1-L3 and L7-L12 in `-law-test`, L4
+  in `-determinism-test`, L5-L7's twins in `-twin-test`, and L13 in
+  `-refusal-test` (dense X), `-graph-refusal-test` (the graph's shape) and
+  `-eigen-refusal-test` (the eigensolver's refusals).
+- **B3-x.** Without norm-laplacian, a given graph is embedded as an exact
+  power-of-two-scaled copy whose largest summed weight is in [1, 2), so the
+  embedding is bitwise invariant to the scale of the weights; with it, the
+  embedding scales as 1/√s on its own.
+- **B3-y.** After a graph fit, the shim refuses a column whose eigen-residual,
+  over the largest degree (the normalised Laplacian's with norm-laplacian), is
+  above 10⁻³ or NaN, and with drop-first a constant column. A fit displaced by
+  samples without edges can be returned without an error.
+- **B3-z.** Duplicate entries of a given graph add: the shim sums them on
+  the device in double before the solve and rounds once, so a graph split into
+  duplicates embeds bitwise as its sum. Python cuML sums them in float32 in no
+  fixed order, so three or more duplicates of one entry can differ by an ulp.
+  Each entry, before adding, is 0 or at least the smallest normal float32.

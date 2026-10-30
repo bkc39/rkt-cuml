@@ -6,7 +6,9 @@
          racket/runtime-path
          (only-in raft/unsafe define-job))
 
-(provide cuml-manifold-tsne-fit-job
+(provide cuml-manifold-spectral-embedding-fit-graph-job
+         cuml-manifold-spectral-embedding-fit-job
+         cuml-manifold-tsne-fit-job
          cuml-manifold-umap-fit-job
          cuml-manifold-umap-transform-job)
 
@@ -72,4 +74,16 @@
                     _uint64
                     _int32
                     _int32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-manifold-spectral-embedding-fit-job
+            library
+            "cuml_manifold_spectral_embedding_fit_job"
+            (handle view _int64 deposit _int64 _int32 _int32 _uint64)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-manifold-spectral-embedding-fit-graph-job
+            library
+            "cuml_manifold_spectral_embedding_fit_graph_job"
+            (handle view view view _int64 deposit _int64 _int32 _int32 _uint64)
             #:exn exn:fail:cuml)

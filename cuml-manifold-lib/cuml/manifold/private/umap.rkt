@@ -5,12 +5,12 @@
          (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
-         (only-in racket/match match match-define)
-         (only-in raft current-device-resources device-array? shape)
+         (only-in racket/match match-define)
+         (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "curve.rkt" curve-parameters)
          (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job)
-         (only-in "support.rkt" bound-params drawn-seed finite-real? metric-code))
+         (only-in "support.rkt" bound-params drawn-seed finite-real? flag metric-code rows-or-zero))
 
 (provide (struct-out umap-result)
          umap-fit
@@ -83,14 +83,6 @@
                most-float
                v))
 
-(define (rows-of a)
-  (match (and (device-array? a) (shape a))
-    [(cons n _) n]
-    [_ 0]))
-
-(define (flag v)
-  (if v 1 0))
-
 (define (schedule n-epochs random-state rows)
   (values (flag n-epochs)
           (or n-epochs 0)
@@ -114,7 +106,7 @@
     params)
   (define-values (a b) (curve who min-dist spread given-a given-b))
   (define-values (epochs-given epochs seed deterministic)
-    (schedule n-epochs random-state (rows-of X)))
+    (schedule n-epochs random-state (rows-or-zero X)))
   (define out (deposit-for/who who resources))
   (cuml-manifold-umap-fit-job who
                               resources
@@ -163,7 +155,7 @@
                             ['random-state random-state])
     params)
   (define-values (epochs-given epochs seed deterministic)
-    (schedule n-epochs random-state (max (rows-of train-X) (rows-of X))))
+    (schedule n-epochs random-state (max (rows-or-zero train-X) (rows-or-zero X))))
   (define out (deposit-for/who who resources))
   (cuml-manifold-umap-transform-job who
                                     resources

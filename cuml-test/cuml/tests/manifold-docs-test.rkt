@@ -1,8 +1,13 @@
 #lang racket/base
 
-(require (only-in cuml fit fit-transform transform tsne umap)
-         (only-in cuml/cluster hdbscan-fit hdbscan-result-labels)
+(require (only-in cuml fit fit-transform spectral-embedding transform tsne umap)
+         (only-in cuml/cluster hdbscan-fit hdbscan-result-labels kmeans-fit kmeans-result-labels)
          (only-in cuml/manifold
+                  spectral-embedding-fit
+                  spectral-embedding-fit-graph
+                  spectral-embedding-params
+                  spectral-embedding-result-embedding
+                  spectral-embedding-result-n-neighbors
                   tsne-fit
                   tsne-params
                   tsne-result-embedding
@@ -15,6 +20,7 @@
          (only-in cuml/manifold/private/curve curve-parameters)
          (only-in cuml/metrics adjusted-rand-score)
          (only-in racket/flonum flsingle)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal?)
          (only-in raft list*->device-matrix list->device-vector shape)
          (only-in raft/tests/private/gpu test-gpu)
@@ -88,3 +94,50 @@
   (check-cuml-error 'logic
                     "transform: tsne has no transform; use fit-transform"
                     (lambda () (transform (fit (tsne #:perplexity 5) (X)) (X)))))
+
+(define path-n 24)
+
+(define (path-graph)
+  (define path
+    (for*/list ([i (sub1 path-n)]
+                [e (list (cons i (add1 i)) (cons (add1 i) i))])
+      e))
+  (list (list->device-vector (map car path) #:dtype 'int32)
+        (list->device-vector (map cdr path) #:dtype 'int32)
+        (list->device-vector (map (lambda (_) 1.0) path) #:dtype 'float32)))
+
+(test-gpu "the manual: the spectral embedding example, its fits and params"
+  (define spectral (spectral-embedding-fit (X) #:n-neighbors 10))
+  (check-equal? (shape (spectral-embedding-result-embedding spectral)) '(60 2))
+  (check-equal? (~> spectral
+                    spectral-embedding-result-embedding
+                    (kmeans-fit #:n-clusters 3)
+                    kmeans-result-labels
+                    (adjusted-rand-score (list->device-vector truth #:dtype 'int32) _))
+                1.0)
+  (check-equal? (spectral-embedding-result-n-neighbors spectral) 10)
+  (check-cuml-error
+   'logic
+   "spectral-embedding-fit: n-components: 30 components with drop-first need at least 64 rows, got 60"
+   (lambda () (spectral-embedding-fit (X) #:n-components 30)))
+  (match-define (list rows cols vals) (path-graph))
+  (check-equal? (~> (spectral-embedding-fit-graph rows cols vals path-n #:n-components 1)
+                    spectral-embedding-result-embedding
+                    shape)
+                '(24 1))
+  (check-cuml-error
+   'logic
+   "spectral-embedding-fit-graph: rows: entry 0: self-loop at sample 0; leave the diagonal out"
+   (lambda () (spectral-embedding-fit-graph rows rows vals path-n)))
+  (check-equal? (hash-ref (spectral-embedding-params #:drop-first #f) 'drop-first) #f)
+  (check-cuml-error
+   'logic
+   "spectral-embedding-fit: affinity: expected nearest-neighbors, got precomputed"
+   (lambda ()
+     (spectral-embedding-fit (X) #:params (spectral-embedding-params #:affinity 'precomputed)))))
+
+(test-gpu "the manual: the spectral embedding estimator"
+  (check-equal? (shape (fit-transform (spectral-embedding #:n-neighbors 10) (X))) '(60 2))
+  (check-cuml-error 'logic
+                    "transform: spectral-embedding has no transform; use fit-transform"
+                    (lambda () (transform (fit (spectral-embedding #:n-neighbors 10) (X)) (X)))))

@@ -5,7 +5,7 @@
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
          (only-in racket/flonum flsingle)
-         (only-in racket/list append* list-set make-list range take)
+         (only-in racket/list append* append-map list-set make-list range take)
          (only-in racket/match match-lambda)
          (only-in racket/math pi)
          (only-in raft device-vector->list list->device-vector)
@@ -17,6 +17,7 @@
          (struct-out graph)
          blobs
          circles
+         clique-graph
          cliques
          float32-rows
          edited-vectors
@@ -42,11 +43,44 @@
          three-blobs
          three-blobs-matrix
          three-blocks
-         truth-of)
+         truth-of
+         unit-path
+         unit-rings
+         unit-rings-of
+         unit-star)
 
 (struct graph (rows cols vals n) #:transparent)
 
 (struct fit-case (name data truth k options compare))
+
+(define (unit-edges edges n)
+  (graph (append-map (match-lambda
+                       [(cons i j) (list i j)])
+                     edges)
+         (append-map (match-lambda
+                       [(cons i j) (list j i)])
+                     edges)
+         (make-list (* 2 (length edges)) 1.0)
+         n))
+
+(define (unit-path n)
+  (unit-edges (for/list ([i (in-range (sub1 n))])
+                (cons i (add1 i)))
+              n))
+
+(define (unit-rings-of sizes)
+  (unit-edges (for*/list ([(n o) (in-parallel (in-list sizes) (in-list (block-starts sizes)))]
+                          [i (in-range n)])
+                (cons (+ o i) (+ o (modulo (add1 i) n))))
+              (apply + sizes)))
+
+(define (unit-rings count n)
+  (unit-rings-of (make-list count n)))
+
+(define (unit-star n)
+  (unit-edges (for/list ([i (in-range 1 n)])
+                (cons 0 i))
+              n))
 
 (define (planted name data truth k #:options [options (hasheq)] #:compare [compare 'labels])
   (fit-case name data truth k options compare))
@@ -175,6 +209,10 @@
          [j (in-range (add1 i) s)])
     (set-edge! edges (+ o i) (+ o j) 1.0))
   (values (edges->graph edges (apply + sizes)) (truth-of sizes)))
+
+(define (clique-graph n)
+  (define-values (g _truth) (cliques (list n)))
+  g)
 
 (define (graph-dense g)
   (define n (graph-n g))

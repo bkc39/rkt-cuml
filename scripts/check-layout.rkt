@@ -24,6 +24,7 @@
                              pca
                              single-linkage
                              spectral-clustering
+                             spectral-embedding
                              standard-scaler
                              truncated-svd
                              tsne

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-suite_seconds=1800
+suite_seconds=3600
 if [ -z "${CUML_GPU_SUITE_BOUNDED:-}" ]; then
   suite=
   sig=

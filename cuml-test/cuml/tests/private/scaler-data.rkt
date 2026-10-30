@@ -25,6 +25,7 @@
 
 (provide bits-equal?
          constant-rows
+         dot
          dyadic-rows
          float32-roundoff
          generated-rows
@@ -35,6 +36,7 @@
          round-to
          rows->matrix
          rows-of
+         scaled-rows
          standardisation-errors
          strided-vector
          transpose
@@ -58,6 +60,12 @@
 
 (define (rows-of xs d)
   (sequence->list (in-slice d xs)))
+
+(define (scaled-rows rows by)
+  (map (lambda (row) (map (lambda (x) (* x by)) row)) rows))
+
+(define (dot xs ys)
+  (for/sum ([x (in-list xs)] [y (in-list ys)]) (* x y)))
 
 (define (strided-vector n [dt 'float64])
   (define backing (list->device-vector (range (* 2 n)) #:dtype dt))

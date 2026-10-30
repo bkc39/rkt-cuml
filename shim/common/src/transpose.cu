@@ -41,6 +41,17 @@ struct row_major {
   }
 };
 
+template <typename T>
+struct scaled_by {
+  const T* x;
+  T* out;
+  int exponent;
+
+  __device__ void operator()(int64_t o) const {
+    out[o] = scaled(x[o], exponent);
+  }
+};
+
 }  // namespace
 
 template <typename T>
@@ -55,6 +66,12 @@ void to_rows(const raft::handle_t& handle, const T* x, int64_t n, int64_t d,
   each(handle, n * d, row_major<T>{x, variance, out, n, d});
 }
 
+template <typename T>
+void scaled_copy(const raft::handle_t& handle, const T* x, int64_t count,
+                 T* out, int exponent) {
+  each(handle, count, scaled_by<T>{x, out, exponent});
+}
+
 template void to_columns<float>(const raft::handle_t&, const float*, int64_t,
                                 int64_t, const float*, float*, int);
 template void to_columns<double>(const raft::handle_t&, const double*, int64_t,
@@ -63,5 +80,8 @@ template void to_rows<float>(const raft::handle_t&, const float*, int64_t,
                              int64_t, const float*, float*);
 template void to_rows<double>(const raft::handle_t&, const double*, int64_t,
                               int64_t, const double*, double*);
+
+template void scaled_copy<float>(const raft::handle_t&, const float*, int64_t,
+                                 float*, int);
 
 }  // namespace cumlrkt

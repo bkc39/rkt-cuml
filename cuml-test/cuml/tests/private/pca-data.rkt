@@ -10,7 +10,7 @@
          (only-in racket/list argmax list-set make-list take)
          (only-in racket/match match)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "scaler-data.rkt" generated-rows round-to rows->matrix transpose))
+         (only-in "scaler-data.rkt" dot generated-rows round-to rows->matrix transpose))
 
 (provide (struct-out fitted)
          (struct-out fixture)
@@ -18,7 +18,6 @@
          centred
          column
          constant-column
-         dot
          duplicate-rows
          first-max-entries
          fitted-of
@@ -37,7 +36,6 @@
          orthonormality-bound
          over-bound
          product
-         scaled-rows
          tie-rows
          wide-fixture)
 
@@ -114,9 +112,6 @@
 
 (define magnitude-rows '((1.0 2.0 0.0) (2.0 4.5 1.0) (3.0 6.0 0.0) (4.0 8.0 1.5) (0.5 -1.0 2.0)))
 
-(define (scaled-rows rows by)
-  (map (lambda (row) (map (lambda (x) (* x by)) row)) rows))
-
 (define tie-rows '((1.0 -1.0) (-1.0 1.0) (2.0 -2.0) (-2.0 2.0) (0.5 0.5) (-0.5 -0.5)))
 
 (define (constant-column n d j value)
@@ -132,9 +127,6 @@
           (device-vector->list (pca-result-explained-variance-ratio result))
           (device-vector->list (pca-result-singular-values result))
           (device-vector->list (pca-result-mean result))))
-
-(define (dot xs ys)
-  (for/sum ([x (in-list xs)] [y (in-list ys)]) (* x y)))
 
 (define (norm xs)
   (sqrt (dot xs xs)))

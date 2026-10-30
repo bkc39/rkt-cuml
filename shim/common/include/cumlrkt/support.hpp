@@ -123,6 +123,14 @@ inline void require_basis(int64_t n, int64_t nev, const char* subject,
   }
 }
 
+inline void require_lanczos_rows(int64_t n, int64_t nev, const char* subject,
+                                 const char* unit, const std::string& text) {
+  if (n < 2 * (nev + 1)) {
+    throw logic_error(std::format("{}: {} at least {} {}, got {}", subject,
+                                  text, 2 * (nev + 1), unit, n));
+  }
+}
+
 inline void settle(const raft::handle_t& handle) {
   raftrkt::cuda_check(
       cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),

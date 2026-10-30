@@ -16,9 +16,8 @@
                   host-gram
                   magnitude-rows
                   non-increasing?
-                  over-bound
-                  scaled-rows)
-         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix unit-roundoff)
+                  over-bound)
+         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix scaled-rows unit-roundoff)
          (only-in "private/tsvd-data.rkt"
                   duplicate-fixture
                   extents

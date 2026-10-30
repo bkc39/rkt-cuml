@@ -40,6 +40,7 @@ using cumlrkt::require_at_least;
 using cumlrkt::require_at_most;
 using cumlrkt::require_basis;
 using cumlrkt::require_float;
+using cumlrkt::require_lanczos_rows;
 using cumlrkt::require_some;
 using cumlrkt::settle;
 using cumlrkt::manifold::distance_of;
@@ -191,13 +192,9 @@ void require_spectral(const umap_request& r, int64_t n) {
         n, r.n_components));
   }
   const int64_t nev = r.n_components + 1;
-  const int64_t least_rows = 2 * (nev + 1);
-  if (n < least_rows) {
-    throw logic_error(std::format(
-        "n-components: spectral init of {} components needs at least {} "
-        "rows, got {}",
-        r.n_components, least_rows, n));
-  }
+  require_lanczos_rows(
+      n, nev, "n-components", "rows",
+      std::format("spectral init of {} components needs", r.n_components));
   const int64_t entries = n * nev;
   if (entries > most_index) {
     throw logic_error(std::format(
