@@ -135,6 +135,9 @@
    (row "g5 nan"
         "vals: entry 3: expected a finite weight of at least 0, got nan"
         (fault (graph-edit ring #:vals (set-entry 3 +nan.0))))
+   (row "g5 inf"
+        "vals: entry 3: expected a finite weight of at least 0, got inf"
+        (fault (graph-edit ring #:vals (set-entry 3 +inf.0))))
    (row "g5 subnormal"
         (string-append "vals: entry 3: expected 0 or a weight of at least 1.1754943508222875e-38,"
                        " got 9.80908925027372e-45")

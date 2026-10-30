@@ -80,9 +80,9 @@ Clusters @racket[n-samples] samples from an affinity graph given as
 coordinates: entry @racket[i] joins sample @racket[(rows i)] to sample
 @racket[(cols i)] with weight @racket[(vals i)]. @racket[rows] and
 @racket[cols] are @racket['int32] and @racket[vals] is @racket['float32], all
-of one length. The graph must be symmetric, without self-loops, with finite
-weights of at least 0. Duplicate entries add, and a sample with no edges gets
-some label. Otherwise as @racket[spectral-clustering-fit], except that
+of one length. The graph must be symmetric, without self-loops, each entry 0
+or a finite weight of at least the smallest normal @racket['float32],
+duplicates then adding. A sample with no edges gets some label. Otherwise as @racket[spectral-clustering-fit], except that
 @racket[params]'s @racket[n-neighbors] and @racket[affinity] are ignored.
 
 @racket[G]'s groups, joined within each group to the samples at most two away:

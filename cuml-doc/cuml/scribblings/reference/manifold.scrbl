@@ -402,8 +402,8 @@ rows, is an error.
          spectral-embedding-result?]{
 Embeds @racket[n-samples] samples from an affinity graph given as
 coordinates, as @racket[spectral-clustering-fit-graph] takes it: symmetric,
-without self-loops, each entry 0 or at least the smallest normal
-@racket['float32], duplicates then adding. A graph
+without self-loops, each entry 0 or a finite weight of at least the smallest
+normal @racket['float32], duplicates then adding. A graph
 that is not symmetric is used as given: an inaccurate or NaN eigenvector is
 refused, the error saying the graph is not symmetric, and cuML's eigensolver
 can fail to converge or return a zero column.
