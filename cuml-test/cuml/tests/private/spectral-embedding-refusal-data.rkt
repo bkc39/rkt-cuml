@@ -161,11 +161,9 @@
 (define (zero-column-rows)
   (list (row "zero column" heavy-text (fault (heavy-pair (expt 2.0 24)) (hasheq 'norm-laplacian #f)))
         (zero-row "zero column, two rings" (unit-rings 2 30) (hasheq 'random-state 1))
-        (row "zero column, upper star"
-             (string-append zero-text edgeless)
-             (fault (graph-upper (unit-star 30))))
+        (zero-row "zero column, upper star" (graph-upper (unit-star 30)) (hasheq))
         (row "zero column, upper triangle of a pair at 2^24"
-             (string-append zero-text edgeless spread-advice)
+             heavy-text
              (fault (graph-upper (heavy-pair (expt 2.0 24)))
                     (hasheq 'norm-laplacian #f 'random-state 0)))))
 

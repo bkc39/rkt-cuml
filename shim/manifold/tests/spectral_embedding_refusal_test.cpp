@@ -424,6 +424,14 @@ TEST(SpectralEmbeddingRefusals, TheGraphShapeFindsSamplesWithoutEdges) {
               }
             }).edgeless,
             1);
+  EXPECT_EQ(shape_with([](host_graph& g) {
+              for (std::size_t e = 0; e < g.rows.size(); ++e) {
+                if (g.rows[e] > g.cols[e]) {
+                  g.vals[e] = 0.0F;
+                }
+              }
+            }).edgeless,
+            0);
 }
 
 TEST(SpectralEmbeddingRefusals, TheGraphShapeComparesSummedWeightsInFloat32) {

@@ -16,6 +16,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <optional>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
@@ -189,12 +190,15 @@ struct column_of {
   }
 };
 
-rmm::device_uvector<double> degrees(const raft::handle_t& handle, const coo& c,
-                                    int64_t n) {
+rmm::device_uvector<double> degrees(
+    const raft::handle_t& handle, const coo& c, int64_t n,
+    std::initializer_list<const int32_t*> ends) {
   const auto stream = raft::resource::get_cuda_stream(handle);
   rmm::device_uvector<double> degree(static_cast<std::size_t>(n), stream);
   thrust::fill_n(rmm::exec_policy(stream), degree.data(), n, 0.0);
-  each(handle, c.nnz, degree_sum{c.rows, c.vals, degree.data()});
+  for (const int32_t* end : ends) {
+    each(handle, c.nnz, degree_sum{end, c.vals, degree.data()});
+  }
   return degree;
 }
 
@@ -204,7 +208,7 @@ std::vector<column_fit> column_fits(const raft::handle_t& handle, const coo& c,
                                     int64_t n, const float* columns, int64_t k,
                                     bool normalised) {
   const auto stream = raft::resource::get_cuda_stream(handle);
-  const rmm::device_uvector<double> degree = degrees(handle, c, n);
+  const rmm::device_uvector<double> degree = degrees(handle, c, n, {c.rows});
   rmm::device_uvector<double> lu(static_cast<std::size_t>(n * k), stream);
   rmm::device_uvector<sums> found(static_cast<std::size_t>(k), stream);
   thrust::fill_n(rmm::exec_policy(stream), lu.data(), n * k, 0.0);
@@ -315,9 +319,10 @@ graph_shape shape_of(const raft::handle_t& handle, const coo& c, int64_t n) {
       e.sums.begin(), thrust::make_discard_iterator(), nets.begin());
   const bool symmetric =
       thrust::none_of(policy, nets.begin(), netted.second, nonzero{});
-  const rmm::device_uvector<double> degree = degrees(handle, c, n);
-  const int64_t edgeless =
-      thrust::count_if(policy, degree.begin(), degree.end(), without_edges{});
+  const rmm::device_uvector<double> touching =
+      degrees(handle, c, n, {c.rows, c.cols});
+  const int64_t edgeless = thrust::count_if(policy, touching.begin(),
+                                            touching.end(), without_edges{});
   return {.symmetric = symmetric,
           .span = ends.second / ends.first,
           .edgeless = edgeless};
