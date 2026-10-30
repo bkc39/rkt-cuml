@@ -50,7 +50,7 @@
          stochastic-blocks
          stochastic-graph
          summed-entries
-         thirds
+         third-and-rest
          twin
          with-isolated)
 
@@ -100,7 +100,7 @@
 (define (halves w)
   (list (/ w 2.0) (/ w 2.0)))
 
-(define (thirds w)
+(define (third-and-rest w)
   (define a (flsingle (/ w 3.0)))
   (list a (flsingle (- w a))))
 

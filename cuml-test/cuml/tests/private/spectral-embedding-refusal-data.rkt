@@ -139,6 +139,10 @@
         (string-append "vals: entry 3: expected 0 or a weight of at least 1.1754943508222875e-38,"
                        " got 9.80908925027372e-45")
         (fault (graph-edit ring #:vals (set-entry 3 1e-44))))
+   (row "g5 subnormal duplicate"
+        (string-append "vals: entry 20: expected 0 or a weight of at least 1.1754943508222875e-38,"
+                       " got 1.0000002153053333e-39")
+        (fault (heavy-pair 1e-39 #:graph ring)))
    (row "g6"
         "vals: the weights sum to 8.507059173023462e+38, more than 3.4028234663852886e+38"
         (fault (graph-map-vals ring past-sum)))

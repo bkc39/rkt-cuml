@@ -965,6 +965,8 @@ Follow-ups are GitHub issues.
   over the largest degree (the normalised Laplacian's with norm-laplacian), is
   above 10⁻³ or NaN, and with drop-first a constant column. A fit displaced by
   samples without edges can be returned without an error.
-- **B3-z.** Duplicate entries of a given graph add, as in Python cuML: the
-  shim sums them on the device before the solve, so a graph split into
-  duplicates embeds bitwise as its sum.
+- **B3-z.** Duplicate entries of a given graph add: the shim sums them on
+  the device in double before the solve and rounds once, so a graph split into
+  duplicates embeds bitwise as its sum. Python cuML sums them in float32 in no
+  fixed order, so three or more duplicates of one entry can differ by an ulp.
+  Each entry, before adding, is 0 or at least the smallest normal float32.

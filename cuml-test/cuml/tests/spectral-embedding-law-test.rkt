@@ -43,7 +43,7 @@
                   stochastic-blocks
                   stochastic-graph
                   summed-entries
-                  thirds
+                  third-and-rest
                   with-isolated)
          (only-in "private/umap-data.rkt"
                   blobs
@@ -170,7 +170,7 @@
 (test-gpu "L3, L9: duplicate entries add, bitwise, at either Laplacian"
   (define weighted (stochastic-graph #:weighted? #t))
   (for* ([g (in-list (list stochastic weighted))]
-         [parts (in-list (list halves thirds))]
+         [parts (in-list (list halves third-and-rest))]
          [norm (in-list '(#t #f))])
     (define options (hasheq 'norm-laplacian norm))
     (check-true (bits-equal? (on-graph (split-entries g parts) options)

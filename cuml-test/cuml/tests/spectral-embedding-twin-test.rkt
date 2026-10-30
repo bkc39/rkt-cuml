@@ -21,7 +21,7 @@
                   sign-ruled?
                   split-entries
                   stochastic-graph
-                  thirds)
+                  third-and-rest)
          (only-in "private/spectral-embedding-twin-data.rkt" parity-configs)
          (only-in "private/umap-data.rkt" blobs digits fixture-rows))
 
@@ -83,7 +83,7 @@
           (graph-checks "L5 sbm weighted" (stochastic-graph #:weighted? #t) (parity-configs))
           (graph-checks "L5 three-blocks" blocks (parity-configs))
           (graph-checks "L5 sbm weighted, split duplicates"
-                        (split-entries (stochastic-graph #:weighted? #t) thirds)
+                        (split-entries (stochastic-graph #:weighted? #t) third-and-rest)
                         (parity-configs))))
 
 (define (sklearn-twins)

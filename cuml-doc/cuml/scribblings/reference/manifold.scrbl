@@ -402,7 +402,8 @@ rows, is an error.
          spectral-embedding-result?]{
 Embeds @racket[n-samples] samples from an affinity graph given as
 coordinates, as @racket[spectral-clustering-fit-graph] takes it: symmetric,
-without self-loops, finite weights of at least 0, duplicates adding. A graph
+without self-loops, each entry 0 or at least the smallest normal
+@racket['float32], duplicates then adding. A graph
 that is not symmetric is used as given: an inaccurate or NaN eigenvector is
 refused, the error saying the graph is not symmetric, and cuML's eigensolver
 can fail to converge or return a zero column.
@@ -410,13 +411,14 @@ Without @racket[norm-laplacian] the embedding does not depend on the scale of
 the weights; with it, it scales by 1/√c when the weights scale by c.
 Without @racket[norm-laplacian], weights spanning orders of magnitude can give
 a wrong embedding or an error; use @racket[norm-laplacian].
-An inaccurate eigenvector is an error, as is a constant one with
-@racket[drop-first].
+A column whose eigen-residual passes 10⁻³ of the largest degree (of the
+normalised Laplacian with @racket[norm-laplacian]) is an error, as is a
+constant one with @racket[drop-first].
 With @racket[norm-laplacian] a sample without edges has eigenvalue 1, and many
 such samples can displace the graph's eigenvectors.
 Without @racket[norm-laplacian] a sample without edges has eigenvalue 0, as
 any separate piece does, and takes a leading column.
-Such a fit can be returned without an error. Otherwise as
+Either such fit can be returned without an error. Otherwise as
 @racket[spectral-embedding-fit], except that @racket[params]'s
 @racket[n-neighbors] and @racket[affinity] are ignored.
 @examples[#:eval ev #:label #f
