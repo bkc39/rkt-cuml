@@ -42,6 +42,7 @@
                   counts-of
                   cumulative
                   dataset-column
+                  dataset-columns
                   features
                   labels-of
                   leading
@@ -51,7 +52,7 @@
                   sizes
                   spectrum)
          (only-in cuml/scribblings/guide/source page-helpers-source)
-         (only-in datasets/core load-dataset-table)
+         (only-in datasets/core dataset-table-names load-dataset-table)
          (only-in pkg/lib pkg-directory)
          (only-in racket/function curry)
          (only-in racket/list
@@ -61,11 +62,14 @@
                   drop
                   first
                   group-by
+                  last
+                  make-list
                   remove-duplicates
                   second
                   take)
          (only-in racket/match match match-define)
          (only-in racket/math exact-round sqr)
+         (only-in racket/path file-name-from-path)
          (only-in racket/string string-contains?)
          (only-in rackunit
                   check
@@ -76,6 +80,7 @@
                   check-not-equal?
                   check-not-false
                   check-pred
+                  check-true
                   test-case)
          (only-in raft
                   device-matrix->list*
@@ -146,20 +151,29 @@
               (~> file read-document included-sections)))
 
 (define dataset-citations
-  '((iris ("doi:10.24432/C56C76" "CC BY 4.0") "doi:10.24432/C56C76. CC BY 4.0")
-    (wine ("doi:10.24432/C5PC7J" "CC BY 4.0") "doi:10.24432/C5PC7J. CC BY 4.0")
-    (faithful ("R 4.3.3" "GPL-2 or GPL-3") "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
-    (breast-cancer ("doi:10.24432/C5DW2B" "CC BY 4.0") "doi:10.24432/C5DW2B. CC BY 4.0")))
+  '((iris datasets-core ("doi:10.24432/C56C76" "CC BY 4.0") "doi:10.24432/C56C76. CC BY 4.0")
+    (wine datasets-core ("doi:10.24432/C5PC7J" "CC BY 4.0") "doi:10.24432/C5PC7J. CC BY 4.0")
+    (faithful datasets-core
+              ("R 4.3.3" "GPL-2 or GPL-3")
+              "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
+    (breast-cancer datasets-core
+                   ("doi:10.24432/C5DW2B" "CC BY 4.0")
+                   "doi:10.24432/C5DW2B. CC BY 4.0")
+    (digits datasets-uci
+            ("doi:10.24432/C50P49" "CC BY 4.0")
+            "Optical Recognition of Handwritten Digits, doi:10.24432/C50P49.")))
 
 (define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
 (define (chapter-datasets chapter)
   (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))
 
-(test-case "the guide chapter that introduces a dataset cites its DOI or licence, as datasets-core's NOTICE gives them"
-  (define datasets-core (pkg-directory "datasets-core"))
-  (check-not-false datasets-core "pkg-directory: datasets-core is not installed")
-  (define notice (flattened-text (build-path datasets-core "NOTICE")))
+(define (notice-of pkg)
+  (define dir (pkg-directory (symbol->string pkg)))
+  (check-not-false dir (format "pkg-directory: ~a is not installed" pkg))
+  (flattened-text (build-path dir "NOTICE")))
+
+(test-case "the guide chapter that introduces a dataset cites its DOI or licence, as its package's NOTICE gives them"
   (define introductions
     (for*/fold ([introductions '()]
                 #:result (reverse introductions))
@@ -168,13 +182,28 @@
                 #:unless (assq dataset introductions))
       (cons (cons dataset chapter) introductions)))
   (check-equal? (map car introductions) (map car dataset-citations))
+  (check-equal? (file-name-from-path (cdr (assq 'digits introductions))) (string->path "embeddings.scrbl"))
   (for ([citation (in-list dataset-citations)])
-    (match-define (list dataset cited notice-text) citation)
+    (match-define (list dataset pkg cited notice-text) citation)
     (define chapter (cdr (assq dataset introductions)))
-    (check-not-false (string-contains? notice notice-text) (format "NOTICE: ~a" notice-text))
+    (check-not-false (string-contains? (notice-of pkg) notice-text)
+                     (format "~a NOTICE: ~a" pkg notice-text))
     (for ([text (in-list cited)])
       (check-not-false (string-contains? (flattened-text chapter) text)
                        (format "~a: ~a" chapter text)))))
+
+(test-case "digits loads without a GPU: 1797 rows of 64 pixels from 0 to 16 and the digit"
+  (define digits (load-dataset-table 'digits))
+  (define names (dataset-table-names digits))
+  (define pixels (features 'digits "digit"))
+  (check-equal? (length names) 65)
+  (check-equal? (last names) "digit")
+  (check-equal? (sizes (dataset-column 'digits "digit")) '(183 182 182 181 181 180 179 178 177 174))
+  (define columns (dataset-columns 'digits pixels))
+  (check-equal? (map length columns) (make-list 64 1797))
+  (check-true (for*/and ([column (in-list columns)]
+                         [pixel (in-list column)])
+                (<= 0 pixel 16))))
 
 (test-case "the helpers leave out noise, label -1"
   (check-equal? (sizes '(-1 0 0 1 -1)) '(2 1))

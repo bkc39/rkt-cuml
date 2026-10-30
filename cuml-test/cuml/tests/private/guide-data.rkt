@@ -7,7 +7,7 @@
          (only-in datasets/core load-dataset-table)
          (only-in racket/file file->string)
          (only-in racket/function curry)
-         (only-in racket/list append-map count take)
+         (only-in racket/list append-map count range remove-duplicates take)
          (only-in racket/match match)
          (only-in racket/sandbox sandbox-namespace-specs)
          (only-in rackunit check-= check-equal?)
@@ -23,6 +23,7 @@
          example-blocks
          flattened-text
          host
+         misplaced-by-class
          mismatches
          read-document
          scaled-matrix
@@ -58,6 +59,11 @@
 
 (define (mismatches labels classes)
   (count (lambda (cluster class) (not (= cluster class))) labels (renumbered classes)))
+
+(define (misplaced-by-class labels classes)
+  (define truth (renumbered classes))
+  (for/list ([class (in-range (length (remove-duplicates truth)))])
+    (count (lambda (cluster id) (and (= id class) (not (= cluster id)))) labels truth)))
 
 (define (scaled-matrix name columns)
   (define-values (_fitted scaled)

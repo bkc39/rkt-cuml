@@ -58,7 +58,7 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/guide-data.rkt" evaluated-chapter mismatches scaled-matrix)
+         (only-in "private/guide-data.rkt" evaluated-chapter misplaced-by-class mismatches scaled-matrix)
          (only-in "private/metrics-data.rkt" mean)
          (only-in "private/scaler-data.rkt" float32-roundoff transpose))
 
@@ -94,7 +94,7 @@
 (define one-sample (cluster-plot '(0.0) '(0.0) '(1)))
 
 (test-case "cluster-style gives each label id its colour and marker, in the fixed order"
-  (check-equal? (map cluster-style (range 8))
+  (check-equal? (map cluster-style (range 10))
                 (list '((42 120 214) fullcircle circle)
                       '((235 104 52) fullsquare square)
                       '((27 175 122) fulltriangleup triangleup)
@@ -102,19 +102,21 @@
                       '((232 123 164) fulltriangledown triangledown)
                       '((0 131 0) full5star 5star)
                       '((98 80 214) fulltriangleright triangleright)
-                      '((227 73 72) full4star 4star)))
-  (check-equal? (~> (range 8) (map cluster-style _) (map second _) remove-duplicates length) 8)
-  (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: 8"
-             (lambda () (cluster-plot '(0 1) '(0 1) '(0 8)))))
+                      '((227 73 72) full4star 4star)
+                      '((140 86 75) fulltriangleleft triangleleft)
+                      '((23 190 207) full6star 6star)))
+  (check-equal? (~> (range 10) (map cluster-style _) (map second _) remove-duplicates length) 10)
+  (check-exn #rx"^cluster-plot: label ids run from 0 to 9\n  label: 10"
+             (lambda () (cluster-plot '(0 1) '(0 1) '(0 10)))))
 
 (test-case "a negative label other than -1, or a non-integer one, is refused in the caller's name"
-  (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: -2"
+  (check-exn #rx"^cluster-plot: label ids run from 0 to 9\n  label: -2"
              (lambda () (cluster-plot '(0) '(0) '(-2))))
-  (check-exn #rx"^cluster-legend: label ids run from 0 to 7\n  label: -2"
+  (check-exn #rx"^cluster-legend: label ids run from 0 to 9\n  label: -2"
              (lambda () (cluster-legend '(-2))))
-  (check-exn #rx"^cluster-legend: label ids run from 0 to 7\n  label: 1.0"
+  (check-exn #rx"^cluster-legend: label ids run from 0 to 9\n  label: 1.0"
              (lambda () (cluster-legend '(1.0) #:names '("a" "b"))))
-  (check-exn #rx"^cluster-style: label ids run from 0 to 7\n  label: 1.0"
+  (check-exn #rx"^cluster-style: label ids run from 0 to 9\n  label: 1.0"
              (lambda () (cluster-style 1.0))))
 
 (test-case "a label keeps its colour whatever other labels a panel holds"
@@ -217,28 +219,27 @@
   (check-equal? (matched-labels '(0 0 1) '(x x x)) '(0 0 1))
   (check-equal? (matched-labels '(3 3 4) '(-1 -1 7)) '(1 1 0)))
 
-(test-case "seven clusters against three classes reach label id 8, past the figure's 0 to 7"
-  (define labels (matched-labels '(0 0 0 0 1 2 3 4 5 6) '(a a b c a a a a a a)))
-  (check-equal? labels '(0 0 0 0 3 4 5 6 7 8))
-  (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: 8"
-             (lambda () (cluster-plot (range 10) (range 10) labels))))
+(define past-nine-classes '(a a b c a a a a a a a a))
 
-(define past-seven-classes '(a a b c a a a a a a))
+(define past-nine (matched-labels '(0 0 0 0 1 2 3 4 5 6 7 8) past-nine-classes))
 
-(define past-seven (matched-labels '(0 0 0 0 1 2 3 4 5 6) past-seven-classes))
+(test-case "nine clusters against three classes reach label id 10, past the figure's 0 to 9"
+  (check-equal? past-nine '(0 0 0 0 3 4 5 6 7 8 9 10))
+  (check-exn #rx"^cluster-plot: label ids run from 0 to 9\n  label: 10"
+             (lambda () (cluster-plot (range 12) (range 12) past-nine))))
 
-(test-case "class-figure refuses a label past 7 as itself"
-  (check-exn #rx"^class-figure: label ids run from 0 to 7\n  label: 8"
+(test-case "class-figure refuses a label past 9 as itself"
+  (check-exn #rx"^class-figure: label ids run from 0 to 9\n  label: 10"
              (lambda ()
-               (class-figure (range 10)
-                             (range 10)
-                             (list (list "k" past-seven))
-                             past-seven-classes
+               (class-figure (range 12)
+                             (range 12)
+                             (list (list "k" past-nine))
+                             past-nine-classes
                              #:class-title "x"))))
 
-(test-case "sweep-figure refuses a label past 7 as itself"
-  (check-exn #rx"^sweep-figure: label ids run from 0 to 7\n  label: 8"
-             (lambda () (sweep-figure (range 10) (range 10) '("k") (list past-seven)))))
+(test-case "sweep-figure refuses a label past 9 as itself"
+  (check-exn #rx"^sweep-figure: label ids run from 0 to 9\n  label: 10"
+             (lambda () (sweep-figure (range 12) (range 12) '("k") (list past-nine)))))
 
 (define (span numbers)
   (list (apply min numbers) (apply max numbers)))
@@ -395,3 +396,35 @@
   (define misplaced (map (curryr mismatches cultivar) clusterings))
   (check-equal? misplaced '(6 6))
   (check-equal? (map (curry misplaced-in 1) clusterings) misplaced))
+
+(define embeddings
+  (delay
+    (evaluated-chapter "embeddings.scrbl")))
+
+(define noise-grey '(137 135 129))
+
+(define (colours-drawn picture targets)
+  (define all (pixels picture))
+  (for/list ([target (in-list targets)])
+    (for/or ([pixel (in-list all)])
+      (for/and ([channel (in-list pixel)]
+                [expected (in-list target)])
+        (<= (abs (- channel expected)) 2)))))
+
+(test-gpu "the figures: digits in UMAP's and t-SNE's planes"
+  (define-values (chapter blocks) (force embeddings))
+  (match-define (list _ _ _ (list umap-figure) (list _ _ _ tsne-figure)) blocks)
+  (define digit (chapter 'digit))
+  (define clusterings
+    (for/list ([name (in-list '(embedded pictured))])
+      (clusters-of (chapter 'clusterer) (chapter name) digit)))
+  (for ([labels (in-list clusterings)])
+    (check-true (for/and ([label (in-list labels)])
+                  (<= -1 label 9))))
+  (check-equal? (map (curryr mismatches digit) clusterings) '(91 330))
+  (match-define (list _ ones _ _ _ _ _ _ _ nines) (misplaced-by-class (first clusterings) digit))
+  (check-equal? (list ones nines) '(28 38))
+  (for ([figure (in-list (list umap-figure tsne-figure))])
+    (check-true (pict? figure))
+    (check-equal? (colours-drawn figure (append (map blended cluster-colors) (list noise-grey)))
+                  (make-list 11 #t))))
