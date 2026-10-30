@@ -261,9 +261,10 @@ gtests built with `-DCUMLRKT_SANITIZE=ON`), `CUML_ASAN_OPTIONS`,
 pool through) and `CUML_SHIM_PROBE` (the test-only `libcumlrkt_probe.so`,
 installed in the shim's `tests` output, which the model tests load; unset on
 a GPU host, they fail rather than skip). `PLTUSERHOME` is
-`~/.cache/rkt-cuml-devshell/<hash of the checkout path>/<hash of the rkt-raft
-and nix/racket-tools.nix store paths>`. Every install skips what is already
-installed, so a bump of either pin enters a fresh, empty home. Every shell
+`~/.cache/rkt-cuml-devshell/<hash of the checkout path>/<hash of the rkt-raft,
+datasets and nix/racket-tools.nix store paths>`, one home per rkt-raft,
+datasets and tool pin. Every install skips what is already installed, so a
+bump of any of these pins enters a fresh, empty home. Every shell
 entry deletes everything else under this checkout's directory (old pins'
 homes), and nothing outside it, so entering a shell with a new pin deletes
 the home of a shell still open on the old pin in the same checkout: close
@@ -302,7 +303,9 @@ runner: run `docs` before any push that touches the scribblings.
 `pkg-deps` skips cuml-doc's `racket-doc` and `threading-doc` (`doc_only`:
 under `--no-docs` setup cannot see the manual's links), so it never
 reports either as unused; drop one by hand when the manual stops linking
-into it. `bindings` runs the census `scripts/check-bindings.rkt`, per family (its `families` list):
+into it. It skips cuml-doc's and cuml-test's `datasets-uci` too
+(`data_only`: it ships data that `datasets-core` finds, and no module a
+package requires). `bindings` runs the census `scripts/check-bindings.rkt`, per family (its `families` list):
 every `cuml_<family>_` export of the staged library is bound once (a
 `_job`'s body excepted), every binding is exported, and
 `scripts/<family>-bindings.rktd`, keyed by issue, plans each export; a leg
@@ -346,7 +349,7 @@ replace each when raft offers a public form:
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*` and `tsne-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-embeddings-test`, `guide-embeddings-seeds-test`, `guide-embeddings-twin-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*` and `tsne-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -434,7 +437,9 @@ kills the test outright.
   `plot-pict`), drawn live by the examples: no committed images.
   `guide-plots-test.rkt` pins the colours by label id, the sizes, and every
   count a figure's prose names; `guide-twin-test.rkt` checks the
-  Decomposition chapter's printed values against an sklearn twin.
+  Decomposition chapter's printed values against an sklearn twin, and
+  `guide-embeddings-twin-test.rkt` the Embeddings chapter's against Python
+  cuML.
 - Every exported name gets a Scribble entry with live examples
   (`scribble/example`, never pasted output), each pinned in
   `cuml-test/cuml/tests/docs-test.rkt` (the reference;
@@ -444,8 +449,9 @@ kills the test outright.
   truncated SVD section and `reference/truncated-svd-estimator.scrbl`,
   `manifold-docs-test.rkt` for `reference/manifold.scrbl`) or
   `guide-docs-test.rkt` (the guide; `guide-decomposition-test.rkt` for the
-  Decomposition chapter's k-means, which evaluates the chapter's own
-  examples in order in a sandbox (`evaluated-chapter`) and pins their
+  Decomposition chapter's k-means and `guide-embeddings-test.rkt` for the
+  Embeddings chapter's scores, which evaluate the chapter's own
+  examples in order in a sandbox (`evaluated-chapter`) and pin their
   printed scores, as `guide-plots-test.rkt` does for its figure).
 
 ## CI

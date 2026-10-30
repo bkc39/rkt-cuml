@@ -970,3 +970,36 @@ Follow-ups are GitHub issues.
   duplicates embeds bitwise as its sum. Python cuML sums them in float32 in no
   fixed order, so three or more duplicates of one entry can differ by an ulp.
   Each entry, before adding, is 0 or at least the smallest normal float32.
+
+## Decisions recorded in leg B4 (#52)
+
+- **B4-a.** The guide's palette has 10 label ids, 0 to 9: tab10's brown
+  `#8c564b` and cyan `#17becf` join as ids 8 and 9, with the markers
+  `triangleleft` and `6star`. Ids 0 to 7 keep their colours and markers.
+- **B4-b.** HDBSCAN in the Embeddings chapter takes `#:min-cluster-size 60
+  #:min-samples 10`: a third of a digit's samples, and umap-learn's
+  min-samples. On UMAP's embedding they give exactly 10 clusters at every
+  seed 0 to 9.
+- **B4-c.** UMAP and t-SNE run at their defaults; umap-learn's clusterable
+  settings (`n-neighbors 30`, `min-dist 0.0`) score lower on digits.
+- **B4-d.** Spectral embedding is not in the chapter: in two dimensions its
+  trustworthiness is 0.878 and HDBSCAN on it scores at most 0.30.
+- **B4-e.** The trustworthiness line prints PCA's two components beside
+  UMAP and t-SNE. `guide-embeddings-test` checks PCA's printed value over 10
+  fits, since PCA fits may differ in the last bits.
+- **B4-f.** Digits comes from `datasets-uci`, a build-dep of cuml-doc and
+  cuml-test (`data_only` in `pkg-deps.sh`), with `datasets-core` at 0.2.
+  The dev shell and the package build set up datasets-uci, and the dev
+  shell's home is keyed on the datasets pin as well as rkt-raft's and the
+  tools'.
+- **B4-g.** The chapter is deterministic, so every printed value is pinned
+  exactly. Python cuML's twin (`guide-embeddings-twin-test`,
+  `python/guide_embeddings_twin.py`) checks the labels, trustworthiness and
+  embeddings bitwise and the ARIs to 1e-12; seeds 0 to 9 are floors for the
+  prose's comparisons (`guide-embeddings-seeds-test`).
+- **B4-h.** `ex-embeddings` is the last Examples chapter, after
+  `ex-decomposition`, so digits is introduced last.
+- **B4-i.** t-SNE's figure has an HDBSCAN panel beside the digit panel.
+- **B4-j.** Repeatability is checked in one process; across processes it is
+  B1 L6's and B2 L4's on digits.
+- **B4-k.** `scored` is a guide helper in `guide/helpers.rkt`.
