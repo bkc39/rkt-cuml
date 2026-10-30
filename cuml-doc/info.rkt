@@ -9,7 +9,8 @@
   '("cuml-lib" "cuml-decomposition-lib"
                "cuml-manifold-lib"
                "cuml-preprocessing-lib"
-               "datasets-core"
+               ("datasets-core" #:version "0.2")
+               "datasets-uci"
                ("raft" #:version "0.2")
                "pict-doc"
                "pict-lib"
