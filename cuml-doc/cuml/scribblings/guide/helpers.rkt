@@ -148,7 +148,17 @@
     (string->number (substring hex start (+ start 2)) 16)))
 
 (define cluster-colors
-  (map rgb '("#2a78d6" "#eb6834" "#1baf7a" "#eda100" "#e87ba4" "#008300" "#6250d6" "#e34948" "#8c564b" "#17becf")))
+  (map rgb
+       (list "#2a78d6"
+             "#eb6834"
+             "#1baf7a"
+             "#eda100"
+             "#e87ba4"
+             "#008300"
+             "#6250d6"
+             "#e34948"
+             "#8c564b"
+             "#17becf")))
 
 (define cluster-shapes
   (list '(fullcircle circle)

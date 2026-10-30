@@ -156,9 +156,7 @@
     (faithful datasets-core
               ("R 4.3.3" "GPL-2 or GPL-3")
               "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
-    (breast-cancer datasets-core
-                   ("doi:10.24432/C5DW2B" "CC BY 4.0")
-                   "doi:10.24432/C5DW2B. CC BY 4.0")
+    (breast-cancer datasets-core ("doi:10.24432/C5DW2B" "CC BY 4.0") "doi:10.24432/C5DW2B. CC BY 4.0")
     (digits datasets-uci
             ("doi:10.24432/C50P49" "CC BY 4.0")
             "Optical Recognition of Handwritten Digits, doi:10.24432/C50P49.")))
@@ -182,7 +180,8 @@
                 #:unless (assq dataset introductions))
       (cons (cons dataset chapter) introductions)))
   (check-equal? (map car introductions) (map car dataset-citations))
-  (check-equal? (file-name-from-path (cdr (assq 'digits introductions))) (string->path "embeddings.scrbl"))
+  (check-equal? (file-name-from-path (cdr (assq 'digits introductions)))
+                (string->path "embeddings.scrbl"))
   (for ([citation (in-list dataset-citations)])
     (match-define (list dataset pkg cited notice-text) citation)
     (define chapter (cdr (assq dataset introductions)))

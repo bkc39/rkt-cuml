@@ -405,6 +405,12 @@
         mkdir -p "$PLTUSERHOME"
       '';
       racketHome = racketHomeFor rkt-raft raftInputs.datasets-src racketTools.sources;
+      testHomeKey =
+        raft: datasets: tools:
+        lib.escapeShellArg (
+          racketHomeFor "/nix/store/${raft}-rkt-raft" "/nix/store/${datasets}-datasets"
+            "/nix/store/${tools}-tools"
+        );
 
       racketHomeKeys = pkgs.runCommand "rkt-cuml-racket-home-keys" { } ''
         export HOME=$TMPDIR/home
@@ -417,10 +423,10 @@
           printf '%s' "$PLTUSERHOME"
         )
         fail() { echo "$1" >&2; exit 1; }
-        key_a=${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft" "/nix/store/a-datasets" "/nix/store/a-tools")}
-        key_raft=${lib.escapeShellArg (racketHomeFor "/nix/store/b-rkt-raft" "/nix/store/a-datasets" "/nix/store/a-tools")}
-        key_datasets=${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft" "/nix/store/b-datasets" "/nix/store/a-tools")}
-        key_tools=${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft" "/nix/store/a-datasets" "/nix/store/b-tools")}
+        key_a=${testHomeKey "a" "a" "a"}
+        key_raft=${testHomeKey "b" "a" "a"}
+        key_datasets=${testHomeKey "a" "b" "a"}
+        key_tools=${testHomeKey "a" "a" "b"}
 
         pin_a=$(home_in checkout-a "$key_a")
         touch "$pin_a/stamp"

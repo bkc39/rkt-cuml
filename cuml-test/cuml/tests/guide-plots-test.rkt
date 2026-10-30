@@ -58,7 +58,11 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/guide-data.rkt" evaluated-chapter misplaced-by-class mismatches scaled-matrix)
+         (only-in "private/guide-data.rkt"
+                  evaluated-chapter
+                  misplaced-by-class
+                  mismatches
+                  scaled-matrix)
          (only-in "private/metrics-data.rkt" mean)
          (only-in "private/scaler-data.rkt" float32-roundoff transpose))
 

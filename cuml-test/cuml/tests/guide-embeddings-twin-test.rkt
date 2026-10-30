@@ -28,7 +28,8 @@
   (define ids (device-vector->list (chapter 'digit-ids)))
   (define clusterer (chapter 'clusterer))
   (define pictures (list images (chapter 'embedded) (chapter 'pictured)))
-  (define labels (map (lambda (samples) (device-vector->list (fit-predict clusterer samples))) pictures))
+  (define labels
+    (map (lambda (samples) (device-vector->list (fit-predict clusterer samples))) pictures))
   (define digits (fixture "digits" rows ids))
   (define (op name . fields)
     (apply hasheq 'op name fields))
@@ -38,25 +39,30 @@
                                     (hash-table ['embedding tsne-embedding])
                                     found)]
                             ['version version])
-    (run-twin
-     twin
-     (hasheq 'cases
-             (append (list (op "digits")
-                           (twin-case digits (umap-model (fit (umap) images)))
-                           (tsne-case digits (tsne-model (fit (tsne) images))))
-                     (for/list ([samples (in-list pictures)])
-                       (op "hdbscan" 'X (device-matrix->list* samples)))
-                     (for/list ([samples (in-list (cdr pictures))])
-                       (op "trust" 'X rows 'E (device-matrix->list* samples)))
-                     (for/list ([ours (in-list labels)])
-                       (op "ari" 'y ids 'labels ours))))))
+    (run-twin twin
+              (hasheq 'cases (append (list (op "digits")
+                                           (twin-case digits (umap-model (fit (umap) images)))
+                                           (tsne-case digits (tsne-model (fit (tsne) images))))
+                                     (for/list ([samples (in-list pictures)])
+                                       (op "hdbscan" 'X (device-matrix->list* samples)))
+                                     (for/list ([samples (in-list (cdr pictures))])
+                                       (op "trust" 'X rows 'E (device-matrix->list* samples)))
+                                     (for/list ([ours (in-list labels)])
+                                       (op "ari" 'y ids 'labels ours))))))
   (check-equal? (hash-ref version 'cuml) "26.08.00")
   (check-equal? (hash-ref version 'sklearn) "1.8.0")
   (check-equal? rows sklearn-rows "the pixels are sklearn's digits")
   (check-equal? (chapter 'digit) sklearn-labels "the digits are sklearn's labels")
   (check-true (bits-equal? (device-matrix->list* (chapter 'embedded)) umap-embedding) "UMAP")
   (check-true (bits-equal? (device-matrix->list* (chapter 'pictured)) tsne-embedding) "t-SNE")
-  (match-define (list raw-labels umap-labels tsne-labels umap-trust tsne-trust raw-ari umap-ari tsne-ari)
+  (match-define (list raw-labels
+                      umap-labels
+                      tsne-labels
+                      umap-trust
+                      tsne-trust
+                      raw-ari
+                      umap-ari
+                      tsne-ari)
     found)
   (for ([ours (in-list labels)]
         [theirs (in-list (list raw-labels umap-labels tsne-labels))]

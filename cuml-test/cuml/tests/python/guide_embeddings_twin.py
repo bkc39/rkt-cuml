@@ -6,7 +6,6 @@ import json
 import sys
 
 import numpy as np
-
 import tsne_twin
 import umap_twin
 
@@ -18,9 +17,9 @@ def f32(rows):
 def hdbscan(case):
     from cuml.cluster import HDBSCAN
 
-    found = HDBSCAN(min_cluster_size=60, min_samples=10, output_type="numpy").fit_predict(
-        f32(case["X"])
-    )
+    found = HDBSCAN(
+        min_cluster_size=60, min_samples=10, output_type="numpy"
+    ).fit_predict(f32(case["X"]))
     return {"labels": np.asarray(found).astype(int).tolist()}
 
 
