@@ -150,16 +150,16 @@
 (define cluster-styles
   (map (match-lambda
          [(cons hex shape) (cons (rgb hex) shape)])
-       '(("#2a78d6" fullcircle circle)
-         ("#eb6834" fullsquare square)
-         ("#1baf7a" fulltriangleup triangleup)
-         ("#eda100" fulldiamond diamond)
-         ("#e87ba4" fulltriangledown triangledown)
-         ("#008300" full5star 5star)
-         ("#6250d6" fulltriangleright triangleright)
-         ("#e34948" full4star 4star)
-         ("#8c564b" fulltriangleleft triangleleft)
-         ("#17becf" full6star 6star))))
+       (list '("#2a78d6" fullcircle circle)
+             '("#eb6834" fullsquare square)
+             '("#1baf7a" fulltriangleup triangleup)
+             '("#eda100" fulldiamond diamond)
+             '("#e87ba4" fulltriangledown triangledown)
+             '("#008300" full5star 5star)
+             '("#6250d6" fulltriangleright triangleright)
+             '("#e34948" full4star 4star)
+             '("#8c564b" fulltriangleleft triangleleft)
+             '("#17becf" full6star 6star))))
 
 (define cluster-colors (map car cluster-styles))
 

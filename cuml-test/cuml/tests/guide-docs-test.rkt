@@ -201,10 +201,8 @@
 (define (install-line)
   (match-define (list line)
     (regexp-match #px"@commandline\\{raco pkg install [^}]*\\}"
-                  (flattened-text (collection-file-path "getting-started.scrbl"
-                                                        "cuml"
-                                                        "scribblings"
-                                                        "guide"))))
+                  (flattened-text
+                   (collection-file-path "getting-started.scrbl" "cuml" "scribblings" "guide"))))
   line)
 
 (define (examples-intro)

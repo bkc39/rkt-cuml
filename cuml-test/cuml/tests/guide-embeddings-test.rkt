@@ -80,22 +80,26 @@
   (match-define (and misplaced (list _ ones _ _ _ _ _ _ _ nines)) (embeddings-pin 'umap-misplaced))
   (define min-cluster-size (embeddings-pin 'min-cluster-size))
   (define min-samples (embeddings-pin 'min-samples))
-  (list (format "holds ~a handwritten digits" (apply + (embeddings-pin 'digit-sizes)))
-        (format "(hdbscan #:min-cluster-size ~a #:min-samples ~a)" min-cluster-size min-samples)
-        (format "A cluster needs ~a digits" min-cluster-size)
-        (format "a core sample ~a neighbours" min-samples)
-        (format "In ~a dimensions" (embeddings-pin 'pixels))
-        (format "one of ~a digits mixing" raw-largest)
-        (format "and ~a digits noise." raw-noise)
-        (format "scoring ~a against ~a on the pixels, and ~a digits noise" umap-ari raw-ari umap-noise)
-        (format "Of the ~a digits the clusters misplace, ~a are 1s or 9s" (apply + misplaced) (+ ones nines))
-        (format "scores ~a and calls ~a digits noise" tsne-ari tsne-noise)
-        (format "~a against ~a" tsne-trust umap-trust)
-        (format "principal components, ~a." pca-trust)))
+  (list
+   (format "holds ~a handwritten digits" (apply + (embeddings-pin 'digit-sizes)))
+   (format "(hdbscan #:min-cluster-size ~a #:min-samples ~a)" min-cluster-size min-samples)
+   (format "A cluster needs ~a digits" min-cluster-size)
+   (format "a core sample ~a neighbours" min-samples)
+   (format "In ~a dimensions" (embeddings-pin 'pixels))
+   (format "one of ~a digits mixing" raw-largest)
+   (format "and ~a digits noise." raw-noise)
+   (format "scoring ~a against ~a on the pixels, and ~a digits noise" umap-ari raw-ari umap-noise)
+   (format "Of the ~a digits the clusters misplace, ~a are 1s or 9s"
+           (apply + misplaced)
+           (+ ones nines))
+   (format "scores ~a and calls ~a digits noise" tsne-ari tsne-noise)
+   (format "~a against ~a" tsne-trust umap-trust)
+   (format "principal components, ~a." pca-trust)))
 
 (test-case "embeddings: the prose states the pinned values"
   (define text
-    (flattened-text (collection-file-path "embeddings.scrbl" "cuml" "scribblings" "guide" "examples")))
+    (flattened-text
+     (collection-file-path "embeddings.scrbl" "cuml" "scribblings" "guide" "examples")))
   (for ([phrase (in-list (prose-phrases))])
     (check-true (string-contains? text phrase) phrase)))
 
@@ -112,7 +116,9 @@
   (define-values (chapter _blocks) (force embeddings))
   (define ids (chapter 'digit-ids))
   (define clusterer (chapter 'clusterer))
-  (for ([row (in-list `((images ,raw-table raw) (embedded ,umap-table umap) (pictured ,tsne-table tsne)))])
+  (for ([row (in-list (list (list 'images raw-table 'raw)
+                            (list 'embedded umap-table 'umap)
+                            (list 'pictured tsne-table 'tsne)))])
     (match-define (list name table pin) row)
     (check-scored ids
                   (fit-predict clusterer (chapter name))

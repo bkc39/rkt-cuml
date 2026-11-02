@@ -46,13 +46,16 @@
   (define raw-ari
     (adjusted-rand-score (chapter 'digit-ids) (fit-predict (chapter 'clusterer) (chapter 'images))))
   (for ([fit (in-list umaps)])
-    (match-define (struct* seeded ([seed seed] [ari ari] [clusters clusters] [matched matched] [trust trust]))
+    (match-define (struct*
+                   seeded
+                   ([seed seed] [ari ari] [clusters clusters] [matched matched] [trust trust]))
       fit)
     (define name (format "UMAP seed ~a" seed))
     (check >= ari umap-ari-floor name)
     (check-equal? clusters 10 name)
     (check-true (andmap drawable-label? matched) name)
-    (match-define (and misplaced (list _ ones _ _ _ _ _ _ _ nines)) (misplaced-by-class matched digit))
+    (match-define (and misplaced (list _ ones _ _ _ _ _ _ _ nines))
+      (misplaced-by-class matched digit))
     (check > (* 2 (+ ones nines)) (apply + misplaced) name)
     (check >= trust umap-trust-floor name))
   (for ([fit (in-list tsnes)])

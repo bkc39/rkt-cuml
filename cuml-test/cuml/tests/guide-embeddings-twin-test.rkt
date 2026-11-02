@@ -59,7 +59,11 @@
                 (cons (list 'ari name) (op "ari" 'y ids 'labels (hash-ref labels name))))))
     (match-define (hash-table ['results results] ['version version])
       (run-twin script (hasheq 'cases (map cdr cases))))
-    (twin-run chapter labels tsne-seed-1 (make-immutable-hash (map cons (map car cases) results)) version)))
+    (twin-run chapter
+              labels
+              tsne-seed-1
+              (make-immutable-hash (map cons (map car cases) results))
+              version)))
 
 (define (theirs key field)
   (hash-ref (hash-ref (twin-run-theirs (force twin)) key) field))
@@ -82,18 +86,22 @@
               "t-SNE"))
 
 (test-twin "t-SNE at seed 1 on the digits is Python cuML's at seed 1, bitwise"
-  (check-true (bits-equal? (~> (force twin) twin-run-tsne-seed-1 tsne-result-embedding device-matrix->list*)
-                           (theirs 'tsne-seed-1 'embedding))))
+  (check-true (bits-equal?
+               (~> (force twin) twin-run-tsne-seed-1 tsne-result-embedding device-matrix->list*)
+               (theirs 'tsne-seed-1 'embedding))))
 
 (test-twin "HDBSCAN labels the pixels and both embeddings as Python cuML does"
   (define labels (twin-run-labels (force twin)))
   (for ([name (in-list pictures)])
-    (check-equal? (hash-ref labels name) (theirs (list 'hdbscan name) 'labels) (symbol->string name))))
+    (check-equal? (hash-ref labels name)
+                  (theirs (list 'hdbscan name) 'labels)
+                  (symbol->string name))))
 
 (test-twin "the embeddings' trustworthiness is Python cuML's"
   (define chapter (twin-run-chapter (force twin)))
   (for ([name (in-list embedded-pictures)])
-    (check-equal? (trustworthiness (chapter 'images) (chapter name)) (theirs (list 'trust name) 't)
+    (check-equal? (trustworthiness (chapter 'images) (chapter name))
+                  (theirs (list 'trust name) 't)
                   (symbol->string name))))
 
 (test-twin "the clusterings' adjusted Rand indices are sklearn's"

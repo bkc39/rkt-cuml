@@ -80,11 +80,16 @@
     (~> (collection-file-path name "cuml" "scribblings" "guide" "examples")
         read-document
         example-blocks))
-  (values chapter (map (curry map chapter) (if n (take blocks n) blocks))))
+  (values chapter
+          (map (curry map chapter)
+               (if n
+                   (take blocks n)
+                   blocks))))
 
 (define (misplaced-by-class labels classes)
   (define truth (renumbered classes))
-  (map (lambda (class) (count (lambda (cluster id) (and (= id class) (not (= cluster id)))) labels truth))
+  (map (lambda (class)
+         (count (lambda (cluster id) (and (= id class) (not (= cluster id)))) labels truth))
        (remove-duplicates truth)))
 
 (define (mismatches labels classes)
@@ -99,8 +104,14 @@
 
 (define (pixels picture #:width [width #f] #:height [height #f])
   (define bitmap (pict->bitmap picture))
-  (define w (if width (min width (send bitmap get-width)) (send bitmap get-width)))
-  (define h (if height (min height (send bitmap get-height)) (send bitmap get-height)))
+  (define w
+    (if width
+        (min width (send bitmap get-width))
+        (send bitmap get-width)))
+  (define h
+    (if height
+        (min height (send bitmap get-height))
+        (send bitmap get-height)))
   (define argb (make-bytes (* 4 w h)))
   (send bitmap get-argb-pixels 0 0 w h argb)
   (for/list ([offset (in-range 0 (bytes-length argb) 4)])
