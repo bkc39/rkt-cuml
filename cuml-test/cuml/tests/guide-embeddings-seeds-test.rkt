@@ -39,7 +39,7 @@
             (trustworthiness images samples))))
 
 (test-gpu "embeddings, seeds 0 to 9: UMAP clusters the digits, t-SNE less well, the pixels worst"
-  (define-values (chapter _blocks) (evaluated-chapter "embeddings.scrbl" #:blocks 2))
+  (define-values (chapter _blocks) (evaluated-chapter "embeddings.scrbl" #:through 'clusterer))
   (define digit (chapter 'digit))
   (define umaps (seeded-fits chapter (umap)))
   (define tsnes (seeded-fits chapter (tsne)))

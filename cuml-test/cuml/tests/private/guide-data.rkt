@@ -9,8 +9,8 @@
          (only-in racket/class send)
          (only-in racket/file file->string)
          (only-in racket/function curry)
-         (only-in racket/list append-map count remove-duplicates take)
-         (only-in racket/match match)
+         (only-in racket/list append-map count drop-right index-where last remove-duplicates take)
+         (only-in racket/match == match match-define)
          (only-in racket/sandbox sandbox-namespace-specs)
          (only-in rackunit check-= check-equal?)
          (only-in raft device-vector->list)
@@ -20,6 +20,7 @@
 
 (provide blended
          boundary-margin
+         chapter-file
          check-scored
          close-to?
          cluster-columns
@@ -32,7 +33,7 @@
          host
          misplaced-by-class
          mismatches
-         noise-grey
+         noise-shade?
          painted
          pixels
          read-document
@@ -45,6 +46,7 @@
           'min-cluster-size 60
           'min-samples 10
           'raw '("0.284" (461 174 160 134 133 102) 633)
+          'raw-largest-column '(0 115 0 118 0 94 1 0 46 87)
           'umap '("0.899" (208 196 185 181 178 178 178 177 166 144) 6)
           'tsne '("0.745" (216 193 180 177 173 172 162 151 114 72) 187)
           'trust '("0.83" "0.988" "0.992")
@@ -72,18 +74,29 @@
     [(? list?) (append-map example-blocks datum)]
     [_ '()]))
 
-(define (evaluated-chapter name #:blocks [n #f])
+(define (chapter-file . path)
+  (apply collection-file-path (last path) "cuml" "scribblings" "guide" (drop-right path 1)))
+
+(define ((defines? name) forms)
+  (for/or ([form (in-list forms)])
+    (match form
+      [(list* 'define (or (== name) (list* (== name) _)) _) #t]
+      [_ #f])))
+
+(define (through blocks name)
+  (match (index-where blocks (defines? name))
+    [#f (raise-arguments-error 'evaluated-chapter "no block defines the name" "name" name)]
+    [index (take blocks (add1 index))]))
+
+(define (evaluated-chapter name #:through [last-name #f])
   (define chapter
     (parameterize ([sandbox-namespace-specs (append (sandbox-namespace-specs) '(cuml pict raft))])
       (make-cuml-eval)))
-  (define blocks
-    (~> (collection-file-path name "cuml" "scribblings" "guide" "examples")
-        read-document
-        example-blocks))
+  (define blocks (~> (chapter-file "examples" name) read-document example-blocks))
   (values chapter
           (map (curry map chapter)
-               (if n
-                   (take blocks n)
+               (if last-name
+                   (through blocks last-name)
                    blocks))))
 
 (define (misplaced-by-class labels classes)
@@ -101,16 +114,20 @@
 
 (define channel-tolerance 2)
 
+(define white 255)
+
+(define (noise-shade? pixel)
+  (match-define (list red green blue) pixel)
+  (define coverage (/ (- white red) (- white (car noise-grey))))
+  (and (<= 1/2 coverage 1)
+       (for/and ([channel (in-list (list green blue))]
+                 [full (in-list (cdr noise-grey))])
+         (<= (abs (- channel (+ (* coverage full) (* (- 1 coverage) white)))) channel-tolerance))))
+
 (define (pixels picture #:width [width #f] #:height [height #f])
   (define bitmap (pict->bitmap picture))
-  (define w
-    (if width
-        (min width (send bitmap get-width))
-        (send bitmap get-width)))
-  (define h
-    (if height
-        (min height (send bitmap get-height))
-        (send bitmap get-height)))
+  (define w (min (or width (send bitmap get-width)) (send bitmap get-width)))
+  (define h (min (or height (send bitmap get-height)) (send bitmap get-height)))
   (define argb (make-bytes (* 4 w h)))
   (send bitmap get-argb-pixels 0 0 w h argb)
   (for/list ([offset (in-range 0 (bytes-length argb) 4)])

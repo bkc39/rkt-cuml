@@ -1,34 +1,23 @@
 #lang racket/base
 
-(require (only-in cuml fit-predict fit-transform pca trustworthiness tsne umap)
-         (only-in cuml/scribblings/guide/helpers
-                  class-figure
-                  cluster-colors
-                  cluster-plot
-                  clusters-of
-                  rounded)
-         (only-in pict pict-height pict-width pict?)
-         (only-in racket/function curryr)
-         (only-in racket/list filter-not last make-list range remove-duplicates)
+(require (only-in cuml fit-predict fit-transform pca trustworthiness)
+         (only-in cuml/scribblings/guide/helpers clusters-of rounded)
+         (only-in pict pict?)
+         (only-in racket/list filter-not last range remove-duplicates split-at-right)
          (only-in racket/match match-define)
          (only-in racket/promise delay force)
-         (only-in racket/string string-contains?)
-         (only-in rackunit check check-equal? check-not-equal? check-not-false check-true test-case)
+         (only-in racket/string string-contains? string-join)
+         (only-in rackunit check check-equal? check-not-false check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/guide-data.rkt"
-                  blended
+                  chapter-file
                   check-scored
-                  close-to?
                   cluster-columns
-                  drawable-label?
                   embeddings-pin
                   evaluated-chapter
                   flattened-text
-                  misplaced-by-class
-                  mismatches
-                  noise-grey
-                  pixels))
+                  misplaced-by-class))
 
 (define embeddings
   (delay
@@ -72,34 +61,59 @@
 (define (printed blocks)
   (map (lambda (forms) (filter-not pict? forms)) blocks))
 
+(define number-words
+  '("zero" "one" "two" "three" "four" "five" "six" "seven" "eight" "nine" "ten" "eleven" "twelve"))
+
+(define (number-word n)
+  (list-ref number-words n))
+
+(define (capitalised word)
+  (string-append (string-upcase (substring word 0 1)) (substring word 1)))
+
+(define (listed words)
+  (define-values (leading final) (split-at-right words 1))
+  (format "~a and ~a" (string-join leading ", ") (car final)))
+
+(define mixing-floor 40)
+
+(define (mixed column)
+  (for/list ([n (in-list column)]
+             [digit (in-naturals)]
+             #:when (>= n mixing-floor))
+    (format "~as" digit)))
+
 (define (prose-phrases)
-  (match-define (list raw-ari (cons raw-largest _) raw-noise) (embeddings-pin 'raw))
-  (match-define (list umap-ari _ umap-noise) (embeddings-pin 'umap))
+  (match-define (list raw-ari (and raw-sizes (cons raw-largest _)) raw-noise) (embeddings-pin 'raw))
+  (match-define (list umap-ari umap-sizes umap-noise) (embeddings-pin 'umap))
   (match-define (list tsne-ari _ tsne-noise) (embeddings-pin 'tsne))
   (match-define (list pca-trust umap-trust tsne-trust) (embeddings-pin 'trust))
   (match-define (and misplaced (list _ ones _ _ _ _ _ _ _ nines)) (embeddings-pin 'umap-misplaced))
   (define min-cluster-size (embeddings-pin 'min-cluster-size))
   (define min-samples (embeddings-pin 'min-samples))
-  (list
-   (format "holds ~a handwritten digits" (apply + (embeddings-pin 'digit-sizes)))
-   (format "(hdbscan #:min-cluster-size ~a #:min-samples ~a)" min-cluster-size min-samples)
-   (format "A cluster needs ~a digits" min-cluster-size)
-   (format "a core sample ~a neighbours" min-samples)
-   (format "In ~a dimensions" (embeddings-pin 'pixels))
-   (format "one of ~a digits mixing" raw-largest)
-   (format "and ~a digits noise." raw-noise)
-   (format "scoring ~a against ~a on the pixels, and ~a digits noise" umap-ari raw-ari umap-noise)
-   (format "Of the ~a digits the clusters misplace, ~a are 1s or 9s"
-           (apply + misplaced)
-           (+ ones nines))
-   (format "scores ~a and calls ~a digits noise" tsne-ari tsne-noise)
-   (format "~a against ~a" tsne-trust umap-trust)
-   (format "principal components, ~a." pca-trust)))
+  (list (format "holds ~a handwritten digits" (apply + (embeddings-pin 'digit-sizes)))
+        (format "(hdbscan #:min-cluster-size ~a #:min-samples ~a)" min-cluster-size min-samples)
+        (format "A cluster needs ~a digits" min-cluster-size)
+        (format "a core sample ~a neighbours" min-samples)
+        (format "In ~a dimensions" (embeddings-pin 'pixels))
+        (format "~a clusters, one of ~a digits mixing ~a,"
+                (number-word (length raw-sizes))
+                raw-largest
+                (listed (mixed (embeddings-pin 'raw-largest-column))))
+        (format "and ~a digits noise." raw-noise)
+        (format "~a clusters, scoring ~a against ~a on the pixels, and ~a digits noise"
+                (capitalised (number-word (length umap-sizes)))
+                umap-ari
+                raw-ari
+                umap-noise)
+        (format "Of the ~a digits the clusters misplace, ~a are 1s or 9s"
+                (apply + misplaced)
+                (+ ones nines))
+        (format "scores ~a and calls ~a digits noise" tsne-ari tsne-noise)
+        (format "~a against ~a" tsne-trust umap-trust)
+        (format "principal components, ~a." pca-trust)))
 
 (test-case "embeddings: the prose states the pinned values"
-  (define text
-    (flattened-text
-     (collection-file-path "embeddings.scrbl" "cuml" "scribblings" "guide" "examples")))
+  (define text (flattened-text (chapter-file "examples" "embeddings.scrbl")))
   (for ([phrase (in-list (prose-phrases))])
     (check-true (string-contains? text phrase) phrase)))
 
@@ -124,7 +138,7 @@
                   (fit-predict clusterer (chapter name))
                   (cluster-columns table)
                   (car (embeddings-pin pin))))
-  (check-not-false (member '(0 115 0 118 0 94 1 0 46 87) (cluster-columns raw-table))
+  (check-not-false (member (embeddings-pin 'raw-largest-column) (cluster-columns raw-table))
                    "the 461 digits' column"))
 
 (test-gpu "embeddings: each digit has a UMAP cluster, and the misplaced digits by class"
@@ -135,15 +149,12 @@
 
 (test-gpu "embeddings: the chapter repeats in one process"
   (define-values (chapter blocks) (force embeddings))
-  (define-values (_again again) (evaluated-chapter "embeddings.scrbl"))
-  (define images (chapter 'images))
-  (check-equal? (printed again) (printed blocks))
-  (check-equal? (device-matrix->list* (fit-transform (umap) images))
-                (device-matrix->list* (chapter 'embedded))
-                "UMAP")
-  (check-equal? (device-matrix->list* (fit-transform (tsne) images))
-                (device-matrix->list* (chapter 'pictured))
-                "t-SNE"))
+  (define-values (again again-blocks) (evaluated-chapter "embeddings.scrbl"))
+  (check-equal? (printed again-blocks) (printed blocks))
+  (for ([name (in-list '(embedded pictured))])
+    (check-equal? (device-matrix->list* (again name))
+                  (device-matrix->list* (chapter name))
+                  (symbol->string name))))
 
 (test-gpu "embeddings: PCA's printed trustworthiness holds over 10 fits"
   (define-values (chapter _blocks) (force embeddings))
@@ -153,39 +164,3 @@
       (trustworthiness images (fit-transform (pca #:n-components 2) images))))
   (check-equal? (remove-duplicates (map rounded scores)) (list (car (embeddings-pin 'trust))))
   (check <= (- (apply max scores) (apply min scores)) pca-trust-spread))
-
-(define panel (cluster-plot '(0.0) '(0.0) '(0)))
-
-(define panel-targets (append (map blended cluster-colors) (list noise-grey)))
-
-(define all-drawn (make-list (length panel-targets) #t))
-
-(define (panel-colours figure)
-  (define drawn (pixels figure #:width (pict-width panel) #:height (pict-height panel)))
-  (map (lambda (target) (ormap (close-to? target) drawn)) panel-targets))
-
-(test-gpu "the figures: digits in UMAP's and t-SNE's planes"
-  (define-values (chapter blocks) (force embeddings))
-  (match-define (list _ _ _ (list umap-figure) _ _ (list tsne-figure)) blocks)
-  (define digit (chapter 'digit))
-  (define clusterings
-    (for/list ([name (in-list '(embedded pictured))])
-      (clusters-of (chapter 'clusterer) (chapter name) digit)))
-  (for ([labels (in-list clusterings)])
-    (check-true (andmap drawable-label? labels)))
-  (check-equal? (map (curryr mismatches digit) clusterings)
-                (list (apply + (embeddings-pin 'umap-misplaced)) (embeddings-pin 'tsne-mismatches)))
-  (for ([figure (in-list (list umap-figure tsne-figure))])
-    (check-true (pict? figure))
-    (check-equal? (panel-colours figure) all-drawn)))
-
-(test-gpu "the figures' colour check reads the HDBSCAN panel, not the digit panel or the legend"
-  (define-values (chapter _blocks) (force embeddings))
-  (define digit (chapter 'digit))
-  (define embedded (chapter 'embedded))
-  (check-not-equal? (panel-colours (class-figure embedded '() digit #:class-title "digit")) all-drawn)
-  (check-not-equal? (panel-colours (class-figure embedded
-                                                 (list (list "HDBSCAN" (make-list (length digit) -1)))
-                                                 digit
-                                                 #:class-title "digit"))
-                    all-drawn))

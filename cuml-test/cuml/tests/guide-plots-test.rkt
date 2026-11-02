@@ -62,7 +62,7 @@
                   drawn?
                   evaluated-chapter
                   mismatches
-                  noise-grey
+                  noise-shade?
                   painted
                   pixels
                   scaled-matrix)
@@ -187,7 +187,9 @@
 (test-case "all noise, one cluster, and mismatched lengths"
   (define noise (cluster-plot '(1 2 3) '(1 2 3) '(-1 -1 -1)))
   (check-equal? (size noise) '(320 280))
-  (check-not-false (drawn? noise noise-grey))
+  (check >
+         (count noise-shade? (pixels noise))
+         (count noise-shade? (pixels (cluster-plot '(1 2 3) '(1 2 3) '(0 0 0)))))
   (check-false (drawn? noise (blended blue)))
   (check-not-false (drawn? (cluster-plot '(1 2 3) '(1 2 3) '(0 0 0)) (blended blue)))
   (check-exn #rx"^cluster-plot: xs, ys and labels differ in length\n  lengths: '[(]3 2[)]"

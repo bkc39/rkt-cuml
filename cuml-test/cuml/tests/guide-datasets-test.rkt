@@ -10,7 +10,7 @@
          (only-in rackunit check-equal? check-not-false check-true test-case)
          (only-in setup/getinfo get-info/full)
          (only-in threading ~>)
-         (only-in "private/guide-data.rkt" flattened-text read-document))
+         (only-in "private/guide-data.rkt" chapter-file flattened-text read-document))
 
 (define (included-sections datum)
   (match datum
@@ -76,12 +76,11 @@
 (define (install-line)
   (match-define (list line)
     (regexp-match #px"@commandline\\{raco pkg install [^}]*\\}"
-                  (flattened-text
-                   (collection-file-path "getting-started.scrbl" "cuml" "scribblings" "guide"))))
+                  (flattened-text (chapter-file "getting-started.scrbl"))))
   line)
 
 (define (examples-intro)
-  (define text (flattened-text (collection-file-path "examples.scrbl" "cuml" "scribblings" "guide")))
+  (define text (flattened-text (chapter-file "examples.scrbl")))
   (substring text 0 (caar (regexp-match-positions #rx"@page-helpers-block" text))))
 
 (define (umbrella-dependencies)
