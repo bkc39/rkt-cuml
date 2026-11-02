@@ -4,10 +4,12 @@
 @title[#:tag "examples" #:style 'toc]{Examples}
 
 One chapter per algorithm or family, each on a real dataset from
-@tt{datasets-core} with known classes or known structure, and each saying why
-the algorithm suits that data or does not. Each chapter names its data's source and licence, and
-the @hyperlink["https://docs.racket-lang.org/datasets-core/datasets-catalog.html"]{datasets-core
-catalog} gives its provenance.
+@tt{datasets-core}, or @tt{datasets-uci} for the digits, with known classes or
+known structure, and each saying why the algorithm suits that data or does not.
+Each chapter names its data's source and licence; the
+@hyperlink["https://docs.racket-lang.org/datasets-core/datasets-catalog.html"]{datasets-core
+catalog} gives the provenance of datasets-core's sets, and @tt{datasets-uci}'s
+NOTICE that of the digits.
 
 Every chapter of this guide runs these helpers, written in plain Racket:
 

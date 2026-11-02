@@ -151,15 +151,18 @@
               (~> file read-document included-sections)))
 
 (define dataset-citations
-  '((iris datasets-core ("doi:10.24432/C56C76" "CC BY 4.0") "doi:10.24432/C56C76. CC BY 4.0")
-    (wine datasets-core ("doi:10.24432/C5PC7J" "CC BY 4.0") "doi:10.24432/C5PC7J. CC BY 4.0")
+  '((iris datasets-core ("doi:10.24432/C56C76" "CC BY 4.0") ("doi:10.24432/C56C76. CC BY 4.0"))
+    (wine datasets-core ("doi:10.24432/C5PC7J" "CC BY 4.0") ("doi:10.24432/C5PC7J. CC BY 4.0"))
     (faithful datasets-core
               ("R 4.3.3" "GPL-2 or GPL-3")
-              "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
-    (breast-cancer datasets-core ("doi:10.24432/C5DW2B" "CC BY 4.0") "doi:10.24432/C5DW2B. CC BY 4.0")
+              ("R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only"))
+    (breast-cancer datasets-core
+                   ("doi:10.24432/C5DW2B" "CC BY 4.0")
+                   ("doi:10.24432/C5DW2B. CC BY 4.0"))
     (digits datasets-uci
             ("doi:10.24432/C50P49" "CC BY 4.0")
-            "Optical Recognition of Handwritten Digits, doi:10.24432/C50P49.")))
+            ("from the UCI Machine Learning Repository under CC BY 4.0"
+             "Optical Recognition of Handwritten Digits, doi:10.24432/C50P49."))))
 
 (define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
@@ -171,25 +174,49 @@
   (check-not-false dir (format "pkg-directory: ~a is not installed" pkg))
   (flattened-text (build-path dir "NOTICE")))
 
+(define (dataset-introductions)
+  (for*/fold ([introductions '()]
+              #:result (reverse introductions))
+             ([chapter (in-list (guide-chapters))]
+              [dataset (in-list (remove-duplicates (chapter-datasets chapter)))]
+              #:unless (assq dataset introductions))
+    (cons (cons dataset chapter) introductions)))
+
 (test-case "the guide chapter that introduces a dataset cites its DOI or licence, as its package's NOTICE gives them"
-  (define introductions
-    (for*/fold ([introductions '()]
-                #:result (reverse introductions))
-               ([chapter (in-list (guide-chapters))]
-                [dataset (in-list (remove-duplicates (chapter-datasets chapter)))]
-                #:unless (assq dataset introductions))
-      (cons (cons dataset chapter) introductions)))
+  (define introductions (dataset-introductions))
   (check-equal? (map car introductions) (map car dataset-citations))
-  (check-equal? (file-name-from-path (cdr (assq 'digits introductions)))
-                (string->path "embeddings.scrbl"))
   (for ([citation (in-list dataset-citations)])
-    (match-define (list dataset pkg cited notice-text) citation)
+    (match-define (list dataset pkg cited notice-texts) citation)
     (define chapter (cdr (assq dataset introductions)))
-    (check-not-false (string-contains? (notice-of pkg) notice-text)
-                     (format "~a NOTICE: ~a" pkg notice-text))
+    (for ([text (in-list notice-texts)])
+      (check-not-false (string-contains? (notice-of pkg) text) (format "~a NOTICE: ~a" pkg text)))
     (for ([text (in-list cited)])
       (check-not-false (string-contains? (flattened-text chapter) text)
                        (format "~a: ~a" chapter text)))))
+
+(test-case "digits is introduced last, by the Embeddings chapter"
+  (check-equal? (~> (dataset-introductions) last cdr file-name-from-path)
+                (string->path "embeddings.scrbl")))
+
+(define (install-line)
+  (match-define (list line)
+    (regexp-match #px"@commandline\\{raco pkg install [^}]*\\}"
+                  (flattened-text (collection-file-path "getting-started.scrbl"
+                                                        "cuml"
+                                                        "scribblings"
+                                                        "guide"))))
+  line)
+
+(define (examples-intro)
+  (define text (flattened-text (collection-file-path "examples.scrbl" "cuml" "scribblings" "guide")))
+  (substring text 0 (caar (regexp-match-positions #rx"@page-helpers-block" text))))
+
+(test-case "the install line and the Examples intro name every package the guide's data comes from"
+  (for ([pkg (in-list (remove-duplicates (map second dataset-citations)))])
+    (define name (symbol->string pkg))
+    (check-not-false (regexp-match? (pregexp (format " ~a( |\\})" name)) (install-line))
+                     (format "install line: ~a" name))
+    (check-not-false (string-contains? (examples-intro) name) (format "Examples intro: ~a" name))))
 
 (test-case "digits loads without a GPU: 1797 rows of 64 pixels from 0 to 16 and the digit"
   (define digits (load-dataset-table 'digits))
