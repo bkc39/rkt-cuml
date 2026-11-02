@@ -29,8 +29,7 @@
                   sizes
                   sweep-figure)
          (only-in datasets/core load-dataset-table)
-         (only-in pict pict->bitmap pict-height pict-width pict?)
-         (only-in racket/class send)
+         (only-in pict pict-height pict-width pict?)
          (only-in racket/function curry curryr)
          (only-in racket/list
                   count
@@ -59,9 +58,13 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt"
+                  blended
+                  drawn?
                   evaluated-chapter
-                  misplaced-by-class
                   mismatches
+                  noise-grey
+                  painted
+                  pixels
                   scaled-matrix)
          (only-in "private/metrics-data.rkt" mean)
          (only-in "private/scaler-data.rkt" float32-roundoff transpose))
@@ -69,28 +72,6 @@
 (match-define (list* blue orange _) cluster-colors)
 
 (define ink '(11 11 11))
-
-(define (pixels picture)
-  (define bitmap (pict->bitmap picture))
-  (define width (send bitmap get-width))
-  (define height (send bitmap get-height))
-  (define argb (make-bytes (* 4 width height)))
-  (send bitmap get-argb-pixels 0 0 width height argb)
-  (for/list ([offset (in-range 0 (bytes-length argb) 4)])
-    (list (bytes-ref argb (+ offset 1)) (bytes-ref argb (+ offset 2)) (bytes-ref argb (+ offset 3)))))
-
-(define (blended color)
-  (map (lambda (channel) (+ (* 4/5 channel) (* 1/5 255))) color))
-
-(define (painted picture target)
-  (count (lambda (pixel)
-           (for/and ([channel (in-list pixel)]
-                     [expected (in-list target)])
-             (<= (abs (- channel expected)) 2)))
-         (pixels picture)))
-
-(define (drawn? picture target)
-  (positive? (painted picture target)))
 
 (define (size picture)
   (list (pict-width picture) (pict-height picture)))
@@ -206,7 +187,7 @@
 (test-case "all noise, one cluster, and mismatched lengths"
   (define noise (cluster-plot '(1 2 3) '(1 2 3) '(-1 -1 -1)))
   (check-equal? (size noise) '(320 280))
-  (check-not-false (drawn? noise '(137 135 129)))
+  (check-not-false (drawn? noise noise-grey))
   (check-false (drawn? noise (blended blue)))
   (check-not-false (drawn? (cluster-plot '(1 2 3) '(1 2 3) '(0 0 0)) (blended blue)))
   (check-exn #rx"^cluster-plot: xs, ys and labels differ in length\n  lengths: '[(]3 2[)]"
@@ -400,35 +381,3 @@
   (define misplaced (map (curryr mismatches cultivar) clusterings))
   (check-equal? misplaced '(6 6))
   (check-equal? (map (curry misplaced-in 1) clusterings) misplaced))
-
-(define embeddings
-  (delay
-    (evaluated-chapter "embeddings.scrbl")))
-
-(define noise-grey '(137 135 129))
-
-(define (colours-drawn picture targets)
-  (define all (pixels picture))
-  (for/list ([target (in-list targets)])
-    (for/or ([pixel (in-list all)])
-      (for/and ([channel (in-list pixel)]
-                [expected (in-list target)])
-        (<= (abs (- channel expected)) 2)))))
-
-(test-gpu "the figures: digits in UMAP's and t-SNE's planes"
-  (define-values (chapter blocks) (force embeddings))
-  (match-define (list _ _ _ (list umap-figure) (list _ _ _ tsne-figure)) blocks)
-  (define digit (chapter 'digit))
-  (define clusterings
-    (for/list ([name (in-list '(embedded pictured))])
-      (clusters-of (chapter 'clusterer) (chapter name) digit)))
-  (for ([labels (in-list clusterings)])
-    (check-true (for/and ([label (in-list labels)])
-                  (<= -1 label 9))))
-  (check-equal? (map (curryr mismatches digit) clusterings) '(91 330))
-  (match-define (list _ ones _ _ _ _ _ _ _ nines) (misplaced-by-class (first clusterings) digit))
-  (check-equal? (list ones nines) '(28 38))
-  (for ([figure (in-list (list umap-figure tsne-figure))])
-    (check-true (pict? figure))
-    (check-equal? (colours-drawn figure (append (map blended cluster-colors) (list noise-grey)))
-                  (make-list 11 #t))))

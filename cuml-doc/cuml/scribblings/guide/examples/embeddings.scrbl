@@ -69,20 +69,30 @@ t-SNE, at its defaults and seed 0, draws the digits apart too:
 @examples[#:eval ev #:label #f
 (define pictured (fit-transform (tsne) images))
 (scored clusterer digit-ids pictured)
-(~> (list (fit-transform (pca #:n-components 2) images) embedded pictured)
+]
+
+But t-SNE does not keep density: HDBSCAN on it scores 0.745 and calls 187
+digits noise.
+
+@racket[trustworthiness] is 1 when each digit's 5 nearest neighbours in the
+picture are among its nearest in the pixels:
+
+@examples[#:eval ev #:label #f
+(define flat (fit-transform (pca #:n-components 2) images))
+(~> (list flat embedded pictured)
     (map (curry trustworthiness images) _)
     (map rounded _))
+]
+
+t-SNE keeps them as well as UMAP, 0.992 against 0.988, and both far better
+than the first two principal components, 0.83. Cluster on UMAP's embedding;
+t-SNE draws the neighbourhoods:
+
+@examples[#:eval ev #:label #f
 (class-figure pictured
               (list (list "HDBSCAN" (clusters-of clusterer pictured digit)))
               digit
               #:class-title "digit")
 ]
-
-@racket[trustworthiness] is 1 when each digit's 5 nearest neighbours in the
-picture are among its nearest in the pixels. t-SNE keeps them as well as
-UMAP, 0.992 against 0.988, and both far better than the first two principal
-components, 0.83. But t-SNE does not keep density: HDBSCAN on it scores
-0.745 and calls 187 digits noise. Cluster on UMAP's embedding; t-SNE draws
-the neighbourhoods.
 
 @(close-eval ev)
