@@ -10,7 +10,7 @@
          (only-in racket/file file->string)
          (only-in racket/function curry)
          (only-in racket/list append-map count drop-right index-where last remove-duplicates take)
-         (only-in racket/match == match match-define)
+         (only-in racket/match match match-define)
          (only-in racket/sandbox sandbox-namespace-specs)
          (only-in rackunit check-= check-equal?)
          (only-in raft device-vector->list)
@@ -77,16 +77,20 @@
 (define (chapter-file . path)
   (apply collection-file-path (last path) "cuml" "scribblings" "guide" (drop-right path 1)))
 
-(define ((defines? name) forms)
-  (for/or ([form (in-list forms)])
-    (match form
-      [(list* 'define (or (== name) (list* (== name) _)) _) #t]
-      [_ #f])))
+(define (defined-name form)
+  (match form
+    [(list* 'define (cons head _) _) head]
+    [(list* 'define head _) head]
+    [_ #f]))
+
+(define ((binds? name) forms)
+  (memq name (map defined-name forms)))
 
 (define (through blocks name)
-  (match (index-where blocks (defines? name))
-    [#f (raise-arguments-error 'evaluated-chapter "no block defines the name" "name" name)]
-    [index (take blocks (add1 index))]))
+  (define index (index-where blocks (binds? name)))
+  (cond
+    [index (take blocks (add1 index))]
+    [else (raise-arguments-error 'evaluated-chapter "no block defines the name" "name" name)]))
 
 (define (evaluated-chapter name #:through [last-name #f])
   (define chapter
