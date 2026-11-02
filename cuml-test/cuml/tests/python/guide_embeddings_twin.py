@@ -18,7 +18,9 @@ def hdbscan(case):
     from cuml.cluster import HDBSCAN
 
     found = HDBSCAN(
-        min_cluster_size=60, min_samples=10, output_type="numpy"
+        min_cluster_size=case["min_cluster_size"],
+        min_samples=case["min_samples"],
+        output_type="numpy",
     ).fit_predict(f32(case["X"]))
     return {"labels": np.asarray(found).astype(int).tolist()}
 
@@ -40,11 +42,6 @@ def umap(case):
     return {"embedding": umap_twin.host(m.embedding_).astype(np.float64).tolist()}
 
 
-def tsne(case):
-    _, _, E = tsne_twin.fitted(case, case["seed"], tsne_twin.ours_rule(case))
-    return {"embedding": E.astype(np.float64).tolist()}
-
-
 def versions():
     import sklearn
 
@@ -62,7 +59,7 @@ def main():
         "trust": trust,
         "ari": ari,
         "umap": umap,
-        "tsne": tsne,
+        "tsne": tsne_twin.tsne,
     }
     results = [ops[case["op"]](case) for case in cases]
     with open(sys.argv[2], "w") as f:
