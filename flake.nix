@@ -377,7 +377,7 @@
       racketHomeFor = raftSource: datasetsSource: toolsSource: ''
         _cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/rkt-cuml-devshell"
         _checkout_id=$(printf '%s' "$PWD" | sha256sum | cut -c1-12)
-        _pins_id=$(printf '%s\n%s\n%s' "${raftSource}" "${toolsSource}" "${datasetsSource}" | sha256sum | cut -c1-12)
+        _pins_id=$(printf '%s\n%s\n%s' "${raftSource}" "${datasetsSource}" "${toolsSource}" | sha256sum | cut -c1-12)
         _checkout_homes="$_cache_root/$_checkout_id"
         _parent_home="''${PLTUSERHOME:-}"
         export PLTUSERHOME="$_checkout_homes/$_pins_id"
