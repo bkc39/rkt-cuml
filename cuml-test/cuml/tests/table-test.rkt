@@ -2,13 +2,12 @@
 
 (require (only-in cuml exn:fail:cuml? table->device-matrix)
          (only-in datasets/core
-                  dataset-names
                   dataset-packages
                   dataset-table-names
                   dataset-table-row-count
                   load-dataset-table)
          (only-in racket/flonum flsingle)
-         (only-in racket/list drop filter-not range take)
+         (only-in racket/list drop range take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-not-false test-case)
          (only-in raft
@@ -39,8 +38,19 @@
 
 (test-case "the selections are datasets-core's own sets, whatever other dataset packages are installed"
   (check-not-false (member "datasets-uci" (dataset-packages)))
-  (define core (dataset-names #:package "datasets-core"))
-  (check-equal? (filter-not (lambda (s) (memq (selection-name s) core)) (numeric-selections)) '()))
+  (check-equal? (map selection-name (numeric-selections))
+                '(air-passengers airquality
+                                 anscombe
+                                 breast-cancer
+                                 diabetes
+                                 faithful
+                                 iris
+                                 mtcars
+                                 plant-growth
+                                 titanic
+                                 tooth-growth
+                                 us-arrests
+                                 wine)))
 
 (define (float32-of v)
   (flsingle (real->double-flonum v)))
