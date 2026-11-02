@@ -73,7 +73,7 @@
   (map (lambda (forms) (filter-not pict? forms)) blocks))
 
 (define (prose-phrases)
-  (match-define (list raw-ari (list raw-largest _ ...) raw-noise) (embeddings-pin 'raw))
+  (match-define (list raw-ari (cons raw-largest _) raw-noise) (embeddings-pin 'raw))
   (match-define (list umap-ari _ umap-noise) (embeddings-pin 'umap))
   (match-define (list tsne-ari _ tsne-noise) (embeddings-pin 'tsne))
   (match-define (list pca-trust umap-trust tsne-trust) (embeddings-pin 'trust))
