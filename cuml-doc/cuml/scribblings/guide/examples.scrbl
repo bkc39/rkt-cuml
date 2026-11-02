@@ -4,8 +4,8 @@
 @title[#:tag "examples" #:style 'toc]{Examples}
 
 One chapter per algorithm or family, each on a real dataset from
-@tt{datasets-core}, or @tt{datasets-uci} for the digits, with known classes or
-known structure, and each saying why the algorithm suits that data or does not.
+@tt{datasets}, the digits from its UCI part, with known classes or known
+structure, and each saying why the algorithm suits that data or does not.
 Each chapter names its data's source and licence; the
 @hyperlink["https://docs.racket-lang.org/datasets-core/datasets-catalog.html"]{datasets-core
 catalog} gives the provenance of datasets-core's sets, and @tt{datasets-uci}'s

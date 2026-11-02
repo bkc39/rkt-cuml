@@ -4,14 +4,14 @@
 # dependency too: setup prints that one to stderr and still exits 0. With
 # --no-docs, setup neither compiles the manual, so it is made first, nor sees
 # the packages the manual links into, so those are listed in doc_only.
-# datasets-uci ships data and no module a package requires, so it is listed in
-# data_only.
+# The datasets umbrella brings the guide's data and no module a package
+# requires, so it is listed in data_only.
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 doc_only=(cuml-doc:pict-doc cuml-doc:plot-doc cuml-doc:plot-gui-lib cuml-doc:racket-doc cuml-doc:threading-doc)
-data_only=(cuml-doc:datasets-uci cuml-test:datasets-uci)
+data_only=(cuml-doc:datasets cuml-test:datasets)
 
 [ "$#" -gt 0 ] || {
   echo "usage: scripts/pkg-deps.sh <pkg> ..." >&2

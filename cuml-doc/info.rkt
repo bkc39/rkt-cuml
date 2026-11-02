@@ -10,7 +10,7 @@
                "cuml-manifold-lib"
                "cuml-preprocessing-lib"
                ("datasets-core" #:version "0.2")
-               "datasets-uci"
+               "datasets"
                ("raft" #:version "0.2")
                "pict-doc"
                "pict-lib"

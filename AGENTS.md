@@ -303,9 +303,9 @@ runner: run `docs` before any push that touches the scribblings.
 `pkg-deps` skips cuml-doc's `racket-doc` and `threading-doc` (`doc_only`:
 under `--no-docs` setup cannot see the manual's links), so it never
 reports either as unused; drop one by hand when the manual stops linking
-into it. It skips cuml-doc's and cuml-test's `datasets-uci` too
-(`data_only`: it ships data that `datasets-core` finds, and no module a
-package requires). `bindings` runs the census `scripts/check-bindings.rkt`,
+into it. It skips cuml-doc's and cuml-test's `datasets` too (`data_only`:
+the umbrella brings data that `datasets-core` finds, and no module a package
+requires). `bindings` runs the census `scripts/check-bindings.rkt`,
 per family (its `families` list): every `cuml_<family>_` export of the staged library is bound once (a
 `_job`'s body excepted), every binding is exported, and
 `scripts/<family>-bindings.rktd`, keyed by issue, plans each export; a leg
@@ -425,11 +425,10 @@ kills the test outright.
 - Two parts, after glmnet's: the guide (`guide.scrbl`, `guide/`: Getting
   started, Concepts with every `deftech` and the hyperparameter rule in
   `concepts-parameters`, and one `ex-*` chapter per
-  algorithm or family on real `datasets-core` data, or `datasets-uci`'s
-  digits) and the reference
+  algorithm or family on real data from the `datasets` umbrella) and the reference
   (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
-  `datasets-core` is a dependency of cuml-lib; `datasets-uci` a build-dep
-  of cuml-doc and cuml-test, named with it in Getting started's install
+  `datasets-core` is a dependency of cuml-lib; the `datasets` umbrella a
+  build-dep of cuml-doc and cuml-test, named in Getting started's install
   line and the Examples intro.
 - The guide's helpers are one module, `guide/helpers.rkt`: Getting started
   shows its `require`, Examples its definitions, every guide sandbox
@@ -451,7 +450,8 @@ kills the test outright.
   and `reference/pca-estimator.scrbl`, `tsvd-docs-test.rkt` for its
   truncated SVD section and `reference/truncated-svd-estimator.scrbl`,
   `manifold-docs-test.rkt` for `reference/manifold.scrbl`) or
-  `guide-docs-test.rkt` (the guide; `guide-decomposition-test.rkt` for the
+  `guide-docs-test.rkt` (the guide; `guide-datasets-test.rkt` for its
+  data's citations and install line; `guide-decomposition-test.rkt` for the
   Decomposition chapter's k-means and `guide-embeddings-test.rkt` for the
   Embeddings chapter's scores, which evaluate the chapter's own
   examples in order in a sandbox (`evaluated-chapter`) and pin their

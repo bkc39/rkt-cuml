@@ -982,10 +982,10 @@ Follow-ups are GitHub issues.
 - **B4-d.** Spectral embedding is not in the chapter.
 - **B4-e.** The trustworthiness line prints PCA's two components beside
   UMAP and t-SNE.
-- **B4-f.** Digits comes from `datasets-uci`, a build-dep of cuml-doc and
-  cuml-test (`data_only` in `pkg-deps.sh`), with `datasets-core` at 0.2. The
-  dev shell's home is keyed on the datasets pin as well as rkt-raft's and the
-  tools'.
+- **B4-f.** cuml-doc and cuml-test depend on the `datasets` umbrella, one
+  dependency for the guide's data (`data_only` in `pkg-deps.sh`), with
+  `datasets-core` at 0.2; digits comes from its UCI part. The dev shell's
+  home is keyed on the datasets pin as well as rkt-raft's and the tools'.
 - **B4-g.** Every printed value is pinned exactly, and checked against
   Python cuML's twin; seeds 0 to 9 are floors for the prose's comparisons.
 - **B4-h.** `ex-embeddings` is the last Examples chapter, so digits is
