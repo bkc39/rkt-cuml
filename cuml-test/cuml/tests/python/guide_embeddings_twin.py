@@ -41,7 +41,7 @@ def umap(case):
 
 
 def tsne(case):
-    _, _, E = tsne_twin.fitted(case, 0, 0.0)
+    _, _, E = tsne_twin.fitted(case, case["seed"], tsne_twin.ours_rule(case))
     return {"embedding": E.astype(np.float64).tolist()}
 
 
