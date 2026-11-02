@@ -88,9 +88,8 @@
 
 (define (misplaced-by-class labels classes)
   (define truth (renumbered classes))
-  (map (lambda (class)
-         (count (lambda (cluster id) (and (= id class) (not (= cluster id)))) labels truth))
-       (remove-duplicates truth)))
+  (for/list ([class (in-list (remove-duplicates truth))])
+    (count (lambda (cluster id) (and (= id class) (not (= cluster id)))) labels truth)))
 
 (define (mismatches labels classes)
   (apply + (misplaced-by-class labels classes)))
@@ -120,11 +119,10 @@
 (define (blended color)
   (map (lambda (channel) (+ (* 4/5 channel) (* 1/5 255))) color))
 
-(define (close-to? target)
-  (lambda (pixel)
-    (for/and ([channel (in-list pixel)]
-              [expected (in-list target)])
-      (<= (abs (- channel expected)) channel-tolerance))))
+(define ((close-to? target) pixel)
+  (for/and ([channel (in-list pixel)]
+            [expected (in-list target)])
+    (<= (abs (- channel expected)) channel-tolerance)))
 
 (define (painted picture target)
   (count (close-to? target) (pixels picture)))

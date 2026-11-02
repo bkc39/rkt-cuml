@@ -149,7 +149,7 @@
 
 (define cluster-styles
   (map (match-lambda
-         [(cons hex shape) (cons (rgb hex) shape)])
+         [(cons hex markers) (cons (rgb hex) markers)])
        (list '("#2a78d6" fullcircle circle)
              '("#eb6834" fullsquare square)
              '("#1baf7a" fulltriangleup triangleup)
