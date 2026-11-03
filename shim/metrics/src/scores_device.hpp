@@ -16,9 +16,6 @@ struct matched {
   double total;
 };
 
-template <typename T>
-int64_t first_negative(const T* x, int64_t n, rmm::cuda_stream_view stream);
-
 template <typename T, typename P>
 double r2_of(const T* y, const P* p, int64_t n, int exponent, sample_weights w,
              rmm::cuda_stream_view stream);
