@@ -122,7 +122,7 @@
   (check-equal? (sqrt (mean-squared-error (doubles y-values) (doubles p-values))) (sqrt 0.375)))
 
 (test-gpu "the manual: accuracy-score on the example's labels"
-  (define truth (list->device-vector '(0 1 2 3) #:dtype 'int32))
+  (define labels (list->device-vector '(0 1 2 3) #:dtype 'int32))
   (define guess (list->device-vector '(0 2 1 3) #:dtype 'int64))
-  (check-equal? (accuracy-score truth guess) 0.5)
-  (check-equal? (accuracy-score truth guess #:sample-weight (doubles '(1 1 1 5))) 0.75))
+  (check-equal? (accuracy-score labels guess) 0.5)
+  (check-equal? (accuracy-score labels guess #:sample-weight (doubles '(1 1 1 5))) 0.75))
