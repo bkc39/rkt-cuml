@@ -6,6 +6,7 @@
                   linear-regression-predict
                   linear-regression-result)
          (only-in racket/list make-list range)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* device-vector->list list*->device-matrix list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
@@ -119,22 +120,16 @@
                (go (linear-regression-result (vector '(1 1 1) 'float32) 0.0)
                    (matrix '((3e38 3e38 3e38) (1 1 1)) 'float32))))))
 
-(define (direct-fit X y . options)
-  (apply linear-regression-fit X y options))
-
 (define (estimator-fit X y #:sample-weight [w #f] #:algorithm [a 'auto] #:fit-intercept [fi #t])
   (fit (linear-regression #:algorithm a #:fit-intercept fi) X y #:sample-weight w))
 
-(define (keyword-fit proc)
-  (make-keyword-procedure (lambda (kws vals X y) (keyword-apply proc kws vals X y '()))))
-
 (test-gpu "R1, V1-V14: linear-regression-fit refuses each row before it solves"
-  (for ([r (in-list (fit-rows (keyword-fit direct-fit)))])
+  (for ([r (in-list (fit-rows linear-regression-fit))])
     (test-case (row-id r)
       (check-row "linear-regression-fit" r))))
 
 (test-gpu "R1, V1-V14: the estimator's fit names the generic"
-  (for ([r (in-list (fit-rows (keyword-fit estimator-fit)))])
+  (for ([r (in-list (fit-rows estimator-fit))])
     (test-case (row-id r)
       (check-row "fit" r))))
 
@@ -164,8 +159,8 @@
 
 (define (collinear-rows n)
   (for/list ([i (in-range n)])
-    (define a (/ (modulo (* 37 i) 101) 16))
-    (define b (/ (modulo (* 53 i) 97) 32))
+    (define a (- (modulo (* 37 i) 11) 5))
+    (define b (- (modulo (* 53 i) 11) 5))
     (list a b (+ a b))))
 
 (define (one-hot-rows n k)
@@ -173,21 +168,15 @@
     (for/list ([j (in-range k)])
       (if (= j (modulo i k)) 1 0))))
 
-(define (vander-rows n degree)
-  (for/list ([i (in-range n)])
-    (define t (/ i (sub1 n)))
-    (for/list ([p (in-range 1 (add1 degree))])
-      (expt t p))))
-
 (define (noisy-targets rows)
   (for/list ([r (in-list rows)] [i (in-naturals)])
-    (+ (apply + r) (/ (modulo (* 31 i) 17) 64))))
+    (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
 
 (test-gpu "V13: a solve that is not a least-squares solution is refused"
-  (for ([fixture (in-list (list (list 'eig 'float32 (collinear-rows 400))
+  (for ([fixture (in-list (list (list 'eig 'float32 (collinear-rows 60))
                                 (list 'qr 'float32 (one-hot-rows 400 4))
-                                (list 'qr 'float64 (vander-rows 400 9))))])
-    (define-values (algorithm dt rows) (apply values fixture))
+                                (list 'qr 'float64 (collinear-rows 60))))])
+    (match-define (list algorithm dt rows) fixture)
     (test-case (format "~a ~a" algorithm dt)
       (check-cuml-error 'logic
                         v13

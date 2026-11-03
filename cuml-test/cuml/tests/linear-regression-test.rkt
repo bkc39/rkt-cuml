@@ -157,7 +157,7 @@
                         (fit-of X (lcase-y c) (lcase-w c) dt #:algorithm a #:fit-intercept fi))
                       (check-equal? (list-ref coef* at) 0.0)
                       (check-true (bits-equal? (list (remove-at coef* at) b*) (list coef b))
-                                  (format "at ~a" at)))))))
+                                  (format "at ~a" at))))))
      (define zero-rows '(3 17 40))
      (define w (for/list ([v (in-list (lcase-w weighted))] [i (in-naturals)])
                  (if (memv i zero-rows) 0 v)))
