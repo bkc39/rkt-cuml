@@ -48,7 +48,8 @@ equations, @racket['svd] and @racket['svd-jacobi] use a Jacobi SVD,
 column, or more columns than rows, always uses the Jacobi SVD. Each column,
 @racket[y] and the weights are scaled by a power of two before the solve, so
 scaling a column by 2@superscript{k} scales its coefficient by
-2@superscript{-k} exactly. A column constant over the rows of positive weight
+2@superscript{-k} exactly; with more columns than rows every column takes
+the same power, so that the fit is the minimum-norm solution. A column constant over the rows of positive weight
 (zero, without @racket[fit-intercept]) gets coefficient 0, as in
 scikit-learn's minimum-norm solution. A solve that is not a least-squares
 solution, as with collinear columns in float32, is refused; @racket['qr] or

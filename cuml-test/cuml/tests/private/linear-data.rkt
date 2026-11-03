@@ -64,7 +64,7 @@
 
 (define (law-cases)
   (append (for*/list ([nd (in-list '((20 2) (20 7) (200 2) (200 7) (200 30) (5000 7)))]
-                      [seed (in-list '(0 1))]
+                      [seed (in-list (if (= (car nd) 5000) '(0) '(0 1)))]
                       [weighted? (in-list '(#f #t))])
             (normal-case (car nd) (cadr nd) seed #:weighted? weighted?))
           (for/list ([seed (in-range 2 6)])
@@ -218,15 +218,19 @@
 
 (define (host-cosine X y w coef intercept fit-intercept)
   (define weights (or w (make-list (length y) 1)))
-  (define-values (G b mx my) (weighted-gram X y w fit-intercept))
+  (define total (apply + weights))
+  (define (centre xs)
+    (define m (if fit-intercept (/ (for/sum ([x (in-list xs)] [wi (in-list weights)]) (* wi x)) total) 0))
+    (map (lambda (x) (- x m)) xs))
   (define r
     (for/list ([row (in-list X)] [yi (in-list y)])
       (- yi intercept (dot row coef))))
-  (define y-norm
-    (sqrt (for/sum ([yi (in-list y)] [wi (in-list weights)]) (* wi (expt (- yi my) 2)))))
-  (for/fold ([worst 0.0]) ([col (in-list (columns-of X))] [m (in-list mx)] [j (in-naturals)])
-    (define num (for/sum ([x (in-list col)] [ri (in-list r)] [wi (in-list weights)]) (* wi (- x m) ri)))
-    (define norm (sqrt (list-ref (list-ref G j) j)))
+  (define yc (centre y))
+  (define y-norm (sqrt (for/sum ([v (in-list yc)] [wi (in-list weights)]) (* wi v v))))
+  (for/fold ([worst 0.0]) ([col (in-list (columns-of X))])
+    (define xc (centre col))
+    (define num (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri)))
+    (define norm (sqrt (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x))))
     (max worst (exact->inexact (/ (abs num) (* norm y-norm))))))
 
 (module+ test

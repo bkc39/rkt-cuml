@@ -59,6 +59,8 @@ def stage(X, y, w, fi):
     first = int(np.argmax(counted))
     reference = X[first] if fi else np.zeros(X.shape[1], dtype=X.dtype)
     kept = np.array([np.any(X[counted, j] != reference[j]) for j in range(X.shape[1])])
+    if kept.sum() > X.shape[0]:
+        e = np.full(X.shape[1], unit_exponent(float(np.max(np.abs(X[counted][:, kept])))))
     return e, f, g, kept, counted
 
 

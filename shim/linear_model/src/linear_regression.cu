@@ -123,8 +123,13 @@ double fit_into(const raft::handle_t& handle, const rr_view* x_view,
   const fit_inputs<T> in = checked_inputs<T>(handle, x_view, y_view, w_view,
                                              fit_intercept, algorithm);
   const bool intercepted = fit_intercept == 1;
-  const staging s =
+  const staging planned =
       plan_staging(handle, in.x, in.y, in.w, intercepted, exponents::per_column);
+  const staging s =
+      std::cmp_greater(planned.kept.size(), in.x.n)
+          ? plan_staging(handle, in.x, in.y, in.w, intercepted,
+                         exponents::uniform)
+          : planned;
   const bool constant_y =
       constant_vector(handle, in.y, in.x.n, in.w, intercepted);
   fit_result<T> r = constant_y || s.kept.empty()
