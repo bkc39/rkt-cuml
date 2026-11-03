@@ -132,6 +132,7 @@ packet (§4) has the detail.
 | 5 #29 | repeated eigenvalues break the single-vector Lanczos: disconnected cliques fail to converge, weakly linked cliques give a wrong partition silently | `sparse/solver/lanczos.cuh` | documented |
 | 5 #29 | the spectral degrees sum in float32, so large weights overflow into a wrong partition | spectral Laplacian | refused past FLT_MAX |
 | 5 #29 | Lanczos leaks a cuSPARSE handle under LSan | `sparse/solver/lanczos.cuh` | suppressed (`leak:libcusparse.so`) |
+| L1 #87 | `lstsqSvdJacobi` creates a `gesvdjInfo` and never destroys it: 2 KiB of host memory per svd or svd-jacobi fit (and per d' = 1 fit, which olsFit sends to svd-jacobi) | `linalg/detail/lstsq.cuh:181` | suppressed (`leak:cusolverDnCreateGesvdjInfo`) |
 | A2 #34 | `contingencyMatrix` sizes its square table from the first vector's min and max only: a predicted label outside that range writes out of bounds | `stats/detail/contingencyMatrix.cuh` | dense codes of both vectors, one K×K table |
 | A2 #34 | trustworthiness with a NaN, Inf or 1e20 entry in X or X-embedded is an illegal address (context poisoned) | `stats/detail/trustworthiness_score.cuh` | refused past a squared norm of 2¹²⁵ |
 | A2 #34 | trustworthiness at n-neighbors ≥ n is an illegal address; 2k ≥ n is outside the formula's domain | `stats/detail/trustworthiness_score.cuh` | refused at 2k ≥ n |
