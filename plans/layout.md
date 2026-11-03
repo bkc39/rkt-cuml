@@ -1017,3 +1017,21 @@ Follow-ups are GitHub issues.
   of two, so r2 is exactly scale-invariant and the error is `+inf.0` only
   past the flonum range.
 - **L0-g.** The Decomposition chapter gains its Reconstruction section.
+
+## Decisions recorded in leg L1 (#87)
+
+- **L1-a.** The family is package `cuml-linear-model-lib`, collection
+  `cuml/linear-model` and native name `linear_model`: one `-`→`_` rule in
+  `install-native.rkt`, `native.rkt`, `scripts/check-bindings.rkt`,
+  `flake.nix` and the CMake family name.
+- **L1-c.** Every column, y and the weights are scaled by powers of two before
+  olsFit and the results scaled back (`shim/linear_model/src/glm_staging.cu`).
+  Bitwise parity with raw Python cuML holds only on already-staged data (E8);
+  the staged recipe is bitwise (P1).
+- **L1-d.** Columns constant over the positive-weight rows (zero, without an
+  intercept) are dropped and get coefficient 0; with nothing left to solve, or
+  a constant y, olsFit is not called.
+- **L1-e.** A fit whose residual cosine on the original data exceeds 2⁻⁸
+  (float32) or 2⁻¹⁸ (float64) is refused (V13).
+- **L1-f.** `define-estimator` takes `#:needs-y`: y is positional, a missing y
+  is refused, and `[score …]` passes y through.

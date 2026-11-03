@@ -81,6 +81,10 @@ packet (§4) has the detail.
 | L0 #86 | `accuracy_score_py` returns a float: 1/3 → 0.33333334, and counts round above 2²⁴ | `metrics/accuracy_score.cu` | not called; exact count |
 | L0 #86 | float32 `r2_score_py` sums in float32 | `raft/stats/detail/scores.cuh` | not called; double sums |
 | L0 #86 | Python cuML `mean_squared_error(squared=False)` on 2-D input takes the square root of the uniform average (0.8416 where sklearn's per-column RMSE gives 0.8227), and with `raw_values` returns the MSE | `python/cuml/cuml/metrics/regression.py` | `squared` not bound |
+| L1 #87 | olsFit overwrites X under svd, qr and svd-qr, and y under qr; eig and the weight sqrt/square restore only to ulps; zero weights leave NaN in y | `cpp/src/glm/ols.cuh` | copy before mutate |
+| L1 #87 | a constant column (or zero column, without an intercept) gives NaN under qr and an arbitrary coefficient under svd | `ols.cuh` | dropped; coefficient 0 |
+| L1 #87 | eig returns results that are not least-squares solutions on collinear float32 data, without any error | `lstsqEig` | residual-cosine refusal |
+| L1 #87 | olsFit asserts on n < 2, d < 1 and unknown algorithm ids; the header documents only algorithms 0–2 | `ols.cuh`, `glm.hpp` | refused before the call |
 
 ## cuVS
 
@@ -138,6 +142,9 @@ packet (§4) has the detail.
 | A5 #48 | n_components in (min(n, d), d] is accepted: the tail is an arbitrary null-space basis with NaN σ | `linalg/detail/tsvd.cuh:342` | refused past min(n, d) |
 | A5 #48 | Gram underflow: below about 1e-19 (float32) or 1e-154 (float64) XᵀX is subnormal or 0, so σ, ev and ratio are 0 and the components arbitrary; at float32 1e-20 the subnormal total variance's reciprocal overflows and the ratio is 0 | `linalg/detail/tsvd.cuh` (Gram gemm, ratio) | X fitted at a power-of-two scale, results scaled back, as A4 #47; fit-transform's matrix is the transform of the unscaled X |
 | A5 #48 | `tsvdTransform` and `tsvdInverseTransform` overflow to ±inf on finite X | `linalg/detail/tsvd.cuh` (gemm) | refused past max/(4·d) and max/(4·k) |
+| L1 #87 | `DivideByNonZero` uses an absolute eps of 1e-10 and returns the numerator below it, so small singular directions are lost whatever the data's scale | `raft/linalg/lstsq.cuh` | per-column power-of-two prescale |
+| L1 #87 | `weightedMean` is not deterministic from run to run above a few thousand rows | `raft/stats/weighted_mean.cuh`, via `preProcessData` | documented (L1-h) |
+| L1 #87 | lstsq takes int sizes and sums workspace sizes in int | `raft/linalg/lstsq.cuh` | refused above INT32_MAX |
 
 ## Python cuML
 
@@ -152,3 +159,4 @@ packet (§4) has the detail.
 | B2 #51 | learning_rate_method='adaptive' (the default) silently overrides n_neighbors and early_exaggeration | `cuml/manifold/t_sne.pyx` | 'auto' not offered (B2-c) |
 | B3 #27 | default n_neighbors max(n/10, 1) is 1 below 20 rows: an all-zero embedding without error | `spectral_embedding.pyx` | default floored at 2, s14 |
 | B3 #27 | no sign rule (sklearn flips each column to a positive largest entry) | `spectral_embedding.pyx` | sign rule in the shim (B3-e) |
+| L1 #87 | one-column X goes to a CuPy SVD, which disagrees with olsFit in the last bits (`linear_regression.pyx`) | bound to olsFit |
