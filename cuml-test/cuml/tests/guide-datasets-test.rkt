@@ -83,8 +83,8 @@
   (define text (flattened-text (chapter-file "examples.scrbl")))
   (substring text 0 (caar (regexp-match-positions #rx"@page-helpers-block" text))))
 
-(define (umbrella-dependencies)
-  (for/list ([dependency (in-list ((get-info/full (pkg-directory "datasets")) 'deps))])
+(define (declared pkg field)
+  (for/list ([dependency (in-list ((get-info/full (pkg-directory pkg)) field))])
     (match dependency
       [(cons name _) name]
       [name name])))
@@ -93,8 +93,12 @@
   (check-not-false (regexp-match? #px" datasets( |\\})" (install-line)) "install line: datasets")
   (check-not-false (regexp-match? #px"@tt\\{datasets\\}" (examples-intro)) "Examples intro: datasets")
   (for ([pkg (in-list (remove-duplicates (map second dataset-citations)))])
-    (check-not-false (member (symbol->string pkg) (cons "datasets-core" (umbrella-dependencies)))
+    (check-not-false (member (symbol->string pkg) (cons "datasets-core" (declared "datasets" 'deps)))
                      (format "the datasets umbrella carries ~a" pkg))))
+
+(test-case "cuml-doc and cuml-test declare the datasets umbrella"
+  (for ([pkg (in-list '("cuml-doc" "cuml-test"))])
+    (check-not-false (member "datasets" (declared pkg 'build-deps)) pkg)))
 
 (test-case "digits loads without a GPU: 1797 rows of 64 pixels from 0 to 16 and the digit"
   (define digits (load-dataset-table 'digits))
