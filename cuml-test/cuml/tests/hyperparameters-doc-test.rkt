@@ -5,6 +5,7 @@
                   dbscan
                   hdbscan
                   kmeans
+                  linear-regression
                   pca
                   spectral-clustering
                   spectral-embedding
@@ -31,6 +32,7 @@
                   tsvd-fit
                   tsvd-fit-transform
                   tsvd-params)
+         (only-in cuml/linear-model linear-regression-fit linear-regression-params)
          (only-in cuml/manifold
                   spectral-embedding-fit
                   spectral-embedding-fit-graph
@@ -72,6 +74,7 @@
                                                "preprocessing.scrbl"
                                                "decomposition.scrbl"
                                                "manifold.scrbl"
+                                               "linear-model.scrbl"
                                                "estimators.scrbl"
                                                "pca-estimator.scrbl"
                                                "truncated-svd-estimator.scrbl"))))
@@ -159,6 +162,8 @@
                  metric
                  init
                  random-state))
+
+(define linear-regression-keys '(algorithm fit-intercept))
 
 (define spectral-embedding-keys
   '(n-components n-neighbors norm-laplacian drop-first random-state affinity))
@@ -339,7 +344,21 @@
                                (list (argument '#:params 'params #f)
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '(affinity))
-                         (estimator-entry 'spectral-embedding spectral-embedding)))))
+                         (estimator-entry 'spectral-embedding spectral-embedding)))
+   (table-bindings
+    linear-regression-params
+    linear-regression-keys
+    (list (list 'linear-regression-params linear-regression-params '() (list (argument #f 'base #f)) '() '())
+          (list 'linear-regression-fit
+                linear-regression-fit
+                '(#:params #:resources)
+                (list (argument #f 'X 'none) (argument #f 'y 'none))
+                (list (argument '#:sample-weight 'sample-weight #f)
+                      (argument '#:params 'params #f)
+                      (argument '#:resources 'resources '(current-device-resources)))
+                '()
+                '#:sample-weight)
+          (estimator-entry 'linear-regression linear-regression)))))
 
 (define-namespace-anchor anchor)
 

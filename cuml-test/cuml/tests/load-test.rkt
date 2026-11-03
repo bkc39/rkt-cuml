@@ -4,6 +4,7 @@
          (only-in cuml/cluster kmeans-fit)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in cuml/decomposition pca-fit tsvd-fit)
+         (only-in cuml/linear-model linear-regression-fit)
          (only-in cuml/manifold spectral-embedding-fit spectral-embedding-fit-graph tsne-fit umap-fit)
          (only-in cuml/preprocessing standard-scaler-fit)
          (only-in rackunit check-equal? check-false check-not-exn test-case)
@@ -85,3 +86,21 @@
                                                          "libcumlrkt_preprocessing.so"))])
                             (regexp-match? (regexp-quote library) maps)))))
    '(0 "(#t #f #f #f #f)" "")))
+
+(test-case "R4: cuml re-exports cuml/linear-model's linear regression"
+  (check-equal? (dynamic-require 'cuml 'linear-regression-fit) linear-regression-fit))
+
+(test-case "R4: cuml/linear-model maps its own shim, and no other family's"
+  (check-equal?
+   (run-program `(module m racket/base
+                   (require cuml/linear-model
+                            (only-in racket/file file->string))
+                   (define maps (file->string "/proc/self/maps"))
+                   (write (for/list ([library (in-list '("libcumlrkt_linear_model.so"
+                                                         "libcumlrkt_cluster.so"
+                                                         "libcumlrkt_decomposition.so"
+                                                         "libcumlrkt_manifold.so"
+                                                         "libcumlrkt_metrics.so"
+                                                         "libcumlrkt_preprocessing.so"))])
+                            (regexp-match? (regexp-quote library) maps)))))
+   '(0 "(#t #f #f #f #f #f)" "")))

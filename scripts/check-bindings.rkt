@@ -17,8 +17,11 @@
 (struct planned (name status issue))
 (struct report (family findings summary))
 
+(define (native-name family)
+  (regexp-replace* #rx"-" family "_"))
+
 (define (prefix-of family)
-  (format "cuml_~a_" family))
+  (format "cuml_~a_" (native-name family)))
 
 (define ((unprefixed family) c-id)
   (define prefix (prefix-of family))
@@ -147,7 +150,8 @@
 
 (define (family-census in-root family)
   (define library
-    (in-root (format "cuml-~a-lib/cuml/~a/native-libs/libcumlrkt_~a.so" family family family)))
+    (in-root
+     (format "cuml-~a-lib/cuml/~a/native-libs/libcumlrkt_~a.so" family family (native-name family))))
   (define plan (call-with-input-file (in-root (format "scripts/~a-bindings.rktd" family)) read))
   (define exports (exports-in family (nm-output library)))
   (define bindings
@@ -276,6 +280,12 @@
      '("make_blobs"))
     (check-equal? (exports-in "metrics"
                               "0000 T cuml_cluster_make_blobs\n0000 T cuml_metrics_check_abi\n")
+                  '("check_abi")))
+
+  (test-case "a hyphenated family's native name replaces - with _"
+    (check-equal? (prefix-of "linear-model") "cuml_linear_model_")
+    (check-equal? (exports-in "linear-model"
+                              "0000 T cuml_linear_model_check_abi\n0000 T cuml_linear_check_abi\n")
                   '("check_abi")))
 
   (test-case "the summary names the planned issues"
