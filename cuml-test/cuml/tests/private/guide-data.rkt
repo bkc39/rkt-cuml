@@ -122,10 +122,11 @@
 
 (define (noise-shade? pixel)
   (match-define (list red green blue) pixel)
-  (define coverage (/ (- white red) (- white (car noise-grey))))
+  (match-define (list grey-red grey-green grey-blue) noise-grey)
+  (define coverage (/ (- white red) (- white grey-red)))
   (and (<= 1/2 coverage 1)
        (for/and ([channel (in-list (list green blue))]
-                 [full (in-list (cdr noise-grey))])
+                 [full (in-list (list grey-green grey-blue))])
          (<= (abs (- channel (+ (* coverage full) (* (- 1 coverage) white)))) channel-tolerance))))
 
 (define (pixels picture #:width [width #f] #:height [height #f])
