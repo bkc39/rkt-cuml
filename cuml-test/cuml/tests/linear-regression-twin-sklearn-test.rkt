@@ -6,6 +6,7 @@
          (only-in raft device-vector->list)
          (only-in "private/linear-data.rkt"
                   algorithms
+                  check-law
                   dtypes
                   lcase
                   lcase-X
@@ -18,7 +19,6 @@
                   unit-roundoff)
          (only-in "private/linear-twin-data.rkt"
                   bits-of
-                  check-law
                   decoded
                   gap
                   kappa-of

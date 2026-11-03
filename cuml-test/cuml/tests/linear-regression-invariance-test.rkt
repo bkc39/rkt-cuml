@@ -6,11 +6,12 @@
                   linear-regression-result-intercept)
          (only-in racket/list append-map make-list)
          (only-in racket/match match-define)
-         (only-in rackunit check-true test-case)
+         (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt"
                   algorithms
+                  check-law
                   dtypes
                   lcase
                   lcase-X
@@ -25,8 +26,7 @@
                   rounded-case
                   solution
                   solution-kappa
-                  unit-roundoff
-                  within))
+                  unit-roundoff))
 
 (define cases
   (list (normal-case 200 7 0)
@@ -49,9 +49,6 @@
 
 (define (size-of f)
   (max 1 (abs (cadr f)) (max-abs (car f))))
-
-(define (check-law name got bound)
-  (check-true (<= (within got bound) 1) (format "~a: ~a of the bound" name (within got bound))))
 
 (define (kappa-of c fi)
   (solution-kappa (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi)))

@@ -7,10 +7,11 @@
                   linear-regression-result-intercept)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
-         (only-in rackunit check-true test-case)
+         (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in "linear-data.rkt"
                   algorithms
+                  check-law
                   dtypes
                   host-cosine
                   lcase-X
@@ -22,12 +23,10 @@
                   on-vector
                   oracle-lstsq
                   solution
-                  unit-roundoff
-                  within))
+                  unit-roundoff))
 
 (provide check-oracle-laws
-         check-prediction-law
-         law-maxima)
+         check-prediction-law)
 
 (define (fit-of X y w dt a fi)
   (define r
@@ -42,13 +41,6 @@
 
 (define (gap xs ys)
   (max-abs (map - xs ys)))
-
-(define law-maxima (make-hash))
-
-(define (check-law name got bound)
-  (define ratio (within got bound))
-  (hash-update! law-maxima name (lambda (m) (max m ratio)) 0.0)
-  (check-true (<= ratio 1) (format "~a: ~a of the bound" name ratio)))
 
 (define (norm2 xs)
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))

@@ -7,10 +7,11 @@
          (only-in cuml/linear-model/private/native libcuml-version)
          (only-in racket/match match-define)
          racket/runtime-path
-         (only-in rackunit check-equal? check-true test-case)
+         (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in "linear-data.rkt"
                   algorithms
+                  check-law
                   lcase
                   lcase-name
                   lcase-X
@@ -22,13 +23,11 @@
                   on-vector
                   oracle-lstsq
                   solution-kappa
-                  unit-roundoff
-                  within)
+                  unit-roundoff)
          (only-in "python-env.rkt" run-twin))
 
 (provide bits-of
          check-cuml-parity
-         check-law
          decoded
          gap
          kappa-of
@@ -90,9 +89,6 @@
   (max-abs (map (lambda (x y) (- (inexact->exact x) (inexact->exact y)))
                 (cons (cadr a) (car a))
                 (cons (cadr b) (car b)))))
-
-(define (check-law name got bound)
-  (check-true (<= (within got bound) 1) (format "~a: ~a of the bound" name (within got bound))))
 
 (define one-column (normal-case 200 1 7))
 

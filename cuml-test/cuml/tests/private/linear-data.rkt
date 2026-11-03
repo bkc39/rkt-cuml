@@ -6,6 +6,7 @@
                   linear-regression-result-intercept)
          (only-in racket/flonum flsingle)
          (only-in racket/list make-list)
+         (only-in rackunit check-true)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "estimator-data.rkt" apply-options))
@@ -13,12 +14,14 @@
 (provide (struct-out lcase)
          (struct-out solution)
          algorithms
+         check-law
          columns-of
          dtypes
          dyadic
          fitted-of
          host-cosine
          law-cases
+         law-maxima
          lcase-device
          max-abs
          normal-case
@@ -101,6 +104,13 @@
   (if (zero? bound)
       (if (zero? got) 0.0 +inf.0)
       (exact->inexact (/ got bound))))
+
+(define law-maxima (make-hash))
+
+(define (check-law name got bound)
+  (define ratio (within got bound))
+  (hash-update! law-maxima name (lambda (m) (max m ratio)) 0.0)
+  (check-true (<= ratio 1) (format "~a: ~a of the bound" name ratio)))
 
 (define (columns-of rows)
   (apply map list rows))
