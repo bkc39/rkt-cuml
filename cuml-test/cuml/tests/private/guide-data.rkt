@@ -9,7 +9,7 @@
          (only-in racket/class send)
          (only-in racket/file file->string)
          (only-in racket/function curry)
-         (only-in racket/list append-map count drop-right index-where last remove-duplicates take)
+         (only-in racket/list append-map count index-where remove-duplicates take)
          (only-in racket/match match match-define)
          (only-in racket/sandbox sandbox-namespace-specs)
          (only-in rackunit check-= check-equal?)
@@ -74,8 +74,8 @@
     [(? list?) (append-map example-blocks datum)]
     [_ '()]))
 
-(define (chapter-file . path)
-  (apply collection-file-path (last path) "cuml" "scribblings" "guide" (drop-right path 1)))
+(define (chapter-file name . dirs)
+  (apply collection-file-path name "cuml" "scribblings" "guide" dirs))
 
 (define (defined-name form)
   (match form
@@ -96,7 +96,7 @@
   (define chapter
     (parameterize ([sandbox-namespace-specs (append (sandbox-namespace-specs) '(cuml pict raft))])
       (make-cuml-eval)))
-  (define blocks (~> (chapter-file "examples" name) read-document example-blocks))
+  (define blocks (~> (chapter-file name "examples") read-document example-blocks))
   (values chapter
           (map (curry map chapter)
                (if last-name

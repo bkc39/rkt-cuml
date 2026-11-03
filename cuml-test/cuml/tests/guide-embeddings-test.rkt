@@ -113,7 +113,7 @@
         (format "principal components, ~a." pca-trust)))
 
 (test-case "embeddings: the prose states the pinned values"
-  (define text (flattened-text (chapter-file "examples" "embeddings.scrbl")))
+  (define text (flattened-text (chapter-file "embeddings.scrbl" "examples")))
   (for ([phrase (in-list (prose-phrases))])
     (check-true (string-contains? text phrase) phrase))
   (match-define (list _ (cons raw-largest _) _) (embeddings-pin 'raw))
