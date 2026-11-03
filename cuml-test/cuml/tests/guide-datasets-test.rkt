@@ -64,10 +64,10 @@
     (match-define (list dataset pkg cited notice-texts) citation)
     (define chapter (cdr (assq dataset introductions)))
     (for ([text (in-list notice-texts)])
-      (check-not-false (string-contains? (notice-of pkg) text) (format "~a NOTICE: ~a" pkg text)))
+      (check-true (string-contains? (notice-of pkg) text) (format "~a NOTICE: ~a" pkg text)))
     (for ([text (in-list cited)])
-      (check-not-false (string-contains? (flattened-text chapter) text)
-                       (format "~a: ~a" chapter text)))))
+      (check-true (string-contains? (flattened-text chapter) text)
+                  (format "~a: ~a" chapter text)))))
 
 (test-case "digits is introduced last, by the Embeddings chapter"
   (check-equal? (~> (dataset-introductions) last cdr file-name-from-path)
@@ -90,8 +90,8 @@
       [name name])))
 
 (test-case "the install line and the Examples intro name the datasets umbrella, which carries every cited package"
-  (check-not-false (regexp-match? #px" datasets( |\\})" (install-line)) "install line: datasets")
-  (check-not-false (regexp-match? #px"@tt\\{datasets\\}" (examples-intro)) "Examples intro: datasets")
+  (check-true (regexp-match? #px" datasets( |\\})" (install-line)) "install line: datasets")
+  (check-true (regexp-match? #px"@tt\\{datasets\\}" (examples-intro)) "Examples intro: datasets")
   (for ([pkg (in-list (remove-duplicates (map second dataset-citations)))])
     (check-not-false (member (symbol->string pkg) (cons "datasets-core" (declared "datasets" 'deps)))
                      (format "the datasets umbrella carries ~a" pkg))))
