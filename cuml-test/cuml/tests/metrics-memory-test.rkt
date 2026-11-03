@@ -67,6 +67,8 @@
 
 (define (refusals truth S ys X y)
   (define short (labels-of '(0 1 2) 'int32))
+  (define short-values (labels-of '(1 2 3) 'float64))
+  (define no-weight (labels-of (make-list 2000 0) 'float64))
   (define many (labels-of (range 46341) 'int32))
   (define flat (labels-of (make-list 46341 0) 'int32))
   (define one-label (labels-of (make-list 400 3) 'int32))
@@ -90,12 +92,11 @@
                  "1.0000000400817551e+40")
          (lambda () (trustworthiness X big-rows)))
    (list "r2-score: y-pred: expected 2000 elements, got 3"
-         (lambda () (r2-score y (labels-of '(1 2 3) 'float64))))
+         (lambda () (r2-score y short-values)))
    (list "mean-squared-error: y-true: row 0, column 0: expected a finite value, got nan"
          (lambda () (mean-squared-error nan-rows nan-rows)))
    (list "accuracy-score: sample-weight: expected a positive sum, got 0"
-         (lambda ()
-           (accuracy-score truth truth #:sample-weight (labels-of (make-list 2000 0) 'float64))))))
+         (lambda () (accuracy-score truth truth #:sample-weight no-weight)))))
 
 (define (refuse-all calls)
   (for* ([call (in-list calls)]

@@ -109,18 +109,20 @@
                       y-pred
                       #:sample-weight [sample-weight #f]
                       #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (cuml-metrics-r2-score-job who resources y-true y-pred sample-weight))
 
 (define/who (mean-squared-error who
                                 y-true
                                 y-pred
                                 #:sample-weight [sample-weight #f]
                                 #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (cuml-metrics-mean-squared-error-job who resources y-true y-pred sample-weight))
 
 (define/who (accuracy-score who
                             y-true
                             y-pred
                             #:sample-weight [sample-weight #f]
                             #:resources [resources (current-device-resources)])
-  (error 'unimplemented))
+  (define-values (correct total)
+    (cuml-metrics-accuracy-score-job who resources y-true y-pred sample-weight))
+  (/ correct total))
