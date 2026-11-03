@@ -43,10 +43,12 @@
 
 (test-case "L3: printing, equality and set-params"
   (check-equal? (printed (linear-regression)) (make-list 3 "#<linear-regression>"))
-  (check-equal? (format "~v" (linear-regression #:algorithm 'qr)) "#<linear-regression #:algorithm 'qr>")
+  (check-equal? (format "~v" (linear-regression #:algorithm 'qr))
+                "#<linear-regression #:algorithm 'qr>")
   (check-equal? (linear-regression #:algorithm 'svd) (linear-regression #:algorithm 'svd))
   (check-not-equal? (linear-regression #:fit-intercept #f) (linear-regression))
-  (check-equal? (estimator-set-params (linear-regression) #:algorithm 'qr) (linear-regression #:algorithm 'qr))
+  (check-equal? (estimator-set-params (linear-regression) #:algorithm 'qr)
+                (linear-regression #:algorithm 'qr))
   (check-false (linear-regression? 'linear-regression))
   (check-false (linear-regression-model (linear-regression))))
 
@@ -56,7 +58,8 @@
 (define data (normal-case 300 5 0 #:weighted? #t))
 
 (test-gpu "L1, L2: fit, predict and score are the procedures, bitwise"
-  (for* ([dt (in-list dtypes)] [a (in-list algorithms)])
+  (for* ([dt (in-list dtypes)]
+         [a (in-list algorithms)])
     (test-case (format "~a ~a" dt a)
       (define X (on-matrix (lcase-X data) dt))
       (define y (on-vector (lcase-y data) dt))
@@ -73,7 +76,8 @@
       (define model (linear-regression-model fitted-e))
       (check-true (bits-equal? (listed (linear-regression-result-coef model))
                                (listed (linear-regression-result-coef direct))))
-      (check-equal? (linear-regression-result-intercept model) (linear-regression-result-intercept direct))
+      (check-equal? (linear-regression-result-intercept model)
+                    (linear-regression-result-intercept direct))
       (define p (predict fitted-e X))
       (check-true (bits-equal? (listed p) (listed (linear-regression-predict direct X))))
       (check-equal? (score fitted-e X y) (r2-score y p))
@@ -84,7 +88,8 @@
   (define y (on-vector (lcase-y data) 'float64))
   (define w (on-vector (lcase-w data) 'float64))
   (check-cuml-error 'logic "fit: linear-regression needs y" (lambda () (fit (linear-regression) X)))
-  (check-true (bits-equal? (listed (linear-regression-result-coef
-                                    (linear-regression-model (fit (linear-regression) X y #:sample-weight w))))
-                           (listed (linear-regression-result-coef
-                                    (linear-regression-fit X y #:sample-weight w))))))
+  (check-true (bits-equal?
+               (listed (linear-regression-result-coef
+                        (linear-regression-model (fit (linear-regression) X y #:sample-weight w))))
+               (listed (linear-regression-result-coef
+                        (linear-regression-fit X y #:sample-weight w))))))

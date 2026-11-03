@@ -86,17 +86,17 @@ struct by_column {
 };
 
 template <typename V, typename F, typename Op>
-std::vector<V> column_totals(rmm::cuda_stream_view stream, int64_t n,
-                             int64_t d, F f, Op op) {
+std::vector<V> column_totals(rmm::cuda_stream_view stream, int64_t n, int64_t d,
+                             F f, Op op) {
   buffer<V> totals = scratch<V>(d, stream);
   buffer<int64_t> columns = scratch<int64_t>(d, stream);
   const thrust::counting_iterator<int64_t> k(0);
   thrust::reduce_by_key(
-      rmm::exec_policy(stream), thrust::make_transform_iterator(k, column_of{n}),
+      rmm::exec_policy(stream),
+      thrust::make_transform_iterator(k, column_of{n}),
       thrust::make_transform_iterator(k + (n * d), column_of{n}),
-      thrust::make_transform_iterator(k, by_column<F, V>{f, n}),
-      columns.data(), totals.data(),
-      thrust::equal_to<int64_t>{}, op);
+      thrust::make_transform_iterator(k, by_column<F, V>{f, n}), columns.data(),
+      totals.data(), thrust::equal_to<int64_t>{}, op);
   return to_host(totals, stream);
 }
 
@@ -357,8 +357,8 @@ int64_t first_positive(const T* w, int64_t n, rmm::cuda_stream_view stream) {
     return 0;
   }
   const thrust::counting_iterator<int64_t> i(0);
-  const int64_t found = *thrust::find_if(rmm::exec_policy(stream), i, i + n,
-                                         positive<T>{w});
+  const int64_t found =
+      *thrust::find_if(rmm::exec_policy(stream), i, i + n, positive<T>{w});
   return found == n ? -1 : found;
 }
 
@@ -370,9 +370,10 @@ std::vector<char> constant_columns(const raft::handle_t& handle,
   const int64_t reference =
       fit_intercept ? first_positive(w, x.n, stream) : int64_t{-1};
   buffer<int> flags = scratch<int>(x.d, stream);
-  raftrkt::cuda_check(cudaMemsetAsync(flags.data(), 0, flags.size() * sizeof(int),
-                                      stream.value()),
-                      "cudaMemsetAsync");
+  raftrkt::cuda_check(
+      cudaMemsetAsync(flags.data(), 0, flags.size() * sizeof(int),
+                      stream.value()),
+      "cudaMemsetAsync");
   each(handle, x.n * x.d,
        unlike_reference<T>{x.data, w, x.d, reference, flags.data()});
   const std::vector<int> varies = to_host(flags, stream);
@@ -385,16 +386,15 @@ std::vector<char> constant_columns(const raft::handle_t& handle,
 template <typename T>
 bool constant_vector(const raft::handle_t& handle, const T* v, int64_t n,
                      const T* w, bool fit_intercept) {
-  const std::vector<char> c =
-      constant_columns(handle, matrix<T, int64_t>{const_cast<T*>(v), n, 1}, w,
-                       fit_intercept);
+  const std::vector<char> c = constant_columns(
+      handle, matrix<T, int64_t>{const_cast<T*>(v), n, 1}, w, fit_intercept);
   return c[0] != 0;
 }
 
 template <typename T>
-staging plan_staging(const raft::handle_t& handle,
-                     const matrix<T, int64_t>& x, const T* y, const T* w,
-                     bool fit_intercept, exponents mode) {
+staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                     const T* y, const T* w, bool fit_intercept,
+                     exponents mode) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const std::vector<double> largest = column_totals<double>(
       stream, x.n, x.d, positive_magnitude<T>{x.data, w, x.d}, larger{});
@@ -470,8 +470,9 @@ template <typename T>
 void require_finite_solution(const T* staged, int64_t d, T intercept,
                              int algorithm, rmm::cuda_stream_view stream) {
   if (first_non_finite(staged, d, stream) >= 0 || !std::isfinite(intercept)) {
-    throw logic_error(std::format("X: the {} solve gave a non-finite coefficient",
-                                  algorithm_name(algorithm)));
+    throw logic_error(
+        std::format("X: the {} solve gave a non-finite coefficient",
+                    algorithm_name(algorithm)));
   }
 }
 
@@ -525,8 +526,7 @@ template int64_t first_positive<double>(const double*, int64_t,
 template std::vector<char> constant_columns<float>(
     const raft::handle_t&, const matrix<float, int64_t>&, const float*, bool);
 template std::vector<char> constant_columns<double>(
-    const raft::handle_t&, const matrix<double, int64_t>&, const double*,
-    bool);
+    const raft::handle_t&, const matrix<double, int64_t>&, const double*, bool);
 template bool constant_vector<float>(const raft::handle_t&, const float*,
                                      int64_t, const float*, bool);
 template bool constant_vector<double>(const raft::handle_t&, const double*,

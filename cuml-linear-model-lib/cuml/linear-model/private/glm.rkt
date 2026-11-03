@@ -21,7 +21,9 @@
                                       resources
                                       X
                                       coef
-                                      (if (real? intercept) (real->double-flonum intercept) +nan.0)
+                                      (if (real? intercept)
+                                          (real->double-flonum intercept)
+                                          +nan.0)
                                       out)
   (match-define (list predictions) (deposit->list out))
   predictions)

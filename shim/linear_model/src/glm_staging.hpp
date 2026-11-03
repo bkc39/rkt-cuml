@@ -27,9 +27,9 @@ int64_t ols_workspace(int algorithm, int64_t n, int64_t d,
 std::string algorithm_name(int algorithm);
 
 template <typename T>
-staging plan_staging(const raft::handle_t& handle,
-                     const matrix<T, int64_t>& x, const T* y, const T* w,
-                     bool fit_intercept, exponents mode);
+staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                     const T* y, const T* w, bool fit_intercept,
+                     exponents mode);
 
 template <typename T>
 std::vector<char> constant_columns(const raft::handle_t& handle,

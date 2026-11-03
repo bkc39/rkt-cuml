@@ -59,7 +59,9 @@ def stage(X, y, w, fi):
     reference = X[first] if fi else np.zeros(X.shape[1], dtype=X.dtype)
     kept = np.array([np.any(X[counted, j] != reference[j]) for j in range(X.shape[1])])
     if kept.sum() > X.shape[0]:
-        e = np.full(X.shape[1], unit_exponent(float(np.max(np.abs(X[counted][:, kept])))))
+        e = np.full(
+            X.shape[1], unit_exponent(float(np.max(np.abs(X[counted][:, kept]))))
+        )
     return e, f, g, kept, counted
 
 
@@ -91,7 +93,9 @@ def staged_fit(case):
     m = CuLinearRegression(
         algorithm=case["algorithm"], fit_intercept=fi, output_type="numpy"
     ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
-    coef[kept] = (host(m.coef_).astype(dt) * np.ldexp(dt(1), e[kept] - f).astype(dt)).astype(dt)
+    coef[kept] = (
+        host(m.coef_).astype(dt) * np.ldexp(dt(1), e[kept] - f).astype(dt)
+    ).astype(dt)
     intercept = dt(np.ldexp(dt(m.intercept_), -f)) if fi else dt(0)
     put(out, "coef", coef)
     put(out, "intercept", np.asarray([intercept], dtype=dt))
@@ -101,7 +105,9 @@ def staged_fit(case):
 def raw_fit(case):
     X, y, w = inputs(case)
     m = CuLinearRegression(
-        algorithm=case["algorithm"], fit_intercept=case["fit_intercept"], output_type="numpy"
+        algorithm=case["algorithm"],
+        fit_intercept=case["fit_intercept"],
+        output_type="numpy",
     ).fit(X, y, sample_weight=w)
     out = {}
     put(out, "coef", np.asarray(host(m.coef_), dtype=X.dtype))
@@ -114,8 +120,12 @@ def sklearn_fit(case):
     X = X.astype(np.float64)
     y = y.astype(np.float64)
     weights = np.ones(len(y)) if w is None else w.astype(np.float64)
-    m = SkLinearRegression(fit_intercept=case["fit_intercept"]).fit(X, y, sample_weight=weights)
-    centred = X - (np.average(X, axis=0, weights=weights) if case["fit_intercept"] else 0)
+    m = SkLinearRegression(fit_intercept=case["fit_intercept"]).fit(
+        X, y, sample_weight=weights
+    )
+    centred = X - (
+        np.average(X, axis=0, weights=weights) if case["fit_intercept"] else 0
+    )
     centred = centred[:, np.any(centred != 0, axis=0)]
     s = np.linalg.svd(np.sqrt(weights)[:, None] * centred, compute_uv=False)
     out = {}

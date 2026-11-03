@@ -345,20 +345,24 @@
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '(affinity))
                          (estimator-entry 'spectral-embedding spectral-embedding)))
-   (table-bindings
-    linear-regression-params
-    linear-regression-keys
-    (list (list 'linear-regression-params linear-regression-params '() (list (argument #f 'base #f)) '() '())
-          (list 'linear-regression-fit
-                linear-regression-fit
-                '(#:params #:resources)
-                (list (argument #f 'X 'none) (argument #f 'y 'none))
-                (list (argument '#:sample-weight 'sample-weight #f)
-                      (argument '#:params 'params #f)
-                      (argument '#:resources 'resources '(current-device-resources)))
-                '()
-                '#:sample-weight)
-          (estimator-entry 'linear-regression linear-regression)))))
+   (table-bindings linear-regression-params
+                   linear-regression-keys
+                   (list (list 'linear-regression-params
+                               linear-regression-params
+                               '()
+                               (list (argument #f 'base #f))
+                               '()
+                               '())
+                         (list 'linear-regression-fit
+                               linear-regression-fit
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none) (argument #f 'y 'none))
+                               (list (argument '#:sample-weight 'sample-weight #f)
+                                     (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '()
+                               '#:sample-weight)
+                         (estimator-entry 'linear-regression linear-regression)))))
 
 (define-namespace-anchor anchor)
 

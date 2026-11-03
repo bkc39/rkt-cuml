@@ -83,7 +83,7 @@ template void to_rows<double>(const raft::handle_t&, const double*, int64_t,
 
 template void scaled_copy<float>(const raft::handle_t&, const float*, int64_t,
                                  float*, int);
-template void scaled_copy<double>(const raft::handle_t&, const double*,
-                                  int64_t, double*, int);
+template void scaled_copy<double>(const raft::handle_t&, const double*, int64_t,
+                                  double*, int);
 
 }  // namespace cumlrkt

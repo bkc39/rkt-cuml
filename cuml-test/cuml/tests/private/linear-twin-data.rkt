@@ -57,8 +57,12 @@
           'dtype (symbol->string dt)
           'X (bits-of dt (map exact->inexact (apply append (lcase-X c))))
           'y (bits-of dt (map exact->inexact (lcase-y c)))
-          'w (if (lcase-w c) (bits-of dt (map exact->inexact (lcase-w c))) 'null)
-          'algorithm (if (eq? a 'auto) "eig" (symbol->string a))
+          'w (if (lcase-w c)
+                 (bits-of dt (map exact->inexact (lcase-w c)))
+                 'null)
+          'algorithm (if (eq? a 'auto)
+                         "eig"
+                         (symbol->string a))
           'fit_intercept fi))
 
 (define (results requests)
@@ -114,15 +118,21 @@
 
 (define (check-cuml-parity dt)
   (define rows
-    (for*/list ([c (in-list p1-cases)] [fi (in-list '(#t #f))] [a (in-list algorithms)])
+    (for*/list ([c (in-list p1-cases)]
+                [fi (in-list '(#t #f))]
+                [a (in-list algorithms)])
       (list c fi dt a)))
-  (define staged (results (for/list ([g (in-list rows)])
-                            (match-define (list c fi dt a) g)
-                            (request "cuml-staged" c dt a fi))))
-  (define raw (results (for/list ([g (in-list rows)])
-                         (match-define (list c fi dt a) g)
-                         (request "cuml" c dt a fi))))
-  (for ([g (in-list rows)] [s (in-list staged)] [r (in-list raw)])
+  (define staged
+    (results (for/list ([g (in-list rows)])
+               (match-define (list c fi dt a) g)
+               (request "cuml-staged" c dt a fi))))
+  (define raw
+    (results (for/list ([g (in-list rows)])
+               (match-define (list c fi dt a) g)
+               (request "cuml" c dt a fi))))
+  (for ([g (in-list rows)]
+        [s (in-list staged)]
+        [r (in-list raw)])
     (match-define (list c fi dt a) g)
     (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)
       (define-values (_r coef b) (ours c dt a fi))
@@ -131,11 +141,9 @@
       (define u (unit-roundoff dt))
       (define size (max 1 (abs b) (max-abs coef)))
       (cond
-        [(eq? c one-column)
-         (check-law "P1 d'=1" (gap fitted (theirs dt s)) (* 4 u kappa size))]
+        [(eq? c one-column) (check-law "P1 d'=1" (gap fitted (theirs dt s)) (* 4 u kappa size))]
         [(and fi (lcase-w c) (> (length (lcase-y c)) 2000))
          (check-law "P1 F11" (gap fitted (theirs dt s)) (* 128 u kappa kappa size))]
         [else (check-equal? fitted (theirs dt s) "P1 bitwise")])
       (unless (eq? c with-constant)
         (check-law "P2" (gap fitted (theirs dt r)) (* 128 u kappa kappa size))))))
-

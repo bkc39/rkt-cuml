@@ -222,9 +222,9 @@ struct fitted {
 };
 
 inline std::string fit_into(const resources& res, fitted& f, const rr_view* x,
-                     const rr_view* y, const rr_view* w = nullptr,
-                     int32_t fit_intercept = 1,
-                     int32_t algorithm = CUML_LINEAR_MODEL_OLS_EIG) {
+                            const rr_view* y, const rr_view* w = nullptr,
+                            int32_t fit_intercept = 1,
+                            int32_t algorithm = CUML_LINEAR_MODEL_OLS_EIG) {
   f.status = outcome(cuml_linear_model_linear_regression_fit(
       res.handle, x, y, w, &f.out.r, fit_intercept, algorithm, &f.intercept));
   return f.status;

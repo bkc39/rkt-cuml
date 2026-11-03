@@ -400,9 +400,7 @@
   (check-equal? (regressor-gadget-model (fit (regressor-gadget) 'X 'y)) '(regressor X y 3 #f))
   (check-equal? (regressor-gadget-model (fit (regressor-gadget #:size 4) 'X 'y #:sample-weight 'w))
                 '(regressor X y 4 w))
-  (check-cuml-error 'logic
-                    "fit: regressor-gadget needs y"
-                    (lambda () (fit (regressor-gadget) 'X))))
+  (check-cuml-error 'logic "fit: regressor-gadget needs y" (lambda () (fit (regressor-gadget) 'X))))
 
 (test-case "L1-g: score passes y through to a #:needs-y estimator's scorer"
   (define e (fit (regressor-gadget) 'X 'y))

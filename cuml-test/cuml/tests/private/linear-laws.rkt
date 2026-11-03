@@ -54,35 +54,38 @@
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))
 
 (define (check-oracle-laws cases intercepts)
-  (for* ([c (in-list cases)] [fi (in-list intercepts)])
+  (for* ([c (in-list cases)]
+         [fi (in-list intercepts)])
     (match-define (solution c* b* kappa) (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi))
     (define y∞ (max-abs (lcase-y c)))
     (define weights (or (lcase-w c) (make-list (length (lcase-y c)) 1)))
-    (for* ([dt (in-list dtypes)] [a (in-list algorithms)])
+    (for* ([dt (in-list dtypes)]
+           [a (in-list algorithms)])
       (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)
         (define u (unit-roundoff dt))
         (define-values (_r coef b) (fit-of (lcase-X c) (lcase-y c) (lcase-w c) dt a fi))
         (check-law "T1" (gap coef c*) (* 128 u kappa kappa (max (max-abs c*) 1)))
-        (check-law "T3"
-                   (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi)
-                   (* 64 u kappa))
+        (check-law "T3" (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi) (* 64 u kappa))
         (when fi
           (check-law "T2" (abs (- b b*)) (* 8 u kappa y∞))
           (define residual-sum
             (for/sum ([row (in-list (lcase-X c))] [yi (in-list (lcase-y c))] [wi (in-list weights)])
-              (* wi (- yi b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))))
+                     (* wi (- yi b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))))
           (check-law "T4"
                      (abs residual-sum)
                      (* 4 (sqrt (length weights)) u (norm2 (lcase-y c)) (max-abs weights))))))))
 
 (define (check-prediction-law cases)
-  (for* ([c (in-list cases)] [dt (in-list dtypes)] #:unless (lcase-w c))
+  (for* ([c (in-list cases)]
+         [dt (in-list dtypes)]
+         #:unless (lcase-w c))
     (test-case (format "~a ~a" (lcase-name c) dt)
       (define u (unit-roundoff dt))
       (define-values (r coef b) (fit-of (lcase-X c) (lcase-y c) #f dt 'auto #t))
       (define d (length coef))
       (define p (device-vector->list (linear-regression-predict r (on-matrix (lcase-X c) dt))))
-      (for ([row (in-list (lcase-X c))] [pi (in-list p)])
+      (for ([row (in-list (lcase-X c))]
+            [pi (in-list p)])
         (define exact (+ b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))
         (define size (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))
         (check-law "T12" (abs (- (inexact->exact pi) exact)) (* 2 d u size))))))

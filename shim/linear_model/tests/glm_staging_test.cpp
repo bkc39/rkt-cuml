@@ -1,3 +1,5 @@
+#include "glm_staging.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cmath>
@@ -10,9 +12,8 @@
 
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
-#include "glm_staging.hpp"
-#include "linear_model_fixture.hpp"
 #include "fit_checks.hpp"
+#include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
 
 namespace {
@@ -57,13 +58,13 @@ TEST(OlsWorkspace, EigIsThreeSquaresAndTwoColumns) {
   EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_EIG, 10, 4, 0), (3 * 16) + 8);
   EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_EIG, 30000, 26755, 0),
             2147543585);
-  EXPECT_EQ(refusal_of(require_workspace, CUML_LINEAR_MODEL_OLS_EIG, 30000,
-                       26754, 0),
-            "accepted");
-  EXPECT_EQ(refusal_of(require_workspace, CUML_LINEAR_MODEL_OLS_EIG, 30000,
-                       26755, 0),
-            "X: 26755 columns need a 2147543585-element eig workspace, more "
-            "than 2147483647 elements");
+  EXPECT_EQ(
+      refusal_of(require_workspace, CUML_LINEAR_MODEL_OLS_EIG, 30000, 26754, 0),
+      "accepted");
+  EXPECT_EQ(
+      refusal_of(require_workspace, CUML_LINEAR_MODEL_OLS_EIG, 30000, 26755, 0),
+      "X: 26755 columns need a 2147543585-element eig workspace, more "
+      "than 2147483647 elements");
 }
 
 TEST(OlsWorkspace, SvdCountsTheQueriedWorkspaceAndBothFactors) {
@@ -179,9 +180,9 @@ TEST(FiniteSolution, AStagedNanIsRefusedNamingTheSolve) {
     EXPECT_EQ(std::string(e.what()),
               "X: the qr solve gave a non-finite coefficient");
   }
-  EXPECT_THROW(require_finite_solution(
-                   data_of(good), 2, std::numeric_limits<double>::infinity(),
-                   CUML_LINEAR_MODEL_OLS_EIG, stream),
+  EXPECT_THROW(require_finite_solution(data_of(good), 2,
+                                       std::numeric_limits<double>::infinity(),
+                                       CUML_LINEAR_MODEL_OLS_EIG, stream),
                cumlrkt::logic_error);
 }
 

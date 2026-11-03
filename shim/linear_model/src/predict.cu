@@ -49,11 +49,12 @@ void predict_into(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     ML::GLM::gemmPredict(handle, columns.data(), static_cast<size_t>(x.n),
                          static_cast<size_t>(x.d), coef,
                          static_cast<T>(intercept), predictions->data());
-    const int64_t i = cumlrkt::first_non_finite(predictions->data(), x.n, stream);
+    const int64_t i =
+        cumlrkt::first_non_finite(predictions->data(), x.n, stream);
     if (i >= 0) {
-      throw logic_error(std::format(
-          "X: row {}: the prediction exceeds the {} range", i,
-          sizeof(T) == sizeof(float) ? "float32" : "float64"));
+      throw logic_error(
+          std::format("X: row {}: the prediction exceeds the {} range", i,
+                      sizeof(T) == sizeof(float) ? "float32" : "float64"));
     }
     cumlrkt::settle(handle);
   }
@@ -83,10 +84,10 @@ int cuml_linear_model_gemm_predict(void* handle, const rr_view* x,
             if constexpr (std::is_same_v<X, C>) {
               predict_into<C>(h, m, c, d, intercept, into);
             } else {
-              throw logic_error(std::format(
-                  "X: expected {}, got {}",
-                  raftrkt::dtype_name(raftrkt::dtype_code<C>),
-                  raftrkt::dtype_name(raftrkt::dtype_code<X>)));
+              throw logic_error(
+                  std::format("X: expected {}, got {}",
+                              raftrkt::dtype_name(raftrkt::dtype_code<C>),
+                              raftrkt::dtype_name(raftrkt::dtype_code<X>)));
             }
           });
         });

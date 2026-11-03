@@ -8,7 +8,11 @@
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
-         (only-in raft device-matrix->list* device-vector->list list*->device-matrix list->device-vector)
+         (only-in raft
+                  device-matrix->list*
+                  device-vector->list
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
@@ -26,19 +30,24 @@
   (list->device-vector xs #:dtype dt))
 
 (define (with-cell rows i j value)
-  (for/list ([row (in-list rows)] [r (in-naturals)])
-    (for/list ([x (in-list row)] [c (in-naturals)])
+  (for/list ([row (in-list rows)]
+             [r (in-naturals)])
+    (for/list ([x (in-list row)]
+               [c (in-naturals)])
       (if (and (= r i) (= c j)) value x))))
 
 (define (with-element xs i value)
-  (for/list ([x (in-list xs)] [k (in-naturals)])
+  (for/list ([x (in-list xs)]
+             [k (in-naturals)])
     (if (= k i) value x)))
 
 (define (fit-rows go)
   (define X (matrix grid))
   (define y (vector targets))
   (list
-   (row "V1 dtype" "X: expected float32 or float64, got int32" (lambda () (go (blank-matrix 5 3 'int32) y)))
+   (row "V1 dtype"
+        "X: expected float32 or float64, got int32"
+        (lambda () (go (blank-matrix 5 3 'int32) y)))
    (row "V1 rank" "X: expected rank 2, got rank 1" (lambda () (go y y)))
    (row "V1 layout"
         "X: expected row-major, got col-major 4x3"
@@ -48,7 +57,9 @@
    (row "V2 length"
         "y: expected 10 elements, got 9"
         (lambda () (go (matrix (append grid grid)) (vector (range 9)))))
-   (row "V2 stride" "y: expected contiguous elements, got stride 2" (lambda () (go X (strided-vector 5))))
+   (row "V2 stride"
+        "y: expected contiguous elements, got stride 2"
+        (lambda () (go X (strided-vector 5))))
    (row "V3 dtype"
         "sample-weight: expected float32, got float64"
         (lambda () (go (matrix grid 'float32) (vector targets 'float32) #:sample-weight y)))
@@ -60,7 +71,9 @@
    (row "V8 algorithm"
         "algorithm: expected auto, eig, svd, svd-jacobi, qr or svd-qr"
         (lambda () (go X y #:algorithm 'lu)))
-   (row "V8 fit-intercept" "fit-intercept: expected #t or #f" (lambda () (go X y #:fit-intercept 'yes)))
+   (row "V8 fit-intercept"
+        "fit-intercept: expected #t or #f"
+        (lambda () (go X y #:fit-intercept 'yes)))
    (row "V9"
         "X: row 3, column 1: expected a finite value, got nan"
         (lambda () (go (matrix (with-cell grid 3 1 +nan.0)) y)))
@@ -82,22 +95,26 @@
           (go (matrix (for/list ([r (in-list grid)])
                         (list (car r) (cadr r) (* (caddr r) (expt 2 -100))))
                       'float32)
-              (vector (for/list ([r (in-list grid)] [t (in-list targets)])
+              (vector (for/list ([r (in-list grid)]
+                                 [t (in-list targets)])
                         (* (expt 2 60) (+ t (caddr r))))
                       'float32))))))
 
 (define (predict-rows fitted go)
-  (list (row "W1 dtype" "X: expected float32 or float64, got int32" (lambda () (go fitted (blank-matrix 5 3 'int32))))
-        (row "W1 rank" "X: expected rank 2, got rank 1" (lambda () (go fitted (vector targets))))
-        (row "W1 layout"
-             "X: expected row-major, got col-major 4x3"
-             (lambda () (go fitted (blank-matrix 4 3 'float64 #:layout 'col-major))))
-        (row "W3" "X: expected float64, got float32" (lambda () (go fitted (matrix grid 'float32))))
-        (row "W4" "X: expected at least 1 row, got 0" (lambda () (go fitted (blank-matrix 0 3 'float64))))
-        (row "W5" "X: expected 3 columns, got 2" (lambda () (go fitted (matrix '((1 2) (3 4))))))
-        (row "W7 X"
-             "X: row 3, column 1: expected a finite value, got nan"
-             (lambda () (go fitted (matrix (with-cell grid 3 1 +nan.0)))))))
+  (list
+   (row "W1 dtype"
+        "X: expected float32 or float64, got int32"
+        (lambda () (go fitted (blank-matrix 5 3 'int32))))
+   (row "W1 rank" "X: expected rank 2, got rank 1" (lambda () (go fitted (vector targets))))
+   (row "W1 layout"
+        "X: expected row-major, got col-major 4x3"
+        (lambda () (go fitted (blank-matrix 4 3 'float64 #:layout 'col-major))))
+   (row "W3" "X: expected float64, got float32" (lambda () (go fitted (matrix grid 'float32))))
+   (row "W4" "X: expected at least 1 row, got 0" (lambda () (go fitted (blank-matrix 0 3 'float64))))
+   (row "W5" "X: expected 3 columns, got 2" (lambda () (go fitted (matrix '((1 2) (3 4))))))
+   (row "W7 X"
+        "X: row 3, column 1: expected a finite value, got nan"
+        (lambda () (go fitted (matrix (with-cell grid 3 1 +nan.0)))))))
 
 (define (result-rows go)
   (define X (matrix grid))
@@ -168,7 +185,8 @@
       (if (= j (modulo i k)) 1 0))))
 
 (define (noisy-targets rows)
-  (for/list ([r (in-list rows)] [i (in-naturals)])
+  (for/list ([r (in-list rows)]
+             [i (in-naturals)])
     (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
 
 (test-gpu "V13: a solve that is not a least-squares solution is refused"

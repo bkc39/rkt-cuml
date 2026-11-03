@@ -146,8 +146,8 @@
   #:fail-when
   (and (memq 'fit-transform (attribute entry.kind)) (memq 'transform (attribute entry.kind)) #'name)
   "fit-transform without transform cannot be given with transform"
-  #:fail-when (and (attribute supervised) (attribute needs-y))
-  "#:needs-y and #:supervised cannot both be given"
+  #:fail-when (and (attribute supervised)
+                   (attribute needs-y)) "#:needs-y and #:supervised cannot both be given"
   #:with name* (format-id #'name "~a*" #'name)
   #:with (field ...) (for/list ([field (in-list '(hyperparameters settings model))])
                        (datum->syntax #'name field #'name))

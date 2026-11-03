@@ -38,8 +38,7 @@ CUMLRKT_API int cuml_linear_model_gemm_predict(void* handle, const rr_view* x,
                                                const rr_view* coef,
                                                double intercept,
                                                rr_deposit* out);
-CUMLRKT_API void cuml_linear_model_gemm_predict_job(void* args,
-                                                    size_t args_len,
+CUMLRKT_API void cuml_linear_model_gemm_predict_job(void* args, size_t args_len,
                                                     rr_job_outcome* outcome);
 
 #ifdef __cplusplus

@@ -12,8 +12,8 @@
 #include "cumlrkt/support.hpp"
 #include "cumlrkt/transpose.hpp"
 #include "cumlrkt/vectors.hpp"
-#include "glm_staging.hpp"
 #include "fit_checks.hpp"
+#include "glm_staging.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
@@ -51,9 +51,8 @@ fit_result<T> nothing_to_solve(const raft::handle_t& handle,
     if (in.w != nullptr) {
       scaled_copy(handle, in.w, in.x.n, ws.data(), s.g);
     }
-    const double mean = staged_mean(handle, ys.data(),
-                                    in.w == nullptr ? nullptr : ws.data(),
-                                    in.x.n);
+    const double mean = staged_mean(
+        handle, ys.data(), in.w == nullptr ? nullptr : ws.data(), in.x.n);
     intercept = static_cast<double>(
         static_cast<T>(std::ldexp(static_cast<T>(mean), -s.f)));
   }
@@ -123,18 +122,18 @@ double fit_into(const raft::handle_t& handle, const rr_view* x_view,
   const fit_inputs<T> in = checked_inputs<T>(handle, x_view, y_view, w_view,
                                              fit_intercept, algorithm);
   const bool intercepted = fit_intercept == 1;
-  const staging planned =
-      plan_staging(handle, in.x, in.y, in.w, intercepted, exponents::per_column);
-  const staging s =
-      std::cmp_greater(planned.kept.size(), in.x.n)
-          ? plan_staging(handle, in.x, in.y, in.w, intercepted,
-                         exponents::uniform)
-          : planned;
+  const staging planned = plan_staging(handle, in.x, in.y, in.w, intercepted,
+                                       exponents::per_column);
+  const staging s = std::cmp_greater(planned.kept.size(), in.x.n)
+                        ? plan_staging(handle, in.x, in.y, in.w, intercepted,
+                                       exponents::uniform)
+                        : planned;
   const bool constant_y =
       constant_vector(handle, in.y, in.x.n, in.w, intercepted);
-  fit_result<T> r = constant_y || s.kept.empty()
-                        ? nothing_to_solve(handle, in, s, intercepted, constant_y)
-                        : solved(handle, in, s, intercepted, algorithm);
+  fit_result<T> r =
+      constant_y || s.kept.empty()
+          ? nothing_to_solve(handle, in, s, intercepted, constant_y)
+          : solved(handle, in, s, intercepted, algorithm);
   settle(handle);
   const rr_view region = raftrkt::region(*r.coef);
   raftrkt::deposit(out, "out", handle, std::move(r.coef), {region});
@@ -147,13 +146,10 @@ double fit_into(const raft::handle_t& handle, const rr_view* x_view,
 
 extern "C" {
 
-int cuml_linear_model_linear_regression_fit(void* handle, const rr_view* x,
-                                            const rr_view* y,
-                                            const rr_view* sample_weight,
-                                            rr_deposit* out,
-                                            int32_t fit_intercept,
-                                            int32_t algorithm,
-                                            double* intercept) {
+int cuml_linear_model_linear_regression_fit(
+    void* handle, const rr_view* x, const rr_view* y,
+    const rr_view* sample_weight, rr_deposit* out, int32_t fit_intercept,
+    int32_t algorithm, double* intercept) {
   return cumlrkt::guarded(
       handle, {{"X", x}, {"y", y}, {"sample-weight", sample_weight}},
       [&](const raft::handle_t& h) {

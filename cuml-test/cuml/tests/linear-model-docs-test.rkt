@@ -29,16 +29,16 @@
                 '("1.000000" "2.000000"))
   (check-equal? (device-vector->list (linear-regression-predict fitted (matrix '((3 5) (2 5)))))
                 '(16.0 15.0))
-  (check-equal? (device-vector->list
-                 (linear-regression-result-coef
-                  (linear-regression-fit (matrix '((0 1) (1 1) (2 1) (3 1))) (vector '(1 3 5 7)))))
+  (check-equal? (device-vector->list (linear-regression-result-coef
+                                      (linear-regression-fit (matrix '((0 1) (1 1) (2 1) (3 1)))
+                                                             (vector '(1 3 5 7)))))
                 '(2.0 0.0))
-  (check-equal? (real->decimal-string
-                 (linear-regression-result-intercept
-                  (linear-regression-fit X (vector '(6 8 10 11))
-                                         #:sample-weight (vector '(1 2 3 4))
-                                         #:algorithm 'qr))
-                 6)
+  (check-equal? (real->decimal-string (linear-regression-result-intercept
+                                       (linear-regression-fit X
+                                                              (vector '(6 8 10 11))
+                                                              #:sample-weight (vector '(1 2 3 4))
+                                                              #:algorithm 'qr))
+                                      6)
                 "3.120000")
   (check-equal? (real->decimal-string (score (fit (linear-regression) X y) X y) 6) "1.000000")
   (check-cuml-error 'logic

@@ -37,11 +37,12 @@ void require_codes(int32_t fit_intercept, int32_t algorithm) {
 }
 
 template <typename T>
-fit_inputs<T> checked_inputs(const raft::handle_t& handle, const rr_view* x_view,
-                             const rr_view* y_view, const rr_view* w_view,
-                             int32_t fit_intercept, int32_t algorithm) {
-  const matrix<T, int64_t> x =
-      rows_of<T, int64_t>(x_view, "X", raftrkt::any_extent, raftrkt::any_extent);
+fit_inputs<T> checked_inputs(const raft::handle_t& handle,
+                             const rr_view* x_view, const rr_view* y_view,
+                             const rr_view* w_view, int32_t fit_intercept,
+                             int32_t algorithm) {
+  const matrix<T, int64_t> x = rows_of<T, int64_t>(
+      x_view, "X", raftrkt::any_extent, raftrkt::any_extent);
   const T* y = raftrkt::vector_data<T, int32_t>(y_view, "y", x.n);
   const T* w = w_view == nullptr ? nullptr
                                  : raftrkt::vector_data<T, int32_t>(
@@ -60,8 +61,8 @@ fit_inputs<T> checked_inputs(const raft::handle_t& handle, const rr_view* x_view
 }
 
 template <typename T>
-int64_t cusolver_lwork_of(const raft::handle_t& handle, int algorithm, int64_t n,
-                       int64_t d) {
+int64_t cusolver_lwork_of(const raft::handle_t& handle, int algorithm,
+                          int64_t n, int64_t d) {
   cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
   int lwork = 0;
   if (algorithm == CUML_LINEAR_MODEL_OLS_SVD) {
@@ -69,12 +70,10 @@ int64_t cusolver_lwork_of(const raft::handle_t& handle, int algorithm, int64_t n
     if (cusolverDnCreateGesvdjInfo(&params) != CUSOLVER_STATUS_SUCCESS) {
       throw logic_error("X: cusolverDnCreateGesvdjInfo failed");
     }
-    const auto status =
-        raft::linalg::detail::cusolverDngesvdj_bufferSize<T>(
-            solver, CUSOLVER_EIG_MODE_VECTOR, 1, static_cast<int>(n),
-            static_cast<int>(d), nullptr, static_cast<int>(n), nullptr,
-            nullptr, static_cast<int>(n), nullptr, static_cast<int>(d), &lwork,
-            params);
+    const auto status = raft::linalg::detail::cusolverDngesvdj_bufferSize<T>(
+        solver, CUSOLVER_EIG_MODE_VECTOR, 1, static_cast<int>(n),
+        static_cast<int>(d), nullptr, static_cast<int>(n), nullptr, nullptr,
+        static_cast<int>(n), nullptr, static_cast<int>(d), &lwork, params);
     cusolverDnDestroyGesvdjInfo(params);
     if (status != CUSOLVER_STATUS_SUCCESS) {
       throw logic_error(std::format(

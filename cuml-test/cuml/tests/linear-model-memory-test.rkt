@@ -39,13 +39,12 @@
   (define nan-X (on-matrix (cons '(+nan.0 0 0 0 0 0 0) (make-list 1999 '(1 1 1 1 1 1 1))) 'float32))
   (define no-weight (on-vector (make-list 2000 0) 'float32))
   (define fitted (linear-regression-fit X y))
-  (list
-   (list "linear-regression-fit: X: row 0, column 0: expected a finite value, got nan"
-         (lambda () (linear-regression-fit nan-X y)))
-   (list "linear-regression-fit: sample-weight: expected a positive sum, got 0"
-         (lambda () (linear-regression-fit X y #:sample-weight no-weight)))
-   (list "linear-regression-predict: X: expected 7 columns, got 2"
-         (lambda () (linear-regression-predict fitted X2)))))
+  (list (list "linear-regression-fit: X: row 0, column 0: expected a finite value, got nan"
+              (lambda () (linear-regression-fit nan-X y)))
+        (list "linear-regression-fit: sample-weight: expected a positive sum, got 0"
+              (lambda () (linear-regression-fit X y #:sample-weight no-weight)))
+        (list "linear-regression-predict: X: expected 7 columns, got 2"
+              (lambda () (linear-regression-predict fitted X2)))))
 
 (define (refuse-all calls)
   (for* ([call (in-list calls)]
@@ -53,8 +52,9 @@
     (match-define (list message thunk) call)
     (check-cuml-error 'logic message thunk)))
 
-(test-process-memory (format "R3: ~a rounds of linear regression free every output and leave device memory flat"
-                             rounds)
+(test-process-memory (format
+                      "R3: ~a rounds of linear regression free every output and leave device memory flat"
+                      rounds)
   (match-define (list X y w X2) (data))
   (define calls (refusals X y X2))
   (for ([_ (in-range 5)])
