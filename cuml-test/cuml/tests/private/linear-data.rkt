@@ -4,6 +4,7 @@
                   linear-regression-fit
                   linear-regression-result-coef
                   linear-regression-result-intercept)
+         (only-in racket/flonum flsingle)
          (only-in racket/list make-list)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in "blob-data.rkt" normal-source uniform-source)
@@ -86,7 +87,7 @@
 
 (define (rounded dt x)
   (inexact->exact (if (eq? dt 'float32)
-                      (real->double-flonum (real->single-flonum x))
+                      (flsingle (real->double-flonum x))
                       (real->double-flonum x))))
 
 (define (rounded-case c dt)

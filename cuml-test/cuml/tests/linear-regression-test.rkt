@@ -6,6 +6,7 @@
                   linear-regression-predict
                   linear-regression-result-coef
                   linear-regression-result-intercept)
+         (only-in racket/flonum flsingle)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
@@ -35,8 +36,8 @@
   (list (device-vector->list (linear-regression-result-coef r))
         (linear-regression-result-intercept r)))
 
-(define (case-fit c dt . options)
-  (apply fit-of (lcase-X c) (lcase-y c) (lcase-w c) dt options))
+(define (case-fit c dt #:algorithm [a 'auto] #:fit-intercept [fi #t])
+  (fit-of (lcase-X c) (lcase-y c) (lcase-w c) dt #:algorithm a #:fit-intercept fi))
 
 (define (match-fit c dt a fi proc)
   (apply proc (fit-of (lcase-X c) (lcase-y c) (lcase-w c) dt #:algorithm a #:fit-intercept fi)))
@@ -46,7 +47,7 @@
 
 (define (rounded dt x)
   (if (eq? dt 'float32)
-      (real->double-flonum (real->single-flonum x))
+      (flsingle (real->double-flonum x))
       (real->double-flonum x)))
 
 (define (scale-column rows k factor)
