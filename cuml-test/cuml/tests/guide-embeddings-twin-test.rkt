@@ -29,7 +29,7 @@
 
 (define embedded-pictures (cdr pictures))
 
-(struct twin-run (chapter labels coarse tsne-seed-1 theirs version))
+(struct twin-run (chapter labels coarse tsne-seed-1 results version))
 
 (define (op name . fields)
   (apply hasheq 'op name fields))
@@ -84,7 +84,7 @@
               version)))
 
 (define (theirs key field)
-  (match-define (struct* twin-run ([theirs results])) (force twin))
+  (match-define (struct* twin-run ([results results])) (force twin))
   (hash-ref (hash-ref results key) field))
 
 (test-twin "the embeddings twin runs Python cuML 26.08.00 and sklearn 1.8.0"
