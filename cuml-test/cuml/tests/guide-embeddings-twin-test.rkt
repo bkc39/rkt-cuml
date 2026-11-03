@@ -36,8 +36,9 @@
 
 (define coarse-cluster-size 50)
 
-(define (hdbscan-op samples min-cluster-size)
-  (define min-samples (embeddings-pin 'min-samples))
+(define coarse-min-samples 5)
+
+(define (hdbscan-op samples min-cluster-size min-samples)
   (op "hdbscan" 'X samples 'min_cluster_size min-cluster-size 'min_samples min-samples))
 
 (define twin
@@ -49,7 +50,7 @@
     (define digits (fixture "digits" rows ids))
     (define tsne-seed-1 (tsne-model (fit (tsne #:random-state 1) images)))
     (define coarse
-      (~> (hdbscan #:min-cluster-size coarse-cluster-size #:min-samples (embeddings-pin 'min-samples))
+      (~> (hdbscan #:min-cluster-size coarse-cluster-size #:min-samples coarse-min-samples)
           (fit-predict (chapter 'embedded))
           device-vector->list))
     (define labels
@@ -62,10 +63,13 @@
                     (cons 'umap (twin-case digits (umap-model (fit (umap) images))))
                     (cons 'tsne (tsne-case digits (tsne-model (fit (tsne) images))))
                     (cons 'tsne-seed-1 (tsne-case digits tsne-seed-1))
-                    (cons 'coarse (hdbscan-op (samples 'embedded) coarse-cluster-size)))
+                    (cons 'coarse
+                          (hdbscan-op (samples 'embedded) coarse-cluster-size coarse-min-samples)))
               (for/list ([name (in-list pictures)])
                 (cons (list 'hdbscan name)
-                      (hdbscan-op (samples name) (embeddings-pin 'min-cluster-size))))
+                      (hdbscan-op (samples name)
+                                  (embeddings-pin 'min-cluster-size)
+                                  (embeddings-pin 'min-samples))))
               (for/list ([name (in-list embedded-pictures)])
                 (cons (list 'trust name) (op "trust" 'X rows 'E (samples name))))
               (for/list ([name (in-list pictures)])
@@ -112,7 +116,7 @@
                   (theirs (list 'hdbscan name) 'labels)
                   (symbol->string name))))
 
-(test-twin "HDBSCAN at 50 digits a cluster labels UMAP's embedding as Python cuML does"
+(test-twin "HDBSCAN at 50 digits a cluster and 5 neighbours labels UMAP's embedding as Python cuML does"
   (match-define (struct* twin-run ([coarse coarse])) (force twin))
   (check-equal? coarse (theirs 'coarse 'labels)))
 
