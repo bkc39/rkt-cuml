@@ -1,13 +1,18 @@
 #lang racket/base
 
-(require (only-in racket/list drop make-list remove-duplicates)
+(require (only-in racket/flonum flsingle)
+         (only-in racket/list drop make-list remove-duplicates)
          (only-in racket/match match match-define)
-         (only-in racket/math pi)
+         (only-in racket/math exact-floor pi sqr)
          (only-in raft list*->device-matrix list->device-vector)
+         (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "scaler-data.rkt" rows-of))
 
 (provide bijection
          choose2
+         exact-accuracy
+         exact-mse
+         exact-r2
          four-blocks
          four-blocks-labels
          host-ari
@@ -22,8 +27,11 @@
          overlap
          overlap-labels
          permute
+         pow2-scaled
          projection
          random-permutation
+         regression-cases
+         regression-pair
          scaled
          shrunk
          sorted-distinct
@@ -239,3 +247,72 @@
   (define v (list->vector xs))
   (for/list ([i (in-list order)])
     (vector-ref v i)))
+
+(define (regression-pair n offset noise seed #:dtype [dt 'float64] #:weighted? [weighted? #f])
+  (define normal (normal-source seed))
+  (define uniform (uniform-source (+ seed 7919)))
+  (define narrow (if (eq? dt 'float32) flsingle values))
+  (define y
+    (for/list ([_ (in-range n)])
+      (narrow (+ offset (normal)))))
+  (define p
+    (for/list ([v (in-list y)])
+      (narrow (+ v (* noise (normal))))))
+  (values y
+          p
+          (and weighted?
+               (for/list ([_ (in-range n)])
+                 (* 3.0 (uniform))))))
+
+(define (regression-cases)
+  (define next (uniform-source 86))
+  (for/list ([i (in-range 120)])
+    (define n (exact-floor (exp (+ (log 2) (* (next) (- (log 4000) (log 2)))))))
+    (define dt (if (even? (quotient i 12)) 'float32 'float64))
+    (define-values (y p w)
+      (regression-pair (max n 2)
+                       (list-ref '(0.0 1e3 1e4) (modulo i 3))
+                       (list-ref '(1e-3 0.1 1.0 10.0) (modulo (quotient i 3) 4))
+                       (+ 8600 i)
+                       #:dtype dt
+                       #:weighted? (odd? (quotient i 24))))
+    (list i dt y p w)))
+
+(define (exact-weights w n)
+  (if w
+      (map inexact->exact w)
+      (make-list n 1)))
+
+(define (exact-r2 y p [w #f])
+  (define ys (map inexact->exact y))
+  (define ps (map inexact->exact p))
+  (define ws (exact-weights w (length y)))
+  (define total (apply + ws))
+  (define first-moment (for/sum ([a (in-list ys)] [c (in-list ws)]) (* c a)))
+  (define spread
+    (- (for/sum ([a (in-list ys)] [c (in-list ws)]) (* c a a)) (/ (sqr first-moment) total)))
+  (- 1 (/ (for/sum ([a (in-list ys)] [b (in-list ps)] [c (in-list ws)]) (* c (sqr (- a b)))) spread)))
+
+(define (row-of v)
+  (if (list? v)
+      v
+      (list v)))
+
+(define (exact-mse y p [w #f])
+  (define d (length (row-of (car y))))
+  (define ws (exact-weights w (length y)))
+  (/ (for/sum ([a (in-list y)] [b (in-list p)] [c (in-list ws)])
+              (* c
+                 (for/sum ([u (in-list (row-of a))] [v (in-list (row-of b))])
+                          (sqr (- (inexact->exact u) (inexact->exact v))))))
+     (* d (apply + ws))))
+
+(define (exact-accuracy a b [w #f])
+  (define ws (exact-weights w (length a)))
+  (/ (for/sum ([x (in-list a)] [y (in-list b)] [c (in-list ws)] #:when (= x y)) c) (apply + ws)))
+
+(define (pow2-scaled xs k)
+  (for/list ([x (in-list xs)])
+    (if (list? x)
+        (pow2-scaled x k)
+        (* x (expt 2 k)))))

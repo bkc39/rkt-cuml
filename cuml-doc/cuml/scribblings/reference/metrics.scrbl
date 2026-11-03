@@ -21,6 +21,11 @@ matter, so @racket[-1] (noise) is a label like any other.
 @racket[contingency-matrix] and @racket[adjusted-rand-score] take at most
 46340 distinct values in each argument and use up to about 16·K@superscript{2}
 bytes of device memory for the larger count K.
+@racket[r2-score] and @racket[mean-squared-error] take @racket['float32] or
+@racket['float64] values, either one in each argument. Each score takes an
+optional @racket[sample-weight], a @racket['float32] or @racket['float64]
+vector of finite values of at least 0 with a positive sum, and sums in
+double precision. Repeated calls on the same data give the same result.
 
 @defstruct*[contingency-table ([counts device-matrix?]
                                [row-labels device-vector?]
@@ -121,3 +126,55 @@ implementations.
   (list*->device-matrix '((0 0) (1 2) (1 0) (2 2) (5 5) (5 6) (7 6) (7 7)) #:dtype 'float32))
 (trustworthiness P P #:n-neighbors 2)
 (trustworthiness P E #:n-neighbors 2)]}
+
+@defproc[(r2-score [y-true device-vector?]
+                   [y-pred device-vector?]
+                   [#:sample-weight sample-weight (or/c #f device-vector?) #f]
+                   [#:resources resources device-resources? (current-device-resources)])
+         flonum?]{
+The coefficient of determination of @racket[y-pred] against @racket[y-true],
+vectors of one length: 1 − Σw(y − ŷ)²/Σw(y − ȳ)², with ȳ the weighted mean
+of @racket[y-true] and w the weights (all 1 when @racket[sample-weight] is
+@racket[#f]). 1.0 is a perfect fit, 0.0 the constant ȳ, and worse fits are
+negative. When @racket[y-true] is constant over the samples of positive
+weight, as with one sample, the score is 1.0 if @racket[y-pred] equals it
+there and 0.0 otherwise; sklearn returns NaN for one sample and decides
+constancy from the rounded variance. Every value must be finite.
+@examples[#:eval ev
+(define y (list->device-vector '(3 -0.5 2 7) #:dtype 'float64))
+(define p (list->device-vector '(2.5 0.0 2 8) #:dtype 'float64))
+(r2-score y p)
+(r2-score y y)
+(r2-score (list->device-vector '(2 2 2) #:dtype 'float32)
+          (list->device-vector '(2 2 3) #:dtype 'float32))]}
+
+@defproc[(mean-squared-error [y-true (or/c device-vector? device-matrix?)]
+                             [y-pred (or/c device-vector? device-matrix?)]
+                             [#:sample-weight sample-weight (or/c #f device-vector?) #f]
+                             [#:resources resources device-resources? (current-device-resources)])
+         flonum?]{
+The weighted mean of (y − ŷ)² over the samples: vectors of one length, or
+row-major matrices of one shape with one row per sample, whose error is the
+mean over the columns. Every value must be finite. The root mean squared
+error is its @racket[sqrt].
+@examples[#:eval ev
+(mean-squared-error y p)
+(mean-squared-error (list*->device-matrix '((0.5 1) (-1 1) (7 -6)) #:dtype 'float64)
+                    (list*->device-matrix '((0 2) (-1 2) (8 -5)) #:dtype 'float64))
+(sqrt (mean-squared-error y p))]}
+
+@defproc[(accuracy-score [y-true device-vector?]
+                         [y-pred device-vector?]
+                         [#:sample-weight sample-weight (or/c #f device-vector?) #f]
+                         [#:resources resources device-resources? (current-device-resources)])
+         flonum?]{
+The weighted fraction of samples whose label in @racket[y-pred] equals
+the one in @racket[y-true]: @racket['int32] or @racket['int64] vectors of
+one length, compared by value. Without weights it is the number of
+matches over n, correctly rounded.
+@examples[#:eval ev
+(define truth (list->device-vector '(0 1 2 3) #:dtype 'int32))
+(define guess (list->device-vector '(0 2 1 3) #:dtype 'int64))
+(accuracy-score truth guess)
+(accuracy-score truth guess
+                #:sample-weight (list->device-vector '(1 1 1 5) #:dtype 'float64))]}

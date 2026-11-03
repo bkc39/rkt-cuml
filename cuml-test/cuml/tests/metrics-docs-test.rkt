@@ -1,9 +1,12 @@
 #lang racket/base
 
 (require (only-in cuml/metrics
+                  accuracy-score
                   adjusted-rand-score
                   contingency-matrix
                   contingency-table
+                  mean-squared-error
+                  r2-score
                   silhouette-samples
                   silhouette-score
                   trustworthiness)
@@ -17,7 +20,7 @@
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/metrics-data.rkt" host-ari mean))
+         (only-in "private/metrics-data.rkt" exact-r2 host-ari mean))
 
 (define truth-labels '(0 0 0 1 1 1))
 (define found-labels '(1 1 -1 0 0 0))
@@ -93,3 +96,33 @@
   (define expected (exact->inexact (host-trustworthiness P-rows E-rows 2)))
   (check-true (<= (abs (- (trustworthiness P E #:n-neighbors 2) expected)) 1e-6)
               (format "~a against ~a" (trustworthiness P E #:n-neighbors 2) expected)))
+
+(define y-values '(3 -0.5 2 7))
+(define p-values '(2.5 0.0 2 8))
+
+(define (doubles xs)
+  (list->device-vector xs #:dtype 'float64))
+
+(test-gpu "the manual: r2-score on the example's values"
+  (define y (doubles y-values))
+  (define expected (exact->inexact (exact-r2 y-values p-values)))
+  (check-true (<= (abs (- (r2-score y (doubles p-values)) expected)) 1e-15)
+              (format "~a against ~a" (r2-score y (doubles p-values)) expected))
+  (check-true (<= (abs (- expected 0.94860813704496)) 1e-14))
+  (check-equal? (r2-score y y) 1.0)
+  (check-equal? (r2-score (list->device-vector '(2 2 2) #:dtype 'float32)
+                          (list->device-vector '(2 2 3) #:dtype 'float32))
+                0.0))
+
+(test-gpu "the manual: mean-squared-error on the example's vectors and matrices"
+  (check-equal? (mean-squared-error (doubles y-values) (doubles p-values)) 0.375)
+  (check-equal? (mean-squared-error (list*->device-matrix '((0.5 1) (-1 1) (7 -6)) #:dtype 'float64)
+                                    (list*->device-matrix '((0 2) (-1 2) (8 -5)) #:dtype 'float64))
+                0.7083333333333334)
+  (check-equal? (sqrt (mean-squared-error (doubles y-values) (doubles p-values))) (sqrt 0.375)))
+
+(test-gpu "the manual: accuracy-score on the example's labels"
+  (define truth (list->device-vector '(0 1 2 3) #:dtype 'int32))
+  (define guess (list->device-vector '(0 2 1 3) #:dtype 'int64))
+  (check-equal? (accuracy-score truth guess) 0.5)
+  (check-equal? (accuracy-score truth guess #:sample-weight (doubles '(1 1 1 5))) 0.75))

@@ -7,17 +7,26 @@
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt"
+                  cuml-metrics-accuracy-score-job
                   cuml-metrics-adjusted-rand-score-job
                   cuml-metrics-contingency-matrix-job
+                  cuml-metrics-mean-squared-error-job
+                  cuml-metrics-r2-score-job
                   cuml-metrics-silhouette-samples-job
                   cuml-metrics-silhouette-score-job
                   cuml-metrics-trustworthiness-job))
 
 (provide (struct-out contingency-table)
+         accuracy-score
+         accuracy-score/who
          adjusted-rand-score
          adjusted-rand-score/who
          contingency-matrix
          contingency-matrix/who
+         mean-squared-error
+         mean-squared-error/who
+         r2-score
+         r2-score/who
          silhouette-samples
          silhouette-samples/who
          silhouette-score
@@ -94,3 +103,24 @@
                                     n-neighbors
                                     (trustworthiness-metric-code metric)
                                     batch-size))
+
+(define/who (r2-score who
+                      y-true
+                      y-pred
+                      #:sample-weight [sample-weight #f]
+                      #:resources [resources (current-device-resources)])
+  (error 'unimplemented))
+
+(define/who (mean-squared-error who
+                                y-true
+                                y-pred
+                                #:sample-weight [sample-weight #f]
+                                #:resources [resources (current-device-resources)])
+  (error 'unimplemented))
+
+(define/who (accuracy-score who
+                            y-true
+                            y-pred
+                            #:sample-weight [sample-weight #f]
+                            #:resources [resources (current-device-resources)])
+  (error 'unimplemented))
