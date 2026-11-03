@@ -7,7 +7,7 @@
          (only-in racket/match match-define)
          (only-in racket/promise delay force)
          (only-in racket/string string-contains? string-join)
-         (only-in rackunit check check-equal? check-not-false check-true test-case)
+         (only-in rackunit check check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/guide-data.rkt"
@@ -115,7 +115,11 @@
 (test-case "embeddings: the prose states the pinned values"
   (define text (flattened-text (chapter-file "examples" "embeddings.scrbl")))
   (for ([phrase (in-list (prose-phrases))])
-    (check-true (string-contains? text phrase) phrase)))
+    (check-true (string-contains? text phrase) phrase))
+  (match-define (list _ (cons raw-largest _) _) (embeddings-pin 'raw))
+  (check-equal? (filter (lambda (column) (= (apply + column) raw-largest)) (cluster-columns raw-table))
+                (list (embeddings-pin 'raw-largest-column))
+                "the raw table's cluster of the largest size"))
 
 (test-gpu "embeddings: the chapter prints its sizes, scores and trustworthiness"
   (define-values (_chapter blocks) (force embeddings))
@@ -137,9 +141,7 @@
     (check-scored ids
                   (fit-predict clusterer (chapter name))
                   (cluster-columns table)
-                  (car (embeddings-pin pin))))
-  (check-not-false (member (embeddings-pin 'raw-largest-column) (cluster-columns raw-table))
-                   "the 461 digits' column"))
+                  (car (embeddings-pin pin)))))
 
 (test-gpu "embeddings: each digit has a UMAP cluster, and the misplaced digits by class"
   (define-values (chapter _blocks) (force embeddings))
