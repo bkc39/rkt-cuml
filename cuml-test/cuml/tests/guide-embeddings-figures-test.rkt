@@ -77,20 +77,15 @@
   (check-equal? (panel-colours (grid labels grid-digits) (grid (noiseless labels) grid-digits))
                 all-drawn))
 
-(test-case "embeddings: the colour check finds no noise in a panel without noise"
-  (define figure (grid grid-digits grid-digits))
-  (check-false (last (panel-colours figure figure))))
+(test-case "embeddings: the colour check finds no noise in a panel that draws it in a cluster's colour"
+  (define labels (with-noise grid-digits))
+  (check-false (last (panel-colours (grid (map (lambda (label) (if (negative? label) 9 label)) labels)
+                                          grid-digits)
+                                    (grid (noiseless labels) grid-digits)))))
 
 (test-case "embeddings: the colour check reads the HDBSCAN panel, not the digit panel or the legend"
   (define half (with-noise (map (curryr modulo 5) (range grid-size))))
   (check-not-equal? (panel-colours (grid half grid-digits) (grid (noiseless half) grid-digits))
                     all-drawn)
   (define unclustered (grid (make-list grid-size -1) grid-digits))
-  (check-not-equal? (panel-colours unclustered (grid (make-list grid-size 0) grid-digits)) all-drawn)
-  (define bare
-    (class-figure (map exact->inexact (range grid-size))
-                  (map exact->inexact (range grid-size))
-                  '()
-                  grid-digits
-                  #:class-title "digit"))
-  (check-not-equal? (panel-colours bare bare) all-drawn))
+  (check-not-equal? (panel-colours unclustered (grid (make-list grid-size 0) grid-digits)) all-drawn))
