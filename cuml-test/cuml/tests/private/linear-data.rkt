@@ -142,7 +142,8 @@
         (/ sy total)
         0))
   (define G
-    (for/vector ([_ (in-range d)])
+    (for/vector #:length d
+                ([_ (in-range d)])
       (make-vector d 0)))
   (define b (make-vector d 0))
   (for ([row (in-list X)]
