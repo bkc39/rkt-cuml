@@ -87,7 +87,6 @@
                       'float32))))))
 
 (define (predict-rows fitted go)
-  (define X (matrix grid))
   (list (row "W1 dtype" "X: expected float32 or float64, got int32" (lambda () (go fitted (blank-matrix 5 3 'int32))))
         (row "W1 rank" "X: expected rank 2, got rank 1" (lambda () (go fitted (vector targets))))
         (row "W1 layout"

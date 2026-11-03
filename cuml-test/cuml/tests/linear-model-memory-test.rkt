@@ -35,7 +35,7 @@
 (define (one-round X y w)
   (linear-regression-predict (linear-regression-fit X y #:sample-weight w #:algorithm 'qr) X))
 
-(define (refusals X y w X2)
+(define (refusals X y X2)
   (define nan-X (on-matrix (cons '(+nan.0 0 0 0 0 0 0) (make-list 1999 '(1 1 1 1 1 1 1))) 'float32))
   (define no-weight (on-vector (make-list 2000 0) 'float32))
   (define fitted (linear-regression-fit X y))
@@ -56,7 +56,7 @@
 (test-process-memory (format "R3: ~a rounds of linear regression free every output and leave device memory flat"
                              rounds)
   (match-define (list X y w X2) (data))
-  (define calls (refusals X y w X2))
+  (define calls (refusals X y X2))
   (for ([_ (in-range 5)])
     (one-round X y w)
     (refuse-all calls))

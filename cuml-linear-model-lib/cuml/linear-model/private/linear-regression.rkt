@@ -6,7 +6,7 @@
          (only-in racket/match match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
-         (only-in "glm.rkt" flag-code glm-predict)
+         (only-in "glm.rkt" flag-code glm-predict/who)
          (only-in "native.rkt" cuml-linear-model-linear-regression-fit-job))
 
 (provide (struct-out linear-regression-result)
@@ -48,5 +48,5 @@
                                        X
                                        #:resources [resources (current-device-resources)])
   (match result
-    [(linear-regression-result coef intercept) (glm-predict who coef intercept X resources)]
+    [(linear-regression-result coef intercept) (glm-predict/who who coef intercept X resources)]
     [_ (raise-argument-error who "linear-regression-result?" result)]))

@@ -57,12 +57,12 @@
 
 (define (insert-column rows at value-of)
   (for/list ([row (in-list rows)] [i (in-naturals)])
-    (append (for/list ([x (in-list row)] [j (in-range at)]) x)
+    (append (for/list ([x (in-list row)] [_ (in-range at)]) x)
             (list (value-of i))
             (list-tail row at))))
 
 (define (remove-at xs at)
-  (append (for/list ([x (in-list xs)] [j (in-range at)]) x) (list-tail xs (add1 at))))
+  (append (for/list ([x (in-list xs)] [_ (in-range at)]) x) (list-tail xs (add1 at))))
 
 (define (each-fit proc)
   (for* ([dt (in-list dtypes)] [a (in-list algorithms)] [fi (in-list '(#t #f))])
@@ -162,7 +162,11 @@
      (define zero-rows '(3 17 40))
      (define w (for/list ([v (in-list (lcase-w weighted))] [i (in-naturals)])
                  (if (memv i zero-rows) 0 v)))
-     (define X (insert-column (lcase-X weighted) 1 (lambda (i) (if (memv i zero-rows) 9 (if fi 5/2 0)))))
+     (define X (insert-column (lcase-X weighted) 1 (lambda (i)
+                                                        (cond
+                                                          [(memv i zero-rows) 9]
+                                                          [fi 5/2]
+                                                          [else 0]))))
      (define dropped (fit-of (insert-column (lcase-X weighted) 1 (lambda (_) (if fi 5/2 0)))
                              (lcase-y weighted) w dt #:algorithm a #:fit-intercept fi))
      (check-true (bits-equal? (fit-of X (lcase-y weighted) w dt #:algorithm a #:fit-intercept fi) dropped)

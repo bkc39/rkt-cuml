@@ -1,12 +1,13 @@
 #lang racket/base
 
-(require (only-in cuml/core/private/deposit deposit-for/who)
+(require (only-in cuml/core/private/define-who define/who)
+         (only-in cuml/core/private/deposit deposit-for/who)
          (only-in racket/match match-define)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt" cuml-linear-model-gemm-predict-job))
 
 (provide flag-code
-         glm-predict)
+         glm-predict/who)
 
 (define (flag-code v)
   (case v
@@ -14,7 +15,7 @@
     [(#f) 0]
     [else -1]))
 
-(define (glm-predict who coef intercept X resources)
+(define/who (glm-predict who coef intercept X resources)
   (define out (deposit-for/who who resources))
   (cuml-linear-model-gemm-predict-job who
                                       resources

@@ -65,7 +65,7 @@
                                (request "sklearn" c 'float64 a fi))))])
     (match-define (list c fi a) g)
     (test-case (format "~a ~a ~a" (lcase-name c) fi a)
-      (define-values (_r coef b) (ours c 'float64 a fi))
+      (define-values (_r coef _b) (ours c 'float64 a fi))
       (define kappa (hash-ref r 'kappa))
       (define sk (theirs 'float64 r))
       (check-law "P3"
