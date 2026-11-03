@@ -996,3 +996,24 @@ Follow-ups are GitHub issues.
 - **B4-j.** Repeatability is checked in one process; across processes it is
   B1 L6's and B2 L4's on digits.
 - **B4-k.** `scored` is a guide helper in `guide/helpers.rkt`.
+
+## Decisions recorded in leg L0 (#86)
+
+- **L0-a.** `r2-score`, `mean-squared-error` and `accuracy-score` are the
+  shim's own reductions (`shim/metrics/src/scores.cpp`, `scores_device.cu`):
+  one deterministic thrust/CUB tree per sum, accumulated in double, with
+  power-of-two prescaling. cuML's `r2_score_py` and `accuracy_score_py` are
+  not called.
+- **L0-b.** On a `y-true` that is constant over the samples of positive
+  weight (exact equality with the first), r2 is 1.0 when `y-pred` equals it
+  there and 0.0 otherwise, n = 1 included.
+- **L0-c.** `#:sample-weight` on all three; matrix input to
+  `mean-squared-error` with the uniform average over columns only.
+  `multioutput`, `force_finite`, `normalize` and `squared` are not bound.
+- **L0-d.** Mixed float32/float64 arguments are accepted, as the labels
+  accept int32 with int64.
+- **L0-e.** Negative weights are refused.
+- **L0-f.** No magnitude refusal: values and weights are prescaled by powers
+  of two, so r2 is exactly scale-invariant and the error is `+inf.0` only
+  past the flonum range.
+- **L0-g.** The Decomposition chapter gains its Reconstruction section.
