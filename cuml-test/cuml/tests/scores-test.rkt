@@ -192,8 +192,8 @@
     (for/list ([j (in-range d)])
       (+ (* 10.0 j) (next)))))
 
-(define (column rows j)
-  (map (lambda (r) (list-ref r j)) rows))
+(define (column xss j)
+  (map (lambda (r) (list-ref r j)) xss))
 
 (test-gpu "M3: a matrix's error is within 1e-14 of the mean of its columns' errors"
   (for* ([dt (in-list '(float32 float64))]

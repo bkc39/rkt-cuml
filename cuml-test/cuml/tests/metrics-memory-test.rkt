@@ -91,8 +91,7 @@
                  float-most
                  "1.0000000400817551e+40")
          (lambda () (trustworthiness X big-rows)))
-   (list "r2-score: y-pred: expected 2000 elements, got 3"
-         (lambda () (r2-score y short-values)))
+   (list "r2-score: y-pred: expected 2000 elements, got 3" (lambda () (r2-score y short-values)))
    (list "mean-squared-error: y-true: row 0, column 0: expected a finite value, got nan"
          (lambda () (mean-squared-error nan-rows nan-rows)))
    (list "accuracy-score: sample-weight: expected a positive sum, got 0"
