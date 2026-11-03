@@ -3,7 +3,7 @@
 (require (only-in cuml fit-predict fit-transform pca trustworthiness)
          (only-in cuml/scribblings/guide/helpers clusters-of rounded)
          (only-in pict pict?)
-         (only-in racket/list filter-not last range remove-duplicates split-at-right)
+         (only-in racket/list filter-not index-of last range remove-duplicates split-at-right)
          (only-in racket/match match-define)
          (only-in racket/promise delay force)
          (only-in racket/string string-contains? string-join)
@@ -17,7 +17,8 @@
                   embeddings-pin
                   evaluated-chapter
                   flattened-text
-                  misplaced-by-class))
+                  misplaced-by-class)
+         (only-in "private/scaler-data.rkt" transpose))
 
 (define embeddings
   (delay
@@ -112,6 +113,20 @@
         (format "~a against ~a" tsne-trust umap-trust)
         (format "principal components, ~a." pca-trust)))
 
+(define (majority-digits table)
+  (for/list ([column (in-list (transpose (map cdr table)))])
+    (index-of column (apply max column))))
+
+(define (majority-misplaced table)
+  (define majorities (majority-digits table))
+  (for/list ([row (in-list table)]
+             [digit (in-naturals)])
+    (- (apply + row)
+       (for/sum ([n (in-list (cdr row))]
+                 [majority (in-list majorities)]
+                 #:when (= majority digit))
+         n))))
+
 (test-case "embeddings: the prose states the pinned values"
   (define text (flattened-text (chapter-file "embeddings.scrbl" "examples")))
   (for ([phrase (in-list (prose-phrases))])
@@ -120,7 +135,11 @@
   (check-equal? (filter (lambda (column) (= (apply + column) raw-largest))
                         (cluster-columns raw-table))
                 (list (embeddings-pin 'raw-largest-column))
-                "the raw table's cluster of the largest size"))
+                "the raw table's cluster of the largest size")
+  (check-equal? (sort (majority-digits umap-table) <) (range 10) "UMAP clusters' majority digits")
+  (check-equal? (majority-misplaced umap-table)
+                (embeddings-pin 'umap-misplaced)
+                "UMAP's misplaced digits by majority"))
 
 (test-gpu "embeddings: the chapter prints its sizes, scores and trustworthiness"
   (define-values (_chapter blocks) (force embeddings))
