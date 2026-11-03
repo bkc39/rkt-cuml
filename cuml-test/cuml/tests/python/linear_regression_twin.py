@@ -24,7 +24,6 @@ def host(a):
 
 def put(out, key, a):
     a = np.ascontiguousarray(host(a))
-    out[key] = a.astype(np.float64).ravel().tolist()
     out[key + "_bits"] = a.view(BITS[a.dtype]).ravel().tolist()
 
 
@@ -117,6 +116,7 @@ def sklearn_fit(case):
     weights = np.ones(len(y)) if w is None else w.astype(np.float64)
     m = SkLinearRegression(fit_intercept=case["fit_intercept"]).fit(X, y, sample_weight=weights)
     centred = X - (np.average(X, axis=0, weights=weights) if case["fit_intercept"] else 0)
+    centred = centred[:, np.any(centred != 0, axis=0)]
     s = np.linalg.svd(np.sqrt(weights)[:, None] * centred, compute_uv=False)
     out = {}
     put(out, "coef", m.coef_)
