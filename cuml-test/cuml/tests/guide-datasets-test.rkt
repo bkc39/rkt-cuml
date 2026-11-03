@@ -66,8 +66,7 @@
     (for ([text (in-list notice-texts)])
       (check-true (string-contains? (notice-of pkg) text) (format "~a NOTICE: ~a" pkg text)))
     (for ([text (in-list cited)])
-      (check-true (string-contains? (flattened-text chapter) text)
-                  (format "~a: ~a" chapter text)))))
+      (check-true (string-contains? (flattened-text chapter) text) (format "~a: ~a" chapter text)))))
 
 (test-case "digits is introduced last, by the Embeddings chapter"
   (check-equal? (~> (dataset-introductions) last cdr file-name-from-path)

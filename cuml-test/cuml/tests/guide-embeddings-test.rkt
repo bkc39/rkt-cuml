@@ -122,10 +122,8 @@
   (for/list ([row (in-list table)]
              [digit (in-naturals)])
     (- (apply + row)
-       (for/sum ([n (in-list (cdr row))]
-                 [majority (in-list majorities)]
-                 #:when (= majority digit))
-         n))))
+       (for/sum ([n (in-list (cdr row))] [majority (in-list majorities)] #:when (= majority digit))
+                n))))
 
 (test-case "embeddings: the prose states the pinned values"
   (define text (flattened-text (chapter-file "embeddings.scrbl" "examples")))
