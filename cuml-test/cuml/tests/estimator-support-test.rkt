@@ -380,3 +380,47 @@
                          [transform values]
                          [fit-transform values])
                       #rx"fit-transform without transform cannot be given with transform"))
+
+(define/who (regressor-fit _who X y #:hyperparameters gadget-params #:sample-weight [w 'none])
+  (list 'regressor X y size w))
+
+(define ((scored-spy kind) who argument X y #:sample-weight [w 'none])
+  (list kind who argument X y w))
+
+(define-estimator regressor-gadget
+  #:hyperparameters gadget-params
+  #:fit regressor-fit/who
+  #:needs-y
+  #:settings ()
+  #:apply values
+  [predict (applied-spy 'predict)]
+  [score (scored-spy 'score) #:sample-weight])
+
+(test-case "L1-f: #:needs-y passes the generic's y to the fit positionally"
+  (check-equal? (regressor-gadget-model (fit (regressor-gadget) 'X 'y)) '(regressor X y 3 #f))
+  (check-equal? (regressor-gadget-model (fit (regressor-gadget #:size 4) 'X 'y #:sample-weight 'w))
+                '(regressor X y 4 w))
+  (check-cuml-error 'logic
+                    "fit: regressor-gadget needs y"
+                    (lambda () (fit (regressor-gadget) 'X))))
+
+(test-case "L1-g: score passes y through to a #:needs-y estimator's scorer"
+  (define e (fit (regressor-gadget) 'X 'y))
+  (define m (regressor-gadget-model e))
+  (check-equal? (score e 'Z 'v) (list 'score 'score m 'Z 'v #f))
+  (check-equal? (score e 'Z 'v #:sample-weight 'w) (list 'score 'score m 'Z 'v 'w))
+  (check-cuml-error 'logic "score: regressor-gadget needs y" (lambda () (score e 'Z)))
+  (check-cuml-error 'logic
+                    "score: regressor-gadget is not fitted"
+                    (lambda () (score (regressor-gadget) 'Z 'v))))
+
+(test-case "L1-f: #:needs-y cannot be given with #:supervised"
+  (check-syntax-error '(define-estimator both
+                         #:hyperparameters gadget-params
+                         #:fit gadget-fit/who
+                         #:supervised
+                         #:needs-y
+                         #:settings ()
+                         #:apply values
+                         [predict values])
+                      #rx"#:needs-y and #:supervised cannot both be given"))

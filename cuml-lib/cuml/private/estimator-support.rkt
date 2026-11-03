@@ -42,7 +42,19 @@
     [sample-weight (logic-error "~a: ~a takes no sample-weight" who owner)]
     [else absent]))
 
-(define (call-fit proc who owner X y hyperparameters settings weighted? sample-weight)
+(define (fit-positional who owner X y needs-y?)
+  (cond
+    [(not needs-y?) (list who X)]
+    [y (list who X y)]
+    [else (logic-error "~a: ~a needs y" who owner)]))
+
+(define (score-positional who owner y needs-y?)
+  (cond
+    [(not needs-y?) '()]
+    [y (list y)]
+    [else (logic-error "~a: ~a needs y" who owner)]))
+
+(define (call-fit proc who owner positional y hyperparameters settings weighted? sample-weight)
   (define named
     (append (list (cons '#:params hyperparameters))
             (cond
@@ -50,15 +62,15 @@
               [else (list (cons '#:y y))])
             (setting-arguments settings)))
   (cond
-    [weighted? (keyword-call proc (list who X) (cons (cons '#:sample-weight sample-weight) named))]
+    [weighted? (keyword-call proc positional (cons (cons '#:sample-weight sample-weight) named))]
     [else
      (refuse-weight who owner sample-weight)
-     (keyword-call proc (list who X) named)]))
+     (keyword-call proc positional named)]))
 
-(define (call-applied proc who argument X settings [sample-weight absent])
+(define (call-applied proc who argument X settings [sample-weight absent] [more '()])
   (define named (setting-arguments settings))
   (keyword-call proc
-                (list who argument X)
+                (list* who argument X more)
                 (cond
                   [(eq? sample-weight absent) named]
                   [else (cons (cons '#:sample-weight sample-weight) named)])))
@@ -99,8 +111,8 @@
       #:attr kind #f
       #:attr weight (and (attribute weighted) #'w)
       #:with generic #'gen:scorer
-      #:with (method ...) #'((define (score e X [_y #f] #:sample-weight [w #f])
-                               (on-model proc 'score e X (~? weight (unweighted 'score w)))))))
+      #:with (method ...) #'((define (score e X [y #f] #:sample-weight [w #f])
+                               (on-score proc e X y (~? weight (unweighted 'score w)))))))
 
   (define (grouped generics methods)
     (for/list ([group (in-list (group-by car (map cons generics methods) free-identifier=?))])
@@ -124,6 +136,7 @@
                             #:fit fit/who:id
                             (~optional (~seq #:labels labels:expr))
                             (~optional (~and supervised #:supervised))
+                            (~optional (~and needs-y #:needs-y))
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
                             (~optional (~seq #:apply model->argument:expr entry:applied ...+)
@@ -133,6 +146,8 @@
   #:fail-when
   (and (memq 'fit-transform (attribute entry.kind)) (memq 'transform (attribute entry.kind)) #'name)
   "fit-transform without transform cannot be given with transform"
+  #:fail-when (and (attribute supervised) (attribute needs-y))
+  "#:needs-y and #:supervised cannot both be given"
   #:with name* (format-id #'name "~a*" #'name)
   #:with (field ...) (for/list ([field (in-list '(hyperparameters settings model))])
                        (datum->syntax #'name field #'name))
@@ -147,6 +162,9 @@
   #:with given-y (cond
                    [(attribute supervised) #'y]
                    [else #'absent])
+  #:with needs-y? (cond
+                    [(attribute needs-y) #'#t]
+                    [else #'#f])
   #:with weighted? (cond
                      [(attribute no-weight) #'#f]
                      [else #'#t])
@@ -156,19 +174,22 @@
       (call-fit fit/who
                 who
                 'name
-                X
+                (fit-positional who 'name X y needs-y?)
                 given-y
                 (hyperparameters-of e)
                 (settings-of e)
                 weighted?
                 sample-weight))
-    (define (on-model proc who e X [sample-weight absent])
+    (define (on-model proc who e X [sample-weight absent] [more '()])
       (call-applied proc
                     who
                     (argument-of (or (model-of e) (logic-error "~a: ~a is not fitted" who 'name)))
                     X
                     (settings-of e)
-                    sample-weight))
+                    sample-weight
+                    more))
+    (define (on-score proc e X y sample-weight)
+      (on-model proc 'score e X sample-weight (score-positional 'score 'name y needs-y?)))
     (define (on-fit proc who e X y sample-weight)
       (call-applied proc who (argument-of (fitted who e X y sample-weight)) X (settings-of e)))
     (define (unweighted who sample-weight)
