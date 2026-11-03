@@ -986,8 +986,10 @@ Follow-ups are GitHub issues.
   dependency for the guide's data (`data_only` in `pkg-deps.sh`), with
   `datasets-core` at 0.2; digits comes from its UCI part. The dev shell's
   home is keyed on the datasets pin as well as rkt-raft's and the tools'.
-- **B4-g.** Every printed value is pinned exactly, and checked against
-  Python cuML's twin; seeds 0 to 9 are floors for the prose's comparisons.
+- **B4-g.** Every printed value is pinned exactly. UMAP's, t-SNE's and
+  HDBSCAN's values are checked against Python cuML's twin, and PCA's
+  trustworthiness over 10 fits; seeds 0 to 9 are floors for the prose's
+  comparisons.
 - **B4-h.** `ex-embeddings` is the last Examples chapter, so digits is
   introduced last.
 - **B4-i.** t-SNE's figure has an HDBSCAN panel beside the digit panel.
