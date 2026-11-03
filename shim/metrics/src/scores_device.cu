@@ -114,15 +114,6 @@ struct positive_weight {
   }
 };
 
-template <typename T>
-struct negative {
-  const T* x;
-
-  __device__ bool operator()(int64_t i) const {
-    return x[i] < 0;
-  }
-};
-
 template <typename A, typename B>
 struct matched_weight {
   weight_at w;
@@ -163,11 +154,6 @@ bool any_where(Predicate p, int64_t n, rmm::cuda_stream_view stream) {
 
 }  // namespace
 
-template <typename T>
-int64_t first_negative(const T* x, int64_t n, rmm::cuda_stream_view stream) {
-  return first_where(negative<T>{x}, n, stream);
-}
-
 template <typename T, typename P>
 double r2_of(const T* y, const P* p, int64_t n, int exponent, sample_weights w,
              rmm::cuda_stream_view stream) {
@@ -207,11 +193,6 @@ matched matches_of(const A* a, const B* b, int64_t n, sample_weights w,
   return {total(matched_weight<A, B>{weight, a, b}, n, stream),
           total(weight, n, stream)};
 }
-
-template int64_t first_negative<float>(const float*, int64_t,
-                                       rmm::cuda_stream_view);
-template int64_t first_negative<double>(const double*, int64_t,
-                                        rmm::cuda_stream_view);
 
 template double r2_of<float, float>(const float*, const float*, int64_t, int,
                                     sample_weights, rmm::cuda_stream_view);

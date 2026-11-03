@@ -1,6 +1,5 @@
 #include <cmath>
 #include <cstdint>
-#include <format>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
@@ -10,25 +9,24 @@
 #include "cumlrkt/metrics.h"
 #include "cumlrkt/rows.hpp"
 #include "cumlrkt/support.hpp"
+#include "cumlrkt/vectors.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
 #include "scores_device.hpp"
 
 namespace {
 
-using cumlrkt::first_non_finite;
 using cumlrkt::guarded;
 using cumlrkt::largest_magnitude;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
 using cumlrkt::on_floats;
 using cumlrkt::on_labels;
-using cumlrkt::printed;
-using cumlrkt::read_one;
 using cumlrkt::require_finite;
+using cumlrkt::require_finite_elements;
+using cumlrkt::require_sample_weights;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
-using cumlrkt::metrics::first_negative;
 using cumlrkt::metrics::matched;
 using cumlrkt::metrics::matches_of;
 using cumlrkt::metrics::r2_of;
@@ -41,17 +39,6 @@ using stream_view = rmm::cuda_stream_view;
 
 stream_view stream_of(const raft::handle_t& handle) {
   return raft::resource::get_cuda_stream(handle);
-}
-
-template <typename T>
-void require_finite_elements(const char* name, const T* x, int64_t n,
-                             stream_view stream) {
-  const int64_t i = first_non_finite(x, n, stream);
-  if (i >= 0) {
-    throw logic_error(
-        std::format("{}: element {}: expected a finite value, got {}", name, i,
-                    printed(static_cast<double>(read_one(x, i, stream)))));
-  }
 }
 
 sample_weights weight_data(const rr_view* view, int64_t n) {
@@ -72,18 +59,7 @@ sample_weights weight_data(const rr_view* view, int64_t n) {
 
 template <typename W>
 int checked_exponent(const W* w, int64_t n, stream_view stream) {
-  require_finite_elements("sample-weight", w, n, stream);
-  const int64_t i = first_negative(w, n, stream);
-  if (i >= 0) {
-    throw logic_error(
-        std::format("sample-weight: element {}: expected at least 0, got {}", i,
-                    printed(static_cast<double>(read_one(w, i, stream)))));
-  }
-  const double largest = largest_magnitude(w, n, stream);
-  if (!(largest > 0)) {
-    throw logic_error("sample-weight: expected a positive sum, got 0");
-  }
-  return std::ilogb(largest);
+  return std::ilogb(require_sample_weights(w, n, stream));
 }
 
 sample_weights checked(sample_weights w, int64_t n, stream_view stream) {
