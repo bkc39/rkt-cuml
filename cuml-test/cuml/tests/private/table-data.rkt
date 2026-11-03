@@ -44,7 +44,7 @@
                 (match (filter (lambda (column) (all-real? table column)) (dataset-table-names table))
                   ['() #f]
                   [columns (selection name table columns)]))
-              (dataset-names)))
+              (dataset-names #:package "datasets-core")))
 
 (define (host-rows table columns [convert values])
   (define vectors

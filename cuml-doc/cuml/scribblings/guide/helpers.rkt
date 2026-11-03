@@ -33,6 +33,7 @@
          rounded
          rows
          rows->matrix
+         scored
          sizes
          spectrum
          sweep-figure)
@@ -109,6 +110,11 @@
 (define (clusters-of estimator samples classes)
   (matched-labels (labels-of estimator samples) classes))
 
+(define (scored estimator ids samples)
+  (define labels (fit-predict estimator samples))
+  (define found (device-vector->list labels))
+  (list (rounded (adjusted-rand-score ids labels)) (sizes found) (count negative? found)))
+
 (define (largest-entries entries names n)
   (~> (map cons entries names) (sort > #:key (compose abs car)) (take n) (map cdr _)))
 
@@ -141,24 +147,31 @@
   (for/list ([start (in-list '(1 3 5))])
     (string->number (substring hex start (+ start 2)) 16)))
 
-(define cluster-colors
-  (map rgb '("#2a78d6" "#eb6834" "#1baf7a" "#eda100" "#e87ba4" "#008300" "#6250d6" "#e34948")))
+(define cluster-styles
+  (map (match-lambda
+         [(cons hex markers) (cons (rgb hex) markers)])
+       (list '("#2a78d6" fullcircle circle)
+             '("#eb6834" fullsquare square)
+             '("#1baf7a" fulltriangleup triangleup)
+             '("#eda100" fulldiamond diamond)
+             '("#e87ba4" fulltriangledown triangledown)
+             '("#008300" full5star 5star)
+             '("#6250d6" fulltriangleright triangleright)
+             '("#e34948" full4star 4star)
+             '("#8c564b" fulltriangleleft triangleleft)
+             '("#17becf" full6star 6star))))
 
-(define cluster-shapes
-  (list '(fullcircle circle)
-        '(fullsquare square)
-        '(fulltriangleup triangleup)
-        '(fulldiamond diamond)
-        '(fulltriangledown triangledown)
-        '(full5star 5star)
-        '(fulltriangleright triangleright)
-        '(full4star 4star)))
+(define cluster-colors (map car cluster-styles))
 
 (define (cluster-style label [who 'cluster-style])
   (cond
-    [(and (exact-nonnegative-integer? label) (< label (length cluster-colors)))
-     (cons (list-ref cluster-colors label) (list-ref cluster-shapes label))]
-    [else (raise-arguments-error who "label ids run from 0 to 7" "label" label)]))
+    [(and (exact-nonnegative-integer? label) (< label (length cluster-styles)))
+     (list-ref cluster-styles label)]
+    [else
+     (raise-arguments-error who
+                            (format "label ids run from 0 to ~a" (sub1 (length cluster-styles)))
+                            "label"
+                            label)]))
 
 (define noise-color (rgb "#898781"))
 

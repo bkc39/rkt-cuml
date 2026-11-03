@@ -15,7 +15,8 @@
                  "cuml-metrics-lib"
                  "cuml-preprocessing-lib"
                  "data-lib"
-                 "datasets-core"
+                 ("datasets-core" #:version "0.2")
+                 "datasets"
                  "math-lib"
                  "pict-lib"
                  ("raft" #:version "0.2")

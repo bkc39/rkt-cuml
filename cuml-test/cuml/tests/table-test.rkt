@@ -1,11 +1,15 @@
 #lang racket/base
 
 (require (only-in cuml exn:fail:cuml? table->device-matrix)
-         (only-in datasets/core dataset-table-names dataset-table-row-count load-dataset-table)
+         (only-in datasets/core
+                  dataset-packages
+                  dataset-table-names
+                  dataset-table-row-count
+                  load-dataset-table)
          (only-in racket/flonum flsingle)
          (only-in racket/list drop range take)
          (only-in racket/match match match-define)
-         (only-in rackunit check-equal?)
+         (only-in rackunit check-equal? check-not-false test-case)
          (only-in raft
                   contiguous?
                   current-device-resources
@@ -27,9 +31,26 @@
                   host-rows
                   numeric-selections
                   selection
+                  selection-name
                   synthetic-table))
 
 (define dtypes '(float32 float64))
+
+(test-case "the selections are datasets-core's own sets, whatever other dataset packages are installed"
+  (check-not-false (member "datasets-uci" (dataset-packages)))
+  (check-equal? (map selection-name (numeric-selections))
+                '(air-passengers airquality
+                                 anscombe
+                                 breast-cancer
+                                 diabetes
+                                 faithful
+                                 iris
+                                 mtcars
+                                 plant-growth
+                                 titanic
+                                 tooth-growth
+                                 us-arrests
+                                 wine)))
 
 (define (float32-of v)
   (flsingle (real->double-flonum v)))

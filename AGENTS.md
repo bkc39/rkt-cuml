@@ -261,9 +261,9 @@ gtests built with `-DCUMLRKT_SANITIZE=ON`), `CUML_ASAN_OPTIONS`,
 pool through) and `CUML_SHIM_PROBE` (the test-only `libcumlrkt_probe.so`,
 installed in the shim's `tests` output, which the model tests load; unset on
 a GPU host, they fail rather than skip). `PLTUSERHOME` is
-`~/.cache/rkt-cuml-devshell/<hash of the checkout path>/<hash of the rkt-raft
-and nix/racket-tools.nix store paths>`. Every install skips what is already
-installed, so a bump of either pin enters a fresh, empty home. Every shell
+`~/.cache/rkt-cuml-devshell/<hash of the checkout path>/<hash of the rkt-raft,
+datasets and nix/racket-tools.nix store paths>`. Every install skips what is
+already installed, so a bump of any of these pins enters a fresh, empty home. Every shell
 entry deletes everything else under this checkout's directory (old pins'
 homes), and nothing outside it, so entering a shell with a new pin deletes
 the home of a shell still open on the old pin in the same checkout: close
@@ -276,7 +276,8 @@ If hashing the checkout or the pins fails, the entry warns and deletes
 nothing.
 The next shell entry copies the new pin's raft tree, links raft from it,
 installs raft's docs dependencies (polars, data-frame, datasets,
-datasets-core, al2-test-runner, rkt-polars' racket-deps) and the tools at
+datasets-core, datasets-r, datasets-uci, datasets-islr, datasets-fetch,
+al2-test-runner, rkt-polars' racket-deps) and the tools at
 the new revisions, and reinstalls Resyntax. A change of a package's
 `info.rkt` or of the shim misses the install stamp inside the same home and
 re-runs the install and setup.
@@ -302,8 +303,10 @@ runner: run `docs` before any push that touches the scribblings.
 `pkg-deps` skips cuml-doc's `racket-doc` and `threading-doc` (`doc_only`:
 under `--no-docs` setup cannot see the manual's links), so it never
 reports either as unused; drop one by hand when the manual stops linking
-into it. `bindings` runs the census `scripts/check-bindings.rkt`, per family (its `families` list):
-every `cuml_<family>_` export of the staged library is bound once (a
+into it. It skips cuml-doc's and cuml-test's `datasets` too (`data_only`:
+the umbrella brings data that `datasets-core` finds, and no module a package
+requires). `bindings` runs the census `scripts/check-bindings.rkt`,
+per family (its `families` list): every `cuml_<family>_` export of the staged library is bound once (a
 `_job`'s body excepted), every binding is exported, and
 `scripts/<family>-bindings.rktd`, keyed by issue, plans each export; a leg
 flips its planned entries to due.
@@ -346,7 +349,7 @@ replace each when raft offers a public form:
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*` and `tsne-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-embeddings-test`, `guide-embeddings-figures-test`, `guide-embeddings-seeds-test`, `guide-embeddings-twin-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*` and `tsne-*` tests, `preprocessing-docs-test`, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -364,7 +367,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `estimator-data` | `apply-options proc options arg ...`: `proc` called with a symbol-keyed hash as keywords; `round-trips constructor changed`: each parameter of `(constructor)` built alone from `changed`, read back; `printed v` (its `~a`, `~s` and `~v` forms); `listed v` (a device vector or matrix as host lists, `#f` as is) |
 | `hdbscan-data` | the HDBSCAN fixtures (`dataset` by name from `dataset-names`, the seed-0 numpy normals in `normals-0.rktd` behind b50, b10 and one-blob, `dup`), `fitted-of` and `fit-lists` (a fit as host lists in a `fitted` struct), `same-fit?` and `persistence-close?` (equal but for persistence within 1e-5), and the host oracles `structure-problems` and `descent-problems` |
 | `program` | `run-program program`: `program`, a quoted module form, run in a fresh `racket`; returns its exit status, stdout and stderr (used by `program-test`, `dbscan-refusal-test`, `spectral-law-test`, `hdbscan-refusal-test`, `hdbscan-law-test`, `table-test`, `load-test`, `pca-transform-law-test`, `private/umap-determinism-data`, `private/tsne-determinism-data`) |
-| `table-data` | `synthetic-table names columns` (a `dataset-table` built by reflection: datasets-core has no public constructor, so this depends on its struct staying `#:transparent`), `numeric-selections` (each bundled dataset with its all-real columns, as `selection` structs), `host-rows`, and the edge values `edge-table` (float64) and `edge-table32` |
+| `table-data` | `synthetic-table names columns` (a `dataset-table` built by reflection: datasets-core has no public constructor, so this depends on its struct staying `#:transparent`), `numeric-selections` (each of datasets-core's own sets with its all-real columns, as `selection` structs, whatever other dataset packages are installed), `host-rows`, and the edge values `edge-table` (float64) and `edge-table32` |
 | `metrics-data` | the metrics fixtures (seeded `labels` and `label-pair`, `labels-of`, the `overlap` blobs and their `overlap-labels`, `three-groups`, the tie-free `projection`, `grid-20`), the relabellings (`monotone-maps`, `bijection`), `permute` and `random-permutation`, and the host oracles `sorted-distinct` and `host-counts`, and `mean` and `median` |
 | `pca-data` | the PCA fixtures (`fixtures`, each a `fixture` of a name and float64 rows, among them `normal-fixture`, `integer-fixture` and `wide-fixture`; `fixture-rows` and `fixture-matrix` narrow to a dtype, optionally keeping the first rows; `axis-rows`, `tie-rows`, `constant-column`, `duplicate-rows`), `fitted-of` (a result's arrays as host lists in a `fitted` struct), `dot`, `norm`, `column`, `gaps`, `first-max-entries`, `orthonormality-bound` (L4: 4·d·u full, 8·d·u Jacobi), and the host oracles `host-project`, `host-reconstruct` and `host-gram` |
 | `pca-twin-data` | the PCA twin's fixture payload (`twin-rows`, at most 40k elements; `twin-key`, `twin-ks`, `twin-case`, `twin-results`), `named` (a fixture by name), `fit-ours` (a fit as an `ours` struct), `l14-problems` (the spec's L14 bounds, the failures as strings), and `check-against-sklearn` and `check-against-cuml`, one fixture's twin cases (the twin tests split by fixture to stay under the 45 s file timeout) |
@@ -380,7 +383,7 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `spectral-embedding-twin-data` | `parity-configs [n-neighbors]`: n-components 2 and 8 × drop-first × norm-laplacian, shared by the L5 twin tests |
 | `manifold-refusal-data` | the refusal inputs UMAP and t-SNE share: `tiny-with cells` (`tiny` with cells replaced), `nan-row`, `large-row`, `zero-row`, their messages `nan-message`, `large-message`, `cosine-message`, and `listed-X` (a host list, for the view check) |
 | `blob-data` | `uniform-source seed` (a seeded uniform [0, 1) thunk on its own generator), `normal-source seed` (a seeded Box–Muller standard-normal thunk over it) and `centred-blobs centres per-group seed` (float32 Gaussian rows around each centre, and their group labels) |
-| `guide-data` | `evaluated-chapter name` (a guide example chapter's `examples` forms evaluated in order in a `make-cuml-eval` sandbox that shares `cuml`, `pict` and `raft` with the test; returns the evaluator and each block's values), `example-blocks` (the forms of each `examples` block of a read document), `read-document` (a `.scrbl` file read as a datum), `flattened-text` (a file's text with each whitespace run one space), `check-scored ids labels columns text` (a clustering's sorted table, its ARI against `table-ari`, both rounded to `text`), `mismatches` (labels that differ from the renumbered classes), `scaled-matrix` (a dataset's columns standardized on the device), `table-ari` (the exact rational adjusted Rand index of a host table), `cluster-columns` (a contingency table's columns, sorted, so a renumbering moves no pin), `host` (a device vector's first n values), `boundary-margin` (a number's distance to the nearest rounding boundary at some places); the guide's own `class-ids`, `counts-of` and `rounded` come from `guide/helpers.rkt` |
+| `guide-data` | `evaluated-chapter name` (a guide example chapter's `examples` forms evaluated in order in a `make-cuml-eval` sandbox that shares `cuml`, `pict` and `raft` with the test; returns the evaluator and each block's values; `#:through name` stops after the block that defines `name`), `chapter-file path ...` (a file under the guide's collection directory), `embeddings-pin key` (the Embeddings chapter's pinned values, one table that its printed blocks and its prose are checked against), `example-blocks` (the forms of each `examples` block of a read document), `read-document` (a `.scrbl` file read as a datum), `flattened-text` (a file's text with each whitespace run one space), `check-scored ids labels columns text` (a clustering's sorted table, its ARI against `table-ari`, both rounded to `text`), `misplaced-by-class` (per class, the labels that differ from the renumbered classes) and `mismatches` (their sum), `drawable-label?` (a label id the figures' palette draws, or noise), the figure pixels (`pixels`, optionally a top-left region; `blended`, a palette colour at the plots' alpha; `close-to?`, `painted`, `drawn?`; `noise-shade?`, a pixel of the noise grey over white at half coverage or more, which the noise checks count against the same plot without noise), `scaled-matrix` (a dataset's columns standardized on the device), `table-ari` (the exact rational adjusted Rand index of a host table), `cluster-columns` (a contingency table's columns, sorted, so a renumbering moves no pin), `host` (a device vector's first n values), `boundary-margin` (a number's distance to the nearest rounding boundary at some places); the guide's own `class-ids`, `counts-of` and `rounded` come from `guide/helpers.rkt` |
 | `python-env` | `run-twin script input` (in.json to out.json), `run-cases script cases` (`run-twin` of `(hasheq 'cases cases)`, its `results`), `test-twin` (probes `import cuml` on first use, not at load), `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
@@ -422,9 +425,11 @@ kills the test outright.
 - Two parts, after glmnet's: the guide (`guide.scrbl`, `guide/`: Getting
   started, Concepts with every `deftech` and the hyperparameter rule in
   `concepts-parameters`, and one `ex-*` chapter per
-  algorithm or family on real `datasets-core` data) and the reference
+  algorithm or family on real data from the `datasets` umbrella) and the reference
   (`reference.scrbl`, `reference/`: the entries, on small synthetic data).
-  `datasets-core` is a dependency of cuml-lib.
+  `datasets-core` is a dependency of cuml-lib; the `datasets` umbrella a
+  build-dep of cuml-doc and cuml-test, named in Getting started's install
+  line and the Examples intro.
 - The guide's helpers are one module, `guide/helpers.rkt`: Getting started
   shows its `require`, Examples its definitions, every guide sandbox
   evaluates both (`utils.rkt` reads them from the file), and the guide
@@ -434,7 +439,9 @@ kills the test outright.
   `plot-pict`), drawn live by the examples: no committed images.
   `guide-plots-test.rkt` pins the colours by label id, the sizes, and every
   count a figure's prose names; `guide-twin-test.rkt` checks the
-  Decomposition chapter's printed values against an sklearn twin.
+  Decomposition chapter's printed values against an sklearn twin, and
+  `guide-embeddings-twin-test.rkt` the Embeddings chapter's against Python
+  cuML.
 - Every exported name gets a Scribble entry with live examples
   (`scribble/example`, never pasted output), each pinned in
   `cuml-test/cuml/tests/docs-test.rkt` (the reference;
@@ -443,9 +450,12 @@ kills the test outright.
   and `reference/pca-estimator.scrbl`, `tsvd-docs-test.rkt` for its
   truncated SVD section and `reference/truncated-svd-estimator.scrbl`,
   `manifold-docs-test.rkt` for `reference/manifold.scrbl`) or
-  `guide-docs-test.rkt` (the guide; `guide-decomposition-test.rkt` for the
-  Decomposition chapter's k-means, which evaluates the chapter's own
-  examples in order in a sandbox (`evaluated-chapter`) and pins their
+  `guide-docs-test.rkt` (the guide; `guide-datasets-test.rkt` for its
+  data's citations and install line; `guide-decomposition-test.rkt` for the
+  Decomposition chapter's k-means, `guide-embeddings-test.rkt` for the
+  Embeddings chapter's scores and `guide-embeddings-figures-test.rkt` for
+  its figures, which evaluate the chapter's own
+  examples in order in a sandbox (`evaluated-chapter`) and pin their
   printed scores, as `guide-plots-test.rkt` does for its figure).
 
 ## CI

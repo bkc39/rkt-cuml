@@ -29,8 +29,7 @@
                   sizes
                   sweep-figure)
          (only-in datasets/core load-dataset-table)
-         (only-in pict pict->bitmap pict-height pict-width pict?)
-         (only-in racket/class send)
+         (only-in pict pict-height pict-width pict?)
          (only-in racket/function curry curryr)
          (only-in racket/list
                   count
@@ -58,7 +57,15 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/guide-data.rkt" evaluated-chapter mismatches scaled-matrix)
+         (only-in "private/guide-data.rkt"
+                  blended
+                  drawn?
+                  evaluated-chapter
+                  mismatches
+                  noise-shade?
+                  painted
+                  pixels
+                  scaled-matrix)
          (only-in "private/metrics-data.rkt" mean)
          (only-in "private/scaler-data.rkt" float32-roundoff transpose))
 
@@ -66,35 +73,13 @@
 
 (define ink '(11 11 11))
 
-(define (pixels picture)
-  (define bitmap (pict->bitmap picture))
-  (define width (send bitmap get-width))
-  (define height (send bitmap get-height))
-  (define argb (make-bytes (* 4 width height)))
-  (send bitmap get-argb-pixels 0 0 width height argb)
-  (for/list ([offset (in-range 0 (bytes-length argb) 4)])
-    (list (bytes-ref argb (+ offset 1)) (bytes-ref argb (+ offset 2)) (bytes-ref argb (+ offset 3)))))
-
-(define (blended color)
-  (map (lambda (channel) (+ (* 4/5 channel) (* 1/5 255))) color))
-
-(define (painted picture target)
-  (count (lambda (pixel)
-           (for/and ([channel (in-list pixel)]
-                     [expected (in-list target)])
-             (<= (abs (- channel expected)) 2)))
-         (pixels picture)))
-
-(define (drawn? picture target)
-  (positive? (painted picture target)))
-
 (define (size picture)
   (list (pict-width picture) (pict-height picture)))
 
 (define one-sample (cluster-plot '(0.0) '(0.0) '(1)))
 
 (test-case "cluster-style gives each label id its colour and marker, in the fixed order"
-  (check-equal? (map cluster-style (range 8))
+  (check-equal? (map cluster-style (range 10))
                 (list '((42 120 214) fullcircle circle)
                       '((235 104 52) fullsquare square)
                       '((27 175 122) fulltriangleup triangleup)
@@ -102,19 +87,21 @@
                       '((232 123 164) fulltriangledown triangledown)
                       '((0 131 0) full5star 5star)
                       '((98 80 214) fulltriangleright triangleright)
-                      '((227 73 72) full4star 4star)))
-  (check-equal? (~> (range 8) (map cluster-style _) (map second _) remove-duplicates length) 8)
-  (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: 8"
-             (lambda () (cluster-plot '(0 1) '(0 1) '(0 8)))))
+                      '((227 73 72) full4star 4star)
+                      '((140 86 75) fulltriangleleft triangleleft)
+                      '((23 190 207) full6star 6star)))
+  (check-equal? (~> (range 10) (map cluster-style _) (map second _) remove-duplicates length) 10)
+  (check-exn #rx"^cluster-plot: label ids run from 0 to 9\n  label: 10"
+             (lambda () (cluster-plot '(0 1) '(0 1) '(0 10)))))
 
 (test-case "a negative label other than -1, or a non-integer one, is refused in the caller's name"
-  (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: -2"
+  (check-exn #rx"^cluster-plot: label ids run from 0 to 9\n  label: -2"
              (lambda () (cluster-plot '(0) '(0) '(-2))))
-  (check-exn #rx"^cluster-legend: label ids run from 0 to 7\n  label: -2"
+  (check-exn #rx"^cluster-legend: label ids run from 0 to 9\n  label: -2"
              (lambda () (cluster-legend '(-2))))
-  (check-exn #rx"^cluster-legend: label ids run from 0 to 7\n  label: 1.0"
+  (check-exn #rx"^cluster-legend: label ids run from 0 to 9\n  label: 1.0"
              (lambda () (cluster-legend '(1.0) #:names '("a" "b"))))
-  (check-exn #rx"^cluster-style: label ids run from 0 to 7\n  label: 1.0"
+  (check-exn #rx"^cluster-style: label ids run from 0 to 9\n  label: 1.0"
              (lambda () (cluster-style 1.0))))
 
 (test-case "a label keeps its colour whatever other labels a panel holds"
@@ -200,7 +187,9 @@
 (test-case "all noise, one cluster, and mismatched lengths"
   (define noise (cluster-plot '(1 2 3) '(1 2 3) '(-1 -1 -1)))
   (check-equal? (size noise) '(320 280))
-  (check-not-false (drawn? noise '(137 135 129)))
+  (check >
+         (count noise-shade? (pixels noise))
+         (count noise-shade? (pixels (cluster-plot '(1 2 3) '(1 2 3) '(0 0 0)))))
   (check-false (drawn? noise (blended blue)))
   (check-not-false (drawn? (cluster-plot '(1 2 3) '(1 2 3) '(0 0 0)) (blended blue)))
   (check-exn #rx"^cluster-plot: xs, ys and labels differ in length\n  lengths: '[(]3 2[)]"
@@ -217,28 +206,27 @@
   (check-equal? (matched-labels '(0 0 1) '(x x x)) '(0 0 1))
   (check-equal? (matched-labels '(3 3 4) '(-1 -1 7)) '(1 1 0)))
 
-(test-case "seven clusters against three classes reach label id 8, past the figure's 0 to 7"
-  (define labels (matched-labels '(0 0 0 0 1 2 3 4 5 6) '(a a b c a a a a a a)))
-  (check-equal? labels '(0 0 0 0 3 4 5 6 7 8))
-  (check-exn #rx"^cluster-plot: label ids run from 0 to 7\n  label: 8"
-             (lambda () (cluster-plot (range 10) (range 10) labels))))
+(define past-nine-classes '(a a b c a a a a a a a a))
 
-(define past-seven-classes '(a a b c a a a a a a))
+(define past-nine (matched-labels '(0 0 0 0 1 2 3 4 5 6 7 8) past-nine-classes))
 
-(define past-seven (matched-labels '(0 0 0 0 1 2 3 4 5 6) past-seven-classes))
+(test-case "nine clusters against three classes reach label id 10, past the figure's 0 to 9"
+  (check-equal? past-nine '(0 0 0 0 3 4 5 6 7 8 9 10))
+  (check-exn #rx"^cluster-plot: label ids run from 0 to 9\n  label: 10"
+             (lambda () (cluster-plot (range 12) (range 12) past-nine))))
 
-(test-case "class-figure refuses a label past 7 as itself"
-  (check-exn #rx"^class-figure: label ids run from 0 to 7\n  label: 8"
+(test-case "class-figure refuses a label past 9 as itself"
+  (check-exn #rx"^class-figure: label ids run from 0 to 9\n  label: 10"
              (lambda ()
-               (class-figure (range 10)
-                             (range 10)
-                             (list (list "k" past-seven))
-                             past-seven-classes
+               (class-figure (range 12)
+                             (range 12)
+                             (list (list "k" past-nine))
+                             past-nine-classes
                              #:class-title "x"))))
 
-(test-case "sweep-figure refuses a label past 7 as itself"
-  (check-exn #rx"^sweep-figure: label ids run from 0 to 7\n  label: 8"
-             (lambda () (sweep-figure (range 10) (range 10) '("k") (list past-seven)))))
+(test-case "sweep-figure refuses a label past 9 as itself"
+  (check-exn #rx"^sweep-figure: label ids run from 0 to 9\n  label: 10"
+             (lambda () (sweep-figure (range 12) (range 12) '("k") (list past-nine)))))
 
 (define (span numbers)
   (list (apply min numbers) (apply max numbers)))

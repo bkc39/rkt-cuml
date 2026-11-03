@@ -10,6 +10,11 @@
     rkt-raft.url = "github:bkc39/rkt-raft/36b118de999c298851e97b9c4199c0555fa42af4";
     rkt-raft.inputs.nixpkgs.follows = "nixpkgs";
     rkt-raft.inputs.treefmt-nix.follows = "treefmt-nix";
+    # Ahead of rkt-raft's pin: the guide's digits are in datasets-uci.
+    rkt-raft.inputs.datasets-src = {
+      url = "github:bkc39/datasets/7c95ced319b8d76a0f437e070c3e8ffad6d30e56";
+      flake = false;
+    };
   };
 
   outputs =
@@ -159,8 +164,8 @@
           ${racketTools.sources}/threading-lib
       '';
 
-      # rkt-raft's recipe at rkt-raft's pins: raft's build-deps (polars,
-      # datasets) installed offline, so raft installs with --deps fail;
+      # rkt-raft's recipe at rkt-raft's pins, datasets aside: raft's build-deps
+      # (polars, datasets) installed offline, so raft installs with --deps fail;
       # datasets-core is also cuml-lib's runtime dependency.
       installDocsDeps = skip: ''
         raco pkg install --batch -j 4 --copy --no-docs --scope user ${skip} \
@@ -177,6 +182,10 @@
           --name data-frame ${raftInputs.data-frame-src}
         raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
           --name datasets-core ${raftInputs.datasets-src}/datasets-core
+        for _datasets_pkg in datasets-r datasets-uci datasets-islr datasets-fetch; do
+          raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
+            --name "$_datasets_pkg" "${raftInputs.datasets-src}/$_datasets_pkg"
+        done
         raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
           --name datasets ${raftInputs.datasets-src}/datasets
       '';
@@ -226,7 +235,7 @@
           ${installDocsDeps "--skip-installed"}
           ${installRaft "$TMPDIR/rkt-raft" ""}
           ${installCuml ""}
-          raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft
+          raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft datasets-core datasets-uci
           bash scripts/pkg-deps.sh ${cumlPackageNames}
           runHook postBuild
         '';
@@ -356,7 +365,8 @@
 
       # PLTUSERHOME lives outside $PWD (raco refuses a --link target inside a
       # collects dir), one directory per checkout so worktrees never share
-      # installed packages, and below it one home per rkt-raft and tool pin:
+      # installed packages, and below it one home per rkt-raft, datasets and
+      # tool pin:
       # every install skips what is installed, so a pin bump needs a fresh
       # home. Entering the shell deletes everything else under the checkout's
       # directory (old pins' homes), and every other entry of the cache root
@@ -364,10 +374,10 @@
       # their path in .checkout. A shell nested in one with another pin keeps
       # its parent's home, and ids that are not 12 hex digits (a failed hash)
       # delete nothing.
-      racketHomeFor = raftSource: toolsSource: ''
+      racketHomeFor = raftSource: datasetsSource: toolsSource: ''
         _cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/rkt-cuml-devshell"
         _checkout_id=$(printf '%s' "$PWD" | sha256sum | cut -c1-12)
-        _pins_id=$(printf '%s\n%s' "${raftSource}" "${toolsSource}" | sha256sum | cut -c1-12)
+        _pins_id=$(printf '%s\n%s\n%s' "${raftSource}" "${datasetsSource}" "${toolsSource}" | sha256sum | cut -c1-12)
         _checkout_homes="$_cache_root/$_checkout_id"
         _parent_home="''${PLTUSERHOME:-}"
         export PLTUSERHOME="$_checkout_homes/$_pins_id"
@@ -394,7 +404,13 @@
         fi
         mkdir -p "$PLTUSERHOME"
       '';
-      racketHome = racketHomeFor rkt-raft racketTools.sources;
+      racketHome = racketHomeFor rkt-raft raftInputs.datasets-src racketTools.sources;
+      testHomeKey =
+        raft: datasets: tools:
+        lib.escapeShellArg (
+          racketHomeFor "/nix/store/${raft}-rkt-raft" "/nix/store/${datasets}-datasets"
+            "/nix/store/${tools}-tools"
+        );
 
       racketHomeKeys = pkgs.runCommand "rkt-cuml-racket-home-keys" { } ''
         export HOME=$TMPDIR/home
@@ -407,9 +423,10 @@
           printf '%s' "$PLTUSERHOME"
         )
         fail() { echo "$1" >&2; exit 1; }
-        key_a=${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft" "/nix/store/a-tools")}
-        key_raft=${lib.escapeShellArg (racketHomeFor "/nix/store/b-rkt-raft" "/nix/store/a-tools")}
-        key_tools=${lib.escapeShellArg (racketHomeFor "/nix/store/a-rkt-raft" "/nix/store/b-tools")}
+        key_a=${testHomeKey "a" "a" "a"}
+        key_raft=${testHomeKey "b" "a" "a"}
+        key_datasets=${testHomeKey "a" "b" "a"}
+        key_tools=${testHomeKey "a" "a" "b"}
 
         pin_a=$(home_in checkout-a "$key_a")
         touch "$pin_a/stamp"
@@ -424,10 +441,14 @@
         raft_b=$(home_in checkout-a "$key_raft")
         [ "$pin_a" != "$raft_b" ] || fail "a rkt-raft pin bump keeps PLTUSERHOME $pin_a"
         [ ! -e "$pin_a" ] || fail "a rkt-raft pin bump leaves the old home $pin_a"
+        datasets_b=$(home_in checkout-a "$key_datasets")
+        [ "$raft_b" != "$datasets_b" ] && [ "$pin_a" != "$datasets_b" ] \
+          || fail "a datasets pin bump keeps PLTUSERHOME $datasets_b"
+        [ ! -e "$raft_b" ] || fail "a datasets pin bump leaves the old home $raft_b"
         tools_b=$(home_in checkout-a "$key_tools")
-        [ "$raft_b" != "$tools_b" ] && [ "$pin_a" != "$tools_b" ] \
+        [ "$datasets_b" != "$tools_b" ] && [ "$raft_b" != "$tools_b" ] && [ "$pin_a" != "$tools_b" ] \
           || fail "a tool pin bump keeps PLTUSERHOME $tools_b"
-        [ ! -e "$raft_b" ] || fail "a tool pin bump leaves the old home $raft_b"
+        [ ! -e "$datasets_b" ] || fail "a tool pin bump leaves the old home $datasets_b"
 
         [ "$(dirname "$pin_a")" = "$root/$(basename "$(dirname "$pin_a")")" ] \
           || fail "homes are not <checkout>/<pins> under $root: $pin_a"
@@ -489,7 +510,7 @@
             ${installRaft "$PLTUSERHOME/${baseNameOf (toString rkt-raft)}" "--skip-installed"}
             ${installCuml "--skip-installed"}
             RAFT_KMEANS_CANARY=${raft.kmeans-canary}/lib/libkmeans_canary.so \
-              raco setup -j 4 --pkgs raft-x86_64-linux raft datasets-core threading-doc
+              raco setup -j 4 --pkgs raft-x86_64-linux raft datasets-core datasets-uci threading-doc
             raco setup -j 4 --no-docs --pkgs ${cumlPackageNames}
           )
           _setup_rc=$?

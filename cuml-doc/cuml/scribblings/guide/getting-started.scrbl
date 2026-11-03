@@ -13,10 +13,10 @@ clusters.
 
 @section[#:tag "gs-installing"]{Installing}
 
-@commandline{raco pkg install --auto cuml datasets-core plot-lib threading}
+@commandline{raco pkg install --auto cuml datasets plot-lib threading}
 
 The packages require Racket 9.3 or later, and cuML an NVIDIA GPU.
-@tt{datasets-core} supplies this guide's data, @tt{plot-lib} its figures and
+@tt{datasets} supplies this guide's data, @tt{plot-lib} its figures and
 @tt{threading} its @racket[~>]. Every example in the guide starts from this
 require and the helpers in @secref["examples"]:
 

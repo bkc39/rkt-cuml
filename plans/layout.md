@@ -970,3 +970,29 @@ Follow-ups are GitHub issues.
   duplicates embeds bitwise as its sum. Python cuML sums them in float32 in no
   fixed order, so three or more duplicates of one entry can differ by an ulp.
   Each entry, before adding, is 0 or at least the smallest normal float32.
+
+## Decisions recorded in leg B4 (#52)
+
+- **B4-a.** The guide's palette has 10 label ids, 0 to 9: tab10's brown
+  `#8c564b` and cyan `#17becf` join as ids 8 and 9, with the markers
+  `triangleleft` and `6star`.
+- **B4-b.** HDBSCAN in the Embeddings chapter takes `#:min-cluster-size 60
+  #:min-samples 10`.
+- **B4-c.** UMAP and t-SNE run at their defaults.
+- **B4-d.** Spectral embedding is not in the chapter.
+- **B4-e.** The trustworthiness line prints PCA's two components beside
+  UMAP and t-SNE.
+- **B4-f.** cuml-doc and cuml-test depend on the `datasets` umbrella, one
+  dependency for the guide's data (`data_only` in `pkg-deps.sh`), with
+  `datasets-core` at 0.2; digits comes from its UCI part. The dev shell's
+  home is keyed on the datasets pin as well as rkt-raft's and the tools'.
+- **B4-g.** Every printed value is pinned exactly. UMAP's, t-SNE's and
+  HDBSCAN's values are checked against Python cuML's twin, and PCA's
+  trustworthiness over 10 fits; seeds 0 to 9 are floors for the prose's
+  comparisons.
+- **B4-h.** `ex-embeddings` is the last Examples chapter, so digits is
+  introduced last.
+- **B4-i.** t-SNE's figure has an HDBSCAN panel beside the digit panel.
+- **B4-j.** Repeatability is checked in one process; across processes it is
+  B1 L6's and B2 L4's on digits.
+- **B4-k.** `scored` is a guide helper in `guide/helpers.rkt`.

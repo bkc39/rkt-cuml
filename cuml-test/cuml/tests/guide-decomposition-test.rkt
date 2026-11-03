@@ -18,7 +18,12 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/guide-data.rkt" check-scored evaluated-chapter flattened-text mismatches))
+         (only-in "private/guide-data.rkt"
+                  chapter-file
+                  check-scored
+                  evaluated-chapter
+                  flattened-text
+                  mismatches))
 
 (define decomposition
   (delay
@@ -80,4 +85,4 @@
   (check-equal? (map (curry components-for '(1/2 3/10 1/5)) '(1/4 4/5 1)) '(1 2 3))
   (check-regexp-match
    #rx"@racket\\[components-for\\] gives the fewest leading components whose cumulative share reaches a share"
-   (flattened-text (collection-file-path "examples.scrbl" "cuml" "scribblings" "guide"))))
+   (flattened-text (chapter-file "examples.scrbl"))))

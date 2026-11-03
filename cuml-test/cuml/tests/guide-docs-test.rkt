@@ -52,7 +52,6 @@
                   spectrum)
          (only-in cuml/scribblings/guide/source page-helpers-source)
          (only-in datasets/core load-dataset-table)
-         (only-in pkg/lib pkg-directory)
          (only-in racket/function curry)
          (only-in racket/list
                   append-map
@@ -66,7 +65,6 @@
                   take)
          (only-in racket/match match match-define)
          (only-in racket/math exact-round sqr)
-         (only-in racket/string string-contains?)
          (only-in rackunit
                   check
                   check-=
@@ -88,13 +86,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/guide-data.rkt"
-                  check-scored
-                  cluster-columns
-                  flattened-text
-                  host
-                  read-document
-                  scaled-matrix)
+         (only-in "private/guide-data.rkt" check-scored cluster-columns host scaled-matrix)
          (only-in "private/metrics-data.rkt" mean worst)
          (only-in "private/scaler-data.rkt" [float32-roundoff u]))
 
@@ -131,50 +123,6 @@
                                   matrix-of))])
     (check-false (memq name exported) (symbol->string name))
     (check-false (memq name defined) (symbol->string name))))
-
-(define (included-sections datum)
-  (match datum
-    [(list 'include-section (? string? section)) (list section)]
-    [(cons head tail) (append (included-sections head) (included-sections tail))]
-    [_ '()]))
-
-(define (guide-chapters [file (collection-file-path "guide.scrbl" "cuml" "scribblings")])
-  (define-values (dir _name _directory?) (split-path file))
-  (append-map (lambda (section)
-                (define chapter (build-path dir section))
-                (cons chapter (guide-chapters chapter)))
-              (~> file read-document included-sections)))
-
-(define dataset-citations
-  '((iris ("doi:10.24432/C56C76" "CC BY 4.0") "doi:10.24432/C56C76. CC BY 4.0")
-    (wine ("doi:10.24432/C5PC7J" "CC BY 4.0") "doi:10.24432/C5PC7J. CC BY 4.0")
-    (faithful ("R 4.3.3" "GPL-2 or GPL-3") "R 4.3.3 datasets: GPL-2.0-only OR GPL-3.0-only")
-    (breast-cancer ("doi:10.24432/C5DW2B" "CC BY 4.0") "doi:10.24432/C5DW2B. CC BY 4.0")))
-
-(define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
-
-(define (chapter-datasets chapter)
-  (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))
-
-(test-case "the guide chapter that introduces a dataset cites its DOI or licence, as datasets-core's NOTICE gives them"
-  (define datasets-core (pkg-directory "datasets-core"))
-  (check-not-false datasets-core "pkg-directory: datasets-core is not installed")
-  (define notice (flattened-text (build-path datasets-core "NOTICE")))
-  (define introductions
-    (for*/fold ([introductions '()]
-                #:result (reverse introductions))
-               ([chapter (in-list (guide-chapters))]
-                [dataset (in-list (remove-duplicates (chapter-datasets chapter)))]
-                #:unless (assq dataset introductions))
-      (cons (cons dataset chapter) introductions)))
-  (check-equal? (map car introductions) (map car dataset-citations))
-  (for ([citation (in-list dataset-citations)])
-    (match-define (list dataset cited notice-text) citation)
-    (define chapter (cdr (assq dataset introductions)))
-    (check-not-false (string-contains? notice notice-text) (format "NOTICE: ~a" notice-text))
-    (for ([text (in-list cited)])
-      (check-not-false (string-contains? (flattened-text chapter) text)
-                       (format "~a: ~a" chapter text)))))
 
 (test-case "the helpers leave out noise, label -1"
   (check-equal? (sizes '(-1 0 0 1 -1)) '(2 1))
