@@ -117,7 +117,8 @@
   (for ([phrase (in-list (prose-phrases))])
     (check-true (string-contains? text phrase) phrase))
   (match-define (list _ (cons raw-largest _) _) (embeddings-pin 'raw))
-  (check-equal? (filter (lambda (column) (= (apply + column) raw-largest)) (cluster-columns raw-table))
+  (check-equal? (filter (lambda (column) (= (apply + column) raw-largest))
+                        (cluster-columns raw-table))
                 (list (embeddings-pin 'raw-largest-column))
                 "the raw table's cluster of the largest size"))
 
