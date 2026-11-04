@@ -5,9 +5,9 @@
          (only-in racket/match match match-define)
          (only-in racket/math exact-floor pi sqr)
          (only-in raft list*->device-matrix list->device-vector)
+         (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "scaler-data.rkt" rows-of)
-         (only-in threading ~>))
+         (only-in "scaler-data.rkt" rows-of))
 
 (provide bijection
          choose2
