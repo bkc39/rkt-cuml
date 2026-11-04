@@ -124,6 +124,9 @@
   (define w (list (expt 2.0 1000) (expt 2.0 -30)))
   (check-equal? (r2 y p w) (exact->inexact (exact-r2 y p w))))
 
+(test-gpu "an r2 whose deviations all flush to zero under the value scaling is -inf.0"
+  (check-equal? (r2 (list (expt 2.0 -60) (expt 2.0 -59)) (list (expt 2.0 1023) 0.0)) -inf.0))
+
 (test-gpu "weights below 2^-1022 of the largest leave the score within 2^(e-1075)/w"
   (define y '(0.0 1.0 -1.0))
   (define p '(0.0 2.0 -1.0))
