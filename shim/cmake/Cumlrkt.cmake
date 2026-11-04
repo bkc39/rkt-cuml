@@ -82,7 +82,7 @@ function(cumlrkt_family family)
       PRIVATE ${lib} raftrkt::headers "${RAFTRKT_LIBRARY}" GTest::gtest_main)
     cumlrkt_enable_warnings(${tests})
     cumlrkt_apply_nix_cflags(${tests})
-    gtest_discover_tests(${tests} DISCOVERY_MODE PRE_TEST
+    gtest_discover_tests(${tests} DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 120
       PROPERTIES TIMEOUT ${cumlrkt_gtest_timeout_seconds})
     if(DEFINED CUMLRKT_TESTS_PREFIX)
       if(arg_TEST_ONLY)
