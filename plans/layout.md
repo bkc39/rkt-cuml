@@ -1017,15 +1017,22 @@ Follow-ups are GitHub issues.
   is exactly scale-invariant and the error is `+inf.0` only past the flonum
   range. Weights are divided by 2^e_w, e_w = ilogb(max w); a sample is
   positive when its scaled weight is (a weight at most 2^(e_w − 1075)
-  counts as zero). Over the positive samples only: values are divided by
-  2^e, e = ilogb(max |y|, |ŷ|), so differences cannot overflow; each
-  residual s·y − s·ŷ is divided again by 2^e_r, e_r = ilogb(max |s·y −
-  s·ŷ|), and for r2 each deviation s·y − ȳ by 2^e_d, e_d = ilogb(max |s·y −
-  ȳ|), before squaring. MSE = ldexp(R′/(d·W′), 2(e + e_r)); r2 = 1 −
-  ldexp(R′/D′, 2(e_r − e_d)). The largest term of each rescaled sum is its
-  scaled weight times a square in [1, 4), so D′ > 0 whenever y-true varies
-  over the positive samples and no exact-zero shortcut is needed: R′ = 0
-  gives exactly 1.0. Zero-weight samples never
-  enter a maximum or a sum, so a large value behind a zero weight changes
-  nothing, and a small residual next to a large value keeps its bits.
+  counts as zero), and a weight below 2^(e_w − 1022) is held as a
+  subnormal, a relative error of up to 2^(e_w − 1075)/w. Over the positive
+  samples only, with e = ilogb(max |y|, |ŷ|): r2 divides the values by
+  2^e, so that its weighted mean ȳ cannot overflow; MSE divides them by
+  2^e_s, e_s = max(0, e − 1021), only as far as the difference needs, so
+  every residual of values below 2^1022 is the correctly rounded y − ŷ.
+  With s that value scaling, each residual s·y − s·ŷ is divided again by 2^e_r, e_r = ilogb(max |s·y
+  − s·ŷ|), and for r2 each deviation s·y − ȳ by 2^e_d, e_d = ilogb(max
+  |s·y − ȳ|), before squaring. MSE = ldexp(R′/(d·W′), 2(e_s + e_r)); r2 =
+  1 − ldexp(R′/D′, 2(e_r − e_d)), or 1 − ldexp(R′, 2(e_r − e_d))/D′ when
+  R′/D′ is not finite. All-zero residuals give R′ = 0, so exactly 1.0 and
+  0.0. D′ can be 0 while y-true varies, when the 2^e scaling flushes every
+  y-true to zero (y-true 2^-60 and 2^-59 beside ŷ 2^1023); r2 is then
+  −inf.0, which is the rounded score.
+  Zero-weight samples never enter a maximum or a sum, so a large value
+  behind a zero weight changes nothing. In r2 a residual more than 2^1022
+  below the largest |y|, |ŷ| is rounded on the subnormal grid of the 2^e
+  scaling; MSE keeps its bits.
 - **L0-g.** The Decomposition chapter gains its Reconstruction section.

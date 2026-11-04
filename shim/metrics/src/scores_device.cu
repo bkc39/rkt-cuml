@@ -4,6 +4,7 @@
 #include <thrust/logical.h>
 #include <thrust/transform_reduce.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <rmm/cuda_stream_view.hpp>
@@ -14,6 +15,8 @@
 namespace cumlrkt::metrics {
 
 namespace {
+
+constexpr int largest_unscaled = 1021;
 
 struct weight_at {
   const float* single;
@@ -231,16 +234,20 @@ double r2_of(const T* y, const P* p, int64_t n, sample_weights w,
             n, stream);
   const double spread = total(
       weighted_deviation<T>{weight, truth, mean, spread_exponent}, n, stream);
-  return 1.0 - std::ldexp(residual / spread,
-                          2 * (residual_exponent - spread_exponent));
+  const int shift = 2 * (residual_exponent - spread_exponent);
+  const double ratio = residual / spread;
+  return 1.0 - (std::isfinite(ratio) ? std::ldexp(ratio, shift)
+                                     : std::ldexp(residual, shift) / spread);
 }
 
 template <typename T, typename P>
 double squared_error_of(const T* y, const P* p, int64_t n, int64_t d,
                         sample_weights w, rmm::cuda_stream_view stream) {
   const weight_at weight = weight_of(w);
-  const int value =
-      largest_exponent(pair_magnitude<T, P>{weight, y, p, d}, n * d, stream);
+  const int value = std::max(
+      0,
+      largest_exponent(pair_magnitude<T, P>{weight, y, p, d}, n * d, stream) -
+          largest_unscaled);
   const value_at<T> truth{y, value};
   const value_at<P> pred{p, value};
   const int residual_exponent = largest_exponent(
