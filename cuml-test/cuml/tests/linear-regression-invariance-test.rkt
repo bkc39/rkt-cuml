@@ -86,9 +86,10 @@
                   [i (in-naturals)])
          (if (memv i gone) 0 v)))
      (when (> (length y) 101)
-       (check-true (bits-equal? (fit-of X y zeroed dt #:algorithm a #:fit-intercept fi)
-                                (fit-of (kept X) (kept y) (kept w) dt #:algorithm a #:fit-intercept fi))
-                   "T6: a zero weight is a deleted row"))
+       (check-true
+        (bits-equal? (fit-of X y zeroed dt #:algorithm a #:fit-intercept fi)
+                     (fit-of (kept X) (kept y) (kept w) dt #:algorithm a #:fit-intercept fi))
+        "T6: a zero weight is a deleted row"))
      (check-law "T7"
                 (fit-gap (fit X y (map (lambda (v) (* 3 v)) w) dt a fi) (fit X y w dt a fi))
                 (* 32 u kappa (fit-size fitted)))
@@ -243,7 +244,9 @@
 (test-gpu "a positive weight that stages to 0 deletes its row"
   (for* ([dt (in-list dtypes)]
          #:do [(define-values (big tiny)
-                 (if (eq? dt 'float32) (values 1e30 1e-20) (values 1e300 1e-30)))]
+                 (if (eq? dt 'float32)
+                     (values 1e30 1e-20)
+                     (values 1e300 1e-30)))]
          [fixture (in-list (vanishing-fixtures big tiny))]
          #:do [(match-define (list name X y w fi) fixture)
                (define zeroed (map (lambda (v) (if (= v tiny) 0 v)) w))]

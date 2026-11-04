@@ -419,9 +419,9 @@ residual_terms residual_moments(const raft::handle_t& handle,
     y_mean = total(stream, x.n, weighted_value<T>{y, w}) / weights;
   }
   const buffer<double> means = to_device(mean, stream);
-  return {column_totals<moment>(
-              stream, x.n, columns.count,
-              column_moments<T>{v, w, means.data(), r.data()}, add_moments{}),
+  return {column_totals<moment>(stream, x.n, columns.count,
+                                column_moments<T>{v, w, means.data(), r.data()},
+                                add_moments{}),
           std::move(largest),
           std::sqrt(total(stream, x.n, centred_square<T>{y, w, y_mean}))};
 }

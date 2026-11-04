@@ -186,9 +186,9 @@ template bool constant_vector<float>(const raft::handle_t&, const float*,
 template bool constant_vector<double>(const raft::handle_t&, const double*,
                                       int64_t, const double*, bool);
 template buffer<float> staged_weights<float>(const raft::handle_t&,
-                                            const float*, int64_t);
+                                             const float*, int64_t);
 template buffer<double> staged_weights<double>(const raft::handle_t&,
-                                              const double*, int64_t);
+                                               const double*, int64_t);
 template staging plan_staging<float>(const raft::handle_t&,
                                      const matrix<float, int64_t>&,
                                      const float*, const float*, bool,
