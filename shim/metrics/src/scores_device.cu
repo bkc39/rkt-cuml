@@ -203,6 +203,15 @@ int64_t first_where(Predicate p, int64_t n, rmm::cuda_stream_view stream) {
   return i == n ? -1 : i;
 }
 
+double scaled_ratio(double numerator, double denominator, int shift) {
+  int numerator_exponent = 0;
+  int denominator_exponent = 0;
+  const double quotient = std::frexp(numerator, &numerator_exponent) /
+                          std::frexp(denominator, &denominator_exponent);
+  return std::ldexp(quotient,
+                    numerator_exponent - denominator_exponent + shift);
+}
+
 template <typename Predicate>
 bool any_where(Predicate p, int64_t n, rmm::cuda_stream_view stream) {
   const thrust::counting_iterator<int64_t> indices(0);
@@ -234,10 +243,8 @@ double r2_of(const T* y, const P* p, int64_t n, sample_weights w,
             n, stream);
   const double spread = total(
       weighted_deviation<T>{weight, truth, mean, spread_exponent}, n, stream);
-  const int shift = 2 * (residual_exponent - spread_exponent);
-  const double ratio = residual / spread;
-  return 1.0 - (std::isfinite(ratio) ? std::ldexp(ratio, shift)
-                                     : std::ldexp(residual, shift) / spread);
+  return 1.0 - scaled_ratio(residual, spread,
+                            2 * (residual_exponent - spread_exponent));
 }
 
 template <typename T, typename P>
@@ -256,8 +263,8 @@ double squared_error_of(const T* y, const P* p, int64_t n, int64_t d,
       total(weighted_residual<T, P>{weight, truth, pred, d, residual_exponent},
             n * d, stream);
   const double sum = total(weight, n, stream);
-  return std::ldexp(residual / (static_cast<double>(d) * sum),
-                    2 * (value + residual_exponent));
+  return scaled_ratio(residual, static_cast<double>(d) * sum,
+                      2 * (value + residual_exponent));
 }
 
 template <typename A, typename B>
