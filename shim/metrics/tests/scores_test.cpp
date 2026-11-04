@@ -88,12 +88,12 @@ scored r2(const resources& res, const std::vector<T>& y,
   return {status, score};
 }
 
-template <typename T>
+template <typename T, typename P>
 scored mse(const resources& res, const std::vector<T>& y,
-           const std::vector<T>& p) {
+           const std::vector<P>& p) {
   const auto size = static_cast<int64_t>(y.size());
   const filled<T> truth(res, y, {size});
-  const filled<T> pred(res, p, {size});
+  const filled<P> pred(res, p, {size});
   double error = 0;
   const int status = cuml_metrics_mean_squared_error(
       res.handle, truth.view(), pred.view(), nullptr, &error);
@@ -352,6 +352,12 @@ TEST(ScoreRefusals, MatrixShapes) {
   });
 }
 
+template <typename T>
+void expect_constant_scores(const resources& res, const std::vector<T>& y) {
+  EXPECT_EQ(r2(res, y, y).value, 1.0);
+  EXPECT_EQ(r2(res, y, nudged(y)).value, 0.0);
+}
+
 TEST(Scores, ConstantTruthScoresOneOrZero) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -362,11 +368,8 @@ TEST(Scores, ConstantTruthScoresOneOrZero) {
       std::vector<double>(thirds, third),
       {1}};
   for (const std::vector<double>& y : constants) {
-    EXPECT_EQ(r2(res, y, y).value, 1.0);
-    EXPECT_EQ(r2(res, y, nudged(y)).value, 0.0);
-    std::vector<float> narrow(y.begin(), y.end());
-    EXPECT_EQ(r2(res, narrow, narrow).value, 1.0);
-    EXPECT_EQ(r2(res, narrow, nudged(narrow)).value, 0.0);
+    expect_constant_scores(res, y);
+    expect_constant_scores(res, std::vector<float>(y.begin(), y.end()));
   }
   const filled<double> y(res, {5, 1, 5}, {3});
   const filled<double> w(res, {1, 0, 2}, {3});
@@ -386,20 +389,23 @@ TEST(Scores, ConstantTruthScoresOneOrZero) {
 TEST(Scores, ErrorOverflowsOnlyPastTheFlonumRange) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const scored narrow = mse<float>(res, {big_float, 0}, {-big_float, 0});
+  const scored narrow = mse<float, float>(res, {big_float, 0}, {-big_float, 0});
   ASSERT_EQ(outcome(narrow.status), "accepted");
   const double twice = 2 * static_cast<double>(big_float);
   EXPECT_EQ(narrow.value, twice * twice / 2);
-  const scored wide = mse<double>(res, {huge_value, 0}, {0, 0});
+  const scored wide = mse<double, double>(res, {huge_value, 0}, {0, 0});
   ASSERT_EQ(outcome(wide.status), "accepted");
   EXPECT_EQ(wide.value, inf);
 }
 
+const std::vector<double> scaling_truth{3, -0.5, 2, 7, 1e-3, 4};
+const std::vector<double> scaling_pred{2.5, 0, 2, 8, 2e-3, 3};
+
 TEST(Scores, PowerOfTwoScalingIsExact) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const std::vector<double> y{3, -0.5, 2, 7, 1e-3, 4};
-  const std::vector<double> p{2.5, 0, 2, 8, 2e-3, 3};
+  const std::vector<double>& y = scaling_truth;
+  const std::vector<double>& p = scaling_pred;
   const double base = r2(res, y, p).value;
   const double error = mse(res, y, p).value;
   for (const int k : {down, up}) {
@@ -410,8 +416,13 @@ TEST(Scores, PowerOfTwoScalingIsExact) {
               std::ldexp(error, 2 * k))
         << k;
   }
-  const std::vector<float> fy(y.begin(), y.end());
-  const std::vector<float> fp(p.begin(), p.end());
+}
+
+TEST(Scores, PowerOfTwoScalingIsExactInFloat32) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const std::vector<float> fy(scaling_truth.begin(), scaling_truth.end());
+  const std::vector<float> fp(scaling_pred.begin(), scaling_pred.end());
   const double fbase = r2(res, fy, fp).value;
   const double ferror = mse(res, fy, fp).value;
   for (const int k : {down_float, up_float}) {
