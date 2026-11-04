@@ -13,12 +13,12 @@
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/exec_policy.hpp>
-#include <utility>
 #include <vector>
 
 #include "cumlrkt/device.cuh"
 #include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
+#include "glm_device.cuh"
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
 
@@ -26,52 +26,8 @@ namespace cumlrkt::glm {
 
 namespace {
 
-template <typename T>
-__device__ bool counted(const T* w, int64_t i) {
-  return w == nullptr || w[i] > 0;
-}
-
-template <typename T>
-__device__ double weight(const T* w, int64_t i) {
-  return w == nullptr ? 1.0 : static_cast<double>(w[i]);
-}
-
 __device__ int64_t source_row(row_selection rows, int64_t i) {
   return rows.index == nullptr ? i : rows.index[i];
-}
-
-struct column_of {
-  int64_t n;
-
-  __device__ int64_t operator()(int64_t k) const {
-    return k / n;
-  }
-};
-
-template <typename F, typename V>
-struct by_column {
-  F f;
-  int64_t n;
-
-  __device__ V operator()(int64_t k) const {
-    const int64_t j = k / n;
-    return f(k - (j * n), j);
-  }
-};
-
-template <typename V, typename F, typename Op>
-std::vector<V> column_totals(rmm::cuda_stream_view stream, int64_t n, int64_t d,
-                             F f, Op op) {
-  buffer<V> totals = scratch<V>(d, stream);
-  buffer<int64_t> columns = scratch<int64_t>(d, stream);
-  const thrust::counting_iterator<int64_t> k(0);
-  thrust::reduce_by_key(
-      rmm::exec_policy(stream),
-      thrust::make_transform_iterator(k, column_of{n}),
-      thrust::make_transform_iterator(k + (n * d), column_of{n}),
-      thrust::make_transform_iterator(k, by_column<F, V>{f, n}), columns.data(),
-      totals.data(), thrust::equal_to<int64_t>{}, op);
-  return to_host(totals, stream);
 }
 
 template <typename T>
@@ -82,12 +38,6 @@ struct positive_magnitude {
 
   __device__ double operator()(int64_t i, int64_t j) const {
     return counted(w, i) ? fabs(static_cast<double>(x[(i * d) + j])) : 0.0;
-  }
-};
-
-struct larger {
-  __device__ double operator()(double a, double b) const {
-    return a < b ? b : a;
   }
 };
 
@@ -159,32 +109,6 @@ struct staged_element {
 };
 
 template <typename T>
-struct weighted_value {
-  const T* y;
-  const T* w;
-
-  __device__ double operator()(int64_t i) const {
-    return weight(w, i) * static_cast<double>(y[i]);
-  }
-};
-
-template <typename T>
-struct weight_of {
-  const T* w;
-
-  __device__ double operator()(int64_t i) const {
-    return weight(w, i);
-  }
-};
-
-template <typename T>
-double total(rmm::cuda_stream_view stream, int64_t n, T f) {
-  const thrust::counting_iterator<int64_t> i(0);
-  return thrust::transform_reduce(rmm::exec_policy(stream), i, i + n, f, 0.0,
-                                  thrust::plus<double>{});
-}
-
-template <typename T>
 struct unstaged {
   const T* staged;
   const int64_t* slot;
@@ -198,103 +122,41 @@ struct unstaged {
 };
 
 template <typename T>
-struct residual_of {
-  const T* x;
-  const T* y;
-  staged_columns columns;
-  const T* coef;
-  double intercept;
-  int64_t d;
-  double* r;
-
-  __device__ void operator()(int64_t i) const {
-    double fitted = intercept;
-    for (int64_t k = 0; k < columns.count; ++k) {
-      const T v = scaled(x[(i * d) + columns.kept[k]], columns.exponent[k]);
-      fitted += static_cast<double>(v) * static_cast<double>(coef[k]);
-    }
-    r[i] = static_cast<double>(y[i]) - fitted;
-  }
-};
-
-template <typename T>
-struct staged_magnitude {
+struct normalised_entry {
   const T* x;
   const T* w;
-  staged_columns columns;
+  const int* exponent;
   int64_t d;
 
-  __device__ double operator()(int64_t i, int64_t k) const {
-    if (!counted(w, i)) {
-      return 0.0;
-    }
-    return fabs(static_cast<double>(
-        scaled(x[(i * d) + columns.kept[k]], columns.exponent[k])));
+  __device__ double operator()(int64_t i, int64_t j) const {
+    return counted(w, i)
+               ? scalbn(static_cast<double>(x[(i * d) + j]), exponent[j])
+               : 0.0;
   }
 };
 
 template <typename T>
-struct normalised_column {
-  const T* x;
-  staged_columns columns;
-  const int* norm;
-  int64_t d;
-
-  __device__ double operator()(int64_t i, int64_t k) const {
-    return scalbn(static_cast<double>(scaled(x[(i * d) + columns.kept[k]],
-                                             columns.exponent[k])),
-                  norm[k]);
-  }
-};
-
-template <typename T>
-struct column_weighted {
-  normalised_column<T> v;
+struct weighted_entry {
+  normalised_entry<T> v;
   const T* w;
 
-  __device__ double operator()(int64_t i, int64_t k) const {
-    if (!counted(w, i)) {
-      return 0.0;
-    }
-    return weight(w, i) * v(i, k);
-  }
-};
-
-struct add_moments {
-  __device__ moment operator()(moment a, moment b) const {
-    return {a.square + b.square, a.cross + b.cross};
+  __device__ double operator()(int64_t i, int64_t j) const {
+    return weight(w, i) * v(i, j);
   }
 };
 
 template <typename T>
-struct column_moments {
-  normalised_column<T> v;
+struct deviation_square {
+  normalised_entry<T> v;
   const T* w;
   const double* mean;
-  const double* r;
 
-  __device__ moment operator()(int64_t i, int64_t k) const {
-    if (!counted(w, i)) {
-      return {0.0, 0.0};
-    }
-    const double c = v(i, k) - mean[k];
-    const double wc = weight(w, i) * c;
-    return {wc * c, wc * r[i]};
-  }
-};
-
-template <typename T>
-struct centred_square {
-  const T* y;
-  const T* w;
-  double mean;
-
-  __device__ double operator()(int64_t i) const {
+  __device__ double operator()(int64_t i, int64_t j) const {
     if (!counted(w, i)) {
       return 0.0;
     }
-    const double v = static_cast<double>(y[i]) - mean;
-    return weight(w, i) * v * v;
+    const double c = v(i, j) - mean[j];
+    return weight(w, i) * c * c;
   }
 };
 
@@ -305,6 +167,30 @@ std::vector<double> column_largest(const matrix<T, int64_t>& x, const T* w,
                                    rmm::cuda_stream_view stream) {
   return column_totals<double>(stream, x.n, x.d,
                                positive_magnitude<T>{x.data, w, x.d}, larger{});
+}
+
+template <typename T>
+std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
+                                  const std::vector<int>& exponent,
+                                  bool fit_intercept,
+                                  rmm::cuda_stream_view stream) {
+  const buffer<int> e = to_device(exponent, stream);
+  const normalised_entry<T> v{x.data, w, e.data(), x.d};
+  std::vector<double> mean(x.d, 0.0);
+  if (fit_intercept) {
+    const double weights = total(stream, x.n, weight_of<T>{w});
+    const std::vector<double> sums = column_totals<double>(
+        stream, x.n, x.d, weighted_entry<T>{v, w}, thrust::plus<double>{});
+    std::ranges::transform(sums, mean.begin(),
+                           [&](double s) { return s / weights; });
+  }
+  const buffer<double> means = to_device(mean, stream);
+  std::vector<double> spread = column_totals<double>(
+      stream, x.n, x.d, deviation_square<T>{v, w, means.data()},
+      thrust::plus<double>{});
+  std::ranges::transform(spread, spread.begin(),
+                         [](double s) { return std::sqrt(s); });
+  return spread;
 }
 
 template <typename T>
@@ -389,43 +275,6 @@ void unstage(const raft::handle_t& handle, const T* staged, const int64_t* slot,
   each(handle, d, unstaged<T>{staged, slot, shift, coef});
 }
 
-template <typename T>
-residual_terms residual_moments(const raft::handle_t& handle,
-                                const matrix<T, int64_t>& x, const T* y,
-                                const T* w, staged_columns columns,
-                                const T* coef, double intercept,
-                                bool fit_intercept) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  buffer<double> r = scratch<double>(x.n, stream);
-  each(handle, x.n,
-       residual_of<T>{x.data, y, columns, coef, intercept, x.d, r.data()});
-  std::vector<double> largest = column_totals<double>(
-      stream, x.n, columns.count, staged_magnitude<T>{x.data, w, columns, x.d},
-      larger{});
-  std::vector<int> norm(largest.size());
-  std::ranges::transform(largest, norm.begin(),
-                         [](double m) { return unit_exponent(m); });
-  const buffer<int> norms = to_device(norm, stream);
-  const normalised_column<T> v{x.data, columns, norms.data(), x.d};
-  std::vector<double> mean(columns.count, 0.0);
-  double y_mean = 0;
-  if (fit_intercept) {
-    const double weights = total(stream, x.n, weight_of<T>{w});
-    const std::vector<double> sums =
-        column_totals<double>(stream, x.n, columns.count,
-                              column_weighted<T>{v, w}, thrust::plus<double>{});
-    std::ranges::transform(sums, mean.begin(),
-                           [&](double s) { return s / weights; });
-    y_mean = total(stream, x.n, weighted_value<T>{y, w}) / weights;
-  }
-  const buffer<double> means = to_device(mean, stream);
-  return {column_totals<moment>(stream, x.n, columns.count,
-                                column_moments<T>{v, w, means.data(), r.data()},
-                                add_moments{}),
-          std::move(largest),
-          std::sqrt(total(stream, x.n, centred_square<T>{y, w, y_mean}))};
-}
-
 #define CUMLRKT_GLM_STAGING_DEVICE(T)                                        \
   template std::vector<double> column_largest<T>(                            \
       const matrix<T, int64_t>&, const T*, rmm::cuda_stream_view);           \
@@ -448,9 +297,9 @@ residual_terms residual_moments(const raft::handle_t& handle,
                                  int64_t);                                   \
   template void unstage<T>(const raft::handle_t&, const T*, const int64_t*,  \
                            const int*, int64_t, T*);                         \
-  template residual_terms residual_moments<T>(                               \
-      const raft::handle_t&, const matrix<T, int64_t>&, const T*, const T*,  \
-      staged_columns, const T*, double, bool);
+  template std::vector<double> column_spread<T>(                             \
+      const matrix<T, int64_t>&, const T*, const std::vector<int>&, bool,    \
+      rmm::cuda_stream_view);
 
 CUMLRKT_GLM_STAGING_DEVICE(float)
 CUMLRKT_GLM_STAGING_DEVICE(double)

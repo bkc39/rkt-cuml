@@ -93,3 +93,16 @@
                         (linear-regression-model (fit (linear-regression) X y #:sample-weight w))))
                (listed (linear-regression-result-coef
                         (linear-regression-fit X y #:sample-weight w))))))
+
+(test-gpu "in float32, score counts a row whose weight fit cut off"
+  (define X (on-matrix '((0) (1) (2) (3)) 'float32))
+  (define y (on-vector '(5 5 5 9) 'float32))
+  (define (fitted-with w4)
+    (define w (on-vector (list 1e30 1e30 1e30 w4) 'float32))
+    (define e (fit (linear-regression) X y #:sample-weight w))
+    (define model (linear-regression-model e))
+    (list (listed (linear-regression-result-coef model))
+          (linear-regression-result-intercept model)
+          (score e X y #:sample-weight w)))
+  (check-equal? (fitted-with 1e-16) '((0.0) 5.0 0.0))
+  (check-equal? (fitted-with 0) '((0.0) 5.0 1.0)))

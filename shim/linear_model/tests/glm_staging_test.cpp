@@ -26,6 +26,7 @@ using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
 using cumlrkt::glm::require_finite_solution;
 using cumlrkt::glm::require_workspace;
+using cumlrkt::glm::spread_exponent;
 using cumlrkt::glm::staged_weights;
 using cumlrkt::glm::staging;
 using cumlrkt::glm::to_host;
@@ -121,12 +122,36 @@ TEST(PlanStaging, ColumnAndTargetExponentsIgnoreZeroWeightRows) {
   const staging_case c;
   const filled<double> w(c.res, {0.375, 3.0, 0.0, 1.0}, {4});
   const staging s = c.planned(data_of(w), exponents::per_column);
-  EXPECT_EQ(s.column_exponent, (std::vector<int>{0, -3}));
+  EXPECT_EQ(s.column_exponent, (std::vector<int>{1, -2}));
   EXPECT_EQ(s.y_exponent, -2);
 }
 
-std::vector<double> weights_after_staging(const resources& res,
-                                          const filled<double>& w) {
+TEST(PlanStaging, ColumnExponentFollowsTheWeightedSpread) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const double low = std::ldexp(1.0, -40);
+  const filled<double> x(
+      res, {1e6, 0.0, 1e6 + 1, 0.0, 1e6 + 2, 0.0, 1e6 + 3, 1.5}, {4, 2});
+  const filled<double> y(res, {1.0, 2.0, 3.0, 4.0}, {4});
+  const filled<double> w(res, {1.0, 1.0, 1.0, low}, {4});
+  const auto planned = [&](const double* weights, bool fit_intercept) {
+    return plan_staging(handle_of(res), matrix_of(x, 4, 2), data_of(y), weights,
+                        fit_intercept, exponents::per_column)
+        .column_exponent;
+  };
+  EXPECT_EQ(planned(data_of(w), true), (std::vector<int>{0, 20}));
+  EXPECT_EQ(planned(nullptr, false), (std::vector<int>{-20, 0}));
+}
+
+TEST(SpreadExponent, KeepsTheColumnSumFiniteAndFallsBackOnAZeroSpread) {
+  EXPECT_EQ(spread_exponent<float>(-10, std::ldexp(1.0, -200), 4), 114);
+  EXPECT_EQ(spread_exponent<double>(-10, std::ldexp(1.0, -200), 4), 190);
+  EXPECT_EQ(spread_exponent<float>(-10, 0.0, 4), -10);
+  EXPECT_EQ(spread_exponent<double>(3, 6.0, 4), 1);
+}
+
+template <typename T>
+std::vector<T> weights_after_staging(const resources& res, const filled<T>& w) {
   const raft::handle_t& h = handle_of(res);
   return to_host(staged_weights(h, data_of(w), 4),
                  raft::resource::get_cuda_stream(h));
@@ -150,6 +175,16 @@ TEST(StagedWeights, AtMostTheCutoffBecomeZero) {
   const double least = std::numeric_limits<double>::denorm_min();
   const filled<double> w(res, {3.0, cutoff, cutoff + least, 1.0}, {4});
   const std::vector<double> staged{0.75, 0.0, least, 0.25};
+  EXPECT_EQ(weights_after_staging(res, w), staged);
+}
+
+TEST(StagedWeights, AtMostTheFloat32CutoffBecomeZero) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const float cutoff = std::ldexp(1.0F, -148);
+  const float least = std::numeric_limits<float>::denorm_min();
+  const filled<float> w(res, {3.0F, cutoff, cutoff + least, 1.0F}, {4});
+  const std::vector<float> staged{0.75F, 0.0F, least, 0.25F};
   EXPECT_EQ(weights_after_staging(res, w), staged);
 }
 

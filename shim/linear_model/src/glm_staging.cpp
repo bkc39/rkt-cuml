@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <format>
 #include <raft/core/handle.hpp>
+#include <ranges>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
 #include <vector>
@@ -14,6 +15,7 @@
 #include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
 #include "glm_staging_device.hpp"
+#include "residual_check.hpp"
 
 namespace cumlrkt::glm {
 
@@ -33,6 +35,13 @@ device_columns columns_of(const staging& s, rmm::cuda_stream_view stream) {
   std::ranges::transform(s.kept, e.begin(),
                          [&](int64_t j) { return s.column_exponent[j]; });
   return {to_device(s.kept, stream), to_device(e, stream)};
+}
+
+double cosine_of(const moment& m, scaled_sum y) {
+  const double ratio =
+      (m.cross.value * m.cross.value) / (m.square.value * y.value);
+  return std::sqrt(std::ldexp(
+      ratio, (2 * m.cross.exponent) - m.square.exponent - y.exponent));
 }
 
 }  // namespace
@@ -83,20 +92,27 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                      exponents mode) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const std::vector<double> largest = column_largest(x, w, stream);
+  std::vector<int> unit(x.d);
+  std::ranges::transform(largest, unit.begin(), unit_exponent);
+  const std::vector<double> spread =
+      column_spread(x, w, unit, fit_intercept, stream);
   const std::vector<char> constant =
       constant_columns(handle, x, w, fit_intercept);
   staging s;
-  double widest = 0;
+  s.column_exponent.resize(x.d);
   for (int64_t j = 0; j < x.d; ++j) {
+    s.column_exponent[j] = spread_exponent<T>(unit[j], spread[j], x.n);
     if (constant[j] == 0) {
       s.kept.push_back(j);
-      widest = std::max(widest, largest[j]);
     }
   }
-  s.column_exponent.resize(x.d);
-  std::ranges::transform(largest, s.column_exponent.begin(), [&](double m) {
-    return unit_exponent(mode == exponents::uniform ? widest : m);
-  });
+  if (mode == exponents::uniform && !s.kept.empty()) {
+    const int shared =
+        std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
+                           return s.column_exponent[j];
+                         }));
+    std::ranges::fill(s.column_exponent, shared);
+  }
   s.y_exponent = unit_exponent(largest_counted(y, x.n, w, stream));
   return s;
 }
@@ -163,19 +179,17 @@ void require_finite_solution(const T* staged, int64_t d, T intercept,
 template <typename T>
 double residual_cosine(const raft::handle_t& handle,
                        const matrix<T, int64_t>& x, const staging& s,
-                       const T* y, const T* w, const T* coef, T intercept,
+                       const T* y, const T* w, const T* coef,
                        bool fit_intercept) {
   const device_columns columns = columns_of(s, stream_of(handle));
   const residual_terms terms =
-      residual_moments(handle, x, y, w, columns.view(), coef,
-                       static_cast<double>(intercept), fit_intercept);
+      residual_moments(handle, x, y, w, columns.view(), coef, fit_intercept);
   double worst = 0;
   for (size_t k = 0; k < terms.moments.size(); ++k) {
-    const moment& m = terms.moments[k];
     if (terms.largest[k] == 0) {
       continue;
     }
-    const double g = std::fabs(m.cross) / (std::sqrt(m.square) * terms.y_norm);
+    const double g = cosine_of(terms.moments[k], terms.y_square);
     worst = std::isnan(g) || std::isnan(worst) ? NAN : std::max(worst, g);
   }
   return worst;
@@ -221,11 +235,10 @@ template void require_finite_solution<double>(const double*, int64_t, double,
 template double residual_cosine<float>(const raft::handle_t&,
                                        const matrix<float, int64_t>&,
                                        const staging&, const float*,
-                                       const float*, const float*, float, bool);
+                                       const float*, const float*, bool);
 template double residual_cosine<double>(const raft::handle_t&,
                                         const matrix<double, int64_t>&,
                                         const staging&, const double*,
-                                        const double*, const double*, double,
-                                        bool);
+                                        const double*, const double*, bool);
 
 }  // namespace cumlrkt::glm

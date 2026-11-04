@@ -1046,17 +1046,32 @@ Follow-ups are GitHub issues.
 - **L1-c.** Every column, y and the weights are scaled by powers of two before
   olsFit and the results scaled back (`shim/linear_model/src/glm_staging.cpp`,
   kernels in `glm_staging_device.cu`). Zero-weight rows are left out of the
-  staged copy (when at least two rows have positive weight), so a zero weight
-  is a deleted row bitwise. The weights are staged first, divided by 4^k,
+  staged copy (when at least two rows have positive weight), on the solve
+  and on the nothing-to-solve path, so a zero weight is a deleted row
+  bitwise. The weights are staged first, divided by 4^k,
   the least power of 4 at or above 2^ilogb(max w); a row counts as
   positive when its staged weight is: a weight at most 2^−150·4^k (float32)
-  or 2^−1075·4^k (float64) counts as zero, as in L0-f. The positive-row count
+  or 2^−1075·4^k (float64) counts as zero. In float64 this is L0-f's
+  cutoff; in float32 it is not (r2-score stages float32 weights in double),
+  so the estimator's `score` can count a row its `fit` dropped, as the
+  Scribble says. The positive-row count
   m and the wide rule, compaction, the constancy and nothing-to-solve checks,
-  the exponent maxima and the residual check all read the staged weights.
+  the exponents and the residual check all read the staged weights.
+- **L1-c, exponents.** Column j's power of two is −ilogb of its weighted
+  spread over the positive rows: √Σw(x−x̄)² with fit-intercept, √Σw·x²
+  without. It is computed in double on the column divided by the power of
+  two of its largest |x|, falls back to that power when the sum underflows,
+  and is capped so that n times the staged max |x| stays finite. y takes the
+  power of its largest |y|. Rounds 0 to 2 took every column's from its
+  largest |x|: a column with a large mean against its spread, or one whose
+  variation sits on low-weight rows, then had a centred, weighted Gram
+  eigenvalue under raft's absolute 1e-10 eps, and eig dropped its direction
+  (review r2 H1, H2). One power of two per column, so E1 holds on non-wide
+  fits.
 - **L1-c, wide rule (V1).** With m positive-weight rows, a fit is wide when the
   kept columns d' exceed m − 1 with an intercept, or m without one. A wide fit
-  stages every kept column with one shared exponent (that of the largest kept
-  column) and solves with the Jacobi SVD whatever the algorithm, so the staged
+  stages every kept column with one shared exponent (the least of the kept
+  columns' exponents, that of the widest spread) and solves with the Jacobi SVD whatever the algorithm, so the staged
   problem is a uniform rescaling of the original and the SVD's minimum-norm
   solution is scikit-learn's. In float32 with an intercept the SVD does not
   reach the minimum-norm solution on every wide X: it interpolates y but can
@@ -1067,9 +1082,12 @@ Follow-ups are GitHub issues.
   intercept) are dropped and get coefficient 0; with nothing left to solve, or
   a constant y, olsFit is not called.
 - **L1-e.** A fit whose residual cosine on the staged data (the centred,
-  weighted cosine between each kept staged column and the residual, each
-  column first divided by the power of two of its largest staged magnitude over
-  the positive-weight rows, so its squares cannot underflow) exceeds
+  weighted cosine between each kept staged column and the residual
+  r = (y − ȳ) − Σ(v − v̄)·c, uncentred without fit-intercept, each column
+  first divided by the power of two of its largest staged magnitude over the
+  positive-weight rows, and each of Σw·c², Σw·c·r and Σw(y − ȳ)² scaled by
+  the power of two of its largest term before the ratio, so no square
+  underflows double) exceeds
   2⁻⁸ (float32) or 2⁻¹⁸ (float64) is refused (V13). A kept column whose staged
   values are 0 on every positive-weight row (the shared exponent of a wide fit
   underflowed it) is skipped: it cannot correlate with the residual, and its

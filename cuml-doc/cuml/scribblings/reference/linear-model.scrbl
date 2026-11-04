@@ -49,16 +49,19 @@ the largest weight rounded down to a power of two and then up to a power of
 4, counts as zero. @racket['auto] and
 @racket['eig] solve the normal equations, @racket['svd] and
 @racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation and
-@racket['svd-qr] a QR-based SVD. Each column, @racket[y] and the weights are
-scaled by a power of two before the solve, so scaling a column by
-2@superscript{k} scales its coefficient by 2@superscript{-k} exactly. A
+@racket['svd-qr] a QR-based SVD. Before the solve each column is scaled by
+the power of two of its weighted spread over the rows of positive weight
+(about its weighted mean, with @racket[fit-intercept]), @racket[y] by that of
+its largest element and the weights by 4@superscript{-k}. A
 column constant over the rows of positive weight (zero, without
 @racket[fit-intercept]) gets coefficient 0. One column left always uses the
 Jacobi SVD. With more columns left than rows of positive weight, less one
-for @racket[fit-intercept], every column takes the same power and the Jacobi
-SVD solves: the fit is the minimum-norm solution in float64, and in float32
-without @racket[fit-intercept]; in float32 with it, the fit interpolates
-@racket[y] but generally is not minimum-norm. A solve that is not a
+for @racket[fit-intercept], every column takes the power of the widest
+spread and the Jacobi SVD solves: the fit is the minimum-norm solution in
+float64, and in float32 without @racket[fit-intercept]; in float32 with it,
+the fit interpolates @racket[y] but generally is not minimum-norm. On any
+other fit, scaling a column by 2@superscript{k} scales its coefficient by
+2@superscript{-k} exactly. A solve that is not a
 least-squares solution, as with collinear columns in float32, is refused;
 @racket['qr] or float64 often fits. With weights and an intercept, fits above
 a few thousand rows can differ in the last bits between runs, as in Python
@@ -112,7 +115,8 @@ An unfitted linear regression with the hyperparameters
 and a scorer. @racket[fit] is @racket[linear-regression-fit] and needs
 @racket[y]; @racket[predict] is @racket[linear-regression-predict];
 @racket[score] is @racket[r2-score] of @racket[y] against the predictions,
-weighted by @racket[sample-weight]. Errors name the generic.
+weighted by @racket[sample-weight]; in float32 it can count a row whose
+weight @racket[fit] counted as zero. Errors name the generic.
 @examples[#:eval ev #:label #f
 (define e (fit (linear-regression) X y))
 (real->decimal-string (score e X y) 6)

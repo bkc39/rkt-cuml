@@ -52,6 +52,24 @@ std::unique_ptr<buffer<T>> zero_coef(int64_t d, rmm::cuda_stream_view stream) {
   return coef;
 }
 
+struct counted_rows {
+  buffer<int64_t> index;
+  row_selection rows;
+};
+
+template <typename T>
+counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
+                             rmm::cuda_stream_view stream) {
+  const bool compact = positive < n && positive >= 2;
+  buffer<int64_t> index = scratch<int64_t>(compact ? positive : 0, stream);
+  if (compact) {
+    positive_rows(w, n, index.data(), stream);
+  }
+  const row_selection rows{compact ? index.data() : nullptr,
+                           compact ? positive : n};
+  return {std::move(index), rows};
+}
+
 template <typename T>
 fit_result<T> nothing_to_solve(const raft::handle_t& handle,
                                const fit_inputs<T>& in, const fit_plan& plan,
@@ -64,12 +82,12 @@ fit_result<T> nothing_to_solve(const raft::handle_t& handle,
     intercept = static_cast<double>(
         read_one(y, first_positive(w, x.n, stream), stream));
   } else if (plan.fit_intercept) {
-    buffer<T> ys = scratch<T>(x.n, stream);
-    buffer<T> ws = scratch<T>(w == nullptr ? 0 : x.n, stream);
-    stage_targets(handle, y, w, plan.s, row_selection{nullptr, x.n}, ys.data(),
-                  ws.data());
-    const double mean =
-        staged_mean(handle, ys.data(), w == nullptr ? nullptr : ws.data(), x.n);
+    const counted_rows c = counted_rows_of(w, x.n, plan.positive, stream);
+    buffer<T> ys = scratch<T>(c.rows.count, stream);
+    buffer<T> ws = scratch<T>(w == nullptr ? 0 : c.rows.count, stream);
+    stage_targets(handle, y, w, plan.s, c.rows, ys.data(), ws.data());
+    const double mean = staged_mean(
+        handle, ys.data(), w == nullptr ? nullptr : ws.data(), c.rows.count);
     intercept = static_cast<double>(
         static_cast<T>(std::ldexp(static_cast<T>(mean), -plan.s.y_exponent)));
   }
@@ -89,11 +107,8 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   require_workspace(
       plan.algorithm, count, kept,
       cusolver_lwork_of<T>(handle, plan.algorithm, {count, kept}));
-  buffer<int64_t> index = scratch<int64_t>(compact ? count : 0, stream);
-  if (compact) {
-    positive_rows(w, x.n, index.data(), stream);
-  }
-  const row_selection rows{compact ? index.data() : nullptr, count};
+  const counted_rows c = counted_rows_of(w, x.n, plan.positive, stream);
+  const row_selection rows = c.rows;
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   buffer<T> xs = scratch<T>(rows.count * kept, stream);
   buffer<T> ys = scratch<T>(x.n, stream);
@@ -110,9 +125,8 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   require_finite_solution(cs.data(), kept, intercept, plan.algorithm, stream);
   stage_targets(handle, y, w, s, row_selection{nullptr, x.n}, ys.data(),
                 ws.data());
-  const double cosine =
-      residual_cosine(handle, x, s, ys.data(), staged_w, cs.data(), intercept,
-                      plan.fit_intercept);
+  const double cosine = residual_cosine(handle, x, s, ys.data(), staged_w,
+                                        cs.data(), plan.fit_intercept);
   const int bits = single<T> ? single_tolerance_bits : double_tolerance_bits;
   if (!(cosine <= std::ldexp(1.0, -bits))) {
     throw logic_error(std::format(

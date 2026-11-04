@@ -48,21 +48,38 @@ def even_floor(x):
     return x - (x % 2)
 
 
+def spread_exponent(column, weights, fi, dt):
+    largest = unit_exponent(float(np.max(np.abs(column))))
+    v = np.ldexp(column.astype(np.float64), largest)
+    if fi:
+        v = v - (weights * v).sum() / weights.sum()
+    spread = float(np.sqrt((weights * v * v).sum()))
+    reach = np.finfo(dt).maxexp - 1 - len(column).bit_length()
+    e = largest + unit_exponent(spread) if spread > 0 else largest
+    return min(e, largest + reach)
+
+
 def stage(X, y, w, fi):
     counted = np.ones(len(y), dtype=bool) if w is None else w > 0
+    g = 0 if w is None else even_floor(unit_exponent(float(np.max(w))))
+    weights = (
+        np.ones(int(counted.sum()))
+        if w is None
+        else (w[counted] * np.ldexp(X.dtype.type(1), g)).astype(np.float64)
+    )
     e = np.array(
-        [unit_exponent(float(np.max(np.abs(X[counted, j])))) for j in range(X.shape[1])]
+        [
+            spread_exponent(X[counted, j], weights, fi, X.dtype)
+            for j in range(X.shape[1])
+        ]
     )
     f = unit_exponent(float(np.max(np.abs(y[counted]))))
-    g = 0 if w is None else even_floor(unit_exponent(float(np.max(w))))
     first = int(np.argmax(counted))
     reference = X[first] if fi else np.zeros(X.shape[1], dtype=X.dtype)
     kept = np.array([np.any(X[counted, j] != reference[j]) for j in range(X.shape[1])])
     wide = kept.sum() > counted.sum() - (1 if fi else 0)
-    if wide:
-        e = np.full(
-            X.shape[1], unit_exponent(float(np.max(np.abs(X[counted][:, kept]))))
-        )
+    if wide and kept.any():
+        e = np.full(X.shape[1], int(np.min(e[kept])))
     return e, f, g, kept, counted, wide
 
 
@@ -90,7 +107,7 @@ def staged_fit(case):
         put(out, "coef", coef)
         put(out, "intercept", np.asarray([intercept], dtype=dt))
         return out
-    Xs = (X[:, kept] * np.ldexp(dt(1), e[kept]).astype(dt)).astype(dt) * zero[:, None]
+    Xs = np.ldexp(X[:, kept], e[kept]).astype(dt) * zero[:, None]
     if 2 <= counted.sum() < len(y):
         Xs, ys, ws = Xs[counted], ys[counted], ws[counted]
     m = CuLinearRegression(
@@ -98,9 +115,7 @@ def staged_fit(case):
         fit_intercept=fi,
         output_type="numpy",
     ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
-    coef[kept] = (
-        host(m.coef_).astype(dt) * np.ldexp(dt(1), e[kept] - f).astype(dt)
-    ).astype(dt)
+    coef[kept] = np.ldexp(host(m.coef_).astype(dt), e[kept] - f).astype(dt)
     intercept = dt(np.ldexp(dt(m.intercept_), -f)) if fi else dt(0)
     put(out, "coef", coef)
     put(out, "intercept", np.asarray([intercept], dtype=dt))

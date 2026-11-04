@@ -10,17 +10,6 @@
 
 namespace cumlrkt::glm {
 
-struct moment {
-  double square;
-  double cross;
-};
-
-struct residual_terms {
-  std::vector<moment> moments;
-  std::vector<double> largest;
-  double y_norm;
-};
-
 struct staged_columns {
   const int64_t* kept;
   const int* exponent;
@@ -56,6 +45,12 @@ std::vector<double> column_largest(const matrix<T, int64_t>& x, const T* w,
                                    rmm::cuda_stream_view stream);
 
 template <typename T>
+std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
+                                  const std::vector<int>& exponent,
+                                  bool fit_intercept,
+                                  rmm::cuda_stream_view stream);
+
+template <typename T>
 double largest_counted(const T* v, int64_t n, const T* w,
                        rmm::cuda_stream_view stream);
 
@@ -71,12 +66,5 @@ void stage_elements(const raft::handle_t& handle, const T* v, const T* w,
 template <typename T>
 void unstage(const raft::handle_t& handle, const T* staged, const int64_t* slot,
              const int* shift, int64_t d, T* coef);
-
-template <typename T>
-residual_terms residual_moments(const raft::handle_t& handle,
-                                const matrix<T, int64_t>& x, const T* y,
-                                const T* w, staged_columns columns,
-                                const T* coef, double intercept,
-                                bool fit_intercept);
 
 }  // namespace cumlrkt::glm

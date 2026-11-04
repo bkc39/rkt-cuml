@@ -2,6 +2,7 @@
 
 (require (only-in cuml/linear-model linear-regression-params linear-regression-predict)
          (only-in racket/match match-define)
+         (only-in racket/math sqr)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in "private/linear-data.rkt"
@@ -34,18 +35,18 @@
 
 (define (already-staged)
   (define c (normal-case 300 5 9 #:weighted? #t))
-  (define (scaled xs)
+  (define w (map (lambda (v) (/ v 2)) (lcase-w c)))
+  (define (spread-scaled xs)
+    (define mean (/ (for/sum ([x (in-list xs)] [v (in-list w)]) (* v x)) (apply + w)))
+    (define spread (sqrt (for/sum ([x (in-list xs)] [v (in-list w)]) (* v (sqr (- x mean))))))
+    (map (lambda (x) (/ (inexact->exact (round (/ (* x 13/10 65536) spread))) 65536)) xs))
+  (define (max-scaled xs)
     (define m (max-abs xs))
-    (map (lambda (x) (/ x m 2/3)) xs))
-  (define columns (apply map list (lcase-X c)))
-  (define X
-    (apply map
-           list
-           (map (lambda (col) (map (lambda (x) (/ (round (* x 1024)) 1024)) (scaled col))) columns)))
+    (map (lambda (x) (/ (round (* (/ x m 2/3) 1024)) 1024)) xs))
   (lcase "already staged"
-         X
-         (map (lambda (v) (/ (round (* v 1024)) 1024)) (scaled (lcase-y c)))
-         (map (lambda (v) (/ v 2)) (lcase-w c))))
+         (apply map list (map spread-scaled (apply map list (lcase-X c))))
+         (max-scaled (lcase-y c))
+         w))
 
 (test-twin "on already-staged data the fit is raw Python cuML's, bitwise"
   (define c (already-staged))
