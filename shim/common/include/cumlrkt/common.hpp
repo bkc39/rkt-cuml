@@ -62,6 +62,14 @@ void on_floats(const rr_view* x, const char* name, Fn&& fn) {
 }
 
 template <typename Fn>
+void on_float_pair(const rr_view* a, const char* a_name, const rr_view* b,
+                   const char* b_name, Fn&& fn) {
+  on_floats(a, a_name, [&](auto a_tag) {
+    on_floats(b, b_name, [&](auto b_tag) { fn(a_tag, b_tag); });
+  });
+}
+
+template <typename Fn>
 void on_labels(const rr_view* labels, const char* name, Fn&& fn) {
   const rr_view& view = *raftrkt::require(labels, name);
   if (view.dtype == RR_DTYPE_INT32) {

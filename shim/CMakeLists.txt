@@ -100,13 +100,17 @@ cumlrkt_family(decomposition
 )
 
 cumlrkt_family(linear_model
-  SOURCES linear_model/src/linear_model.cpp linear_model/src/linear_regression.cu
-          linear_model/src/fit_checks.cu linear_model/src/predict.cu
-          linear_model/src/glm_staging.cu common/src/transpose.cu
+  SOURCES linear_model/src/linear_model.cpp
+          linear_model/src/linear_regression.cpp
+          linear_model/src/fit_checks.cpp linear_model/src/predict.cpp
+          linear_model/src/glm_staging.cpp
+          linear_model/src/glm_staging_device.cu common/src/transpose.cu
   TESTS linear_model/tests/glm_staging_test.cpp
         linear_model/tests/linear_model_refusal_test.cpp
-        linear_model/src/glm_staging.cu linear_model/src/fit_checks.cu
-        common/src/rows.cu
+        linear_model/src/glm_staging.cpp
+        linear_model/src/glm_staging_device.cu
+        linear_model/src/fit_checks.cpp common/src/rows.cu
+        common/src/vectors.cpp
 )
 target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver)
 if(TARGET cumlrkt_linear_model_tests)

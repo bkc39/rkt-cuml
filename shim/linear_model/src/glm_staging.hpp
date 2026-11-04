@@ -13,16 +13,25 @@ namespace cumlrkt::glm {
 enum class exponents { per_column, uniform };
 
 struct staging {
-  std::vector<int> e;
-  int f;
-  int g;
+  std::vector<int> column_exponent;
+  int y_exponent;
+  int weight_exponent;
   std::vector<int64_t> kept;
+};
+
+struct ols_shape {
+  int64_t n;
+  int64_t d;
+};
+
+struct row_selection {
+  const int64_t* index;
+  int64_t count;
 };
 
 int even_floor(int x);
 
-int64_t ols_workspace(int algorithm, int64_t n, int64_t d,
-                      int64_t cusolver_lwork);
+int64_t ols_workspace(int algorithm, ols_shape shape, int64_t cusolver_lwork);
 
 std::string algorithm_name(int algorithm);
 
@@ -44,12 +53,20 @@ template <typename T>
 int64_t first_positive(const T* w, int64_t n, rmm::cuda_stream_view stream);
 
 template <typename T>
-void stage_columns(const raft::handle_t& handle, const matrix<T, int64_t>& x,
-                   const T* w, const staging& s, T* out);
+int64_t positive_count(const T* w, int64_t n, rmm::cuda_stream_view stream);
 
 template <typename T>
-void stage_vector(const raft::handle_t& handle, const T* v, int64_t n,
-                  const T* w, int exponent, T* out);
+void positive_rows(const T* w, int64_t n, int64_t* rows,
+                   rmm::cuda_stream_view stream);
+
+template <typename T>
+void stage_columns(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                   const T* w, const staging& s, row_selection rows, T* out);
+
+template <typename T>
+void stage_targets(const raft::handle_t& handle, const T* y, const T* w,
+                   const staging& s, row_selection rows, T* staged_y,
+                   T* staged_w);
 
 template <typename T>
 double staged_mean(const raft::handle_t& handle, const T* y, const T* w,
@@ -68,8 +85,5 @@ double residual_cosine(const raft::handle_t& handle,
                        const matrix<T, int64_t>& x, const staging& s,
                        const T* y, const T* w, const T* coef, T intercept,
                        bool fit_intercept);
-
-template <typename T>
-bool all_zero(const T* v, int64_t n, rmm::cuda_stream_view stream);
 
 }  // namespace cumlrkt::glm

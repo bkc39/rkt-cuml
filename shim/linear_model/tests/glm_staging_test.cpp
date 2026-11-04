@@ -55,8 +55,8 @@ const T* data_of(const filled<T>& a) {
 }
 
 TEST(OlsWorkspace, EigIsThreeSquaresAndTwoColumns) {
-  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_EIG, 10, 4, 0), (3 * 16) + 8);
-  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_EIG, 30000, 26755, 0),
+  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_EIG, {10, 4}, 0), (3 * 16) + 8);
+  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_EIG, {30000, 26755}, 0),
             2147543585);
   EXPECT_EQ(
       refusal_of(require_workspace, CUML_LINEAR_MODEL_OLS_EIG, 30000, 26754, 0),
@@ -68,11 +68,11 @@ TEST(OlsWorkspace, EigIsThreeSquaresAndTwoColumns) {
 }
 
 TEST(OlsWorkspace, SvdCountsTheQueriedWorkspaceAndBothFactors) {
-  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_SVD, 10, 4, 7),
+  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_SVD, {10, 4}, 7),
             7 + 40 + 16 + 8 + 1);
-  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_SVD_QR, 10, 4, 7),
+  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_SVD_QR, {10, 4}, 7),
             7 + 40 + 16 + 8 + 1);
-  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_SVD_QR, 4, 10, 7),
+  EXPECT_EQ(ols_workspace(CUML_LINEAR_MODEL_OLS_SVD_QR, {4, 10}, 7),
             7 + 16 + 100 + 8 + 1);
   EXPECT_EQ(refusal_of(require_workspace, CUML_LINEAR_MODEL_OLS_SVD, 2,
                        1073741800, 64),
@@ -91,9 +91,10 @@ TEST(OlsWorkspace, CusolverWorkspacesAtTheSvdBoundaries) {
   const int64_t n = 40000;
   for (const int64_t d : {int64_t{20000}, int64_t{26000}}) {
     const int64_t lwork = cumlrkt::glm::cusolver_lwork_of<float>(
-        h, CUML_LINEAR_MODEL_OLS_SVD, n, d);
+        h, CUML_LINEAR_MODEL_OLS_SVD, {n, d});
     EXPECT_GE(lwork, 0) << d;
-    const int64_t size = ols_workspace(CUML_LINEAR_MODEL_OLS_SVD, n, d, lwork);
+    const int64_t size =
+        ols_workspace(CUML_LINEAR_MODEL_OLS_SVD, {n, d}, lwork);
     EXPECT_EQ(refusal_of(require_workspace, CUML_LINEAR_MODEL_OLS_SVD, n, d,
                          lwork) == "accepted",
               size <= cumlrkt::most_index)
@@ -117,17 +118,17 @@ TEST(PlanStaging, ColumnAndTargetExponentsIgnoreZeroWeightRows) {
   const staging_case c;
   const filled<double> w(c.res, {0.375, 3.0, 0.0, 1.0}, {4});
   const staging s = c.planned(data_of(w), exponents::per_column);
-  EXPECT_EQ(s.e, (std::vector<int>{0, -3}));
-  EXPECT_EQ(s.f, -2);
+  EXPECT_EQ(s.column_exponent, (std::vector<int>{0, -3}));
+  EXPECT_EQ(s.y_exponent, -2);
 }
 
 TEST(PlanStaging, WeightExponentIsEven) {
   CUMLRKT_REQUIRE_GPU();
   const staging_case c;
   const filled<double> w(c.res, {0.375, 3.0, 0.0, 1.0}, {4});
-  EXPECT_EQ(c.planned(data_of(w), exponents::per_column).g, -2);
+  EXPECT_EQ(c.planned(data_of(w), exponents::per_column).weight_exponent, -2);
   const filled<double> w2(c.res, {0.375, 0.75, 0.0, 1.0}, {4});
-  EXPECT_EQ(c.planned(data_of(w2), exponents::per_column).g, 0);
+  EXPECT_EQ(c.planned(data_of(w2), exponents::per_column).weight_exponent, 0);
 }
 
 TEST(PlanStaging, UniformExponentIsSharedByEveryColumn) {
@@ -135,8 +136,8 @@ TEST(PlanStaging, UniformExponentIsSharedByEveryColumn) {
   const staging_case c;
   const staging u =
       c.planned(static_cast<const double*>(nullptr), exponents::uniform);
-  EXPECT_EQ(u.e, (std::vector<int>{-99, -99}));
-  EXPECT_EQ(u.g, 0);
+  EXPECT_EQ(u.column_exponent, (std::vector<int>{-99, -99}));
+  EXPECT_EQ(u.weight_exponent, 0);
 }
 
 TEST(ConstantColumns, FollowTheInterceptRule) {
@@ -172,7 +173,7 @@ TEST(UnstageCoef, ZerosDroppedColumnsAndReportsTheFirstOverflow) {
             -1);
   EXPECT_EQ(coef.array.read<float>(),
             (std::vector<float>{6.0F, 0.0F, -0.25F, 4.0F}));
-  s.e = {0, 0, past_float_range, past_float_range - 1};
+  s.column_exponent = {0, 0, past_float_range, past_float_range - 1};
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,
                          static_cast<float*>(coef.array.view.data)),
             2);

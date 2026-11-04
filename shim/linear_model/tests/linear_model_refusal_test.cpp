@@ -1,5 +1,7 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <string>
@@ -25,6 +27,15 @@ constexpr double inf = std::numeric_limits<double>::infinity();
 
 const std::vector<double> grid{1, 0, 2, 0, 3, 1, 4, 1, 0, 2, 2, 5, 3, 1, 1};
 const std::vector<double> targets{1, 2, 3, 4, 5};
+
+double largest_gap(const std::vector<double>& got,
+                   const std::vector<double>& want) {
+  double gap = 0;
+  for (std::size_t i = 0; i < want.size(); ++i) {
+    gap = std::max(gap, std::fabs(got.at(i) - want[i]));
+  }
+  return gap;
+}
 
 std::vector<double> with(std::vector<double> v, std::size_t at, double value) {
   v[at] = value;
@@ -159,6 +170,24 @@ TEST(LinearRegression, FitsTheDocsExampleExactly) {
     EXPECT_EQ(f.out.read<double>(0), (std::vector<double>{2.0, 0.0}))
         << algorithm;
     EXPECT_EQ(f.intercept, 1.0) << algorithm;
+  }
+}
+
+TEST(LinearRegression, FitsTheTwoColumnDocsExampleUnderEveryAlgorithm) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> x(res, {1, 1, 1, 2, 2, 2, 2, 3}, {4, 2});
+  const filled<double> y(res, {6, 8, 9, 11}, {4});
+  constexpr double close = 0x1p-45;
+  for (const int32_t algorithm :
+       {CUML_LINEAR_MODEL_OLS_SVD, CUML_LINEAR_MODEL_OLS_EIG,
+        CUML_LINEAR_MODEL_OLS_QR, CUML_LINEAR_MODEL_OLS_SVD_QR}) {
+    fitted f(res);
+    EXPECT_EQ(fit_into(res, f, x.view(), y.view(), nullptr, 1, algorithm),
+              "accepted");
+    std::vector<double> got = f.out.read<double>(0);
+    got.push_back(f.intercept);
+    EXPECT_LE(largest_gap(got, {1.0, 2.0, 3.0}), close) << algorithm;
   }
 }
 

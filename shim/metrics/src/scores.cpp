@@ -27,6 +27,7 @@ using cumlrkt::require_finite_elements;
 using cumlrkt::require_sample_weights;
 using cumlrkt::require_some;
 using cumlrkt::rows_of;
+using cumlrkt::stream_of;
 using cumlrkt::metrics::matched;
 using cumlrkt::metrics::matches_of;
 using cumlrkt::metrics::r2_of;
@@ -36,10 +37,6 @@ using raftrkt::any_extent;
 using raftrkt::vector_data;
 
 using stream_view = rmm::cuda_stream_view;
-
-stream_view stream_of(const raft::handle_t& handle) {
-  return raft::resource::get_cuda_stream(handle);
-}
 
 sample_weights weight_data(const rr_view* view, int64_t n) {
   sample_weights w{nullptr, nullptr, 0};

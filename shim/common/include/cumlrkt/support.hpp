@@ -131,6 +131,10 @@ inline void require_lanczos_rows(int64_t n, int64_t nev, const char* subject,
   }
 }
 
+inline rmm::cuda_stream_view stream_of(const raft::handle_t& handle) {
+  return raft::resource::get_cuda_stream(handle);
+}
+
 inline void settle(const raft::handle_t& handle) {
   raftrkt::cuda_check(
       cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),

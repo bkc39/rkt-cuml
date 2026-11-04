@@ -1,7 +1,8 @@
+#include "fit_checks.hpp"
+
 #include <cstdint>
 #include <format>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cuda_stream.hpp>
 #include <raft/core/resource/cusolver_dn_handle.hpp>
 #include <raft/linalg/detail/cusolver_wrappers.hpp>
 #include <rmm/cuda_stream_view.hpp>
@@ -10,14 +11,28 @@
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
 #include "cumlrkt/vectors.hpp"
-#include "fit_checks.hpp"
 #include "glm_staging.hpp"
 #include "raftrkt/view.hpp"
 
 namespace cumlrkt::glm {
 
+namespace {
+
+void require_codes(const fit_request& request) {
+  if (request.algorithm < CUML_LINEAR_MODEL_OLS_SVD ||
+      request.algorithm > CUML_LINEAR_MODEL_OLS_SVD_QR) {
+    throw logic_error(
+        "algorithm: expected auto, eig, svd, svd-jacobi, qr or svd-qr");
+  }
+  if (request.fit_intercept != 0 && request.fit_intercept != 1) {
+    throw logic_error("fit-intercept: expected #t or #f");
+  }
+}
+
+}  // namespace
+
 void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork) {
-  const int64_t size = ols_workspace(algorithm, n, d, lwork);
+  const int64_t size = ols_workspace(algorithm, {n, d}, lwork);
   if (size > most_index) {
     throw logic_error(std::format(
         "X: {} columns need a {}-element {} workspace, more than {} elements",
@@ -25,33 +40,20 @@ void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork) {
   }
 }
 
-void require_codes(int32_t fit_intercept, int32_t algorithm) {
-  if (algorithm < CUML_LINEAR_MODEL_OLS_SVD ||
-      algorithm > CUML_LINEAR_MODEL_OLS_SVD_QR) {
-    throw logic_error(
-        "algorithm: expected auto, eig, svd, svd-jacobi, qr or svd-qr");
-  }
-  if (fit_intercept != 0 && fit_intercept != 1) {
-    throw logic_error("fit-intercept: expected #t or #f");
-  }
-}
-
 template <typename T>
 fit_inputs<T> checked_inputs(const raft::handle_t& handle,
-                             const rr_view* x_view, const rr_view* y_view,
-                             const rr_view* w_view, int32_t fit_intercept,
-                             int32_t algorithm) {
+                             const fit_request& request) {
   const matrix<T, int64_t> x = rows_of<T, int64_t>(
-      x_view, "X", raftrkt::any_extent, raftrkt::any_extent);
-  const T* y = raftrkt::vector_data<T, int32_t>(y_view, "y", x.n);
-  const T* w = w_view == nullptr ? nullptr
-                                 : raftrkt::vector_data<T, int32_t>(
-                                       w_view, "sample-weight", x.n);
+      request.x, "X", raftrkt::any_extent, raftrkt::any_extent);
+  const T* y = raftrkt::vector_data<T, int32_t>(request.y, "y", x.n);
+  const T* w = request.w == nullptr ? nullptr
+                                    : raftrkt::vector_data<T, int32_t>(
+                                          request.w, "sample-weight", x.n);
   require_some("X", "row", x.n, 2);
   require_some("X", "column", x.d);
   require_index("X", x.n, x.d);
-  require_codes(fit_intercept, algorithm);
-  const rmm::cuda_stream_view stream = raft::resource::get_cuda_stream(handle);
+  require_codes(request);
+  const rmm::cuda_stream_view stream = stream_of(handle);
   require_finite("X", x, stream);
   require_finite_elements("y", y, x.n, stream);
   if (w != nullptr) {
@@ -62,7 +64,8 @@ fit_inputs<T> checked_inputs(const raft::handle_t& handle,
 
 template <typename T>
 int64_t cusolver_lwork_of(const raft::handle_t& handle, int algorithm,
-                          int64_t n, int64_t d) {
+                          ols_shape shape) {
+  const auto [n, d] = shape;
   cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
   int lwork = 0;
   if (algorithm == CUML_LINEAR_MODEL_OLS_SVD) {
@@ -91,18 +94,13 @@ int64_t cusolver_lwork_of(const raft::handle_t& handle, int algorithm,
   return lwork;
 }
 
-template int64_t cusolver_lwork_of<float>(const raft::handle_t&, int, int64_t,
-                                          int64_t);
-template int64_t cusolver_lwork_of<double>(const raft::handle_t&, int, int64_t,
-                                           int64_t);
+template int64_t cusolver_lwork_of<float>(const raft::handle_t&, int,
+                                          ols_shape);
+template int64_t cusolver_lwork_of<double>(const raft::handle_t&, int,
+                                           ols_shape);
 template fit_inputs<float> checked_inputs<float>(const raft::handle_t&,
-                                                 const rr_view*, const rr_view*,
-                                                 const rr_view*, int32_t,
-                                                 int32_t);
+                                                 const fit_request&);
 template fit_inputs<double> checked_inputs<double>(const raft::handle_t&,
-                                                   const rr_view*,
-                                                   const rr_view*,
-                                                   const rr_view*, int32_t,
-                                                   int32_t);
+                                                   const fit_request&);
 
 }  // namespace cumlrkt::glm
