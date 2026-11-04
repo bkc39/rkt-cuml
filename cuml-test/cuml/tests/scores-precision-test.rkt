@@ -143,20 +143,22 @@
   (define p-rows '((-1.7e308 1.7e308) (1e-150 3e-150)))
   (check-equal? (mse y-rows p-rows '(0.0 1.0)) (exact->inexact (exact-mse y-rows p-rows '(0.0 1.0)))))
 
-(define (light-beside-heavy n heavy)
+(define (light-beside-heavy count heavy)
   (values (cons 0.0 heavy)
           (cons (expt 2.0 500) heavy)
-          (cons (* 1.3 (expt 2.0 -1022)) (make-list n 1.0))))
+          (cons (* 1.3 (expt 2.0 -1022)) (make-list count 1.0))))
 
-(define (alternating n c)
-  (for/list ([_ (in-range n)]
+(define (alternating count c)
+  (for/list ([_ (in-range count)]
              [sign (in-cycle '(1.0 -1.0))])
     (* sign c)))
 
 (test-gpu "a light normal weight on the largest residual leaves the final ratio's bits"
-  (for ([n (in-list '(1024 65536))])
-    (define-values (y p w) (light-beside-heavy n (alternating n (* 1.9 (expt 2.0 -20)))))
+  (for ([count (in-list '(1024 65536))])
+    (define-values (y p w) (light-beside-heavy count (alternating count (* 1.9 (expt 2.0 -20)))))
     (define exact (exact-r2 y p w))
-    (check-= (inexact->exact (r2 y p w)) exact (* 1e-14 (abs (- 1 exact))) (format "r2 n = ~a" n))
-    (define-values (ym pm wm) (light-beside-heavy n (make-list n 1.0)))
-    (check-equal? (mse ym pm wm) (exact->inexact (exact-mse ym pm wm)) (format "error n = ~a" n))))
+    (check-= (inexact->exact (r2 y p w)) exact (* 1e-14 (abs (- 1 exact))) (format "r2 n = ~a" count))
+    (define-values (ym pm wm) (light-beside-heavy count (make-list count 1.0)))
+    (check-equal? (mse ym pm wm)
+                  (exact->inexact (exact-mse ym pm wm))
+                  (format "error n = ~a" count))))
