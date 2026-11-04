@@ -1,14 +1,16 @@
 #lang racket/base
 
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
-         (only-in math/flonum flsum)
+         (only-in math/flonum flsum flvector->list)
          (only-in racket/flonum for/flvector in-flvector)
          (only-in racket/list make-list remove-duplicates)
          (only-in racket/math sqr)
-         (only-in rackunit check-equal? check-true)
+         (only-in rackunit check-= check-equal?)
          (only-in raft device-vector->flvector flvector->device-vector list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/blob-data.rkt" normal-source uniform-source))
+         (only-in "private/blob-data.rkt" normal-source uniform-source)
+         (only-in "private/metrics-data.rkt" exact-mse exact-r2)
+         (only-in "private/scores-data.rkt" vec weights-of))
 
 (define n (expt 10 6))
 
@@ -23,12 +25,8 @@
   (for/flvector #:length n ([_ (in-range n)]) (+ shift (next))))
 
 (define (host-scores y p)
-  (define ys
-    (for/list ([a (in-flvector y)])
-      a))
-  (define ps
-    (for/list ([b (in-flvector p)])
-      b))
+  (define ys (flvector->list y))
+  (define ps (flvector->list p))
   (define count (exact->inexact (length ys)))
   (define centre (/ (flsum ys) count))
   (define spread (flsum (map (lambda (a) (sqr (- a centre))) ys)))
@@ -47,11 +45,14 @@
   (define-values (r2 mse) (host-scores (device-vector->flvector y) (device-vector->flvector p)))
   (define ours-r2 (r2-score y p))
   (define ours-mse (mean-squared-error y p))
-  (define r2-gap (/ (abs (- ours-r2 r2)) (max 1.0 (abs (- 1.0 r2)))))
-  (define mse-gap (/ (abs (- ours-mse mse)) mse))
-  (printf "X1: r2 ~a (gap ~a), error ~a (gap ~a)\n" ours-r2 r2-gap ours-mse mse-gap)
-  (check-true (<= r2-gap 1e-12) (format "r2 ~a against ~a" ours-r2 r2))
-  (check-true (<= mse-gap 1e-12) (format "error ~a against ~a" ours-mse mse)))
+  (define r2-scale (max 1.0 (abs (- 1.0 r2))))
+  (printf "X1: r2 ~a (gap ~a), error ~a (gap ~a)\n"
+          ours-r2
+          (/ (abs (- ours-r2 r2)) r2-scale)
+          ours-mse
+          (/ (abs (- ours-mse mse)) mse))
+  (check-= ours-r2 r2 (* 1e-12 r2-scale) (format "r2 ~a against ~a" ours-r2 r2))
+  (check-= ours-mse mse (* 1e-12 mse) (format "error ~a against ~a" ours-mse mse)))
 
 (test-gpu "X2: five repeated weighted calls of each score give the same bits"
   (define y (flvector->device-vector (normals 3 1e4) #:dtype 'float32))
@@ -74,3 +75,38 @@
                               (lambda () (accuracy-score labels guesses #:sample-weight w))))])
     (define runs (repeats score))
     (check-equal? (length (remove-duplicates runs)) 1 (format "~a" runs))))
+
+(define (r2 y p [w #f] #:dtype [dt 'float64] #:pred [pt dt])
+  (r2-score (vec y dt) (vec p pt) #:sample-weight (weights-of w)))
+
+(define (mse y p [w #f] #:dtype [dt 'float64] #:pred [pt dt])
+  (mean-squared-error (vec y dt) (vec p pt) #:sample-weight (weights-of w)))
+
+(test-gpu "a small residual beside a large value keeps its bits"
+  (check-equal? (mse '(1e200 1.0) '(1e200 2.0)) 0.5)
+  (check-equal? (mse (list (expt 2.0 540) 1.0) (list (expt 2.0 540) 2.0)) 0.5)
+  (check-equal? (mse (list (expt 2.0 127) 1.0) (list (expt 2.0 127) 2.0) #:dtype 'float32) 0.5)
+  (define exact (exact-mse '(1e160 1.0) '(1e160 1.1)))
+  (check-= (inexact->exact (mse '(1e160 1.0) '(1e160 1.1))) exact (* 1e-14 exact)))
+
+(test-gpu "a large value behind a zero weight scores as the call without its sample"
+  (define w '(0.0 1.0 1.0))
+  (check-equal? (r2 (list (expt 2.0 1000) 1.0 2.0) (list (expt 2.0 1000) 1.0 3.0) w) -1.0)
+  (check-equal? (r2 '(1.0 2.0) '(1.0 3.0)) -1.0)
+  (check-equal? (mse (list (expt 2.0 1000) 1.0 2.0) (list (expt 2.0 1000) 1.0 3.0) w) 0.5)
+  (check-equal? (mse '(1.0 2.0) '(1.0 3.0)) 0.5)
+  (check-equal? (r2 '(0.0 1.0 2.0) '(1e300 1.0 3.0) w #:dtype 'float32 #:pred 'float64) -1.0)
+  (check-equal? (mse '(0.0 1.0 2.0) '(1e300 1.0 3.0) w #:dtype 'float32 #:pred 'float64) 0.5)
+  (check-equal? (r2 (list (expt 2.0 127) 1.0 2.0) (list (expt 2.0 127) 1.0 3.0) w #:dtype 'float32)
+                -1.0)
+  (define exact (exact-r2 '(1.0 2.0) '(1.1 2.0)))
+  (check-= (inexact->exact (r2 '(1e160 1.0 2.0) '(1e160 1.1 2.0) w))
+           exact
+           (* 1e-14 (abs (- 1 exact)))))
+
+(test-gpu "a weight that scales to zero against the largest drops its sample"
+  (define w (list (expt 2.0 1023) (expt 2.0 -1000)))
+  (check-equal? (r2 '(5.0 7.0) '(6.0 8.0) w) (r2 '(5.0) '(6.0)))
+  (check-equal? (r2 '(5.0 7.0) '(6.0 8.0) w) 0.0)
+  (check-equal? (r2 '(5.0 7.0) '(5.0 8.0) w) 1.0)
+  (check-equal? (mse '(5.0 7.0) '(6.0 8.0) w) 1.0))

@@ -48,7 +48,7 @@
                                                ['singular_values singular]
                                                ['explained_variance variance])
                                    (hash-table ['ratio svd-ratio] ['singular_values svd-singular])
-                                   (hash-table ['error error]))]
+                                   (hash-table ['error reconstruction-error]))]
                             ['version version])
     (run-twin twin
               (hasheq 'cases (list (twin-case "pca" raw 2)
@@ -103,6 +103,6 @@
                  (list (~> (pca-transform plane scaled)
                            (pca-inverse-transform plane _)
                            (mean-squared-error scaled _)))
-                 (list error)
+                 (list reconstruction-error)
                  (list (* 2 ratio-bound))
                  10))

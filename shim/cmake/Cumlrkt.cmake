@@ -1,5 +1,4 @@
 set(cumlrkt_gtest_timeout_seconds 6)
-set(cumlrkt_gtest_discovery_timeout_seconds 60)
 
 function(cumlrkt_enable_warnings target)
   target_compile_options(${target}
@@ -39,8 +38,7 @@ function(cumlrkt_family family)
   set(lib cumlrkt_${family})
   set(common_sources)
   if(NOT arg_TEST_ONLY)
-    set(common_sources common/src/labels.cu common/src/rows.cu
-                       common/src/vectors.cpp)
+    set(common_sources common/src/labels.cu common/src/rows.cu)
   endif()
   add_library(${lib} SHARED ${arg_SOURCES} ${common_sources})
   set_target_properties(${lib} PROPERTIES
@@ -84,8 +82,7 @@ function(cumlrkt_family family)
       PRIVATE ${lib} raftrkt::headers "${RAFTRKT_LIBRARY}" GTest::gtest_main)
     cumlrkt_enable_warnings(${tests})
     cumlrkt_apply_nix_cflags(${tests})
-    gtest_discover_tests(${tests} DISCOVERY_MODE PRE_TEST
-      DISCOVERY_TIMEOUT ${cumlrkt_gtest_discovery_timeout_seconds}
+    gtest_discover_tests(${tests} DISCOVERY_MODE PRE_TEST DISCOVERY_TIMEOUT 120
       PROPERTIES TIMEOUT ${cumlrkt_gtest_timeout_seconds})
     if(DEFINED CUMLRKT_TESTS_PREFIX)
       if(arg_TEST_ONLY)

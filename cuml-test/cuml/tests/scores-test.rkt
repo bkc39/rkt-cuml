@@ -3,10 +3,9 @@
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
          (only-in racket/flonum flsingle)
          (only-in racket/list append* drop-right last make-list)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define match-lambda)
          (only-in racket/math exact-floor sqr)
-         (only-in rackunit check check-equal? check-true test-case)
-         (only-in raft list*->device-matrix list->device-vector)
+         (only-in rackunit check-= check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
          (only-in "private/metrics-data.rkt"
@@ -16,25 +15,13 @@
                   mean
                   pow2-scaled
                   regression-cases)
-         (only-in "private/scaler-data.rkt" rows-of))
-
-(define (vec xs dt)
-  (list->device-vector xs #:dtype dt))
-
-(define (rows xs dt)
-  (list*->device-matrix xs #:dtype dt))
-
-(define (weights-of w [dt 'float64])
-  (and w (vec w dt)))
+         (only-in "private/scaler-data.rkt" rows-of)
+         (only-in "private/scores-data.rkt" integer-weights label-cases on vec weights-of))
 
 (define (r2 y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
   (r2-score (vec y dt) (vec p pt) #:sample-weight (weights-of w wt)))
 
 (define (mse y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
-  (define (on xs t)
-    (if (list? (car xs))
-        (rows xs t)
-        (vec xs t)))
   (mean-squared-error (on y dt) (on p pt) #:sample-weight (weights-of w wt)))
 
 (define (accuracy a b [w #f] #:true [at 'int32] #:pred [bt at] #:weight [wt 'float64])
@@ -46,52 +33,20 @@
 (define (relative-gap ours exact)
   (/ (abs (- (inexact->exact ours) exact)) exact))
 
-(define int32-palette '(-1 0 1 2 7 2147483647 -2147483647 -2147483648))
-(define int64-palette (append int32-palette (list (expt 2 40) (- (expt 2 40)) (expt 2 32))))
-
-(define (palette dt)
-  (if (eq? dt 'int32) int32-palette int64-palette))
-
-(define (label-cases)
-  (define next (uniform-source 860))
-  (define (pick xs)
-    (list-ref xs (exact-floor (* (next) (length xs)))))
-  (for/list ([i (in-range 200)])
-    (match-define (list at bt) (list-ref '((int32 int32) (int32 int64) (int64 int64)) (modulo i 3)))
-    (define n (add1 (exact-floor (* (next) 5000))))
-    (define truth
-      (for/list ([_ (in-range n)])
-        (pick (palette at))))
-    (define found
-      (for/list ([t (in-list truth)])
-        (define u (next))
-        (cond
-          [(and (eq? bt 'int64) (eqv? t 0) (< u 0.2)) (expt 2 32)]
-          [(< u 0.7) t]
-          [else (pick (palette bt))])))
-    (list at bt truth found)))
+(define (accuracy-cases)
+  (label-cases #:seed 860 #:count 200 #:most 5000))
 
 (test-gpu "A1: unweighted accuracy is the exact count over n, correctly rounded"
-  (for ([c (in-list (label-cases))]
-        [i (in-naturals)])
-    (match-define (list at bt truth found) c)
+  (for ([c (in-list (accuracy-cases))])
+    (match-define (list i at bt truth found) c)
     (test-case (format "case ~a ~a x ~a" i at bt)
       (check-equal? (accuracy truth found #:true at #:pred bt)
                     (exact->inexact (exact-accuracy truth found))))))
 
-(define (integer-weights n seed)
-  (define next (uniform-source seed))
-  (define w
-    (for/list ([_ (in-range n)])
-      (exact->inexact (exact-floor (* 9 (next))))))
-  (if (andmap zero? w)
-      (cons 1.0 (cdr w))
-      w))
-
 (test-gpu "A2: accuracy is symmetric bit for bit, with and without weights"
-  (for ([c (in-list (label-cases))]
-        [i (in-range 40)])
-    (match-define (list at bt truth found) c)
+  (for ([c (in-list (accuracy-cases))]
+        [_ (in-range 40)])
+    (match-define (list i at bt truth found) c)
     (define w (integer-weights (length truth) i))
     (define u (map (lambda (x) (+ 0.25 x)) w))
     (check-equal? (accuracy truth found #:true at #:pred bt)
@@ -112,9 +67,9 @@
              (make-list (inexact->exact c) x))))
 
 (test-gpu "A4: integer weights equal the unweighted score on repeated samples, bit for bit"
-  (for ([c (in-list (label-cases))]
-        [i (in-range 60)])
-    (match-define (list at bt truth found) c)
+  (for ([c (in-list (accuracy-cases))]
+        [_ (in-range 60)])
+    (match-define (list i at bt truth found) c)
     (define w (integer-weights (length truth) (+ 100 i)))
     (test-case (format "case ~a" i)
       (check-equal? (accuracy truth found w #:true at #:pred bt)
@@ -192,8 +147,8 @@
     (for/list ([j (in-range d)])
       (+ (* 10.0 j) (next)))))
 
-(define (column xss j)
-  (map (lambda (r) (list-ref r j)) xss))
+(define (columns xss)
+  (apply map list xss))
 
 (test-gpu "M3: a matrix's error is within 1e-14 of the mean of its columns' errors"
   (for* ([dt (in-list '(float32 float64))]
@@ -203,11 +158,11 @@
     (define p (normal-rows 300 d (+ d 20)))
     (define w (and weighted? (integer-weights 300 d)))
     (define whole (mse y p w #:dtype dt))
-    (define columns
-      (mean (for/list ([j (in-range d)])
-              (mse (column y j) (column p j) w #:dtype dt))))
-    (check-true (<= (abs (- whole columns)) (* 1e-14 columns))
-                (format "~a against ~a" whole columns))))
+    (define by-column
+      (mean (for/list ([a (in-list (columns y))]
+                       [b (in-list (columns p))])
+              (mse a b w #:dtype dt))))
+    (check-= whole by-column (* 1e-14 by-column) (format "~a against ~a" whole by-column))))
 
 (test-gpu "M4: the error is finite when only the float32 square overflows, inf past the flonum range"
   (define big (flsingle 1e19))
@@ -226,9 +181,9 @@
   (printf "M5: worst error gap ~a\n" (exact->inexact worst)))
 
 (define (sample-cases)
-  (for/list ([c (in-list (regression-cases))]
-             #:when (zero? (modulo (car c) 10)))
-    c))
+  (filter (match-lambda
+            [(list i _ _ _ _) (zero? (modulo i 10))])
+          (regression-cases)))
 
 (test-gpu "X3: scaling both arguments by 2^k keeps r2 and scales the error by 2^2k, exactly"
   (for ([c (in-list (sample-cases))])
@@ -247,7 +202,8 @@
                       (* base-mse (expt 2 (* 2 k))))))))
 
 (test-gpu "X4: scaling the weights by 2^k leaves all three scores unchanged, bit for bit"
-  (define-values (truth found) (values '(0 1 2 2 3 1 0 4) '(0 1 1 2 3 0 0 4)))
+  (define truth '(0 1 2 2 3 1 0 4))
+  (define found '(0 1 1 2 3 0 0 4))
   (for ([c (in-list (sample-cases))])
     (match-define (list i dt y p _) c)
     (define w (integer-weights (length y) i))
@@ -265,7 +221,8 @@
                       (accuracy truth found v #:weight wt))))))
 
 (test-gpu "X5: all-ones weights give the same bits as no weights"
-  (define-values (truth found) (values '(0 1 2 2 3 1 0 4) '(0 1 1 2 3 0 0 4)))
+  (define truth '(0 1 2 2 3 1 0 4))
+  (define found '(0 1 1 2 3 0 0 4))
   (for ([c (in-list (sample-cases))])
     (match-define (list _ dt y p _) c)
     (define ones (make-list (length y) 1.0))
@@ -285,23 +242,23 @@
     (define w (integer-weights (length y) (+ 200 i)))
     (define zero-one (map (lambda (x) (if (> x 4) 1.0 0.0)) w))
     (test-case (format "case ~a ~a" i dt)
-      (check (lambda (a b) (<= (abs (- a b)) (* 1e-14 (max 1 (abs (- 1 b))))))
-             (r2 y p w #:dtype dt)
-             (r2 (repeated y w) (repeated p w) #:dtype dt))
-      (check (lambda (a b) (<= (abs (- a b)) (* 1e-14 b)))
-             (mse y p w #:dtype dt)
-             (mse (repeated y w) (repeated p w) #:dtype dt))
+      (check-true (<= (r2-gap (r2 y p w #:dtype dt) (r2 (repeated y w) (repeated p w) #:dtype dt))
+                      1e-14))
+      (check-true (<= (relative-gap (mse y p w #:dtype dt)
+                                    (mse (repeated y w) (repeated p w) #:dtype dt))
+                      1e-14))
       (when (> (length (kept y zero-one)) 1)
-        (check (lambda (a b) (<= (abs (- a b)) (* 1e-14 (max 1 (abs (- 1 b))))))
-               (r2 y p zero-one #:dtype dt)
-               (r2 (kept y zero-one) (kept p zero-one) #:dtype dt))
-        (check (lambda (a b) (<= (abs (- a b)) (* 1e-14 b)))
-               (mse y p zero-one #:dtype dt)
-               (mse (kept y zero-one) (kept p zero-one) #:dtype dt))))))
+        (check-true (<= (r2-gap (r2 y p zero-one #:dtype dt)
+                                (r2 (kept y zero-one) (kept p zero-one) #:dtype dt))
+                        1e-14))
+        (check-true (<= (relative-gap (mse y p zero-one #:dtype dt)
+                                      (mse (kept y zero-one) (kept p zero-one) #:dtype dt))
+                        1e-14))))))
 
 (test-gpu "X7: mixed float32 and float64 arguments give the bits of the widened call"
-  (for ([c (in-list (sample-cases))]
-        #:when (eq? (cadr c) 'float32))
+  (for ([c (in-list (filter (match-lambda
+                              [(list _ dt _ _ _) (eq? dt 'float32)])
+                            (sample-cases)))])
     (match-define (list i _ y p w) c)
     (define widened (r2 y p w #:dtype 'float64))
     (define widened-mse (mse y p w #:dtype 'float64))

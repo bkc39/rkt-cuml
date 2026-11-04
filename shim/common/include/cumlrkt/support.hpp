@@ -136,9 +136,8 @@ inline rmm::cuda_stream_view stream_of(const raft::handle_t& handle) {
 }
 
 inline void settle(const raft::handle_t& handle) {
-  raftrkt::cuda_check(
-      cudaStreamSynchronize(raft::resource::get_cuda_stream(handle).value()),
-      "cudaStreamSynchronize");
+  raftrkt::cuda_check(cudaStreamSynchronize(stream_of(handle).value()),
+                      "cudaStreamSynchronize");
 }
 
 template <typename T>
@@ -164,10 +163,11 @@ void require_bounded_rows(const char* name, const matrix<T, int64_t>& x,
   }
 }
 
-template <typename T>
-void require_finite(const char* name, const matrix<T, int64_t>& x,
+template <typename T, typename Index>
+void require_finite(const char* name, const matrix<T, Index>& x,
                     rmm::cuda_stream_view stream) {
-  const int64_t i = first_non_finite(x.data, x.n * x.d, stream);
+  const int64_t i =
+      first_non_finite(x.data, static_cast<int64_t>(x.n) * x.d, stream);
   if (i >= 0) {
     const T got = read_one(x.data, i, stream);
     throw logic_error(

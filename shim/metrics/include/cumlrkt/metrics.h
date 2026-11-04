@@ -87,7 +87,8 @@ CUMLRKT_API void cuml_metrics_mean_squared_error_job(void* args,
                                                      rr_job_outcome* outcome);
 
 /* correct: the weight of matching samples (their count without weights);
-   total: the weight sum (n without weights). */
+   total: the weight sum (n without weights). With weights both are scaled
+   by one power of two, so only correct / total has a meaning. */
 CUMLRKT_API int cuml_metrics_accuracy_score(void* handle, const rr_view* y_true,
                                             const rr_view* y_pred,
                                             const rr_view* sample_weight,

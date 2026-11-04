@@ -2,17 +2,11 @@
 
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
          (only-in rackunit test-case)
-         (only-in raft list*->device-matrix list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/refusal-rows.rkt" check-row row row-id)
-         (only-in "private/scaler-data.rkt" strided-vector))
-
-(define (vec xs dt)
-  (list->device-vector xs #:dtype dt))
-
-(define (rows xs dt)
-  (list*->device-matrix xs #:dtype dt))
+         (only-in "private/scaler-data.rkt" strided-vector)
+         (only-in "private/scores-data.rkt" rows vec))
 
 (define (weight-rows proc y p)
   (define (with w)
@@ -79,6 +73,9 @@
      "y-true: expected at least 1 element, got 0"
      (lambda ()
        (proc (blank-vector 0 'float64) (blank-vector 0 'float64) #:sample-weight (vec '(1) 'int32))))
+    (row "V9 before V10"
+         "sample-weight: expected float32 or float64, got int32"
+         (lambda () (proc (vec '(1 +nan.0 3 4) 'float64) p #:sample-weight (vec '(1 1 1 1) 'int32))))
     (row "V10 true before pred"
          "y-true: element 0: expected a finite value, got -inf"
          (lambda ()

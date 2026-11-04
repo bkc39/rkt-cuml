@@ -71,7 +71,7 @@ def trustworthiness(case):
     }
 
 
-def finite(x):
+def nan_to_none(x):
     x = float(x)
     return None if math.isnan(x) else x
 
@@ -87,10 +87,10 @@ def regression(case):
     w = weight(case)
     sk, cu = {"r2": (sk_r2, cu_r2), "mse": (sk_mse, cu_mse)}[case["op"]]
     return {
-        "sklearn": finite(
+        "sklearn": nan_to_none(
             sk(yt.astype(np.float64), yp.astype(np.float64), sample_weight=w)
         ),
-        "cuml": finite(cu(yt, yp, sample_weight=w)),
+        "cuml": nan_to_none(cu(yt, yp, sample_weight=w)),
     }
 
 

@@ -110,7 +110,6 @@ cumlrkt_family(linear_model
         linear_model/src/glm_staging.cpp
         linear_model/src/glm_staging_device.cu
         linear_model/src/fit_checks.cpp common/src/rows.cu
-        common/src/vectors.cpp
 )
 target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver)
 if(TARGET cumlrkt_linear_model_tests)

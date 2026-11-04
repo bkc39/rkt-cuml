@@ -1,7 +1,7 @@
 #include <cmath>
 #include <cstdint>
+#include <format>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cuda_stream.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <type_traits>
 
@@ -17,7 +17,6 @@
 namespace {
 
 using cumlrkt::guarded;
-using cumlrkt::largest_magnitude;
 using cumlrkt::logic_error;
 using cumlrkt::matrix;
 using cumlrkt::on_floats;
@@ -36,8 +35,6 @@ using cumlrkt::metrics::squared_error_of;
 using raftrkt::any_extent;
 using raftrkt::vector_data;
 
-using stream_view = rmm::cuda_stream_view;
-
 sample_weights weight_data(const rr_view* view, int64_t n) {
   sample_weights w{nullptr, nullptr, 0};
   if (view != nullptr) {
@@ -55,24 +52,18 @@ sample_weights weight_data(const rr_view* view, int64_t n) {
 }
 
 template <typename W>
-int checked_exponent(const W* w, int64_t n, stream_view stream) {
+int checked_exponent(const W* w, int64_t n, rmm::cuda_stream_view stream) {
   return std::ilogb(require_sample_weights(w, n, stream));
 }
 
-sample_weights checked(sample_weights w, int64_t n, stream_view stream) {
+sample_weights checked(sample_weights w, int64_t n,
+                       rmm::cuda_stream_view stream) {
   if (w.single != nullptr) {
     w.exponent = checked_exponent(w.single, n, stream);
   } else if (w.wide != nullptr) {
     w.exponent = checked_exponent(w.wide, n, stream);
   }
   return w;
-}
-
-template <typename T, typename P>
-int value_exponent(const T* y, const P* p, int64_t count, stream_view stream) {
-  const double largest = std::fmax(largest_magnitude(y, count, stream),
-                                   largest_magnitude(p, count, stream));
-  return largest > 0 ? std::ilogb(largest) : 0;
 }
 
 struct score_views {
@@ -121,42 +112,36 @@ void on_label_pair(const score_views& views, Use&& use) {
 }
 
 double r2(const raft::handle_t& handle, const score_views& views) {
-  const stream_view stream = stream_of(handle);
+  const rmm::cuda_stream_view stream = stream_of(handle);
   double score = 0;
   on_value_pair(views, [&](const auto* y, const auto* p, int64_t n) {
     require_some("y-true", "element", n);
     const sample_weights w = weight_data(views.weights, n);
     require_finite_elements("y-true", y, n, stream);
     require_finite_elements("y-pred", p, n, stream);
-    score = r2_of(y, p, n, value_exponent(y, p, n, stream),
-                  checked(w, n, stream), stream);
+    score = r2_of(y, p, n, checked(w, n, stream), stream);
   });
   return score;
 }
 
-template <typename T>
-matrix<T, int64_t> wide(const matrix<T, int32_t>& m) {
-  return {m.data, m.n, m.d};
-}
-
 double squared_error(const raft::handle_t& handle, const score_views& views) {
-  const stream_view stream = stream_of(handle);
+  const rmm::cuda_stream_view stream = stream_of(handle);
   double error = 0;
   const auto score = [&](const auto* y, const auto* p, int64_t n, int64_t d,
                          sample_weights w) {
-    error = squared_error_of(y, p, n, d, value_exponent(y, p, n * d, stream),
-                             checked(w, n, stream), stream);
+    error = squared_error_of(y, p, n, d, checked(w, n, stream), stream);
   };
-  if (raftrkt::require(views.truth, "y-true")->rank == 2) {
+  const auto rank = raftrkt::require(views.truth, "y-true")->rank;
+  if (rank == 2) {
     on_value_rows(views, [&](const auto& y, const auto& p) {
       require_some("y-true", "row", y.n);
       require_some("y-true", "column", y.d);
       const sample_weights w = weight_data(views.weights, y.n);
-      require_finite("y-true", wide(y), stream);
-      require_finite("y-pred", wide(p), stream);
+      require_finite("y-true", y, stream);
+      require_finite("y-pred", p, stream);
       score(y.data, p.data, y.n, y.d, w);
     });
-  } else {
+  } else if (rank == 1) {
     on_value_pair(views, [&](const auto* y, const auto* p, int64_t n) {
       require_some("y-true", "element", n);
       const sample_weights w = weight_data(views.weights, n);
@@ -164,12 +149,17 @@ double squared_error(const raft::handle_t& handle, const score_views& views) {
       require_finite_elements("y-pred", p, n, stream);
       score(y, p, n, 1, w);
     });
+  } else {
+    on_floats(views.truth, "y-true", [&](auto /*tag*/) {
+      throw logic_error(
+          std::format("y-true: expected rank 1 or 2, got rank {}", rank));
+    });
   }
   return error;
 }
 
 matched accuracy(const raft::handle_t& handle, const score_views& views) {
-  const stream_view stream = stream_of(handle);
+  const rmm::cuda_stream_view stream = stream_of(handle);
   matched found{0, 0};
   on_label_pair(views, [&](const auto* a, const auto* b, int64_t n) {
     require_some("y-true", "element", n);

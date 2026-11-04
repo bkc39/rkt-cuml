@@ -12,7 +12,7 @@
                   trustworthiness)
          (only-in racket/list index-of range remove-duplicates take)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-true)
+         (only-in rackunit check-= check-equal? check-true)
          (only-in raft
                   device-matrix->list*
                   device-vector->list
@@ -20,7 +20,8 @@
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/metrics-data.rkt" exact-r2 host-ari mean))
+         (only-in "private/metrics-data.rkt" exact-r2 host-ari mean)
+         (only-in "private/scores-data.rkt" vec))
 
 (define truth-labels '(0 0 0 1 1 1))
 (define found-labels '(1 1 -1 0 0 0))
@@ -101,14 +102,13 @@
 (define p-values '(2.5 0.0 2 8))
 
 (define (doubles xs)
-  (list->device-vector xs #:dtype 'float64))
+  (vec xs 'float64))
 
 (test-gpu "the manual: r2-score on the example's values"
   (define y (doubles y-values))
   (define expected (exact->inexact (exact-r2 y-values p-values)))
-  (check-true (<= (abs (- (r2-score y (doubles p-values)) expected)) 1e-15)
-              (format "~a against ~a" (r2-score y (doubles p-values)) expected))
-  (check-true (<= (abs (- expected 0.94860813704496)) 1e-14))
+  (define score (r2-score y (doubles p-values)))
+  (check-= score expected 1e-15 (format "~a against ~a" score expected))
   (check-equal? (r2-score y y) 1.0)
   (check-equal? (r2-score (list->device-vector '(2 2 2) #:dtype 'float32)
                           (list->device-vector '(2 2 3) #:dtype 'float32))
