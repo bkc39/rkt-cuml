@@ -195,16 +195,18 @@ TEST(FiniteSolution, AFiniteSolutionIsAccepted) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<double> good(res, {1.0, 2.0}, {2});
-  EXPECT_EQ(finite_refusal(res, good, finite_intercept, CUML_LINEAR_MODEL_OLS_QR),
-            "accepted");
+  EXPECT_EQ(
+      finite_refusal(res, good, finite_intercept, CUML_LINEAR_MODEL_OLS_QR),
+      "accepted");
 }
 
 TEST(FiniteSolution, AStagedNanIsRefusedNamingTheSolve) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<double> bad(res, {1.0, std::nan("")}, {2});
-  EXPECT_EQ(finite_refusal(res, bad, finite_intercept, CUML_LINEAR_MODEL_OLS_QR),
-            "X: the qr solve gave a non-finite coefficient");
+  EXPECT_EQ(
+      finite_refusal(res, bad, finite_intercept, CUML_LINEAR_MODEL_OLS_QR),
+      "X: the qr solve gave a non-finite coefficient");
 }
 
 TEST(FiniteSolution, ANonFiniteInterceptIsRefused) {
