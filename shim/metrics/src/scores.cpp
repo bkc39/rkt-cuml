@@ -202,20 +202,17 @@ int cuml_metrics_mean_squared_error(void* handle, const rr_view* y_true,
 
 int cuml_metrics_accuracy_score(void* handle, const rr_view* y_true,
                                 const rr_view* y_pred,
-                                const rr_view* sample_weight, double* correct,
-                                double* total) {
-  return guarded(
-      handle,
-      {{"y-true", y_true},
-       {"y-pred", y_pred},
-       {"sample-weight", sample_weight}},
-      [&](const raft::handle_t& h) {
-        double* const matched_into = raftrkt::require(correct, "correct");
-        double* const total_into = raftrkt::require(total, "total");
-        const matched found = accuracy(h, {y_true, y_pred, sample_weight});
-        *matched_into = found.correct;
-        *total_into = found.total;
-      });
+                                const rr_view* sample_weight, double* score) {
+  return guarded(handle,
+                 {{"y-true", y_true},
+                  {"y-pred", y_pred},
+                  {"sample-weight", sample_weight}},
+                 [&](const raft::handle_t& h) {
+                   double* const into = raftrkt::require(score, "score");
+                   const matched found =
+                       accuracy(h, {y_true, y_pred, sample_weight});
+                   *into = found.correct / found.total;
+                 });
 }
 
 CUMLRKT_JOB(cuml_metrics_r2_score)

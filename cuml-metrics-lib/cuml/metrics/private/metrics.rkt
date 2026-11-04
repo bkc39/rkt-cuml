@@ -123,6 +123,4 @@
                             y-pred
                             #:sample-weight [sample-weight #f]
                             #:resources [resources (current-device-resources)])
-  (define-values (correct total)
-    (cuml-metrics-accuracy-score-job who resources y-true y-pred sample-weight))
-  (/ correct total))
+  (cuml-metrics-accuracy-score-job who resources y-true y-pred sample-weight))

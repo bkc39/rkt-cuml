@@ -33,13 +33,13 @@ constexpr double huge_value = 0x1p600;
 constexpr double big_value = 1e200;
 constexpr double cancelled_value = 0x1p540;
 constexpr double dropped_value = 0x1p1000;
+constexpr double top_value = 1e300;
+constexpr double tiny_value = 1e-30;
 constexpr double half = 0.5;
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr float inf_float = std::numeric_limits<float>::infinity();
 constexpr std::size_t thirds = 7;
 constexpr double weighted_accuracy = 0.75;
-constexpr double scaled_correct = 1.5;
-constexpr double scaled_total = 2.0;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 
 struct refusal {
@@ -80,12 +80,6 @@ rr_view strided(const device_array& a) {
 struct scored {
   int status;
   double value;
-};
-
-struct accuracy_outputs {
-  double correct;
-  double total;
-  std::string status;
 };
 
 template <typename T, typename P = T>
@@ -272,8 +266,6 @@ TEST(ScoreRefusals, NameTheArgument) {
   const filled<double> nan_y(res, {1, nan, 3, 4}, {n});
   const filled<float> inf_p(res, {1, 2, 3, inf_float}, {n});
   double score = 0;
-  double correct = 0;
-  double total = 0;
   const entry r2_call = [&](const rr_view* t, const rr_view* q,
                             const rr_view* w) {
     return cuml_metrics_r2_score(res.handle, t, q, w, &score);
@@ -284,7 +276,7 @@ TEST(ScoreRefusals, NameTheArgument) {
   };
   const entry accuracy_call = [&](const rr_view* t, const rr_view* q,
                                   const rr_view* w) {
-    return cuml_metrics_accuracy_score(res.handle, t, q, w, &correct, &total);
+    return cuml_metrics_accuracy_score(res.handle, t, q, w, &score);
   };
   for (const entry& call : {r2_call, mse_call}) {
     expect_refusals(float_rows(call, s));
@@ -313,14 +305,9 @@ TEST(ScoreRefusals, NameTheArgument) {
        "error is NULL"},
       {[&] {
          return cuml_metrics_accuracy_score(res.handle, a.view(), b.view(),
-                                            nullptr, nullptr, &total);
+                                            nullptr, nullptr);
        },
-       "correct is NULL"},
-      {[&] {
-         return cuml_metrics_accuracy_score(res.handle, a.view(), b.view(),
-                                            nullptr, &correct, nullptr);
-       },
-       "total is NULL"},
+       "score is NULL"},
   });
 }
 
@@ -451,33 +438,30 @@ TEST(Scores, PowerOfTwoScalingIsExactInFloat32) {
   }
 }
 
-accuracy_outputs accuracy(const resources& res, const rr_view* weights) {
+scored accuracy(const resources& res, const rr_view* weights) {
   const filled<int32_t> a(res, {0, 1, 2, 3}, {n});
   const filled<int64_t> b(res, {0, 2, 1, 3}, {n});
-  accuracy_outputs found{-1, -1, ""};
-  found.status = outcome(cuml_metrics_accuracy_score(
-      res.handle, a.view(), b.view(), weights, &found.correct, &found.total));
-  return found;
+  double score = -1;
+  const int status = cuml_metrics_accuracy_score(res.handle, a.view(), b.view(),
+                                                 weights, &score);
+  return {status, score};
 }
 
-TEST(Scores, AccuracyReturnsTheMatchCountAndN) {
+TEST(Scores, AccuracyIsTheMatchCountOverN) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const accuracy_outputs found = accuracy(res, nullptr);
-  ASSERT_EQ(found.status, "accepted");
-  EXPECT_EQ(found.correct, 2.0);
-  EXPECT_EQ(found.total, 4.0);
+  const scored found = accuracy(res, nullptr);
+  ASSERT_EQ(outcome(found.status), "accepted");
+  EXPECT_EQ(found.value, half);
 }
 
-TEST(Scores, WeightedAccuracyReturnsTheScaledMatchedWeightAndTotal) {
+TEST(Scores, WeightedAccuracyIsTheMatchedWeightOverTheWeightSum) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const filled<double> w(res, {1, 1, 1, 5}, {n});
-  const accuracy_outputs found = accuracy(res, w.view());
-  ASSERT_EQ(found.status, "accepted");
-  EXPECT_EQ(found.correct, scaled_correct);
-  EXPECT_EQ(found.total, scaled_total);
-  EXPECT_EQ(found.correct / found.total, weighted_accuracy);
+  const scored found = accuracy(res, w.view());
+  ASSERT_EQ(outcome(found.status), "accepted");
+  EXPECT_EQ(found.value, weighted_accuracy);
 }
 
 TEST(Scores, SmallResidualsBesideLargeValuesKeepTheirBits) {
@@ -487,6 +471,9 @@ TEST(Scores, SmallResidualsBesideLargeValuesKeepTheirBits) {
     const scored error = mse<double, double>(res, {big, 1}, {big, 2});
     EXPECT_EQ(error.value, half) << big;
   }
+  const scored tiny_error =
+      mse<double, double>(res, {top_value, 0}, {top_value, tiny_value});
+  EXPECT_EQ(tiny_error.value, tiny_value * tiny_value / 2);
 }
 
 TEST(Scores, ALargeValueBehindAZeroWeightChangesNothing) {
