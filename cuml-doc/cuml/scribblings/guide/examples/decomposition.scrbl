@@ -61,7 +61,10 @@ eleven held:
 
 @examples[#:eval ev #:label #f
 (define plane (pca-fit scaled #:n-components 2))
-(~> (pca-transform plane scaled) (pca-inverse-transform plane _) (mean-squared-error scaled _) rounded)
+(~> (pca-transform plane scaled)
+    (pca-inverse-transform plane _)
+    (mean-squared-error scaled _)
+    rounded)
 ]
 
 The mean squared error, 0.446, is the variance left out: 1 − 0.554.

@@ -14,7 +14,7 @@
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true)
-         (only-in raft list*->device-matrix list->device-vector)
+         (only-in raft list*->device-matrix)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
@@ -33,29 +33,34 @@
                   pool-sample
                   sample-bytes
                   sample-used
-                  test-process-memory))
+                  test-process-memory)
+         (only-in "private/scores-data.rkt" vec))
 
 (define rounds 300)
 (define sample-every 100)
 (define refusals-per-sample 20)
 (define buffers-per-round 4)
 
+(struct inputs (truth found S ys X E y p S64 w))
+
 (define (data)
   (define-values (truth found) (label-pair 2000 6 9 3))
   (define-values (X E) (projection 300 10 2))
-  (define-values (y p w) (regression-pair 2000 10.0 0.5 4 #:dtype 'float32 #:weighted? #t))
-  (list (labels-of truth 'int32)
-        (labels-of found 'int64)
-        (overlap 'float32 #:each 100)
-        (labels-of (overlap-labels #:each 100) 'int32)
-        X
-        E
-        (list->device-vector y #:dtype 'float32)
-        (list->device-vector p #:dtype 'float64)
-        (overlap 'float64 #:each 100)
-        (list->device-vector w #:dtype 'float64)))
+  (define-values (y p w)
+    (regression-pair 2000 #:offset 10.0 #:noise 0.5 #:seed 4 #:dtype 'float32 #:weighted? #t))
+  (inputs (labels-of truth 'int32)
+          (labels-of found 'int64)
+          (overlap 'float32 #:each 100)
+          (labels-of (overlap-labels #:each 100) 'int32)
+          X
+          E
+          (vec y 'float32)
+          (vec p 'float64)
+          (overlap 'float64 #:each 100)
+          (vec w 'float64)))
 
-(define (one-round truth found S ys X E y p S64 w)
+(define (one-round in)
+  (match-define (inputs truth found S ys X E y p S64 w) in)
   (contingency-matrix truth found)
   (adjusted-rand-score truth found)
   (silhouette-score S ys)
@@ -65,10 +70,11 @@
   (mean-squared-error S S64)
   (accuracy-score truth found #:sample-weight w))
 
-(define (refusals truth S ys X y)
+(define (refusals in)
+  (match-define (inputs truth _ S ys X _ y _ _ _) in)
   (define short (labels-of '(0 1 2) 'int32))
-  (define short-values (labels-of '(1 2 3) 'float64))
-  (define no-weight (labels-of (make-list 2000 0) 'float64))
+  (define short-values (vec '(1 2 3) 'float64))
+  (define zero-weights (vec (make-list 2000 0) 'float64))
   (define many (labels-of (range 46341) 'int32))
   (define flat (labels-of (make-list 46341 0) 'int32))
   (define one-label (labels-of (make-list 400 3) 'int32))
@@ -95,7 +101,7 @@
    (list "mean-squared-error: y-true: row 0, column 0: expected a finite value, got nan"
          (lambda () (mean-squared-error nan-rows nan-rows)))
    (list "accuracy-score: sample-weight: expected a positive sum, got 0"
-         (lambda () (accuracy-score truth truth #:sample-weight no-weight)))))
+         (lambda () (accuracy-score truth truth #:sample-weight zero-weights)))))
 
 (define (refuse-all calls)
   (for* ([call (in-list calls)]
@@ -105,10 +111,10 @@
 
 (test-process-memory (format "~a rounds of the metrics free every output and leave device memory flat"
                              rounds)
-  (match-define (list truth found S ys X E y p S64 w) (data))
-  (define calls (refusals truth S ys X y))
+  (define in (data))
+  (define calls (refusals in))
   (for ([_ (in-range 5)])
-    (one-round truth found S ys X E y p S64 w)
+    (one-round in)
     (refuse-all calls))
   (define failures (settled-count release-failure-count))
   (match-define (list base-used base-bytes) (baseline-sample))
@@ -122,7 +128,7 @@
                #:result (values (reverse samples) (reverse refused-drops)))
               ([_ (in-range (quotient rounds sample-every))])
       (for ([_ (in-range sample-every)])
-        (one-round truth found S ys X E y p S64 w))
+        (one-round in))
       (define sample (pool-sample))
       (define before (settled-count buffer-drop-count))
       (refuse-all calls)
@@ -135,7 +141,7 @@
   (define wanted (* buffers-per-round rounds))
   (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
   (define freed (- (buffer-drop-count) drops))
-  (void/reference-sink truth found S ys X E y p S64 w calls)
+  (void/reference-sink in calls)
   (define used (map sample-used samples))
   (define growth (device-growth base-bytes samples))
   (printf

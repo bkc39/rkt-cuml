@@ -21,11 +21,14 @@ matter, so @racket[-1] (noise) is a label like any other.
 @racket[contingency-matrix] and @racket[adjusted-rand-score] take at most
 46340 distinct values in each argument and use up to about 16·K@superscript{2}
 bytes of device memory for the larger count K.
+
 @racket[r2-score] and @racket[mean-squared-error] take @racket['float32] or
 @racket['float64] values, either one in each argument. Each score takes an
 optional @racket[sample-weight], a @racket['float32] or @racket['float64]
 vector of finite values of at least 0 with a positive sum, and sums in
-double precision. Repeated calls on the same data give the same result.
+double precision. A weight of at most 2@superscript{−1075}·2@superscript{e},
+where 2@superscript{e} is the largest weight rounded down to a power of two,
+counts as zero: its sample is dropped. Repeated calls on the same data give the same result.
 
 @defstruct*[contingency-table ([counts device-matrix?]
                                [row-labels device-vector?]
@@ -141,10 +144,10 @@ weight, as with one sample, the score is 1.0 if @racket[y-pred] equals it
 there and 0.0 otherwise; sklearn returns NaN for one sample and decides
 constancy from the rounded variance. Every value must be finite.
 @examples[#:eval ev
-(define y (list->device-vector '(3 -0.5 2 7) #:dtype 'float64))
-(define p (list->device-vector '(2.5 0.0 2 8) #:dtype 'float64))
-(r2-score y p)
-(r2-score y y)
+(define observed (list->device-vector '(3 -0.5 2 7) #:dtype 'float64))
+(define fitted (list->device-vector '(2.5 0.0 2 8) #:dtype 'float64))
+(r2-score observed fitted)
+(r2-score observed observed)
 (r2-score (list->device-vector '(2 2 2) #:dtype 'float32)
           (list->device-vector '(2 2 3) #:dtype 'float32))]}
 
@@ -158,10 +161,10 @@ row-major matrices of one shape with one row per sample, whose error is the
 mean over the columns. Every value must be finite. The root mean squared
 error is its @racket[sqrt].
 @examples[#:eval ev
-(mean-squared-error y p)
+(mean-squared-error observed fitted)
 (mean-squared-error (list*->device-matrix '((0.5 1) (-1 1) (7 -6)) #:dtype 'float64)
                     (list*->device-matrix '((0 2) (-1 2) (8 -5)) #:dtype 'float64))
-(sqrt (mean-squared-error y p))]}
+(sqrt (mean-squared-error observed fitted))]}
 
 @defproc[(accuracy-score [y-true device-vector?]
                          [y-pred device-vector?]
@@ -173,8 +176,8 @@ the one in @racket[y-true]: @racket['int32] or @racket['int64] vectors of
 one length, compared by value. Without weights it is the number of
 matches over n, correctly rounded.
 @examples[#:eval ev
-(define truth (list->device-vector '(0 1 2 3) #:dtype 'int32))
+(define actual (list->device-vector '(0 1 2 3) #:dtype 'int32))
 (define guess (list->device-vector '(0 2 1 3) #:dtype 'int64))
-(accuracy-score truth guess)
-(accuracy-score truth guess
+(accuracy-score actual guess)
+(accuracy-score actual guess
                 #:sample-weight (list->device-vector '(1 1 1 5) #:dtype 'float64))]}

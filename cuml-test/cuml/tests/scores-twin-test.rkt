@@ -1,13 +1,15 @@
 #lang racket/base
 
 (require (only-in cuml/metrics mean-squared-error r2-score)
+         (only-in cuml/metrics/private/native libcuml-version)
          (only-in racket/list take)
          (only-in racket/match match-define)
-         (only-in rackunit check-true test-case)
+         (only-in rackunit check-equal? check-true test-case)
          (only-in "private/metrics-data.rkt" regression-cases regression-pair)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows-of)
-         (only-in "private/scores-twin-data.rkt" case-of on twin-results weights-of))
+         (only-in "private/scores-data.rkt" on weights-of)
+         (only-in "private/scores-twin-data.rkt" case-of twin-results))
 
 (define (vector-cases)
   (for/list ([c (in-list (regression-cases))])
@@ -21,9 +23,9 @@
     (define n 200)
     (define-values (y p w)
       (regression-pair (* n d)
-                       (* 100.0 i)
-                       0.5
-                       (+ 9600 i)
+                       #:offset (* 100.0 i)
+                       #:noise 0.5
+                       #:seed (+ 9600 i)
                        #:dtype dt
                        #:weighted? (odd? (quotient i 2))))
     (list (format "matrix ~a ~a ~ax~a" i dt n d) dt (rows-of y d) (rows-of p d) (and w (take w n)))))
@@ -37,14 +39,16 @@
 (test-twin "T1, T2: r2 and the error agree with sklearn on the float64 cast and Python cuML on the dtype"
   (define vectors (vector-cases))
   (define matrices (matrix-cases))
-  (define r2-results
+  (define-values (r2-results r2-version)
     (twin-results (for/list ([c (in-list vectors)])
                     (match-define (list _ dt y p w) c)
-                    (case-of "r2" y p w dt))))
-  (define mse-results
+                    (case-of "r2" y p w #:dtype dt))))
+  (define-values (mse-results mse-version)
     (twin-results (for/list ([c (in-list (append vectors matrices))])
                     (match-define (list _ dt y p w) c)
-                    (case-of "mse" y p w dt))))
+                    (case-of "mse" y p w #:dtype dt))))
+  (check-equal? r2-version libcuml-version "T5")
+  (check-equal? mse-version libcuml-version "T5")
   (define (check-against score cases results gap cuml-bound)
     (for/fold ([worst (hash)])
               ([c (in-list cases)]

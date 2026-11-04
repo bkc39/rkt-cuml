@@ -6,7 +6,8 @@
          (only-in racket/math exact-floor pi sqr)
          (only-in raft list*->device-matrix list->device-vector)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "scaler-data.rkt" rows-of))
+         (only-in "scaler-data.rkt" rows-of)
+         (only-in threading ~>))
 
 (provide bijection
          choose2
@@ -248,7 +249,12 @@
   (for/list ([i (in-list order)])
     (vector-ref v i)))
 
-(define (regression-pair n offset noise seed #:dtype [dt 'float64] #:weighted? [weighted? #f])
+(define (regression-pair n
+                         #:offset offset
+                         #:noise noise
+                         #:seed seed
+                         #:dtype [dt 'float64]
+                         #:weighted? [weighted? #f])
   (define normal (normal-source seed))
   (define uniform (uniform-source (+ seed 7919)))
   (define narrow (if (eq? dt 'float32) flsingle values))
@@ -264,16 +270,23 @@
                (for/list ([_ (in-range n)])
                  (* 3.0 (uniform))))))
 
+(define (log-uniform u lo hi)
+  (~> (- (log hi) (log lo)) (* u) (+ (log lo)) exp))
+
 (define (regression-cases)
   (define next (uniform-source 86))
-  (for/list ([i (in-range 120)])
-    (define n (exact-floor (exp (+ (log 2) (* (next) (- (log 4000) (log 2)))))))
+  (for/list ([i (in-range 120)]
+             [offset (in-cycle '(0.0 1e3 1e4))]
+             [noise (in-cycle (for*/list ([s (in-list '(1e-3 0.1 1.0 10.0))]
+                                          [_ (in-range 3)])
+                                s))])
+    (define n (exact-floor (log-uniform (next) 2 4000)))
     (define dt (if (even? (quotient i 12)) 'float32 'float64))
     (define-values (y p w)
       (regression-pair (max n 2)
-                       (list-ref '(0.0 1e3 1e4) (modulo i 3))
-                       (list-ref '(1e-3 0.1 1.0 10.0) (modulo (quotient i 3) 4))
-                       (+ 8600 i)
+                       #:offset offset
+                       #:noise noise
+                       #:seed (+ 8600 i)
                        #:dtype dt
                        #:weighted? (odd? (quotient i 24))))
     (list i dt y p w)))

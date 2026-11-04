@@ -1013,7 +1013,19 @@ Follow-ups are GitHub issues.
 - **L0-d.** Mixed float32/float64 arguments are accepted, as the labels
   accept int32 with int64.
 - **L0-e.** Negative weights are refused.
-- **L0-f.** No magnitude refusal: values and weights are prescaled by powers
-  of two, so r2 is exactly scale-invariant and the error is `+inf.0` only
-  past the flonum range.
+- **L0-f.** No magnitude refusal. Every scaling is by a power of two, so r2
+  is exactly scale-invariant and the error is `+inf.0` only past the flonum
+  range. Weights are divided by 2^e_w, e_w = ilogb(max w); a sample is
+  positive when its scaled weight is (a weight at most 2^(e_w − 1075)
+  counts as zero). Over the positive samples only: values are divided by
+  2^e, e = ilogb(max |y|, |ŷ|), so differences cannot overflow; each
+  residual s·y − s·ŷ is divided again by 2^e_r, e_r = ilogb(max |s·y −
+  s·ŷ|), and for r2 each deviation s·y − ȳ by 2^e_d, e_d = ilogb(max |s·y −
+  ȳ|), before squaring. MSE = ldexp(R′/(d·W′), 2(e + e_r)); r2 = 1 −
+  ldexp(R′/D′, 2(e_r − e_d)). The largest term of each rescaled sum is its
+  scaled weight times a square in [1, 4), so D′ > 0 whenever y-true varies
+  over the positive samples and no exact-zero shortcut is needed: R′ = 0
+  gives exactly 1.0. Zero-weight samples never
+  enter a maximum or a sum, so a large value behind a zero weight changes
+  nothing, and a small residual next to a large value keeps its bits.
 - **L0-g.** The Decomposition chapter gains its Reconstruction section.
