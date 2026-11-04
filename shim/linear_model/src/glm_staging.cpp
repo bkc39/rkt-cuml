@@ -98,11 +98,20 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     return unit_exponent(mode == exponents::uniform ? widest : m);
   });
   s.y_exponent = unit_exponent(largest_counted(y, x.n, w, stream));
-  s.weight_exponent =
-      w == nullptr
-          ? 0
-          : even_floor(unit_exponent(largest_counted(w, x.n, w, stream)));
   return s;
+}
+
+template <typename T>
+buffer<T> staged_weights(const raft::handle_t& handle, const T* w, int64_t n) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  buffer<T> staged = scratch<T>(w == nullptr ? 0 : n, stream);
+  if (w != nullptr) {
+    const int exponent =
+        even_floor(unit_exponent(largest_counted(w, n, w, stream)));
+    stage_elements(handle, w, w, row_selection{nullptr, n}, exponent,
+                   staged.data());
+  }
+  return staged;
 }
 
 template <typename T>
@@ -119,7 +128,7 @@ void stage_targets(const raft::handle_t& handle, const T* y, const T* w,
                    T* staged_w) {
   stage_elements(handle, y, w, rows, s.y_exponent, staged_y);
   if (w != nullptr) {
-    stage_elements(handle, w, w, rows, s.weight_exponent, staged_w);
+    stage_elements(handle, w, w, rows, 0, staged_w);
   }
 }
 
@@ -161,8 +170,9 @@ double residual_cosine(const raft::handle_t& handle,
       residual_moments(handle, x, y, w, columns.view(), coef,
                        static_cast<double>(intercept), fit_intercept);
   double worst = 0;
-  for (const moment& m : terms.moments) {
-    if (m.square == 0) {
+  for (size_t k = 0; k < terms.moments.size(); ++k) {
+    const moment& m = terms.moments[k];
+    if (terms.largest[k] == 0) {
       continue;
     }
     const double g = std::fabs(m.cross) / (std::sqrt(m.square) * terms.y_norm);
@@ -175,6 +185,10 @@ template bool constant_vector<float>(const raft::handle_t&, const float*,
                                      int64_t, const float*, bool);
 template bool constant_vector<double>(const raft::handle_t&, const double*,
                                       int64_t, const double*, bool);
+template buffer<float> staged_weights<float>(const raft::handle_t&,
+                                            const float*, int64_t);
+template buffer<double> staged_weights<double>(const raft::handle_t&,
+                                              const double*, int64_t);
 template staging plan_staging<float>(const raft::handle_t&,
                                      const matrix<float, int64_t>&,
                                      const float*, const float*, bool,

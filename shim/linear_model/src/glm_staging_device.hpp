@@ -17,6 +17,7 @@ struct moment {
 
 struct residual_terms {
   std::vector<moment> moments;
+  std::vector<double> largest;
   double y_norm;
 };
 

@@ -13,6 +13,7 @@
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
 #include "fit_checks.hpp"
+#include "glm_staging_device.hpp"
 #include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
 
@@ -25,7 +26,9 @@ using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
 using cumlrkt::glm::require_finite_solution;
 using cumlrkt::glm::require_workspace;
+using cumlrkt::glm::staged_weights;
 using cumlrkt::glm::staging;
+using cumlrkt::glm::to_host;
 using cumlrkt::glm::unstage_coef;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
@@ -122,13 +125,32 @@ TEST(PlanStaging, ColumnAndTargetExponentsIgnoreZeroWeightRows) {
   EXPECT_EQ(s.y_exponent, -2);
 }
 
-TEST(PlanStaging, WeightExponentIsEven) {
+std::vector<double> weights_after_staging(const resources& res,
+                                          const filled<double>& w) {
+  const raft::handle_t& h = handle_of(res);
+  return to_host(staged_weights(h, data_of(w), 4),
+                 raft::resource::get_cuda_stream(h));
+}
+
+TEST(StagedWeights, TakeAnEvenExponent) {
   CUMLRKT_REQUIRE_GPU();
-  const staging_case c;
-  const filled<double> w(c.res, {0.375, 3.0, 0.0, 1.0}, {4});
-  EXPECT_EQ(c.planned(data_of(w), exponents::per_column).weight_exponent, -2);
-  const filled<double> w2(c.res, {0.375, 0.75, 0.0, 1.0}, {4});
-  EXPECT_EQ(c.planned(data_of(w2), exponents::per_column).weight_exponent, 0);
+  const resources res;
+  const filled<double> w(res, {0.375, 3.0, 0.0, 1.0}, {4});
+  const std::vector<double> quartered{0.09375, 0.75, 0.0, 0.25};
+  EXPECT_EQ(weights_after_staging(res, w), quartered);
+  const filled<double> w2(res, {0.375, 0.75, 0.0, 1.0}, {4});
+  const std::vector<double> unchanged{0.375, 0.75, 0.0, 1.0};
+  EXPECT_EQ(weights_after_staging(res, w2), unchanged);
+}
+
+TEST(StagedWeights, AtMostTheCutoffBecomeZero) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const double cutoff = std::ldexp(1.0, -1073);
+  const double least = std::numeric_limits<double>::denorm_min();
+  const filled<double> w(res, {3.0, cutoff, cutoff + least, 1.0}, {4});
+  const std::vector<double> staged{0.75, 0.0, least, 0.25};
+  EXPECT_EQ(weights_after_staging(res, w), staged);
 }
 
 TEST(PlanStaging, UniformExponentIsSharedByEveryColumn) {
@@ -137,7 +159,6 @@ TEST(PlanStaging, UniformExponentIsSharedByEveryColumn) {
   const staging u =
       c.planned(static_cast<const double*>(nullptr), exponents::uniform);
   EXPECT_EQ(u.column_exponent, (std::vector<int>{-99, -99}));
-  EXPECT_EQ(u.weight_exponent, 0);
 }
 
 TEST(ConstantColumns, FollowTheInterceptRule) {
@@ -165,7 +186,7 @@ TEST(UnstageCoef, ZerosDroppedColumnsAndReportsTheFirstOverflow) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const raft::handle_t& h = handle_of(res);
-  staging s{{3, 0, -2, 1}, 1, 0, {0, 2, 3}};
+  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}};
   const filled<float> staged(res, {1.5F, -2.0F, 4.0F}, {3});
   filled<float> coef(res, {poison, poison, poison, poison}, {4});
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,

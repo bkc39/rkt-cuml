@@ -86,9 +86,9 @@
                   [i (in-naturals)])
          (if (memv i gone) 0 v)))
      (when (> (length y) 101)
-       (check-law "T6"
-                  (fit-gap (fit X y zeroed dt a fi) (fit (kept X) (kept y) (kept w) dt a fi))
-                  (* 32 u kappa (fit-size fitted))))
+       (check-true (bits-equal? (fit-of X y zeroed dt #:algorithm a #:fit-intercept fi)
+                                (fit-of (kept X) (kept y) (kept w) dt #:algorithm a #:fit-intercept fi))
+                   "T6: a zero weight is a deleted row"))
      (check-law "T7"
                 (fit-gap (fit X y (map (lambda (v) (* 3 v)) w) dt a fi) (fit X y w dt a fi))
                 (* 32 u kappa (fit-size fitted)))
@@ -125,6 +125,11 @@
        (define lifted (fit X (map (lambda (v) (+ v 5)) y) w dt a fi))
        (check-law "T11" (fit-gap lifted (list coef (+ b 5))) (* 8 u kappa (max (max-abs y) 5)))))))
 
+(define (predicted-by f X)
+  (match-define (list coef b) (exact-fit f))
+  (for/list ([row (in-list X)])
+    (+ b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj)))))
+
 (define (wide-case)
   (normal-case 12 30 6))
 
@@ -147,12 +152,9 @@
       (check-law "T13 float64"
                  (gap f64 c*)
                  (* 64 (unit-roundoff 'float64) kappa (max 1 (max-abs c*))))
-      (match-define (list coef b) (fit X y #f 'float32 a #t))
-      (define residual
-        (for/list ([row (in-list X)]
-                   [yi (in-list y)])
-          (- (+ b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))) yi)))
-      (check-law "T13 float32" (max-abs residual) (* (expt 2 -12) (max-abs y))))))
+      (check-law "T13 float32"
+                 (max-abs (map - (predicted-by (fit X y #f 'float32 a #t) X) y))
+                 (* (expt 2 -12) (max-abs y))))))
 
 (test-gpu "the prescale reaches columns, X and y far from 1"
   (define base (normal-case 200 7 0 #:weighted? #t))
@@ -196,9 +198,13 @@
          [a (in-list algorithms)])
     (test-case (format "~a ~a ~a" name dt a)
       (define fitted (fit-of X y ones dt #:algorithm a #:fit-intercept fi))
-      (check-law "minimum norm"
-                 (fit-gap fitted (list c* b*))
-                 (* 64 (unit-roundoff dt) (fit-size (list c* b*))))
+      (if (and fi (eq? dt 'float32))
+          (check-law "interpolation"
+                     (max-abs (map - (predicted-by fitted X) y))
+                     (* (expt 2 -12) (max-abs y)))
+          (check-law "minimum norm"
+                     (fit-gap fitted (list c* b*))
+                     (* 64 (unit-roundoff dt) (fit-size (list c* b*)))))
       (check-true (bits-equal? (fit-of padded-X padded-y padded-w dt #:algorithm a #:fit-intercept fi)
                                fitted)
                   "zero-weight rows are deleted rows"))))
@@ -219,3 +225,29 @@
       (check-equal? underflowed 0.0)
       (check-law "coef" (gap (map inexact->exact coef) c*) (* 64 (unit-roundoff dt) (max-abs c*)))
       (check-law "intercept" (abs (- (inexact->exact b) b*)) (* 8 (unit-roundoff dt) 2)))))
+
+(define (vanishing-fixtures big tiny)
+  (list (list "square" '((0 0) (1 0) (0 1)) '(1 2 4) (list big tiny tiny) #t)
+        (list "tall, nothing left to solve"
+              '((0 0) (0 0) (1 0) (0 1) (2 0) (0 2))
+              '(1 1 2 4 3 7)
+              (list big big tiny tiny tiny tiny)
+              #t)
+        (list "tall, solved"
+              '((0 0) (1 0) (0 1) (1 1) (2 0) (0 2))
+              '(1 2 4 6 3 7)
+              (list big big big big tiny tiny)
+              #t)
+        (list "no intercept" '((1 0) (1 1) (2 1)) '(1 3 4) (list big tiny tiny) #f)))
+
+(test-gpu "a positive weight that stages to 0 deletes its row"
+  (for* ([dt (in-list dtypes)]
+         #:do [(define-values (big tiny)
+                 (if (eq? dt 'float32) (values 1e30 1e-20) (values 1e300 1e-30)))]
+         [fixture (in-list (vanishing-fixtures big tiny))]
+         #:do [(match-define (list name X y w fi) fixture)
+               (define zeroed (map (lambda (v) (if (= v tiny) 0 v)) w))]
+         [a (in-list algorithms)])
+    (test-case (format "~a ~a ~a" name dt a)
+      (check-true (bits-equal? (fit-of X y w dt #:algorithm a #:fit-intercept fi)
+                               (fit-of X y zeroed dt #:algorithm a #:fit-intercept fi))))))

@@ -42,7 +42,11 @@ Fits ordinary least squares to @racket[y] on the columns of @racket[X], a
 row-major @racket['float32] or @racket['float64] matrix of finite values with
 at least two rows. @racket[y] and @racket[sample-weight] are vectors of
 @racket[X]'s dtype with one finite element per row; weights are at least 0
-with a positive sum, and a zero weight deletes its row. @racket['auto] and
+with a positive sum, and a zero weight deletes its row. A weight of at most
+2@superscript{−150}·4@superscript{k} in float32, or
+2@superscript{−1075}·4@superscript{k} in float64, where 4@superscript{k} is
+the largest weight rounded down to a power of two and then up to a power of
+4, counts as zero. @racket['auto] and
 @racket['eig] solve the normal equations, @racket['svd] and
 @racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation and
 @racket['svd-qr] a QR-based SVD. Each column, @racket[y] and the weights are
@@ -54,7 +58,7 @@ Jacobi SVD. With more columns left than rows of positive weight, less one
 for @racket[fit-intercept], every column takes the same power and the Jacobi
 SVD solves: the fit is the minimum-norm solution in float64, and in float32
 without @racket[fit-intercept]; in float32 with it, the fit interpolates
-@racket[y] but need not be minimum-norm. A solve that is not a
+@racket[y] but generally is not minimum-norm. A solve that is not a
 least-squares solution, as with collinear columns in float32, is refused;
 @racket['qr] or float64 often fits. With weights and an intercept, fits above
 a few thousand rows can differ in the last bits between runs, as in Python

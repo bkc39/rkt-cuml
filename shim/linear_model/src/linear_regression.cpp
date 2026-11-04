@@ -155,7 +155,10 @@ fit_plan plan_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
 template <typename T>
 double fit_into(const raft::handle_t& handle, const fit_request& request,
                 rr_deposit* out) {
-  const fit_inputs<T> in = checked_inputs<T>(handle, request);
+  const fit_inputs<T> checked = checked_inputs<T>(handle, request);
+  const buffer<T> weights = staged_weights(handle, checked.w, checked.x.n);
+  const fit_inputs<T> in{checked.x, checked.y,
+                         checked.w == nullptr ? nullptr : weights.data()};
   const fit_plan plan = plan_fit(handle, in, request);
   const bool constant_y =
       constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);

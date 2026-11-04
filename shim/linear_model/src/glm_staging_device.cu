@@ -13,6 +13,7 @@
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/exec_policy.hpp>
+#include <utility>
 #include <vector>
 
 #include "cumlrkt/device.cuh"
@@ -217,7 +218,7 @@ struct residual_of {
 };
 
 template <typename T>
-struct column_weighted {
+struct staged_magnitude {
   const T* x;
   const T* w;
   staged_columns columns;
@@ -227,9 +228,35 @@ struct column_weighted {
     if (!counted(w, i)) {
       return 0.0;
     }
-    return weight(w, i) *
-           static_cast<double>(
-               scaled(x[(i * d) + columns.kept[k]], columns.exponent[k]));
+    return fabs(static_cast<double>(
+        scaled(x[(i * d) + columns.kept[k]], columns.exponent[k])));
+  }
+};
+
+template <typename T>
+struct normalised_column {
+  const T* x;
+  staged_columns columns;
+  const int* norm;
+  int64_t d;
+
+  __device__ double operator()(int64_t i, int64_t k) const {
+    return scalbn(static_cast<double>(scaled(x[(i * d) + columns.kept[k]],
+                                             columns.exponent[k])),
+                  norm[k]);
+  }
+};
+
+template <typename T>
+struct column_weighted {
+  normalised_column<T> v;
+  const T* w;
+
+  __device__ double operator()(int64_t i, int64_t k) const {
+    if (!counted(w, i)) {
+      return 0.0;
+    }
+    return weight(w, i) * v(i, k);
   }
 };
 
@@ -241,22 +268,18 @@ struct add_moments {
 
 template <typename T>
 struct column_moments {
-  const T* x;
+  normalised_column<T> v;
   const T* w;
-  staged_columns columns;
   const double* mean;
   const double* r;
-  int64_t d;
 
   __device__ moment operator()(int64_t i, int64_t k) const {
     if (!counted(w, i)) {
       return {0.0, 0.0};
     }
-    const double v = static_cast<double>(scaled(x[(i * d) + columns.kept[k]],
-                                                columns.exponent[k])) -
-                     mean[k];
-    const double wv = weight(w, i) * v;
-    return {wv * v, wv * r[i]};
+    const double c = v(i, k) - mean[k];
+    const double wc = weight(w, i) * c;
+    return {wc * c, wc * r[i]};
   }
 };
 
@@ -376,22 +399,30 @@ residual_terms residual_moments(const raft::handle_t& handle,
   buffer<double> r = scratch<double>(x.n, stream);
   each(handle, x.n,
        residual_of<T>{x.data, y, columns, coef, intercept, x.d, r.data()});
+  std::vector<double> largest = column_totals<double>(
+      stream, x.n, columns.count, staged_magnitude<T>{x.data, w, columns, x.d},
+      larger{});
+  std::vector<int> norm(largest.size());
+  std::ranges::transform(largest, norm.begin(),
+                         [](double m) { return unit_exponent(m); });
+  const buffer<int> norms = to_device(norm, stream);
+  const normalised_column<T> v{x.data, columns, norms.data(), x.d};
   std::vector<double> mean(columns.count, 0.0);
   double y_mean = 0;
   if (fit_intercept) {
     const double weights = total(stream, x.n, weight_of<T>{w});
-    const std::vector<double> sums = column_totals<double>(
-        stream, x.n, columns.count, column_weighted<T>{x.data, w, columns, x.d},
-        thrust::plus<double>{});
+    const std::vector<double> sums =
+        column_totals<double>(stream, x.n, columns.count,
+                              column_weighted<T>{v, w}, thrust::plus<double>{});
     std::ranges::transform(sums, mean.begin(),
-                           [&](double v) { return v / weights; });
+                           [&](double s) { return s / weights; });
     y_mean = total(stream, x.n, weighted_value<T>{y, w}) / weights;
   }
   const buffer<double> means = to_device(mean, stream);
-  return {column_totals<moment>(stream, x.n, columns.count,
-                                column_moments<T>{x.data, w, columns,
-                                                  means.data(), r.data(), x.d},
-                                add_moments{}),
+  return {column_totals<moment>(
+              stream, x.n, columns.count,
+              column_moments<T>{v, w, means.data(), r.data()}, add_moments{}),
+          std::move(largest),
           std::sqrt(total(stream, x.n, centred_square<T>{y, w, y_mean}))};
 }
 

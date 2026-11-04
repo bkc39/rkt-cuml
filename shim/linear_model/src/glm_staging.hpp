@@ -15,7 +15,6 @@ enum class exponents { per_column, uniform };
 struct staging {
   std::vector<int> column_exponent;
   int y_exponent;
-  int weight_exponent;
   std::vector<int64_t> kept;
 };
 
@@ -34,6 +33,9 @@ int even_floor(int x);
 int64_t ols_workspace(int algorithm, ols_shape shape, int64_t cusolver_lwork);
 
 std::string algorithm_name(int algorithm);
+
+template <typename T>
+buffer<T> staged_weights(const raft::handle_t& handle, const T* w, int64_t n);
 
 template <typename T>
 staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,

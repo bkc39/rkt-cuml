@@ -1040,7 +1040,12 @@ Follow-ups are GitHub issues.
   olsFit and the results scaled back (`shim/linear_model/src/glm_staging.cpp`,
   kernels in `glm_staging_device.cu`). Zero-weight rows are left out of the
   staged copy (when at least two rows have positive weight), so a zero weight
-  is a deleted row bitwise.
+  is a deleted row bitwise. The weights are staged first, divided by 4^k,
+  the least power of 4 at or above 2^ilogb(max w); a row counts as
+  positive when its staged weight is: a weight at most 2^−150·4^k (float32)
+  or 2^−1075·4^k (float64) counts as zero, as in L0-f. The positive-row count
+  m and the wide rule, compaction, the constancy and nothing-to-solve checks,
+  the exponent maxima and the residual check all read the staged weights.
 - **L1-c, wide rule (V1).** With m positive-weight rows, a fit is wide when the
   kept columns d' exceed m − 1 with an intercept, or m without one. A wide fit
   stages every kept column with one shared exponent (that of the largest kept
@@ -1055,10 +1060,13 @@ Follow-ups are GitHub issues.
   intercept) are dropped and get coefficient 0; with nothing left to solve, or
   a constant y, olsFit is not called.
 - **L1-e.** A fit whose residual cosine on the staged data (the centred,
-  weighted cosine between each kept staged column and the residual) exceeds
+  weighted cosine between each kept staged column and the residual, each
+  column first divided by the power of two of its largest staged magnitude over
+  the positive-weight rows, so its squares cannot underflow) exceeds
   2⁻⁸ (float32) or 2⁻¹⁸ (float64) is refused (V13). A kept column whose staged
-  values are all 0 (the shared exponent of a wide fit underflowed it) is skipped:
-  it cannot correlate with the residual, and its coefficient is 0. The check
+  values are 0 on every positive-weight row (the shared exponent of a wide fit
+  underflowed it) is skipped: it cannot correlate with the residual, and its
+  coefficient is 0; any other column whose cosine is not finite is refused. The check
   does not see the intercept: centring removes any constant error, so Σ w r = 0
   is left to cuML's closed form ȳ − x̄ᵀc. A check of |Σ w r| against
   √(Σ w)·‖ỹ_c‖ was not added because it refuses sound float32 fits whose y mean
