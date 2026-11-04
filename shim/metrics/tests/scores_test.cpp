@@ -30,10 +30,16 @@ constexpr double tenth = 0.1;
 constexpr double third = 1.0 / 3.0;
 constexpr double nudge = 1e-3;
 constexpr double huge_value = 0x1p600;
+constexpr double big_value = 1e200;
+constexpr double cancelled_value = 0x1p540;
+constexpr double dropped_value = 0x1p1000;
+constexpr double half = 0.5;
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr float inf_float = std::numeric_limits<float>::infinity();
 constexpr std::size_t thirds = 7;
 constexpr double weighted_accuracy = 0.75;
+constexpr double scaled_correct = 1.5;
+constexpr double scaled_total = 2.0;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 
 struct refusal {
@@ -330,7 +336,13 @@ TEST(ScoreRefusals, MatrixShapes) {
   const rr_view no_rows = shaped(s.doubles.view, {0, 2});
   const rr_view no_columns = shaped(s.doubles.view, {n, 0});
   const rr_view past = shaped(s.doubles.view, {past_index, 2});
+  const rr_view cube = shaped(s.doubles.view, {n, 2, 2});
+  const rr_view int_cube = shaped(s.ints.view, {n, 2, 2});
   expect_refusals({
+      {[&] { return call(&cube, &cube); },
+       "y-true: expected rank 1 or 2, got rank 3"},
+      {[&] { return call(&int_cube, &cube); },
+       "y-true: expected float32 or float64, got int32"},
       {[&] { return call(&col_major, p.view()); },
        "y-true: expected row-major, got col-major 4x2"},
       {[&] { return call(y.view(), &vector); },
@@ -449,7 +461,30 @@ TEST(Scores, AccuracyReturnsTheMatchedWeightAndTheTotal) {
   ASSERT_EQ(outcome(cuml_metrics_accuracy_score(res.handle, a.view(), b.view(),
                                                 w.view(), &correct, &total)),
             "accepted");
+  EXPECT_EQ(correct, scaled_correct);
+  EXPECT_EQ(total, scaled_total);
   EXPECT_EQ(correct / total, weighted_accuracy);
+}
+
+TEST(Scores, SmallResidualsBesideLargeValuesKeepTheirBits) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (const double big : {big_value, cancelled_value}) {
+    const scored error = mse<double, double>(res, {big, 1}, {big, 2});
+    EXPECT_EQ(error.value, half) << big;
+  }
+  const filled<double> y(res, {dropped_value, 1, 2}, {3});
+  const filled<double> p(res, {dropped_value, 1, 3}, {3});
+  const filled<double> w(res, {0, 1, 1}, {3});
+  double score = 0;
+  ASSERT_EQ(outcome(cuml_metrics_r2_score(res.handle, y.view(), p.view(),
+                                          w.view(), &score)),
+            "accepted");
+  EXPECT_EQ(score, -1.0);
+  ASSERT_EQ(outcome(cuml_metrics_mean_squared_error(
+                res.handle, y.view(), p.view(), w.view(), &score)),
+            "accepted");
+  EXPECT_EQ(score, half);
 }
 
 }  // namespace
