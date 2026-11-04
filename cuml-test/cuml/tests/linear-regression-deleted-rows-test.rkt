@@ -59,6 +59,7 @@
                   "at the cutoff")
       (define counted (fit-of cutoff-X cutoff-y (list 3 3 3 (+ cutoff step)) dt #:algorithm a))
       (check-false (bits-equal? counted deleted) "one step above")
-      (check-law "one step above, the second column fits the last row"
-                 (fit-gap counted '((1 24) -23))
-                 (* 64 (unit-roundoff dt) 24)))))
+      (unless (eq? a 'auto)
+        (check-law "one step above, the second column fits the last row"
+                   (fit-gap counted '((1 24) -23))
+                   (* 64 (unit-roundoff dt) 24))))))

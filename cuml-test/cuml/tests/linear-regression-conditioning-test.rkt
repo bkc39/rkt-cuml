@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/match match-define)
+         (only-in racket/math sqr)
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" uniform-source)
@@ -13,7 +14,6 @@
                   fit-of
                   fit-size
                   gap
-                  kappa-of
                   lcase
                   lcase-X
                   lcase-name
@@ -31,9 +31,6 @@
 (define (oracle-of c)
   (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) #t))
 
-(define (t1 dt kappa c*)
-  (* 128 (unit-roundoff dt) kappa kappa (max 1 (max-abs c*))))
-
 (define (offset-case dt offset b1)
   (define draw (uniform-source 3))
   (define X
@@ -47,17 +44,41 @@
                        #f)
                 dt))
 
+(define (offset-x-case offset)
+  (define draw (uniform-source 7))
+  (define xs
+    (for/list ([_ (in-range 200)])
+      (+ offset (inexact->exact (draw)))))
+  (rounded-case (lcase (format "x offset ~a" offset)
+                       (map list xs)
+                       (for/list ([x (in-list xs)])
+                         (+ 3 (* 2 (- x offset)) (* 1/100 (- (inexact->exact (draw)) 1/2))))
+                       #f)
+                'float64))
+
+(define (column-means c)
+  (define n (length (lcase-y c)))
+  (for/list ([col (in-list (apply map list (lcase-X c)))])
+    (define mean (/ (apply + col) n))
+    (list mean (sqrt (/ (for/sum ([x (in-list col)]) (sqr (- x mean))) n)))))
+
 (test-gpu "a column whose mean dwarfs its spread keeps its direction"
-  (for* ([fixture (in-list `((float64 1000000 ,(/ 1000000)) (float32 1000 1)))]
-         #:do [(match-define (list dt offset b1) fixture)
-               (define c (offset-case dt offset b1))
-               (match-define (solution c* b* _) (oracle-of c))
-               (define bound (t1 dt (kappa-of c #t) c*))]
+  (for* ([fixture (in-list (list (list 'float64 (offset-case 'float64 #e1e6 #e1e-6))
+                                 (list 'float32 (offset-case 'float32 1000 1))
+                                 (list 'float64 (offset-x-case #e1e11))))]
+         #:do [(match-define (list dt c) fixture)
+               (match-define (solution c* b* kappa) (oracle-of c))
+               (define u (unit-roundoff dt))
+               (define means (column-means c))
+               (define ratio (apply max (map (lambda (m) (/ (abs (car m)) (cadr m))) means)))
+               (define bound (* (+ (* 128 kappa kappa u) (* 16 (sqr (* u ratio)))) (max 1 (max-abs c*))))]
          [a (in-list algorithms)])
-    (test-case (format "~a offset ~a ~a" dt offset a)
+    (test-case (format "~a ~a ~a" dt (lcase-name c) a)
       (match-define (list coef b) (exact-fit (fit-case c dt a)))
-      (check-law "T1" (gap coef c*) bound)
-      (check-law "intercept, T1 times the column mean" (abs (- b b*)) (* bound (add1 offset))))))
+      (check-law "T1, plus the centring's second-order term" (gap coef c*) bound)
+      (check-law "intercept, the coef bound times the column mean"
+                 (abs (- b b*))
+                 (* bound (add1 (apply max (map (lambda (m) (abs (car m))) means))))))))
 
 (define low-weight-column
   (let ([t #e1e-12])
@@ -93,25 +114,13 @@
                        #f)
                 'float64))
 
-(define (offset-x-case offset)
-  (define draw (uniform-source 7))
-  (define xs
-    (for/list ([_ (in-range 200)])
-      (+ offset (inexact->exact (draw)))))
-  (rounded-case (lcase (format "x offset ~a" offset)
-                       (map list xs)
-                       (for/list ([x (in-list xs)])
-                         (+ 3 (* 2 (- x offset)) (* 1/100 (- (inexact->exact (draw)) 1/2))))
-                       #f)
-                'float64))
-
 (define near-constant-y
   (lcase "y = (1 1 1 1+2^-52)" '((0) (1) (2) (3)) (list 1 1 1 (+ 1 (expt 2 -52))) #f))
 
 (test-gpu "a fit is accepted when y's or a column's mean dwarfs its spread"
   (for* ([c
           (in-list
-           (list (offset-y-case #e1e6) (offset-y-case #e1e7) (offset-x-case #e1e11) near-constant-y))]
+           (list (offset-y-case #e1e6) (offset-y-case #e1e7) near-constant-y))]
          #:do [(match-define (solution c* b* kappa) (oracle-of c))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" (lcase-name c) a)
