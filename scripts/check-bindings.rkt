@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/file find-files)
+(require (only-in cuml/core/private/install-native native-name)
+         (only-in racket/file find-files)
          (only-in racket/function curry negate)
          (only-in racket/list append-map count filter-map last remove-duplicates)
          (only-in racket/match == match match-define match-lambda)
@@ -16,9 +17,6 @@
 
 (struct planned (name status issue))
 (struct report (family findings summary))
-
-(define (native-name family)
-  (regexp-replace* #rx"-" family "_"))
 
 (define (prefix-of family)
   (format "cuml_~a_" (native-name family)))

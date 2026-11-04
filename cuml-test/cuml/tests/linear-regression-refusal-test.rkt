@@ -8,26 +8,16 @@
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
-         (only-in raft
-                  device-matrix->list*
-                  device-vector->list
-                  list*->device-matrix
-                  list->device-vector)
+         (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/linear-data.rkt" algorithms dtypes)
+         (only-in "private/linear-data.rkt" algorithms dtypes [on-matrix matrix] [on-vector vector])
          (only-in "private/refusal-rows.rkt" check-row row row-id)
          (only-in "private/scaler-data.rkt" strided-vector))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1)))
 (define targets '(1 2 3 4 5))
-
-(define (matrix rows [dt 'float64])
-  (list*->device-matrix rows #:dtype dt))
-
-(define (vector xs [dt 'float64])
-  (list->device-vector xs #:dtype dt))
 
 (define (with-cell rows i j value)
   (for/list ([row (in-list rows)]
@@ -93,12 +83,18 @@
         "X: column 2: the coefficient exceeds the float32 range"
         (lambda ()
           (go (matrix (for/list ([r (in-list grid)])
-                        (list (car r) (cadr r) (* (caddr r) (expt 2 -100))))
+                        (match-define (list a b c) r)
+                        (list a b (* c (expt 2 -100))))
                       'float32)
               (vector (for/list ([r (in-list grid)]
                                  [t (in-list targets)])
-                        (* (expt 2 60) (+ t (caddr r))))
-                      'float32))))))
+                        (match-define (list _ _ c) r)
+                        (* (expt 2 60) (+ t c)))
+                      'float32))))
+   (row "intercept overflow"
+        "y: the intercept exceeds the float32 range"
+        (lambda ()
+          (go (matrix '((1000) (1001) (1002)) 'float32) (vector '(3e38 2.9e38 2.8e38) 'float32))))))
 
 (define (predict-rows fitted go)
   (list
@@ -139,24 +135,24 @@
 (define (estimator-fit X y #:sample-weight [w #f] #:algorithm [a 'auto] #:fit-intercept [fi #t])
   (fit (linear-regression #:algorithm a #:fit-intercept fi) X y #:sample-weight w))
 
-(test-gpu "R1, V1-V14: linear-regression-fit refuses each row before it solves"
+(test-gpu "linear-regression-fit refuses each row"
   (for ([r (in-list (fit-rows linear-regression-fit))])
     (test-case (row-id r)
       (check-row "linear-regression-fit" r))))
 
-(test-gpu "R1, V1-V14: the estimator's fit names the generic"
+(test-gpu "the estimator's fit names the generic"
   (for ([r (in-list (fit-rows estimator-fit))])
     (test-case (row-id r)
       (check-row "fit" r))))
 
-(test-gpu "R1, W1-W8: linear-regression-predict refuses each row"
+(test-gpu "linear-regression-predict refuses each row"
   (define fitted (linear-regression-fit (matrix grid) (vector targets)))
   (for ([r (in-list (append (predict-rows fitted linear-regression-predict)
                             (result-rows linear-regression-predict)))])
     (test-case (row-id r)
       (check-row "linear-regression-predict" r))))
 
-(test-gpu "R1, W1-W7: the estimator's predict names the generic"
+(test-gpu "the estimator's predict names the generic"
   (define fitted (fit (linear-regression) (matrix grid) (vector targets)))
   (for ([r (in-list (predict-rows fitted predict))])
     (test-case (row-id r)
@@ -189,7 +185,7 @@
              [i (in-naturals)])
     (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
 
-(test-gpu "V13: a solve that is not a least-squares solution is refused"
+(test-gpu "a solve that is not a least-squares solution is refused"
   (for ([fixture (in-list (list (list 'eig 'float32 (collinear-rows 60))
                                 (list 'qr 'float32 (one-hot-rows 400 4))
                                 (list 'qr 'float64 (collinear-rows 60))))])
@@ -202,7 +198,7 @@
                                                  (vector (noisy-targets rows) dt)
                                                  #:algorithm algorithm))))))
 
-(test-gpu "R2: X, y and w are unchanged after every fit"
+(test-gpu "X, y and w are unchanged after every fit"
   (for* ([dt (in-list dtypes)]
          [algorithm (in-list algorithms)]
          [w (in-list (list #f '(1 0 2 3 1/2)))]

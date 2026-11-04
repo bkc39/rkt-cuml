@@ -1025,13 +1025,40 @@ Follow-ups are GitHub issues.
   `install-native.rkt`, `native.rkt`, `scripts/check-bindings.rkt`,
   `flake.nix` and the CMake family name.
 - **L1-c.** Every column, y and the weights are scaled by powers of two before
-  olsFit and the results scaled back (`shim/linear_model/src/glm_staging.cu`).
+  olsFit and the results scaled back (`shim/linear_model/src/glm_staging.cpp`,
+  kernels in `glm_staging_device.cu`). Zero-weight rows are left out of the
+  staged copy (when at least two rows have positive weight), so a zero weight
+  is a deleted row bitwise.
+- **L1-c, wide rule (V1).** With m positive-weight rows, a fit is wide when the
+  kept columns d' exceed m − 1 with an intercept, or m without one. A wide fit
+  stages every kept column with one shared exponent (that of the largest kept
+  column) and solves with the Jacobi SVD whatever the algorithm, so the staged
+  problem is a uniform rescaling of the original and the SVD's minimum-norm
+  solution is scikit-learn's. In float32 with an intercept the SVD does not
+  reach the minimum-norm solution on every wide X: it interpolates y but can
+  differ from it by order 1 (spec F6); float64 reaches it to rounding.
   Bitwise parity with raw Python cuML holds only on already-staged data (E8);
   the staged recipe is bitwise (P1).
 - **L1-d.** Columns constant over the positive-weight rows (zero, without an
   intercept) are dropped and get coefficient 0; with nothing left to solve, or
   a constant y, olsFit is not called.
-- **L1-e.** A fit whose residual cosine on the original data exceeds 2⁻⁸
-  (float32) or 2⁻¹⁸ (float64) is refused (V13).
+- **L1-e.** A fit whose residual cosine on the staged data (the centred,
+  weighted cosine between each kept staged column and the residual) exceeds
+  2⁻⁸ (float32) or 2⁻¹⁸ (float64) is refused (V13). A kept column whose staged
+  values are all 0 (the shared exponent of a wide fit underflowed it) is skipped:
+  it cannot correlate with the residual, and its coefficient is 0. The check
+  does not see the intercept: centring removes any constant error, so Σ w r = 0
+  is left to cuML's closed form ȳ − x̄ᵀc. A check of |Σ w r| against
+  √(Σ w)·‖ỹ_c‖ was not added because it refuses sound float32 fits whose y mean
+  dwarfs its spread (y = 10⁶ + N(0, 1): rounding alone gives about 6·10⁻²).
+  Law T4 tests Σ w r = 0.
+- **L1-e, ordering.** The workspace bound (V7) is checked after staging is
+  planned, so it follows plan_staging's d-sized scratch, the constant-column
+  flags and, for svd, a gesvdj info handle; all are freed on the refusal. This
+  departs from spec §3's "every refusal before any allocation", as spec §2.7
+  orders it.
+- **L1-e, intercept overflow.** A finite solve whose unscaled intercept
+  overflows the dtype is refused with "y: the intercept exceeds the {dtype}
+  range", after V14; it is not in the spec's V table.
 - **L1-f.** `define-estimator` takes `#:needs-y`: y is positional, a missing y
   is refused, and `[score …]` passes y through.

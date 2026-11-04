@@ -58,18 +58,19 @@ def stage(X, y, w, fi):
     first = int(np.argmax(counted))
     reference = X[first] if fi else np.zeros(X.shape[1], dtype=X.dtype)
     kept = np.array([np.any(X[counted, j] != reference[j]) for j in range(X.shape[1])])
-    if kept.sum() > X.shape[0]:
+    wide = kept.sum() > counted.sum() - (1 if fi else 0)
+    if wide:
         e = np.full(
             X.shape[1], unit_exponent(float(np.max(np.abs(X[counted][:, kept]))))
         )
-    return e, f, g, kept, counted
+    return e, f, g, kept, counted, wide
 
 
 def staged_fit(case):
     X, y, w = inputs(case)
     fi = case["fit_intercept"]
     dt = X.dtype.type
-    e, f, g, kept, counted = stage(X, y, w, fi)
+    e, f, g, kept, counted, wide = stage(X, y, w, fi)
     coef = np.zeros(X.shape[1], dtype=dt)
     zero = np.where(counted, 1, 0).astype(dt)
     y0 = y[int(np.argmax(counted))]
@@ -90,8 +91,12 @@ def staged_fit(case):
         put(out, "intercept", np.asarray([intercept], dtype=dt))
         return out
     Xs = (X[:, kept] * np.ldexp(dt(1), e[kept]).astype(dt)).astype(dt) * zero[:, None]
+    if 2 <= counted.sum() < len(y):
+        Xs, ys, ws = Xs[counted], ys[counted], ws[counted]
     m = CuLinearRegression(
-        algorithm=case["algorithm"], fit_intercept=fi, output_type="numpy"
+        algorithm="svd" if wide else case["algorithm"],
+        fit_intercept=fi,
+        output_type="numpy",
     ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
     coef[kept] = (
         host(m.coef_).astype(dt) * np.ldexp(dt(1), e[kept] - f).astype(dt)

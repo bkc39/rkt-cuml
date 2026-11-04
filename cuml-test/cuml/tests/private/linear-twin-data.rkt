@@ -1,17 +1,18 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model
-                  linear-regression-fit
-                  linear-regression-result-coef
-                  linear-regression-result-intercept)
-         (only-in cuml/linear-model/private/native libcuml-version)
+(require (only-in cuml/linear-model/private/native libcuml-version)
+         (only-in racket/list make-list)
          (only-in racket/match match-define)
          racket/runtime-path
-         (only-in rackunit check-equal? test-case)
-         (only-in raft device-vector->list)
+         (only-in rackunit check-equal? check-true test-case)
+         (only-in threading ~>)
          (only-in "linear-data.rkt"
                   algorithms
+                  case-fit
                   check-law
+                  fit-gap
+                  fit-size
+                  kappa-of
                   lcase
                   lcase-name
                   lcase-X
@@ -19,20 +20,18 @@
                   lcase-y
                   max-abs
                   normal-case
-                  on-matrix
-                  on-vector
                   oracle-lstsq
-                  solution-kappa
+                  rounded-case
+                  scaled-columns
+                  solution
                   unit-roundoff)
          (only-in "python-env.rkt" run-twin))
 
 (provide bits-of
+         check-cuml-failures
          check-cuml-parity
          decoded
-         gap
-         kappa-of
          one-column
-         ours
          p1-cases
          request
          results
@@ -54,7 +53,7 @@
 (define (request op c dt a fi)
   (hasheq 'op op
           'dtype (symbol->string dt)
-          'X (bits-of dt (map exact->inexact (apply append (lcase-X c))))
+          'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
           'y (bits-of dt (map exact->inexact (lcase-y c)))
           'w (if (lcase-w c)
                  (bits-of dt (map exact->inexact (lcase-w c)))
@@ -70,25 +69,9 @@
   (check-equal? version libcuml-version)
   results)
 
-(define (ours c dt a fi)
-  (define r
-    (linear-regression-fit (on-matrix (lcase-X c) dt)
-                           (on-vector (lcase-y c) dt)
-                           #:sample-weight (on-vector (lcase-w c) dt)
-                           #:algorithm a
-                           #:fit-intercept fi))
-  (values r
-          (device-vector->list (linear-regression-result-coef r))
-          (linear-regression-result-intercept r)))
-
 (define (theirs dt result)
-  (list (decoded dt (hash-ref result 'coef_bits))
-        (car (decoded dt (hash-ref result 'intercept_bits)))))
-
-(define (gap a b)
-  (max-abs (map (lambda (x y) (- (inexact->exact x) (inexact->exact y)))
-                (cons (cadr a) (car a))
-                (cons (cadr b) (car b)))))
+  (match-define (list intercept) (decoded dt (hash-ref result 'intercept_bits)))
+  (list (decoded dt (hash-ref result 'coef_bits)) intercept))
 
 (define one-column (normal-case 200 1 7))
 
@@ -109,9 +92,6 @@
         with-constant
         one-column))
 
-(define (kappa-of c fi)
-  (solution-kappa (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi)))
-
 (define (check-cuml-parity dt)
   (define rows
     (for*/list ([c (in-list p1-cases)]
@@ -131,15 +111,65 @@
         [r (in-list raw)])
     (match-define (list c fi dt a) g)
     (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)
-      (define-values (_r coef b) (ours c dt a fi))
-      (define fitted (list coef b))
+      (define fitted (case-fit c dt #:algorithm a #:fit-intercept fi))
       (define kappa (kappa-of c fi))
       (define u (unit-roundoff dt))
-      (define size (max 1 (abs b) (max-abs coef)))
+      (define size (fit-size fitted))
       (cond
-        [(eq? c one-column) (check-law "P1 d'=1" (gap fitted (theirs dt s)) (* 4 u kappa size))]
+        [(eq? c one-column)
+         (check-law "one column, staged" (fit-gap fitted (theirs dt s)) (* 4 u kappa size))]
         [(and fi (lcase-w c) (> (length (lcase-y c)) 2000))
-         (check-law "P1 F11" (gap fitted (theirs dt s)) (* 128 u kappa kappa size))]
-        [else (check-equal? fitted (theirs dt s) "P1 bitwise")])
+         (check-law "weighted with an intercept, staged"
+                    (fit-gap fitted (theirs dt s))
+                    (* 128 u kappa kappa size))]
+        [else (check-equal? fitted (theirs dt s) "staged, bitwise")])
       (unless (eq? c with-constant)
-        (check-law "P2" (gap fitted (theirs dt r)) (* 128 u kappa kappa size))))))
+        (check-law "raw" (fit-gap fitted (theirs dt r)) (* 128 u kappa kappa size))))))
+
+(define (staged-relative coef c* factors y-factor)
+  (define (staged xs)
+    (for/list ([x (in-list xs)]
+               [s (in-list factors)])
+      (/ (* (inexact->exact x) s) y-factor)))
+  (/ (max-abs (map - (staged coef) (staged c*))) (max 1 (max-abs (staged c*)))))
+
+(define (worst-column-error coef c*)
+  (for/fold ([worst 0])
+            ([x (in-list coef)]
+             [c (in-list c*)]
+             #:unless (zero? c))
+    (max worst (/ (abs (- (inexact->exact x) c)) (abs c)))))
+
+(define (scaled-case base factors y-factor)
+  (rounded-case (scaled-columns base factors y-factor) 'float32))
+
+(define (cuml-failures)
+  (define base (normal-case 200 7 0 #:weighted? #t))
+  (define constant-base (normal-case 200 4 8 #:weighted? #t))
+  (define (scaled name factors y-factor failing)
+    (list name (scaled-case base factors y-factor) base factors y-factor failing))
+  (list (scaled "a column at 1e-5" (list 1 #e1e-5 1 1 1 1 1) 1 '(auto))
+        (scaled "y at 1e37" (make-list 7 1) #e1e37 algorithms)
+        (list "a constant column" with-constant constant-base (make-list 5 1) 1 '(qr))))
+
+(define (check-cuml-failures)
+  (define rows
+    (for*/list ([failure (in-list (cuml-failures))]
+                #:do [(match-define (list name c base factors y-factor failing) failure)]
+                [a (in-list failing)])
+      (list name c base factors y-factor a)))
+  (for ([g (in-list rows)]
+        [r (in-list (results (for/list ([g (in-list rows)])
+                               (match-define (list _ c _ _ _ a) g)
+                               (request "cuml" c 'float32 a #t))))])
+    (match-define (list name c base factors y-factor a) g)
+    (test-case (format "~a ~a" name a)
+      (match-define (solution c* _ _) (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) #t))
+      (match-define (list coef _) (theirs 'float32 r))
+      (check-true (or (not (andmap rational? coef)) (> (worst-column-error coef c*) 1/2))
+                  "Python cuML gets it wrong")
+      (match-define (list ours _) (case-fit c 'float32 #:algorithm a))
+      (define kappa (kappa-of base #t))
+      (check-law "ours"
+                 (staged-relative ours c* factors y-factor)
+                 (* 128 (unit-roundoff 'float32) kappa kappa)))))

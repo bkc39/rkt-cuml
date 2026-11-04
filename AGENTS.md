@@ -226,9 +226,9 @@ the families will follow once it lands.
       it with `_` everywhere native: the shim directory and CMake family
       (`linear_model`), the library (`libcumlrkt_linear_model.so`), the C
       prefix (`cuml_linear_model_`) and the census lookup. `native-name` in
-      `install-native.rkt` is the one rule; `native.rkt`,
-      `scripts/check-bindings.rkt` and `flake.nix`'s `stageNativeLibs` apply
-      the same replacement.
+      `install-native.rkt` is the one rule, which `native.rkt` and
+      `scripts/check-bindings.rkt` require; only `flake.nix`'s
+      `stageNativeLibs` repeats the replacement.
 - [ ] `families` in `flake.nix` (staging, packages list).
 - [ ] cuml-lib: dep, `implies`, re-export in `cuml/main.rkt`.
 - [ ] The hyperparameters as one `define-hyperparameters` table

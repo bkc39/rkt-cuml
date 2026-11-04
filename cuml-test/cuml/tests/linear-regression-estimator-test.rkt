@@ -36,12 +36,12 @@
 
 (define changed (hasheq 'algorithm 'qr 'fit-intercept #f))
 
-(test-case "L3: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal? (linear-regression-params) (hasheq 'algorithm 'auto 'fit-intercept #t))
   (check-equal? (estimator-params (linear-regression)) (linear-regression-params))
   (check-equal? (round-trips linear-regression changed) changed))
 
-(test-case "L3: printing, equality and set-params"
+(test-case "printing, equality and set-params"
   (check-equal? (printed (linear-regression)) (make-list 3 "#<linear-regression>"))
   (check-equal? (format "~v" (linear-regression #:algorithm 'qr))
                 "#<linear-regression #:algorithm 'qr>")
@@ -57,7 +57,7 @@
 
 (define data (normal-case 300 5 0 #:weighted? #t))
 
-(test-gpu "L1, L2: fit, predict and score are the procedures, bitwise"
+(test-gpu "fit, predict and score are the procedures, bitwise"
   (for* ([dt (in-list dtypes)]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" dt a)
@@ -83,7 +83,7 @@
       (check-equal? (score fitted-e X y) (r2-score y p))
       (check-equal? (score fitted-e X y #:sample-weight w) (r2-score y p #:sample-weight w)))))
 
-(test-gpu "L4: fit needs y and takes a sample weight"
+(test-gpu "fit needs y and takes a sample weight"
   (define X (on-matrix (lcase-X data) 'float64))
   (define y (on-vector (lcase-y data) 'float64))
   (define w (on-vector (lcase-w data) 'float64))

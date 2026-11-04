@@ -42,38 +42,37 @@ Fits ordinary least squares to @racket[y] on the columns of @racket[X], a
 row-major @racket['float32] or @racket['float64] matrix of finite values with
 at least two rows. @racket[y] and @racket[sample-weight] are vectors of
 @racket[X]'s dtype with one finite element per row; weights are at least 0
-with a positive sum. @racket['auto] and @racket['eig] solve the normal
-equations, @racket['svd] and @racket['svd-jacobi] use a Jacobi SVD,
-@racket['qr] a QR factorisation and @racket['svd-qr] a QR-based SVD; one
-column, or more columns than rows, always uses the Jacobi SVD. Each column,
-@racket[y] and the weights are scaled by a power of two before the solve, so
-scaling a column by 2@superscript{k} scales its coefficient by
-2@superscript{-k} exactly; with more columns than rows every column takes
-the same power, so that the fit is the minimum-norm solution. A column constant over the rows of positive weight
-(zero, without @racket[fit-intercept]) gets coefficient 0, as in
-scikit-learn's minimum-norm solution. A solve that is not a least-squares
-solution, as with collinear columns in float32, is refused; @racket['qr] or
-float64 often fits. With weights and an intercept, fits above a few thousand
-rows can differ in the last bits between runs, as in Python cuML.
-@racket[X], @racket[y] and @racket[sample-weight] are not modified.
+with a positive sum, and a zero weight deletes its row. @racket['auto] and
+@racket['eig] solve the normal equations, @racket['svd] and
+@racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation and
+@racket['svd-qr] a QR-based SVD. Each column, @racket[y] and the weights are
+scaled by a power of two before the solve, so scaling a column by
+2@superscript{k} scales its coefficient by 2@superscript{-k} exactly. A
+column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0. One column left always uses the
+Jacobi SVD. With more columns left than rows of positive weight, less one
+for @racket[fit-intercept], every column takes the same power and the Jacobi
+SVD solves: the fit is the minimum-norm solution in float64, and in float32
+without @racket[fit-intercept]; in float32 with it, the fit interpolates
+@racket[y] but need not be minimum-norm. A solve that is not a
+least-squares solution, as with collinear columns in float32, is refused;
+@racket['qr] or float64 often fits. With weights and an intercept, fits above
+a few thousand rows can differ in the last bits between runs, as in Python
+cuML. @racket[X], @racket[y] and @racket[sample-weight] are not modified.
 
-Python cuML does not scale columns, so there a column of scale 1e-5 or a
-float32 @racket[y] of 1e37 gives wrong or NaN coefficients, and a constant
-column gives NaN under @racket['qr]; it also routes one column to a CuPy SVD,
-so results agree only to rounding. scikit-learn always returns the
-minimum-norm solution, including for collinear columns, and has
-@tt{positive}, @tt{n_jobs}, @tt{rank_} and @tt{singular_}, which have no
-equivalent here; @tt{copy_X} has none because inputs are never modified.
+scikit-learn returns the minimum-norm solution for collinear columns too.
+Python cuML does not scale, so a float32 column at 1e-5, a float32 @racket[y]
+at 1e37 and a constant column under @racket['qr] give it wrong or NaN
+coefficients.
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 1) (1 1) (2 1) (3 1)) #:dtype 'float64))
 (define yc (list->device-vector '(1 3 5 7) #:dtype 'float64))
-(device-vector->list (linear-regression-result-coef (linear-regression-fit Xc yc)))
+(~> (linear-regression-fit Xc yc) linear-regression-result-coef device-vector->list)
 (define w (list->device-vector '(1 2 3 4) #:dtype 'float64))
-(real->decimal-string
- (linear-regression-result-intercept
-  (linear-regression-fit X (list->device-vector '(6 8 10 11) #:dtype 'float64)
-                         #:sample-weight w #:algorithm 'qr))
- 6)
+(~> (linear-regression-fit X (list->device-vector '(6 8 10 11) #:dtype 'float64)
+                           #:sample-weight w #:algorithm 'qr)
+    linear-regression-result-intercept
+    (real->decimal-string 6))
 (eval:error (linear-regression-fit X (list->device-vector '(1 2 3) #:dtype 'float64)))
 ]}
 

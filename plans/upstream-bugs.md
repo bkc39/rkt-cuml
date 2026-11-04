@@ -160,4 +160,4 @@ packet (§4) has the detail.
 | B2 #51 | learning_rate_method='adaptive' (the default) silently overrides n_neighbors and early_exaggeration | `cuml/manifold/t_sne.pyx` | 'auto' not offered (B2-c) |
 | B3 #27 | default n_neighbors max(n/10, 1) is 1 below 20 rows: an all-zero embedding without error | `spectral_embedding.pyx` | default floored at 2, s14 |
 | B3 #27 | no sign rule (sklearn flips each column to a positive largest entry) | `spectral_embedding.pyx` | sign rule in the shim (B3-e) |
-| L1 #87 | one-column X goes to a CuPy SVD, which disagrees with olsFit in the last bits (`linear_regression.pyx`) | bound to olsFit |
+| L1 #87 | one-column X goes to a CuPy SVD, which disagrees with olsFit in the last bits | `linear_regression.pyx` | bound to olsFit |

@@ -6,8 +6,11 @@
          (only-in raft device-vector->list)
          (only-in "private/linear-data.rkt"
                   algorithms
+                  case-fit
+                  case-result
                   check-law
                   dtypes
+                  gap
                   lcase
                   lcase-X
                   lcase-name
@@ -16,14 +19,12 @@
                   max-abs
                   normal-case
                   on-matrix
+                  result-fit
                   unit-roundoff)
          (only-in "private/linear-twin-data.rkt"
                   bits-of
                   decoded
-                  gap
-                  kappa-of
                   one-column
-                  ours
                   p1-cases
                   request
                   results
@@ -46,7 +47,7 @@
          (map (lambda (v) (/ (round (* v 1024)) 1024)) (scaled (lcase-y c)))
          (map (lambda (v) (/ v 2)) (lcase-w c))))
 
-(test-twin "E8: on already-staged data the fit is raw Python cuML's, bitwise"
+(test-twin "on already-staged data the fit is raw Python cuML's, bitwise"
   (define c (already-staged))
   (define rows
     (for*/list ([fi (in-list '(#t #f))]
@@ -59,10 +60,9 @@
                                (request "cuml" c dt a fi))))])
     (match-define (list fi dt a) g)
     (test-case (format "~a ~a ~a" fi dt a)
-      (define-values (_r coef b) (ours c dt a fi))
-      (check-equal? (list coef b) (theirs dt r)))))
+      (check-equal? (case-fit c dt #:algorithm a #:fit-intercept fi) (theirs dt r)))))
 
-(test-twin "P3: sklearn's float64 fit is within T1's bound"
+(test-twin "sklearn's float64 fit is within the oracle bound"
   (define rows
     (for*/list ([c (in-list p1-cases)]
                 [fi (in-list '(#t #f))]
@@ -74,15 +74,14 @@
                                (request "sklearn" c 'float64 a fi))))])
     (match-define (list c fi a) g)
     (test-case (format "~a ~a ~a" (lcase-name c) fi a)
-      (define-values (_r coef _b) (ours c 'float64 a fi))
+      (match-define (list coef _) (case-fit c 'float64 #:algorithm a #:fit-intercept fi))
       (define kappa (hash-ref r 'kappa))
-      (define sk (theirs 'float64 r))
-      (check-law
-       "P3"
-       (max-abs (map (lambda (x y) (- (inexact->exact x) (inexact->exact y))) coef (car sk)))
-       (* 128 (unit-roundoff 'float64) kappa kappa (max 1 (max-abs (car sk))))))))
+      (match-define (list sk _) (theirs 'float64 r))
+      (check-law "sklearn"
+                 (gap (map inexact->exact coef) (map inexact->exact sk))
+                 (* 128 (unit-roundoff 'float64) kappa kappa (max 1 (max-abs sk)))))))
 
-(test-twin "P4: predictions agree with CuPy's product"
+(test-twin "predictions agree with CuPy's product"
   (define rows
     (for*/list ([c (in-list p1-cases)]
                 [dt (in-list dtypes)])
@@ -90,13 +89,14 @@
   (define fits
     (for/list ([g (in-list rows)])
       (match-define (list c dt) g)
-      (define-values (r coef b) (ours c dt 'auto #t))
-      (list r coef b)))
+      (define r (case-result c dt))
+      (cons r (result-fit r))))
   (define requests
     (for/list ([g (in-list rows)]
                [f (in-list fits)])
       (match-define (list c dt) g)
-      (hash-set* (request "predict" c dt 'auto #t) 'coef (bits-of dt (cadr f)) 'intercept (caddr f))))
+      (match-define (list _ coef b) f)
+      (hash-set* (request "predict" c dt 'auto #t) 'coef (bits-of dt coef) 'intercept b)))
   (for ([g (in-list rows)]
         [f (in-list fits)]
         [r (in-list (results requests))])
@@ -111,11 +111,11 @@
             [p (in-list ours-p)]
             [q (in-list (decoded dt (hash-ref r 'pred_bits)))])
         (define size (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))
-        (check-law "P4"
+        (check-law "prediction"
                    (abs (- (inexact->exact p) (inexact->exact q)))
                    (* 8 d u (inexact->exact size)))))))
 
-(test-twin "P5: the defaults match Python cuML's"
+(test-twin "the defaults match Python cuML's"
   (match-define (list theirs) (results (list (hasheq 'op "params"))))
   (check-equal? (twin-params theirs '(copy-X)) (hasheq 'algorithm 'auto 'fit-intercept #t))
   (check-equal? (linear-regression-params) (hasheq 'algorithm 'auto 'fit-intercept #t)))

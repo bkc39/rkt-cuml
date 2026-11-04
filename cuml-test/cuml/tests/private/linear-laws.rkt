@@ -1,18 +1,19 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model
-                  linear-regression-fit
-                  linear-regression-predict
-                  linear-regression-result-coef
-                  linear-regression-result-intercept)
+(require (only-in cuml/linear-model linear-regression-predict)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
+         (only-in threading ~>)
          (only-in "linear-data.rkt"
                   algorithms
+                  case-fit
+                  case-result
                   check-law
                   dtypes
+                  exact-fit
+                  gap
                   host-cosine
                   lcase-X
                   lcase-name
@@ -20,27 +21,13 @@
                   lcase-y
                   max-abs
                   on-matrix
-                  on-vector
                   oracle-lstsq
+                  result-fit
                   solution
                   unit-roundoff))
 
 (provide check-oracle-laws
          check-prediction-law)
-
-(define (fit-of X y w dt a fi)
-  (define r
-    (linear-regression-fit (on-matrix X dt)
-                           (on-vector y dt)
-                           #:sample-weight (on-vector w dt)
-                           #:algorithm a
-                           #:fit-intercept fi))
-  (values r
-          (map inexact->exact (device-vector->list (linear-regression-result-coef r)))
-          (inexact->exact (linear-regression-result-intercept r))))
-
-(define (gap xs ys)
-  (max-abs (map - xs ys)))
 
 (define (norm2 xs)
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))
@@ -55,7 +42,7 @@
            [a (in-list algorithms)])
       (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)
         (define u (unit-roundoff dt))
-        (define-values (_r coef b) (fit-of (lcase-X c) (lcase-y c) (lcase-w c) dt a fi))
+        (match-define (list coef b) (exact-fit (case-fit c dt #:algorithm a #:fit-intercept fi)))
         (check-law "T1" (gap coef c*) (* 128 u kappa kappa (max (max-abs c*) 1)))
         (check-law "T3" (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi) (* 64 u kappa))
         (when fi
@@ -73,9 +60,10 @@
          #:unless (lcase-w c))
     (test-case (format "~a ~a" (lcase-name c) dt)
       (define u (unit-roundoff dt))
-      (define-values (r coef b) (fit-of (lcase-X c) (lcase-y c) #f dt 'auto #t))
+      (define r (case-result c dt))
+      (match-define (list coef b) (exact-fit (result-fit r)))
       (define d (length coef))
-      (define p (device-vector->list (linear-regression-predict r (on-matrix (lcase-X c) dt))))
+      (define p (~> r (linear-regression-predict (on-matrix (lcase-X c) dt)) device-vector->list))
       (for ([row (in-list (lcase-X c))]
             [pi (in-list p)])
         (define exact (+ b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))
