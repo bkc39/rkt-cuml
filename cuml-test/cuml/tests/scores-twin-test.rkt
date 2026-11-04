@@ -1,7 +1,6 @@
 #lang racket/base
 
 (require (only-in cuml/metrics mean-squared-error r2-score)
-         (only-in cuml/metrics/private/native libcuml-version)
          (only-in racket/list take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
@@ -9,7 +8,7 @@
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows-of)
          (only-in "private/scores-data.rkt" on weights-of)
-         (only-in "private/scores-twin-data.rkt" case-of twin-results))
+         (only-in "private/scores-twin-data.rkt" case-of checked-twin-results))
 
 (define (vector-cases)
   (for/list ([c (in-list (regression-cases))])
@@ -39,16 +38,14 @@
 (test-twin "T1, T2: r2 and the error agree with sklearn on the float64 cast and Python cuML on the dtype"
   (define vectors (vector-cases))
   (define matrices (matrix-cases))
-  (define-values (r2-results r2-version)
-    (twin-results (for/list ([c (in-list vectors)])
-                    (match-define (list _ dt y p w) c)
-                    (case-of "r2" y p w #:dtype dt))))
-  (define-values (mse-results mse-version)
-    (twin-results (for/list ([c (in-list (append vectors matrices))])
-                    (match-define (list _ dt y p w) c)
-                    (case-of "mse" y p w #:dtype dt))))
-  (check-equal? r2-version libcuml-version "T5")
-  (check-equal? mse-version libcuml-version "T5")
+  (define r2-results
+    (checked-twin-results (for/list ([c (in-list vectors)])
+                            (match-define (list _ dt y p w) c)
+                            (case-of "r2" y p w #:dtype dt))))
+  (define mse-results
+    (checked-twin-results (for/list ([c (in-list (append vectors matrices))])
+                            (match-define (list _ dt y p w) c)
+                            (case-of "mse" y p w #:dtype dt))))
   (define (check-against score cases results gap cuml-bound)
     (for/fold ([worst (hash)])
               ([c (in-list cases)]
