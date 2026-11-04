@@ -115,6 +115,15 @@ struct non_finite {
 };
 
 template <typename T>
+struct negative {
+  const T* x;
+
+  __device__ bool operator()(int64_t i) const {
+    return x[i] < 0;
+  }
+};
+
+template <typename T>
 struct large {
   const T* x;
   double most;
@@ -271,6 +280,12 @@ int64_t first_non_finite(const T* x, int64_t count,
 }
 
 template <typename T>
+int64_t first_negative(const T* x, int64_t count,
+                       rmm::cuda_stream_view stream) {
+  return first_index(0, count, negative<T>{x}, stream);
+}
+
+template <typename T>
 int64_t first_large_element(const T* x, int64_t count, double most,
                             rmm::cuda_stream_view stream) {
   return first_index(0, count, large<T>{x, most}, stream);
@@ -309,6 +324,10 @@ template int64_t first_non_finite<float>(const float*, int64_t,
                                          rmm::cuda_stream_view);
 template int64_t first_non_finite<double>(const double*, int64_t,
                                           rmm::cuda_stream_view);
+template int64_t first_negative<float>(const float*, int64_t,
+                                       rmm::cuda_stream_view);
+template int64_t first_negative<double>(const double*, int64_t,
+                                        rmm::cuda_stream_view);
 template int64_t first_large_element<float>(const float*, int64_t, double,
                                             rmm::cuda_stream_view);
 template int64_t first_large_element<double>(const double*, int64_t, double,

@@ -70,9 +70,11 @@ cumlrkt_family(cluster
 cumlrkt_family(metrics
   SOURCES metrics/src/metrics.cpp metrics/src/contingency.cpp
           metrics/src/contingency_device.cu
+          metrics/src/scores.cpp metrics/src/scores_device.cu
           metrics/src/silhouette.cpp
           metrics/src/trustworthiness.cpp
   TESTS metrics/tests/metrics_test.cpp metrics/tests/metrics_refusal_test.cpp
+        metrics/tests/scores_test.cpp
 )
 
 cumlrkt_family(preprocessing NO_LIBCUML

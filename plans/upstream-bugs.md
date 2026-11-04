@@ -76,6 +76,11 @@ packet (§4) has the detail.
 | B2 #51 | `square_distances` squares the L1 distance under manhattan, which overflows float32 for rows inside the 2¹²⁵ squared-norm bound: ±(3.5·10¹⁸)×3 gives NaN under FFT and exact | `tsne_runner.cuh:210-217` | refused past an L1 norm of 2^62.5 under manhattan (f20c) |
 | B2 #51 | the squared kNN distances are scaled by 1/max, inf in float32 once the largest neighbour distance under the metric is below 2⁻⁶⁴, which gives NaN | `distances.cuh:147` | f23 after the fit; documented |
 | B2 #51 | the same scaling is 0·inf = NaN when every computed kNN distance is 0: rows far from the origin, whose ‖x‖²+‖y‖²−2x·y cancels in float32 (a 1.7·10⁹ time column under euclidean), or duplicates filling every neighbourhood (40×(0,0), 40×(1,1), perplexity 5) | `distances.cuh:147` | f23 after the fit, advising "centre or rescale X, or raise n-neighbors"; documented |
+| L0 #86 | `r2_score_py` on a constant y-true gives NaN, −inf or a huge finite negative (−6.0e13 for [0.1]×3 float32), depending on how the mean rounds | `raft/stats/detail/scores.cuh` `r2_score` | not called; constancy decided exactly |
+| L0 #86 | `r2_score_py` and `accuracy_score_py` on n = 0 throw cudaErrorInvalidValue | `metrics/r2_score.cu`, `metrics/accuracy_score.cu` | not called; refused |
+| L0 #86 | `accuracy_score_py` returns a float: 1/3 → 0.33333334, and counts round above 2²⁴ | `metrics/accuracy_score.cu` | not called; exact count |
+| L0 #86 | float32 `r2_score_py` sums in float32 | `raft/stats/detail/scores.cuh` | not called; double sums |
+| L0 #86 | Python cuML `mean_squared_error(squared=False)` on 2-D input takes the square root of the uniform average (0.8416 where sklearn's per-column RMSE gives 0.8227), and with `raw_values` returns the MSE | `python/cuml/cuml/metrics/regression.py` | `squared` not bound |
 
 ## cuVS
 

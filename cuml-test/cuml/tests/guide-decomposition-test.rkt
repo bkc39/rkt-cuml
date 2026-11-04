@@ -46,7 +46,7 @@
 
 (test-gpu "decomposition: the chapter's k-means scores"
   (define-values (chapter blocks) (force decomposition))
-  (match-define (list* _ _ _ k-means _) blocks)
+  (match-define (list* _ _ _ _ k-means _) blocks)
   (check-equal? (last k-means) '("0.897" "0.895" "0.912"))
   (for ([row (in-list scored)])
     (match-define (list name columns text) row)

@@ -1,5 +1,6 @@
-"""Twin of cuml/tests/guide-twin-test.rkt: sklearn's exact PCA and arpack
-TruncatedSVD of the float32 rows the decomposition chapter fits, in float64."""
+"""Twin of cuml/tests/guide-twin-test.rkt: sklearn's exact PCA, its
+reconstruction error, and arpack TruncatedSVD of the float32 rows the
+decomposition chapter fits, in float64."""
 
 import json
 import sys
@@ -7,6 +8,7 @@ import sys
 import numpy as np
 import sklearn
 from sklearn.decomposition import PCA, TruncatedSVD
+from sklearn.metrics import mean_squared_error
 
 
 def rows(case):
@@ -36,10 +38,20 @@ def tsvd(case):
     }
 
 
+def reconstruction(case):
+    X = rows(case)
+    model = PCA(svd_solver="full", n_components=case["k"]).fit(X)
+    return {
+        "error": float(
+            mean_squared_error(X, model.inverse_transform(model.transform(X)))
+        )
+    }
+
+
 def main():
     with open(sys.argv[1]) as f:
         given = json.load(f)
-    ops = {"pca": pca, "tsvd": tsvd}
+    ops = {"pca": pca, "tsvd": tsvd, "reconstruction": reconstruction}
     results = [ops[case["op"]](case) for case in given["cases"]]
     with open(sys.argv[2], "w") as f:
         json.dump({"results": results, "version": sklearn.__version__}, f)

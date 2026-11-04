@@ -1,0 +1,227 @@
+#include <cmath>
+#include <cstdint>
+#include <format>
+#include <raft/core/handle.hpp>
+#include <rmm/cuda_stream_view.hpp>
+#include <type_traits>
+#include <utility>
+
+#include "cumlrkt/common.hpp"
+#include "cumlrkt/metrics.h"
+#include "cumlrkt/rows.hpp"
+#include "cumlrkt/support.hpp"
+#include "cumlrkt/vectors.hpp"
+#include "raftrkt/job.hpp"
+#include "raftrkt/view.hpp"
+#include "scores_device.hpp"
+
+namespace {
+
+using cumlrkt::guarded;
+using cumlrkt::logic_error;
+using cumlrkt::matrix;
+using cumlrkt::on_floats;
+using cumlrkt::on_labels;
+using cumlrkt::require_finite;
+using cumlrkt::require_finite_elements;
+using cumlrkt::require_sample_weights;
+using cumlrkt::require_some;
+using cumlrkt::rows_of;
+using cumlrkt::stream_of;
+using cumlrkt::metrics::matched;
+using cumlrkt::metrics::matches_of;
+using cumlrkt::metrics::r2_of;
+using cumlrkt::metrics::sample_weights;
+using cumlrkt::metrics::squared_error_of;
+using raftrkt::any_extent;
+using raftrkt::vector_data;
+
+sample_weights weight_data(const rr_view* view, int64_t n) {
+  sample_weights w{nullptr, nullptr, 0};
+  if (view != nullptr) {
+    on_floats(view, "sample-weight", [&](auto tag) {
+      using W = decltype(tag);
+      const W* data = vector_data<W, int32_t>(view, "sample-weight", n);
+      if constexpr (std::is_same_v<W, float>) {
+        w.single = data;
+      } else {
+        w.wide = data;
+      }
+    });
+  }
+  return w;
+}
+
+template <typename W>
+int checked_exponent(const W* w, int64_t n, rmm::cuda_stream_view stream) {
+  return std::ilogb(require_sample_weights(w, n, stream));
+}
+
+sample_weights checked(sample_weights w, int64_t n,
+                       rmm::cuda_stream_view stream) {
+  if (w.single != nullptr) {
+    w.exponent = checked_exponent(w.single, n, stream);
+  } else if (w.wide != nullptr) {
+    w.exponent = checked_exponent(w.wide, n, stream);
+  }
+  return w;
+}
+
+struct score_views {
+  const rr_view* truth;
+  const rr_view* pred;
+  const rr_view* weights;
+};
+
+const auto floats = [](const rr_view* x, const char* name, auto&& fn) {
+  on_floats(x, name, std::forward<decltype(fn)>(fn));
+};
+
+const auto labels = [](const rr_view* x, const char* name, auto&& fn) {
+  on_labels(x, name, std::forward<decltype(fn)>(fn));
+};
+
+template <typename Dispatch, typename Use>
+void on_vector_pair(Dispatch dispatch, const score_views& views, Use&& use) {
+  dispatch(views.truth, "y-true", [&](auto t) {
+    using T = decltype(t);
+    const T* a = vector_data<T, int32_t>(views.truth, "y-true");
+    const int64_t n = views.truth->shape[0];
+    dispatch(views.pred, "y-pred", [&](auto q) {
+      using P = decltype(q);
+      use(a, vector_data<P, int32_t>(views.pred, "y-pred", n), n);
+    });
+  });
+}
+
+template <typename Use>
+void on_finite_values(const score_views& views, rmm::cuda_stream_view stream,
+                      Use&& use) {
+  on_vector_pair(floats, views, [&](const auto* y, const auto* p, int64_t n) {
+    require_some("y-true", "element", n);
+    const sample_weights w = weight_data(views.weights, n);
+    require_finite_elements("y-true", y, n, stream);
+    require_finite_elements("y-pred", p, n, stream);
+    use(y, p, n, checked(w, n, stream));
+  });
+}
+
+template <typename Use>
+void on_finite_rows(const score_views& views, rmm::cuda_stream_view stream,
+                    Use&& use) {
+  on_floats(views.truth, "y-true", [&](auto t) {
+    using T = decltype(t);
+    const matrix<T, int32_t> y =
+        rows_of<T, int32_t>(views.truth, "y-true", any_extent, any_extent);
+    on_floats(views.pred, "y-pred", [&](auto q) {
+      using P = decltype(q);
+      const matrix<P, int32_t> p =
+          rows_of<P, int32_t>(views.pred, "y-pred", y.n, y.d);
+      require_some("y-true", "row", y.n);
+      require_some("y-true", "column", y.d);
+      const sample_weights w = weight_data(views.weights, y.n);
+      require_finite("y-true", y, stream);
+      require_finite("y-pred", p, stream);
+      use(y.data, p.data, y.n, y.d, checked(w, y.n, stream));
+    });
+  });
+}
+
+[[noreturn]] void refuse_dtype_then_rank(const rr_view* truth, int64_t rank) {
+  on_floats(truth, "y-true", [](auto /*tag*/) {});
+  throw logic_error(
+      std::format("y-true: expected rank 1 or 2, got rank {}", rank));
+}
+
+double r2(const raft::handle_t& handle, const score_views& views) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  double score = 0;
+  on_finite_values(
+      views, stream,
+      [&](const auto* y, const auto* p, int64_t n, sample_weights w) {
+        score = r2_of(y, p, n, w, stream);
+      });
+  return score;
+}
+
+double squared_error(const raft::handle_t& handle, const score_views& views) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  double error = 0;
+  const auto score = [&](const auto* y, const auto* p, int64_t n, int64_t d,
+                         sample_weights w) {
+    error = squared_error_of(y, p, n, d, w, stream);
+  };
+  const auto rank = raftrkt::require(views.truth, "y-true")->rank;
+  if (rank == 2) {
+    on_finite_rows(views, stream, score);
+  } else if (rank == 1) {
+    on_finite_values(views, stream,
+                     [&](const auto* y, const auto* p, int64_t n,
+                         sample_weights w) { score(y, p, n, 1, w); });
+  } else {
+    refuse_dtype_then_rank(views.truth, rank);
+  }
+  return error;
+}
+
+matched accuracy(const raft::handle_t& handle, const score_views& views) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  matched found{0, 0};
+  on_vector_pair(labels, views, [&](const auto* a, const auto* b, int64_t n) {
+    require_some("y-true", "element", n);
+    const sample_weights w = checked(weight_data(views.weights, n), n, stream);
+    found = matches_of(a, b, n, w, stream);
+  });
+  return found;
+}
+
+}  // namespace
+
+extern "C" {
+
+int cuml_metrics_r2_score(void* handle, const rr_view* y_true,
+                          const rr_view* y_pred, const rr_view* sample_weight,
+                          double* score) {
+  return guarded(handle,
+                 {{"y-true", y_true},
+                  {"y-pred", y_pred},
+                  {"sample-weight", sample_weight}},
+                 [&](const raft::handle_t& h) {
+                   double* const into = raftrkt::require(score, "score");
+                   *into = r2(h, {y_true, y_pred, sample_weight});
+                 });
+}
+
+int cuml_metrics_mean_squared_error(void* handle, const rr_view* y_true,
+                                    const rr_view* y_pred,
+                                    const rr_view* sample_weight,
+                                    double* error) {
+  return guarded(handle,
+                 {{"y-true", y_true},
+                  {"y-pred", y_pred},
+                  {"sample-weight", sample_weight}},
+                 [&](const raft::handle_t& h) {
+                   double* const into = raftrkt::require(error, "error");
+                   *into = squared_error(h, {y_true, y_pred, sample_weight});
+                 });
+}
+
+int cuml_metrics_accuracy_score(void* handle, const rr_view* y_true,
+                                const rr_view* y_pred,
+                                const rr_view* sample_weight, double* score) {
+  return guarded(handle,
+                 {{"y-true", y_true},
+                  {"y-pred", y_pred},
+                  {"sample-weight", sample_weight}},
+                 [&](const raft::handle_t& h) {
+                   double* const into = raftrkt::require(score, "score");
+                   const matched found =
+                       accuracy(h, {y_true, y_pred, sample_weight});
+                   *into = found.correct / found.total;
+                 });
+}
+
+CUMLRKT_JOB(cuml_metrics_r2_score)
+CUMLRKT_JOB(cuml_metrics_mean_squared_error)
+CUMLRKT_JOB(cuml_metrics_accuracy_score)
+}
