@@ -5,7 +5,6 @@
          (only-in racket/match match match-define)
          (only-in racket/math exact-floor pi sqr)
          (only-in raft list*->device-matrix list->device-vector)
-         (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "scaler-data.rkt" rows-of))
 
@@ -271,7 +270,8 @@
                  (* 3.0 (uniform))))))
 
 (define (log-uniform u lo hi)
-  (~> (- (log hi) (log lo)) (* u) (+ (log lo)) exp))
+  (define span (- (log hi) (log lo)))
+  (exp (+ (log lo) (* u span))))
 
 (define (regression-cases)
   (define next (uniform-source 86))

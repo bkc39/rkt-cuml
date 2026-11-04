@@ -82,6 +82,12 @@ struct scored {
   double value;
 };
 
+struct accuracy_outputs {
+  double correct;
+  double total;
+  std::string status;
+};
+
 template <typename T, typename P = T>
 scored r2(const resources& res, const std::vector<T>& y,
           const std::vector<P>& p) {
@@ -445,25 +451,33 @@ TEST(Scores, PowerOfTwoScalingIsExactInFloat32) {
   }
 }
 
-TEST(Scores, AccuracyReturnsTheMatchedWeightAndTheTotal) {
-  CUMLRKT_REQUIRE_GPU();
-  const resources res;
+accuracy_outputs accuracy(const resources& res, const rr_view* weights) {
   const filled<int32_t> a(res, {0, 1, 2, 3}, {n});
   const filled<int64_t> b(res, {0, 2, 1, 3}, {n});
+  accuracy_outputs found{-1, -1, ""};
+  found.status = outcome(cuml_metrics_accuracy_score(
+      res.handle, a.view(), b.view(), weights, &found.correct, &found.total));
+  return found;
+}
+
+TEST(Scores, AccuracyReturnsTheMatchCountAndN) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const accuracy_outputs found = accuracy(res, nullptr);
+  ASSERT_EQ(found.status, "accepted");
+  EXPECT_EQ(found.correct, 2.0);
+  EXPECT_EQ(found.total, 4.0);
+}
+
+TEST(Scores, WeightedAccuracyReturnsTheScaledMatchedWeightAndTotal) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
   const filled<double> w(res, {1, 1, 1, 5}, {n});
-  double correct = 0;
-  double total = 0;
-  ASSERT_EQ(outcome(cuml_metrics_accuracy_score(res.handle, a.view(), b.view(),
-                                                nullptr, &correct, &total)),
-            "accepted");
-  EXPECT_EQ(correct, 2.0);
-  EXPECT_EQ(total, 4.0);
-  ASSERT_EQ(outcome(cuml_metrics_accuracy_score(res.handle, a.view(), b.view(),
-                                                w.view(), &correct, &total)),
-            "accepted");
-  EXPECT_EQ(correct, scaled_correct);
-  EXPECT_EQ(total, scaled_total);
-  EXPECT_EQ(correct / total, weighted_accuracy);
+  const accuracy_outputs found = accuracy(res, w.view());
+  ASSERT_EQ(found.status, "accepted");
+  EXPECT_EQ(found.correct, scaled_correct);
+  EXPECT_EQ(found.total, scaled_total);
+  EXPECT_EQ(found.correct / found.total, weighted_accuracy);
 }
 
 TEST(Scores, SmallResidualsBesideLargeValuesKeepTheirBits) {
@@ -473,6 +487,11 @@ TEST(Scores, SmallResidualsBesideLargeValuesKeepTheirBits) {
     const scored error = mse<double, double>(res, {big, 1}, {big, 2});
     EXPECT_EQ(error.value, half) << big;
   }
+}
+
+TEST(Scores, ALargeValueBehindAZeroWeightChangesNothing) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
   const filled<double> y(res, {dropped_value, 1, 2}, {3});
   const filled<double> p(res, {dropped_value, 1, 3}, {3});
   const filled<double> w(res, {0, 1, 1}, {3});
