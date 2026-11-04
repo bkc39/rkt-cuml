@@ -28,7 +28,12 @@ optional @racket[sample-weight], a @racket['float32] or @racket['float64]
 vector of finite values of at least 0 with a positive sum, and sums in
 double precision. A weight of at most 2@superscript{−1075}·2@superscript{e},
 where 2@superscript{e} is the largest weight rounded down to a power of two,
-counts as zero: its sample is dropped. Repeated calls on the same data give the same result.
+counts as zero: its sample is dropped. A weight w below
+2@superscript{−1022}·2@superscript{e} is held as a multiple of
+2@superscript{−1074}·2@superscript{e}, a relative error of up to
+2@superscript{e−1075}/w, and the terms of its sample are rounded on the
+same grid, so a score that such samples carry is accurate only to about
+that. Repeated calls on the same data give the same result.
 
 @defstruct*[contingency-table ([counts device-matrix?]
                                [row-labels device-vector?]

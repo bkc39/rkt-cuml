@@ -71,5 +71,5 @@
 (define-job cuml-metrics-accuracy-score-job
             library
             "cuml_metrics_accuracy_score_job"
-            (handle view view view (out _double) (out _double))
+            (handle view view view (out _double))
             #:exn exn:fail:cuml)
