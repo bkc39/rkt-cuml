@@ -417,13 +417,13 @@
                     "score: regressor-gadget is not fitted"
                     (lambda () (score (regressor-gadget) 'Z))))
 
-(test-case "#:needs-y cannot be given with #:supervised"
-  (check-syntax-error '(define-estimator both
-                         #:hyperparameters gadget-params
-                         #:fit gadget-fit/who
-                         #:supervised
-                         #:needs-y
-                         #:settings ()
-                         #:apply values
-                         [predict values])
-                      #rx"expected the literal #:settings\n  at: #:needs-y"))
+(test-case "#:needs-y cannot be given with #:supervised, in either order"
+  (for ([clauses (in-list '((#:supervised #:needs-y) (#:needs-y #:supervised)))])
+    (check-syntax-error `(define-estimator both
+                           #:hyperparameters gadget-params
+                           #:fit gadget-fit/who
+                           ,@clauses
+                           #:settings ()
+                           #:apply values
+                           [predict values])
+                        #rx"define-estimator: #:needs-y and #:supervised are exclusive")))

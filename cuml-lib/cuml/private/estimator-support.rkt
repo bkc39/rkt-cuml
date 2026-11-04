@@ -135,7 +135,11 @@
                             #:hyperparameters table:table-id
                             #:fit fit/who:id
                             (~optional (~seq #:labels labels:expr))
-                            (~optional (~or* (~and supervised #:supervised) (~and needs-y #:needs-y)))
+                            (~optional (~or* (~seq (~or* (~seq #:supervised #:needs-y)
+                                                         (~seq #:needs-y #:supervised))
+                                                   (~fail "#:needs-y and #:supervised are exclusive"))
+                                             (~and supervised #:supervised)
+                                             (~and needs-y #:needs-y)))
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
                             (~optional (~seq #:apply model->argument:expr entry:applied ...+)
