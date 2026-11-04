@@ -110,10 +110,9 @@
                 (* 128 u kappa (fit-size fitted)))
      (when fi
        (define shifted
-         (fit (map (lambda (row)
-                     (match-define (cons x0 rest) row)
-                     (cons (+ 2 x0) rest))
-                   X)
+         (fit (for/list ([row (in-list X)])
+                (match-define (cons x0 rest) row)
+                (cons (+ 2 x0) rest))
               y
               w
               dt
