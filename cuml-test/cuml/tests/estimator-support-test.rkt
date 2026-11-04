@@ -396,13 +396,13 @@
   [predict (applied-spy 'predict)]
   [score (scored-spy 'score) #:sample-weight])
 
-(test-case "L1-f: #:needs-y passes the generic's y to the fit positionally"
+(test-case "#:needs-y passes the generic's y to the fit positionally"
   (check-equal? (regressor-gadget-model (fit (regressor-gadget) 'X 'y)) '(regressor X y 3 #f))
   (check-equal? (regressor-gadget-model (fit (regressor-gadget #:size 4) 'X 'y #:sample-weight 'w))
                 '(regressor X y 4 w))
   (check-cuml-error 'logic "fit: regressor-gadget needs y" (lambda () (fit (regressor-gadget) 'X))))
 
-(test-case "L1-g: score passes y through to a #:needs-y estimator's scorer"
+(test-case "score passes y through to a #:needs-y estimator's scorer"
   (define e (fit (regressor-gadget) 'X 'y))
   (define m (regressor-gadget-model e))
   (check-equal? (score e 'Z 'v) (list 'score 'score m 'Z 'v #f))
@@ -412,7 +412,12 @@
                     "score: regressor-gadget is not fitted"
                     (lambda () (score (regressor-gadget) 'Z 'v))))
 
-(test-case "L1-f: #:needs-y cannot be given with #:supervised"
+(test-case "score on an unfitted #:needs-y estimator says not fitted before needs y"
+  (check-cuml-error 'logic
+                    "score: regressor-gadget is not fitted"
+                    (lambda () (score (regressor-gadget) 'Z))))
+
+(test-case "#:needs-y cannot be given with #:supervised"
   (check-syntax-error '(define-estimator both
                          #:hyperparameters gadget-params
                          #:fit gadget-fit/who
@@ -421,4 +426,4 @@
                          #:settings ()
                          #:apply values
                          [predict values])
-                      #rx"#:needs-y and #:supervised cannot both be given"))
+                      #rx"expected the literal #:settings\n  at: #:needs-y"))
