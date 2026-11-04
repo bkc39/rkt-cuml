@@ -101,28 +101,40 @@ TEST(OlsWorkspace, CusolverWorkspacesAtTheSvdBoundaries) {
   }
 }
 
-TEST(PlanStaging, WeightExponentIsEvenAndZeroWeightRowsAreIgnored) {
+struct staging_case {
+  resources res;
+  filled<double> x{res, {0.75, 1.0, 1.5, 3.0, 1e30, 1e30, 0.5, 9.0}, {4, 2}};
+  filled<double> y{res, {1.0, 5.0, 1e30, 3.0}, {4}};
+
+  staging planned(const double* w, exponents rule) const {
+    return plan_staging(handle_of(res), matrix_of(x, 4, 2), data_of(y), w, true,
+                        rule);
+  }
+};
+
+TEST(PlanStaging, ColumnAndTargetExponentsIgnoreZeroWeightRows) {
   CUMLRKT_REQUIRE_GPU();
-  const resources res;
-  const raft::handle_t& h = handle_of(res);
-  const filled<double> x(res, {0.75, 1.0, 1.5, 3.0, 1e30, 1e30, 0.5, 9.0},
-                         {4, 2});
-  const filled<double> y(res, {1.0, 5.0, 1e30, 3.0}, {4});
-  const filled<double> w(res, {0.375, 3.0, 0.0, 1.0}, {4});
-  const staging s = plan_staging(h, matrix_of(x, 4, 2), data_of(y), data_of(w),
-                                 true, exponents::per_column);
+  const staging_case c;
+  const filled<double> w(c.res, {0.375, 3.0, 0.0, 1.0}, {4});
+  const staging s = c.planned(data_of(w), exponents::per_column);
   EXPECT_EQ(s.e, (std::vector<int>{0, -3}));
   EXPECT_EQ(s.f, -2);
-  EXPECT_EQ(s.g % 2, 0);
-  EXPECT_EQ(s.g, -2);
-  const filled<double> w2(res, {0.375, 0.75, 0.0, 1.0}, {4});
-  EXPECT_EQ(plan_staging(h, matrix_of(x, 4, 2), data_of(y), data_of(w2), true,
-                         exponents::per_column)
-                .g,
-            0);
-  const staging u = plan_staging(h, matrix_of(x, 4, 2), data_of(y),
-                                 static_cast<const double*>(nullptr), true,
-                                 exponents::uniform);
+}
+
+TEST(PlanStaging, WeightExponentIsEven) {
+  CUMLRKT_REQUIRE_GPU();
+  const staging_case c;
+  const filled<double> w(c.res, {0.375, 3.0, 0.0, 1.0}, {4});
+  EXPECT_EQ(c.planned(data_of(w), exponents::per_column).g, -2);
+  const filled<double> w2(c.res, {0.375, 0.75, 0.0, 1.0}, {4});
+  EXPECT_EQ(c.planned(data_of(w2), exponents::per_column).g, 0);
+}
+
+TEST(PlanStaging, UniformExponentIsSharedByEveryColumn) {
+  CUMLRKT_REQUIRE_GPU();
+  const staging_case c;
+  const staging u =
+      c.planned(static_cast<const double*>(nullptr), exponents::uniform);
   EXPECT_EQ(u.e, (std::vector<int>{-99, -99}));
   EXPECT_EQ(u.g, 0);
 }
@@ -145,45 +157,63 @@ TEST(ConstantColumns, FollowTheInterceptRule) {
             (std::vector<char>{1, 1, 1}));
 }
 
+constexpr float poison = 9.0F;
+constexpr int past_float_range = 130;
+
 TEST(UnstageCoef, ZerosDroppedColumnsAndReportsTheFirstOverflow) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const raft::handle_t& h = handle_of(res);
   staging s{{3, 0, -2, 1}, 1, 0, {0, 2, 3}};
   const filled<float> staged(res, {1.5F, -2.0F, 4.0F}, {3});
-  filled<float> coef(res, {9, 9, 9, 9}, {4});
+  filled<float> coef(res, {poison, poison, poison, poison}, {4});
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,
                          static_cast<float*>(coef.array.view.data)),
             -1);
   EXPECT_EQ(coef.array.read<float>(),
             (std::vector<float>{6.0F, 0.0F, -0.25F, 4.0F}));
-  s.e = {0, 0, 130, 129};
+  s.e = {0, 0, past_float_range, past_float_range - 1};
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,
                          static_cast<float*>(coef.array.view.data)),
             2);
 }
 
+constexpr double finite_intercept = 0.5;
+
+std::string finite_refusal(const resources& res, const filled<double>& coef,
+                           double intercept, int algorithm) {
+  try {
+    require_finite_solution(data_of(coef), 2, intercept, algorithm,
+                            raft::resource::get_cuda_stream(handle_of(res)));
+  } catch (const cumlrkt::logic_error& e) {
+    return e.what();
+  }
+  return "accepted";
+}
+
+TEST(FiniteSolution, AFiniteSolutionIsAccepted) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> good(res, {1.0, 2.0}, {2});
+  EXPECT_EQ(finite_refusal(res, good, finite_intercept, CUML_LINEAR_MODEL_OLS_QR),
+            "accepted");
+}
+
 TEST(FiniteSolution, AStagedNanIsRefusedNamingTheSolve) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  const raft::handle_t& h = handle_of(res);
-  const auto stream = raft::resource::get_cuda_stream(h);
-  const filled<double> good(res, {1.0, 2.0}, {2});
   const filled<double> bad(res, {1.0, std::nan("")}, {2});
-  EXPECT_NO_THROW(require_finite_solution(data_of(good), 2, 0.5,
-                                          CUML_LINEAR_MODEL_OLS_QR, stream));
-  try {
-    require_finite_solution(data_of(bad), 2, 0.5, CUML_LINEAR_MODEL_OLS_QR,
-                            stream);
-    ADD_FAILURE() << "accepted a staged NaN";
-  } catch (const cumlrkt::logic_error& e) {
-    EXPECT_EQ(std::string(e.what()),
-              "X: the qr solve gave a non-finite coefficient");
-  }
-  EXPECT_THROW(require_finite_solution(data_of(good), 2,
-                                       std::numeric_limits<double>::infinity(),
-                                       CUML_LINEAR_MODEL_OLS_EIG, stream),
-               cumlrkt::logic_error);
+  EXPECT_EQ(finite_refusal(res, bad, finite_intercept, CUML_LINEAR_MODEL_OLS_QR),
+            "X: the qr solve gave a non-finite coefficient");
+}
+
+TEST(FiniteSolution, ANonFiniteInterceptIsRefused) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> good(res, {1.0, 2.0}, {2});
+  EXPECT_EQ(finite_refusal(res, good, std::numeric_limits<double>::infinity(),
+                           CUML_LINEAR_MODEL_OLS_EIG),
+            "X: the eig solve gave a non-finite coefficient");
 }
 
 }  // namespace
