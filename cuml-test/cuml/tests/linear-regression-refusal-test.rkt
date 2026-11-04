@@ -158,7 +158,7 @@
     (test-case (row-id r)
       (check-row "predict" r))))
 
-(test-case "the estimator refuses a missing y and predict before fit"
+(test-gpu "the estimator refuses a missing y and predict before fit"
   (check-cuml-error 'logic
                     "fit: linear-regression needs y"
                     (lambda () (fit (linear-regression) (matrix grid))))
