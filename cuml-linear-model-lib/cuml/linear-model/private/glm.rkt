@@ -8,9 +8,9 @@
          (only-in "native.rkt" cuml-linear-model-gemm-predict-job))
 
 (provide glm-predict/who
-         intercept-flag)
+         intercept-flag/who)
 
-(define (intercept-flag who fit-intercept)
+(define/who (intercept-flag who fit-intercept)
   (match fit-intercept
     [#t 1]
     [#f 0]

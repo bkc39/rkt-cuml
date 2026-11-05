@@ -60,10 +60,12 @@
 
 (define (column-moments c)
   (define n (length (lcase-y c)))
-  (for/lists (means spreads)
-             ([col (in-list (columns-of (lcase-X c)))])
-             (define mean (/ (apply + col) n))
-             (values mean (sqrt (/ (for/sum ([x (in-list col)]) (sqr (- x mean))) n)))))
+  (define columns (columns-of (lcase-X c)))
+  (define means (map (lambda (col) (/ (apply + col) n)) columns))
+  (values means
+          (for/list ([col (in-list columns)]
+                     [mean (in-list means)])
+            (sqrt (/ (for/sum ([x (in-list col)]) (sqr (- x mean))) n)))))
 
 (test-gpu "a column whose mean dwarfs its spread keeps its direction"
   (for* ([fixture (in-list (list (list 'float64 (offset-case 'float64 #e1e6 #e1e-6))

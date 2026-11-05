@@ -27,8 +27,8 @@
                (define w (kept-rows (lcase-w wide) gone))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a ~a" dt fi a)
-      (define (fit X y w)
-        (fit-of X y w dt #:algorithm a #:fit-intercept fi))
+      (define (fit rows targets weights)
+        (fit-of rows targets weights dt #:algorithm a #:fit-intercept fi))
       (define deleted (fit X y w))
       (check-true (bits-equal? (fit (lcase-X wide) (lcase-y wide) (zeroed (lcase-w wide) gone))
                                deleted)
