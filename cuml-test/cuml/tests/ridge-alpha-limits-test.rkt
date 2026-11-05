@@ -117,14 +117,15 @@
          [s (in-list solvers)])
     (define k (refused-ratio dt))
     (test-case (format "~a ~a ~a ~a 2^~a" (lcase-name c) fi dt s k)
-      (check-cuml-error 'logic
-                        #rx"^ridge-fit: alpha: expected at most [0-9.e+]+ for this X in float(32|64), got "
-                        (lambda ()
-                          (ridge-case-fit c
-                                          dt
-                                          #:alpha (* (expt 2 k) (widest-spread c fi))
-                                          #:solver s
-                                          #:fit-intercept fi))))))
+      (check-cuml-error
+       'logic
+       #rx"^ridge-fit: alpha: expected at most [0-9.e+]+ for this X in float(32|64), got "
+       (lambda ()
+         (ridge-case-fit c
+                         dt
+                         #:alpha (* (expt 2 k) (widest-spread c fi))
+                         #:solver s
+                         #:fit-intercept fi))))))
 
 (define kept-one
   (let ([c (normal-case 200 1 3 #:weighted? #t)])

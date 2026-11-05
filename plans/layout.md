@@ -1173,11 +1173,12 @@ Follow-ups are GitHub issues.
   (float32) and 2^−12 u (float64). Without the floor, α/σ²_max past 2^98
   (float32) or 2^208 (float64) gave wrong or zero coefficients (review H1).
   Past the floor α′ grows with α; an α′ past the dtype's range is refused
-  (`alpha: expected at most {bound} for this X in {dtype}`), which happens from
-  α/σ²_max ≈ 2^110 (float32) or 2^958 (float64). Below that edge the staged
-  coefficients stay normal for columns correlated with y; a fit whose largest
-  staged coefficient (≈ corr·‖y′‖/(α′/σ′)) is subnormal loses bits silently, which
-  needs a correlation under about 2^−6 (float32) at the edge. y keeps L1's power
+  (`alpha: expected at most {bound} for this X in {dtype}`), measured from
+  α/σ²_max = 2^111 to 2^112 (float32) and 2^959 to 2^960 (float64) on
+  `normal-case 200 3 0` and `200 7 1` weighted; up to the edge the error equals
+  the error at 2^90 (float32) or 2^200 (float64). A y with correlation 2^−4 to
+  2^−20 to X fits at 2^110 (float32) as at 2^100, with error ≈ u/corr from y's
+  rounding: no silent loss from subnormal staged coefficients was found. y keeps L1's power
   of two, which cancels from α′. Scaling X by 2^a with alpha by 4^a, y by 2^c,
   or the weights and alpha by 4^m moves the fit exactly (laws B2–B4).
 - **L2-b.** The keyword is `#:solver` (`'auto`, `'eig`, `'svd`), Python

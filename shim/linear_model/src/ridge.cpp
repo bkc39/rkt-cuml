@@ -20,8 +20,8 @@ template <typename T>
 double ridge_fit_into(const raft::handle_t& handle,
                       const ridge_request& request, rr_deposit* out) {
   const fit_request& fit = request.fit;
-  const checked_fit<T> checked = checked_inputs<T>(
-      handle, fit, [&] { require_ridge_codes(request); });
+  const checked_fit<T> checked =
+      checked_inputs<T>(handle, fit, [&] { require_ridge_codes(request); });
   prepared_fit<T> prepared = prepare_fit(handle, checked, fit.fit_intercept);
   const ridge_scale<T> scale =
       ridge_scale_of<T>(prepared.planned, prepared.counted.rows.count,
@@ -32,12 +32,11 @@ double ridge_fit_into(const raft::handle_t& handle,
   }
   const fit_inputs<T> in = prepared.in;
   const auto kept = static_cast<int64_t>(prepared.planned.kept.size());
-  const fit_plan plan{
-      shared_at(std::move(prepared.planned), scale.shared),
-      prepared.fit_intercept,
-      {glm_family::ridge,
-       ridge_algorithm(fit.algorithm, prepared.positive, kept)},
-      std::move(prepared.counted)};
+  const fit_plan plan{shared_at(std::move(prepared.planned), scale.shared),
+                      prepared.fit_intercept,
+                      {glm_family::ridge,
+                       ridge_algorithm(fit.algorithm, prepared.positive, kept)},
+                      std::move(prepared.counted)};
   const bool constant_y =
       constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);
   return deposit_fit(handle,

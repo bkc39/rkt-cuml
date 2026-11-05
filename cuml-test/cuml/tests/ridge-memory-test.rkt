@@ -26,7 +26,8 @@
   (ridge-predict (ridge-fit X y #:sample-weight w #:alpha 1/2 #:solver 'svd) X))
 
 (define (refusals X y _ wide wide-y mixed mixed-y)
-  (list (list "ridge-fit: solver: expected auto, eig or svd" (lambda () (ridge-fit X y #:solver 'lsmr)))
+  (list (list "ridge-fit: solver: expected auto, eig or svd"
+              (lambda () (ridge-fit X y #:solver 'lsmr)))
         (list "ridge-fit: alpha: expected a finite value at least 0, got -1"
               (lambda () (ridge-fit X y #:alpha -1)))
         (list "ridge-fit: X: 2x24000 elements are past cuSOLVER's eig workspace query"

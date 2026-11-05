@@ -54,20 +54,14 @@
 
 (define (case-request op c dt fi . settings)
   (apply hash-set*
-         (hasheq 'op
-                 op
-                 'dtype
-                 (symbol->string dt)
-                 'X
-                 (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
-                 'y
-                 (bits-of dt (map exact->inexact (lcase-y c)))
-                 'w
-                 (if (lcase-w c)
-                     (bits-of dt (map exact->inexact (lcase-w c)))
-                     'null)
-                 'fit_intercept
-                 fi)
+         (hasheq 'op op
+                 'dtype (symbol->string dt)
+                 'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
+                 'y (bits-of dt (map exact->inexact (lcase-y c)))
+                 'w (if (lcase-w c)
+                        (bits-of dt (map exact->inexact (lcase-w c)))
+                        'null)
+                 'fit_intercept fi)
          settings))
 
 (define (request op c dt a fi)

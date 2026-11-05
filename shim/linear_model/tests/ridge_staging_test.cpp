@@ -158,12 +158,12 @@ TEST(RidgeStaging, RoutesTheCasesRidgeFitCannotTake) {
     EXPECT_EQ(ridge_algorithm(c.solver, c.rows, c.kept), c.routed)
         << c.solver << " " << c.rows << " " << c.kept;
   }
-  EXPECT_EQ(
-      workspace_of({glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_SVD}, {10, 3}, 5),
-      53);
-  EXPECT_EQ(
-      workspace_of({glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_EIG}, {10, 3}, 5),
-      62);
+  EXPECT_EQ(workspace_of({glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_SVD},
+                         {10, 3}, 5),
+            53);
+  EXPECT_EQ(workspace_of({glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_EIG},
+                         {10, 3}, 5),
+            62);
   EXPECT_EQ(workspace_refusal(wide_columns, wide_lwork),
             "X: 24000 columns need a 2302120000-element eig workspace, more "
             "than 2147483647 elements");

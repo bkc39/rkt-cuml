@@ -62,8 +62,9 @@ prepared_fit<T> prepare_fit(const raft::handle_t& handle,
       plan_staging(handle, in.x, in.y, in.w, counted.rows, intercepted);
   const int weight_power =
       raw.w == nullptr ? 0 : even_floor(unit_exponent(checked.largest_weight));
-  return {std::move(weights), in,       intercepted,       weight_power,
-          positive,           std::move(counted), std::move(planned)};
+  return {std::move(weights), in,       intercepted,
+          weight_power,       positive, std::move(counted),
+          std::move(planned)};
 }
 
 template <typename T>
@@ -109,9 +110,8 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                       cs.data(), &intercept, plan.fit_intercept,
                       plan.solver.algorithm, staged_w);
   } else {
-    ML::GLM::olsFit(handle, p.x.data(), n, d, p.y.data(), cs.data(),
-                    &intercept, plan.fit_intercept, plan.solver.algorithm,
-                    staged_w);
+    ML::GLM::olsFit(handle, p.x.data(), n, d, p.y.data(), cs.data(), &intercept,
+                    plan.fit_intercept, plan.solver.algorithm, staged_w);
   }
   settle(handle);
   require_finite_solution(cs.data(), kept, intercept, plan.solver.algorithm,

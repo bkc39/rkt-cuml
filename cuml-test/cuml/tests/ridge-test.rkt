@@ -36,7 +36,8 @@
 (struct refused (message) #:transparent)
 
 (define (outcome thunk)
-  (with-handlers ([exn:fail? (lambda (e) (refused (regexp-replace #rx"^[a-z-]+: " (exn-message e) "")))])
+  (with-handlers ([exn:fail? (lambda (e)
+                               (refused (regexp-replace #rx"^[a-z-]+: " (exn-message e) "")))])
     (match-define (list coef b) (thunk))
     (fitted coef b)))
 
@@ -89,11 +90,10 @@
   (for* ([solver (in-list '(eig svd))]
          [alpha (in-list tiny-alphas)])
     (test-case (format "~a ~a" solver alpha)
-      (check-equal? (collinear-outcome solver alpha)
-                    (outcome (lambda ()
-                               (case-fit (collinear 60)
-                                         'float32
-                                         #:algorithm (lstsq-algorithm solver))))))))
+      (check-equal?
+       (collinear-outcome solver alpha)
+       (outcome (lambda ()
+                  (case-fit (collinear 60) 'float32 #:algorithm (lstsq-algorithm solver))))))))
 
 (test-gpu "float32 eig refuses collinear X with an alpha under rounding"
   (for ([alpha (in-list tiny-alphas)])

@@ -60,13 +60,12 @@
          [fi (in-list '(#t #f))]
          [m (in-list '(-3 2))])
     (test-case (format "~a ~a ~a 4^~a" dt s fi m)
-      (check-true (bits-equal?
-                   (ridge-case-fit (scaled-case base #:w (expt 4 m))
-                                   dt
-                                   #:alpha (* 3/2 (expt 4 m))
-                                   #:solver s
-                                   #:fit-intercept fi)
-                   (ridge-case-fit base dt #:alpha 3/2 #:solver s #:fit-intercept fi))))))
+      (check-true (bits-equal? (ridge-case-fit (scaled-case base #:w (expt 4 m))
+                                               dt
+                                               #:alpha (* 3/2 (expt 4 m))
+                                               #:solver s
+                                               #:fit-intercept fi)
+                               (ridge-case-fit base dt #:alpha 3/2 #:solver s #:fit-intercept fi))))))
 
 (define (deleted-cases fi)
   (append (list (normal-case 200 7 6 #:weighted? #t) (normal-case 1000 7 7 #:weighted? #t))

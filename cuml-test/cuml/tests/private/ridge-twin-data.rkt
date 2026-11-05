@@ -29,14 +29,7 @@
 (define-runtime-path twin "../python/ridge_twin.py")
 
 (define (request op c dt alpha solver fi)
-  (case-request op
-                c
-                dt
-                fi
-                'alpha
-                (real->double-flonum alpha)
-                'solver
-                (symbol->string solver)))
+  (case-request op c dt fi 'alpha (real->double-flonum alpha) 'solver (symbol->string solver)))
 
 (define (results requests)
   (twin-results twin requests))
@@ -127,10 +120,11 @@
 
 (define (check-raw-parity dt)
   (define rows (raw-rows))
-  (check-against dt
-                 rows
-                 (paired-references dt rows "cuml" '(eig svd) python-solver (lambda (r) (theirs dt r)))
-                 "Python cuML"))
+  (check-against
+   dt
+   rows
+   (paired-references dt rows "cuml" '(eig svd) python-solver (lambda (r) (theirs dt r)))
+   "Python cuML"))
 
 (define (check-sklearn-parity dt)
   (define rows (raw-rows))

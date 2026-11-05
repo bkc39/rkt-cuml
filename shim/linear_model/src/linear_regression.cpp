@@ -18,14 +18,13 @@ namespace {
 template <typename T>
 fit_plan plan_fit(prepared_fit<T>& prepared, int algorithm) {
   const auto kept = static_cast<int64_t>(prepared.planned.kept.size());
-  const bool wide =
-      kept > prepared.positive - (prepared.fit_intercept ? 1 : 0);
-  return {wide ? uniform(std::move(prepared.planned))
-               : std::move(prepared.planned),
-          prepared.fit_intercept,
-          {glm_family::ols,
-           wide || kept == 1 ? CUML_LINEAR_MODEL_OLS_SVD : algorithm},
-          std::move(prepared.counted)};
+  const bool wide = kept > prepared.positive - (prepared.fit_intercept ? 1 : 0);
+  return {
+      wide ? uniform(std::move(prepared.planned)) : std::move(prepared.planned),
+      prepared.fit_intercept,
+      {glm_family::ols,
+       wide || kept == 1 ? CUML_LINEAR_MODEL_OLS_SVD : algorithm},
+      std::move(prepared.counted)};
 }
 
 }  // namespace
@@ -49,9 +48,9 @@ double ols_fit_into(const raft::handle_t& handle, const fit_request& request,
                     rr_deposit* out) {
   const checked_fit<T> checked =
       checked_inputs<T>(handle, request, [&] { require_ols_codes(request); });
-  return ols_fit_prepared(
-      handle, prepare_fit(handle, checked, request.fit_intercept),
-      request.algorithm, out);
+  return ols_fit_prepared(handle,
+                          prepare_fit(handle, checked, request.fit_intercept),
+                          request.algorithm, out);
 }
 
 template double ols_fit_prepared<float>(const raft::handle_t&,

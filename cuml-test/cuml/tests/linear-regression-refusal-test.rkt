@@ -32,32 +32,32 @@
   (define X (matrix grid))
   (define y (vector targets))
   (append
-   (list
-    (row "X layout"
-         "X: expected row-major, got col-major 4x3"
-         (lambda () (go (blank-matrix 4 3 'float32 #:layout 'col-major) (blank-vector 4 'float32))))
-    (row "y rank" "y: expected rank 1, got rank 2" (lambda () (go X X)))
-    (row "y stride"
-         "y: expected contiguous elements, got stride 2"
-         (lambda () (go X (strided-vector 5))))
-    (row "weight dtype"
-         "sample-weight: expected float32, got float64"
-         (lambda () (go (matrix grid 'float32) (vector targets 'float32) #:sample-weight y)))
-    (row "unknown algorithm"
-         "algorithm: expected auto, eig, svd, svd-jacobi, qr or svd-qr"
-         (lambda () (go X y #:algorithm 'lu)))
-    (row "non-boolean fit-intercept"
-         "fit-intercept: expected #t or #f, got 'yes"
-         (lambda () (go X y #:fit-intercept 'yes)))
-    (row "non-boolean fit-intercept before the X views"
-         "fit-intercept: expected #t or #f, got 'yes"
-         (lambda () (go (blank-matrix 5 3 'int32) y #:fit-intercept 'yes)))
-    (row "non-finite weight"
-         "sample-weight: element 0: expected a finite value, got nan"
-         (lambda () (go X y #:sample-weight (vector '(+nan.0 1 1 1 1)))))
-    (row "coefficient overflow"
-         "X: column 2: the coefficient exceeds the float32 range"
-         (lambda () (go (overflow-X) (overflow-y)))))
+   (list (row "X layout"
+              "X: expected row-major, got col-major 4x3"
+              (lambda ()
+                (go (blank-matrix 4 3 'float32 #:layout 'col-major) (blank-vector 4 'float32))))
+         (row "y rank" "y: expected rank 1, got rank 2" (lambda () (go X X)))
+         (row "y stride"
+              "y: expected contiguous elements, got stride 2"
+              (lambda () (go X (strided-vector 5))))
+         (row "weight dtype"
+              "sample-weight: expected float32, got float64"
+              (lambda () (go (matrix grid 'float32) (vector targets 'float32) #:sample-weight y)))
+         (row "unknown algorithm"
+              "algorithm: expected auto, eig, svd, svd-jacobi, qr or svd-qr"
+              (lambda () (go X y #:algorithm 'lu)))
+         (row "non-boolean fit-intercept"
+              "fit-intercept: expected #t or #f, got 'yes"
+              (lambda () (go X y #:fit-intercept 'yes)))
+         (row "non-boolean fit-intercept before the X views"
+              "fit-intercept: expected #t or #f, got 'yes"
+              (lambda () (go (blank-matrix 5 3 'int32) y #:fit-intercept 'yes)))
+         (row "non-finite weight"
+              "sample-weight: element 0: expected a finite value, got nan"
+              (lambda () (go X y #:sample-weight (vector '(+nan.0 1 1 1 1)))))
+         (row "coefficient overflow"
+              "X: column 2: the coefficient exceeds the float32 range"
+              (lambda () (go (overflow-X) (overflow-y)))))
    (shared-fit-rows go)))
 
 (define (predict-rows fitted go)

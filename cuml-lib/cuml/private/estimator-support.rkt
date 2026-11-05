@@ -18,13 +18,12 @@
          define-regressor
          params->string)
 
-(define ((r2-scorer predict/who)
-         who
-         result
-         X
-         y
-         #:sample-weight [sample-weight #f]
-         #:resources [resources (current-device-resources)])
+(define ((r2-scorer predict/who) who
+                                 result
+                                 X
+                                 y
+                                 #:sample-weight [sample-weight #f]
+                                 #:resources [resources (current-device-resources)])
   (r2-score/who who
                 y
                 (predict/who who result X #:resources resources)
@@ -260,9 +259,9 @@
               #f)))))
 
 (define-syntax-parse-rule (define-regressor name:id
-                            #:hyperparameters table:id
-                            #:fit fit/who:id
-                            #:predict predict/who:id)
+                                            #:hyperparameters table:id
+                                            #:fit fit/who:id
+                                            #:predict predict/who:id)
   (define-estimator name
     #:hyperparameters table
     #:fit fit/who

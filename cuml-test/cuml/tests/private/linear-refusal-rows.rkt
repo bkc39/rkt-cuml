@@ -45,37 +45,37 @@
 (define (shared-fit-rows go)
   (define X (matrix grid))
   (define y (vector targets))
-  (list
-   (row "X dtype"
-        "X: expected float32 or float64, got int32"
-        (lambda () (go (blank-matrix 5 3 'int32) y)))
-   (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go y y)))
-   (row "y dtype" "y: expected float32, got float64" (lambda () (go (matrix grid 'float32) y)))
-   (row "y length"
-        "y: expected 10 elements, got 9"
-        (lambda () (go (matrix (append grid grid)) (vector (range 9)))))
-   (row "weight length"
-        "sample-weight: expected 5 elements, got 4"
-        (lambda () (go X y #:sample-weight (vector '(1 1 1 1)))))
-   (row "one row"
-        "X: expected at least 2 rows, got 1"
-        (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
-   (row "no column"
-        "X: expected at least 1 column, got 0"
-        (lambda () (go (blank-matrix 5 0 'float64) y)))
-   (row "non-finite X"
-        "X: row 3, column 1: expected a finite value, got nan"
-        (lambda () (go (matrix (with-cell grid 3 1 +nan.0)) y)))
-   (row "non-finite y"
-        "y: element 4: expected a finite value, got inf"
-        (lambda () (go X (vector (with-element targets 4 +inf.0)))))
-   (row "negative weight"
-        "sample-weight: element 1: expected at least 0, got -1"
-        (lambda () (go X y #:sample-weight (vector '(1 -1 1 1 1)))))
-   (row "zero weight sum"
-        "sample-weight: expected a positive sum, got 0"
-        (lambda () (go X y #:sample-weight (vector '(0 0 0 0 0)))))
-   (row "intercept overflow"
-        "y: the intercept exceeds the float32 range"
-        (lambda ()
-          (go (matrix '((1000) (1001) (1002)) 'float32) (vector '(3e38 2.9e38 2.8e38) 'float32))))))
+  (list (row "X dtype"
+             "X: expected float32 or float64, got int32"
+             (lambda () (go (blank-matrix 5 3 'int32) y)))
+        (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go y y)))
+        (row "y dtype" "y: expected float32, got float64" (lambda () (go (matrix grid 'float32) y)))
+        (row "y length"
+             "y: expected 10 elements, got 9"
+             (lambda () (go (matrix (append grid grid)) (vector (range 9)))))
+        (row "weight length"
+             "sample-weight: expected 5 elements, got 4"
+             (lambda () (go X y #:sample-weight (vector '(1 1 1 1)))))
+        (row "one row"
+             "X: expected at least 2 rows, got 1"
+             (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
+        (row "no column"
+             "X: expected at least 1 column, got 0"
+             (lambda () (go (blank-matrix 5 0 'float64) y)))
+        (row "non-finite X"
+             "X: row 3, column 1: expected a finite value, got nan"
+             (lambda () (go (matrix (with-cell grid 3 1 +nan.0)) y)))
+        (row "non-finite y"
+             "y: element 4: expected a finite value, got inf"
+             (lambda () (go X (vector (with-element targets 4 +inf.0)))))
+        (row "negative weight"
+             "sample-weight: element 1: expected at least 0, got -1"
+             (lambda () (go X y #:sample-weight (vector '(1 -1 1 1 1)))))
+        (row "zero weight sum"
+             "sample-weight: expected a positive sum, got 0"
+             (lambda () (go X y #:sample-weight (vector '(0 0 0 0 0)))))
+        (row "intercept overflow"
+             "y: the intercept exceeds the float32 range"
+             (lambda ()
+               (go (matrix '((1000) (1001) (1002)) 'float32)
+                   (vector '(3e38 2.9e38 2.8e38) 'float32))))))

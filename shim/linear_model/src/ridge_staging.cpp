@@ -24,8 +24,8 @@ int alpha_exponent(double alpha, int weight_power) {
   if (alpha == 0) {
     return std::numeric_limits<int>::max();
   }
-  return even_floor((2 * ridge_headroom<T>)-(std::ilogb(alpha) +
-                                             weight_power)) /
+  return even_floor(
+             (2 * ridge_headroom<T>)-(std::ilogb(alpha) + weight_power)) /
          2;
 }
 
@@ -44,11 +44,10 @@ int shared_cap(const staging& s, int64_t n) {
 }
 
 double widest_spread(const staging& s, int shared) {
-  return std::ranges::max(s.kept | std::views::transform([&](int64_t j) {
-                            return std::ldexp(
-                                s.spread[j],
-                                shared - unit_exponent(s.largest[j]));
-                          }));
+  return std::ranges::max(
+      s.kept | std::views::transform([&](int64_t j) {
+        return std::ldexp(s.spread[j], shared - unit_exponent(s.largest[j]));
+      }));
 }
 
 template <typename T>
@@ -74,10 +73,9 @@ ridge_scale<T> ridge_scale_of(const staging& s, int64_t n,
     return {0, T{0}, true};
   }
   const int spread = shared_spread(s);
-  const int shared =
-      std::min({spread + ridge_headroom<T>, shared_cap<T>(s, n),
-                std::max(alpha_exponent<T>(alpha, weight_power),
-                         spread + ridge_floor<T>)});
+  const int shared = std::min({spread + ridge_headroom<T>, shared_cap<T>(s, n),
+                               std::max(alpha_exponent<T>(alpha, weight_power),
+                                        spread + ridge_floor<T>)});
   const T staged = staged_alpha<T>(alpha, (2 * shared) + weight_power);
   const double widest = widest_spread(s, shared);
   return {shared, staged,

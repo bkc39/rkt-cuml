@@ -253,5 +253,4 @@
                             (quote-syntax update)))))
 
 (define-syntax-parse-rule (define-codes code:id e:code-entry ...)
-  (define code
-    (let ([table (hasheq e.entry ... ...)]) (lambda (key) (hash-ref table key -1)))))
+  (define code (let ([table (hasheq e.entry ... ...)]) (lambda (key) (hash-ref table key -1)))))
