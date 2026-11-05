@@ -28,6 +28,7 @@
          fit-gap
          fit-of
          fit-size
+         floor-log2
          gap
          host-cosine
          insert-column
@@ -48,8 +49,10 @@
          result-fit
          rounded
          rounded-case
+         scaled-case
          scaled-columns
          unit-roundoff
+         weighted-spread
          weights-or-ones
          zeroed)
 
@@ -141,6 +144,14 @@
 (define (kappa-of c fi)
   (solution-kappa (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi)))
 
+(define (scaled-case c #:X [x-factor 1] #:y [y-factor 1] #:w [w-factor 1])
+  (define (by f xs)
+    (and xs (map (lambda (v) (* f v)) xs)))
+  (lcase (lcase-name c)
+         (map (lambda (row) (by x-factor row)) (lcase-X c))
+         (by y-factor (lcase-y c))
+         (by w-factor (lcase-w c))))
+
 (define (scaled-columns c factors y-factor)
   (lcase (lcase-name c)
          (for/list ([row (in-list (lcase-X c))])
@@ -184,6 +195,13 @@
 
 (define (remove-at xs at)
   (append (take xs at) (drop xs (add1 at))))
+
+(define (floor-log2 x)
+  (let loop ([e (- (integer-length (numerator x)) (integer-length (denominator x)))])
+    (cond
+      [(> (expt 2 e) x) (loop (sub1 e))]
+      [(<= (expt 2 (add1 e)) x) (loop (add1 e))]
+      [else e])))
 
 (define (weighted-spread xs ws)
   (define m (/ (for/sum ([x (in-list xs)] [w (in-list ws)]) (* w x)) (apply + ws)))
@@ -424,7 +442,7 @@
   (for/list ([r (in-list ratios)])
     (ridge-solve G b mx my top bottom (* r unit))))
 
-(define (host-cosine X y w coef intercept fit-intercept)
+(define (host-cosine X y w coef intercept fit-intercept #:alpha [alpha 0])
   (define weights (weights-or-ones w y))
   (define total (apply + weights))
   (define (centre xs)
@@ -439,11 +457,16 @@
       (- yi intercept (dot row coef))))
   (define yc (centre y))
   (define y-norm (sqrt (for/sum ([v (in-list yc)] [wi (in-list weights)]) (* wi v v))))
-  (for/fold ([worst 0.0]) ([col (in-list (columns-of X))])
+  (for/fold ([worst 0.0])
+            ([col (in-list (columns-of X))]
+             [cj (in-list coef)])
     (define xc (centre col))
-    (define num (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri)))
-    (define norm (sqrt (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x))))
-    (max worst (exact->inexact (/ (abs num) (* norm y-norm))))))
+    (define num
+      (- (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri)) (* alpha cj)))
+    (define square (+ alpha (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x))))
+    (if (zero? square)
+        worst
+        (max worst (exact->inexact (/ (abs num) (* (sqrt square) y-norm)))))))
 
 (module+ test
   (require (only-in rackunit check-equal? check-true))

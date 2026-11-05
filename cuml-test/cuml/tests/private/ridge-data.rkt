@@ -7,9 +7,11 @@
          (only-in threading ~>)
          (only-in "linear-data.rkt"
                   check-law
+                  columns-of
                   dtypes
                   exact-fit
                   gap
+                  host-cosine
                   lcase-name
                   lcase-w
                   lcase-X
@@ -20,6 +22,7 @@
                   ridge-oracles
                   ridge-solution
                   unit-roundoff
+                  weighted-spread
                   weights-or-ones))
 
 (provide alpha-ratios
@@ -28,9 +31,10 @@
          norm2
          ridge-case-fit
          ridge-case-result
-         ridge-host-cosine
          ridge-result-fit
-         solvers)
+         rounding-alpha
+         solvers
+         widest-spread)
 
 (define alpha-ratios (list (expt 2 -20) (expt 2 -7) 1 (expt 2 7)))
 (define solvers '(eig svd))
@@ -40,6 +44,17 @@
 
 (define (norm2 xs)
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))
+
+(define (widest-spread c fi)
+  (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
+  (define (spread col)
+    (if fi
+        (weighted-spread col weights)
+        (for/sum ([x (in-list col)] [w (in-list weights)]) (* w x x))))
+  (apply max (map spread (columns-of (lcase-X c)))))
+
+(define (rounding-alpha c dt fi)
+  (* (inexact->exact (unit-roundoff dt)) (widest-spread c fi)))
 
 (define (ridge-case-result c dt #:alpha alpha #:solver [solver 'auto] #:fit-intercept [fi #t])
   (ridge-fit (on-matrix (lcase-X c) dt)
@@ -52,34 +67,7 @@
 (define (ridge-result-fit r)
   (list (~> r ridge-result-coef device-vector->list) (ridge-result-intercept r)))
 
-(define (ridge-case-fit c dt #:alpha alpha #:solver [solver 'auto] #:fit-intercept [fi #t])
-  (ridge-result-fit (ridge-case-result c dt #:alpha alpha #:solver solver #:fit-intercept fi)))
-
-(define (ridge-host-cosine X y w coef intercept fi alpha)
-  (define weights (weights-or-ones w y))
-  (define total (apply + weights))
-  (define (centre xs)
-    (define m
-      (if fi
-          (/ (for/sum ([x (in-list xs)] [wi (in-list weights)]) (* wi x)) total)
-          0))
-    (map (lambda (x) (- x m)) xs))
-  (define r
-    (for/list ([row (in-list X)]
-               [yi (in-list y)])
-      (- yi intercept (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj)))))
-  (define y-norm (sqrt (for/sum ([v (in-list (centre y))] [wi (in-list weights)]) (* wi v v))))
-  (for/fold ([worst 0.0])
-            ([col (in-list (apply map list X))]
-             [cj (in-list coef)])
-    (define xc (centre col))
-    (define num
-      (- (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri))
-         (* alpha cj)))
-    (define square (+ alpha (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x))))
-    (if (zero? square)
-        worst
-        (max worst (exact->inexact (/ (abs num) (* (sqrt square) y-norm)))))))
+(define ridge-case-fit (compose1 ridge-result-fit ridge-case-result))
 
 (define (check-ridge-laws cases intercepts)
   (for* ([c (in-list cases)]
@@ -95,7 +83,7 @@
           (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)))
         (check-law "R1" (gap coef c*) (* 128 u kappa (max-abs c*)))
         (check-law "R3"
-                   (ridge-host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi alpha)
+                   (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
                    (* 64 u kappa))
         (when fi
           (check-law "R2" (abs (- b b*)) (* 8 u kappa y∞)))))))

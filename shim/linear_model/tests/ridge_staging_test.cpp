@@ -16,10 +16,11 @@
 
 namespace {
 
+using cumlrkt::glm::glm_family;
 using cumlrkt::glm::ridge_algorithm;
-using cumlrkt::glm::ridge_staging;
-using cumlrkt::glm::ridge_workspace;
+using cumlrkt::glm::ridge_scale_of;
 using cumlrkt::glm::staging;
+using cumlrkt::glm::workspace_of;
 using cumlrkt::test::filled;
 using cumlrkt::test::fit_into;
 using cumlrkt::test::fitted;
@@ -33,6 +34,7 @@ staging planned(std::vector<int> exponent, std::vector<double> largest) {
   staging s;
   s.column_exponent = std::move(exponent);
   s.largest = std::move(largest);
+  s.spread.assign(s.largest.size(), 1.0);
   s.y_exponent = 3;
   for (std::size_t j = 0; j < s.largest.size(); ++j) {
     s.kept.push_back(static_cast<int64_t>(j));
@@ -48,16 +50,26 @@ struct staged_case {
   int64_t n;
   int shared;
   double alpha_staged;
+  bool negligible;
 };
 
 template <typename T>
 void expect_staged(const staged_case& c) {
-  const auto r = ridge_staging<T>(planned(c.exponent, c.largest), c.n,
-                                  {c.alpha, c.weight_power});
-  EXPECT_EQ(r.s.column_exponent, std::vector<int>(c.exponent.size(), c.shared))
-      << c.alpha;
+  const auto r = ridge_scale_of<T>(planned(c.exponent, c.largest), c.n,
+                                   {c.alpha, c.weight_power});
+  EXPECT_EQ(r.shared, c.shared) << c.alpha;
   EXPECT_EQ(r.alpha, static_cast<T>(c.alpha_staged)) << c.alpha;
-  EXPECT_EQ(r.s.y_exponent, 3);
+  EXPECT_EQ(r.negligible, c.negligible) << c.alpha;
+}
+
+template <typename T>
+std::string scale_refusal(double alpha) {
+  try {
+    ridge_scale_of<T>(planned({0}, {1.5}), 10, {alpha, 0});
+  } catch (const cumlrkt::logic_error& e) {
+    return e.what();
+  }
+  return "accepted";
 }
 
 struct routed_case {
@@ -72,8 +84,8 @@ constexpr int64_t wide_lwork = 1150000000;
 
 std::string workspace_refusal(int64_t columns, int64_t lwork) {
   try {
-    cumlrkt::glm::require_ridge_workspace(CUML_LINEAR_MODEL_RIDGE_EIG,
-                                          {2, columns}, lwork);
+    cumlrkt::glm::require_workspace(
+        {glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_EIG}, {2, columns}, lwork);
   } catch (const cumlrkt::logic_error& e) {
     return e.what();
   }
@@ -96,23 +108,41 @@ void expect_least_squares(const resources& res, const filled<float>& x,
 
 TEST(RidgeStaging, SharesOneExponentAndScalesAlphaByItsSquare) {
   const std::vector<staged_case> f32{
-      {{-3, 2}, {12.0, 0.5}, 1.0, 0, 100, 13, 0x1p26},
-      {{-3, 2}, {12.0, 0.5}, 0x1p20, 0, 100, 6, 0x1p32},
-      {{-3, 2}, {12.0, 0.5}, 0x1p21, 0, 100, 5, 0x1p31},
-      {{-3, 2}, {12.0, 0.5}, 3.0, -4, 100, 13, 0x3p22},
-      {{-3, 2}, {12.0, 0.5}, 0x1p-190, 0, 100, 13, 0.0},
+      {{-3, 2}, {12.0, 0.5}, 1.0, 0, 100, 13, 0x1p26, false},
+      {{-3, 2}, {12.0, 0.5}, 0x1p20, 0, 100, 6, 0x1p32, false},
+      {{-3, 2}, {12.0, 0.5}, 0x1p21, 0, 100, 5, 0x1p31, false},
+      {{-3, 2}, {12.0, 0.5}, 3.0, -4, 100, 13, 0x3p22, false},
+      {{-3, 2}, {12.0, 0.5}, 0x1p-190, 0, 100, 13, 0.0, true},
   };
   for (const staged_case& c : f32) {
     expect_staged<float>(c);
   }
   const std::vector<staged_case> f64{
-      {{0}, {1.5}, 1e-300, 0, 10, 64, std::ldexp(1e-300, 128)},
-      {{18}, {0x1p1000}, 1.0, 0, 10, 18, 0x1p36},
-      {{0}, {1.5}, 0x1p500, -2, 10, -185, std::ldexp(0x1p500, -372)},
+      {{0}, {1.5}, 1e-300, 0, 10, 64, std::ldexp(1e-300, 128), true},
+      {{18}, {0x1p1000}, 1.0, 0, 10, 18, 0x1p36, true},
   };
   for (const staged_case& c : f64) {
     expect_staged<double>(c);
   }
+}
+
+TEST(RidgeStaging, AnAlphaFarPastTheSpreadKeepsTheWidestColumnAtTheFloor) {
+  expect_staged<float>({{0}, {1.5}, 0x1p100, 0, 10, 8, 0x1p116, false});
+  expect_staged<double>(
+      {{0}, {1.5}, 0x1p500, -2, 10, 32, std::ldexp(0x1p500, 62), false});
+  EXPECT_EQ(scale_refusal<float>(0x1p120),
+            "alpha: expected at most 5.192296549049818e+33 for this X in "
+            "float32, got 1.329227995784916e+36");
+  EXPECT_EQ(scale_refusal<double>(0x1p1000),
+            "alpha: expected at most 9.745314011399998e+288 for this X in "
+            "float64, got 1.0715086071862673e+301");
+}
+
+TEST(RidgeStaging, AnAlphaUnderRoundingAgainstTheWidestSpreadIsNegligible) {
+  expect_staged<float>({{0}, {1.5}, 0x1p-24, 0, 10, 16, 0x1p8, true});
+  expect_staged<float>({{0}, {1.5}, 0x1p-23, 0, 10, 16, 0x1p9, false});
+  expect_staged<double>({{0}, {1.5}, 0x1p-53, 0, 10, 64, 0x1p75, true});
+  expect_staged<double>({{0}, {1.5}, 0x1p-52, 0, 10, 64, 0x1p76, false});
 }
 
 TEST(RidgeStaging, RoutesTheCasesRidgeFitCannotTake) {
@@ -128,8 +158,12 @@ TEST(RidgeStaging, RoutesTheCasesRidgeFitCannotTake) {
     EXPECT_EQ(ridge_algorithm(c.solver, c.rows, c.kept), c.routed)
         << c.solver << " " << c.rows << " " << c.kept;
   }
-  EXPECT_EQ(ridge_workspace(CUML_LINEAR_MODEL_RIDGE_SVD, {10, 3}, 5), 53);
-  EXPECT_EQ(ridge_workspace(CUML_LINEAR_MODEL_RIDGE_EIG, {10, 3}, 5), 62);
+  EXPECT_EQ(
+      workspace_of({glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_SVD}, {10, 3}, 5),
+      53);
+  EXPECT_EQ(
+      workspace_of({glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_EIG}, {10, 3}, 5),
+      62);
   EXPECT_EQ(workspace_refusal(wide_columns, wide_lwork),
             "X: 24000 columns need a 2302120000-element eig workspace, more "
             "than 2147483647 elements");

@@ -23,7 +23,7 @@
   [solver 'auto]
   [fit-intercept #t])
 
-(define-codes solver-code [auto 1] [eig 1] [svd 0])
+(define-codes solver-code [(auto eig) 1] [svd 0])
 
 (define/who (ridge-fit who
                        X

@@ -9,17 +9,12 @@
                   ridge-fit
                   ridge-predict
                   ridge-result-coef)
-         (only-in racket/match match-define)
          (only-in rackunit check-equal?)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/linear-data.rkt"
-                  oracle-ridge
-                  [on-matrix matrix]
-                  [on-vector vector]
-                  ridge-solution))
+         (only-in "private/linear-data.rkt" [on-matrix matrix] [on-vector vector]))
 
 (test-gpu "the linear-regression examples print what the manual shows"
   (define X (matrix '((1 1) (1 2) (2 2) (2 3))))
@@ -52,44 +47,26 @@
                     (lambda () (linear-regression-predict fitted (matrix '((1 2 3))))))
   (check-cuml-error 'logic "fit: linear-regression needs y" (lambda () (fit (linear-regression) X))))
 
-(define ((decimals k) c)
-  (real->decimal-string c k))
+(define (decimals k cs)
+  (map (lambda (c) (real->decimal-string c k)) cs))
 
-(test-gpu "the ridge examples print what the exact oracle gives"
-  (define rows '((1 1) (1 2) (2 2) (2 3)))
-  (define ys '(6 8 9 11))
-  (define X (matrix rows))
-  (define y (vector ys))
-  (define (oracle alpha)
-    (match-define (ridge-solution _ coef intercept _ _ _ _) (oracle-ridge rows ys #f alpha #t))
-    (values coef intercept))
-  (define-values (c1 b1) (oracle 1))
-  (define fitted-r (ridge-fit X y #:alpha 1.0))
-  (check-equal? (~> fitted-r ridge-result-coef device-vector->list (map (decimals 6) _))
-                (map (decimals 6) c1))
-  (check-equal? (~> fitted-r (ridge-predict (matrix '((3 5) (2 5)))) device-vector->list)
-                (for/list ([row (in-list '((3 5) (2 5)))])
-                  (real->double-flonum (+ b1
-                                          (for/sum ([x (in-list row)] [c (in-list c1)]) (* x c))))))
-  (check-equal?
-   (~> (ridge-fit X y #:alpha 0) ridge-result-coef device-vector->list (map (decimals 6) _))
-   '("1.000000" "2.000000"))
-  (define-values (c6 _b6) (oracle 1000000))
-  (check-equal?
-   (~> (ridge-fit X y #:alpha 1e6) ridge-result-coef device-vector->list (map (decimals 9) _))
-   (map (decimals 9) c6))
+(test-gpu "the ridge examples print what the manual shows"
+  (define X (matrix '((1 1) (1 2) (2 2) (2 3))))
+  (define y (vector '(6 8 9 11)))
+  (define fitted (ridge-fit X y #:alpha 1.0))
+  (check-equal? (~> fitted ridge-result-coef device-vector->list (decimals 6 _))
+                '("0.800000" "1.400000"))
+  (check-equal? (~> fitted (ridge-predict (matrix '((3 5) (2 5)))) device-vector->list)
+                '(13.9 13.1))
+  (check-equal? (~> (ridge-fit X y #:alpha 0) ridge-result-coef device-vector->list (decimals 6 _))
+                '("1.000000" "2.000000"))
+  (check-equal? (~> (ridge-fit X y #:alpha 1e6) ridge-result-coef device-vector->list (decimals 9 _))
+                '("0.000003000" "0.000005000"))
   (check-cuml-error 'logic
                     "ridge-fit: alpha: expected a finite value at least 0, got -1"
                     (lambda () (ridge-fit X y #:alpha -1)))
   (check-cuml-error 'logic
                     "ridge-fit: solver: expected auto, eig or svd"
                     (lambda () (ridge-fit X y #:solver 'lsmr)))
-  (define-values (ch bh) (oracle 1/2))
-  (define mean (/ (apply + ys) (length ys)))
-  (define residual
-    (for/sum ([row (in-list rows)] [v (in-list ys)])
-             (expt (- v bh (for/sum ([x (in-list row)] [c (in-list ch)]) (* x c))) 2)))
-  (define total (for/sum ([v (in-list ys)]) (expt (- v mean) 2)))
-  (check-equal? (~> (ridge #:alpha 0.5) (fit X y) (score X y) (real->decimal-string 6))
-                (real->decimal-string (- 1 (/ residual total)) 6))
+  (check-equal? (~> (ridge #:alpha 0.5) (fit X y) (score X y) (real->decimal-string 6)) "0.973935")
   (check-cuml-error 'logic "fit: ridge needs y" (lambda () (fit (ridge) X))))

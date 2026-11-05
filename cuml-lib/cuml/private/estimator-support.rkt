@@ -15,21 +15,21 @@
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide define-estimator
-         params->string
-         r2-scorer)
+         define-regressor
+         params->string)
 
-(define (r2-scorer predict/who)
-  (lambda (who
-           result
-           X
-           y
-           #:sample-weight [sample-weight #f]
-           #:resources [resources (current-device-resources)])
-    (r2-score/who who
-                  y
-                  (predict/who who result X #:resources resources)
-                  #:sample-weight sample-weight
-                  #:resources resources)))
+(define ((r2-scorer predict/who)
+         who
+         result
+         X
+         y
+         #:sample-weight [sample-weight #f]
+         #:resources [resources (current-device-resources)])
+  (r2-score/who who
+                y
+                (predict/who who result X #:resources resources)
+                #:sample-weight sample-weight
+                #:resources resources))
 
 (define (params->string name keys hyperparameters defaults setting-names settings fitted?)
   (define shown
@@ -258,3 +258,16 @@
        (name* (table.resolve 'name 'name params (given-hash '(key-name ...) (list key ...)))
               (hasheq (~@ 'setting setting) ...)
               #f)))))
+
+(define-syntax-parse-rule (define-regressor name:id
+                            #:hyperparameters table:id
+                            #:fit fit/who:id
+                            #:predict predict/who:id)
+  (define-estimator name
+    #:hyperparameters table
+    #:fit fit/who
+    #:needs-y
+    #:settings (resources)
+    #:apply values
+    [predict predict/who]
+    [score (r2-scorer predict/who) #:sample-weight]))

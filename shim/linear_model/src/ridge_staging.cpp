@@ -8,49 +8,86 @@
 #include <ranges>
 #include <utility>
 
-#include "cumlrkt/limits.hpp"
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
+#include "fit_checks.hpp"
 #include "glm_staging.hpp"
+#include "raftrkt/view.hpp"
 
 namespace cumlrkt::glm {
 
 namespace {
-
-int floor_half(int x) {
-  return (x - (((x % 2) + 2) % 2)) / 2;
-}
 
 template <typename T>
 int alpha_exponent(double alpha, int weight_power) {
   if (alpha == 0) {
     return std::numeric_limits<int>::max();
   }
-  return floor_half((2 * ridge_headroom<T>)-(std::ilogb(alpha) + weight_power));
+  return even_floor((2 * ridge_headroom<T>)-(std::ilogb(alpha) +
+                                             weight_power)) /
+         2;
+}
+
+int shared_spread(const staging& s) {
+  return std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
+                            return s.column_exponent[j];
+                          }));
+}
+
+template <typename T>
+int shared_cap(const staging& s, int64_t n) {
+  return std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
+                            return unit_exponent(s.largest[j]) +
+                                   column_reach<T>(n);
+                          }));
+}
+
+double widest_spread(const staging& s, int shared) {
+  return std::ranges::max(s.kept | std::views::transform([&](int64_t j) {
+                            return std::ldexp(
+                                s.spread[j],
+                                shared - unit_exponent(s.largest[j]));
+                          }));
+}
+
+template <typename T>
+T staged_alpha(double alpha, int power) {
+  const auto staged = static_cast<T>(std::ldexp(alpha, power));
+  if (!std::isfinite(staged)) {
+    throw logic_error(std::format(
+        "alpha: expected at most {} for this X in {}, got {}",
+        printed(std::ldexp(static_cast<double>(std::numeric_limits<T>::max()),
+                           -power)),
+        raftrkt::dtype_name(raftrkt::dtype_code<T>), printed(alpha)));
+  }
+  return staged;
 }
 
 }  // namespace
 
 template <typename T>
-ridge_stage<T> ridge_staging(staging s, int64_t n, ridge_penalty penalty) {
+ridge_scale<T> ridge_scale_of(const staging& s, int64_t n,
+                              ridge_penalty penalty) {
   const auto [alpha, weight_power] = penalty;
   if (s.kept.empty()) {
-    return {std::move(s), static_cast<T>(std::ldexp(alpha, weight_power))};
+    return {0, T{0}, true};
   }
-  const int spread =
-      std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
-                         return s.column_exponent[j] + ridge_headroom<T>;
-                       }));
-  const int cap = std::ranges::min(
-      s.kept | std::views::transform([&](int64_t j) {
-        return unit_exponent(s.largest[j]) + column_reach<T>(n);
-      }));
+  const int spread = shared_spread(s);
   const int shared =
-      std::min({spread, cap, alpha_exponent<T>(alpha, weight_power)});
+      std::min({spread + ridge_headroom<T>, shared_cap<T>(s, n),
+                std::max(alpha_exponent<T>(alpha, weight_power),
+                         spread + ridge_floor<T>)});
+  const T staged = staged_alpha<T>(alpha, (2 * shared) + weight_power);
+  const double widest = widest_spread(s, shared);
+  return {shared, staged,
+          static_cast<double>(staged) / widest / widest <=
+              std::ldexp(1.0, -std::numeric_limits<T>::digits)};
+}
+
+staging shared_at(staging s, int shared) {
   std::ranges::fill(s.column_exponent, shared);
-  return {std::move(s),
-          static_cast<T>(std::ldexp(alpha, (2 * shared) + weight_power))};
+  return s;
 }
 
 int ridge_algorithm(int solver, int64_t rows, int64_t kept) {
@@ -63,52 +100,28 @@ int ridge_algorithm(int solver, int64_t rows, int64_t kept) {
   return solver;
 }
 
-int64_t ridge_workspace(int algorithm, ols_shape shape, int64_t lwork) {
-  const auto [m, d] = shape;
-  const int64_t square =
-      algorithm == CUML_LINEAR_MODEL_RIDGE_SVD ? d * d : 2 * d * d;
-  return (m * d) + square + (3 * d) + lwork;
+int lstsq_algorithm(int solver) {
+  return solver == CUML_LINEAR_MODEL_RIDGE_SVD ? CUML_LINEAR_MODEL_OLS_SVD_QR
+                                               : CUML_LINEAR_MODEL_OLS_EIG;
 }
 
-void require_ridge_codes(ridge_codes codes) {
-  const auto [solver, fit_intercept, alpha] = codes;
+void require_ridge_codes(const ridge_request& request) {
+  const int32_t solver = request.fit.algorithm;
   if (solver != CUML_LINEAR_MODEL_RIDGE_SVD &&
       solver != CUML_LINEAR_MODEL_RIDGE_EIG) {
     throw logic_error("solver: expected auto, eig or svd");
   }
-  if (fit_intercept != 0 && fit_intercept != 1) {
-    throw logic_error("fit-intercept: expected #t or #f");
-  }
-  if (!std::isfinite(alpha) || !(alpha >= 0)) {
-    throw logic_error(std::format(
-        "alpha: expected a finite value at least 0, got {}", printed(alpha)));
-  }
-}
-
-void require_ridge_workspace(int algorithm, ols_shape shape, int64_t lwork) {
-  const int64_t size = ridge_workspace(algorithm, shape, lwork);
-  if (size > most_index) {
-    throw logic_error(std::format(
-        "X: {} columns need a {}-element {} workspace, more than {} elements",
-        shape.d, size, algorithm_name(algorithm), most_index));
+  require_fit_intercept(request.fit.fit_intercept);
+  if (!std::isfinite(request.alpha) || !(request.alpha >= 0)) {
+    throw logic_error(
+        std::format("alpha: expected a finite value at least 0, got {}",
+                    printed(request.alpha)));
   }
 }
 
-template <typename T>
-void require_ridge_solution(double cosine, int algorithm) {
-  if (!(cosine <= std::ldexp(1.0, -tolerance_bits<T>))) {
-    throw logic_error(std::format(
-        "X: the {} solve is not a ridge solution (gradient cosine {} > 2^-{}); "
-        "X is ill-conditioned for this alpha",
-        algorithm_name(algorithm), printed(cosine), tolerance_bits<T>));
-  }
-}
-
-template ridge_stage<float> ridge_staging<float>(staging, int64_t,
-                                                 ridge_penalty);
-template ridge_stage<double> ridge_staging<double>(staging, int64_t,
-                                                   ridge_penalty);
-template void require_ridge_solution<float>(double, int);
-template void require_ridge_solution<double>(double, int);
+template ridge_scale<float> ridge_scale_of<float>(const staging&, int64_t,
+                                                  ridge_penalty);
+template ridge_scale<double> ridge_scale_of<double>(const staging&, int64_t,
+                                                    ridge_penalty);
 
 }  // namespace cumlrkt::glm

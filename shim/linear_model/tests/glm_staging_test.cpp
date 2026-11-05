@@ -29,7 +29,6 @@ using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
 using cumlrkt::glm::profiles;
 using cumlrkt::glm::require_finite_solution;
-using cumlrkt::glm::require_workspace;
 using cumlrkt::glm::row_selection;
 using cumlrkt::glm::spread_exponent;
 using cumlrkt::glm::staged_weights;
@@ -39,6 +38,11 @@ using cumlrkt::glm::uniform;
 using cumlrkt::glm::unstage_coef;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
+
+void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork) {
+  cumlrkt::glm::require_workspace({cumlrkt::glm::glm_family::ols, algorithm},
+                                  {n, d}, lwork);
+}
 
 std::string refusal_of(void (*f)(int, int64_t, int64_t, int64_t), int a,
                        int64_t n, int64_t d, int64_t lwork) {
@@ -101,7 +105,7 @@ TEST(OlsWorkspace, CusolverWorkspacesAtTheSvdBoundaries) {
   const int64_t n = 40000;
   for (const int64_t d : {int64_t{20000}, int64_t{26000}}) {
     const int64_t lwork = cumlrkt::glm::cusolver_lwork_of<float>(
-        h, CUML_LINEAR_MODEL_OLS_SVD, {n, d});
+        h, {cumlrkt::glm::glm_family::ols, CUML_LINEAR_MODEL_OLS_SVD}, {n, d});
     EXPECT_GE(lwork, 0) << d;
     const int64_t size =
         ols_workspace(CUML_LINEAR_MODEL_OLS_SVD, {n, d}, lwork);
@@ -281,7 +285,7 @@ TEST(UnstageCoef, ZerosDroppedColumnsAndReportsTheFirstOverflow) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const raft::handle_t& h = handle_of(res);
-  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}, {}, {}, {}};
+  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}, {}, {}, {}, {}};
   const filled<float> staged(res, {1.5F, -2.0F, 4.0F}, {3});
   filled<float> coef(res, {poison, poison, poison, poison}, {4});
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,

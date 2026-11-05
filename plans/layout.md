@@ -1164,18 +1164,26 @@ Follow-ups are GitHub issues.
   every kept column is scaled by one shared power of two 2^s and alpha by its
   square (`shim/linear_model/src/ridge_staging.cpp`). With e_j L1's capped
   per-column exponent, c_j = −ilogb(max|x_j|) + reach (L1's cap), H = 16
-  (float32) or 64 (float64) and 4^k L1's weight power,
-  s = min(min_j e_j + H, min_j c_j, ⌊(2H − ilogb(α·4^−k))/2⌋), so the larger
-  of the widest staged spread² and the staged α′ = (T)(α·4^s·4^−k), rounded
-  once from double, sits near 2^(2H): both of `ridge.cuh`'s 1e-10 cuts lie
-  below what the solver resolves. y keeps L1's power of two, which cancels
-  from α′. Scaling X by 2^a with alpha by 4^a, y by 2^c, or the weights and
-  alpha by 4^m moves the fit exactly (laws B2–B4).
+  (float32) or 64 (float64), F = H/2 and 4^k L1's weight power,
+  s = min(min_j e_j + H, min_j c_j, max(⌊(2H − ilogb(α·4^−k))/2⌋, min_j e_j + F)),
+  so the larger of the widest staged spread² and the staged α′ = (T)(α·4^s·4^−k),
+  rounded once from double, sits near 2^(2H), and the widest staged spread never
+  falls below 2^F: `ridge.cuh` zeroes singular values ≤ 1e-10 ≈ 2^−33, and with
+  the widest at 2^F what it can drop is under 2^(−33−F) of the fit, 2^−17 u
+  (float32) and 2^−12 u (float64). Without the floor, α/σ²_max past 2^98
+  (float32) or 2^208 (float64) gave wrong or zero coefficients (review H1).
+  Past the floor α′ grows with α; an α′ past the dtype's range is refused
+  (`alpha: expected at most {bound} for this X in {dtype}`), which happens from
+  α/σ²_max ≈ 2^110 (float32) or 2^958 (float64). Below that edge the staged
+  coefficients stay normal for columns correlated with y; a fit whose largest
+  staged coefficient (≈ corr·‖y′‖/(α′/σ′)) is subnormal loses bits silently, which
+  needs a correlation under about 2^−6 (float32) at the edge. y keeps L1's power
+  of two, which cancels from α′. Scaling X by 2^a with alpha by 4^a, y by 2^c,
+  or the weights and alpha by 4^m moves the fit exactly (laws B2–B4).
 - **L2-b.** The keyword is `#:solver` (`'auto`, `'eig`, `'svd`), Python
   cuML's and sklearn's name; `'auto` is `'eig`; `'lsmr` is not bound.
-- **L2-c.** alpha 0, and an alpha whose staged α′ rounds to 0, run
-  `linear-regression-fit`'s path: 'eig, or 'svd-qr for 'svd, bit for bit
-  (law B1). −0.0 is accepted as 0.
+- **L2-c.** alpha 0 is L2-i's case α′ = 0: `linear-regression-fit`'s path,
+  'eig, or 'svd-qr for 'svd, bit for bit (law B1). −0.0 is accepted as 0.
 - **L2-d.** NaN, ±inf and negative alpha are refused in C (V8), a non-real
   alpha in Racket; an exact alpha past the double range becomes +inf.0 and
   is refused.
@@ -1189,9 +1197,30 @@ Follow-ups are GitHub issues.
 - **L2-f.** One kept column runs `ridgeFit`'s SVD under either solver
   (`ridgeFit` does this itself); 'svd with fewer positive-weight rows than
   kept columns runs eig, since gesvd aborts there. Both are covered by law R7.
-- **L2-g.** Weighted fits with an intercept repeat bitwise only up to about
-  2048 positive rows, through raft `weightedMean` (L1-h); the bitwise laws
-  B5–B8 stay inside that size.
-- **L2-h.** `r2-scorer` in `cuml/private/estimator-support.rkt` builds the
-  weighted `r2-score` scorer from a predict `/who`; `linear-regression` and
-  `ridge` both use it.
+- **L2-g.** Weighted fits with an intercept do not repeat bitwise from about
+  2000 positive rows (measured: 2000 rows of `normal-case 2000 7 2` float32
+  'eig differ by 1 ulp between runs; 1000 rows repeat), through raft
+  `weightedMean` (L1-h); unweighted fits and fits without an intercept repeat.
+  The bitwise laws B5–B8 keep weighted intercepted cases at ≤ 1000 rows, and
+  both Scribble entries say so.
+- **L2-h.** `define-regressor` in `cuml/private/estimator-support.rkt` is
+  `define-estimator` with `#:needs-y`, the resources setting, predict and the
+  weighted `r2-score` scorer from a predict `/who` (`r2-scorer`);
+  `linear-regression` and `ridge` are each one `define-regressor`.
+- **L2-i.** Every fit whose staged α′ ≤ u·σ′²_max runs `linear-regression-fit`'s
+  path (L2-c), u = 2^−24 (float32) or 2^−53 (float64) and σ′²_max the largest
+  staged weighted (centred with an intercept) column spread², from the planner's
+  per-column spread: the penalty is below rounding there, and the solver's
+  noise eigenvalues of rank-deficient X would pass for α′ (review M1: float32
+  'eig on x₃ = x₁ + x₂ returned min-norm + 1.72·(1, 1, −1) at α = 1e-40).
+  The route reuses ridge's checked inputs, staged weights and plan, so it costs
+  no second scan, and gives L1's bits and L1's refusals. The ratio α′/σ′²_max
+  equals α/σ²_max, so the threshold is u·max_j Σw(x_j − x̄_j)² in the caller's
+  units; tests check u·σ²/2 (L1's bits) and 2u·σ² (the ridge solve, R1).
+  The threshold is against the widest column, so a column of much smaller
+  spread loses its shrinkage: on Q2's float32 columns at 2^−13, 1, 2^13, 1
+  (u·σ²_max ≈ 151) α = 1 now returns the least-squares fit, 4121·max|c*| from
+  the ridge solution that 'svd solved to 4.6e−5 before the route; Q2 moved to
+  α = 1024. On p3's collinear X 'eig refuses as L1 does, but 'svd-qr accepts a
+  least-squares solution with a 33798·(1, 1, −1) null-space part, which 'svd
+  therefore returns (L1's own behaviour; open with the owner).

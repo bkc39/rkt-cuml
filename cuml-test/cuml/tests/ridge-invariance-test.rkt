@@ -14,14 +14,12 @@
                   lcase-y
                   normal-case
                   remove-at
+                  scaled-case
                   zeroed)
          (only-in "private/ridge-data.rkt" ridge-case-fit solvers)
          (only-in "private/scaler-data.rkt" bits-equal?))
 
 (define base (normal-case 200 7 3 #:weighted? #t))
-
-(define (scaled-by f xs)
-  (map (lambda (x) (* f x)) xs))
 
 (define (shifts dt)
   (if (eq? dt 'float32)
@@ -35,14 +33,12 @@
          [a (in-list (shifts dt))])
     (test-case (format "~a ~a ~a 2^~a" dt s fi a)
       (match-define (list coef b) (ridge-case-fit base dt #:alpha 3/2 #:solver s #:fit-intercept fi))
-      (define scaled
-        (lcase ""
-               (map (lambda (row) (scaled-by (expt 2 a) row)) (lcase-X base))
-               (lcase-y base)
-               (lcase-w base)))
-      (check-true (bits-equal?
-                   (ridge-case-fit scaled dt #:alpha (* 3/2 (expt 4 a)) #:solver s #:fit-intercept fi)
-                   (list (scaled-by (expt 2 (- a)) coef) b))))))
+      (check-true (bits-equal? (ridge-case-fit (scaled-case base #:X (expt 2 a))
+                                               dt
+                                               #:alpha (* 3/2 (expt 4 a))
+                                               #:solver s
+                                               #:fit-intercept fi)
+                               (list (map (lambda (x) (* x (expt 2 (- a)))) coef) b))))))
 
 (test-gpu "y times 2^c gives 2^c times the fit, bitwise (B3)"
   (for* ([dt (in-list dtypes)]
@@ -51,9 +47,12 @@
          [c (in-list '(-40 7 40))])
     (test-case (format "~a ~a ~a 2^~a" dt s fi c)
       (match-define (list coef b) (ridge-case-fit base dt #:alpha 3/2 #:solver s #:fit-intercept fi))
-      (define scaled (lcase "" (lcase-X base) (scaled-by (expt 2 c) (lcase-y base)) (lcase-w base)))
-      (check-true (bits-equal? (ridge-case-fit scaled dt #:alpha 3/2 #:solver s #:fit-intercept fi)
-                               (list (scaled-by (expt 2 c) coef) (* (expt 2 c) b)))))))
+      (check-true (bits-equal? (ridge-case-fit (scaled-case base #:y (expt 2 c))
+                                               dt
+                                               #:alpha 3/2
+                                               #:solver s
+                                               #:fit-intercept fi)
+                               (list (map (lambda (x) (* x (expt 2 c))) coef) (* (expt 2 c) b)))))))
 
 (test-gpu "weights times 4^m with alpha times 4^m give the same fit, bitwise (B4)"
   (for* ([dt (in-list dtypes)]
@@ -61,13 +60,16 @@
          [fi (in-list '(#t #f))]
          [m (in-list '(-3 2))])
     (test-case (format "~a ~a ~a 4^~a" dt s fi m)
-      (define scaled (lcase "" (lcase-X base) (lcase-y base) (scaled-by (expt 4 m) (lcase-w base))))
       (check-true (bits-equal?
-                   (ridge-case-fit scaled dt #:alpha (* 3/2 (expt 4 m)) #:solver s #:fit-intercept fi)
+                   (ridge-case-fit (scaled-case base #:w (expt 4 m))
+                                   dt
+                                   #:alpha (* 3/2 (expt 4 m))
+                                   #:solver s
+                                   #:fit-intercept fi)
                    (ridge-case-fit base dt #:alpha 3/2 #:solver s #:fit-intercept fi))))))
 
 (define (deleted-cases fi)
-  (append (list (normal-case 200 7 6 #:weighted? #t) (normal-case 2000 7 7 #:weighted? #t))
+  (append (list (normal-case 200 7 6 #:weighted? #t) (normal-case 1000 7 7 #:weighted? #t))
           (if fi
               '()
               (list (normal-case 5000 7 8 #:weighted? #t)))))

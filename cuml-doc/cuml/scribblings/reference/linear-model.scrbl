@@ -67,9 +67,10 @@ coefficient fixed only by rows of low weight w is accurate to about
 u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal
 does not see its loss.
 
-With weights and an intercept, fits above a few thousand rows can differ in
-the last bits between runs, as in Python cuML. @racket[X], @racket[y] and
-@racket[sample-weight] are not modified.
+Weighted fits with an intercept can differ in the last bits between runs
+from about 2000 rows, as in Python cuML; unweighted fits, and fits without an
+intercept, repeat bitwise. @racket[X], @racket[y] and @racket[sample-weight]
+are not modified.
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 1) (1 1) (2 1) (3 1)) #:dtype 'float64))
 (define yc (list->device-vector '(1 3 5 7) #:dtype 'float64))
@@ -135,9 +136,9 @@ The @racket[linear-regression-result] of the fit that made
 @declare-exporting[cuml/linear-model cuml]
 
 @examples[#:eval ev
+(define (decimals k cs) (map (lambda (c) (real->decimal-string c k)) cs))
 (define fitted-r (ridge-fit X y #:alpha 1.0))
-(~> fitted-r ridge-result-coef device-vector->list
-    (map (lambda (c) (real->decimal-string c 6)) _))
+(~> fitted-r ridge-result-coef device-vector->list (decimals 6 _))
 (device-vector->list
  (ridge-predict fitted-r (list*->device-matrix '((3 5) (2 5)) #:dtype 'float64)))
 ]
@@ -148,7 +149,7 @@ The result of @racket[ridge-fit], as @racket[linear-regression-result].}
 @defproc[(ridge-fit [X device-matrix?]
                     [y device-vector?]
                     [#:sample-weight sample-weight (or/c #f device-vector?) #f]
-                    [#:alpha alpha (and/c real? (>=/c 0)) 1.0]
+                    [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                     [#:solver solver (or/c 'auto 'eig 'svd) 'auto]
                     [#:fit-intercept fit-intercept boolean? #t]
                     [#:params params (or/c #f hash?) #f]
@@ -158,35 +159,34 @@ Minimises Σ@subscript{i} w@subscript{i}(y@subscript{i} − b@subscript{0} − x
 @racket[alpha]·‖b‖², as scikit-learn's and Python cuML's @tt{Ridge}: @racket[alpha]
 is not scaled by the row count or the weights' sum, and the intercept is not
 penalised. @racket[X], @racket[y] and @racket[sample-weight] are as for
-@racket[linear-regression-fit]; @racket[alpha] is finite and at least 0. With
-@racket[alpha] 0, or one that rounds to 0 against @racket[X]'s spread, the fit is
-@racket[linear-regression-fit]'s with @racket['eig] (@racket['auto], @racket['eig])
-or @racket['svd-qr] (@racket['svd]).
+@racket[linear-regression-fit].
 
 @racket['auto] and @racket['eig] eigendecompose XᵀWX; @racket['svd] takes a
-QR-based SVD of X (scikit-learn's @tt{'cholesky} and @tt{'svd}; @tt{'lsqr},
-@tt{'sag} and Python cuML's @tt{'lsmr} are not offered). One non-constant column
-is solved by the SVD, and @racket['svd] with fewer rows of positive weight than
-non-constant columns by @racket['eig]. Every column is scaled by one shared
-power of two and @racket[alpha] by its square, so
-@racket[(ridge-fit (* 2^a X) y #:alpha (* 4^a alpha))] gives exactly 2@superscript{−a}
-times the coefficients. A column constant over the rows of positive weight
-(zero, without @racket[fit-intercept]) gets coefficient 0.
+QR-based SVD of X. Every column and @racket[alpha] are first scaled by powers of
+two. An @racket[alpha] of at most u times the largest column's weighted spread
+Σ@subscript{i}w@subscript{i}(x@subscript{ij} − x̄@subscript{j})² (x̄@subscript{j}
+0 without @racket[fit-intercept]), u being the dtype's unit roundoff, is taken as 0:
+that fit is @racket[linear-regression-fit]'s with @racket['eig] (@racket['auto],
+@racket['eig]) or @racket['svd-qr] (@racket['svd]), refusals included. Such an
+@racket[alpha] can still shrink a column of much smaller spread; scale the columns
+alike, or fit in float64. A column
+constant over the rows of positive weight (zero, without @racket[fit-intercept])
+gets coefficient 0.
 
-The fit is refused when, for some centred column x, |xᵀW r − @racket[alpha]·b|
-exceeds 2@superscript{-8} (float32) or 2@superscript{-18} (float64) times
-√(xᵀWx + @racket[alpha]) times @racket[y]'s weighted spread, r being the residual,
-as with float32 @racket['eig] on columns of very different scales; @racket['svd]
-or float64 often fits. The refusal bounds the solve, not the coefficients: when
-@racket[alpha] is small against X's conditioning, coefficients are accurate only
-to about u·(σ@subscript{max}² + @racket[alpha])/(σ@subscript{min}² + @racket[alpha]).
+The fit is refused when the solve misses the ridge solution by more than
+2@superscript{-8} (float32) or 2@superscript{-18} (float64) in gradient cosine, as
+when X is ill-conditioned for @racket[alpha] (float32 @racket['eig] on columns of
+very different scales); @racket['svd] or float64 often fits. It is refused too when
+@racket[alpha] scaled with X passes the dtype's range. Coefficients are accurate to
+about u·(σ@subscript{max}² + @racket[alpha])/(σ@subscript{min}² + @racket[alpha]).
 
-Repeatability and mutation are as for @racket[linear-regression-fit].
+Weighted fits with an intercept can differ in the last bits between runs from
+about 2000 rows, as in Python cuML; unweighted fits, and fits without an
+intercept, repeat bitwise. @racket[X], @racket[y] and @racket[sample-weight] are
+not modified.
 @examples[#:eval ev #:label #f
-(~> (ridge-fit X y #:alpha 0) ridge-result-coef device-vector->list
-    (map (lambda (c) (real->decimal-string c 6)) _))
-(~> (ridge-fit X y #:alpha 1e6) ridge-result-coef device-vector->list
-    (map (lambda (c) (real->decimal-string c 9)) _))
+(~> (ridge-fit X y #:alpha 0) ridge-result-coef device-vector->list (decimals 6 _))
+(~> (ridge-fit X y #:alpha 1e6) ridge-result-coef device-vector->list (decimals 9 _))
 (eval:error (ridge-fit X y #:alpha -1))
 (eval:error (ridge-fit X y #:solver 'lsmr))
 ]}
@@ -197,7 +197,7 @@ Repeatability and mutation are as for @racket[linear-regression-fit].
 As @racket[linear-regression-predict], for a @racket[ridge-result].}
 
 @defproc[(ridge-params [base (or/c #f hash?) #f]
-                       [#:alpha alpha (and/c real? (>=/c 0)) 1.0]
+                       [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                        [#:solver solver (or/c 'auto 'eig 'svd) 'auto]
                        [#:fit-intercept fit-intercept boolean? #t])
          (and/c hash? hash-eq? immutable?)]{
@@ -208,7 +208,7 @@ The hyperparameters of @racket[ridge-fit] and @racket[ridge], as @racket[kmeans-
 @declare-exporting[cuml]
 
 @defproc[(ridge [params (or/c #f hash?) #f]
-                [#:alpha alpha (and/c real? (>=/c 0)) 1.0]
+                [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                 [#:solver solver (or/c 'auto 'eig 'svd) 'auto]
                 [#:fit-intercept fit-intercept boolean? #t]
                 [#:resources resources (or/c #f device-resources?) #f])

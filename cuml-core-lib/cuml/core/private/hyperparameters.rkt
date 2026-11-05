@@ -120,8 +120,11 @@
       #:attr update (hyperparameter-table-update (attribute table))))
 
   (define-syntax-class code-entry
-    #:attributes (name value)
-    (pattern [name:id value:expr]))
+    #:attributes ([entry 1])
+    (pattern [one:id value:expr]
+      #:with (entry ...) #'('one value))
+    (pattern [(name:id ...+) value:expr]
+      #:with (entry ...) #'((~@ 'name value) ...)))
 
   (define-syntax-class params-name
     #:description "a table name ending in -params"
@@ -251,4 +254,4 @@
 
 (define-syntax-parse-rule (define-codes code:id e:code-entry ...)
   (define code
-    (let ([table (hasheq (~@ 'e.name e.value) ...)]) (lambda (key) (hash-ref table key -1)))))
+    (let ([table (hasheq e.entry ... ...)]) (lambda (key) (hash-ref table key -1)))))

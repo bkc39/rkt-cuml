@@ -20,6 +20,7 @@ struct staging {
   int y_exponent;
   std::vector<int64_t> kept;
   std::vector<double> largest;
+  std::vector<double> spread;
   std::vector<double> normalised_mean;
   std::vector<double> normalised_remainder;
 };
@@ -32,6 +33,13 @@ struct ols_shape {
 struct row_selection {
   const int64_t* index;
   int64_t count;
+};
+
+enum class glm_family : std::uint8_t { ols, ridge };
+
+struct glm_solver {
+  glm_family family;
+  int algorithm;
 };
 
 int even_floor(int x);
@@ -102,7 +110,7 @@ void require_finite_solution(const T* staged, int64_t d, T intercept,
                              int algorithm, rmm::cuda_stream_view stream);
 
 template <typename T>
-void require_least_squares(double cosine, int algorithm);
+void require_stationary(double cosine, glm_solver solver);
 
 template <typename T>
 void require_in_range(int64_t column, T intercept);

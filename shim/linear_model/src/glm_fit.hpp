@@ -26,13 +26,25 @@ struct counted_rows {
 struct fit_plan {
   staging s;
   bool fit_intercept;
-  int algorithm;
+  glm_solver solver;
   counted_rows counted;
 };
 
 template <typename T>
-counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
-                             rmm::cuda_stream_view stream);
+struct prepared_fit {
+  buffer<T> weights;
+  fit_inputs<T> in;
+  bool fit_intercept;
+  int weight_power;
+  int64_t positive;
+  counted_rows counted;
+  staging planned;
+};
+
+template <typename T>
+prepared_fit<T> prepare_fit(const raft::handle_t& handle,
+                            const checked_fit<T>& checked,
+                            int32_t fit_intercept);
 
 template <typename T>
 fit_result<T> nothing_to_solve(const raft::handle_t& handle,
@@ -40,8 +52,16 @@ fit_result<T> nothing_to_solve(const raft::handle_t& handle,
                                bool constant_y);
 
 template <typename T>
+fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
+                     const fit_plan& plan, T alpha);
+
+template <typename T>
 double deposit_fit(const raft::handle_t& handle, fit_result<T> r,
                    rr_deposit* out);
+
+template <typename T>
+double ols_fit_prepared(const raft::handle_t& handle, prepared_fit<T> prepared,
+                        int algorithm, rr_deposit* out);
 
 template <typename T>
 double ols_fit_into(const raft::handle_t& handle, const fit_request& request,

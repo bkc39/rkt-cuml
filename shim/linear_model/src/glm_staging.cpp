@@ -112,6 +112,7 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   staging s;
   s.column_exponent.resize(x.d);
   s.largest.resize(x.d);
+  s.spread.resize(x.d);
   s.normalised_mean.resize(x.d);
   s.normalised_remainder.resize(x.d);
   for (int64_t j = 0; j < x.d; ++j) {
@@ -119,6 +120,7 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     s.column_exponent[j] =
         spread_exponent<T>(unit[j], spread[j].spread, rows.count);
     s.largest[j] = p.largest;
+    s.spread[j] = spread[j].spread;
     s.normalised_mean[j] = p.mean;
     s.normalised_remainder[j] = spread[j].remainder;
     if (p.varies) {
@@ -200,13 +202,21 @@ void require_finite_solution(const T* staged, int64_t d, T intercept,
 }
 
 template <typename T>
-void require_least_squares(double cosine, int algorithm) {
-  if (!(cosine <= std::ldexp(1.0, -tolerance_bits<T>))) {
-    throw logic_error(std::format(
-        "X: the {} solve is not a least-squares solution (residual cosine {} "
-        "> 2^-{}); X may have collinear columns",
-        algorithm_name(algorithm), printed(cosine), tolerance_bits<T>));
+void require_stationary(double cosine, glm_solver solver) {
+  if (cosine <= std::ldexp(1.0, -tolerance_bits<T>)) {
+    return;
   }
+  const std::string name = algorithm_name(solver.algorithm);
+  if (solver.family == glm_family::ridge) {
+    throw logic_error(std::format(
+        "X: the {} solve is not a ridge solution (gradient cosine {} > 2^-{}); "
+        "X is ill-conditioned for this alpha",
+        name, printed(cosine), tolerance_bits<T>));
+  }
+  throw logic_error(std::format(
+      "X: the {} solve is not a least-squares solution (residual cosine {} "
+      "> 2^-{}); X may have collinear columns",
+      name, printed(cosine), tolerance_bits<T>));
 }
 
 template <typename T>
@@ -271,8 +281,8 @@ template void require_finite_solution<float>(const float*, int64_t, float, int,
                                              rmm::cuda_stream_view);
 template void require_finite_solution<double>(const double*, int64_t, double,
                                               int, rmm::cuda_stream_view);
-template void require_least_squares<float>(double, int);
-template void require_least_squares<double>(double, int);
+template void require_stationary<float>(double, glm_solver);
+template void require_stationary<double>(double, glm_solver);
 template void require_in_range<float>(int64_t, float);
 template void require_in_range<double>(int64_t, double);
 template double stationarity_cosine<float>(const raft::handle_t&,

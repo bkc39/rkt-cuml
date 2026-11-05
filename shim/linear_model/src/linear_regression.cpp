@@ -1,9 +1,5 @@
-#include <cmath>
 #include <cstdint>
-#include <cuml/linear_model/glm.hpp>
-#include <memory>
 #include <raft/core/handle.hpp>
-#include <rmm/cuda_stream_view.hpp>
 #include <utility>
 
 #include "cumlrkt/linear_model.h"
@@ -11,7 +7,6 @@
 #include "fit_checks.hpp"
 #include "glm_fit.hpp"
 #include "glm_staging.hpp"
-#include "glm_staging_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
@@ -21,146 +16,49 @@ namespace cumlrkt::glm {
 namespace {
 
 template <typename T>
-std::unique_ptr<buffer<T>> zero_coef(int64_t d, rmm::cuda_stream_view stream) {
-  auto coef = std::make_unique<buffer<T>>(scratch<T>(d, stream));
-  raftrkt::cuda_check(cudaMemsetAsync(coef->data(), 0, coef->size() * sizeof(T),
-                                      stream.value()),
-                      "cudaMemsetAsync");
-  return coef;
+fit_plan plan_fit(prepared_fit<T>& prepared, int algorithm) {
+  const auto kept = static_cast<int64_t>(prepared.planned.kept.size());
+  const bool wide =
+      kept > prepared.positive - (prepared.fit_intercept ? 1 : 0);
+  return {wide ? uniform(std::move(prepared.planned))
+               : std::move(prepared.planned),
+          prepared.fit_intercept,
+          {glm_family::ols,
+           wide || kept == 1 ? CUML_LINEAR_MODEL_OLS_SVD : algorithm},
+          std::move(prepared.counted)};
 }
 
 }  // namespace
 
 template <typename T>
-counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
-                             rmm::cuda_stream_view stream) {
-  const bool compact = positive < n && positive >= 2;
-  buffer<int64_t> index = scratch<int64_t>(compact ? positive : 0, stream);
-  if (compact) {
-    positive_rows(w, n, index.data(), stream);
-  }
-  const row_selection rows{compact ? index.data() : nullptr,
-                           compact ? positive : n};
-  return {std::move(index), rows};
+double ols_fit_prepared(const raft::handle_t& handle, prepared_fit<T> prepared,
+                        int algorithm, rr_deposit* out) {
+  const fit_inputs<T> in = prepared.in;
+  const fit_plan plan = plan_fit(prepared, algorithm);
+  const bool constant_y =
+      constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);
+  return deposit_fit(handle,
+                     constant_y || plan.s.kept.empty()
+                         ? nothing_to_solve(handle, in, plan, constant_y)
+                         : solved(handle, in, plan, T{0}),
+                     out);
 }
-
-template <typename T>
-fit_result<T> nothing_to_solve(const raft::handle_t& handle,
-                               const fit_inputs<T>& in, const fit_plan& plan,
-                               bool constant_y) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const auto& [x, y, w] = in;
-  auto coef = zero_coef<T>(x.d, stream);
-  double intercept = 0;
-  if (plan.fit_intercept && constant_y) {
-    intercept = static_cast<double>(
-        read_one(y, first_positive(w, x.n, stream), stream));
-  } else if (plan.fit_intercept) {
-    const centre c =
-        target_centre(y, w, plan.counted.rows, plan.s.y_exponent, stream);
-    intercept = static_cast<double>(static_cast<T>(
-        std::ldexp(static_cast<T>(c.mean + c.remainder), -plan.s.y_exponent)));
-  }
-  settle(handle);
-  return {std::move(coef), intercept};
-}
-
-template <typename T>
-double deposit_fit(const raft::handle_t& handle, fit_result<T> r,
-                   rr_deposit* out) {
-  settle(handle);
-  const rr_view region = raftrkt::region(*r.coef);
-  raftrkt::deposit(out, "out", handle, std::move(r.coef), {region});
-  return r.intercept;
-}
-
-namespace {
-
-template <typename T>
-fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
-                     const fit_plan& plan) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const auto& [x, y, w] = in;
-  const staging& s = plan.s;
-  const auto kept = static_cast<int64_t>(s.kept.size());
-  const row_selection rows = plan.counted.rows;
-  require_workspace(
-      plan.algorithm, rows.count, kept,
-      cusolver_lwork_of<T>(handle, plan.algorithm, {rows.count, kept}));
-  staged_problem<T> p = stage_problem(handle, x, y, w, s, rows);
-  buffer<T> cs = scratch<T>(kept, stream);
-  T intercept{0};
-  ML::GLM::olsFit(handle, p.x.data(), static_cast<size_t>(rows.count),
-                  static_cast<size_t>(kept), p.y.data(), cs.data(), &intercept,
-                  plan.fit_intercept, plan.algorithm,
-                  w == nullptr ? nullptr : p.w.data());
-  settle(handle);
-  require_finite_solution(cs.data(), kept, intercept, plan.algorithm, stream);
-  require_least_squares<T>(
-      stationarity_cosine(handle, x, y, w, rows, s, cs.data(),
-                          plan.fit_intercept, T{0}),
-      plan.algorithm);
-  auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
-  const T unscaled = std::ldexp(intercept, -s.y_exponent);
-  require_in_range(unstage_coef(handle, cs.data(), s, x.d, coef->data()),
-                   unscaled);
-  return {std::move(coef),
-          plan.fit_intercept ? static_cast<double>(unscaled) : 0.0};
-}
-
-template <typename T>
-fit_plan plan_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
-                  const fit_request& request) {
-  const auto& [x, y, w] = in;
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const bool intercepted = request.fit_intercept == 1;
-  const int64_t positive = positive_count(w, x.n, stream);
-  counted_rows counted = counted_rows_of(w, x.n, positive, stream);
-  staging planned = plan_staging(handle, x, y, w, counted.rows, intercepted);
-  const auto kept = static_cast<int64_t>(planned.kept.size());
-  const bool wide = kept > positive - (intercepted ? 1 : 0);
-  const int algorithm =
-      wide || kept == 1 ? CUML_LINEAR_MODEL_OLS_SVD : request.algorithm;
-  return {wide ? uniform(std::move(planned)) : std::move(planned), intercepted,
-          algorithm, std::move(counted)};
-}
-
-}  // namespace
 
 template <typename T>
 double ols_fit_into(const raft::handle_t& handle, const fit_request& request,
                     rr_deposit* out) {
   const checked_fit<T> checked =
       checked_inputs<T>(handle, request, [&] { require_ols_codes(request); });
-  const fit_inputs<T>& raw = checked.in;
-  const buffer<T> weights =
-      staged_weights(handle, raw.w, raw.x.n, checked.largest_weight);
-  const fit_inputs<T> in{raw.x, raw.y,
-                         raw.w == nullptr ? nullptr : weights.data()};
-  const fit_plan plan = plan_fit(handle, in, request);
-  const bool constant_y =
-      constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);
-  return deposit_fit(handle,
-                     constant_y || plan.s.kept.empty()
-                         ? nothing_to_solve(handle, in, plan, constant_y)
-                         : solved(handle, in, plan),
-                     out);
+  return ols_fit_prepared(
+      handle, prepare_fit(handle, checked, request.fit_intercept),
+      request.algorithm, out);
 }
 
-template counted_rows counted_rows_of<float>(const float*, int64_t, int64_t,
-                                             rmm::cuda_stream_view);
-template counted_rows counted_rows_of<double>(const double*, int64_t, int64_t,
-                                              rmm::cuda_stream_view);
-template fit_result<float> nothing_to_solve<float>(const raft::handle_t&,
-                                                   const fit_inputs<float>&,
-                                                   const fit_plan&, bool);
-template fit_result<double> nothing_to_solve<double>(const raft::handle_t&,
-                                                     const fit_inputs<double>&,
-                                                     const fit_plan&, bool);
-template double deposit_fit<float>(const raft::handle_t&, fit_result<float>,
-                                   rr_deposit*);
-template double deposit_fit<double>(const raft::handle_t&, fit_result<double>,
-                                    rr_deposit*);
+template double ols_fit_prepared<float>(const raft::handle_t&,
+                                        prepared_fit<float>, int, rr_deposit*);
+template double ols_fit_prepared<double>(const raft::handle_t&,
+                                         prepared_fit<double>, int,
+                                         rr_deposit*);
 template double ols_fit_into<float>(const raft::handle_t&, const fit_request&,
                                     rr_deposit*);
 template double ols_fit_into<double>(const raft::handle_t&, const fit_request&,

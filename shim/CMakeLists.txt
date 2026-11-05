@@ -101,7 +101,7 @@ cumlrkt_family(decomposition
 
 cumlrkt_family(linear_model
   SOURCES linear_model/src/linear_model.cpp
-          linear_model/src/linear_regression.cpp
+          linear_model/src/glm_fit.cpp linear_model/src/linear_regression.cpp
           linear_model/src/ridge.cpp linear_model/src/ridge_staging.cpp
           linear_model/src/fit_checks.cpp linear_model/src/predict.cpp
           linear_model/src/glm_staging.cpp
