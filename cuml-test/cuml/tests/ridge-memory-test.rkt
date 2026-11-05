@@ -28,7 +28,9 @@
 
 (define (data)
   (define c (normal-case 2000 7 0 #:weighted? #t))
-  (list (on-matrix (lcase-X c) 'float32) (on-vector (lcase-y c) 'float32) (on-vector (lcase-w c) 'float32)))
+  (list (on-matrix (lcase-X c) 'float32)
+        (on-vector (lcase-y c) 'float32)
+        (on-vector (lcase-w c) 'float32)))
 
 (define (one-round X y w)
   (ridge-predict (ridge-fit X y #:sample-weight w #:alpha 1/2 #:solver 'svd) X))
@@ -51,7 +53,8 @@
   (define wide (wide-X 24000))
   (define wide-y (on-vector '(1 2) 'float32))
   (match-define (list Xm ym) (mixed-scales))
-  (list (list "ridge-fit: solver: expected auto, eig or svd" (lambda () (ridge-fit X y #:solver 'lsmr)))
+  (list (list "ridge-fit: solver: expected auto, eig or svd"
+              (lambda () (ridge-fit X y #:solver 'lsmr)))
         (list "ridge-fit: alpha: expected a finite value at least 0, got -1"
               (lambda () (ridge-fit X y #:alpha -1)))
         (list "ridge-fit: X: 2x24000 elements are past cuSOLVER's eig workspace query"
@@ -91,23 +94,25 @@
       (check-equal? (sample-used after-refusals)
                     (sample-used sample)
                     "a refused call holds no pool memory once it returns")
-      (values (cons sample samples) (cons (- (settled-count buffer-drop-count) before) refused-drops))))
+      (values (cons sample samples)
+              (cons (- (settled-count buffer-drop-count) before) refused-drops))))
   (define wanted (* buffers-per-round rounds))
   (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
   (define freed (- (buffer-drop-count) drops))
   (void/reference-sink X y w calls)
   (define used (map sample-used samples))
   (define growth (device-growth base-bytes samples))
-  (printf "memory: ~a ridge rounds and ~a refused calls in ~a s; pool used ~a before, ~a after; device ~a before, ~a after; ~a of ~a buffers freed\n"
-          rounds
-          (* refusals-per-sample (length calls) (length samples))
-          (~r (/ (- (current-inexact-milliseconds) started) 1000.0) #:precision 1)
-          base-used
-          used
-          base-bytes
-          (map sample-bytes samples)
-          freed
-          wanted)
+  (printf
+   "memory: ~a ridge rounds and ~a refused calls in ~a s; pool used ~a before, ~a after; device ~a before, ~a after; ~a of ~a buffers freed\n"
+   rounds
+   (* refusals-per-sample (length calls) (length samples))
+   (~r (/ (- (current-inexact-milliseconds) started) 1000.0) #:precision 1)
+   base-used
+   used
+   base-bytes
+   (map sample-bytes samples)
+   freed
+   wanted)
   (check-equal? freed wanted)
   (check-equal? refused-drops (make-list (length samples) 0) "refusals hand Racket no buffer to drop")
   (check-equal? (- (release-failure-count) failures) 0)
@@ -115,5 +120,6 @@
   (check-true (<= (executor-threads) (add1 threads)))
   (for ([u (in-list used)])
     (check-equal? u base-used "pool use returns to the baseline after a collection"))
-  (check-true (<= growth device-slack)
-              (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))
+  (check-true
+   (<= growth device-slack)
+   (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack)))

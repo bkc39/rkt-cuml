@@ -73,8 +73,9 @@
             ([col (in-list (apply map list X))]
              [cj (in-list coef)])
     (define xc (centre col))
-    (define num (- (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri))
-                   (* alpha cj)))
+    (define num
+      (- (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri))
+         (* alpha cj)))
     (define square (+ alpha (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x))))
     (if (zero? square)
         worst

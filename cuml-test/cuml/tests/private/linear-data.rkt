@@ -399,9 +399,17 @@
                                [i (in-naturals)])
                       (for/list ([g (in-list row)]
                                  [j (in-naturals)])
-                        (if (= i j) (+ g alpha) g)))
+                        (if (= i j)
+                            (+ g alpha)
+                            g)))
                     b))
-  (ridge-solution alpha c (- my (dot mx c)) (/ (+ top alpha) (+ bottom alpha)) top bottom (sqrt (dot b b))))
+  (ridge-solution alpha
+                  c
+                  (- my (dot mx c))
+                  (/ (+ top alpha) (+ bottom alpha))
+                  top
+                  bottom
+                  (sqrt (dot b b))))
 
 (define (oracle-ridge X y w alpha fit-intercept)
   (car (ridge-oracles X y w fit-intercept (list alpha) #:relative? #f)))
@@ -409,7 +417,10 @@
 (define (ridge-oracles X y w fit-intercept ratios #:relative? [relative? #t])
   (define-values (G b mx my) (weighted-gram X y w fit-intercept))
   (define-values (top bottom) (eigen-range G))
-  (define unit (if relative? (expt 2 (exact-round (/ (log top) (log 2)))) 1))
+  (define unit
+    (if relative?
+        (expt 2 (exact-round (/ (log top) (log 2))))
+        1))
   (for/list ([r (in-list ratios)])
     (ridge-solve G b mx my top bottom (* r unit))))
 

@@ -15,7 +15,11 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/linear-data.rkt" oracle-ridge [on-matrix matrix] [on-vector vector] ridge-solution))
+         (only-in "private/linear-data.rkt"
+                  oracle-ridge
+                  [on-matrix matrix]
+                  [on-vector vector]
+                  ridge-solution))
 
 (test-gpu "the linear-regression examples print what the manual shows"
   (define X (matrix '((1 1) (1 2) (2 2) (2 3))))
@@ -65,12 +69,15 @@
                 (map (decimals 6) c1))
   (check-equal? (~> fitted-r (ridge-predict (matrix '((3 5) (2 5)))) device-vector->list)
                 (for/list ([row (in-list '((3 5) (2 5)))])
-                  (real->double-flonum (+ b1 (for/sum ([x (in-list row)] [c (in-list c1)]) (* x c))))))
-  (check-equal? (~> (ridge-fit X y #:alpha 0) ridge-result-coef device-vector->list (map (decimals 6) _))
-                '("1.000000" "2.000000"))
+                  (real->double-flonum (+ b1
+                                          (for/sum ([x (in-list row)] [c (in-list c1)]) (* x c))))))
+  (check-equal?
+   (~> (ridge-fit X y #:alpha 0) ridge-result-coef device-vector->list (map (decimals 6) _))
+   '("1.000000" "2.000000"))
   (define-values (c6 _b6) (oracle 1000000))
-  (check-equal? (~> (ridge-fit X y #:alpha 1e6) ridge-result-coef device-vector->list (map (decimals 9) _))
-                (map (decimals 9) c6))
+  (check-equal?
+   (~> (ridge-fit X y #:alpha 1e6) ridge-result-coef device-vector->list (map (decimals 9) _))
+   (map (decimals 9) c6))
   (check-cuml-error 'logic
                     "ridge-fit: alpha: expected a finite value at least 0, got -1"
                     (lambda () (ridge-fit X y #:alpha -1)))
@@ -81,7 +88,7 @@
   (define mean (/ (apply + ys) (length ys)))
   (define residual
     (for/sum ([row (in-list rows)] [v (in-list ys)])
-      (expt (- v bh (for/sum ([x (in-list row)] [c (in-list ch)]) (* x c))) 2)))
+             (expt (- v bh (for/sum ([x (in-list row)] [c (in-list ch)]) (* x c))) 2)))
   (define total (for/sum ([v (in-list ys)]) (expt (- v mean) 2)))
   (check-equal? (~> (ridge #:alpha 0.5) (fit X y) (score X y) (real->decimal-string 6))
                 (real->decimal-string (- 1 (/ residual total)) 6))

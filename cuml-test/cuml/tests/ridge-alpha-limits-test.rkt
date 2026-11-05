@@ -22,8 +22,7 @@
                   weights-or-ones)
          (only-in "private/ridge-data.rkt" lstsq-algorithm norm2 ridge-case-fit solvers))
 
-(define cases
-  (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t) (normal-case 20 2 1)))
+(define cases (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t) (normal-case 20 2 1)))
 
 (define (weighted-mean xs ws)
   (/ (for/sum ([x (in-list xs)] [w (in-list ws)]) (* x w)) (apply + ws)))
@@ -31,7 +30,10 @@
 (test-gpu "as alpha goes to 0 the fit goes to linear-regression-fit's (R5)"
   (for* ([c (in-list cases)]
          [fi (in-list '(#t #f))]
-         [o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi
+         [o (in-list (ridge-oracles (lcase-X c)
+                                    (lcase-y c)
+                                    (lcase-w c)
+                                    fi
                                     (list (expt 2 -40) (expt 2 -20) (expt 2 -10))))]
          [dt (in-list dtypes)]
          [s (in-list solvers)])
@@ -49,8 +51,8 @@
 (test-gpu "as alpha grows the coefficients shrink to 0 and the intercept to y's mean (R6)"
   (for* ([c (in-list cases)]
          [fi (in-list '(#t #f))]
-         [o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi
-                                    (list 1 (expt 2 20) (expt 2 60))))]
+         [o (in-list
+             (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi (list 1 (expt 2 20) (expt 2 60))))]
          [dt (in-list dtypes)]
          [s (in-list solvers)])
     (match-define (ridge-solution alpha _ _ kappa top bottom xty) o)

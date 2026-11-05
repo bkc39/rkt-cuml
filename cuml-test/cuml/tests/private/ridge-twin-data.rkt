@@ -66,7 +66,10 @@
   (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
   (define total (apply + weights))
   (define (spread2 col)
-    (define m (if fi (/ (for/sum ([x (in-list col)] [w (in-list weights)]) (* w x)) total) 0))
+    (define m
+      (if fi
+          (/ (for/sum ([x (in-list col)] [w (in-list weights)]) (* w x)) total)
+          0))
     (for/sum ([x (in-list col)] [w (in-list weights)]) (* w (expt (- x m) 2))))
   (define widest (apply max (map spread2 (apply map list (lcase-X c)))))
   (define sx (expt 2 (- (headroom dt) (quotient (floor-log2 widest) 2))))
@@ -78,7 +81,9 @@
          (lcase-w c)))
 
 (define staged-sources
-  (list (normal-case 300 7 0) (normal-case 300 7 1 #:weighted? #t) (normal-case 300 2 2 #:weighted? #t)))
+  (list (normal-case 300 7 0)
+        (normal-case 300 7 1 #:weighted? #t)
+        (normal-case 300 2 2 #:weighted? #t)))
 
 (define (check-staged-parity dt)
   (define rows
@@ -107,7 +112,8 @@
 (define (raw-rows)
   (for*/list ([c (in-list raw-sources)]
               [fi (in-list '(#t #f))]
-              [o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi (list (expt 2 -7) 1)))])
+              [o (in-list
+                  (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi (list (expt 2 -7) 1)))])
     (list c fi o)))
 
 (define (check-against dt rows theirs-of name)
@@ -117,8 +123,16 @@
     (for* ([ours (in-list solvers)]
            [reference (in-list (theirs-of row))])
       (match-define (list label fit) reference)
-      (test-case (format "~a ~a ~a alpha ~a ours ~a, ~a ~a" (lcase-name c) dt fi alpha ours name label)
-        (match-define (list coef _) (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver ours #:fit-intercept fi)))
+      (test-case (format "~a ~a ~a alpha ~a ours ~a, ~a ~a"
+                         (lcase-name c)
+                         dt
+                         fi
+                         alpha
+                         ours
+                         name
+                         label)
+        (match-define (list coef _)
+          (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver ours #:fit-intercept fi)))
         (match-define (list coef* _) (exact-fit fit))
         (check-law "R4" (gap coef coef*) (* 256 u kappa (max-abs coef*)))))))
 

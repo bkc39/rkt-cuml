@@ -66,11 +66,11 @@
          [fi (in-list '(#t #f))]
          [alpha (in-list '(0 0.0 -0.0))])
     (test-case (format "~a ~a ~a ~a ~a" (lcase-name c) dt solver fi alpha)
-      (check-equal? (outcome (lambda ()
-                               (ridge-case-result c dt #:alpha alpha #:solver solver #:fit-intercept fi))
-                             ridge-result-coef
-                             ridge-result-intercept)
-                    (lstsq-outcome c dt solver fi)))))
+      (check-equal?
+       (outcome (lambda () (ridge-case-result c dt #:alpha alpha #:solver solver #:fit-intercept fi))
+                ridge-result-coef
+                ridge-result-intercept)
+       (lstsq-outcome c dt solver fi)))))
 
 (test-gpu "two identical fits are bitwise equal (B7)"
   (for ([spec (in-list (cartesian-product (list (normal-case 200 7 1 #:weighted? #t)
