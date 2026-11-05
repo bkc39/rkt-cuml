@@ -1148,7 +1148,10 @@ Follow-ups are GitHub issues.
   planned, so it follows the compacted row index, plan_staging's d-sized
   scratch, the column profiles and, for svd, a gesvdj info handle; all are
   freed on the refusal. This departs from spec §3's "every refusal before any
-  allocation", as spec §2.7 orders it.
+  allocation", as spec §2.7 orders it. Racket refuses a non-boolean
+  `fit-intercept` (V8's half; the algorithm half stays in C, after V1) and a
+  non-real intercept (W7's half; a non-finite one stays in C, after W1–W6)
+  before any view check, so they precede V1 and W1.
 - **L1-e, intercept overflow.** A finite solve whose unscaled intercept
   overflows the dtype is refused with "y: the intercept exceeds the {dtype}
   range", after V14; it is not in the spec's V table.

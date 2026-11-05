@@ -74,6 +74,9 @@
    (row "non-boolean fit-intercept"
         "fit-intercept: expected #t or #f, got 'yes"
         (lambda () (go X y #:fit-intercept 'yes)))
+   (row "non-boolean fit-intercept before the X views"
+        "fit-intercept: expected #t or #f, got 'yes"
+        (lambda () (go (blank-matrix 5 3 'int32) y #:fit-intercept 'yes)))
    (row "non-finite X"
         "X: row 3, column 1: expected a finite value, got nan"
         (lambda () (go (matrix (with-cell grid 3 1 +nan.0)) y)))
@@ -144,6 +147,9 @@
         (row "non-real intercept"
              "intercept: expected a real number, got 'b"
              (lambda () (go (linear-regression-result (vector '(1 2 3)) 'b) X)))
+        (row "non-real intercept before the X views"
+             "intercept: expected a real number, got 'b"
+             (lambda () (go (linear-regression-result (vector '(1 2 3)) 'b) (blank-matrix 5 3 'int32))))
         (row "prediction overflow"
              "X: row 0: the prediction exceeds the float32 range"
              (lambda ()
