@@ -87,10 +87,10 @@
                             (regexp-match? (regexp-quote library) maps)))))
    '(0 "(#t #f #f #f #f)" "")))
 
-(test-case "R4: cuml re-exports cuml/linear-model's linear regression"
+(test-case "cuml re-exports cuml/linear-model's linear regression"
   (check-equal? (dynamic-require 'cuml 'linear-regression-fit) linear-regression-fit))
 
-(test-case "R4: cuml/linear-model maps its own shim, and no other family's"
+(test-case "cuml/linear-model maps its own shim, and no other family's"
   (check-equal?
    (run-program `(module m racket/base
                    (require cuml/linear-model

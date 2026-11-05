@@ -4,14 +4,16 @@
          (only-in rackunit check-false check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" uniform-source)
-         (only-in "private/linear-data.rkt" algorithms check-law dtypes fit-gap fit-of unit-roundoff)
+         (only-in "private/linear-data.rkt"
+                  algorithms
+                  check-law
+                  dtypes
+                  fit-gap
+                  fit-of
+                  kept-rows
+                  unit-roundoff
+                  zeroed)
          (only-in "private/scaler-data.rkt" bits-equal?))
-
-(define (kept xs gone)
-  (for/list ([x (in-list xs)]
-             [i (in-naturals)]
-             #:unless (memv i gone))
-    x))
 
 (test-gpu "with every column constant, a zero or cut-off weight is a deleted row, bitwise"
   (for* ([n (in-list '(100 1000 5000 20000))]
@@ -29,16 +31,11 @@
       (define gone
         (for/list ([k (in-range 7)])
           (* k (quotient n 7))))
-      (define zeroed
-        (for/list ([v (in-list w)]
-                   [i (in-naturals)])
-          (cond
-            [(not (memv i gone)) v]
-            [cut? 1e-30]
-            [else 0.0])))
       (define X (make-list n '(3.0)))
-      (check-true (bits-equal? (fit-of X y zeroed 'float64)
-                               (fit-of (kept X gone) (kept y gone) (kept w gone) 'float64))))))
+      (define (kept xs)
+        (kept-rows xs gone))
+      (check-true (bits-equal? (fit-of X y (zeroed w gone (if cut? 1e-30 0.0)) 'float64)
+                               (fit-of (kept X) (kept y) (kept w) 'float64))))))
 
 (define cutoff-X '((0 1) (1 1) (2 1) (3 5)))
 (define cutoff-y '(1 2 3 100))

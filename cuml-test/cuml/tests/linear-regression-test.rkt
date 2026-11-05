@@ -33,7 +33,8 @@
                   remove-at
                   result-fit
                   rounded
-                  unit-roundoff)
+                  unit-roundoff
+                  zeroed)
          (only-in "private/scaler-data.rkt" bits-equal?))
 
 (define base (normal-case 200 5 0))
@@ -157,10 +158,7 @@
                 (check-equal? (list-ref coef* at) 0.0)
                 (check-true (bits-equal? (list (remove-at coef* at) b*) fitted) (format "at ~a" at)))
               (define zero-rows '(3 17 40))
-              (define w
-                (for/list ([v (in-list (lcase-w weighted))]
-                           [i (in-naturals)])
-                  (if (memv i zero-rows) 0 v)))
+              (define w (zeroed (lcase-w weighted) zero-rows))
               (define X
                 (insert-column (lcase-X weighted)
                                1
@@ -181,7 +179,7 @@
                             dropped)
                "constant over the positive-weight rows only"))))
 
-(test-gpu "E4 holds bitwise when a column's weighted spread is within ulps of a power of two"
+(test-gpu "a constant column leaves the rest bitwise when a column's weighted spread is within ulps of a power of two"
   (for* ([step (in-range -10 26 2)]
          #:do [(define c (power-spread-case 1 step))
                (define (kept xs)
@@ -191,11 +189,11 @@
                (define w (kept (lcase-w c)))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" (lcase-name c) a)
-      (match-define (list coef* b*)
+      (match-define (list (cons dropped rest) b*)
         (fit-of (insert-column X 0 (lambda (_) 7.0)) y w 'float64 #:algorithm a))
-      (check-equal? (car coef*) 0.0)
-      (check-true (bits-equal? (list (remove-at coef* 0) b*) (fit-of X y w 'float64 #:algorithm a))
-                  "E4: a constant column leaves the rest"))))
+      (check-equal? dropped 0.0)
+      (check-true (bits-equal? (list rest b*) (fit-of X y w 'float64 #:algorithm a))
+                  "a constant column leaves the rest"))))
 
 (test-gpu "nothing to solve: a constant y, a zero y, or a single positive weight"
   (for* ([dt (in-list dtypes)]

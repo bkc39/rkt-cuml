@@ -35,7 +35,7 @@
                     linear-regression-result-intercept
                     (real->decimal-string 6))
                 "3.120000")
-  (check-equal? (real->decimal-string (score (fit (linear-regression) X y) X y) 6) "1.000000")
+  (check-equal? (~> (linear-regression) (fit X y) (score X y) (real->decimal-string 6)) "1.000000")
   (check-cuml-error 'logic
                     "linear-regression-fit: y: expected 4 elements, got 3"
                     (lambda () (linear-regression-fit X (vector '(1 2 3)))))

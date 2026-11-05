@@ -20,6 +20,7 @@
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" listed printed round-trips)
@@ -88,11 +89,14 @@
   (define y (on-vector (lcase-y data) 'float64))
   (define w (on-vector (lcase-w data) 'float64))
   (check-cuml-error 'logic "fit: linear-regression needs y" (lambda () (fit (linear-regression) X)))
-  (check-true (bits-equal?
-               (listed (linear-regression-result-coef
-                        (linear-regression-model (fit (linear-regression) X y #:sample-weight w))))
-               (listed (linear-regression-result-coef
-                        (linear-regression-fit X y #:sample-weight w))))))
+  (check-true (bits-equal? (~> (linear-regression)
+                               (fit X y #:sample-weight w)
+                               linear-regression-model
+                               linear-regression-result-coef
+                               listed)
+                           (~> (linear-regression-fit X y #:sample-weight w)
+                               linear-regression-result-coef
+                               listed))))
 
 (test-gpu "in float32, score counts a row whose weight fit cut off"
   (define X (on-matrix '((0) (1) (2) (3)) 'float32))

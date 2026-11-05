@@ -1,7 +1,6 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model linear-regression-predict)
-         (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
@@ -24,7 +23,8 @@
                   oracle-lstsq
                   result-fit
                   solution
-                  unit-roundoff))
+                  unit-roundoff
+                  weights-or-ones))
 
 (provide check-oracle-laws
          check-prediction-law)
@@ -37,7 +37,7 @@
          [fi (in-list intercepts)])
     (match-define (solution c* b* kappa) (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi))
     (define y∞ (max-abs (lcase-y c)))
-    (define weights (or (lcase-w c) (make-list (length (lcase-y c)) 1)))
+    (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
     (for* ([dt (in-list dtypes)]
            [a (in-list algorithms)])
       (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)

@@ -5,11 +5,13 @@
          (only-in racket/math sqr)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
+         (only-in threading ~>)
          (only-in "private/linear-data.rkt"
                   algorithms
                   case-fit
                   case-result
                   check-law
+                  columns-of
                   dtypes
                   gap
                   lcase
@@ -45,7 +47,7 @@
     (define m (max-abs xs))
     (map (lambda (x) (/ (round (* (/ x m 2/3) 1024)) 1024)) xs))
   (lcase "already staged"
-         (apply map list (map spread-scaled (apply map list (lcase-X c))))
+         (~> c lcase-X columns-of (map spread-scaled _) columns-of)
          (max-scaled (lcase-y c))
          w))
 
@@ -108,7 +110,7 @@
       (define d (length coef))
       (define u (unit-roundoff dt))
       (define ours-p
-        (device-vector->list (linear-regression-predict fitted (on-matrix (lcase-X c) dt))))
+        (~> fitted (linear-regression-predict (on-matrix (lcase-X c) dt)) device-vector->list))
       (for ([row (in-list (lcase-X c))]
             [p (in-list ours-p)]
             [q (in-list (decoded dt (hash-ref r 'pred_bits)))])

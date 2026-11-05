@@ -30,7 +30,9 @@
                   scaled-columns
                   solution
                   solution-kappa
-                  unit-roundoff)
+                  unit-roundoff
+                  weights-or-ones
+                  zeroed)
          (only-in "private/scaler-data.rkt" bits-equal?))
 
 (define cases
@@ -42,14 +44,13 @@
 (define (fit X y w dt a fi)
   (exact-fit (fit-of X y w dt #:algorithm a #:fit-intercept fi)))
 
-(define (weights-of c)
-  (or (lcase-w c) (make-list (length (lcase-y c)) 1)))
-
 (define (permuted xs)
   (define v (list->vector xs))
   (define n (vector-length v))
   (for/list ([i (in-range n)])
     (vector-ref v (modulo (* i 7) n))))
+
+(struct trial (c fi dt a kappa fitted))
 
 (define (each-case proc)
   (for* ([c (in-list cases)]
@@ -58,15 +59,16 @@
     (for* ([dt (in-list dtypes)]
            [a (in-list algorithms)])
       (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)
-        (define u (unit-roundoff dt))
-        (proc c fi dt a u kappa (fit (lcase-X c) (lcase-y c) (lcase-w c) dt a fi))))))
+        (proc (trial c fi dt a kappa (fit (lcase-X c) (lcase-y c) (lcase-w c) dt a fi)))))))
 
 (test-gpu "equivalent weightings and orderings agree within the bound"
   (each-case
-   (lambda (c fi dt a u kappa fitted)
+   (lambda (t)
+     (match-define (trial c fi dt a kappa fitted) t)
+     (define u (unit-roundoff dt))
      (define X (lcase-X c))
      (define y (lcase-y c))
-     (define w (weights-of c))
+     (define w (weights-or-ones (lcase-w c) y))
      (define counts
        (for/list ([i (in-range (length y))])
          (add1 (modulo (* i 5) 4))))
@@ -80,19 +82,12 @@
      (check-law "T5" (fit-gap (fit X y counts dt a fi) repeated) (* 32 u kappa (fit-size repeated)))
      (define gone '(3 50 101))
      (define (kept xs)
-       (for/list ([x (in-list xs)]
-                  [i (in-naturals)]
-                  #:unless (memv i gone))
-         x))
-     (define zeroed
-       (for/list ([v (in-list w)]
-                  [i (in-naturals)])
-         (if (memv i gone) 0 v)))
+       (kept-rows xs gone))
      (when (> (length y) 101)
        (check-true
-        (bits-equal? (fit-of X y zeroed dt #:algorithm a #:fit-intercept fi)
+        (bits-equal? (fit-of X y (zeroed w gone) dt #:algorithm a #:fit-intercept fi)
                      (fit-of (kept X) (kept y) (kept w) dt #:algorithm a #:fit-intercept fi))
-        "T6: a zero weight is a deleted row"))
+        "a zero weight is a deleted row"))
      (check-law "T7"
                 (fit-gap (fit X y (map (lambda (v) (* 3 v)) w) dt a fi) (fit X y w dt a fi))
                 (* 32 u kappa (fit-size fitted)))
@@ -101,25 +96,23 @@
                          fitted)
                 (* 32 u kappa (fit-size fitted))))))
 
-(test-gpu "T6 holds bitwise when a column's weighted spread is within ulps of a power of two"
+(test-gpu "zero weights delete rows bitwise when a column's weighted spread is within ulps of a power of two"
   (for* ([step (in-range -10 26 2)]
          #:do [(define c (power-spread-case 1 step)) (define w (lcase-w c))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" (lcase-name c) a)
-      (define zeroed
-        (for/list ([v (in-list w)]
-                   [i (in-naturals)])
-          (if (memv i power-spread-gone) 0.0 v)))
       (define (kept xs)
         (kept-rows xs power-spread-gone))
       (check-true
-       (bits-equal? (fit-of (lcase-X c) (lcase-y c) zeroed 'float64 #:algorithm a)
+       (bits-equal? (fit-of (lcase-X c) (lcase-y c) (zeroed w power-spread-gone) 'float64 #:algorithm a)
                     (fit-of (kept (lcase-X c)) (kept (lcase-y c)) (kept w) 'float64 #:algorithm a))
-       "T6: a zero weight is a deleted row"))))
+       "a zero weight is a deleted row"))))
 
 (test-gpu "column order, a shifted column and a shifted y move the fit as they should"
   (each-case
-   (lambda (c fi dt a u kappa fitted)
+   (lambda (t)
+     (match-define (trial c fi dt a kappa fitted) t)
+     (define u (unit-roundoff dt))
      (define X (lcase-X c))
      (define y (lcase-y c))
      (define w (lcase-w c))
@@ -268,8 +261,8 @@
                      (values 1e300 1e-30)))]
          [fixture (in-list (vanishing-fixtures big tiny))]
          #:do [(match-define (list name X y w fi) fixture)
-               (define zeroed (map (lambda (v) (if (= v tiny) 0 v)) w))]
+               (define dropped (map (lambda (v) (if (= v tiny) 0 v)) w))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a ~a" name dt a)
       (check-true (bits-equal? (fit-of X y w dt #:algorithm a #:fit-intercept fi)
-                               (fit-of X y zeroed dt #:algorithm a #:fit-intercept fi))))))
+                               (fit-of X y dropped dt #:algorithm a #:fit-intercept fi))))))
