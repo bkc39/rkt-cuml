@@ -103,8 +103,7 @@
 
 (test-gpu "T6 holds bitwise when a column's weighted spread is within ulps of a power of two"
   (for* ([step (in-range -10 26 2)]
-         #:do [(define c (power-spread-case 1 step))
-               (define w (lcase-w c))]
+         #:do [(define c (power-spread-case 1 step)) (define w (lcase-w c))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" (lcase-name c) a)
       (define zeroed
@@ -113,9 +112,10 @@
           (if (memv i power-spread-gone) 0.0 v)))
       (define (kept xs)
         (kept-rows xs power-spread-gone))
-      (check-true (bits-equal? (fit-of (lcase-X c) (lcase-y c) zeroed 'float64 #:algorithm a)
-                               (fit-of (kept (lcase-X c)) (kept (lcase-y c)) (kept w) 'float64 #:algorithm a))
-                  "T6: a zero weight is a deleted row"))))
+      (check-true
+       (bits-equal? (fit-of (lcase-X c) (lcase-y c) zeroed 'float64 #:algorithm a)
+                    (fit-of (kept (lcase-X c)) (kept (lcase-y c)) (kept w) 'float64 #:algorithm a))
+       "T6: a zero weight is a deleted row"))))
 
 (test-gpu "column order, a shifted column and a shifted y move the fit as they should"
   (each-case

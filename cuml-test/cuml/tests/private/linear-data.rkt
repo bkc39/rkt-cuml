@@ -188,15 +188,16 @@
   (define c (/ 1.0 (sqrt (exact->inexact (spread raw)))))
   (define x1 (map (lambda (v) (* c v)) raw))
   (define j
-    (argmax (lambda (i) (if (memv i power-spread-gone) -1 (abs (list-ref x1 i)))) (range n)))
+    (argmax (lambda (i)
+              (if (memv i power-spread-gone)
+                  -1
+                  (abs (list-ref x1 i))))
+            (range n)))
   (define (stepped k)
     (list-set x1 j (flstep (list-ref x1 j) k)))
   (define per (- (spread (stepped 1)) (spread (stepped 0))))
   (define k0 (exact-round (/ (- 1 (spread (stepped 0))) per)))
-  (lcase (format "spread at 1, seed ~a step ~a" seed step)
-         (map list (stepped (+ k0 step)) x2)
-         y
-         w))
+  (lcase (format "spread at 1, seed ~a step ~a" seed step) (map list (stepped (+ k0 step)) x2) y w))
 
 (define (rounded dt x)
   (if (eq? dt 'float32)

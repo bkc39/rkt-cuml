@@ -151,12 +151,17 @@ TEST(SpreadExponent, KeepsTheColumnSumFiniteAndFallsBackOnAZeroSpread) {
   EXPECT_EQ(spread_exponent<double>(3, 6.0, 4), 1);
 }
 
+struct staged_terms {
+  int exponent;
+  int64_t count;
+};
+
 template <typename T>
-bool weighted_column_sum_finite(int exponent, int64_t n) {
+bool weighted_column_sum_finite(staged_terms terms) {
   const T below_two = std::nextafter(T{2}, T{0});
-  const T largest = std::ldexp(below_two, exponent);
+  const T largest = std::ldexp(below_two, terms.exponent);
   T sum{0};
-  for (int64_t i = 0; i < n; ++i) {
+  for (int64_t i = 0; i < terms.count; ++i) {
     sum += below_two * largest;
   }
   return std::isfinite(sum);
@@ -166,8 +171,8 @@ template <typename T>
 void expect_cap_at_the_boundary() {
   constexpr int64_t n = 7;
   const int cap = spread_exponent<T>(0, std::ldexp(1.0, -1070), n);
-  EXPECT_TRUE(weighted_column_sum_finite<T>(cap, n)) << cap;
-  EXPECT_FALSE(weighted_column_sum_finite<T>(cap + 1, n)) << cap;
+  EXPECT_TRUE(weighted_column_sum_finite<T>({cap, n})) << cap;
+  EXPECT_FALSE(weighted_column_sum_finite<T>({cap + 1, n})) << cap;
 }
 
 TEST(SpreadExponent, CapKeepsNStagedWeightTimesColumnTermsFinite) {
