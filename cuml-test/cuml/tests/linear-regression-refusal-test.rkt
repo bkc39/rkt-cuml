@@ -132,37 +132,38 @@
 
 (define (result-rows go)
   (define X (matrix grid))
-  (list (row "coef rank"
-             "coef: expected rank 1, got rank 2"
-             (lambda () (go (linear-regression-result X 0.0) X)))
-        (row "X rank before the dtype mismatch"
-             "X: expected rank 2, got rank 1"
-             (lambda () (go (linear-regression-result (vector '(1 2)) 0.0) (vector '(1 2 3) 'float32))))
-        (row "coef rank before the dtype mismatch"
-             "coef: expected rank 1, got rank 2"
-             (lambda ()
-               (go (linear-regression-result (matrix '((1 2) (3 4))) 0.0)
-                   (matrix '((1 2) (3 4)) 'float32))))
-        (row "empty coef"
-             "coef: expected at least 1 element, got 0"
-             (lambda () (go (linear-regression-result (blank-vector 0 'float64) 0.0) X)))
-        (row "non-finite coef"
-             "coef: element 0: expected a finite value, got nan"
-             (lambda () (go (linear-regression-result (vector '(+nan.0 2 3)) 0.0) X)))
-        (row "non-finite intercept"
-             "intercept: expected a finite value, got inf"
-             (lambda () (go (linear-regression-result (vector '(1 2 3)) +inf.0) X)))
-        (row "non-real intercept"
-             "intercept: expected a real number, got 'b"
-             (lambda () (go (linear-regression-result (vector '(1 2 3)) 'b) X)))
-        (row "non-real intercept before the X views"
-             "intercept: expected a real number, got 'b"
-             (lambda () (go (linear-regression-result (vector '(1 2 3)) 'b) (blank-matrix 5 3 'int32))))
-        (row "prediction overflow"
-             "X: row 0: the prediction exceeds the float32 range"
-             (lambda ()
-               (go (linear-regression-result (vector '(1 1 1) 'float32) 0.0)
-                   (matrix '((3e38 3e38 3e38) (1 1 1)) 'float32))))))
+  (list
+   (row "coef rank"
+        "coef: expected rank 1, got rank 2"
+        (lambda () (go (linear-regression-result X 0.0) X)))
+   (row "X rank before the dtype mismatch"
+        "X: expected rank 2, got rank 1"
+        (lambda () (go (linear-regression-result (vector '(1 2)) 0.0) (vector '(1 2 3) 'float32))))
+   (row "coef rank before the dtype mismatch"
+        "coef: expected rank 1, got rank 2"
+        (lambda ()
+          (go (linear-regression-result (matrix '((1 2) (3 4))) 0.0)
+              (matrix '((1 2) (3 4)) 'float32))))
+   (row "empty coef"
+        "coef: expected at least 1 element, got 0"
+        (lambda () (go (linear-regression-result (blank-vector 0 'float64) 0.0) X)))
+   (row "non-finite coef"
+        "coef: element 0: expected a finite value, got nan"
+        (lambda () (go (linear-regression-result (vector '(+nan.0 2 3)) 0.0) X)))
+   (row "non-finite intercept"
+        "intercept: expected a finite value, got inf"
+        (lambda () (go (linear-regression-result (vector '(1 2 3)) +inf.0) X)))
+   (row "non-real intercept"
+        "intercept: expected a real number, got 'b"
+        (lambda () (go (linear-regression-result (vector '(1 2 3)) 'b) X)))
+   (row "non-real intercept before the X views"
+        "intercept: expected a real number, got 'b"
+        (lambda () (go (linear-regression-result (vector '(1 2 3)) 'b) (blank-matrix 5 3 'int32))))
+   (row "prediction overflow"
+        "X: row 0: the prediction exceeds the float32 range"
+        (lambda ()
+          (go (linear-regression-result (vector '(1 1 1) 'float32) 0.0)
+              (matrix '((3e38 3e38 3e38) (1 1 1)) 'float32))))))
 
 (define (estimator-fit X y #:sample-weight [w #f] #:algorithm [a 'auto] #:fit-intercept [fi #t])
   (fit (linear-regression #:algorithm a #:fit-intercept fi) X y #:sample-weight w))

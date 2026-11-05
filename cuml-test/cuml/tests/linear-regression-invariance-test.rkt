@@ -235,7 +235,8 @@
       (check-law "least squares on the kept columns"
                  (fit-gap fitted expected)
                  (* 128 (unit-roundoff dt) kappa kappa (fit-size expected)))
-      (check-true (> (max-abs (map - (predicted-by fitted X) y)) 1/10) "the fit does not interpolate"))))
+      (check-true (> (max-abs (map - (predicted-by fitted X) y)) 1/10)
+                  "the fit does not interpolate"))))
 
 (test-gpu "a column the shared power underflows gets 0.0, not a refusal"
   (for* ([dt (in-list dtypes)]
