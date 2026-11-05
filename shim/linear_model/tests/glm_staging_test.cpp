@@ -21,15 +21,16 @@ namespace {
 
 using cumlrkt::matrix;
 using cumlrkt::glm::constant_columns;
-using cumlrkt::glm::exponents;
 using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
 using cumlrkt::glm::require_finite_solution;
 using cumlrkt::glm::require_workspace;
+using cumlrkt::glm::row_selection;
 using cumlrkt::glm::spread_exponent;
 using cumlrkt::glm::staged_weights;
 using cumlrkt::glm::staging;
 using cumlrkt::glm::to_host;
+using cumlrkt::glm::uniform;
 using cumlrkt::glm::unstage_coef;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
@@ -111,9 +112,9 @@ struct staging_case {
   filled<double> x{res, {0.75, 1.0, 1.5, 3.0, 1e30, 1e30, 0.5, 9.0}, {4, 2}};
   filled<double> y{res, {1.0, 5.0, 1e30, 3.0}, {4}};
 
-  staging planned(const double* w, exponents rule) const {
-    return plan_staging(handle_of(res), matrix_of(x, 4, 2), data_of(y), w, true,
-                        rule);
+  staging planned(const double* w) const {
+    return plan_staging(handle_of(res), matrix_of(x, 4, 2), data_of(y), w,
+                        row_selection{nullptr, 4}, true);
   }
 };
 
@@ -121,7 +122,7 @@ TEST(PlanStaging, ColumnAndTargetExponentsIgnoreZeroWeightRows) {
   CUMLRKT_REQUIRE_GPU();
   const staging_case c;
   const filled<double> w(c.res, {0.375, 3.0, 0.0, 1.0}, {4});
-  const staging s = c.planned(data_of(w), exponents::per_column);
+  const staging s = c.planned(data_of(w));
   EXPECT_EQ(s.column_exponent, (std::vector<int>{1, -2}));
   EXPECT_EQ(s.y_exponent, -2);
 }
@@ -136,7 +137,7 @@ TEST(PlanStaging, ColumnExponentFollowsTheWeightedSpread) {
   const filled<double> w(res, {1.0, 1.0, 1.0, low}, {4});
   const auto planned = [&](const double* weights, bool fit_intercept) {
     return plan_staging(handle_of(res), matrix_of(x, 4, 2), data_of(y), weights,
-                        fit_intercept, exponents::per_column)
+                        row_selection{nullptr, 4}, fit_intercept)
         .column_exponent;
   };
   EXPECT_EQ(planned(data_of(w), true), (std::vector<int>{0, 20}));
@@ -144,10 +145,34 @@ TEST(PlanStaging, ColumnExponentFollowsTheWeightedSpread) {
 }
 
 TEST(SpreadExponent, KeepsTheColumnSumFiniteAndFallsBackOnAZeroSpread) {
-  EXPECT_EQ(spread_exponent<float>(-10, std::ldexp(1.0, -200), 4), 114);
+  EXPECT_EQ(spread_exponent<float>(-10, std::ldexp(1.0, -200), 4), 113);
   EXPECT_EQ(spread_exponent<double>(-10, std::ldexp(1.0, -200), 4), 190);
   EXPECT_EQ(spread_exponent<float>(-10, 0.0, 4), -10);
   EXPECT_EQ(spread_exponent<double>(3, 6.0, 4), 1);
+}
+
+template <typename T>
+bool weighted_column_sum_finite(int exponent, int64_t n) {
+  const T below_two = std::nextafter(T{2}, T{0});
+  const T largest = std::ldexp(below_two, exponent);
+  T sum{0};
+  for (int64_t i = 0; i < n; ++i) {
+    sum += below_two * largest;
+  }
+  return std::isfinite(sum);
+}
+
+template <typename T>
+void expect_cap_at_the_boundary() {
+  constexpr int64_t n = 7;
+  const int cap = spread_exponent<T>(0, std::ldexp(1.0, -1070), n);
+  EXPECT_TRUE(weighted_column_sum_finite<T>(cap, n)) << cap;
+  EXPECT_FALSE(weighted_column_sum_finite<T>(cap + 1, n)) << cap;
+}
+
+TEST(SpreadExponent, CapKeepsNStagedWeightTimesColumnTermsFinite) {
+  expect_cap_at_the_boundary<float>();
+  expect_cap_at_the_boundary<double>();
 }
 
 template <typename T>
@@ -191,8 +216,7 @@ TEST(StagedWeights, AtMostTheFloat32CutoffBecomeZero) {
 TEST(PlanStaging, UniformExponentIsSharedByEveryColumn) {
   CUMLRKT_REQUIRE_GPU();
   const staging_case c;
-  const staging u =
-      c.planned(static_cast<const double*>(nullptr), exponents::uniform);
+  const staging u = uniform(c.planned(static_cast<const double*>(nullptr)));
   EXPECT_EQ(u.column_exponent, (std::vector<int>{-99, -99}));
 }
 

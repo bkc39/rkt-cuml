@@ -14,8 +14,6 @@
 
 namespace cumlrkt::glm {
 
-enum class exponents { per_column, uniform };
-
 struct staging {
   std::vector<int> column_exponent;
   int y_exponent;
@@ -36,7 +34,7 @@ int even_floor(int x);
 
 template <typename T>
 int spread_exponent(int largest, double spread, int64_t n) {
-  const int reach = std::numeric_limits<T>::max_exponent - 1 -
+  const int reach = std::numeric_limits<T>::max_exponent - 2 -
                     std::bit_width(static_cast<uint64_t>(n));
   const int e = spread > 0 ? largest + unit_exponent(spread) : largest;
   return std::min(e, largest + reach);
@@ -51,8 +49,10 @@ buffer<T> staged_weights(const raft::handle_t& handle, const T* w, int64_t n);
 
 template <typename T>
 staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
-                     const T* y, const T* w, bool fit_intercept,
-                     exponents mode);
+                     const T* y, const T* w, row_selection rows,
+                     bool fit_intercept);
+
+staging uniform(staging s);
 
 template <typename T>
 std::vector<char> constant_columns(const raft::handle_t& handle,

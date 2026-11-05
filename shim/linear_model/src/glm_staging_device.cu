@@ -26,18 +26,41 @@ namespace cumlrkt::glm {
 
 namespace {
 
-__device__ int64_t source_row(row_selection rows, int64_t i) {
-  return rows.index == nullptr ? i : rows.index[i];
-}
-
 template <typename T>
-struct positive_magnitude {
+struct profile_entry {
   const T* x;
   const T* w;
   int64_t d;
+  int64_t reference;
 
-  __device__ double operator()(int64_t i, int64_t j) const {
-    return counted(w, i) ? fabs(static_cast<double>(x[(i * d) + j])) : 0.0;
+  __device__ column_profile operator()(int64_t i, int64_t j) const {
+    if (!counted(w, i)) {
+      return {0.0, 0.0};
+    }
+    const auto v = static_cast<double>(x[(i * d) + j]);
+    const double base =
+        reference < 0 ? 0.0 : static_cast<double>(x[(reference * d) + j]);
+    return {fabs(v), fabs(v - base)};
+  }
+};
+
+struct larger_profile {
+  __device__ column_profile operator()(column_profile a,
+                                       column_profile b) const {
+    return {a.largest < b.largest ? b.largest : a.largest,
+            a.varies < b.varies ? b.varies : a.varies};
+  }
+};
+
+struct weighted_total {
+  double weight;
+  double value;
+};
+
+struct add_totals {
+  __device__ weighted_total operator()(weighted_total a,
+                                       weighted_total b) const {
+    return {a.weight + b.weight, a.value + b.value};
   }
 };
 
@@ -140,8 +163,11 @@ struct weighted_entry {
   normalised_entry<T> v;
   const T* w;
 
-  __device__ double operator()(int64_t i, int64_t j) const {
-    return weight(w, i) * v(i, j);
+  __device__ weighted_total operator()(int64_t i, int64_t j) const {
+    if (!counted(w, i)) {
+      return {0.0, 0.0};
+    }
+    return {weight(w, i), weight(w, i) * v(i, j)};
   }
 };
 
@@ -163,14 +189,20 @@ struct deviation_square {
 }  // namespace
 
 template <typename T>
-std::vector<double> column_largest(const matrix<T, int64_t>& x, const T* w,
-                                   rmm::cuda_stream_view stream) {
-  return column_totals<double>(stream, x.n, x.d,
-                               positive_magnitude<T>{x.data, w, x.d}, larger{});
+std::vector<column_profile> column_profiles(const matrix<T, int64_t>& x,
+                                            const T* w, row_selection rows,
+                                            bool fit_intercept,
+                                            rmm::cuda_stream_view stream) {
+  const int64_t reference =
+      fit_intercept ? first_positive(w, x.n, stream) : int64_t{-1};
+  return column_reduce(stream, rows, x.d,
+                       profile_entry<T>{x.data, w, x.d, reference},
+                       larger_profile{}, column_profile{0.0, 0.0});
 }
 
 template <typename T>
 std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
+                                  row_selection rows,
                                   const std::vector<int>& exponent,
                                   bool fit_intercept,
                                   rmm::cuda_stream_view stream) {
@@ -178,16 +210,17 @@ std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
   const normalised_entry<T> v{x.data, w, e.data(), x.d};
   std::vector<double> mean(x.d, 0.0);
   if (fit_intercept) {
-    const double weights = total(stream, x.n, weight_of<T>{w});
-    const std::vector<double> sums = column_totals<double>(
-        stream, x.n, x.d, weighted_entry<T>{v, w}, thrust::plus<double>{});
-    std::ranges::transform(sums, mean.begin(),
-                           [&](double s) { return s / weights; });
+    const std::vector<weighted_total> sums =
+        column_reduce(stream, rows, x.d, weighted_entry<T>{v, w}, add_totals{},
+                      weighted_total{0.0, 0.0});
+    std::ranges::transform(sums, mean.begin(), [](weighted_total t) {
+      return t.value / t.weight;
+    });
   }
   const buffer<double> means = to_device(mean, stream);
-  std::vector<double> spread = column_totals<double>(
-      stream, x.n, x.d, deviation_square<T>{v, w, means.data()},
-      thrust::plus<double>{});
+  std::vector<double> spread =
+      column_reduce(stream, rows, x.d, deviation_square<T>{v, w, means.data()},
+                    thrust::plus<double>{}, 0.0);
   std::ranges::transform(spread, spread.begin(),
                          [](double s) { return std::sqrt(s); });
   return spread;
@@ -276,8 +309,9 @@ void unstage(const raft::handle_t& handle, const T* staged, const int64_t* slot,
 }
 
 #define CUMLRKT_GLM_STAGING_DEVICE(T)                                        \
-  template std::vector<double> column_largest<T>(                            \
-      const matrix<T, int64_t>&, const T*, rmm::cuda_stream_view);           \
+  template std::vector<column_profile> column_profiles<T>(                   \
+      const matrix<T, int64_t>&, const T*, row_selection, bool,              \
+      rmm::cuda_stream_view);                                                \
   template double largest_counted<T>(const T*, int64_t, const T*,            \
                                      rmm::cuda_stream_view);                 \
   template int64_t first_positive<T>(const T*, int64_t,                      \
@@ -298,8 +332,8 @@ void unstage(const raft::handle_t& handle, const T* staged, const int64_t* slot,
   template void unstage<T>(const raft::handle_t&, const T*, const int64_t*,  \
                            const int*, int64_t, T*);                         \
   template std::vector<double> column_spread<T>(                             \
-      const matrix<T, int64_t>&, const T*, const std::vector<int>&, bool,    \
-      rmm::cuda_stream_view);
+      const matrix<T, int64_t>&, const T*, row_selection,                    \
+      const std::vector<int>&, bool, rmm::cuda_stream_view);
 
 CUMLRKT_GLM_STAGING_DEVICE(float)
 CUMLRKT_GLM_STAGING_DEVICE(double)

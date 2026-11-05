@@ -31,11 +31,16 @@ struct fit_result {
   double intercept;
 };
 
+struct counted_rows {
+  buffer<int64_t> index;
+  row_selection rows;
+};
+
 struct fit_plan {
   staging s;
   bool fit_intercept;
   int algorithm;
-  int64_t positive;
+  counted_rows counted;
 };
 
 template <typename T>
@@ -51,11 +56,6 @@ std::unique_ptr<buffer<T>> zero_coef(int64_t d, rmm::cuda_stream_view stream) {
                       "cudaMemsetAsync");
   return coef;
 }
-
-struct counted_rows {
-  buffer<int64_t> index;
-  row_selection rows;
-};
 
 template <typename T>
 counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
@@ -82,12 +82,12 @@ fit_result<T> nothing_to_solve(const raft::handle_t& handle,
     intercept = static_cast<double>(
         read_one(y, first_positive(w, x.n, stream), stream));
   } else if (plan.fit_intercept) {
-    const counted_rows c = counted_rows_of(w, x.n, plan.positive, stream);
-    buffer<T> ys = scratch<T>(c.rows.count, stream);
-    buffer<T> ws = scratch<T>(w == nullptr ? 0 : c.rows.count, stream);
-    stage_targets(handle, y, w, plan.s, c.rows, ys.data(), ws.data());
+    const row_selection rows = plan.counted.rows;
+    buffer<T> ys = scratch<T>(rows.count, stream);
+    buffer<T> ws = scratch<T>(w == nullptr ? 0 : rows.count, stream);
+    stage_targets(handle, y, w, plan.s, rows, ys.data(), ws.data());
     const double mean = staged_mean(
-        handle, ys.data(), w == nullptr ? nullptr : ws.data(), c.rows.count);
+        handle, ys.data(), w == nullptr ? nullptr : ws.data(), rows.count);
     intercept = static_cast<double>(
         static_cast<T>(std::ldexp(static_cast<T>(mean), -plan.s.y_exponent)));
   }
@@ -102,13 +102,10 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   const auto& [x, y, w] = in;
   const staging& s = plan.s;
   const auto kept = static_cast<int64_t>(s.kept.size());
-  const bool compact = plan.positive < x.n && plan.positive >= 2;
-  const int64_t count = compact ? plan.positive : x.n;
+  const row_selection rows = plan.counted.rows;
   require_workspace(
-      plan.algorithm, count, kept,
-      cusolver_lwork_of<T>(handle, plan.algorithm, {count, kept}));
-  const counted_rows c = counted_rows_of(w, x.n, plan.positive, stream);
-  const row_selection rows = c.rows;
+      plan.algorithm, rows.count, kept,
+      cusolver_lwork_of<T>(handle, plan.algorithm, {rows.count, kept}));
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   buffer<T> xs = scratch<T>(rows.count * kept, stream);
   buffer<T> ys = scratch<T>(x.n, stream);
@@ -153,17 +150,17 @@ template <typename T>
 fit_plan plan_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
                   const fit_request& request) {
   const auto& [x, y, w] = in;
+  const rmm::cuda_stream_view stream = stream_of(handle);
   const bool intercepted = request.fit_intercept == 1;
-  const int64_t positive = positive_count(w, x.n, stream_of(handle));
-  const staging planned =
-      plan_staging(handle, x, y, w, intercepted, exponents::per_column);
+  const int64_t positive = positive_count(w, x.n, stream);
+  counted_rows counted = counted_rows_of(w, x.n, positive, stream);
+  staging planned = plan_staging(handle, x, y, w, counted.rows, intercepted);
   const auto kept = static_cast<int64_t>(planned.kept.size());
   const bool wide = kept > positive - (intercepted ? 1 : 0);
-  return {wide ? plan_staging(handle, x, y, w, intercepted, exponents::uniform)
-               : planned,
-          intercepted,
-          wide || kept == 1 ? CUML_LINEAR_MODEL_OLS_SVD : request.algorithm,
-          positive};
+  const int algorithm =
+      wide || kept == 1 ? CUML_LINEAR_MODEL_OLS_SVD : request.algorithm;
+  return {wide ? uniform(std::move(planned)) : std::move(planned), intercepted,
+          algorithm, std::move(counted)};
 }
 
 template <typename T>

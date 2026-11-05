@@ -19,12 +19,16 @@
                   dtypes
                   fit-gap
                   fit-of
+                  kept-rows
                   lcase-X
+                  lcase-name
                   lcase-w
                   lcase-y
                   normal-case
                   on-matrix
                   on-vector
+                  power-spread-case
+                  power-spread-gone
                   result-fit
                   rounded
                   unit-roundoff)
@@ -189,6 +193,22 @@
                (bits-equal? (fit-of X (lcase-y weighted) w dt #:algorithm a #:fit-intercept fi)
                             dropped)
                "constant over the positive-weight rows only"))))
+
+(test-gpu "E4 holds bitwise when a column's weighted spread is within ulps of a power of two"
+  (for* ([step (in-range -10 26 2)]
+         #:do [(define c (power-spread-case 1 step))
+               (define (kept xs)
+                 (kept-rows xs power-spread-gone))
+               (define X (kept (lcase-X c)))
+               (define y (kept (lcase-y c)))
+               (define w (kept (lcase-w c)))]
+         [a (in-list algorithms)])
+    (test-case (format "~a ~a" (lcase-name c) a)
+      (match-define (list coef* b*)
+        (fit-of (insert-column X 0 (lambda (_) 7.0)) y w 'float64 #:algorithm a))
+      (check-equal? (car coef*) 0.0)
+      (check-true (bits-equal? (list (remove-at coef* 0) b*) (fit-of X y w 'float64 #:algorithm a))
+                  "E4: a constant column leaves the rest"))))
 
 (test-gpu "nothing to solve: a constant y, a zero y, or a single positive weight"
   (for* ([dt (in-list dtypes)]

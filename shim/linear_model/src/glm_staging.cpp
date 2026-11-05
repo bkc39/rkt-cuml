@@ -88,32 +88,37 @@ bool constant_vector(const raft::handle_t& handle, const T* v, int64_t n,
 
 template <typename T>
 staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
-                     const T* y, const T* w, bool fit_intercept,
-                     exponents mode) {
+                     const T* y, const T* w, row_selection rows,
+                     bool fit_intercept) {
   const rmm::cuda_stream_view stream = stream_of(handle);
-  const std::vector<double> largest = column_largest(x, w, stream);
+  const std::vector<column_profile> profile =
+      column_profiles(x, w, rows, fit_intercept, stream);
   std::vector<int> unit(x.d);
-  std::ranges::transform(largest, unit.begin(), unit_exponent);
+  std::ranges::transform(profile, unit.begin(), [](column_profile p) {
+    return unit_exponent(p.largest);
+  });
   const std::vector<double> spread =
-      column_spread(x, w, unit, fit_intercept, stream);
-  const std::vector<char> constant =
-      constant_columns(handle, x, w, fit_intercept);
+      column_spread(x, w, rows, unit, fit_intercept, stream);
   staging s;
   s.column_exponent.resize(x.d);
   for (int64_t j = 0; j < x.d; ++j) {
-    s.column_exponent[j] = spread_exponent<T>(unit[j], spread[j], x.n);
-    if (constant[j] == 0) {
+    s.column_exponent[j] = spread_exponent<T>(unit[j], spread[j], rows.count);
+    if (profile[j].varies > 0) {
       s.kept.push_back(j);
     }
   }
-  if (mode == exponents::uniform && !s.kept.empty()) {
+  s.y_exponent = unit_exponent(largest_counted(y, x.n, w, stream));
+  return s;
+}
+
+staging uniform(staging s) {
+  if (!s.kept.empty()) {
     const int shared =
         std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
                            return s.column_exponent[j];
                          }));
     std::ranges::fill(s.column_exponent, shared);
   }
-  s.y_exponent = unit_exponent(largest_counted(y, x.n, w, stream));
   return s;
 }
 
@@ -205,12 +210,12 @@ template buffer<double> staged_weights<double>(const raft::handle_t&,
                                                const double*, int64_t);
 template staging plan_staging<float>(const raft::handle_t&,
                                      const matrix<float, int64_t>&,
-                                     const float*, const float*, bool,
-                                     exponents);
+                                     const float*, const float*, row_selection,
+                                     bool);
 template staging plan_staging<double>(const raft::handle_t&,
                                       const matrix<double, int64_t>&,
-                                      const double*, const double*, bool,
-                                      exponents);
+                                      const double*, const double*,
+                                      row_selection, bool);
 template void stage_columns<float>(const raft::handle_t&,
                                    const matrix<float, int64_t>&, const float*,
                                    const staging&, row_selection, float*);

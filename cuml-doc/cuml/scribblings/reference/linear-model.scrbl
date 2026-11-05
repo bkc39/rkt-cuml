@@ -61,9 +61,14 @@ spread and the Jacobi SVD solves: the fit is the minimum-norm solution in
 float64, and in float32 without @racket[fit-intercept]; in float32 with it,
 the fit interpolates @racket[y] but generally is not minimum-norm. On any
 other fit, scaling a column by 2@superscript{k} scales its coefficient by
-2@superscript{-k} exactly. A solve that is not a
-least-squares solution, as with collinear columns in float32, is refused;
-@racket['qr] or float64 often fits. With weights and an intercept, fits above
+2@superscript{-k} exactly. A fit is refused when the
+residual's weighted inner product with some centred column exceeds
+2@superscript{-8} (float32) or 2@superscript{-18} (float64) times that
+column's weighted spread times @racket[y]'s, as with collinear columns in
+float32; @racket['qr] or float64 often fits. A coefficient fixed only by rows
+of low weight w is accurate to about u·√(w@subscript{max}/w) under every
+algorithm, u being the dtype's unit roundoff, and @racket['auto] can lose it
+entirely once w/w@subscript{max} is below about u²; the check sees neither. With weights and an intercept, fits above
 a few thousand rows can differ in the last bits between runs, as in Python
 cuML. @racket[X], @racket[y] and @racket[sample-weight] are not modified.
 

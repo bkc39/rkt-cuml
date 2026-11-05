@@ -40,12 +40,20 @@ buffer<T> to_device(const std::vector<T>& host, rmm::cuda_stream_view stream) {
   return b;
 }
 
+struct column_profile {
+  double largest;
+  double varies;
+};
+
 template <typename T>
-std::vector<double> column_largest(const matrix<T, int64_t>& x, const T* w,
-                                   rmm::cuda_stream_view stream);
+std::vector<column_profile> column_profiles(const matrix<T, int64_t>& x,
+                                            const T* w, row_selection rows,
+                                            bool fit_intercept,
+                                            rmm::cuda_stream_view stream);
 
 template <typename T>
 std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
+                                  row_selection rows,
                                   const std::vector<int>& exponent,
                                   bool fit_intercept,
                                   rmm::cuda_stream_view stream);

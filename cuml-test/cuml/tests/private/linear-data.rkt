@@ -4,9 +4,11 @@
                   linear-regression-fit
                   linear-regression-result-coef
                   linear-regression-result-intercept)
+         (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
-         (only-in racket/list last make-list)
+         (only-in racket/list argmax last list-set make-list range)
          (only-in racket/match match match-define)
+         (only-in racket/math exact-round sqr)
          (only-in rackunit check-true)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in threading ~>)
@@ -27,6 +29,7 @@
          fit-size
          gap
          host-cosine
+         kept-rows
          kappa-of
          law-cases
          reach-fixtures
@@ -35,6 +38,8 @@
          on-matrix
          on-vector
          oracle-lstsq
+         power-spread-case
+         power-spread-gone
          result-fit
          rounded
          rounded-case
@@ -148,6 +153,50 @@
           (list (list "X at 1e-12" (make-list 7 #e1e-12) 1)
                 (list "y at 1e37" (make-list 7 1) #e1e37)
                 (list "subnormal y" (make-list 7 1) #e1e-40))))
+
+(define power-spread-gone '(3 50 101))
+
+(define (kept-rows xs gone)
+  (for/list ([x (in-list xs)]
+             [i (in-naturals)]
+             #:unless (memv i gone))
+    x))
+
+(define (weighted-spread xs ws)
+  (define m (/ (for/sum ([x (in-list xs)] [w (in-list ws)]) (* w x)) (apply + ws)))
+  (for/sum ([x (in-list xs)] [w (in-list ws)]) (* w (sqr (- x m)))))
+
+;; f64, n = 200: column 1 scaled so that its exact weighted spread over the rows
+;; outside power-spread-gone is 1, then its largest such element moved by `step`
+;; ulps from the element that puts the spread nearest 1.
+(define (power-spread-case seed step)
+  (define n 200)
+  (define draw (uniform-source (+ 101 seed)))
+  (define (draws f)
+    (for/list ([_ (in-range n)])
+      (f (draw))))
+  (define w (draws (lambda (u) (+ 0.5 (* 1.5 u)))))
+  (define x2 (draws (lambda (u) (- (* 2 u) 1))))
+  (define raw (draws (lambda (u) (- (* 2 u) 1))))
+  (define y
+    (for/list ([a (in-list raw)]
+               [b (in-list x2)])
+      (+ (* 3 a) (* -2 b) 0.5 (* 0.01 (draw)))))
+  (define (spread xs)
+    (weighted-spread (map inexact->exact (kept-rows xs power-spread-gone))
+                     (map inexact->exact (kept-rows w power-spread-gone))))
+  (define c (/ 1.0 (sqrt (exact->inexact (spread raw)))))
+  (define x1 (map (lambda (v) (* c v)) raw))
+  (define j
+    (argmax (lambda (i) (if (memv i power-spread-gone) -1 (abs (list-ref x1 i)))) (range n)))
+  (define (stepped k)
+    (list-set x1 j (flstep (list-ref x1 j) k)))
+  (define per (- (spread (stepped 1)) (spread (stepped 0))))
+  (define k0 (exact-round (/ (- 1 (spread (stepped 0))) per)))
+  (lcase (format "spread at 1, seed ~a step ~a" seed step)
+         (map list (stepped (+ k0 step)) x2)
+         y
+         w))
 
 (define (rounded dt x)
   (if (eq? dt 'float32)

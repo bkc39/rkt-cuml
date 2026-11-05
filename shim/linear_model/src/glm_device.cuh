@@ -6,6 +6,7 @@
 #include <thrust/reduce.h>
 #include <thrust/transform_reduce.h>
 
+#include <algorithm>
 #include <climits>
 #include <cstdint>
 #include <rmm/cuda_stream_view.hpp>
@@ -26,6 +27,99 @@ __device__ bool counted(const T* w, int64_t i) {
 template <typename T>
 __device__ double weight(const T* w, int64_t i) {
   return w == nullptr ? 1.0 : static_cast<double>(w[i]);
+}
+
+__device__ inline int64_t source_row(row_selection rows, int64_t p) {
+  return rows.index == nullptr ? p : rows.index[p];
+}
+
+inline constexpr int column_lanes = 32;
+inline constexpr int row_lanes = 8;
+inline constexpr int64_t chunk_rows = 2048;
+inline constexpr int fold_threads = 256;
+inline constexpr int64_t most_blocks = 65535;
+
+// Column j's total over the selected rows depends only on its own values and
+// rows.count: lane r of a chunk folds rows r, r + row_lanes, ... in order,
+// the lanes fold in order, and fold_chunks folds the chunks in a fixed tree.
+// So a zero-weight row compacted out and a deleted row give the same bits,
+// and no other column, nor its position, can change them.
+template <typename V, typename F, typename Op>
+__global__ void chunk_totals(F f, Op op, V identity, row_selection rows,
+                             int64_t d, V* partial) {
+  __shared__ V lanes[row_lanes][column_lanes];
+  const int lane = static_cast<int>(threadIdx.x) % column_lanes;
+  const int r = static_cast<int>(threadIdx.x) / column_lanes;
+  const int64_t begin = static_cast<int64_t>(blockIdx.x) * chunk_rows;
+  const int64_t end = std::min(begin + chunk_rows, rows.count);
+  for (int64_t tile = blockIdx.y; tile * column_lanes < d; tile += gridDim.y) {
+    const int64_t j = (tile * column_lanes) + lane;
+    V acc = identity;
+    if (j < d) {
+      for (int64_t p = begin + r; p < end; p += row_lanes) {
+        acc = op(acc, f(source_row(rows, p), j));
+      }
+    }
+    lanes[r][lane] = acc;
+    __syncthreads();
+    if (r == 0 && j < d) {
+      for (int k = 1; k < row_lanes; ++k) {
+        acc = op(acc, lanes[k][lane]);
+      }
+      partial[(static_cast<int64_t>(blockIdx.x) * d) + j] = acc;
+    }
+    __syncthreads();
+  }
+}
+
+template <typename V, typename Op>
+__global__ void fold_chunks(Op op, V identity, int64_t chunks, int64_t d,
+                            const V* partial, V* totals) {
+  __shared__ V folded[fold_threads];
+  const int t = static_cast<int>(threadIdx.x);
+  for (int64_t j = blockIdx.x; j < d; j += gridDim.x) {
+    V acc = identity;
+    for (int64_t b = t; b < chunks; b += fold_threads) {
+      acc = op(acc, partial[(b * d) + j]);
+    }
+    folded[t] = acc;
+    __syncthreads();
+    for (int s = fold_threads / 2; s > 0; s /= 2) {
+      if (t < s) {
+        folded[t] = op(folded[t], folded[t + s]);
+      }
+      __syncthreads();
+    }
+    if (t == 0) {
+      totals[j] = folded[0];
+    }
+    __syncthreads();
+  }
+}
+
+// One total per column j of f(i, j) over the selected source rows i. A warp
+// reads column_lanes adjacent columns of one row of the row-major X.
+template <typename V, typename F, typename Op>
+std::vector<V> column_reduce(rmm::cuda_stream_view stream, row_selection rows,
+                             int64_t d, F f, Op op, V identity) {
+  if (d == 0) {
+    return {};
+  }
+  const int64_t chunks =
+      std::max<int64_t>(1, (rows.count + chunk_rows - 1) / chunk_rows);
+  const int64_t tiles = (d + column_lanes - 1) / column_lanes;
+  buffer<V> partial = scratch<V>(chunks * d, stream);
+  buffer<V> totals = scratch<V>(d, stream);
+  const dim3 grid(static_cast<unsigned>(chunks),
+                  static_cast<unsigned>(std::min(tiles, most_blocks)));
+  chunk_totals<V><<<grid, column_lanes * row_lanes, 0, stream.value()>>>(
+      f, op, identity, rows, d, partial.data());
+  raftrkt::cuda_check(cudaGetLastError(), "chunk_totals");
+  fold_chunks<V><<<static_cast<unsigned>(std::min(d, most_blocks)),
+                   fold_threads, 0, stream.value()>>>(
+      op, identity, chunks, d, partial.data(), totals.data());
+  raftrkt::cuda_check(cudaGetLastError(), "fold_chunks");
+  return to_host(totals, stream);
 }
 
 struct column_of {

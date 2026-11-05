@@ -59,7 +59,9 @@
                   "at the cutoff")
       (define counted (fit-of cutoff-X cutoff-y (list 3 3 3 (+ cutoff step)) dt #:algorithm a))
       (check-false (bits-equal? counted deleted) "one step above")
-      (unless (eq? a 'auto)
-        (check-law "one step above, the second column fits the last row"
-                   (fit-gap counted '((1 24) -23))
-                   (* 64 (unit-roundoff dt) 24))))))
+      (define-values (claim expected)
+        (if (eq? a 'auto)
+            (values "one step above, auto is accepted with the light row's coupling lost (c2 = 24.5)"
+                    '((1 49/2) -47/2))
+            (values "one step above, the second column fits the last row" '((1 24) -23))))
+      (check-law claim (fit-gap counted expected) (* 64 (unit-roundoff dt) 24)))))

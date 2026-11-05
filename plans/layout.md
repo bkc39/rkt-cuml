@@ -1061,7 +1061,14 @@ Follow-ups are GitHub issues.
   spread over the positive rows: √Σw(x−x̄)² with fit-intercept, √Σw·x²
   without. It is computed in double on the column divided by the power of
   two of its largest |x|, falls back to that power when the sum underflows,
-  and is capped so that n times the staged max |x| stays finite. y takes the
+  and is capped so that n times the staged max |x| times the staged max
+  weight (under 2) stays finite (review r3 L1). The spread, and the mean and
+  weight total that feed it, are summed over the compacted positive rows one
+  column at a time, in a tree fixed by the row count alone, so a zero weight
+  is bitwise a deleted row (T6) and no other column, nor a column's position,
+  changes them (E4); round 2's one reduce_by_key over all n·d entries let
+  either move a spread within an ulp of a power of two across it (review r3
+  M1). y takes the
   power of its largest |y|. Rounds 0 to 2 took every column's from its
   largest |x|: a column with a large mean against its spread, or one whose
   variation sits on low-weight rows, then had a centred, weighted Gram
@@ -1096,12 +1103,17 @@ Follow-ups are GitHub issues.
   is left to cuML's closed form ȳ − x̄ᵀc. A check of |Σ w r| against
   √(Σ w)·‖ỹ_c‖ was not added because it refuses sound float32 fits whose y mean
   dwarfs its spread (y = 10⁶ + N(0, 1): rounding alone gives about 6·10⁻²).
-  Law T4 tests Σ w r = 0.
+  Law T4 tests Σ w r = 0. The bound is on that cosine, not on the
+  coefficients: a coefficient fixed only by rows of low weight w carries an
+  error of about u·√(w_max/w) under every algorithm (normwise backward
+  stable, within T1's κ of the unscaled X), and eig ('auto) can lose it
+  entirely once w/w_max is below about u²; the wrong fit's residual is then at
+  rounding level, so the check cannot see it (review r3 M2).
 - **L1-e, ordering.** The workspace bound (V7) is checked after staging is
-  planned, so it follows plan_staging's d-sized scratch, the constant-column
-  flags and, for svd, a gesvdj info handle; all are freed on the refusal. This
-  departs from spec §3's "every refusal before any allocation", as spec §2.7
-  orders it.
+  planned, so it follows the compacted row index, plan_staging's d-sized
+  scratch, the column profiles and, for svd, a gesvdj info handle; all are
+  freed on the refusal. This departs from spec §3's "every refusal before any
+  allocation", as spec §2.7 orders it.
 - **L1-e, intercept overflow.** A finite solve whose unscaled intercept
   overflows the dtype is refused with "y: the intercept exceeds the {dtype}
   range", after V14; it is not in the spec's V table.

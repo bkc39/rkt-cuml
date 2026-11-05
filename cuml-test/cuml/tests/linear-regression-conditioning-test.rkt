@@ -8,6 +8,7 @@
          (only-in "private/linear-data.rkt"
                   algorithms
                   check-law
+                  dtypes
                   dyadic
                   exact-fit
                   fit-gap
@@ -88,7 +89,7 @@
            '(1 2 3 5 7 7)
            (list 1 1 1 t (* 3 t) (* 2 t)))))
 
-(test-gpu "a column whose variation sits on low-weight rows keeps its direction"
+(test-gpu "p6's column, varying only on rows of weight 1e-12, is not lost to eig's eps cut"
   (for* ([dt (in-list '(float32 float64))]
          #:do [(define c (rounded-case low-weight-column dt))
                (match-define (solution c* b* _) (oracle-of c))]
@@ -102,6 +103,22 @@
       (check-law "within 2^-16 (float32) or 2^-40 (float64) of the oracle"
                  (fit-gap (fit-case c dt a) (list c* b*))
                  bound))))
+
+(define (light-row-case t)
+  (lcase (format "light row ~a" t) '((0 0) (0 1) (0 2) (1 3)) '(1 2 3 5) (list 3 3 3 t)))
+
+(test-gpu "a coefficient fixed only by a row of weight w is within 4u sqrt(w_max/w)"
+  (for* ([dt (in-list dtypes)]
+         [t (in-list (if (eq? dt 'float32)
+                         '(#e1e-4 #e1e-8)
+                         '(#e1e-8 #e1e-16)))]
+         [a (in-list algorithms)])
+    (test-case (format "~a ~a ~a" dt t a)
+      (match-define (list (list c1 _) _)
+        (exact-fit (fit-case (rounded-case (light-row-case t) dt) dt a)))
+      (check-law "the first coefficient, exactly 1"
+                 (abs (- c1 1))
+                 (* 4 (unit-roundoff dt) (sqrt (/ 3 t)))))))
 
 (define (offset-y-case offset)
   (define draw (uniform-source 11))
