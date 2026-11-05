@@ -2,13 +2,13 @@
 
 #include <thrust/functional.h>
 #include <thrust/iterator/counting_iterator.h>
-#include <thrust/iterator/transform_iterator.h>
-#include <thrust/reduce.h>
 #include <thrust/transform_reduce.h>
 
 #include <algorithm>
 #include <climits>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/exec_policy.hpp>
 #include <vector>
@@ -56,6 +56,7 @@ __global__ void chunk_totals(F f, Op op, V identity, row_selection rows,
     const int64_t j = (tile * column_lanes) + lane;
     V acc = identity;
     if (j < d) {
+#pragma unroll 4
       for (int64_t p = begin + r; p < end; p += row_lanes) {
         acc = op(acc, f(source_row(rows, p), j));
       }
@@ -122,40 +123,6 @@ std::vector<V> column_reduce(rmm::cuda_stream_view stream, row_selection rows,
   return to_host(totals, stream);
 }
 
-struct column_of {
-  int64_t n;
-
-  __device__ int64_t operator()(int64_t k) const {
-    return k / n;
-  }
-};
-
-template <typename F, typename V>
-struct by_column {
-  F f;
-  int64_t n;
-
-  __device__ V operator()(int64_t k) const {
-    const int64_t j = k / n;
-    return f(k - (j * n), j);
-  }
-};
-
-template <typename V, typename F, typename Op>
-std::vector<V> column_totals(rmm::cuda_stream_view stream, int64_t n, int64_t d,
-                             F f, Op op) {
-  buffer<V> totals = scratch<V>(d, stream);
-  buffer<int64_t> columns = scratch<int64_t>(d, stream);
-  const thrust::counting_iterator<int64_t> k(0);
-  thrust::reduce_by_key(
-      rmm::exec_policy(stream),
-      thrust::make_transform_iterator(k, column_of{n}),
-      thrust::make_transform_iterator(k + (n * d), column_of{n}),
-      thrust::make_transform_iterator(k, by_column<F, V>{f, n}), columns.data(),
-      totals.data(), thrust::equal_to<int64_t>{}, op);
-  return to_host(totals, stream);
-}
-
 struct larger {
   __device__ double operator()(double a, double b) const {
     return a < b ? b : a;
@@ -188,19 +155,143 @@ struct weight_of {
   }
 };
 
+struct weighted_total {
+  double weight;
+  double value;
+};
+
+struct add_totals {
+  __device__ weighted_total operator()(weighted_total a,
+                                       weighted_total b) const {
+    return {a.weight + b.weight, a.value + b.value};
+  }
+};
+
+inline constexpr int vector_threads = 256;
+
+// The total of f(i) over the selected rows i, in an order fixed by rows.count:
+// thread t of a chunk folds its rows t, t + vector_threads, ... in order, the
+// threads fold in a fixed tree, and fold_chunks folds the chunks.
+template <typename V, typename F, typename Op>
+__global__ void vector_chunks(F f, Op op, V identity, row_selection rows,
+                              V* partial) {
+  __shared__ V folded[vector_threads];
+  const int t = static_cast<int>(threadIdx.x);
+  const int64_t begin = static_cast<int64_t>(blockIdx.x) * chunk_rows;
+  const int64_t end = std::min(begin + chunk_rows, rows.count);
+  V acc = identity;
+  for (int64_t p = begin + t; p < end; p += vector_threads) {
+    acc = op(acc, f(source_row(rows, p)));
+  }
+  folded[t] = acc;
+  __syncthreads();
+  for (int s = vector_threads / 2; s > 0; s /= 2) {
+    if (t < s) {
+      folded[t] = op(folded[t], folded[t + s]);
+    }
+    __syncthreads();
+  }
+  if (t == 0) {
+    partial[blockIdx.x] = folded[0];
+  }
+}
+
+template <typename V, typename F, typename Op>
+V vector_reduce(rmm::cuda_stream_view stream, row_selection rows, F f, Op op,
+                V identity) {
+  const int64_t chunks =
+      std::max<int64_t>(1, (rows.count + chunk_rows - 1) / chunk_rows);
+  buffer<V> partial = scratch<V>(chunks, stream);
+  buffer<V> totals = scratch<V>(1, stream);
+  vector_chunks<V>
+      <<<static_cast<unsigned>(chunks), vector_threads, 0, stream.value()>>>(
+          f, op, identity, rows, partial.data());
+  raftrkt::cuda_check(cudaGetLastError(), "vector_chunks");
+  fold_chunks<V><<<1, fold_threads, 0, stream.value()>>>(
+      op, identity, chunks, 1, partial.data(), totals.data());
+  raftrkt::cuda_check(cudaGetLastError(), "fold_chunks");
+  return to_host(totals, stream)[0];
+}
+
+template <typename T>
+struct row_weight {
+  const T* w;
+
+  __device__ double operator()(int64_t i) const {
+    return counted(w, i) ? weight(w, i) : 0.0;
+  }
+};
+
+template <typename T>
+double selected_weight(rmm::cuda_stream_view stream, row_selection rows,
+                       const T* w) {
+  return vector_reduce(stream, rows, row_weight<T>{w}, thrust::plus<double>{},
+                       0.0);
+}
+
+// 2^exponent as a T factor when it is one, else 0. scaled_by(v, p) is then
+// scaled(v, p.exponent): v·2^e rounds once either way.
+template <typename T>
+struct power_of_two {
+  T factor;
+  int exponent;
+};
+
+template <typename T>
+power_of_two<T> power_of_two_of(int e) {
+  constexpr int least =
+      std::numeric_limits<T>::min_exponent - std::numeric_limits<T>::digits;
+  constexpr int most = std::numeric_limits<T>::max_exponent - 1;
+  return {e >= least && e <= most ? std::ldexp(T{1}, e) : T{0}, e};
+}
+
+template <typename T>
+__device__ T scaled_by(T v, power_of_two<T> p) {
+  return p.factor != 0 ? cumlrkt::times(v, p.factor) : scaled(v, p.exponent);
+}
+
 inline constexpr int no_exponent = INT_MIN;
 
-// a·b·c as a significand product and the exponent ilogb(a)+ilogb(b)+ilogb(c),
-// so a sum of such terms can be scaled by its largest term's power of two
-// before any product underflows.
+// significand·2^exponent. A product of factors in [2^-320, 2^321) is carried
+// as itself at exponent 0, since neither it nor any partial product leaves
+// double's normal range; any other as the product of the significands at
+// the sum of the factors' ilogb. A sum of such terms is rescaled to the
+// larger exponent at each addition, so no product underflows or overflows.
 struct product3 {
   double significand;
   int exponent;
 };
 
+inline constexpr int moderate_reach = 320;
+
+// Tested on the exponent bits, so it costs no double-rate instruction.
+inline __device__ bool moderate(double v) {
+  const int biased = (__double2hiint(v) >> 20) & 0x7ff;
+  return biased >= 1023 - moderate_reach && biased <= 1023 + moderate_reach;
+}
+
+inline __host__ __device__ product3 no_product() {
+  return {0.0, no_exponent};
+}
+
+inline __device__ product3 product_of(double a, double b) {
+  if (moderate(a) && moderate(b)) {
+    return {a * b, 0};
+  }
+  if (a == 0 || b == 0) {
+    return no_product();
+  }
+  const int ea = ilogb(a);
+  const int eb = ilogb(b);
+  return {scalbn(a, -ea) * scalbn(b, -eb), ea + eb};
+}
+
 inline __device__ product3 product_of(double a, double b, double c) {
+  if (moderate(a) && moderate(b) && moderate(c)) {
+    return {a * b * c, 0};
+  }
   if (a == 0 || b == 0 || c == 0) {
-    return {0.0, no_exponent};
+    return no_product();
   }
   const int ea = ilogb(a);
   const int eb = ilogb(b);
@@ -208,15 +299,21 @@ inline __device__ product3 product_of(double a, double b, double c) {
   return {scalbn(a, -ea) * scalbn(b, -eb) * scalbn(c, -ec), ea + eb + ec};
 }
 
-inline __device__ double scaled_product(product3 p, int largest) {
-  return p.exponent == no_exponent
-             ? 0.0
-             : scalbn(p.significand, p.exponent - largest);
-}
-
-struct largest_exponent {
-  __device__ int operator()(int a, int b) const {
-    return a < b ? b : a;
+struct add_scaled {
+  __device__ product3 operator()(product3 a, product3 b) const {
+    if (a.exponent == b.exponent) {
+      return {a.significand + b.significand, a.exponent};
+    }
+    if (a.exponent == no_exponent) {
+      return b;
+    }
+    if (b.exponent == no_exponent) {
+      return a;
+    }
+    const int e = a.exponent < b.exponent ? b.exponent : a.exponent;
+    return {scalbn(a.significand, a.exponent - e) +
+                scalbn(b.significand, b.exponent - e),
+            e};
   }
 };
 

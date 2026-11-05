@@ -97,16 +97,22 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   std::ranges::transform(profile, unit.begin(), [](column_profile p) {
     return unit_exponent(p.largest);
   });
+  std::vector<double> mean(x.d);
+  std::ranges::transform(profile, mean.begin(),
+                         [](column_profile p) { return p.mean; });
   const std::vector<double> spread =
-      column_spread(x, w, rows, unit, fit_intercept, stream);
+      column_spread(x, w, rows, unit, mean, stream);
   staging s;
   s.column_exponent.resize(x.d);
+  s.largest.resize(x.d);
   for (int64_t j = 0; j < x.d; ++j) {
     s.column_exponent[j] = spread_exponent<T>(unit[j], spread[j], rows.count);
-    if (profile[j].varies > 0) {
+    s.largest[j] = profile[j].largest;
+    if (profile[j].varies) {
       s.kept.push_back(j);
     }
   }
+  s.mean = std::move(mean);
   s.y_exponent = unit_exponent(largest_counted(y, x.n, w, stream));
   return s;
 }
@@ -183,12 +189,11 @@ void require_finite_solution(const T* staged, int64_t d, T intercept,
 
 template <typename T>
 double residual_cosine(const raft::handle_t& handle,
-                       const matrix<T, int64_t>& x, const staging& s,
-                       const T* y, const T* w, const T* coef,
+                       const matrix<T, int64_t>& x, const T* y, const T* w,
+                       row_selection rows, const staging& s, const T* coef,
                        bool fit_intercept) {
-  const device_columns columns = columns_of(s, stream_of(handle));
   const residual_terms terms =
-      residual_moments(handle, x, y, w, columns.view(), coef, fit_intercept);
+      residual_moments(handle, x, y, w, rows, s, coef, fit_intercept);
   double worst = 0;
   for (size_t k = 0; k < terms.moments.size(); ++k) {
     if (terms.largest[k] == 0) {
@@ -239,11 +244,13 @@ template void require_finite_solution<double>(const double*, int64_t, double,
                                               int, rmm::cuda_stream_view);
 template double residual_cosine<float>(const raft::handle_t&,
                                        const matrix<float, int64_t>&,
-                                       const staging&, const float*,
-                                       const float*, const float*, bool);
+                                       const float*, const float*,
+                                       row_selection, const staging&,
+                                       const float*, bool);
 template double residual_cosine<double>(const raft::handle_t&,
                                         const matrix<double, int64_t>&,
-                                        const staging&, const double*,
-                                        const double*, const double*, bool);
+                                        const double*, const double*,
+                                        row_selection, const staging&,
+                                        const double*, bool);
 
 }  // namespace cumlrkt::glm

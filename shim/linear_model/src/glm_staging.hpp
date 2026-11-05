@@ -14,10 +14,15 @@
 
 namespace cumlrkt::glm {
 
+// largest is each column's largest |x| over the counted rows, and mean its
+// weighted mean there divided by the power of two of largest (0 without an
+// intercept).
 struct staging {
   std::vector<int> column_exponent;
   int y_exponent;
   std::vector<int64_t> kept;
+  std::vector<double> largest;
+  std::vector<double> mean;
 };
 
 struct ols_shape {
@@ -96,8 +101,8 @@ void require_finite_solution(const T* staged, int64_t d, T intercept,
 
 template <typename T>
 double residual_cosine(const raft::handle_t& handle,
-                       const matrix<T, int64_t>& x, const staging& s,
-                       const T* y, const T* w, const T* coef,
+                       const matrix<T, int64_t>& x, const T* y, const T* w,
+                       row_selection rows, const staging& s, const T* coef,
                        bool fit_intercept);
 
 }  // namespace cumlrkt::glm

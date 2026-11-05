@@ -40,9 +40,12 @@ buffer<T> to_device(const std::vector<T>& host, rmm::cuda_stream_view stream) {
   return b;
 }
 
+// mean is the weighted mean over the counted rows divided by the power of two
+// of largest, and 0 without an intercept.
 struct column_profile {
   double largest;
-  double varies;
+  bool varies;
+  double mean;
 };
 
 template <typename T>
@@ -55,7 +58,7 @@ template <typename T>
 std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
                                   row_selection rows,
                                   const std::vector<int>& exponent,
-                                  bool fit_intercept,
+                                  const std::vector<double>& mean,
                                   rmm::cuda_stream_view stream);
 
 template <typename T>

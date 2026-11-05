@@ -108,22 +108,20 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
       cusolver_lwork_of<T>(handle, plan.algorithm, {rows.count, kept}));
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   buffer<T> xs = scratch<T>(rows.count * kept, stream);
-  buffer<T> ys = scratch<T>(x.n, stream);
-  buffer<T> ws = scratch<T>(w == nullptr ? 0 : x.n, stream);
+  buffer<T> ys = scratch<T>(rows.count, stream);
+  buffer<T> ws = scratch<T>(w == nullptr ? 0 : rows.count, stream);
   buffer<T> cs = scratch<T>(kept, stream);
-  T* staged_w = w == nullptr ? nullptr : ws.data();
   stage_columns(handle, x, w, s, rows, xs.data());
   stage_targets(handle, y, w, s, rows, ys.data(), ws.data());
   T intercept{0};
   ML::GLM::olsFit(handle, xs.data(), static_cast<size_t>(rows.count),
                   static_cast<size_t>(kept), ys.data(), cs.data(), &intercept,
-                  plan.fit_intercept, plan.algorithm, staged_w);
+                  plan.fit_intercept, plan.algorithm,
+                  w == nullptr ? nullptr : ws.data());
   settle(handle);
   require_finite_solution(cs.data(), kept, intercept, plan.algorithm, stream);
-  stage_targets(handle, y, w, s, row_selection{nullptr, x.n}, ys.data(),
-                ws.data());
-  const double cosine = residual_cosine(handle, x, s, ys.data(), staged_w,
-                                        cs.data(), plan.fit_intercept);
+  const double cosine =
+      residual_cosine(handle, x, y, w, rows, s, cs.data(), plan.fit_intercept);
   const int bits = single<T> ? single_tolerance_bits : double_tolerance_bits;
   if (!(cosine <= std::ldexp(1.0, -bits))) {
     throw logic_error(std::format(

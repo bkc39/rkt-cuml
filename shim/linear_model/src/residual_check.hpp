@@ -27,7 +27,8 @@ struct residual_terms {
 template <typename T>
 residual_terms residual_moments(const raft::handle_t& handle,
                                 const matrix<T, int64_t>& x, const T* y,
-                                const T* w, staged_columns columns,
-                                const T* coef, bool fit_intercept);
+                                const T* w, row_selection rows,
+                                const staging& s, const T* coef,
+                                bool fit_intercept);
 
 }  // namespace cumlrkt::glm

@@ -245,7 +245,7 @@ TEST(UnstageCoef, ZerosDroppedColumnsAndReportsTheFirstOverflow) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const raft::handle_t& h = handle_of(res);
-  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}};
+  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}, {}, {}};
   const filled<float> staged(res, {1.5F, -2.0F, 4.0F}, {3});
   filled<float> coef(res, {poison, poison, poison, poison}, {4});
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,

@@ -1062,7 +1062,9 @@ Follow-ups are GitHub issues.
   without. It is computed in double on the column divided by the power of
   two of its largest |x|, falls back to that power when the sum underflows,
   and is capped so that n times the staged max |x| times the staged max
-  weight (under 2) stays finite (review r3 L1). The spread, and the mean and
+  weight (under 2) stays finite (review r3 L1). The mean's Σw·x is summed in
+  the pass that finds the largest |x|, carried as a significand and a power
+  of two, so it needs no largest first. The spread, and the mean and
   weight total that feed it, are summed over the compacted positive rows one
   column at a time, in a tree fixed by the row count alone, so a zero weight
   is bitwise a deleted row (T6) and no other column, nor a column's position,
@@ -1090,11 +1092,12 @@ Follow-ups are GitHub issues.
   a constant y, olsFit is not called.
 - **L1-e.** A fit whose residual cosine on the staged data (the centred,
   weighted cosine between each kept staged column and the residual
-  r = (y − ȳ) − Σ(v − v̄)·c, uncentred without fit-intercept, each column
-  first divided by the power of two of its largest staged magnitude over the
-  positive-weight rows, and each of Σw·c², Σw·c·r and Σw(y − ȳ)² scaled by
-  the power of two of its largest term before the ratio, so no square
-  underflows double) exceeds
+  r = (y − ȳ) − Σ(v − v̄)·c, uncentred without fit-intercept, over the
+  compacted positive-weight rows, in each column's staged units, since its
+  power of two cancels in its cosine; v̄ is the planner's mean, and each of
+  Σw·c², Σw·c·r and Σw(y − ȳ)² is carried as a significand and a power of two
+  rescaled at each addition, so no product underflows or overflows double)
+  exceeds
   2⁻⁸ (float32) or 2⁻¹⁸ (float64) is refused (V13). A kept column whose staged
   values are 0 on every positive-weight row (the shared exponent of a wide fit
   underflowed it) is skipped: it cannot correlate with the residual, and its
