@@ -40,10 +40,8 @@ line<T> line_of(const rr_view* coef, double intercept) {
 }
 
 template <typename T>
-void predict_into(const raft::handle_t& handle, const rr_view* x_view,
+void predict_into(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                   const rr_view* coef, double intercept, rr_deposit* out) {
-  const matrix<T, int64_t> x = cumlrkt::rows_of<T, int64_t>(
-      x_view, "X", raftrkt::any_extent, raftrkt::any_extent);
   const line<T> fitted = line_of<T>(coef, intercept);
   cumlrkt::require_some("X", "row", x.n);
   if (x.d != fitted.d) {
@@ -90,7 +88,11 @@ int cuml_linear_model_gemm_predict(void* handle, const rr_view* x,
       handle, {{"X", x}, {"coef", coef}}, [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
         cumlrkt::on_same_floats(x, "X", coef, "coef", [&](auto tag) {
-          predict_into<decltype(tag)>(h, x, coef, intercept, into);
+          using T = decltype(tag);
+          predict_into<T>(h,
+                          cumlrkt::rows_of<T, int64_t>(
+                              x, "X", raftrkt::any_extent, raftrkt::any_extent),
+                          coef, intercept, into);
         });
       });
 }
