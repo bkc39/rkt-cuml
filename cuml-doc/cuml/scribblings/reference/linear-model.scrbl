@@ -45,23 +45,30 @@ at least two rows. @racket[y] and @racket[sample-weight] are vectors of
 with a positive sum. A zero weight deletes its row, and so does a weight of
 at most 2@superscript{−150}·4@superscript{k} (float32) or
 2@superscript{−1075}·4@superscript{k} (float64), 4@superscript{k} being the
-largest weight's power of two rounded up to a power of 4. @racket['auto] and
-@racket['eig] solve the normal equations, @racket['svd] and
-@racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation and
-@racket['svd-qr] a QR-based SVD; each column, @racket[y] and the weights are
-first scaled by powers of two. A column constant over the rows of positive
-weight (zero, without @racket[fit-intercept]) gets coefficient 0. With more
-columns than rows of positive weight, less one for @racket[fit-intercept],
-the Jacobi SVD gives the minimum-norm fit, except in float32 with
+largest weight's power of two rounded up to a power of 4.
+
+@racket['auto] and @racket['eig] solve the normal equations, @racket['svd]
+and @racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation
+and @racket['svd-qr] a QR-based SVD; each column, @racket[y] and the weights
+are first scaled by powers of two.
+
+A column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0. With more non-constant columns
+than rows of positive weight, less one for @racket[fit-intercept], the Jacobi
+SVD gives the minimum-norm fit, except in float32 with
 @racket[fit-intercept], where the fit interpolates @racket[y] but generally
-is not minimum-norm. The fit is refused when the residual's weighted cosine
-with some centred column exceeds 2@superscript{-8} (float32) or
-2@superscript{-18} (float64), as with collinear columns in float32;
-@racket['qr] or float64 often fits. A coefficient fixed only by rows of low
-weight w is accurate to about u·√(w@subscript{max}/w), u being the dtype's
-unit roundoff, and the refusal does not see its loss. With weights and an
-intercept, fits above a few thousand rows can differ in the last bits
-between runs, as in Python cuML. @racket[X], @racket[y] and
+is not minimum-norm.
+
+The fit is refused when the residual's weighted inner product with some
+centred column exceeds 2@superscript{-8} (float32) or 2@superscript{-18}
+(float64) times that column's weighted spread times @racket[y]'s, as with
+collinear columns in float32; @racket['qr] or float64 often fits. A
+coefficient fixed only by rows of low weight w is accurate to about
+u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal
+does not see its loss.
+
+With weights and an intercept, fits above a few thousand rows can differ in
+the last bits between runs, as in Python cuML. @racket[X], @racket[y] and
 @racket[sample-weight] are not modified.
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 1) (1 1) (2 1) (3 1)) #:dtype 'float64))

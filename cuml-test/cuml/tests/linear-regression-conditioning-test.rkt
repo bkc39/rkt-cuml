@@ -16,6 +16,7 @@
                   fit-of
                   fit-size
                   gap
+                  host-cosine
                   lcase
                   lcase-X
                   lcase-name
@@ -68,12 +69,12 @@
             (sqrt (/ (for/sum ([x (in-list col)]) (sqr (- x mean))) n)))))
 
 (test-gpu "a column whose mean dwarfs its spread keeps its direction"
-  (for* ([fixture (in-list (list (list 'float64 (offset-case 'float64 #e1e6 #e1e-6))
-                                 (list 'float32 (offset-case 'float32 1000 1))
-                                 (list 'float64 (offset-x-case #e1e11))
-                                 (list 'float64 (offset-x-case #e1e13))
-                                 (list 'float64 (offset-x-case #e3e13))))]
-         #:do [(match-define (list dt c) fixture)
+  (for* ([fixture (in-list (list (list 'float64 (offset-case 'float64 #e1e6 #e1e-6) #f)
+                                 (list 'float32 (offset-case 'float32 1000 1) #f)
+                                 (list 'float64 (offset-x-case #e1e11) #f)
+                                 (list 'float64 (offset-x-case #e1e13) #t)
+                                 (list 'float64 (offset-x-case #e3e13) #t)))]
+         #:do [(match-define (list dt c refusal-bound?) fixture)
                (match-define (solution c* b* kappa) (oracle-of c))
                (define u (unit-roundoff dt))
                (define-values (means spreads) (column-moments c))
@@ -86,7 +87,11 @@
       (check-law "T1, plus the centring's second-order term" (gap coef c*) bound)
       (check-law "intercept, the coef bound times the column mean"
                  (abs (- b b*))
-                 (* bound (add1 (apply max (map abs means))))))))
+                 (* bound (add1 (apply max (map abs means)))))
+      (when refusal-bound?
+        (check-law "the accepted fit is within the refusal bound"
+                   (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b #t)
+                   (expt 2 -18))))))
 
 (define low-weight-column
   (let ([t #e1e-12])
