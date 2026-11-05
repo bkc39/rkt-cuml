@@ -7,6 +7,7 @@
 (define deps '("base"))
 (define build-deps
   '("cuml-lib" "cuml-decomposition-lib"
+               "cuml-linear-model-lib"
                "cuml-manifold-lib"
                "cuml-preprocessing-lib"
                ("datasets-core" #:version "0.2")

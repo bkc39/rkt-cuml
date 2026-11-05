@@ -6,6 +6,7 @@
          cuml/core
          cuml/decomposition
          cuml/estimator
+         cuml/linear-model
          cuml/manifold
          cuml/metrics
          cuml/preprocessing
@@ -14,6 +15,7 @@
          "private/dbscan-estimator.rkt"
          "private/hdbscan-estimator.rkt"
          "private/kmeans-estimator.rkt"
+         "private/linear-regression-estimator.rkt"
          "private/pca-estimator.rkt"
          "private/spectral-embedding-estimator.rkt"
          "private/spectral-estimator.rkt"
@@ -26,6 +28,7 @@
                        cuml/core
                        cuml/decomposition
                        cuml/estimator
+                       cuml/linear-model
                        cuml/manifold
                        cuml/metrics
                        cuml/preprocessing
@@ -34,6 +37,7 @@
                        "private/dbscan-estimator.rkt"
                        "private/hdbscan-estimator.rkt"
                        "private/kmeans-estimator.rkt"
+                       "private/linear-regression-estimator.rkt"
                        "private/pca-estimator.rkt"
                        "private/spectral-embedding-estimator.rkt"
                        "private/spectral-estimator.rkt"

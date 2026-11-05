@@ -99,6 +99,25 @@ cumlrkt_family(decomposition
         decomposition/src/pca_device.cu
 )
 
+cumlrkt_family(linear_model
+  SOURCES linear_model/src/linear_model.cpp
+          linear_model/src/linear_regression.cpp
+          linear_model/src/fit_checks.cpp linear_model/src/predict.cpp
+          linear_model/src/glm_staging.cpp
+          linear_model/src/glm_staging_device.cu
+          linear_model/src/residual_check.cu common/src/transpose.cu
+  TESTS linear_model/tests/glm_staging_test.cpp
+        linear_model/tests/linear_model_refusal_test.cpp
+        linear_model/src/glm_staging.cpp
+        linear_model/src/glm_staging_device.cu
+        linear_model/src/residual_check.cu
+        linear_model/src/fit_checks.cpp common/src/rows.cu
+)
+target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver)
+if(TARGET cumlrkt_linear_model_tests)
+  target_link_libraries(cumlrkt_linear_model_tests PRIVATE CUDA::cusolver)
+endif()
+
 cumlrkt_family(manifold
   SOURCES common/src/transpose.cu manifold/src/manifold.cpp
           manifold/src/manifold_support.cpp manifold/src/tsne.cpp

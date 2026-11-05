@@ -38,6 +38,7 @@
       families = [
         "cluster"
         "decomposition"
+        "linear-model"
         "manifold"
         "metrics"
         "preprocessing"
@@ -141,7 +142,7 @@
         ${lib.concatMapStrings (family: ''
           _dest="$PWD/cuml-${family}-lib/cuml/${family}/native-libs"
           mkdir -p "$_dest"
-          for _f in ${src}/lib/libcumlrkt_${family}.*; do
+          for _f in ${src}/lib/libcumlrkt_${builtins.replaceStrings [ "-" ] [ "_" ] family}.*; do
             _b=$(basename "$_f")
             if cmp -s "$_f" "$_dest/$_b"; then
               continue

@@ -2,7 +2,8 @@
 
 (require (only-in racket/file call-with-atomic-output-file file->bytes make-directory*))
 
-(provide native-pre-installer
+(provide native-name
+         native-pre-installer
          not-staged-advice
          stage-native-libs!
          staged?)
@@ -10,8 +11,11 @@
 (define not-staged-advice
   "build it with nix (`nix develop` stages it), or set CUML_NATIVE_LIB_PATH to a directory whose lib/ holds it and reinstall")
 
+(define (native-name family)
+  (regexp-replace* #rx"-" family "_"))
+
 (define (library-pattern family)
-  (regexp (string-append "^libcumlrkt_" (regexp-quote family) "[.]")))
+  (regexp (string-append "^libcumlrkt_" (regexp-quote (native-name family)) "[.]")))
 
 (define (staged? family dir)
   (and (directory-exists? dir)
@@ -43,6 +47,6 @@
     [else
      (eprintf "cuml/~a: libcumlrkt_~a is not staged in ~a; ~a\n"
               family
-              family
+              (native-name family)
               native-libs-dir
               not-staged-advice)]))
