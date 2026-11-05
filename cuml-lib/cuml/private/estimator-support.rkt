@@ -10,8 +10,8 @@
          (only-in cuml/core/private/logic-error logic-error)
          (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
          (only-in cuml/metrics/private/metrics r2-score/who)
-         (only-in raft current-device-resources)
          (only-in racket/string string-append*)
+         (only-in raft current-device-resources)
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide define-estimator
