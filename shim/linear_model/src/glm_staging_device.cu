@@ -65,10 +65,9 @@ std::vector<profile_sums<T>> profile_totals(const T* x, int64_t n, int64_t d,
                                             rmm::cuda_stream_view stream) {
   const int64_t reference =
       fit_intercept ? first_positive(w, n, stream) : int64_t{-1};
-  return column_reduce<Columns>(stream, rows, d,
-                                profile_entry<T>{x, w, d, reference},
-                                add_profiles<T>{},
-                                profile_sums<T>{T{0}, 0, no_product()});
+  return column_reduce<Columns>(
+      stream, rows, d, profile_entry<T>{x, w, d, reference}, add_profiles<T>{},
+      profile_sums<T>{T{0}, 0, no_product()});
 }
 
 template <typename T>
@@ -177,9 +176,9 @@ struct deviation_terms {
       return {0.0, 0.0};
     }
     const double c = v(i, j) - mean[j];
-    return w == nullptr ? deviation_sums{c * c, c}
-                        : deviation_sums{weight(w, i) * c * c,
-                                         weight(w, i) * c};
+    return w == nullptr
+               ? deviation_sums{c * c, c}
+               : deviation_sums{weight(w, i) * c * c, weight(w, i) * c};
   }
 };
 
@@ -201,8 +200,8 @@ profiles column_profiles(const matrix<T, int64_t>& x, const T* w,
 }
 
 template <typename T>
-std::vector<spread_terms> column_spread(const matrix<T, int64_t>& x,
-                                        const T* w, row_selection rows,
+std::vector<spread_terms> column_spread(const matrix<T, int64_t>& x, const T* w,
+                                        row_selection rows,
                                         const std::vector<int>& exponent,
                                         const profiles& p,
                                         rmm::cuda_stream_view stream) {
@@ -227,8 +226,8 @@ std::vector<spread_terms> column_spread(const matrix<T, int64_t>& x,
 }
 
 template <typename T>
-centre target_centre(const T* y, const T* w, row_selection rows,
-                     int y_exponent, rmm::cuda_stream_view stream) {
+centre target_centre(const T* y, const T* w, row_selection rows, int y_exponent,
+                     rmm::cuda_stream_view stream) {
   const staged_target<T> target{y, power_of_two_of<T>(y_exponent)};
   const weighted_total t =
       vector_reduce(stream, rows, weighted_target<T>{target, w}, add_totals{},
@@ -243,8 +242,8 @@ centre target_centre(const T* y, const T* w, row_selection rows,
 template <typename T>
 bool constant_vector(const raft::handle_t& handle, const T* v, int64_t n,
                      const T* w, bool fit_intercept) {
-  return profile_totals<1>(v, n, 1, w, row_selection{nullptr, n},
-                           fit_intercept, stream_of(handle))[0]
+  return profile_totals<1>(v, n, 1, w, row_selection{nullptr, n}, fit_intercept,
+                           stream_of(handle))[0]
              .varies == 0;
 }
 

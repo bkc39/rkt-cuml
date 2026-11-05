@@ -52,8 +52,9 @@
     (match-define (list message thunk) call)
     (check-cuml-error 'logic message thunk)))
 
-(test-process-memory (format "~a rounds of linear regression free every output and leave device memory flat"
-                             rounds)
+(test-process-memory (format
+                      "~a rounds of linear regression free every output and leave device memory flat"
+                      rounds)
   (match-define (list X y w X2) (data))
   (define calls (refusals X y X2))
   (for ([_ (in-range 5)])

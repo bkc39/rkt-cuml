@@ -90,10 +90,9 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   const rmm::cuda_stream_view stream = stream_of(handle);
   const profiles profile = column_profiles(x, w, rows, fit_intercept, stream);
   std::vector<int> unit(x.d);
-  std::ranges::transform(profile.columns, unit.begin(),
-                         [](column_profile p) {
-                           return unit_exponent(p.largest);
-                         });
+  std::ranges::transform(profile.columns, unit.begin(), [](column_profile p) {
+    return unit_exponent(p.largest);
+  });
   const std::vector<spread_terms> spread =
       column_spread(x, w, rows, unit, profile, stream);
   staging s;
@@ -204,9 +203,8 @@ void require_in_range(int64_t column, T intercept) {
                     column, raftrkt::dtype_name(raftrkt::dtype_code<T>)));
   }
   if (!std::isfinite(intercept)) {
-    throw logic_error(
-        std::format("y: the intercept exceeds the {} range",
-                    raftrkt::dtype_name(raftrkt::dtype_code<T>)));
+    throw logic_error(std::format("y: the intercept exceeds the {} range",
+                                  raftrkt::dtype_name(raftrkt::dtype_code<T>)));
   }
 }
 

@@ -13,7 +13,12 @@
          (only-in "private/blob-data.rkt" uniform-source)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/linear-data.rkt" algorithms dtypes dyadic [on-matrix matrix] [on-vector vector])
+         (only-in "private/linear-data.rkt"
+                  algorithms
+                  dtypes
+                  dyadic
+                  [on-matrix matrix]
+                  [on-vector vector])
          (only-in "private/refusal-rows.rkt" check-row row row-id)
          (only-in "private/scaler-data.rkt" strided-vector))
 
@@ -57,8 +62,12 @@
    (row "weight length"
         "sample-weight: expected 5 elements, got 4"
         (lambda () (go X y #:sample-weight (vector '(1 1 1 1)))))
-   (row "one row" "X: expected at least 2 rows, got 1" (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
-   (row "no column" "X: expected at least 1 column, got 0" (lambda () (go (blank-matrix 5 0 'float64) y)))
+   (row "one row"
+        "X: expected at least 2 rows, got 1"
+        (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
+   (row "no column"
+        "X: expected at least 1 column, got 0"
+        (lambda () (go (blank-matrix 5 0 'float64) y)))
    (row "unknown algorithm"
         "algorithm: expected auto, eig, svd, svd-jacobi, qr or svd-qr"
         (lambda () (go X y #:algorithm 'lu)))
@@ -98,20 +107,25 @@
           (go (matrix '((1000) (1001) (1002)) 'float32) (vector '(3e38 2.9e38 2.8e38) 'float32))))))
 
 (define (predict-rows fitted go)
-  (list
-   (row "X dtype"
-        "X: expected float32 or float64, got int32"
-        (lambda () (go fitted (blank-matrix 5 3 'int32))))
-   (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go fitted (vector targets))))
-   (row "X layout"
-        "X: expected row-major, got col-major 4x3"
-        (lambda () (go fitted (blank-matrix 4 3 'float64 #:layout 'col-major))))
-   (row "X dtype unlike coef" "X: expected float64, got float32" (lambda () (go fitted (matrix grid 'float32))))
-   (row "no rows" "X: expected at least 1 row, got 0" (lambda () (go fitted (blank-matrix 0 3 'float64))))
-   (row "X width unlike coef" "X: expected 3 columns, got 2" (lambda () (go fitted (matrix '((1 2) (3 4))))))
-   (row "non-finite X"
-        "X: row 3, column 1: expected a finite value, got nan"
-        (lambda () (go fitted (matrix (with-cell grid 3 1 +nan.0)))))))
+  (list (row "X dtype"
+             "X: expected float32 or float64, got int32"
+             (lambda () (go fitted (blank-matrix 5 3 'int32))))
+        (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go fitted (vector targets))))
+        (row "X layout"
+             "X: expected row-major, got col-major 4x3"
+             (lambda () (go fitted (blank-matrix 4 3 'float64 #:layout 'col-major))))
+        (row "X dtype unlike coef"
+             "X: expected float64, got float32"
+             (lambda () (go fitted (matrix grid 'float32))))
+        (row "no rows"
+             "X: expected at least 1 row, got 0"
+             (lambda () (go fitted (blank-matrix 0 3 'float64))))
+        (row "X width unlike coef"
+             "X: expected 3 columns, got 2"
+             (lambda () (go fitted (matrix '((1 2) (3 4))))))
+        (row "non-finite X"
+             "X: row 3, column 1: expected a finite value, got nan"
+             (lambda () (go fitted (matrix (with-cell grid 3 1 +nan.0)))))))
 
 (define (result-rows go)
   (define X (matrix grid))
@@ -170,7 +184,8 @@
                     "predict: linear-regression is not fitted"
                     (lambda () (predict (linear-regression) (matrix grid)))))
 
-(define not-least-squares #rx"^linear-regression-fit: X: the [a-z-]+ solve is not a least-squares solution")
+(define not-least-squares
+  #rx"^linear-regression-fit: X: the [a-z-]+ solve is not a least-squares solution")
 
 (define (collinear-rows n)
   (for/list ([i (in-range n)])

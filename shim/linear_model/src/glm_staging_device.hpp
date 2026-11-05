@@ -67,15 +67,15 @@ profiles column_profiles(const matrix<T, int64_t>& x, const T* w,
                          rmm::cuda_stream_view stream);
 
 template <typename T>
-std::vector<spread_terms> column_spread(const matrix<T, int64_t>& x,
-                                            const T* w, row_selection rows,
-                                            const std::vector<int>& exponent,
-                                            const profiles& p,
-                                            rmm::cuda_stream_view stream);
+std::vector<spread_terms> column_spread(const matrix<T, int64_t>& x, const T* w,
+                                        row_selection rows,
+                                        const std::vector<int>& exponent,
+                                        const profiles& p,
+                                        rmm::cuda_stream_view stream);
 
 template <typename T>
-centre target_centre(const T* y, const T* w, row_selection rows,
-                     int y_exponent, rmm::cuda_stream_view stream);
+centre target_centre(const T* y, const T* w, row_selection rows, int y_exponent,
+                     rmm::cuda_stream_view stream);
 
 template <typename T>
 double largest_counted(const T* v, int64_t n, const T* w,

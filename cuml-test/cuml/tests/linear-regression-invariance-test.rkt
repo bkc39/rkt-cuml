@@ -104,8 +104,9 @@
       (define (kept xs)
         (kept-rows xs power-spread-gone))
       (check-true
-       (bits-equal? (fit-of (lcase-X c) (lcase-y c) (zeroed w power-spread-gone) 'float64 #:algorithm a)
-                    (fit-of (kept (lcase-X c)) (kept (lcase-y c)) (kept w) 'float64 #:algorithm a))
+       (bits-equal?
+        (fit-of (lcase-X c) (lcase-y c) (zeroed w power-spread-gone) 'float64 #:algorithm a)
+        (fit-of (kept (lcase-X c)) (kept (lcase-y c)) (kept w) 'float64 #:algorithm a))
        "a zero weight is a deleted row"))))
 
 (test-gpu "column order, a shifted column and a shifted y move the fit as they should"

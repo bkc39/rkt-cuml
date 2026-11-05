@@ -98,8 +98,8 @@ template int64_t cusolver_lwork_of<float>(const raft::handle_t&, int,
 template int64_t cusolver_lwork_of<double>(const raft::handle_t&, int,
                                            ols_shape);
 template checked_fit<float> checked_inputs<float>(const raft::handle_t&,
-                                                 const fit_request&);
+                                                  const fit_request&);
 template checked_fit<double> checked_inputs<double>(const raft::handle_t&,
-                                                   const fit_request&);
+                                                    const fit_request&);
 
 }  // namespace cumlrkt::glm

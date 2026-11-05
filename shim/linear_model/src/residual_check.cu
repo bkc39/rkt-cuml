@@ -144,9 +144,9 @@ residual_terms residual_moments(const raft::handle_t& handle,
   const buffer<power_of_two<T>> stages = to_device(stage, stream);
   const buffer<double> means = to_device(mean, stream);
   const buffer<double> remainders = to_device(remainder, stream);
-  const centred_column<T> c{x.data,           kept.data(), stages.data(),
-                            means.data(),     remainders.data(),
-                            count,            x.d};
+  const centred_column<T> c{x.data,       kept.data(),       stages.data(),
+                            means.data(), remainders.data(), count,
+                            x.d};
   const centred_target<T> target{
       staged_target<T>{y, power_of_two_of<T>(s.y_exponent)},
       fit_intercept ? target_centre(y, w, rows, s.y_exponent, stream)
