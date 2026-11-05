@@ -167,7 +167,7 @@
   (define table
     (for/list ([row (in-list rows)]
                [i (in-naturals)])
-      (cons row
-            (list (list 'svd (sk (list-ref theirs (* 2 i))))
-                  (list 'cholesky (sk (list-ref theirs (add1 (* 2 i)))))))))
+      (list row
+            (list 'svd (sk (list-ref theirs (* 2 i))))
+            (list 'cholesky (sk (list-ref theirs (add1 (* 2 i))))))))
   (check-against dt rows (lambda (row) (cdr (assq row table))) "sklearn"))

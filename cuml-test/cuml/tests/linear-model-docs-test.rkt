@@ -52,8 +52,8 @@
                     (lambda () (linear-regression-predict fitted (matrix '((1 2 3))))))
   (check-cuml-error 'logic "fit: linear-regression needs y" (lambda () (fit (linear-regression) X))))
 
-(define (decimals k)
-  (lambda (c) (real->decimal-string c k)))
+(define ((decimals k) c)
+  (real->decimal-string c k))
 
 (test-gpu "the ridge examples print what the exact oracle gives"
   (define rows '((1 1) (1 2) (2 2) (2 3)))
