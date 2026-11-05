@@ -135,6 +135,14 @@
   (list (row "coef rank"
              "coef: expected rank 1, got rank 2"
              (lambda () (go (linear-regression-result X 0.0) X)))
+        (row "X rank before the dtype mismatch"
+             "X: expected rank 2, got rank 1"
+             (lambda () (go (linear-regression-result (vector '(1 2)) 0.0) (vector '(1 2 3) 'float32))))
+        (row "coef rank before the dtype mismatch"
+             "coef: expected rank 1, got rank 2"
+             (lambda ()
+               (go (linear-regression-result (matrix '((1 2) (3 4))) 0.0)
+                   (matrix '((1 2) (3 4)) 'float32))))
         (row "empty coef"
              "coef: expected at least 1 element, got 0"
              (lambda () (go (linear-regression-result (blank-vector 0 'float64) 0.0) X)))

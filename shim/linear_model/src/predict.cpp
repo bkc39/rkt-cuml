@@ -5,6 +5,7 @@
 #include <memory>
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
+#include <type_traits>
 #include <utility>
 
 #include "cumlrkt/linear_model.h"
@@ -41,8 +42,7 @@ line<T> line_of(const rr_view* coef, double intercept) {
 
 template <typename T>
 void predict_into(const raft::handle_t& handle, const matrix<T, int64_t>& x,
-                  const rr_view* coef, double intercept, rr_deposit* out) {
-  const line<T> fitted = line_of<T>(coef, intercept);
+                  const line<T>& fitted, rr_deposit* out) {
   cumlrkt::require_some("X", "row", x.n);
   if (x.d != fitted.d) {
     throw logic_error(
@@ -87,12 +87,22 @@ int cuml_linear_model_gemm_predict(void* handle, const rr_view* x,
   return cumlrkt::guarded(
       handle, {{"X", x}, {"coef", coef}}, [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
-        cumlrkt::on_same_floats(x, "X", coef, "coef", [&](auto tag) {
-          using T = decltype(tag);
-          predict_into<T>(h,
-                          cumlrkt::rows_of<T, int64_t>(
-                              x, "X", raftrkt::any_extent, raftrkt::any_extent),
-                          coef, intercept, into);
+        cumlrkt::on_floats(x, "X", [&](auto x_tag) {
+          using X = decltype(x_tag);
+          const matrix<X, int64_t> m = cumlrkt::rows_of<X, int64_t>(
+              x, "X", raftrkt::any_extent, raftrkt::any_extent);
+          cumlrkt::on_floats(coef, "coef", [&](auto c_tag) {
+            using C = decltype(c_tag);
+            const line<C> fitted = line_of<C>(coef, intercept);
+            if constexpr (std::is_same_v<X, C>) {
+              predict_into<C>(h, m, fitted, into);
+            } else {
+              throw logic_error(
+                  std::format("X: expected {}, got {}",
+                              raftrkt::dtype_name(raftrkt::dtype_code<C>),
+                              raftrkt::dtype_name(raftrkt::dtype_code<X>)));
+            }
+          });
         });
       });
 }

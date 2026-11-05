@@ -5,7 +5,6 @@
 #include <cuml/version_config.hpp>
 #include <new>
 #include <string>
-#include <type_traits>
 
 #include "raftrkt/abi.h"
 #include "raftrkt/array.h"
@@ -60,25 +59,6 @@ void on_floats(const rr_view* x, const char* name, Fn&& fn) {
                       ": expected float32 or float64, got " +
                       raftrkt::dtype_name(view.dtype));
   }
-}
-
-template <typename Fn>
-void on_same_floats(const rr_view* a, const char* a_name, const rr_view* b,
-                    const char* b_name, Fn&& fn) {
-  on_floats(a, a_name, [&](auto a_tag) {
-    on_floats(b, b_name, [&](auto b_tag) {
-      using A = decltype(a_tag);
-      using B = decltype(b_tag);
-      if constexpr (std::is_same_v<A, B>) {
-        fn(a_tag);
-      } else {
-        throw logic_error(std::string(a_name) + ": expected " +
-                          raftrkt::dtype_name(raftrkt::dtype_code<B>) +
-                          ", got " +
-                          raftrkt::dtype_name(raftrkt::dtype_code<A>));
-      }
-    });
-  });
 }
 
 template <typename Fn>
