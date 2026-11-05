@@ -130,8 +130,8 @@ fit_plan plan_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
 template <typename T>
 double ols_fit_into(const raft::handle_t& handle, const fit_request& request,
                     rr_deposit* out) {
-  const checked_fit<T> checked = checked_inputs<T>(
-      handle, request, [&] { require_ols_codes(request); });
+  const checked_fit<T> checked =
+      checked_inputs<T>(handle, request, [&] { require_ols_codes(request); });
   const fit_inputs<T>& raw = checked.in;
   const buffer<T> weights =
       staged_weights(handle, raw.w, raw.x.n, checked.largest_weight);

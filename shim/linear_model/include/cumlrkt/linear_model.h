@@ -39,10 +39,12 @@ CUMLRKT_API void cuml_linear_model_linear_regression_fit_job(
 /* sample_weight may be NULL. alpha is the penalty in X's units. Region 0 of out
    is the d coefficients in X's dtype; *intercept is exact in X's dtype, and 0
    without fit_intercept. */
-CUMLRKT_API int cuml_linear_model_ridge_fit(
-    void* handle, const rr_view* x, const rr_view* y,
-    const rr_view* sample_weight, rr_deposit* out, double alpha,
-    int32_t fit_intercept, int32_t solver, double* intercept);
+CUMLRKT_API int cuml_linear_model_ridge_fit(void* handle, const rr_view* x,
+                                            const rr_view* y,
+                                            const rr_view* sample_weight,
+                                            rr_deposit* out, double alpha,
+                                            int32_t fit_intercept,
+                                            int32_t solver, double* intercept);
 CUMLRKT_API void cuml_linear_model_ridge_fit_job(void* args, size_t args_len,
                                                  rr_job_outcome* outcome);
 

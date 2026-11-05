@@ -43,9 +43,9 @@ int64_t ridge_lwork_of(const raft::handle_t& handle, int algorithm,
                 static_cast<int>(d), nullptr, static_cast<int>(d), nullptr,
                 &lwork);
   if (status != CUSOLVER_STATUS_SUCCESS) {
-    throw logic_error(std::format(
-        "X: {}x{} elements are past cuSOLVER's {} workspace query", m, d,
-        algorithm_name(algorithm)));
+    throw logic_error(
+        std::format("X: {}x{} elements are past cuSOLVER's {} workspace query",
+                    m, d, algorithm_name(algorithm)));
   }
   return lwork;
 }
@@ -89,7 +89,7 @@ double ridge_fit_into(const raft::handle_t& handle,
                       const ridge_request& request, rr_deposit* out) {
   const fit_request& fit = request.fit;
   const checked_fit<T> checked = checked_inputs<T>(handle, fit, [&] {
-    require_ridge_codes(fit.algorithm, fit.fit_intercept, request.alpha);
+    require_ridge_codes({fit.algorithm, fit.fit_intercept, request.alpha});
   });
   const fit_inputs<T>& raw = checked.in;
   const rmm::cuda_stream_view stream = stream_of(handle);
@@ -101,20 +101,17 @@ double ridge_fit_into(const raft::handle_t& handle,
   const int64_t positive = positive_count(in.w, in.x.n, stream);
   counted_rows counted = counted_rows_of(in.w, in.x.n, positive, stream);
   const int weight_power =
-      raw.w == nullptr
-          ? 0
-          : even_floor(unit_exponent(checked.largest_weight));
+      raw.w == nullptr ? 0 : even_floor(unit_exponent(checked.largest_weight));
   ridge_stage<T> staged = ridge_staging<T>(
       plan_staging(handle, in.x, in.y, in.w, counted.rows, intercepted),
-      request.alpha, weight_power, counted.rows.count);
+      counted.rows.count, {request.alpha, weight_power});
   if (staged.alpha == 0) {
-    return ols_fit_into<T>(
-        handle,
-        {fit.x, fit.y, fit.w, fit.fit_intercept,
-         fit.algorithm == CUML_LINEAR_MODEL_RIDGE_SVD
-             ? CUML_LINEAR_MODEL_OLS_SVD_QR
-             : CUML_LINEAR_MODEL_OLS_EIG},
-        out);
+    return ols_fit_into<T>(handle,
+                           {fit.x, fit.y, fit.w, fit.fit_intercept,
+                            fit.algorithm == CUML_LINEAR_MODEL_RIDGE_SVD
+                                ? CUML_LINEAR_MODEL_OLS_SVD_QR
+                                : CUML_LINEAR_MODEL_OLS_EIG},
+                           out);
   }
   const auto kept = static_cast<int64_t>(staged.s.kept.size());
   const fit_plan plan{std::move(staged.s), intercepted,
@@ -148,8 +145,7 @@ int cuml_linear_model_ridge_fit(void* handle, const rr_view* x,
         const cumlrkt::glm::ridge_request request{
             {x, y, sample_weight, fit_intercept, solver}, alpha};
         cumlrkt::on_floats(x, "X", [&](auto tag) {
-          *icpt =
-              cumlrkt::glm::ridge_fit_into<decltype(tag)>(h, request, into);
+          *icpt = cumlrkt::glm::ridge_fit_into<decltype(tag)>(h, request, into);
         });
       });
 }

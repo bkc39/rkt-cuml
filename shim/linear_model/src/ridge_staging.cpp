@@ -27,22 +27,21 @@ int alpha_exponent(double alpha, int weight_power) {
   if (alpha == 0) {
     return std::numeric_limits<int>::max();
   }
-  return floor_half((2 * ridge_headroom<T>) -
-                    (std::ilogb(alpha) + weight_power));
+  return floor_half((2 * ridge_headroom<T>)-(std::ilogb(alpha) + weight_power));
 }
 
 }  // namespace
 
 template <typename T>
-ridge_stage<T> ridge_staging(staging s, double alpha, int weight_power,
-                             int64_t n) {
+ridge_stage<T> ridge_staging(staging s, int64_t n, ridge_penalty penalty) {
+  const auto [alpha, weight_power] = penalty;
   if (s.kept.empty()) {
     return {std::move(s), static_cast<T>(std::ldexp(alpha, weight_power))};
   }
-  const int spread = std::ranges::min(
-      s.kept | std::views::transform([&](int64_t j) {
-        return s.column_exponent[j] + ridge_headroom<T>;
-      }));
+  const int spread =
+      std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
+                         return s.column_exponent[j] + ridge_headroom<T>;
+                       }));
   const int cap = std::ranges::min(
       s.kept | std::views::transform([&](int64_t j) {
         return unit_exponent(s.largest[j]) + column_reach<T>(n);
@@ -71,7 +70,8 @@ int64_t ridge_workspace(int algorithm, ols_shape shape, int64_t lwork) {
   return (m * d) + square + (3 * d) + lwork;
 }
 
-void require_ridge_codes(int32_t solver, int32_t fit_intercept, double alpha) {
+void require_ridge_codes(ridge_codes codes) {
+  const auto [solver, fit_intercept, alpha] = codes;
   if (solver != CUML_LINEAR_MODEL_RIDGE_SVD &&
       solver != CUML_LINEAR_MODEL_RIDGE_EIG) {
     throw logic_error("solver: expected auto, eig or svd");
@@ -104,10 +104,10 @@ void require_ridge_solution(double cosine, int algorithm) {
   }
 }
 
-template ridge_stage<float> ridge_staging<float>(staging, double, int,
-                                                 int64_t);
-template ridge_stage<double> ridge_staging<double>(staging, double, int,
-                                                   int64_t);
+template ridge_stage<float> ridge_staging<float>(staging, int64_t,
+                                                 ridge_penalty);
+template ridge_stage<double> ridge_staging<double>(staging, int64_t,
+                                                   ridge_penalty);
 template void require_ridge_solution<float>(double, int);
 template void require_ridge_solution<double>(double, int);
 

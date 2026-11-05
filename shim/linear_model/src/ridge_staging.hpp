@@ -16,15 +16,25 @@ struct ridge_stage {
   T alpha;
 };
 
+struct ridge_penalty {
+  double alpha;
+  int weight_power;
+};
+
+struct ridge_codes {
+  int32_t solver;
+  int32_t fit_intercept;
+  double alpha;
+};
+
 template <typename T>
-ridge_stage<T> ridge_staging(staging s, double alpha, int weight_power,
-                             int64_t n);
+ridge_stage<T> ridge_staging(staging s, int64_t n, ridge_penalty penalty);
 
 int ridge_algorithm(int solver, int64_t rows, int64_t kept);
 
 int64_t ridge_workspace(int algorithm, ols_shape shape, int64_t lwork);
 
-void require_ridge_codes(int32_t solver, int32_t fit_intercept, double alpha);
+void require_ridge_codes(ridge_codes codes);
 
 void require_ridge_workspace(int algorithm, ols_shape shape, int64_t lwork);
 

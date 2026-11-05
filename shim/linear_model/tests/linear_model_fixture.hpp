@@ -234,9 +234,9 @@ inline std::string ridge_into(const resources& res, fitted& f, const rr_view* x,
                               const rr_view* y, const rr_view* w = nullptr,
                               double alpha = 1.0, int32_t fit_intercept = 1,
                               int32_t solver = CUML_LINEAR_MODEL_RIDGE_EIG) {
-  f.status = outcome(cuml_linear_model_ridge_fit(res.handle, x, y, w, &f.out.r,
-                                                 alpha, fit_intercept, solver,
-                                                 &f.intercept));
+  f.status =
+      outcome(cuml_linear_model_ridge_fit(res.handle, x, y, w, &f.out.r, alpha,
+                                          fit_intercept, solver, &f.intercept));
   return f.status;
 }
 

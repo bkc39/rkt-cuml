@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cumlrkt/linear_model.h"
@@ -49,6 +50,50 @@ struct staged_case {
   double alpha_staged;
 };
 
+template <typename T>
+void expect_staged(const staged_case& c) {
+  const auto r = ridge_staging<T>(planned(c.exponent, c.largest), c.n,
+                                  {c.alpha, c.weight_power});
+  EXPECT_EQ(r.s.column_exponent, std::vector<int>(c.exponent.size(), c.shared))
+      << c.alpha;
+  EXPECT_EQ(r.alpha, static_cast<T>(c.alpha_staged)) << c.alpha;
+  EXPECT_EQ(r.s.y_exponent, 3);
+}
+
+struct routed_case {
+  int solver;
+  int64_t rows;
+  int64_t kept;
+  int routed;
+};
+
+constexpr int64_t wide_columns = 24000;
+constexpr int64_t wide_lwork = 1150000000;
+
+std::string workspace_refusal(int64_t columns, int64_t lwork) {
+  try {
+    cumlrkt::glm::require_ridge_workspace(CUML_LINEAR_MODEL_RIDGE_EIG,
+                                          {2, columns}, lwork);
+  } catch (const cumlrkt::logic_error& e) {
+    return e.what();
+  }
+  return "accepted";
+}
+
+void expect_least_squares(const resources& res, const filled<float>& x,
+                          const filled<float>& y, std::pair<int, int> codes,
+                          double alpha) {
+  fitted ours(res);
+  fitted theirs(res);
+  ASSERT_EQ(
+      ridge_into(res, ours, x.view(), y.view(), nullptr, alpha, 1, codes.first),
+      "accepted");
+  ASSERT_EQ(fit_into(res, theirs, x.view(), y.view(), nullptr, 1, codes.second),
+            "accepted");
+  EXPECT_EQ(ours.out.read<float>(0), theirs.out.read<float>(0)) << alpha;
+  EXPECT_EQ(ours.intercept, theirs.intercept) << alpha;
+}
+
 TEST(RidgeStaging, SharesOneExponentAndScalesAlphaByItsSquare) {
   const std::vector<staged_case> f32{
       {{-3, 2}, {12.0, 0.5}, 1.0, 0, 100, 13, 0x1p26},
@@ -58,12 +103,7 @@ TEST(RidgeStaging, SharesOneExponentAndScalesAlphaByItsSquare) {
       {{-3, 2}, {12.0, 0.5}, 0x1p-190, 0, 100, 13, 0.0},
   };
   for (const staged_case& c : f32) {
-    const auto r = ridge_staging<float>(planned(c.exponent, c.largest), c.alpha,
-                                        c.weight_power, c.n);
-    EXPECT_EQ(r.s.column_exponent, std::vector<int>(c.exponent.size(), c.shared))
-        << c.alpha;
-    EXPECT_EQ(r.alpha, static_cast<float>(c.alpha_staged)) << c.alpha;
-    EXPECT_EQ(r.s.y_exponent, 3);
+    expect_staged<float>(c);
   }
   const std::vector<staged_case> f64{
       {{0}, {1.5}, 1e-300, 0, 10, 64, std::ldexp(1e-300, 128)},
@@ -71,37 +111,26 @@ TEST(RidgeStaging, SharesOneExponentAndScalesAlphaByItsSquare) {
       {{0}, {1.5}, 0x1p500, -2, 10, -185, std::ldexp(0x1p500, -372)},
   };
   for (const staged_case& c : f64) {
-    const auto r = ridge_staging<double>(planned(c.exponent, c.largest),
-                                         c.alpha, c.weight_power, c.n);
-    EXPECT_EQ(r.s.column_exponent, std::vector<int>(c.exponent.size(), c.shared))
-        << c.alpha;
-    EXPECT_EQ(r.alpha, c.alpha_staged) << c.alpha;
+    expect_staged<double>(c);
   }
 }
 
 TEST(RidgeStaging, RoutesTheCasesRidgeFitCannotTake) {
-  EXPECT_EQ(ridge_algorithm(CUML_LINEAR_MODEL_RIDGE_EIG, 10, 3),
-            CUML_LINEAR_MODEL_RIDGE_EIG);
-  EXPECT_EQ(ridge_algorithm(CUML_LINEAR_MODEL_RIDGE_SVD, 10, 3),
-            CUML_LINEAR_MODEL_RIDGE_SVD);
-  EXPECT_EQ(ridge_algorithm(CUML_LINEAR_MODEL_RIDGE_SVD, 3, 3),
-            CUML_LINEAR_MODEL_RIDGE_SVD);
-  EXPECT_EQ(ridge_algorithm(CUML_LINEAR_MODEL_RIDGE_SVD, 2, 3),
-            CUML_LINEAR_MODEL_RIDGE_EIG);
-  EXPECT_EQ(ridge_algorithm(CUML_LINEAR_MODEL_RIDGE_EIG, 10, 1),
-            CUML_LINEAR_MODEL_RIDGE_SVD);
-  EXPECT_EQ(ridge_algorithm(CUML_LINEAR_MODEL_RIDGE_SVD, 1, 1),
-            CUML_LINEAR_MODEL_RIDGE_SVD);
+  const std::vector<routed_case> routes{
+      {CUML_LINEAR_MODEL_RIDGE_EIG, 10, 3, CUML_LINEAR_MODEL_RIDGE_EIG},
+      {CUML_LINEAR_MODEL_RIDGE_SVD, 10, 3, CUML_LINEAR_MODEL_RIDGE_SVD},
+      {CUML_LINEAR_MODEL_RIDGE_SVD, 3, 3, CUML_LINEAR_MODEL_RIDGE_SVD},
+      {CUML_LINEAR_MODEL_RIDGE_SVD, 2, 3, CUML_LINEAR_MODEL_RIDGE_EIG},
+      {CUML_LINEAR_MODEL_RIDGE_EIG, 10, 1, CUML_LINEAR_MODEL_RIDGE_SVD},
+      {CUML_LINEAR_MODEL_RIDGE_SVD, 1, 1, CUML_LINEAR_MODEL_RIDGE_SVD},
+  };
+  for (const routed_case& c : routes) {
+    EXPECT_EQ(ridge_algorithm(c.solver, c.rows, c.kept), c.routed)
+        << c.solver << " " << c.rows << " " << c.kept;
+  }
   EXPECT_EQ(ridge_workspace(CUML_LINEAR_MODEL_RIDGE_SVD, {10, 3}, 5), 53);
   EXPECT_EQ(ridge_workspace(CUML_LINEAR_MODEL_RIDGE_EIG, {10, 3}, 5), 62);
-  std::string refused = "accepted";
-  try {
-    cumlrkt::glm::require_ridge_workspace(CUML_LINEAR_MODEL_RIDGE_EIG,
-                                          {2, 24000}, 1150000000);
-  } catch (const cumlrkt::logic_error& e) {
-    refused = e.what();
-  }
-  EXPECT_EQ(refused,
+  EXPECT_EQ(workspace_refusal(wide_columns, wide_lwork),
             "X: 24000 columns need a 2302120000-element eig workspace, more "
             "than 2147483647 elements");
 }
@@ -116,15 +145,7 @@ TEST(Ridge, AlphaThatUnderflowsIsTheLeastSquaresFitBitwise) {
        {std::pair{CUML_LINEAR_MODEL_RIDGE_EIG, CUML_LINEAR_MODEL_OLS_EIG},
         std::pair{CUML_LINEAR_MODEL_RIDGE_SVD, CUML_LINEAR_MODEL_OLS_SVD_QR}}) {
     for (const double alpha : {0.0, -0.0, 0x1p-190}) {
-      fitted ours(res);
-      fitted theirs(res);
-      ASSERT_EQ(ridge_into(res, ours, x.view(), y.view(), nullptr, alpha, 1,
-                           solver),
-                "accepted");
-      ASSERT_EQ(fit_into(res, theirs, x.view(), y.view(), nullptr, 1, algorithm),
-                "accepted");
-      EXPECT_EQ(ours.out.read<float>(0), theirs.out.read<float>(0)) << alpha;
-      EXPECT_EQ(ours.intercept, theirs.intercept) << alpha;
+      expect_least_squares(res, x, y, {solver, algorithm}, alpha);
     }
   }
 }

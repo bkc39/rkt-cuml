@@ -1,8 +1,8 @@
 #include "fit_checks.hpp"
 
 #include <cstdint>
-#include <functional>
 #include <format>
+#include <functional>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cusolver_dn_handle.hpp>
 #include <raft/linalg/detail/cusolver_wrappers.hpp>
@@ -95,8 +95,9 @@ template int64_t cusolver_lwork_of<float>(const raft::handle_t&, int,
                                           ols_shape);
 template int64_t cusolver_lwork_of<double>(const raft::handle_t&, int,
                                            ols_shape);
-template checked_fit<float> checked_inputs<float>(
-    const raft::handle_t&, const fit_request&, const std::function<void()>&);
+template checked_fit<float> checked_inputs<float>(const raft::handle_t&,
+                                                  const fit_request&,
+                                                  const std::function<void()>&);
 template checked_fit<double> checked_inputs<double>(
     const raft::handle_t&, const fit_request&, const std::function<void()>&);
 

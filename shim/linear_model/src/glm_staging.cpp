@@ -51,8 +51,9 @@ double stationarity_of(const moment& m, scaled_sum y, double alpha, double b) {
     return cosine_of(m, y);
   }
   const double penalty = alpha * b;
-  const int top = penalty == 0 ? m.cross.exponent
-                               : std::max(m.cross.exponent, std::ilogb(penalty));
+  const int top = penalty == 0
+                      ? m.cross.exponent
+                      : std::max(m.cross.exponent, std::ilogb(penalty));
   const double gradient = std::ldexp(m.cross.value, m.cross.exponent - top) -
                           std::ldexp(penalty, -top);
   const int base = std::max(m.square.exponent, std::ilogb(alpha));
@@ -230,8 +231,7 @@ double stationarity_cosine(const raft::handle_t& handle,
       residual_moments(handle, x, y, w, rows, s, coef, fit_intercept);
   const auto count = static_cast<int64_t>(terms.moments.size());
   const std::vector<T> b =
-      alpha == 0 ? std::vector<T>{}
-                 : to_host(coef, count, stream_of(handle));
+      alpha == 0 ? std::vector<T>{} : to_host(coef, count, stream_of(handle));
   double worst = 0;
   for (int64_t k = 0; k < count; ++k) {
     if (terms.largest[k] == 0) {
