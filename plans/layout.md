@@ -1084,13 +1084,26 @@ Follow-ups are GitHub issues.
   is bitwise a deleted row (T6) and no other column, nor a column's position,
   changes them (E4); round 2's one reduce_by_key over all n·d entries let
   either move a spread within an ulp of a power of two across it (review r3
-  M1). y takes the
+  M1). Every such sum, the target's and the residual check's included, goes
+  through one chunked-fold kernel (`chunk_totals` in `glm_device.cuh`):
+  2048-row chunks, each folded in a fixed tree over a 256-thread block with
+  a column count the caller fixes, never chosen from d, then the chunk totals
+  folded in a fixed tree; a single vector is the one-column case (review
+  final C-1). y takes the
   power of its largest |y|. Rounds 0 to 2 took every column's from its
   largest |x|: a column with a large mean against its spread, or one whose
   variation sits on low-weight rows, then had a centred, weighted Gram
   eigenvalue under raft's absolute 1e-10 eps, and eig dropped its direction
   (review r2 H1, H2). One power of two per column, so E1 holds on non-wide
-  fits.
+  fits: scaling a column by 2^k scales its coefficient by 2^−k exactly.
+- **L1-c, against other libraries.** Python cuML does not scale, so a float32
+  column at 1e-5, a float32 y at 1e37 and a constant column under qr give it
+  wrong or NaN coefficients; scikit-learn returns the minimum-norm solution
+  for collinear columns, where this fit can refuse (L1-e). With weights and
+  an intercept, fits above a few thousand rows can differ in the last bits
+  between runs, as in Python cuML. These were in the Scribble entry until
+  the final style read (R10) cut it to what the fit does and refuses; the
+  entry keeps the run-to-run disclosure.
 - **L1-c, wide rule (V1).** With m positive-weight rows, a fit is wide when the
   kept columns d' exceed m − 1 with an intercept, or m without one. A wide fit
   stages every kept column with one shared exponent (the least of the kept
@@ -1108,7 +1121,12 @@ Follow-ups are GitHub issues.
   weighted cosine between each kept staged column and the residual
   r = (y − ȳ) − Σ(v − v̄)·c, uncentred without fit-intercept, over the
   compacted positive-weight rows, in each column's staged units, since its
-  power of two cancels in its cosine; v̄ is the planner's mean, and each of
+  power of two cancels in its cosine; v̄ is the planner's mean rounded to a
+  double, less the remainder ρ = Σw(v − v̄)/Σw that the spread pass sums
+  alongside the spread (and target_centre for y), so the centring carries
+  ρ's rounding error rather than v̄'s: without ρ, a float64 column at
+  10¹³ + U(0, 1) kept an error Σw·ε·(v − v̄) that read as a cosine of
+  2.5·10⁻⁵ and refused a sound fit (review r4 M1); each of
   Σw·c², Σw·c·r and Σw(y − ȳ)² is carried as a significand and a power of two
   rescaled at each addition, so no product underflows or overflows double)
   exceeds
