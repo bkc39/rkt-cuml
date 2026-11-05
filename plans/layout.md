@@ -1157,3 +1157,41 @@ Follow-ups are GitHub issues.
   range", after V14; it is not in the spec's V table.
 - **L1-f.** `define-estimator` takes `#:needs-y`: y is positional, a missing y
   is refused, and `[score …]` passes y through.
+
+## Decisions recorded in leg L2 (#88)
+
+- **L2-a.** Ridge's penalty is not invariant under per-column scaling, so
+  every kept column is scaled by one shared power of two 2^s and alpha by its
+  square (`shim/linear_model/src/ridge_staging.cpp`). With e_j L1's capped
+  per-column exponent, c_j = −ilogb(max|x_j|) + reach (L1's cap), H = 16
+  (float32) or 64 (float64) and 4^k L1's weight power,
+  s = min(min_j e_j + H, min_j c_j, ⌊(2H − ilogb(α·4^−k))/2⌋), so the larger
+  of the widest staged spread² and the staged α′ = (T)(α·4^s·4^−k), rounded
+  once from double, sits near 2^(2H): both of `ridge.cuh`'s 1e-10 cuts lie
+  below what the solver resolves. y keeps L1's power of two, which cancels
+  from α′. Scaling X by 2^a with alpha by 4^a, y by 2^c, or the weights and
+  alpha by 4^m moves the fit exactly (laws B2–B4).
+- **L2-b.** The keyword is `#:solver` (`'auto`, `'eig`, `'svd`), Python
+  cuML's and sklearn's name; `'auto` is `'eig`; `'lsmr` is not bound.
+- **L2-c.** alpha 0, and an alpha whose staged α′ rounds to 0, run
+  `linear-regression-fit`'s path: 'eig, or 'svd-qr for 'svd, bit for bit
+  (law B1). −0.0 is accepted as 0.
+- **L2-d.** NaN, ±inf and negative alpha are refused in C (V8), a non-real
+  alpha in Racket; an exact alpha past the double range becomes +inf.0 and
+  is refused.
+- **L2-e.** After the solve the shim computes, on the staged data,
+  g_j = |Σw′(v′_j − v̄′_j)r′ − α′b′_j| / (√(Σw′(v′_j − v̄′_j)² + α′)·√Σw′(y′ − ȳ′)²),
+  the residual cosine of the augmented problem [X; √α′·I], and refuses the
+  fit when max g > 2^−8 (float32) or 2^−18 (float64). L1's residual cosine is
+  its α′ = 0 case: one `stationarity_cosine`. The check bounds the solve, not
+  the conditioning: a float32 'svd fit 5× off on collinear X passes at
+  2.6e-3, as the Scribble says.
+- **L2-f.** One kept column runs `ridgeFit`'s SVD under either solver
+  (`ridgeFit` does this itself); 'svd with fewer positive-weight rows than
+  kept columns runs eig, since gesvd aborts there. Both are covered by law R7.
+- **L2-g.** Weighted fits with an intercept repeat bitwise only up to about
+  2048 positive rows, through raft `weightedMean` (L1-h); the bitwise laws
+  B5–B8 stay inside that size.
+- **L2-h.** `r2-scorer` in `cuml/private/estimator-support.rkt` builds the
+  weighted `r2-score` scorer from a predict `/who`; `linear-regression` and
+  `ridge` both use it.
