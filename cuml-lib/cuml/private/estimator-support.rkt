@@ -9,11 +9,27 @@
          (only-in cuml/core/private/hyperparameters absent given-hash key->keyword proc-name table-id)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
+         (only-in cuml/metrics/private/metrics r2-score/who)
+         (only-in raft current-device-resources)
          (only-in racket/string string-append*)
          (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide define-estimator
-         params->string)
+         params->string
+         r2-scorer)
+
+(define (r2-scorer predict/who)
+  (lambda (who
+           result
+           X
+           y
+           #:sample-weight [sample-weight #f]
+           #:resources [resources (current-device-resources)])
+    (r2-score/who who
+                  y
+                  (predict/who who result X #:resources resources)
+                  #:sample-weight sample-weight
+                  #:resources resources)))
 
 (define (params->string name keys hyperparameters defaults setting-names settings fitted?)
   (define shown

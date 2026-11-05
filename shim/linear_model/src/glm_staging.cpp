@@ -23,9 +23,6 @@ namespace cumlrkt::glm {
 
 namespace {
 
-template <typename T>
-constexpr int tolerance_bits = std::is_same_v<T, float> ? 8 : 18;
-
 struct device_columns {
   buffer<int64_t> kept;
   buffer<int> exponent;
@@ -47,6 +44,22 @@ double cosine_of(const moment& m, scaled_sum y) {
       (m.cross.value * m.cross.value) / (m.square.value * y.value);
   return std::sqrt(std::ldexp(
       ratio, (2 * m.cross.exponent) - m.square.exponent - y.exponent));
+}
+
+double stationarity_of(const moment& m, scaled_sum y, double alpha, double b) {
+  if (alpha == 0) {
+    return cosine_of(m, y);
+  }
+  const double penalty = alpha * b;
+  const int top = penalty == 0 ? m.cross.exponent
+                               : std::max(m.cross.exponent, std::ilogb(penalty));
+  const double gradient = std::ldexp(m.cross.value, m.cross.exponent - top) -
+                          std::ldexp(penalty, -top);
+  const int base = std::max(m.square.exponent, std::ilogb(alpha));
+  const double square = std::ldexp(m.square.value, m.square.exponent - base) +
+                        std::ldexp(alpha, -base);
+  const double ratio = (gradient * gradient) / (square * y.value);
+  return std::sqrt(std::ldexp(ratio, (2 * top) - base - y.exponent));
 }
 
 }  // namespace
@@ -209,18 +222,24 @@ void require_in_range(int64_t column, T intercept) {
 }
 
 template <typename T>
-double residual_cosine(const raft::handle_t& handle,
-                       const matrix<T, int64_t>& x, const T* y, const T* w,
-                       row_selection rows, const staging& s, const T* coef,
-                       bool fit_intercept) {
+double stationarity_cosine(const raft::handle_t& handle,
+                           const matrix<T, int64_t>& x, const T* y, const T* w,
+                           row_selection rows, const staging& s, const T* coef,
+                           bool fit_intercept, T alpha) {
   const residual_terms terms =
       residual_moments(handle, x, y, w, rows, s, coef, fit_intercept);
+  const auto count = static_cast<int64_t>(terms.moments.size());
+  const std::vector<T> b =
+      alpha == 0 ? std::vector<T>{}
+                 : to_host(coef, count, stream_of(handle));
   double worst = 0;
-  for (size_t k = 0; k < terms.moments.size(); ++k) {
+  for (int64_t k = 0; k < count; ++k) {
     if (terms.largest[k] == 0) {
       continue;
     }
-    const double g = cosine_of(terms.moments[k], terms.y_square);
+    const double g = stationarity_of(
+        terms.moments[k], terms.y_square, static_cast<double>(alpha),
+        b.empty() ? 0.0 : static_cast<double>(b[k]));
     worst = std::isnan(g) || std::isnan(worst) ? NAN : std::max(worst, g);
   }
   return worst;
@@ -256,15 +275,15 @@ template void require_least_squares<float>(double, int);
 template void require_least_squares<double>(double, int);
 template void require_in_range<float>(int64_t, float);
 template void require_in_range<double>(int64_t, double);
-template double residual_cosine<float>(const raft::handle_t&,
-                                       const matrix<float, int64_t>&,
-                                       const float*, const float*,
-                                       row_selection, const staging&,
-                                       const float*, bool);
-template double residual_cosine<double>(const raft::handle_t&,
-                                        const matrix<double, int64_t>&,
-                                        const double*, const double*,
-                                        row_selection, const staging&,
-                                        const double*, bool);
+template double stationarity_cosine<float>(const raft::handle_t&,
+                                           const matrix<float, int64_t>&,
+                                           const float*, const float*,
+                                           row_selection, const staging&,
+                                           const float*, bool, float);
+template double stationarity_cosine<double>(const raft::handle_t&,
+                                            const matrix<double, int64_t>&,
+                                            const double*, const double*,
+                                            row_selection, const staging&,
+                                            const double*, bool, double);
 
 }  // namespace cumlrkt::glm

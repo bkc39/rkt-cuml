@@ -9,6 +9,7 @@
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
 #include "fit_checks.hpp"
+#include "glm_fit.hpp"
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
 #include "raftrkt/deposit.hpp"
@@ -20,24 +21,6 @@ namespace cumlrkt::glm {
 namespace {
 
 template <typename T>
-struct fit_result {
-  std::unique_ptr<buffer<T>> coef;
-  double intercept;
-};
-
-struct counted_rows {
-  buffer<int64_t> index;
-  row_selection rows;
-};
-
-struct fit_plan {
-  staging s;
-  bool fit_intercept;
-  int algorithm;
-  counted_rows counted;
-};
-
-template <typename T>
 std::unique_ptr<buffer<T>> zero_coef(int64_t d, rmm::cuda_stream_view stream) {
   auto coef = std::make_unique<buffer<T>>(scratch<T>(d, stream));
   raftrkt::cuda_check(cudaMemsetAsync(coef->data(), 0, coef->size() * sizeof(T),
@@ -45,6 +28,8 @@ std::unique_ptr<buffer<T>> zero_coef(int64_t d, rmm::cuda_stream_view stream) {
                       "cudaMemsetAsync");
   return coef;
 }
+
+}  // namespace
 
 template <typename T>
 counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
@@ -81,6 +66,17 @@ fit_result<T> nothing_to_solve(const raft::handle_t& handle,
 }
 
 template <typename T>
+double deposit_fit(const raft::handle_t& handle, fit_result<T> r,
+                   rr_deposit* out) {
+  settle(handle);
+  const rr_view region = raftrkt::region(*r.coef);
+  raftrkt::deposit(out, "out", handle, std::move(r.coef), {region});
+  return r.intercept;
+}
+
+namespace {
+
+template <typename T>
 fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                      const fit_plan& plan) {
   const rmm::cuda_stream_view stream = stream_of(handle);
@@ -101,7 +97,8 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   settle(handle);
   require_finite_solution(cs.data(), kept, intercept, plan.algorithm, stream);
   require_least_squares<T>(
-      residual_cosine(handle, x, y, w, rows, s, cs.data(), plan.fit_intercept),
+      stationarity_cosine(handle, x, y, w, rows, s, cs.data(),
+                          plan.fit_intercept, T{0}),
       plan.algorithm);
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   const T unscaled = std::ldexp(intercept, -s.y_exponent);
@@ -128,10 +125,13 @@ fit_plan plan_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
           algorithm, std::move(counted)};
 }
 
+}  // namespace
+
 template <typename T>
-double fit_into(const raft::handle_t& handle, const fit_request& request,
-                rr_deposit* out) {
-  const checked_fit<T> checked = checked_inputs<T>(handle, request);
+double ols_fit_into(const raft::handle_t& handle, const fit_request& request,
+                    rr_deposit* out) {
+  const checked_fit<T> checked = checked_inputs<T>(
+      handle, request, [&] { require_ols_codes(request); });
   const fit_inputs<T>& raw = checked.in;
   const buffer<T> weights =
       staged_weights(handle, raw.w, raw.x.n, checked.largest_weight);
@@ -140,16 +140,31 @@ double fit_into(const raft::handle_t& handle, const fit_request& request,
   const fit_plan plan = plan_fit(handle, in, request);
   const bool constant_y =
       constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);
-  fit_result<T> r = constant_y || plan.s.kept.empty()
-                        ? nothing_to_solve(handle, in, plan, constant_y)
-                        : solved(handle, in, plan);
-  settle(handle);
-  const rr_view region = raftrkt::region(*r.coef);
-  raftrkt::deposit(out, "out", handle, std::move(r.coef), {region});
-  return r.intercept;
+  return deposit_fit(handle,
+                     constant_y || plan.s.kept.empty()
+                         ? nothing_to_solve(handle, in, plan, constant_y)
+                         : solved(handle, in, plan),
+                     out);
 }
 
-}  // namespace
+template counted_rows counted_rows_of<float>(const float*, int64_t, int64_t,
+                                             rmm::cuda_stream_view);
+template counted_rows counted_rows_of<double>(const double*, int64_t, int64_t,
+                                              rmm::cuda_stream_view);
+template fit_result<float> nothing_to_solve<float>(const raft::handle_t&,
+                                                   const fit_inputs<float>&,
+                                                   const fit_plan&, bool);
+template fit_result<double> nothing_to_solve<double>(const raft::handle_t&,
+                                                     const fit_inputs<double>&,
+                                                     const fit_plan&, bool);
+template double deposit_fit<float>(const raft::handle_t&, fit_result<float>,
+                                   rr_deposit*);
+template double deposit_fit<double>(const raft::handle_t&, fit_result<double>,
+                                    rr_deposit*);
+template double ols_fit_into<float>(const raft::handle_t&, const fit_request&,
+                                    rr_deposit*);
+template double ols_fit_into<double>(const raft::handle_t&, const fit_request&,
+                                     rr_deposit*);
 
 }  // namespace cumlrkt::glm
 
@@ -167,7 +182,7 @@ int cuml_linear_model_linear_regression_fit(
         const cumlrkt::glm::fit_request request{x, y, sample_weight,
                                                 fit_intercept, algorithm};
         cumlrkt::on_floats(x, "X", [&](auto tag) {
-          *icpt = cumlrkt::glm::fit_into<decltype(tag)>(h, request, into);
+          *icpt = cumlrkt::glm::ols_fit_into<decltype(tag)>(h, request, into);
         });
       });
 }

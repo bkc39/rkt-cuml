@@ -1,6 +1,7 @@
 #include "fit_checks.hpp"
 
 #include <cstdint>
+#include <functional>
 #include <format>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cusolver_dn_handle.hpp>
@@ -16,9 +17,7 @@
 
 namespace cumlrkt::glm {
 
-namespace {
-
-void require_codes(const fit_request& request) {
+void require_ols_codes(const fit_request& request) {
   if (request.algorithm < CUML_LINEAR_MODEL_OLS_SVD ||
       request.algorithm > CUML_LINEAR_MODEL_OLS_SVD_QR) {
     throw logic_error(
@@ -28,8 +27,6 @@ void require_codes(const fit_request& request) {
     throw logic_error("fit-intercept: expected #t or #f");
   }
 }
-
-}  // namespace
 
 void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork) {
   const int64_t size = ols_workspace(algorithm, {n, d}, lwork);
@@ -42,7 +39,8 @@ void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork) {
 
 template <typename T>
 checked_fit<T> checked_inputs(const raft::handle_t& handle,
-                              const fit_request& request) {
+                              const fit_request& request,
+                              const std::function<void()>& require_codes) {
   const matrix<T, int64_t> x = rows_of<T, int64_t>(
       request.x, "X", raftrkt::any_extent, raftrkt::any_extent);
   const T* y = raftrkt::vector_data<T, int32_t>(request.y, "y", x.n);
@@ -52,7 +50,7 @@ checked_fit<T> checked_inputs(const raft::handle_t& handle,
   require_some("X", "row", x.n, 2);
   require_some("X", "column", x.d);
   require_index("X", x.n, x.d);
-  require_codes(request);
+  require_codes();
   const rmm::cuda_stream_view stream = stream_of(handle);
   require_finite("X", x, stream);
   require_finite_elements("y", y, x.n, stream);
@@ -97,9 +95,9 @@ template int64_t cusolver_lwork_of<float>(const raft::handle_t&, int,
                                           ols_shape);
 template int64_t cusolver_lwork_of<double>(const raft::handle_t&, int,
                                            ols_shape);
-template checked_fit<float> checked_inputs<float>(const raft::handle_t&,
-                                                  const fit_request&);
-template checked_fit<double> checked_inputs<double>(const raft::handle_t&,
-                                                    const fit_request&);
+template checked_fit<float> checked_inputs<float>(
+    const raft::handle_t&, const fit_request&, const std::function<void()>&);
+template checked_fit<double> checked_inputs<double>(
+    const raft::handle_t&, const fit_request&, const std::function<void()>&);
 
 }  // namespace cumlrkt::glm
