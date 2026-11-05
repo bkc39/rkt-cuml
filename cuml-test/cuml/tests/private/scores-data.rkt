@@ -1,13 +1,17 @@
 #lang racket/base
 
-(require (only-in racket/match match-define)
+(require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
+         (only-in racket/match match match-define)
          (only-in racket/math exact-floor)
          (only-in raft list*->device-matrix list->device-vector)
          (only-in "blob-data.rkt" uniform-source))
 
-(provide integer-weights
+(provide accuracy
+         integer-weights
          label-cases
+         mse
          on
+         r2
          rows
          vec
          weights-of)
@@ -19,12 +23,21 @@
   (list*->device-matrix xs #:dtype dt))
 
 (define (on xs dt)
-  (if (list? (car xs))
-      (rows xs dt)
-      (vec xs dt)))
+  (match xs
+    [(cons (? list?) _) (rows xs dt)]
+    [_ (vec xs dt)]))
 
 (define (weights-of w [dt 'float64])
   (and w (vec w dt)))
+
+(define (r2 y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
+  (r2-score (vec y dt) (vec p pt) #:sample-weight (weights-of w wt)))
+
+(define (mse y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
+  (mean-squared-error (on y dt) (on p pt) #:sample-weight (weights-of w wt)))
+
+(define (accuracy a b [w #f] #:true [at 'int32] #:pred [bt at] #:weight [wt 'float64])
+  (accuracy-score (vec a at) (vec b bt) #:sample-weight (weights-of w wt)))
 
 (define int32-palette '(-1 0 1 2 7 2147483647 -2147483647 -2147483648))
 
@@ -60,6 +73,8 @@
   (define w
     (for/list ([_ (in-range n)])
       (exact->inexact (exact-floor (* 9 (next))))))
-  (if (andmap zero? w)
-      (cons 1.0 (cdr w))
-      w))
+  (match w
+    [(cons _ rest)
+     #:when (andmap zero? w)
+     (cons 1.0 rest)]
+    [_ w]))

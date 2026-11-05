@@ -1,7 +1,6 @@
 #lang racket/base
 
 (require (only-in cuml/metrics accuracy-score r2-score)
-         (only-in cuml/metrics/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/match match-define)
          (only-in racket/math nan?)
@@ -9,7 +8,7 @@
          (only-in "private/blob-data.rkt" uniform-source)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scores-data.rkt" label-cases on vec weights-of)
-         (only-in "private/scores-twin-data.rkt" case-of twin-results))
+         (only-in "private/scores-twin-data.rkt" case-of checked-twin-results))
 
 (define (weighted-label-cases)
   (define next (uniform-source 862))
@@ -23,11 +22,10 @@
 
 (test-twin "T3: accuracy equals sklearn and Python cuML unweighted, within 1e-15 weighted"
   (define cases (weighted-label-cases))
-  (define-values (results version)
-    (twin-results (for/list ([c (in-list cases)])
-                    (match-define (list _ at bt truth found w) c)
-                    (case-of "accuracy" truth found w #:dtype at #:pred-dtype bt))))
-  (check-equal? version libcuml-version "T5")
+  (define results
+    (checked-twin-results (for/list ([c (in-list cases)])
+                            (match-define (list _ at bt truth found w) c)
+                            (case-of "accuracy" truth found w #:dtype at #:pred-dtype bt))))
   (for ([c (in-list cases)]
         [theirs (in-list results)])
     (match-define (list i at bt truth found w) c)
@@ -48,11 +46,10 @@
           (list '(2.0 2.0 2.0) '(2.0 2.0 3.0) 0.0)
           (list '(1.0) '(1.0) 1.0)
           (list '(1.0) '(2.0) 0.0)))
-  (define-values (results version)
-    (twin-results (for/list ([c (in-list cases)])
-                    (match-define (list y p _) c)
-                    (case-of "r2" y p #f #:dtype 'float64))))
-  (check-equal? version libcuml-version "T5")
+  (define results
+    (checked-twin-results (for/list ([c (in-list cases)])
+                            (match-define (list y p _) c)
+                            (case-of "r2" y p #f #:dtype 'float64))))
   (for ([c (in-list cases)]
         [theirs (in-list results)])
     (match-define (list y p expected) c)

@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
-         (only-in racket/flonum flsingle)
+(require (only-in racket/flonum flsingle)
          (only-in racket/list append* drop-right last make-list)
          (only-in racket/match match-define match-lambda)
          (only-in racket/math exact-floor sqr)
@@ -16,16 +15,7 @@
                   pow2-scaled
                   regression-cases)
          (only-in "private/scaler-data.rkt" rows-of)
-         (only-in "private/scores-data.rkt" integer-weights label-cases on vec weights-of))
-
-(define (r2 y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
-  (r2-score (vec y dt) (vec p pt) #:sample-weight (weights-of w wt)))
-
-(define (mse y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
-  (mean-squared-error (on y dt) (on p pt) #:sample-weight (weights-of w wt)))
-
-(define (accuracy a b [w #f] #:true [at 'int32] #:pred [bt at] #:weight [wt 'float64])
-  (accuracy-score (vec a at) (vec b bt) #:sample-weight (weights-of w wt)))
+         (only-in "private/scores-data.rkt" accuracy integer-weights label-cases mse r2))
 
 (define (r2-gap ours exact)
   (/ (abs (- (inexact->exact ours) exact)) (max 1 (abs (- 1 exact)))))
@@ -201,13 +191,14 @@
         (check-equal? (mse (pow2-scaled y k) (pow2-scaled p k) w #:dtype dt)
                       (* base-mse (expt 2 (* 2 k))))))))
 
+(define labels '(0 1 2 2 3 1 0 4))
+(define guesses '(0 1 1 2 3 0 0 4))
+
 (test-gpu "X4: scaling the weights by 2^k leaves all three scores unchanged, bit for bit"
-  (define truth '(0 1 2 2 3 1 0 4))
-  (define found '(0 1 1 2 3 0 0 4))
   (for ([c (in-list (sample-cases))])
     (match-define (list i dt y p _) c)
     (define w (integer-weights (length y) i))
-    (define v (integer-weights (length truth) (+ i 1)))
+    (define v (integer-weights (length labels) (+ i 1)))
     (for* ([wt (in-list '(float32 float64))]
            [k (in-list (if (eq? wt 'float32)
                            '(-100 100)
@@ -217,18 +208,16 @@
                       (r2 y p w #:dtype dt #:weight wt))
         (check-equal? (mse y p (pow2-scaled w k) #:dtype dt #:weight wt)
                       (mse y p w #:dtype dt #:weight wt))
-        (check-equal? (accuracy truth found (pow2-scaled v k) #:weight wt)
-                      (accuracy truth found v #:weight wt))))))
+        (check-equal? (accuracy labels guesses (pow2-scaled v k) #:weight wt)
+                      (accuracy labels guesses v #:weight wt))))))
 
 (test-gpu "X5: all-ones weights give the same bits as no weights"
-  (define truth '(0 1 2 2 3 1 0 4))
-  (define found '(0 1 1 2 3 0 0 4))
   (for ([c (in-list (sample-cases))])
     (match-define (list _ dt y p _) c)
     (define ones (make-list (length y) 1.0))
     (check-equal? (r2 y p ones #:dtype dt) (r2 y p #:dtype dt))
     (check-equal? (mse y p ones #:dtype dt) (mse y p #:dtype dt)))
-  (check-equal? (accuracy truth found (make-list 8 1.0)) (accuracy truth found)))
+  (check-equal? (accuracy labels guesses (make-list (length labels) 1.0)) (accuracy labels guesses)))
 
 (define (kept xs w)
   (for/list ([x (in-list xs)]
