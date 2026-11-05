@@ -3,8 +3,6 @@
 #include <thrust/find.h>
 #include <thrust/functional.h>
 #include <thrust/iterator/counting_iterator.h>
-#include <thrust/iterator/transform_iterator.h>
-#include <thrust/reduce.h>
 #include <thrust/transform_reduce.h>
 
 #include <algorithm>
@@ -26,9 +24,6 @@ namespace cumlrkt::glm {
 
 namespace {
 
-// One read of X gives each column's largest |x|, whether it differs from the
-// reference row, and Σw·x, the last carried scaled so that it needs no
-// largest first.
 template <typename T>
 struct profile_sums {
   T largest;
@@ -63,8 +58,19 @@ struct add_profiles {
   }
 };
 
-// Σw·x / Σw over the power of two of the largest |x|: both scalings are
-// exact, so it is the mean of the normalised column.
+template <int Columns, typename T>
+std::vector<profile_sums<T>> profile_totals(const T* x, int64_t n, int64_t d,
+                                            const T* w, row_selection rows,
+                                            bool fit_intercept,
+                                            rmm::cuda_stream_view stream) {
+  const int64_t reference =
+      fit_intercept ? first_positive(w, n, stream) : int64_t{-1};
+  return column_reduce<Columns>(stream, rows, d,
+                                profile_entry<T>{x, w, d, reference},
+                                add_profiles<T>{},
+                                profile_sums<T>{T{0}, 0, no_product()});
+}
+
 template <typename T>
 double normalised_mean(const profile_sums<T>& p, double weights) {
   return p.sum.exponent == no_exponent
@@ -81,24 +87,6 @@ struct vector_magnitude {
 
   __device__ double operator()(int64_t i) const {
     return counted(w, i) ? fabs(static_cast<double>(v[i])) : 0.0;
-  }
-};
-
-template <typename T>
-struct unlike_reference {
-  const T* x;
-  const T* w;
-  int64_t d;
-  int64_t reference;
-  int* flags;
-
-  __device__ void operator()(int64_t k) const {
-    const int64_t i = k / d;
-    const int64_t j = k - (i * d);
-    const T base = reference < 0 ? T{0} : x[(reference * d) + j];
-    if (counted(w, i) && x[k] != base) {
-      flags[j] = 1;
-    }
   }
 };
 
@@ -165,59 +153,99 @@ struct normalised_entry {
   }
 };
 
+struct deviation_sums {
+  double square;
+  double deviation;
+};
+
+struct add_deviations {
+  __device__ deviation_sums operator()(deviation_sums a,
+                                       deviation_sums b) const {
+    return {a.square + b.square, a.deviation + b.deviation};
+  }
+};
+
+// Σw·c / Σw is the part of the mean lost to its rounding to a double.
 template <typename T>
-struct deviation_square {
+struct deviation_terms {
   normalised_entry<T> v;
   const T* w;
   const double* mean;
 
-  __device__ double operator()(int64_t i, int64_t j) const {
+  __device__ deviation_sums operator()(int64_t i, int64_t j) const {
     if (!counted(w, i)) {
-      return 0.0;
+      return {0.0, 0.0};
     }
     const double c = v(i, j) - mean[j];
-    return w == nullptr ? c * c : weight(w, i) * c * c;
+    return w == nullptr ? deviation_sums{c * c, c}
+                        : deviation_sums{weight(w, i) * c * c,
+                                         weight(w, i) * c};
   }
 };
 
 }  // namespace
 
 template <typename T>
-std::vector<column_profile> column_profiles(const matrix<T, int64_t>& x,
-                                            const T* w, row_selection rows,
-                                            bool fit_intercept,
-                                            rmm::cuda_stream_view stream) {
-  const int64_t reference =
-      fit_intercept ? first_positive(w, x.n, stream) : int64_t{-1};
-  const std::vector<profile_sums<T>> sums = column_reduce(
-      stream, rows, x.d, profile_entry<T>{x.data, w, x.d, reference},
-      add_profiles<T>{}, profile_sums<T>{T{0}, 0, no_product()});
+profiles column_profiles(const matrix<T, int64_t>& x, const T* w,
+                         row_selection rows, bool fit_intercept,
+                         rmm::cuda_stream_view stream) {
+  const std::vector<profile_sums<T>> sums = profile_totals<column_lanes>(
+      x.data, x.n, x.d, w, rows, fit_intercept, stream);
   const double weights = fit_intercept ? selected_weight(stream, rows, w) : 0;
-  std::vector<column_profile> profiles(x.d);
-  std::ranges::transform(sums, profiles.begin(), [&](const profile_sums<T>& p) {
+  std::vector<column_profile> columns(x.d);
+  std::ranges::transform(sums, columns.begin(), [&](const profile_sums<T>& p) {
     return column_profile{static_cast<double>(p.largest), p.varies != 0,
                           fit_intercept ? normalised_mean(p, weights) : 0.0};
   });
-  return profiles;
+  return {std::move(columns), weights};
 }
 
 template <typename T>
-std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
-                                  row_selection rows,
-                                  const std::vector<int>& exponent,
-                                  const std::vector<double>& mean,
-                                  rmm::cuda_stream_view stream) {
+std::vector<spread_terms> column_spread(const matrix<T, int64_t>& x,
+                                        const T* w, row_selection rows,
+                                        const std::vector<int>& exponent,
+                                        const profiles& p,
+                                        rmm::cuda_stream_view stream) {
   std::vector<power_of_two<double>> unit(exponent.size());
   std::ranges::transform(exponent, unit.begin(), power_of_two_of<double>);
+  std::vector<double> mean(p.columns.size());
+  std::ranges::transform(p.columns, mean.begin(),
+                         [](const column_profile& c) { return c.mean; });
   const buffer<power_of_two<double>> units = to_device(unit, stream);
-  const normalised_entry<T> v{x.data, units.data(), x.d};
   const buffer<double> means = to_device(mean, stream);
-  std::vector<double> spread =
-      column_reduce(stream, rows, x.d, deviation_square<T>{v, w, means.data()},
-                    thrust::plus<double>{}, 0.0);
-  std::ranges::transform(spread, spread.begin(),
-                         [](double s) { return std::sqrt(s); });
+  const std::vector<deviation_sums> sums = column_reduce(
+      stream, rows, x.d,
+      deviation_terms<T>{normalised_entry<T>{x.data, units.data(), x.d}, w,
+                         means.data()},
+      add_deviations{}, deviation_sums{0.0, 0.0});
+  std::vector<spread_terms> spread(sums.size());
+  std::ranges::transform(sums, spread.begin(), [&](const deviation_sums& s) {
+    return spread_terms{std::sqrt(s.square),
+                        p.weight > 0 ? s.deviation / p.weight : 0.0};
+  });
   return spread;
+}
+
+template <typename T>
+centre target_centre(const T* y, const T* w, row_selection rows,
+                     int y_exponent, rmm::cuda_stream_view stream) {
+  const staged_target<T> target{y, power_of_two_of<T>(y_exponent)};
+  const weighted_total t =
+      vector_reduce(stream, rows, weighted_target<T>{target, w}, add_totals{},
+                    weighted_total{0.0, 0.0});
+  const double mean = t.value / t.weight;
+  const double deviation =
+      vector_reduce(stream, rows, target_deviation<T>{target, w, mean},
+                    thrust::plus<double>{}, 0.0);
+  return {mean, deviation / t.weight};
+}
+
+template <typename T>
+bool constant_vector(const raft::handle_t& handle, const T* v, int64_t n,
+                     const T* w, bool fit_intercept) {
+  return profile_totals<1>(v, n, 1, w, row_selection{nullptr, n},
+                           fit_intercept, stream_of(handle))[0]
+             .varies == 0;
 }
 
 template <typename T>
@@ -254,27 +282,6 @@ void positive_rows(const T* w, int64_t n, int64_t* rows,
 }
 
 template <typename T>
-std::vector<char> constant_columns(const raft::handle_t& handle,
-                                   const matrix<T, int64_t>& x, const T* w,
-                                   bool fit_intercept) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const int64_t reference =
-      fit_intercept ? first_positive(w, x.n, stream) : int64_t{-1};
-  buffer<int> flags = scratch<int>(x.d, stream);
-  raftrkt::cuda_check(
-      cudaMemsetAsync(flags.data(), 0, flags.size() * sizeof(int),
-                      stream.value()),
-      "cudaMemsetAsync");
-  each(handle, x.n * x.d,
-       unlike_reference<T>{x.data, w, x.d, reference, flags.data()});
-  const std::vector<int> varies = to_host(flags, stream);
-  std::vector<char> constant(varies.size());
-  std::ranges::transform(varies, constant.begin(),
-                         [](int v) { return static_cast<char>(v == 0); });
-  return constant;
-}
-
-template <typename T>
 void stage_matrix(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                   const T* w, row_selection rows, staged_columns columns,
                   T* out) {
@@ -289,50 +296,63 @@ void stage_elements(const raft::handle_t& handle, const T* v, const T* w,
 }
 
 template <typename T>
-double staged_mean(const raft::handle_t& handle, const T* y, const T* w,
-                   int64_t n) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  return total(stream, n, weighted_value<T>{y, w}) /
-         total(stream, n, weight_of<T>{w});
-}
-
-template <typename T>
 void unstage(const raft::handle_t& handle, const T* staged, const int64_t* slot,
              const int* shift, int64_t d, T* coef) {
   each(handle, d, unstaged<T>{staged, slot, shift, coef});
 }
 
-#define CUMLRKT_GLM_STAGING_DEVICE(T)                                        \
-  template std::vector<column_profile> column_profiles<T>(                   \
-      const matrix<T, int64_t>&, const T*, row_selection, bool,              \
-      rmm::cuda_stream_view);                                                \
-  template double largest_counted<T>(const T*, int64_t, const T*,            \
-                                     rmm::cuda_stream_view);                 \
-  template int64_t first_positive<T>(const T*, int64_t,                      \
-                                     rmm::cuda_stream_view);                 \
-  template int64_t positive_count<T>(const T*, int64_t,                      \
-                                     rmm::cuda_stream_view);                 \
-  template void positive_rows<T>(const T*, int64_t, int64_t*,                \
-                                 rmm::cuda_stream_view);                     \
-  template std::vector<char> constant_columns<T>(                            \
-      const raft::handle_t&, const matrix<T, int64_t>&, const T*, bool);     \
-  template void stage_matrix<T>(const raft::handle_t&,                       \
-                                const matrix<T, int64_t>&, const T*,         \
-                                row_selection, staged_columns, T*);          \
-  template void stage_elements<T>(const raft::handle_t&, const T*, const T*, \
-                                  row_selection, int, T*);                   \
-  template double staged_mean<T>(const raft::handle_t&, const T*, const T*,  \
-                                 int64_t);                                   \
-  template void unstage<T>(const raft::handle_t&, const T*, const int64_t*,  \
-                           const int*, int64_t, T*);                         \
-  template std::vector<double> column_spread<T>(                             \
-      const matrix<T, int64_t>&, const T*, row_selection,                    \
-      const std::vector<int>&, const std::vector<double>&,                   \
-      rmm::cuda_stream_view);
-
-CUMLRKT_GLM_STAGING_DEVICE(float)
-CUMLRKT_GLM_STAGING_DEVICE(double)
-
-#undef CUMLRKT_GLM_STAGING_DEVICE
+template profiles column_profiles<float>(const matrix<float, int64_t>&,
+                                         const float*, row_selection, bool,
+                                         rmm::cuda_stream_view);
+template profiles column_profiles<double>(const matrix<double, int64_t>&,
+                                          const double*, row_selection, bool,
+                                          rmm::cuda_stream_view);
+template std::vector<spread_terms> column_spread<float>(
+    const matrix<float, int64_t>&, const float*, row_selection,
+    const std::vector<int>&, const profiles&, rmm::cuda_stream_view);
+template std::vector<spread_terms> column_spread<double>(
+    const matrix<double, int64_t>&, const double*, row_selection,
+    const std::vector<int>&, const profiles&, rmm::cuda_stream_view);
+template centre target_centre<float>(const float*, const float*, row_selection,
+                                     int, rmm::cuda_stream_view);
+template centre target_centre<double>(const double*, const double*,
+                                      row_selection, int,
+                                      rmm::cuda_stream_view);
+template bool constant_vector<float>(const raft::handle_t&, const float*,
+                                     int64_t, const float*, bool);
+template bool constant_vector<double>(const raft::handle_t&, const double*,
+                                      int64_t, const double*, bool);
+template double largest_counted<float>(const float*, int64_t, const float*,
+                                       rmm::cuda_stream_view);
+template double largest_counted<double>(const double*, int64_t, const double*,
+                                        rmm::cuda_stream_view);
+template int64_t first_positive<float>(const float*, int64_t,
+                                       rmm::cuda_stream_view);
+template int64_t first_positive<double>(const double*, int64_t,
+                                        rmm::cuda_stream_view);
+template int64_t positive_count<float>(const float*, int64_t,
+                                       rmm::cuda_stream_view);
+template int64_t positive_count<double>(const double*, int64_t,
+                                        rmm::cuda_stream_view);
+template void positive_rows<float>(const float*, int64_t, int64_t*,
+                                   rmm::cuda_stream_view);
+template void positive_rows<double>(const double*, int64_t, int64_t*,
+                                    rmm::cuda_stream_view);
+template void stage_matrix<float>(const raft::handle_t&,
+                                  const matrix<float, int64_t>&, const float*,
+                                  row_selection, staged_columns, float*);
+template void stage_matrix<double>(const raft::handle_t&,
+                                   const matrix<double, int64_t>&,
+                                   const double*, row_selection, staged_columns,
+                                   double*);
+template void stage_elements<float>(const raft::handle_t&, const float*,
+                                    const float*, row_selection, int, float*);
+template void stage_elements<double>(const raft::handle_t&, const double*,
+                                     const double*, row_selection, int,
+                                     double*);
+template void unstage<float>(const raft::handle_t&, const float*,
+                             const int64_t*, const int*, int64_t, float*);
+template void unstage<double>(const raft::handle_t&, const double*,
+                              const int64_t*, const int*, int64_t, double*);
 
 }  // namespace cumlrkt::glm

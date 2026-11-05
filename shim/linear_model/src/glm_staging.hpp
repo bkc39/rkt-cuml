@@ -14,15 +14,13 @@
 
 namespace cumlrkt::glm {
 
-// largest is each column's largest |x| over the counted rows, and mean its
-// weighted mean there divided by the power of two of largest (0 without an
-// intercept).
 struct staging {
   std::vector<int> column_exponent;
   int y_exponent;
   std::vector<int64_t> kept;
   std::vector<double> largest;
-  std::vector<double> mean;
+  std::vector<double> normalised_mean;
+  std::vector<double> normalised_remainder;
 };
 
 struct ols_shape {
@@ -50,7 +48,8 @@ int64_t ols_workspace(int algorithm, ols_shape shape, int64_t cusolver_lwork);
 std::string algorithm_name(int algorithm);
 
 template <typename T>
-buffer<T> staged_weights(const raft::handle_t& handle, const T* w, int64_t n);
+buffer<T> staged_weights(const raft::handle_t& handle, const T* w, int64_t n,
+                         double largest);
 
 template <typename T>
 staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
@@ -58,11 +57,6 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                      bool fit_intercept);
 
 staging uniform(staging s);
-
-template <typename T>
-std::vector<char> constant_columns(const raft::handle_t& handle,
-                                   const matrix<T, int64_t>& x, const T* w,
-                                   bool fit_intercept);
 
 template <typename T>
 bool constant_vector(const raft::handle_t& handle, const T* v, int64_t n,
@@ -79,17 +73,17 @@ void positive_rows(const T* w, int64_t n, int64_t* rows,
                    rmm::cuda_stream_view stream);
 
 template <typename T>
-void stage_columns(const raft::handle_t& handle, const matrix<T, int64_t>& x,
-                   const T* w, const staging& s, row_selection rows, T* out);
+struct staged_problem {
+  buffer<T> x;
+  buffer<T> y;
+  buffer<T> w;
+};
 
 template <typename T>
-void stage_targets(const raft::handle_t& handle, const T* y, const T* w,
-                   const staging& s, row_selection rows, T* staged_y,
-                   T* staged_w);
-
-template <typename T>
-double staged_mean(const raft::handle_t& handle, const T* y, const T* w,
-                   int64_t n);
+staged_problem<T> stage_problem(const raft::handle_t& handle,
+                                const matrix<T, int64_t>& x, const T* y,
+                                const T* w, const staging& s,
+                                row_selection rows);
 
 template <typename T>
 int64_t unstage_coef(const raft::handle_t& handle, const T* staged,
@@ -98,6 +92,12 @@ int64_t unstage_coef(const raft::handle_t& handle, const T* staged,
 template <typename T>
 void require_finite_solution(const T* staged, int64_t d, T intercept,
                              int algorithm, rmm::cuda_stream_view stream);
+
+template <typename T>
+void require_least_squares(double cosine, int algorithm);
+
+template <typename T>
+void require_in_range(int64_t column, T intercept);
 
 template <typename T>
 double residual_cosine(const raft::handle_t& handle,

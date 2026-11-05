@@ -6,7 +6,7 @@
                   linear-regression-result-intercept)
          (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
-         (only-in racket/list argmax last list-set make-list range)
+         (only-in racket/list drop last make-list take)
          (only-in racket/match match match-define)
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true)
@@ -29,6 +29,7 @@
          fit-size
          gap
          host-cosine
+         insert-column
          kept-rows
          kappa-of
          law-cases
@@ -40,12 +41,14 @@
          oracle-lstsq
          power-spread-case
          power-spread-gone
+         remove-at
          result-fit
          rounded
          rounded-case
          scaled-columns
          unit-roundoff
-         within)
+         weights-or-ones
+         zeroed)
 
 (struct lcase (name X y w) #:transparent)
 (struct solution (coef intercept kappa) #:transparent)
@@ -162,13 +165,26 @@
              #:unless (memv i gone))
     x))
 
+(define (zeroed ws gone [to 0])
+  (for/list ([v (in-list ws)]
+             [i (in-naturals)])
+    (if (memv i gone) to v)))
+
+(define (weights-or-ones w y)
+  (or w (make-list (length y) 1)))
+
+(define (insert-column rows at value-of)
+  (for/list ([row (in-list rows)]
+             [i (in-naturals)])
+    (append (take row at) (list (value-of i)) (drop row at))))
+
+(define (remove-at xs at)
+  (append (take xs at) (drop xs (add1 at))))
+
 (define (weighted-spread xs ws)
   (define m (/ (for/sum ([x (in-list xs)] [w (in-list ws)]) (* w x)) (apply + ws)))
   (for/sum ([x (in-list xs)] [w (in-list ws)]) (* w (sqr (- x m)))))
 
-;; f64, n = 200: column 1 scaled so that its exact weighted spread over the rows
-;; outside power-spread-gone is 1, then its largest such element moved by `step`
-;; ulps from the element that puts the spread nearest 1.
 (define (power-spread-case seed step)
   (define n 200)
   (define draw (uniform-source (+ 101 seed)))
@@ -187,14 +203,21 @@
                      (map inexact->exact (kept-rows w power-spread-gone))))
   (define c (/ 1.0 (sqrt (exact->inexact (spread raw)))))
   (define x1 (map (lambda (v) (* c v)) raw))
-  (define j
-    (argmax (lambda (i)
-              (if (memv i power-spread-gone)
-                  -1
-                  (abs (list-ref x1 i))))
-            (range n)))
+  (define-values (j xj)
+    (for/fold ([j 0]
+               [xj 0.0])
+              ([x (in-list x1)]
+               [i (in-naturals)]
+               #:unless (memv i power-spread-gone))
+      (if (> (abs x) (abs xj))
+          (values i x)
+          (values j xj))))
   (define (stepped k)
-    (list-set x1 j (flstep (list-ref x1 j) k)))
+    (for/list ([x (in-list x1)]
+               [i (in-naturals)])
+      (if (= i j)
+          (flstep xj k)
+          x)))
   (define per (- (spread (stepped 1)) (spread (stepped 0))))
   (define k0 (exact-round (/ (- 1 (spread (stepped 0))) per)))
   (lcase (format "spread at 1, seed ~a step ~a" seed step) (map list (stepped (+ k0 step)) x2) y w))
@@ -233,7 +256,7 @@
     (dot row v)))
 
 (define (weighted-gram X y w fit-intercept)
-  (define weights (or w (make-list (length y) 1)))
+  (define weights (weights-or-ones w y))
   (define total (apply + weights))
   (define (mean xs)
     (if fit-intercept
@@ -364,7 +387,7 @@
   (solution c (- my (dot mx c)) (condition G)))
 
 (define (host-cosine X y w coef intercept fit-intercept)
-  (define weights (or w (make-list (length y) 1)))
+  (define weights (weights-or-ones w y))
   (define total (apply + weights))
   (define (centre xs)
     (define m

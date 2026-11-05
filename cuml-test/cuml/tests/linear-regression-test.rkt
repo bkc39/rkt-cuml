@@ -19,6 +19,7 @@
                   dtypes
                   fit-gap
                   fit-of
+                  insert-column
                   kept-rows
                   lcase-X
                   lcase-name
@@ -29,6 +30,7 @@
                   on-vector
                   power-spread-case
                   power-spread-gone
+                  remove-at
                   result-fit
                   rounded
                   unit-roundoff)
@@ -44,21 +46,6 @@
       (if (= j k)
           (* x factor)
           x))))
-
-(define (insert-column rows at value-of)
-  (for/list ([row (in-list rows)]
-             [i (in-naturals)])
-    (append (for/list ([x (in-list row)]
-                       [_ (in-range at)])
-              x)
-            (list (value-of i))
-            (list-tail row at))))
-
-(define (remove-at xs at)
-  (append (for/list ([x (in-list xs)]
-                     [_ (in-range at)])
-            x)
-          (list-tail xs (add1 at))))
 
 (define (each-fit proc)
   (for* ([dt (in-list dtypes)]

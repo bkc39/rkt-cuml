@@ -5,7 +5,6 @@
 #include <memory>
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
-#include <type_traits>
 #include <utility>
 
 #include "cumlrkt/linear_model.h"
@@ -33,8 +32,19 @@ struct line {
 };
 
 template <typename T>
-void predict_into(const raft::handle_t& handle, const matrix<T, int64_t>& x,
-                  const line<T>& fitted, rr_deposit* out) {
+line<T> line_of(const rr_view* coef, double intercept) {
+  const T* c = raftrkt::vector_data<T, int32_t>(coef, "coef");
+  const int64_t d = coef->shape[0];
+  cumlrkt::require_some("coef", "element", d);
+  return {c, d, intercept};
+}
+
+template <typename T>
+void predict_into(const raft::handle_t& handle, const rr_view* x_view,
+                  const rr_view* coef, double intercept, rr_deposit* out) {
+  const matrix<T, int64_t> x = cumlrkt::rows_of<T, int64_t>(
+      x_view, "X", raftrkt::any_extent, raftrkt::any_extent);
+  const line<T> fitted = line_of<T>(coef, intercept);
   cumlrkt::require_some("X", "row", x.n);
   if (x.d != fitted.d) {
     throw logic_error(
@@ -61,7 +71,7 @@ void predict_into(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     if (i >= 0) {
       throw logic_error(
           std::format("X: row {}: the prediction exceeds the {} range", i,
-                      sizeof(T) == sizeof(float) ? "float32" : "float64"));
+                      raftrkt::dtype_name(raftrkt::dtype_code<T>)));
     }
     cumlrkt::settle(handle);
   }
@@ -79,24 +89,9 @@ int cuml_linear_model_gemm_predict(void* handle, const rr_view* x,
   return cumlrkt::guarded(
       handle, {{"X", x}, {"coef", coef}}, [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
-        cumlrkt::on_float_pair(
-            x, "X", coef, "coef", [&](auto x_tag, auto c_tag) {
-              using X = decltype(x_tag);
-              using C = decltype(c_tag);
-              const matrix<X, int64_t> m = cumlrkt::rows_of<X, int64_t>(
-                  x, "X", raftrkt::any_extent, raftrkt::any_extent);
-              const C* c = raftrkt::vector_data<C, int32_t>(coef, "coef");
-              const int64_t d = coef->shape[0];
-              cumlrkt::require_some("coef", "element", d);
-              if constexpr (std::is_same_v<X, C>) {
-                predict_into<C>(h, m, line<C>{c, d, intercept}, into);
-              } else {
-                throw logic_error(
-                    std::format("X: expected {}, got {}",
-                                raftrkt::dtype_name(raftrkt::dtype_code<C>),
-                                raftrkt::dtype_name(raftrkt::dtype_code<X>)));
-              }
-            });
+        cumlrkt::on_same_floats(x, "X", coef, "coef", [&](auto tag) {
+          predict_into<decltype(tag)>(h, x, coef, intercept, into);
+        });
       });
 }
 

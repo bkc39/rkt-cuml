@@ -41,8 +41,8 @@ void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork) {
 }
 
 template <typename T>
-fit_inputs<T> checked_inputs(const raft::handle_t& handle,
-                             const fit_request& request) {
+checked_fit<T> checked_inputs(const raft::handle_t& handle,
+                              const fit_request& request) {
   const matrix<T, int64_t> x = rows_of<T, int64_t>(
       request.x, "X", raftrkt::any_extent, raftrkt::any_extent);
   const T* y = raftrkt::vector_data<T, int32_t>(request.y, "y", x.n);
@@ -56,10 +56,9 @@ fit_inputs<T> checked_inputs(const raft::handle_t& handle,
   const rmm::cuda_stream_view stream = stream_of(handle);
   require_finite("X", x, stream);
   require_finite_elements("y", y, x.n, stream);
-  if (w != nullptr) {
-    require_sample_weights(w, x.n, stream);
-  }
-  return {x, y, w};
+  const double largest_weight =
+      w == nullptr ? 0.0 : require_sample_weights(w, x.n, stream);
+  return {{x, y, w}, largest_weight};
 }
 
 template <typename T>
@@ -98,9 +97,9 @@ template int64_t cusolver_lwork_of<float>(const raft::handle_t&, int,
                                           ols_shape);
 template int64_t cusolver_lwork_of<double>(const raft::handle_t&, int,
                                            ols_shape);
-template fit_inputs<float> checked_inputs<float>(const raft::handle_t&,
+template checked_fit<float> checked_inputs<float>(const raft::handle_t&,
                                                  const fit_request&);
-template fit_inputs<double> checked_inputs<double>(const raft::handle_t&,
+template checked_fit<double> checked_inputs<double>(const raft::handle_t&,
                                                    const fit_request&);
 
 }  // namespace cumlrkt::glm

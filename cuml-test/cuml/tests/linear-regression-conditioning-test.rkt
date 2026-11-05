@@ -8,6 +8,7 @@
          (only-in "private/linear-data.rkt"
                   algorithms
                   check-law
+                  columns-of
                   dtypes
                   dyadic
                   exact-fit
@@ -57,21 +58,23 @@
                        #f)
                 'float64))
 
-(define (column-means c)
+(define (column-moments c)
   (define n (length (lcase-y c)))
-  (for/list ([col (in-list (apply map list (lcase-X c)))])
+  (for/lists (means spreads) ([col (in-list (columns-of (lcase-X c)))])
     (define mean (/ (apply + col) n))
-    (list mean (sqrt (/ (for/sum ([x (in-list col)]) (sqr (- x mean))) n)))))
+    (values mean (sqrt (/ (for/sum ([x (in-list col)]) (sqr (- x mean))) n)))))
 
 (test-gpu "a column whose mean dwarfs its spread keeps its direction"
   (for* ([fixture (in-list (list (list 'float64 (offset-case 'float64 #e1e6 #e1e-6))
                                  (list 'float32 (offset-case 'float32 1000 1))
-                                 (list 'float64 (offset-x-case #e1e11))))]
+                                 (list 'float64 (offset-x-case #e1e11))
+                                 (list 'float64 (offset-x-case #e1e13))
+                                 (list 'float64 (offset-x-case #e3e13))))]
          #:do [(match-define (list dt c) fixture)
                (match-define (solution c* b* kappa) (oracle-of c))
                (define u (unit-roundoff dt))
-               (define means (column-means c))
-               (define ratio (apply max (map (lambda (m) (/ (abs (car m)) (cadr m))) means)))
+               (define-values (means spreads) (column-moments c))
+               (define ratio (apply max (map (lambda (m s) (/ (abs m) s)) means spreads)))
                (define bound
                  (* (+ (* 128 kappa kappa u) (* 16 (sqr (* u ratio)))) (max 1 (max-abs c*))))]
          [a (in-list algorithms)])
@@ -80,7 +83,7 @@
       (check-law "T1, plus the centring's second-order term" (gap coef c*) bound)
       (check-law "intercept, the coef bound times the column mean"
                  (abs (- b b*))
-                 (* bound (add1 (apply max (map (lambda (m) (abs (car m))) means))))))))
+                 (* bound (add1 (apply max (map abs means))))))))
 
 (define low-weight-column
   (let ([t #e1e-12])
@@ -89,7 +92,7 @@
            '(1 2 3 5 7 7)
            (list 1 1 1 t (* 3 t) (* 2 t)))))
 
-(test-gpu "p6's column, varying only on rows of weight 1e-12, is not lost to eig's eps cut"
+(test-gpu "a column varying only on rows of weight 1e-12 is not lost to eig's eps cut"
   (for* ([dt (in-list '(float32 float64))]
          #:do [(define c (rounded-case low-weight-column dt))
                (match-define (solution c* b* _) (oracle-of c))]

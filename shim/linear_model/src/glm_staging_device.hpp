@@ -40,26 +40,42 @@ buffer<T> to_device(const std::vector<T>& host, rmm::cuda_stream_view stream) {
   return b;
 }
 
-// mean is the weighted mean over the counted rows divided by the power of two
-// of largest, and 0 without an intercept.
 struct column_profile {
   double largest;
   bool varies;
   double mean;
 };
 
+struct profiles {
+  std::vector<column_profile> columns;
+  double weight;
+};
+
+struct spread_terms {
+  double spread;
+  double remainder;
+};
+
+struct centre {
+  double mean;
+  double remainder;
+};
+
 template <typename T>
-std::vector<column_profile> column_profiles(const matrix<T, int64_t>& x,
+profiles column_profiles(const matrix<T, int64_t>& x, const T* w,
+                         row_selection rows, bool fit_intercept,
+                         rmm::cuda_stream_view stream);
+
+template <typename T>
+std::vector<spread_terms> column_spread(const matrix<T, int64_t>& x,
                                             const T* w, row_selection rows,
-                                            bool fit_intercept,
+                                            const std::vector<int>& exponent,
+                                            const profiles& p,
                                             rmm::cuda_stream_view stream);
 
 template <typename T>
-std::vector<double> column_spread(const matrix<T, int64_t>& x, const T* w,
-                                  row_selection rows,
-                                  const std::vector<int>& exponent,
-                                  const std::vector<double>& mean,
-                                  rmm::cuda_stream_view stream);
+centre target_centre(const T* y, const T* w, row_selection rows,
+                     int y_exponent, rmm::cuda_stream_view stream);
 
 template <typename T>
 double largest_counted(const T* v, int64_t n, const T* w,

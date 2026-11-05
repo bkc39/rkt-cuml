@@ -1,5 +1,3 @@
-#include <thrust/functional.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -23,54 +21,37 @@ constexpr int warp_lanes = 32;
 constexpr int residual_threads = 256;
 constexpr int64_t most_residual_blocks = int64_t{1} << 20;
 
-// The kept columns as the solve saw them, centred: X's column kept[k] staged
-// by stage[k], less its weighted mean in the same units. The check works in
-// these units throughout; a column's own power of two cancels in its cosine.
 template <typename T>
 struct centred_column {
   const T* x;
   const int64_t* kept;
   const power_of_two<T>* stage;
   const double* mean;
+  const double* remainder;
   int64_t count;
   int64_t d;
 
   __device__ double operator()(int64_t i, int64_t k) const {
-    return static_cast<double>(scaled_by(x[(i * d) + kept[k]], stage[k])) -
-           mean[k];
+    return (static_cast<double>(scaled_by(x[(i * d) + kept[k]], stage[k])) -
+            mean[k]) -
+           remainder[k];
   }
 };
 
 template <typename T>
-struct staged_target {
-  const T* y;
-  power_of_two<T> stage;
+struct centred_target {
+  staged_target<T> y;
+  centre c;
 
   __device__ double operator()(int64_t i) const {
-    return static_cast<double>(scaled_by(y[i], stage));
+    return (y(i) - c.mean) - c.remainder;
   }
 };
 
-template <typename T>
-struct weighted_target {
-  staged_target<T> y;
-  const T* w;
-
-  __device__ weighted_total operator()(int64_t i) const {
-    if (!counted(w, i)) {
-      return {0.0, 0.0};
-    }
-    return {weight(w, i), weight(w, i) * y(i)};
-  }
-};
-
-// One warp per row: r = (y - ȳ) - Σ c·coef over the centred columns c, the
-// columns' terms summed lane-strided and then across the warp, in an order
-// fixed by the kept count.
 template <typename T>
 __global__ void centred_residuals(centred_column<T> c, const T* coef,
-                                  staged_target<T> y, double y_mean,
-                                  row_selection rows, double* r) {
+                                  centred_target<T> y, row_selection rows,
+                                  double* r) {
   const int lane = static_cast<int>(threadIdx.x) % warp_lanes;
   const int64_t thread =
       (static_cast<int64_t>(blockIdx.x) * blockDim.x) + threadIdx.x;
@@ -86,7 +67,7 @@ __global__ void centred_residuals(centred_column<T> c, const T* coef,
       fitted += __shfl_down_sync(0xffffffffU, fitted, s);
     }
     if (lane == 0) {
-      r[i] = (y(i) - y_mean) - fitted;
+      r[i] = y(i) - fitted;
     }
   }
 }
@@ -103,13 +84,10 @@ struct add_moments {
   }
 };
 
-// Column k < count gives Σw·c² and Σw·c·r for its centred column c; column
-// count gives Σw(y - ȳ)² in .square.
 template <typename T>
 struct moment_terms {
   centred_column<T> c;
-  staged_target<T> y;
-  double y_mean;
+  centred_target<T> y;
   const T* w;
   const double* r;
 
@@ -118,7 +96,7 @@ struct moment_terms {
       return {no_product(), no_product()};
     }
     const bool target = k == c.count;
-    const double v = target ? y(i) - y_mean : c(i, k);
+    const double v = target ? y(i) : c(i, k);
     const double wi = weight(w, i);
     if (!moderate(wi) || !moderate(v)) {
       return {product_of(wi, v, v),
@@ -149,6 +127,7 @@ residual_terms residual_moments(const raft::handle_t& handle,
   const auto count = static_cast<int64_t>(s.kept.size());
   std::vector<power_of_two<T>> stage(count);
   std::vector<double> mean(count, 0.0);
+  std::vector<double> remainder(count, 0.0);
   std::vector<double> largest(count);
   for (int64_t k = 0; k < count; ++k) {
     const int64_t j = s.kept[k];
@@ -156,22 +135,22 @@ residual_terms residual_moments(const raft::handle_t& handle,
     stage[k] = power_of_two_of<T>(e);
     largest[k] = std::abs(std::ldexp(static_cast<T>(s.largest[j]), e));
     if (fit_intercept) {
-      mean[k] = std::ldexp(s.mean[j], e - unit_exponent(s.largest[j]));
+      const int shift = e - unit_exponent(s.largest[j]);
+      mean[k] = std::ldexp(s.normalised_mean[j], shift);
+      remainder[k] = std::ldexp(s.normalised_remainder[j], shift);
     }
   }
   const buffer<int64_t> kept = to_device(s.kept, stream);
   const buffer<power_of_two<T>> stages = to_device(stage, stream);
   const buffer<double> means = to_device(mean, stream);
-  const centred_column<T> c{x.data,       kept.data(), stages.data(),
-                            means.data(), count,       x.d};
-  const staged_target<T> target{y, power_of_two_of<T>(s.y_exponent)};
-  double y_mean = 0;
-  if (fit_intercept) {
-    const weighted_total t =
-        vector_reduce(stream, rows, weighted_target<T>{target, w}, add_totals{},
-                      weighted_total{0.0, 0.0});
-    y_mean = t.value / t.weight;
-  }
+  const buffer<double> remainders = to_device(remainder, stream);
+  const centred_column<T> c{x.data,           kept.data(), stages.data(),
+                            means.data(),     remainders.data(),
+                            count,            x.d};
+  const centred_target<T> target{
+      staged_target<T>{y, power_of_two_of<T>(s.y_exponent)},
+      fit_intercept ? target_centre(y, w, rows, s.y_exponent, stream)
+                    : centre{0.0, 0.0}};
   buffer<double> r = scratch<double>(x.n, stream);
   const int64_t blocks =
       std::clamp<int64_t>((rows.count + (residual_threads / warp_lanes) - 1) /
@@ -179,10 +158,10 @@ residual_terms residual_moments(const raft::handle_t& handle,
                           1, most_residual_blocks);
   centred_residuals<T>
       <<<static_cast<unsigned>(blocks), residual_threads, 0, stream.value()>>>(
-          c, coef, target, y_mean, rows, r.data());
+          c, coef, target, rows, r.data());
   raftrkt::cuda_check(cudaGetLastError(), "centred_residuals");
   const std::vector<moment_sums> sums = column_reduce(
-      stream, rows, count + 1, moment_terms<T>{c, target, y_mean, w, r.data()},
+      stream, rows, count + 1, moment_terms<T>{c, target, w, r.data()},
       add_moments{}, moment_sums{no_product(), no_product()});
   std::vector<moment> moments(count);
   for (int64_t k = 0; k < count; ++k) {

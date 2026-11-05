@@ -6,7 +6,7 @@
          (only-in racket/match match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
-         (only-in "glm.rkt" flag-code glm-predict/who)
+         (only-in "glm.rkt" glm-predict/who intercept-flag)
          (only-in "native.rkt" cuml-linear-model-linear-regression-fit-job))
 
 (provide (struct-out linear-regression-result)
@@ -30,6 +30,7 @@
                                    #:sample-weight [sample-weight #f]
                                    #:hyperparameters linear-regression-params
                                    #:resources [resources (current-device-resources)])
+  (define flag (intercept-flag who fit-intercept))
   (define out (deposit-for/who who resources))
   (define intercept
     (cuml-linear-model-linear-regression-fit-job who
@@ -38,7 +39,7 @@
                                                  y
                                                  sample-weight
                                                  out
-                                                 (flag-code fit-intercept)
+                                                 flag
                                                  (algorithm-code algorithm)))
   (match-define (list coef) (deposit->list out))
   (linear-regression-result coef intercept))

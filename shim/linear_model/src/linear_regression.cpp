@@ -1,7 +1,6 @@
 #include <cmath>
 #include <cstdint>
 #include <cuml/linear_model/glm.hpp>
-#include <format>
 #include <memory>
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
@@ -11,6 +10,7 @@
 #include "cumlrkt/support.hpp"
 #include "fit_checks.hpp"
 #include "glm_staging.hpp"
+#include "glm_staging_device.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/job.hpp"
 #include "raftrkt/view.hpp"
@@ -18,12 +18,6 @@
 namespace cumlrkt::glm {
 
 namespace {
-
-constexpr int single_tolerance_bits = 8;
-constexpr int double_tolerance_bits = 18;
-
-template <typename T>
-constexpr bool single = sizeof(T) == sizeof(float);
 
 template <typename T>
 struct fit_result {
@@ -42,11 +36,6 @@ struct fit_plan {
   int algorithm;
   counted_rows counted;
 };
-
-template <typename T>
-const char* dtype_of() {
-  return single<T> ? "float32" : "float64";
-}
 
 template <typename T>
 std::unique_ptr<buffer<T>> zero_coef(int64_t d, rmm::cuda_stream_view stream) {
@@ -82,14 +71,10 @@ fit_result<T> nothing_to_solve(const raft::handle_t& handle,
     intercept = static_cast<double>(
         read_one(y, first_positive(w, x.n, stream), stream));
   } else if (plan.fit_intercept) {
-    const row_selection rows = plan.counted.rows;
-    buffer<T> ys = scratch<T>(rows.count, stream);
-    buffer<T> ws = scratch<T>(w == nullptr ? 0 : rows.count, stream);
-    stage_targets(handle, y, w, plan.s, rows, ys.data(), ws.data());
-    const double mean = staged_mean(
-        handle, ys.data(), w == nullptr ? nullptr : ws.data(), rows.count);
-    intercept = static_cast<double>(
-        static_cast<T>(std::ldexp(static_cast<T>(mean), -plan.s.y_exponent)));
+    const centre c =
+        target_centre(y, w, plan.counted.rows, plan.s.y_exponent, stream);
+    intercept = static_cast<double>(static_cast<T>(
+        std::ldexp(static_cast<T>(c.mean + c.remainder), -plan.s.y_exponent)));
   }
   settle(handle);
   return {std::move(coef), intercept};
@@ -106,40 +91,22 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   require_workspace(
       plan.algorithm, rows.count, kept,
       cusolver_lwork_of<T>(handle, plan.algorithm, {rows.count, kept}));
-  auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
-  buffer<T> xs = scratch<T>(rows.count * kept, stream);
-  buffer<T> ys = scratch<T>(rows.count, stream);
-  buffer<T> ws = scratch<T>(w == nullptr ? 0 : rows.count, stream);
+  staged_problem<T> p = stage_problem(handle, x, y, w, s, rows);
   buffer<T> cs = scratch<T>(kept, stream);
-  stage_columns(handle, x, w, s, rows, xs.data());
-  stage_targets(handle, y, w, s, rows, ys.data(), ws.data());
   T intercept{0};
-  ML::GLM::olsFit(handle, xs.data(), static_cast<size_t>(rows.count),
-                  static_cast<size_t>(kept), ys.data(), cs.data(), &intercept,
+  ML::GLM::olsFit(handle, p.x.data(), static_cast<size_t>(rows.count),
+                  static_cast<size_t>(kept), p.y.data(), cs.data(), &intercept,
                   plan.fit_intercept, plan.algorithm,
-                  w == nullptr ? nullptr : ws.data());
+                  w == nullptr ? nullptr : p.w.data());
   settle(handle);
   require_finite_solution(cs.data(), kept, intercept, plan.algorithm, stream);
-  const double cosine =
-      residual_cosine(handle, x, y, w, rows, s, cs.data(), plan.fit_intercept);
-  const int bits = single<T> ? single_tolerance_bits : double_tolerance_bits;
-  if (!(cosine <= std::ldexp(1.0, -bits))) {
-    throw logic_error(std::format(
-        "X: the {} solve is not a least-squares solution (residual cosine {} "
-        "> 2^-{}); X may have collinear columns",
-        algorithm_name(plan.algorithm), printed(cosine), bits));
-  }
-  const int64_t j = unstage_coef(handle, cs.data(), s, x.d, coef->data());
-  if (j >= 0) {
-    throw logic_error(
-        std::format("X: column {}: the coefficient exceeds the {} range", j,
-                    dtype_of<T>()));
-  }
+  require_least_squares<T>(
+      residual_cosine(handle, x, y, w, rows, s, cs.data(), plan.fit_intercept),
+      plan.algorithm);
+  auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   const T unscaled = std::ldexp(intercept, -s.y_exponent);
-  if (!std::isfinite(unscaled)) {
-    throw logic_error(
-        std::format("y: the intercept exceeds the {} range", dtype_of<T>()));
-  }
+  require_in_range(unstage_coef(handle, cs.data(), s, x.d, coef->data()),
+                   unscaled);
   return {std::move(coef),
           plan.fit_intercept ? static_cast<double>(unscaled) : 0.0};
 }
@@ -164,10 +131,12 @@ fit_plan plan_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
 template <typename T>
 double fit_into(const raft::handle_t& handle, const fit_request& request,
                 rr_deposit* out) {
-  const fit_inputs<T> checked = checked_inputs<T>(handle, request);
-  const buffer<T> weights = staged_weights(handle, checked.w, checked.x.n);
-  const fit_inputs<T> in{checked.x, checked.y,
-                         checked.w == nullptr ? nullptr : weights.data()};
+  const checked_fit<T> checked = checked_inputs<T>(handle, request);
+  const fit_inputs<T>& raw = checked.in;
+  const buffer<T> weights =
+      staged_weights(handle, raw.w, raw.x.n, checked.largest_weight);
+  const fit_inputs<T> in{raw.x, raw.y,
+                         raw.w == nullptr ? nullptr : weights.data()};
   const fit_plan plan = plan_fit(handle, in, request);
   const bool constant_y =
       constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);

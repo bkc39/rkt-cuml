@@ -10,9 +10,10 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/blob-data.rkt" uniform-source)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/linear-data.rkt" algorithms dtypes [on-matrix matrix] [on-vector vector])
+         (only-in "private/linear-data.rkt" algorithms dtypes dyadic [on-matrix matrix] [on-vector vector])
          (only-in "private/refusal-rows.rkt" check-row row row-id)
          (only-in "private/scaler-data.rkt" strided-vector))
 
@@ -35,51 +36,51 @@
   (define X (matrix grid))
   (define y (vector targets))
   (list
-   (row "V1 dtype"
+   (row "X dtype"
         "X: expected float32 or float64, got int32"
         (lambda () (go (blank-matrix 5 3 'int32) y)))
-   (row "V1 rank" "X: expected rank 2, got rank 1" (lambda () (go y y)))
-   (row "V1 layout"
+   (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go y y)))
+   (row "X layout"
         "X: expected row-major, got col-major 4x3"
         (lambda () (go (blank-matrix 4 3 'float32 #:layout 'col-major) (blank-vector 4 'float32))))
-   (row "V2 dtype" "y: expected float32, got float64" (lambda () (go (matrix grid 'float32) y)))
-   (row "V2 rank" "y: expected rank 1, got rank 2" (lambda () (go X X)))
-   (row "V2 length"
+   (row "y dtype" "y: expected float32, got float64" (lambda () (go (matrix grid 'float32) y)))
+   (row "y rank" "y: expected rank 1, got rank 2" (lambda () (go X X)))
+   (row "y length"
         "y: expected 10 elements, got 9"
         (lambda () (go (matrix (append grid grid)) (vector (range 9)))))
-   (row "V2 stride"
+   (row "y stride"
         "y: expected contiguous elements, got stride 2"
         (lambda () (go X (strided-vector 5))))
-   (row "V3 dtype"
+   (row "weight dtype"
         "sample-weight: expected float32, got float64"
         (lambda () (go (matrix grid 'float32) (vector targets 'float32) #:sample-weight y)))
-   (row "V3 length"
+   (row "weight length"
         "sample-weight: expected 5 elements, got 4"
         (lambda () (go X y #:sample-weight (vector '(1 1 1 1)))))
-   (row "V4" "X: expected at least 2 rows, got 1" (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
-   (row "V5" "X: expected at least 1 column, got 0" (lambda () (go (blank-matrix 5 0 'float64) y)))
-   (row "V8 algorithm"
+   (row "one row" "X: expected at least 2 rows, got 1" (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
+   (row "no column" "X: expected at least 1 column, got 0" (lambda () (go (blank-matrix 5 0 'float64) y)))
+   (row "unknown algorithm"
         "algorithm: expected auto, eig, svd, svd-jacobi, qr or svd-qr"
         (lambda () (go X y #:algorithm 'lu)))
-   (row "V8 fit-intercept"
-        "fit-intercept: expected #t or #f"
+   (row "non-boolean fit-intercept"
+        "fit-intercept: expected #t or #f, got 'yes"
         (lambda () (go X y #:fit-intercept 'yes)))
-   (row "V9"
+   (row "non-finite X"
         "X: row 3, column 1: expected a finite value, got nan"
         (lambda () (go (matrix (with-cell grid 3 1 +nan.0)) y)))
-   (row "V10 y"
+   (row "non-finite y"
         "y: element 4: expected a finite value, got inf"
         (lambda () (go X (vector (with-element targets 4 +inf.0)))))
-   (row "V10 sample-weight"
+   (row "non-finite weight"
         "sample-weight: element 0: expected a finite value, got nan"
         (lambda () (go X y #:sample-weight (vector '(+nan.0 1 1 1 1)))))
-   (row "V11"
+   (row "negative weight"
         "sample-weight: element 1: expected at least 0, got -1"
         (lambda () (go X y #:sample-weight (vector '(1 -1 1 1 1)))))
-   (row "V12"
+   (row "zero weight sum"
         "sample-weight: expected a positive sum, got 0"
         (lambda () (go X y #:sample-weight (vector (make-list 5 0)))))
-   (row "V14"
+   (row "coefficient overflow"
         "X: column 2: the coefficient exceeds the float32 range"
         (lambda ()
           (go (matrix (for/list ([r (in-list grid)])
@@ -98,35 +99,38 @@
 
 (define (predict-rows fitted go)
   (list
-   (row "W1 dtype"
+   (row "X dtype"
         "X: expected float32 or float64, got int32"
         (lambda () (go fitted (blank-matrix 5 3 'int32))))
-   (row "W1 rank" "X: expected rank 2, got rank 1" (lambda () (go fitted (vector targets))))
-   (row "W1 layout"
+   (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go fitted (vector targets))))
+   (row "X layout"
         "X: expected row-major, got col-major 4x3"
         (lambda () (go fitted (blank-matrix 4 3 'float64 #:layout 'col-major))))
-   (row "W3" "X: expected float64, got float32" (lambda () (go fitted (matrix grid 'float32))))
-   (row "W4" "X: expected at least 1 row, got 0" (lambda () (go fitted (blank-matrix 0 3 'float64))))
-   (row "W5" "X: expected 3 columns, got 2" (lambda () (go fitted (matrix '((1 2) (3 4))))))
-   (row "W7 X"
+   (row "X dtype unlike coef" "X: expected float64, got float32" (lambda () (go fitted (matrix grid 'float32))))
+   (row "no rows" "X: expected at least 1 row, got 0" (lambda () (go fitted (blank-matrix 0 3 'float64))))
+   (row "X width unlike coef" "X: expected 3 columns, got 2" (lambda () (go fitted (matrix '((1 2) (3 4))))))
+   (row "non-finite X"
         "X: row 3, column 1: expected a finite value, got nan"
         (lambda () (go fitted (matrix (with-cell grid 3 1 +nan.0)))))))
 
 (define (result-rows go)
   (define X (matrix grid))
-  (list (row "W2 rank"
+  (list (row "coef rank"
              "coef: expected rank 1, got rank 2"
              (lambda () (go (linear-regression-result X 0.0) X)))
-        (row "W2 empty"
+        (row "empty coef"
              "coef: expected at least 1 element, got 0"
              (lambda () (go (linear-regression-result (blank-vector 0 'float64) 0.0) X)))
-        (row "W7 coef"
+        (row "non-finite coef"
              "coef: element 0: expected a finite value, got nan"
              (lambda () (go (linear-regression-result (vector '(+nan.0 2 3)) 0.0) X)))
-        (row "W7 intercept"
+        (row "non-finite intercept"
              "intercept: expected a finite value, got inf"
              (lambda () (go (linear-regression-result (vector '(1 2 3)) +inf.0) X)))
-        (row "W8"
+        (row "non-real intercept"
+             "intercept: expected a real number, got 'b"
+             (lambda () (go (linear-regression-result (vector '(1 2 3)) 'b) X)))
+        (row "prediction overflow"
              "X: row 0: the prediction exceeds the float32 range"
              (lambda ()
                (go (linear-regression-result (vector '(1 1 1) 'float32) 0.0)
@@ -166,8 +170,7 @@
                     "predict: linear-regression is not fitted"
                     (lambda () (predict (linear-regression) (matrix grid)))))
 
-(define v13
-  #px"^linear-regression-fit: X: the (eig|svd|qr|svd-qr) solve is not a least-squares solution \\(residual cosine \\S+ > 2\\^-(8|18)\\); X may have collinear columns$")
+(define not-least-squares #rx"^linear-regression-fit: X: the [a-z-]+ solve is not a least-squares solution")
 
 (define (collinear-rows n)
   (for/list ([i (in-range n)])
@@ -185,17 +188,27 @@
              [i (in-naturals)])
     (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
 
+(define (uneven-weights n)
+  (define draw (uniform-source 77))
+  (for/list ([i (in-range n)])
+    (if (zero? (modulo i 13))
+        0
+        (dyadic (+ 1/2 (* 3/2 (draw))) 6))))
+
 (test-gpu "a solve that is not a least-squares solution is refused"
-  (for ([fixture (in-list (list (list 'eig 'float32 (collinear-rows 60))
-                                (list 'qr 'float32 (one-hot-rows 400 4))
-                                (list 'qr 'float64 (collinear-rows 60))))])
-    (match-define (list algorithm dt rows) fixture)
-    (test-case (format "~a ~a" algorithm dt)
+  (for ([fixture (in-list (list (list 'eig 'float32 (collinear-rows 60) #f)
+                                (list 'qr 'float32 (one-hot-rows 400 4) #f)
+                                (list 'qr 'float64 (collinear-rows 60) #f)
+                                (list 'auto 'float32 (collinear-rows 5003) (uneven-weights 5003))
+                                (list 'qr 'float64 (collinear-rows 5003) (uneven-weights 5003))))])
+    (match-define (list algorithm dt rows w) fixture)
+    (test-case (format "~a ~a ~a rows~a" algorithm dt (length rows) (if w ", weighted" ""))
       (check-cuml-error 'logic
-                        v13
+                        not-least-squares
                         (lambda ()
                           (linear-regression-fit (matrix rows dt)
                                                  (vector (noisy-targets rows) dt)
+                                                 #:sample-weight (and w (vector w dt))
                                                  #:algorithm algorithm))))))
 
 (test-gpu "X, y and w are unchanged after every fit"

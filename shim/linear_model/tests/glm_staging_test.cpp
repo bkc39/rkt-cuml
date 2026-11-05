@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include "cumlrkt/linear_model.h"
+#include "cumlrkt/rows.hpp"
 #include "cumlrkt/support.hpp"
 #include "fit_checks.hpp"
 #include "glm_staging_device.hpp"
@@ -20,9 +22,12 @@
 namespace {
 
 using cumlrkt::matrix;
-using cumlrkt::glm::constant_columns;
+using cumlrkt::glm::column_profile;
+using cumlrkt::glm::column_profiles;
+using cumlrkt::glm::constant_vector;
 using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
+using cumlrkt::glm::profiles;
 using cumlrkt::glm::require_finite_solution;
 using cumlrkt::glm::require_workspace;
 using cumlrkt::glm::row_selection;
@@ -183,8 +188,11 @@ TEST(SpreadExponent, CapKeepsNStagedWeightTimesColumnTermsFinite) {
 template <typename T>
 std::vector<T> weights_after_staging(const resources& res, const filled<T>& w) {
   const raft::handle_t& h = handle_of(res);
-  return to_host(staged_weights(h, data_of(w), 4),
-                 raft::resource::get_cuda_stream(h));
+  const auto stream = raft::resource::get_cuda_stream(h);
+  return to_host(
+      staged_weights(h, data_of(w), 4,
+                     cumlrkt::largest_magnitude(data_of(w), 4, stream)),
+      stream);
 }
 
 TEST(StagedWeights, TakeAnEvenExponent) {
@@ -225,22 +233,45 @@ TEST(PlanStaging, UniformExponentIsSharedByEveryColumn) {
   EXPECT_EQ(u.column_exponent, (std::vector<int>{-99, -99}));
 }
 
-TEST(ConstantColumns, FollowTheInterceptRule) {
+std::vector<char> constant_columns(const resources& res, const filled<float>& x,
+                                   const float* w, bool fit_intercept) {
+  const raft::handle_t& h = handle_of(res);
+  const profiles p =
+      column_profiles(matrix_of(x, 4, 3), w, row_selection{nullptr, 4},
+                      fit_intercept, raft::resource::get_cuda_stream(h));
+  std::vector<char> constant(p.columns.size());
+  std::ranges::transform(p.columns, constant.begin(), [](column_profile c) {
+    return static_cast<char>(!c.varies);
+  });
+  return constant;
+}
+
+TEST(ColumnProfiles, ConstantColumnsFollowTheInterceptRule) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<float> x(res, {2, 0, 1, 2, 0, 2, 2, 0, 3, 7, 5, 4}, {4, 3});
+  const filled<float> w(res, {1, 1, 1, 0}, {4});
+  EXPECT_EQ(constant_columns(res, x, nullptr, true),
+            (std::vector<char>{0, 0, 0}));
+  EXPECT_EQ(constant_columns(res, x, data_of(w), true),
+            (std::vector<char>{1, 1, 0}));
+  EXPECT_EQ(constant_columns(res, x, data_of(w), false),
+            (std::vector<char>{0, 1, 0}));
+  const filled<float> later(res, {0, 0, 0, 1}, {4});
+  EXPECT_EQ(constant_columns(res, x, data_of(later), true),
+            (std::vector<char>{1, 1, 1}));
+}
+
+TEST(ConstantVector, FollowsTheInterceptRule) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const raft::handle_t& h = handle_of(res);
-  const filled<float> x(res, {2, 0, 1, 2, 0, 2, 2, 0, 3, 7, 5, 4}, {4, 3});
+  const filled<float> v(res, {2, 2, 2, 7}, {4});
   const filled<float> w(res, {1, 1, 1, 0}, {4});
-  EXPECT_EQ(constant_columns(h, matrix_of(x, 4, 3),
-                             static_cast<const float*>(nullptr), true),
-            (std::vector<char>{0, 0, 0}));
-  EXPECT_EQ(constant_columns(h, matrix_of(x, 4, 3), data_of(w), true),
-            (std::vector<char>{1, 1, 0}));
-  EXPECT_EQ(constant_columns(h, matrix_of(x, 4, 3), data_of(w), false),
-            (std::vector<char>{0, 1, 0}));
-  const filled<float> later(res, {0, 0, 0, 1}, {4});
-  EXPECT_EQ(constant_columns(h, matrix_of(x, 4, 3), data_of(later), true),
-            (std::vector<char>{1, 1, 1}));
+  EXPECT_FALSE(constant_vector(h, data_of(v), 4,
+                               static_cast<const float*>(nullptr), true));
+  EXPECT_TRUE(constant_vector(h, data_of(v), 4, data_of(w), true));
+  EXPECT_FALSE(constant_vector(h, data_of(v), 4, data_of(w), false));
 }
 
 constexpr float poison = 9.0F;
@@ -250,7 +281,7 @@ TEST(UnstageCoef, ZerosDroppedColumnsAndReportsTheFirstOverflow) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const raft::handle_t& h = handle_of(res);
-  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}, {}, {}};
+  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}, {}, {}, {}};
   const filled<float> staged(res, {1.5F, -2.0F, 4.0F}, {3});
   filled<float> coef(res, {poison, poison, poison, poison}, {4});
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,

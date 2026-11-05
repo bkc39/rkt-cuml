@@ -16,6 +16,12 @@ struct fit_inputs {
   const T* w;
 };
 
+template <typename T>
+struct checked_fit {
+  fit_inputs<T> in;
+  double largest_weight;
+};
+
 struct fit_request {
   const rr_view* x;
   const rr_view* y;
@@ -31,7 +37,7 @@ int64_t cusolver_lwork_of(const raft::handle_t& handle, int algorithm,
                           ols_shape shape);
 
 template <typename T>
-fit_inputs<T> checked_inputs(const raft::handle_t& handle,
-                             const fit_request& request);
+checked_fit<T> checked_inputs(const raft::handle_t& handle,
+                              const fit_request& request);
 
 }  // namespace cumlrkt::glm
