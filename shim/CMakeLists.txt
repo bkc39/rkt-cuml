@@ -102,12 +102,15 @@ cumlrkt_family(decomposition
 cumlrkt_family(linear_model
   SOURCES linear_model/src/linear_model.cpp
           linear_model/src/linear_regression.cpp
+          linear_model/src/ridge.cpp linear_model/src/ridge_staging.cpp
           linear_model/src/fit_checks.cpp linear_model/src/predict.cpp
           linear_model/src/glm_staging.cpp
           linear_model/src/glm_staging_device.cu
           linear_model/src/residual_check.cu common/src/transpose.cu
   TESTS linear_model/tests/glm_staging_test.cpp
         linear_model/tests/linear_model_refusal_test.cpp
+        linear_model/tests/ridge_staging_test.cpp
+        linear_model/src/ridge_staging.cpp
         linear_model/src/glm_staging.cpp
         linear_model/src/glm_staging_device.cu
         linear_model/src/residual_check.cu

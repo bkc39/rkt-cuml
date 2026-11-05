@@ -7,6 +7,7 @@
                   kmeans
                   linear-regression
                   pca
+                  ridge
                   spectral-clustering
                   spectral-embedding
                   standard-scaler
@@ -32,7 +33,11 @@
                   tsvd-fit
                   tsvd-fit-transform
                   tsvd-params)
-         (only-in cuml/linear-model linear-regression-fit linear-regression-params)
+         (only-in cuml/linear-model
+                  linear-regression-fit
+                  linear-regression-params
+                  ridge-fit
+                  ridge-params)
          (only-in cuml/manifold
                   spectral-embedding-fit
                   spectral-embedding-fit-graph
@@ -164,6 +169,8 @@
                  random-state))
 
 (define linear-regression-keys '(algorithm fit-intercept))
+
+(define ridge-keys '(alpha solver fit-intercept))
 
 (define spectral-embedding-keys
   '(n-components n-neighbors norm-laplacian drop-first random-state affinity))
@@ -362,7 +369,20 @@
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '()
                                '#:sample-weight)
-                         (estimator-entry 'linear-regression linear-regression)))))
+                         (estimator-entry 'linear-regression linear-regression)))
+   (table-bindings ridge-params
+                   ridge-keys
+                   (list (list 'ridge-params ridge-params '() (list (argument #f 'base #f)) '() '())
+                         (list 'ridge-fit
+                               ridge-fit
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none) (argument #f 'y 'none))
+                               (list (argument '#:sample-weight 'sample-weight #f)
+                                     (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '()
+                               '#:sample-weight)
+                         (estimator-entry 'ridge ridge)))))
 
 (define-namespace-anchor anchor)
 

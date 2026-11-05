@@ -15,6 +15,7 @@
          (only-in "blob-data.rkt" normal-source uniform-source))
 
 (provide (struct-out lcase)
+         (struct-out ridge-solution)
          (struct-out solution)
          algorithms
          case-fit
@@ -39,6 +40,8 @@
          on-matrix
          on-vector
          oracle-lstsq
+         oracle-ridge
+         ridge-oracles
          power-spread-case
          power-spread-gone
          remove-at
@@ -52,6 +55,7 @@
 
 (struct lcase (name X y w) #:transparent)
 (struct solution (coef intercept kappa) #:transparent)
+(struct ridge-solution (alpha coef intercept kappa top bottom xty) #:transparent)
 
 (define algorithms '(auto svd qr svd-qr))
 (define dtypes '(float32 float64))
@@ -365,7 +369,7 @@
         (values v 0.0)
         (values (map (lambda (x) (/ x norm)) Gv) norm))))
 
-(define (condition G-exact)
+(define (eigen-range G-exact)
   (define G
     (for/list ([row (in-list G-exact)])
       (map exact->inexact row)))
@@ -376,7 +380,10 @@
       (for/list ([g (in-list row)]
                  [j (in-naturals)])
         (- (if (= i j) top 0.0) g))))
-  (define bottom (- top (power-top shifted 600)))
+  (values top (- top (power-top shifted 600))))
+
+(define (condition G-exact)
+  (define-values (top bottom) (eigen-range G-exact))
   (if (> bottom (* 1e-14 top))
       (sqrt (/ top bottom))
       +inf.0))
@@ -385,6 +392,26 @@
   (define-values (G b mx my) (weighted-gram X y w fit-intercept))
   (define c (min-norm-solve G b))
   (solution c (- my (dot mx c)) (condition G)))
+
+(define (ridge-solve G b mx my top bottom alpha)
+  (define c
+    (min-norm-solve (for/list ([row (in-list G)]
+                               [i (in-naturals)])
+                      (for/list ([g (in-list row)]
+                                 [j (in-naturals)])
+                        (if (= i j) (+ g alpha) g)))
+                    b))
+  (ridge-solution alpha c (- my (dot mx c)) (/ (+ top alpha) (+ bottom alpha)) top bottom (sqrt (dot b b))))
+
+(define (oracle-ridge X y w alpha fit-intercept)
+  (car (ridge-oracles X y w fit-intercept (list alpha) #:relative? #f)))
+
+(define (ridge-oracles X y w fit-intercept ratios #:relative? [relative? #t])
+  (define-values (G b mx my) (weighted-gram X y w fit-intercept))
+  (define-values (top bottom) (eigen-range G))
+  (define unit (if relative? (expt 2 (exact-round (/ (log top) (log 2)))) 1))
+  (for/list ([r (in-list ratios)])
+    (ridge-solve G b mx my top bottom (* r unit))))
 
 (define (host-cosine X y w coef intercept fit-intercept)
   (define weights (weights-or-ones w y))

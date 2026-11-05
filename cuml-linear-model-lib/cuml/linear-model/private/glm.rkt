@@ -7,7 +7,8 @@
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt" cuml-linear-model-gemm-predict-job))
 
-(provide glm-predict/who
+(provide alpha-value/who
+         glm-predict/who
          intercept-flag/who)
 
 (define/who (intercept-flag who fit-intercept)
@@ -15,6 +16,11 @@
     [#t 1]
     [#f 0]
     [v (logic-error "~a: fit-intercept: expected #t or #f, got ~e" who v)]))
+
+(define/who (alpha-value who alpha)
+  (if (real? alpha)
+      (real->double-flonum alpha)
+      (logic-error "~a: alpha: expected a real number, got ~e" who alpha)))
 
 (define (intercept-value who intercept)
   (if (real? intercept)
