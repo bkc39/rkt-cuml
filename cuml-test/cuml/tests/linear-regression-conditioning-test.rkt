@@ -71,7 +71,8 @@
                (define u (unit-roundoff dt))
                (define means (column-means c))
                (define ratio (apply max (map (lambda (m) (/ (abs (car m)) (cadr m))) means)))
-               (define bound (* (+ (* 128 kappa kappa u) (* 16 (sqr (* u ratio)))) (max 1 (max-abs c*))))]
+               (define bound
+                 (* (+ (* 128 kappa kappa u) (* 16 (sqr (* u ratio)))) (max 1 (max-abs c*))))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a ~a" dt (lcase-name c) a)
       (match-define (list coef b) (exact-fit (fit-case c dt a)))
@@ -118,9 +119,7 @@
   (lcase "y = (1 1 1 1+2^-52)" '((0) (1) (2) (3)) (list 1 1 1 (+ 1 (expt 2 -52))) #f))
 
 (test-gpu "a fit is accepted when y's or a column's mean dwarfs its spread"
-  (for* ([c
-          (in-list
-           (list (offset-y-case #e1e6) (offset-y-case #e1e7) near-constant-y))]
+  (for* ([c (in-list (list (offset-y-case #e1e6) (offset-y-case #e1e7) near-constant-y))]
          #:do [(match-define (solution c* b* kappa) (oracle-of c))]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" (lcase-name c) a)
