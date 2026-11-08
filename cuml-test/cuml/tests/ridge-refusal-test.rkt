@@ -119,11 +119,11 @@
 (test-gpu "float32 eig on columns of very different scales is refused; svd fits them (Q2)"
   (check-cuml-error 'logic
                     #rx"^ridge-fit: X: the eig solve is not a ridge solution "
-                    (lambda () (ridge-case-fit mixed-scales 'float32 #:alpha 1024 #:solver 'eig)))
+                    (lambda () (ridge-case-fit mixed-scales 'float32 #:alpha 1 #:solver 'eig)))
   (match-define (ridge-solution _ c* _ _ _ _ _)
-    (oracle-ridge (lcase-X mixed-scales) (lcase-y mixed-scales) #f 1024 #t))
+    (oracle-ridge (lcase-X mixed-scales) (lcase-y mixed-scales) #f 1 #t))
   (match-define (list coef _)
-    (exact-fit (ridge-case-fit mixed-scales 'float32 #:alpha 1024 #:solver 'svd)))
+    (exact-fit (ridge-case-fit mixed-scales 'float32 #:alpha 1 #:solver 'svd)))
   (check-law "svd gap" (gap coef c*) (* (expt 2 -10) (max-abs c*))))
 
 (test-gpu "X, y and w are unchanged after every fit"

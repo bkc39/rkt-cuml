@@ -43,8 +43,8 @@ int shared_cap(const staging& s, int64_t n) {
                           }));
 }
 
-double widest_spread(const staging& s, int shared) {
-  return std::ranges::max(
+double narrowest_spread(const staging& s, int shared) {
+  return std::ranges::min(
       s.kept | std::views::transform([&](int64_t j) {
         return std::ldexp(s.spread[j], shared - unit_exponent(s.largest[j]));
       }));
@@ -77,9 +77,9 @@ ridge_scale<T> ridge_scale_of(const staging& s, int64_t n,
                                std::max(alpha_exponent<T>(alpha, weight_power),
                                         spread + ridge_floor<T>)});
   const T staged = staged_alpha<T>(alpha, (2 * shared) + weight_power);
-  const double widest = widest_spread(s, shared);
+  const double narrowest = narrowest_spread(s, shared);
   return {shared, staged,
-          static_cast<double>(staged) / widest / widest <=
+          static_cast<double>(staged) / narrowest / narrowest <=
               std::ldexp(1.0, -std::numeric_limits<T>::digits)};
 }
 
@@ -99,7 +99,7 @@ int ridge_algorithm(int solver, int64_t rows, int64_t kept) {
 }
 
 int lstsq_algorithm(int solver) {
-  return solver == CUML_LINEAR_MODEL_RIDGE_SVD ? CUML_LINEAR_MODEL_OLS_SVD_QR
+  return solver == CUML_LINEAR_MODEL_RIDGE_SVD ? CUML_LINEAR_MODEL_OLS_SVD
                                                : CUML_LINEAR_MODEL_OLS_EIG;
 }
 

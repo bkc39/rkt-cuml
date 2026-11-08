@@ -30,11 +30,13 @@ using cumlrkt::test::ridge_into;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
 
-staging planned(std::vector<int> exponent, std::vector<double> largest) {
+staging planned(std::vector<int> exponent, std::vector<double> largest,
+                std::vector<double> spread = {}) {
   staging s;
   s.column_exponent = std::move(exponent);
   s.largest = std::move(largest);
-  s.spread.assign(s.largest.size(), 1.0);
+  s.spread = std::move(spread);
+  s.spread.resize(s.largest.size(), 1.0);
   s.y_exponent = 3;
   for (std::size_t j = 0; j < s.largest.size(); ++j) {
     s.kept.push_back(static_cast<int64_t>(j));
@@ -54,8 +56,9 @@ struct staged_case {
 };
 
 template <typename T>
-void expect_staged(const staged_case& c) {
-  const auto r = ridge_scale_of<T>(planned(c.exponent, c.largest), c.n,
+void expect_staged(const staged_case& c,
+                   const std::vector<double>& spread = {}) {
+  const auto r = ridge_scale_of<T>(planned(c.exponent, c.largest, spread), c.n,
                                    {c.alpha, c.weight_power});
   EXPECT_EQ(r.shared, c.shared) << c.alpha;
   EXPECT_EQ(r.alpha, static_cast<T>(c.alpha_staged)) << c.alpha;
@@ -138,11 +141,30 @@ TEST(RidgeStaging, AnAlphaFarPastTheSpreadKeepsTheWidestColumnAtTheFloor) {
             "float64, got 1.0715086071862673e+301");
 }
 
-TEST(RidgeStaging, AnAlphaUnderRoundingAgainstTheWidestSpreadIsNegligible) {
-  expect_staged<float>({{0}, {1.5}, 0x1p-24, 0, 10, 16, 0x1p8, true});
-  expect_staged<float>({{0}, {1.5}, 0x1p-23, 0, 10, 16, 0x1p9, false});
-  expect_staged<double>({{0}, {1.5}, 0x1p-53, 0, 10, 64, 0x1p75, true});
-  expect_staged<double>({{0}, {1.5}, 0x1p-52, 0, 10, 64, 0x1p76, false});
+TEST(RidgeStaging, AnAlphaUnderRoundingAgainstTheNarrowestSpreadIsNegligible) {
+  const std::vector<staged_case> one_column_f32{
+      {{0}, {1.5}, 0x1p-24, 0, 10, 16, 0x1p8, true},
+      {{0}, {1.5}, 0x1p-23, 0, 10, 16, 0x1p9, false},
+  };
+  for (const staged_case& c : one_column_f32) {
+    expect_staged<float>(c);
+  }
+  const std::vector<staged_case> one_column_f64{
+      {{0}, {1.5}, 0x1p-53, 0, 10, 64, 0x1p75, true},
+      {{0}, {1.5}, 0x1p-52, 0, 10, 64, 0x1p76, false},
+  };
+  for (const staged_case& c : one_column_f64) {
+    expect_staged<double>(c);
+  }
+  const std::vector<double> mixed_spread{1.0, 0x1p-8};
+  const std::vector<staged_case> mixed_f32{
+      {{0, 0}, {1.5, 1.5}, 0x1p-40, 0, 10, 16, 0x1p-8, true},
+      {{0, 0}, {1.5, 1.5}, 0x1p-39, 0, 10, 16, 0x1p-7, false},
+      {{0, 0}, {1.5, 1.5}, 0x1p-24, 0, 10, 16, 0x1p8, false},
+  };
+  for (const staged_case& c : mixed_f32) {
+    expect_staged<float>(c, mixed_spread);
+  }
 }
 
 TEST(RidgeStaging, RoutesTheCasesRidgeFitCannotTake) {
@@ -177,7 +199,7 @@ TEST(Ridge, AlphaThatUnderflowsIsTheLeastSquaresFitBitwise) {
   const filled<float> y(res, {1, 2, 3, 4, 5}, {5});
   for (const auto [solver, algorithm] :
        {std::pair{CUML_LINEAR_MODEL_RIDGE_EIG, CUML_LINEAR_MODEL_OLS_EIG},
-        std::pair{CUML_LINEAR_MODEL_RIDGE_SVD, CUML_LINEAR_MODEL_OLS_SVD_QR}}) {
+        std::pair{CUML_LINEAR_MODEL_RIDGE_SVD, CUML_LINEAR_MODEL_OLS_SVD}}) {
     for (const double alpha : {0.0, -0.0, 0x1p-190}) {
       expect_least_squares(res, x, y, {solver, algorithm}, alpha);
     }

@@ -1184,7 +1184,11 @@ Follow-ups are GitHub issues.
 - **L2-b.** The keyword is `#:solver` (`'auto`, `'eig`, `'svd`), Python
   cuML's and sklearn's name; `'auto` is `'eig`; `'lsmr` is not bound.
 - **L2-c.** alpha 0 is L2-i's case α′ = 0: `linear-regression-fit`'s path,
-  'eig, or 'svd-qr for 'svd, bit for bit (law B1). −0.0 is accepted as 0.
+  'eig for 'auto and 'eig, 'svd for 'svd, bit for bit (law B1), so exactly
+  collinear X is refused under both solvers as L1's 'eig and 'svd refuse it.
+  L1's 'svd covers every shape ridge takes: it already runs the Jacobi SVD for
+  one kept column and whenever the kept columns outnumber the positive-weight
+  rows, less one with an intercept (L1's `plan_fit`). −0.0 is accepted as 0.
 - **L2-d.** NaN, ±inf and negative alpha are refused in C (V8), a non-real
   alpha in Racket; an exact alpha past the double range becomes +inf.0 and
   is refused.

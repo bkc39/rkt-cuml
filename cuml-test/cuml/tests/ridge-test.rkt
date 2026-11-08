@@ -73,7 +73,7 @@
 (define threshold-cases
   (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t) (normal-case 20 2 0)))
 
-(test-gpu "an alpha under rounding against the widest column spread is linear-regression-fit's fit (B1)"
+(test-gpu "an alpha under rounding against the narrowest column spread is linear-regression-fit's fit (B1)"
   (for* ([c (in-list threshold-cases)]
          [dt (in-list dtypes)]
          [solver (in-list '(eig svd))]
@@ -86,19 +86,15 @@
 (define (collinear-outcome solver alpha)
   (outcome (lambda () (ridge-case-fit (collinear 60) 'float32 #:alpha alpha #:solver solver))))
 
-(test-gpu "float32 collinear X with an alpha under rounding is linear-regression-fit's outcome"
+(test-gpu "float32 collinear X with an alpha under rounding is refused, as linear-regression-fit refuses it"
   (for* ([solver (in-list '(eig svd))]
          [alpha (in-list tiny-alphas)])
     (test-case (format "~a ~a" solver alpha)
-      (check-equal?
-       (collinear-outcome solver alpha)
-       (outcome (lambda ()
-                  (case-fit (collinear 60) 'float32 #:algorithm (lstsq-algorithm solver))))))))
-
-(test-gpu "float32 eig refuses collinear X with an alpha under rounding"
-  (for ([alpha (in-list tiny-alphas)])
-    (test-case (format "~a" alpha)
-      (check-pred refused? (collinear-outcome 'eig alpha)))))
+      (define ours (collinear-outcome solver alpha))
+      (check-pred refused? ours)
+      (check-equal? ours
+                    (outcome (lambda ()
+                               (case-fit (collinear 60) 'float32 #:algorithm (lstsq-algorithm solver))))))))
 
 (test-gpu "two identical fits are bitwise equal (B7)"
   (for ([spec (in-list (cartesian-product (list (normal-case 200 7 1 #:weighted? #t)

@@ -66,7 +66,7 @@
                  (* (+ (/ alpha (+ bottom alpha)) (* 256 (unit-roundoff dt) (/ top bottom)))
                     (norm2 lstsq))))))
 
-(test-gpu "an alpha either side of rounding against the widest column spread solves the ridge problem"
+(test-gpu "an alpha either side of rounding against the narrowest column spread solves the ridge problem"
   (for* ([c (in-list cases)]
          [fi (in-list '(#t #f))]
          [dt (in-list dtypes)]

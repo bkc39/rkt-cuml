@@ -33,7 +33,7 @@
         (list "ridge-fit: X: 2x24000 elements are past cuSOLVER's eig workspace query"
               (lambda () (ridge-fit wide wide-y)))
         (list #rx"^ridge-fit: X: the eig solve is not a ridge solution "
-              (lambda () (ridge-fit mixed mixed-y #:alpha 1024 #:solver 'eig)))))
+              (lambda () (ridge-fit mixed mixed-y #:alpha 1 #:solver 'eig)))))
 
 (test-fit-memory "ridge"
                  #:rounds 200

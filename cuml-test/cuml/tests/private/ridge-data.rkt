@@ -28,6 +28,7 @@
 (provide alpha-ratios
          check-ridge-laws
          lstsq-algorithm
+         narrowest-spread
          norm2
          ridge-case-fit
          ridge-case-result
@@ -40,21 +41,27 @@
 (define solvers '(eig svd))
 
 (define (lstsq-algorithm solver)
-  (if (eq? solver 'svd) 'svd-qr 'eig))
+  (if (eq? solver 'svd) 'svd 'eig))
 
 (define (norm2 xs)
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))
 
-(define (widest-spread c fi)
+(define (column-spreads c fi)
   (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
   (define (spread col)
     (if fi
         (weighted-spread col weights)
         (for/sum ([x (in-list col)] [w (in-list weights)]) (* w x x))))
-  (apply max (map spread (columns-of (lcase-X c)))))
+  (filter positive? (map spread (columns-of (lcase-X c)))))
+
+(define (widest-spread c fi)
+  (apply max (column-spreads c fi)))
+
+(define (narrowest-spread c fi)
+  (apply min (column-spreads c fi)))
 
 (define (rounding-alpha c dt fi)
-  (* (inexact->exact (unit-roundoff dt)) (widest-spread c fi)))
+  (* (inexact->exact (unit-roundoff dt)) (narrowest-spread c fi)))
 
 (define (ridge-case-result c dt #:alpha alpha #:solver [solver 'auto] #:fit-intercept [fi #t])
   (ridge-fit (on-matrix (lcase-X c) dt)

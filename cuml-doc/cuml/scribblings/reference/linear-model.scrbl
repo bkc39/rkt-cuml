@@ -163,13 +163,12 @@ penalised. @racket[X], @racket[y] and @racket[sample-weight] are as for
 
 @racket['auto] and @racket['eig] eigendecompose XᵀWX; @racket['svd] takes a
 QR-based SVD of X. Every column and @racket[alpha] are first scaled by powers of
-two. An @racket[alpha] of at most u times the largest column's weighted spread
+two. An @racket[alpha] of at most u times every column's weighted spread
 Σ@subscript{i}w@subscript{i}(x@subscript{ij} − x̄@subscript{j})² (x̄@subscript{j}
-0 without @racket[fit-intercept]), u being the dtype's unit roundoff, is taken as 0:
-that fit is @racket[linear-regression-fit]'s with @racket['eig] (@racket['auto],
-@racket['eig]) or @racket['svd-qr] (@racket['svd]), refusals included. Such an
-@racket[alpha] can still shrink a column of much smaller spread; scale the columns
-alike, or fit in float64. A column
+0 without @racket[fit-intercept]), u being the dtype's unit roundoff, is below
+rounding against every column and is taken as 0: that fit is
+@racket[linear-regression-fit]'s with the same @racket[solver] (@racket['auto] is
+@racket['eig]), refusals included, so exactly collinear X is refused. A column
 constant over the rows of positive weight (zero, without @racket[fit-intercept])
 gets coefficient 0.
 
