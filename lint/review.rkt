@@ -81,6 +81,7 @@
 (define-syntax-class reviewed-form
   #:datum-literals (define-definition-context-refactoring-rule define-estimator
                                                                define-generics
+                                                               define-regressor
                                                                define-refactoring-rule
                                                                define-hyperparameters
                                                                define-page-helpers
@@ -115,8 +116,7 @@
     #:attr review (lambda ()
                     (track-binding #'name)
                     (for-each recur (filter values (attribute entry.default)))))
-  (pattern (define-estimator name:id
-             . options)
+  (pattern ((~or* define-estimator define-regressor) name:id . options)
     #:attr review (lambda ()
                     (track-binding #'name)
                     (track-binding #'name "~a?" #:check-usages? #f)

@@ -11,6 +11,6 @@
          linear-regression?)
 
 (define-regressor linear-regression
-                  #:hyperparameters linear-regression-params
-                  #:fit linear-regression-fit/who
-                  #:predict linear-regression-predict/who)
+  #:hyperparameters linear-regression-params
+  #:fit linear-regression-fit/who
+  #:predict linear-regression-predict/who)

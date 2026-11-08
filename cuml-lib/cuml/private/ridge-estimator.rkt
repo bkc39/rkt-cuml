@@ -8,6 +8,6 @@
          ridge?)
 
 (define-regressor ridge
-                  #:hyperparameters ridge-params
-                  #:fit ridge-fit/who
-                  #:predict ridge-predict/who)
+  #:hyperparameters ridge-params
+  #:fit ridge-fit/who
+  #:predict ridge-predict/who)

@@ -259,9 +259,9 @@
               #f)))))
 
 (define-syntax-parse-rule (define-regressor name:id
-                                            #:hyperparameters table:id
-                                            #:fit fit/who:id
-                                            #:predict predict/who:id)
+                            #:hyperparameters table:id
+                            #:fit fit/who:id
+                            #:predict predict/who:id)
   (define-estimator name
     #:hyperparameters table
     #:fit fit/who

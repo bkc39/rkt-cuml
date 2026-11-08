@@ -10,7 +10,13 @@
                   ridge-result-intercept)
          (only-in racket/list cartesian-product)
          (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-false check-pred check-true test-case)
+         (only-in rackunit
+                  check-equal?
+                  check-false
+                  check-pred
+                  check-regexp-match
+                  check-true
+                  test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
@@ -32,14 +38,12 @@
                   ridge-result-fit
                   rounding-alpha))
 
-(struct fitted (coef intercept) #:transparent)
 (struct refused (message) #:transparent)
 
 (define (outcome thunk)
   (with-handlers ([exn:fail? (lambda (e)
                                (refused (regexp-replace #rx"^[a-z-]+: " (exn-message e) "")))])
-    (match-define (list coef b) (thunk))
-    (fitted coef b)))
+    (thunk)))
 
 (define (collinear n)
   (define c (normal-case n 2 9))
@@ -92,9 +96,11 @@
     (test-case (format "~a ~a" solver alpha)
       (define ours (collinear-outcome solver alpha))
       (check-pred refused? ours)
-      (check-equal? ours
-                    (outcome (lambda ()
-                               (case-fit (collinear 60) 'float32 #:algorithm (lstsq-algorithm solver))))))))
+      (check-regexp-match #rx"X may have collinear columns$" (refused-message ours))
+      (check-equal?
+       ours
+       (outcome (lambda ()
+                  (case-fit (collinear 60) 'float32 #:algorithm (lstsq-algorithm solver))))))))
 
 (test-gpu "two identical fits are bitwise equal (B7)"
   (for ([spec (in-list (cartesian-product (list (normal-case 200 7 1 #:weighted? #t)

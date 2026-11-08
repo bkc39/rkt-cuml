@@ -1212,20 +1212,30 @@ Follow-ups are GitHub issues.
   `define-estimator` with `#:needs-y`, the resources setting, predict and the
   weighted `r2-score` scorer from a predict `/who` (`r2-scorer`);
   `linear-regression` and `ridge` are each one `define-regressor`.
-- **L2-i.** Every fit whose staged α′ ≤ u·σ′²_max runs `linear-regression-fit`'s
-  path (L2-c), u = 2^−24 (float32) or 2^−53 (float64) and σ′²_max the largest
-  staged weighted (centred with an intercept) column spread², from the planner's
-  per-column spread: the penalty is below rounding there, and the solver's
-  noise eigenvalues of rank-deficient X would pass for α′ (review M1: float32
-  'eig on x₃ = x₁ + x₂ returned min-norm + 1.72·(1, 1, −1) at α = 1e-40).
-  The route reuses ridge's checked inputs, staged weights and plan, so it costs
-  no second scan, and gives L1's bits and L1's refusals. The ratio α′/σ′²_max
-  equals α/σ²_max, so the threshold is u·max_j Σw(x_j − x̄_j)² in the caller's
-  units; tests check u·σ²/2 (L1's bits) and 2u·σ² (the ridge solve, R1).
-  The threshold is against the widest column, so a column of much smaller
-  spread loses its shrinkage: on Q2's float32 columns at 2^−13, 1, 2^13, 1
-  (u·σ²_max ≈ 151) α = 1 now returns the least-squares fit, 4121·max|c*| from
-  the ridge solution that 'svd solved to 4.6e−5 before the route; Q2 moved to
-  α = 1024. On p3's collinear X 'eig refuses as L1 does, but 'svd-qr accepts a
-  least-squares solution with a 33798·(1, 1, −1) null-space part, which 'svd
-  therefore returns (L1's own behaviour; open with the owner).
+- **L2-i.** Every fit whose staged α′ ≤ u·σ′²_min runs `linear-regression-fit`'s
+  path (L2-c), u = 2^−24 (float32) or 2^−53 (float64) and σ′²_min the smallest
+  staged weighted (centred with an intercept) spread² among the kept columns,
+  from the planner's per-column spread, compared as α′/σ′/σ′ so it cannot
+  overflow: the penalty is below rounding on every column's diagonal there, and
+  the solver's noise eigenvalues of rank-deficient X would pass for α′ (review
+  M1: float32 'eig on x₃ = x₁ + x₂ returned min-norm + 1.72·(1, 1, −1) at
+  α = 1e-40). The route reuses ridge's checked inputs, staged weights and plan,
+  so it costs no second scan, and gives L1's bits and L1's refusals. α′/σ′²_min
+  equals α/σ²_min, so the threshold is u·min_j Σw(x_j − x̄_j)² in the caller's
+  units; tests check u·σ²_min/2 (L1's bits) and 2u·σ²_min (the ridge solve, R1).
+  Measured (`normal-case 200 7 0`, `200 7 1` weighted, `20 2 0`, and 200 rows
+  with columns at 2^−13 … 2^13; both dtypes, solvers and intercepts): at 1/4
+  and 1/2 of the threshold 64 of 64 fits are L1's bits; at 2 and 4, 64 of 64
+  are not, and on the mixed-scale X 12 of 16 of those are refused (float32,
+  and float64 'eig): an α just past rounding on the narrowest column is
+  ill-conditioned there, where α = 0 fits. Above u·σ²_max the route never
+  applies. Between u·σ²_min and u·σ²_max, on mixed-scale X with exactly
+  collinear wide columns (x₁ at 2^−13 or 1, x₂ at 1, x₃, x₄, x₃ + x₄ at 2^13),
+  'eig is refused at every α measured, and 'svd is accepted with a null-space
+  error the gradient cosine cannot see: up to 4.3e4·max|c*| (float64, α =
+  2u·σ²_min) and 4.7·max|c*| (float32, columns at 1). Every accepted fit is
+  within u·κ_α (at most 1.8·u·κ_α, κ_α = (λ_max + α)/α ≥ 1/u there), so the
+  Scribble's accuracy sentence covers it; there the bound says nothing.
+  Q2's float32 columns at 2^−13, 1, 2^13, 1 at α = 1 are past the threshold:
+  'eig is refused and 'svd is within 2^−10·max|c*| of the ridge solution. On
+  p3's collinear X both solvers are refused, as L1's 'eig and 'svd refuse it.

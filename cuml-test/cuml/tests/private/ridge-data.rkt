@@ -28,7 +28,6 @@
 (provide alpha-ratios
          check-ridge-laws
          lstsq-algorithm
-         narrowest-spread
          norm2
          ridge-case-fit
          ridge-case-result
