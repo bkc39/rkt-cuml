@@ -29,6 +29,8 @@ using cumlrkt::test::ridge_into;
 
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
+constexpr double one_column_largest = 1.5;
+constexpr int64_t one_column_rows = 10;
 
 staging planned(std::vector<int> exponent, std::vector<double> largest,
                 std::vector<double> spread = {}) {
@@ -68,7 +70,8 @@ void expect_staged(const staged_case& c,
 template <typename T>
 std::string scale_refusal(double alpha) {
   try {
-    ridge_scale_of<T>(planned({0}, {1.5}), 10, {alpha, 0});
+    ridge_scale_of<T>(planned({0}, {one_column_largest}), one_column_rows,
+                      {alpha, 0});
   } catch (const cumlrkt::logic_error& e) {
     return e.what();
   }
@@ -130,9 +133,11 @@ TEST(RidgeStaging, SharesOneExponentAndScalesAlphaByItsSquare) {
 }
 
 TEST(RidgeStaging, AnAlphaFarPastTheSpreadKeepsTheWidestColumnAtTheFloor) {
-  expect_staged<float>({{0}, {1.5}, 0x1p100, 0, 10, 8, 0x1p116, false});
-  expect_staged<double>(
-      {{0}, {1.5}, 0x1p500, -2, 10, 32, std::ldexp(0x1p500, 62), false});
+  const staged_case floored_f32{{0}, {1.5}, 0x1p100, 0, 10, 8, 0x1p116, false};
+  expect_staged<float>(floored_f32);
+  const staged_case floored_f64{
+      {0}, {1.5}, 0x1p500, -2, 10, 32, std::ldexp(0x1p500, 62), false};
+  expect_staged<double>(floored_f64);
   EXPECT_EQ(scale_refusal<float>(0x1p120),
             "alpha: expected at most 5.192296549049818e+33 for this X in "
             "float32, got 1.329227995784916e+36");
