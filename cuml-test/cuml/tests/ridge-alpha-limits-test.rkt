@@ -127,6 +127,23 @@
                          #:solver s
                          #:fit-intercept fi))))))
 
+(test-gpu "an alpha whose staged value overflows is refused for a constant y too"
+  (define c (normal-case 200 7 0))
+  (define constant (lcase "constant y" (lcase-X c) (map (lambda (_) 5/2) (lcase-y c)) #f))
+  (for* ([dt (in-list dtypes)]
+         [s (in-list solvers)]
+         [fi (in-list '(#t #f))])
+    (test-case (format "~a ~a ~a" dt s fi)
+      (check-cuml-error
+       'logic
+       #rx"^ridge-fit: alpha: expected at most [0-9.e+]+ for this X in float(32|64), got "
+       (lambda ()
+         (ridge-case-fit constant
+                         dt
+                         #:alpha (* (expt 2 (refused-ratio dt)) (widest-spread c fi))
+                         #:solver s
+                         #:fit-intercept fi))))))
+
 (define kept-one
   (let ([c (normal-case 200 1 3 #:weighted? #t)])
     (lcase "one of three columns kept"
