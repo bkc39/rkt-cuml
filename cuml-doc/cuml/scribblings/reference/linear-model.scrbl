@@ -177,7 +177,13 @@ The fit is refused when the solve misses the ridge solution by more than
 when X is ill-conditioned for @racket[alpha] (float32 @racket['eig] on columns of
 very different scales); @racket['svd] or float64 often fits. It is refused too when
 @racket[alpha] scaled with X passes the dtype's range. Coefficients are accurate to
-about u·(σ@subscript{max}² + @racket[alpha])/(σ@subscript{min}² + @racket[alpha]).
+about u·(σ@subscript{max}² + @racket[alpha])/(σ@subscript{min}² + @racket[alpha]),
+σ² being the eigenvalues of XᵀWX (X centred with @racket[fit-intercept]). Where
+@racket[alpha] is under u times the widest column's spread and X has (nearly)
+collinear columns, that bound is at least 1: @racket['eig] refuses the fits it
+does not solve there, and @racket['svd] may return one wrong in the near-null
+directions by many times the coefficients' size, which the gradient check
+cannot see.
 
 Weighted fits with an intercept can differ in the last bits between runs from
 about 2000 rows, as in Python cuML; unweighted fits, and fits without an

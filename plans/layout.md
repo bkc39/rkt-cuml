@@ -1176,11 +1176,20 @@ Follow-ups are GitHub issues.
   (`alpha: expected at most {bound} for this X in {dtype}`), measured from
   α/σ²_max = 2^111 to 2^112 (float32) and 2^959 to 2^960 (float64) on
   `normal-case 200 3 0` and `200 7 1` weighted; up to the edge the error equals
-  the error at 2^90 (float32) or 2^200 (float64). A y with correlation 2^−4 to
-  2^−20 to X fits at 2^110 (float32) as at 2^100, with error ≈ u/corr from y's
-  rounding: no silent loss from subnormal staged coefficients was found. y keeps L1's power
-  of two, which cancels from α′. Scaling X by 2^a with alpha by 4^a, y by 2^c,
-  or the weights and alpha by 4^m moves the fit exactly (laws B2–B4).
+  the error at 2^90 (float32) or 2^200 (float64). Past the floor the staged
+  coefficients b′ ≈ X′ᵀy′/α′ shrink with α′ and can go subnormal; what that
+  costs is below u·max|c|, so R1 does not see it. With y's correlation to X at
+  2^−20 to 2^−30 (float32) or 2^−40 to 2^−60 (float64), on dtype-rounded data,
+  the fit is off by 1.6e-2 to 7.7 (float32) and 7e-6 to 8.3 (float64) of
+  max|c*| (review r1 H-b), but rel·corr/u stays within 0.05 to 0.3 at every
+  α from α/σ²_max = 1 (no floor) to the edge: the error is the u/corr
+  cancellation in X′ᵀy′, which R1's 128·u·κ bound leaves out, not the floor.
+  A column 2^−40 narrower than the widest (float32, corr 1) loses its own
+  coefficient past α/σ²_max ≈ 2^100 (relative error 0.11 there, 1 at 2^110),
+  an absolute error under 2^−40·max|c|; float64 keeps it to 3e-14 up to the
+  edge. y keeps L1's power of two, which cancels from α′. Scaling X by 2^a
+  with alpha by 4^a, y by 2^c, or the weights and alpha by 4^m moves the fit
+  exactly (laws B2–B4).
 - **L2-b.** The keyword is `#:solver` (`'auto`, `'eig`, `'svd`), Python
   cuML's and sklearn's name; `'auto` is `'eig`; `'lsmr` is not bound.
 - **L2-c.** alpha 0 is L2-i's case α′ = 0: `linear-regression-fit`'s path,
@@ -1215,8 +1224,15 @@ Follow-ups are GitHub issues.
 - **L2-i.** Every fit whose staged α′ ≤ u·σ′²_min runs `linear-regression-fit`'s
   path (L2-c), u = 2^−24 (float32) or 2^−53 (float64) and σ′²_min the smallest
   staged weighted (centred with an intercept) spread² among the kept columns,
-  from the planner's per-column spread, compared as α′/σ′/σ′ so it cannot
-  overflow: the penalty is below rounding on every column's diagonal there, and
+  from the planner's per-column spread. α = 0 routes before any arithmetic;
+  otherwise α′ ≤ 2^−digits·σ′_j² is decided per kept column from frexp
+  mantissas and integer exponents (α taken exactly, not as the rounded α′),
+  so no quotient can be 0/0 or ∞/∞ and no staged spread can underflow:
+  dividing by an ldexp'd σ′_min, which is 0 on float64 columns 2^∓950 apart or
+  on a column varying only on a row of weight 2^−1074, made α = 0 a NaN
+  comparison and sent it down the ridge path, where those columns got 0
+  (review r1 H-a; B1 rows on both). A kept column whose spread is 0 is never
+  negligible against α > 0. The penalty is below rounding on every column's diagonal there, and
   the solver's noise eigenvalues of rank-deficient X would pass for α′ (review
   M1: float32 'eig on x₃ = x₁ + x₂ returned min-norm + 1.72·(1, 1, −1) at
   α = 1e-40). The route reuses ridge's checked inputs, staged weights and plan,
@@ -1235,7 +1251,18 @@ Follow-ups are GitHub issues.
   error the gradient cosine cannot see: up to 4.3e4·max|c*| (float64, α =
   2u·σ²_min) and 4.7·max|c*| (float32, columns at 1). Every accepted fit is
   within u·κ_α (at most 1.8·u·κ_α, κ_α = (λ_max + α)/α ≥ 1/u there), so the
-  Scribble's accuracy sentence covers it; there the bound says nothing.
+  bound holds but says nothing, and the Scribble discloses the window.
+  Review r1's detector 2, the condition of the column-equilibrated Gram
+  D⁻¹X′ᵀWX′D⁻¹ + α′D⁻² (D the staged spreads) run only in the window, is
+  not adopted: measured exactly (`.scratch` probe p10, the window rows above
+  and Q2, no intercept), u·κ is ≥ 8 on every window row, but 0.10 on Q2
+  (float32), over any 2^−10 threshold, and 1679 on Q2 with x₁ at 2^−20, a fit
+  'svd solves to 7.1e-5: a column damped far past its spread by α′ inflates
+  the largest eigenvalue, so it refuses good fits. Equilibrating
+  X′ᵀWX′ + α′I by √(σ′_j² + α′) instead (unit diagonal) gives u·κ ≥ 8 on
+  every window row, 8.3e-8 on both Q2 rows (float32), 1.5e-16 (float64) and
+  ≤ 2.9e-10 on the nearly collinear eps rows: it separates them, but is not
+  the ruled detector; an owner decision.
   Q2's float32 columns at 2^−13, 1, 2^13, 1 at α = 1 are past the threshold:
   'eig is refused and 'svd is within 2^−10·max|c*| of the ridge solution. On
   p3's collinear X both solvers are refused, as L1's 'eig and 'svd refuse it.
