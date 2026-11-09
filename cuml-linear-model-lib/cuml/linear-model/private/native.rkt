@@ -10,7 +10,8 @@
          racket/runtime-path
          (only-in raft/unsafe define-job))
 
-(provide cuml-linear-model-gemm-predict-job
+(provide cuml-linear-model-elastic-net-fit-job
+         cuml-linear-model-gemm-predict-job
          cuml-linear-model-linear-regression-fit-job
          cuml-linear-model-ridge-fit-job
          libcuml-version)
@@ -31,6 +32,23 @@
             library
             "cuml_linear_model_ridge_fit_job"
             (handle view view view deposit _double _int32 _int32 (out _double))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-elastic-net-fit-job
+            library
+            "cuml_linear_model_elastic_net_fit_job"
+            (handle view
+                    view
+                    view
+                    deposit
+                    _double
+                    _double
+                    _int32
+                    _int32
+                    _double
+                    _int32
+                    (out _double)
+                    (out _int32))
             #:exn exn:fail:cuml)
 
 (define-job cuml-linear-model-gemm-predict-job

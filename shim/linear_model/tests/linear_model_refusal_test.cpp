@@ -191,4 +191,71 @@ TEST(LinearRegression, FitsTheTwoColumnDocsExampleUnderEveryAlgorithm) {
   }
 }
 
+using cumlrkt::test::cd_settings;
+using cumlrkt::test::elastic_net_into;
+
+struct cd_refusal {
+  cd_settings settings;
+  const char* message;
+};
+
+const std::vector<cd_refusal> cd_refusals{
+    {{.selection = 2}, "selection: expected cyclic or random"},
+    {{.alpha = -1, .selection = 2}, "selection: expected cyclic or random"},
+    {{.fit_intercept = 2}, "fit-intercept: expected #t or #f"},
+    {{.alpha = -1, .fit_intercept = 2}, "fit-intercept: expected #t or #f"},
+    {{.alpha = -1}, "alpha: expected a finite value at least 0, got -1"},
+    {{.alpha = nan}, "alpha: expected a finite value at least 0, got nan"},
+    {{.alpha = inf}, "alpha: expected a finite value at least 0, got inf"},
+    {{.alpha = -1, .l1_ratio = 2},
+     "alpha: expected a finite value at least 0, got -1"},
+    {{.l1_ratio = -0.5},
+     "l1-ratio: expected a finite value from 0 to 1, got -0.5"},
+    {{.l1_ratio = 1.5},
+     "l1-ratio: expected a finite value from 0 to 1, got 1.5"},
+    {{.l1_ratio = nan},
+     "l1-ratio: expected a finite value from 0 to 1, got nan"},
+    {{.l1_ratio = 2, .max_iter = 0},
+     "l1-ratio: expected a finite value from 0 to 1, got 2"},
+    {{.max_iter = 0}, "max-iter: expected at least 1, got 0"},
+    {{.max_iter = -1}, "max-iter: expected at least 1, got -1"},
+    {{.max_iter = 0, .tol = -1}, "max-iter: expected at least 1, got 0"},
+    {{.tol = -1}, "tol: expected a finite value of at least 0, got -1"},
+    {{.tol = nan}, "tol: expected a finite value of at least 0, got nan"},
+    {{.tol = inf}, "tol: expected a finite value of at least 0, got inf"},
+};
+
+TEST(ElasticNetRefusal, CodesAreRefusedAfterTheViewsAndBeforeTheValues) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> x(res, grid, {5, 3});
+  const filled<double> y(res, targets, {5});
+  const filled<double> x_nan(res, with(grid, 10, nan), {5, 3});
+  const filled<float> y32(res, {1, 2, 3, 4, 5}, {5});
+  for (const cd_refusal& r : cd_refusals) {
+    fitted f(res);
+    EXPECT_EQ(elastic_net_into(res, f, x.view(), y.view(), r.settings),
+              r.message);
+    EXPECT_EQ(cuml_linear_model_last_error_kind(), RR_ERROR_LOGIC) << r.message;
+    expect_untouched(f.out);
+    fitted g(res);
+    EXPECT_EQ(elastic_net_into(res, g, x_nan.view(), y.view(), r.settings),
+              r.message);
+    fitted v(res);
+    EXPECT_EQ(elastic_net_into(res, v, x.view(), y32.view(), r.settings),
+              "y: expected float64, got float32");
+  }
+}
+
+TEST(ElasticNetRefusal, ZeroToleranceAndZeroAlphaAreAccepted) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> x(res, grid, {5, 3});
+  const filled<double> y(res, targets, {5});
+  fitted f(res);
+  EXPECT_EQ(elastic_net_into(res, f, x.view(), y.view(),
+                             {.alpha = 0, .max_iter = 3, .tol = 0}),
+            "accepted");
+}
+
 }  // namespace

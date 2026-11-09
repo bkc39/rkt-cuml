@@ -42,6 +42,15 @@ struct prepared_fit {
 };
 
 template <typename T>
+fit_result<T> nothing_to_solve(const raft::handle_t& handle,
+                               const fit_inputs<T>& in, const fit_plan& plan,
+                               bool constant_y);
+
+template <typename T>
+double deposit_fit(const raft::handle_t& handle, fit_result<T> r,
+                   rr_deposit* out);
+
+template <typename T>
 prepared_fit<T> prepare_fit(const raft::handle_t& handle,
                             const checked_fit<T>& checked,
                             int32_t fit_intercept);

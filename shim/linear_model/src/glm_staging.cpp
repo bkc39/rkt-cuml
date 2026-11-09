@@ -99,6 +99,8 @@ std::string algorithm_name(int algorithm) {
       return "eig";
     case CUML_LINEAR_MODEL_OLS_QR:
       return "qr";
+    case cd_algorithm:
+      return "cd";
     default:
       return "svd-qr";
   }

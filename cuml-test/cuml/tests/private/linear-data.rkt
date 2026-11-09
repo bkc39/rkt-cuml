@@ -22,8 +22,10 @@
          case-result
          check-law
          columns-of
+         dot
          dtypes
          dyadic
+         eigen-range
          exact-fit
          fit-gap
          fit-of
@@ -37,6 +39,7 @@
          law-cases
          reach-fixtures
          max-abs
+         min-norm-solve
          normal-case
          on-matrix
          on-vector
@@ -52,6 +55,7 @@
          scaled-case
          scaled-columns
          unit-roundoff
+         weighted-gram
          weighted-spread
          weights-or-ones
          zeroed)

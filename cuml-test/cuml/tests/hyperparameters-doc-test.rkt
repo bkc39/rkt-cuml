@@ -3,8 +3,10 @@
 (require (only-in cuml
                   agglomerative-clustering
                   dbscan
+                  elastic-net
                   hdbscan
                   kmeans
+                  lasso
                   linear-regression
                   pca
                   ridge
@@ -34,6 +36,10 @@
                   tsvd-fit-transform
                   tsvd-params)
          (only-in cuml/linear-model
+                  elastic-net-fit
+                  elastic-net-params
+                  lasso-fit
+                  lasso-params
                   linear-regression-fit
                   linear-regression-params
                   ridge-fit
@@ -171,6 +177,10 @@
 (define linear-regression-keys '(algorithm fit-intercept))
 
 (define ridge-keys '(alpha solver fit-intercept))
+
+(define elastic-net-keys '(alpha l1-ratio fit-intercept max-iter tol selection))
+
+(define lasso-keys '(alpha fit-intercept max-iter tol selection))
 
 (define spectral-embedding-keys
   '(n-components n-neighbors norm-laplacian drop-first random-state affinity))
@@ -382,7 +392,33 @@
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '()
                                '#:sample-weight)
-                         (estimator-entry 'ridge ridge)))))
+                         (estimator-entry 'ridge ridge)))
+   (table-bindings elastic-net-params
+                   elastic-net-keys
+                   (list (list 'elastic-net-params elastic-net-params '() (list (argument #f 'base #f)) '() '())
+                         (list 'elastic-net-fit
+                               elastic-net-fit
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none) (argument #f 'y 'none))
+                               (list (argument '#:sample-weight 'sample-weight #f)
+                                     (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '()
+                               '#:sample-weight)
+                         (estimator-entry 'elastic-net elastic-net)))
+   (table-bindings lasso-params
+                   lasso-keys
+                   (list (list 'lasso-params lasso-params '() (list (argument #f 'base #f)) '() '())
+                         (list 'lasso-fit
+                               lasso-fit
+                               '(#:params #:resources)
+                               (list (argument #f 'X 'none) (argument #f 'y 'none))
+                               (list (argument '#:sample-weight 'sample-weight #f)
+                                     (argument '#:params 'params #f)
+                                     (argument '#:resources 'resources '(current-device-resources)))
+                               '()
+                               '#:sample-weight)
+                         (estimator-entry 'lasso lasso)))))
 
 (define-namespace-anchor anchor)
 

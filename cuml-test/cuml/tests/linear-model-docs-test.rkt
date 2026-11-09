@@ -1,7 +1,12 @@
 #lang racket/base
 
-(require (only-in cuml fit linear-regression ridge score)
+(require (only-in cuml elastic-net fit lasso linear-regression ridge score)
          (only-in cuml/linear-model
+                  elastic-net-fit
+                  elastic-net-result-coef
+                  lasso-fit
+                  lasso-result-coef
+                  lasso-result-n-iter
                   linear-regression-fit
                   linear-regression-predict
                   linear-regression-result-coef
@@ -69,3 +74,28 @@
                     (lambda () (ridge-fit X y #:solver 'lsmr)))
   (check-equal? (~> (ridge #:alpha 0.5) (fit X y) (score X y) (real->decimal-string 6)) "0.973935")
   (check-cuml-error 'logic "fit: ridge needs y" (lambda () (fit (ridge) X))))
+
+(test-gpu "the elastic-net and lasso examples print what the manual shows"
+  (define X (matrix '((1 1) (1 2) (2 2) (2 3))))
+  (define y (vector '(6 8 9 11)))
+  (define fitted-l (lasso-fit X y #:alpha 0.1))
+  (check-equal? (~> fitted-l lasso-result-coef device-vector->list (decimals 6 _))
+                '("0.601953" "1.999023"))
+  (check-equal? (lasso-result-n-iter fitted-l) 11)
+  (check-equal? (~> (elastic-net-fit X y #:alpha 0.1 #:l1-ratio 0.5)
+                    elastic-net-result-coef
+                    device-vector->list
+                    (decimals 6 _))
+                '("0.829906" "1.804588"))
+  (check-equal? (~> (elastic-net-fit X y #:alpha 3) elastic-net-result-coef device-vector->list)
+                '(0.0 0.0))
+  (check-cuml-error
+   'logic
+   #rx"^lasso-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol 0.001 and KKT residual "
+   (lambda () (lasso-fit (matrix '((1e5 1e5) (1e5 2e5) (2e5 2e5) (2e5 3e5))) y #:alpha 1e4)))
+  (check-cuml-error 'logic
+                    "elastic-net-fit: l1-ratio: expected a finite value from 0 to 1, got 1.5"
+                    (lambda () (elastic-net-fit X y #:l1-ratio 1.5)))
+  (check-equal? (~> (elastic-net #:alpha 0.1) (fit X y) (score X y) (real->decimal-string 6))
+                "SCORE")
+  (check-cuml-error 'logic "fit: lasso needs y" (lambda () (fit (lasso) X))))

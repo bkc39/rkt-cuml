@@ -13,6 +13,7 @@
          cuml/table
          "private/agglomerative-estimator.rkt"
          "private/dbscan-estimator.rkt"
+         "private/elastic-net-estimator.rkt"
          "private/hdbscan-estimator.rkt"
          "private/kmeans-estimator.rkt"
          "private/linear-regression-estimator.rkt"
@@ -36,6 +37,7 @@
                        cuml/table
                        "private/agglomerative-estimator.rkt"
                        "private/dbscan-estimator.rkt"
+                       "private/elastic-net-estimator.rkt"
                        "private/hdbscan-estimator.rkt"
                        "private/kmeans-estimator.rkt"
                        "private/linear-regression-estimator.rkt"

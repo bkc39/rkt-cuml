@@ -1,0 +1,249 @@
+#include "cd_staging.hpp"
+
+#include <gtest/gtest.h>
+
+#include <array>
+#include <cmath>
+#include <cstdint>
+#include <limits>
+#include <raft/core/handle.hpp>
+#include <raft/core/resource/cuda_stream.hpp>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "cd_device.hpp"
+#include "cumlrkt/support.hpp"
+#include "glm_staging.hpp"
+#include "glm_staging_device.hpp"
+#include "linear_model_fixture.hpp"
+#include "raftrkt/view.hpp"
+#include "residual_check.hpp"
+
+namespace {
+
+using cumlrkt::matrix;
+using cumlrkt::glm::absolute_stop;
+using cumlrkt::glm::cd_centres;
+using cumlrkt::glm::cd_epochs;
+using cumlrkt::glm::cd_scale_of;
+using cumlrkt::glm::cd_shared_cap;
+using cumlrkt::glm::centre;
+using cumlrkt::glm::kkt_of;
+using cumlrkt::glm::kkt_terms;
+using cumlrkt::glm::moment;
+using cumlrkt::glm::require_kkt;
+using cumlrkt::glm::residual_terms;
+using cumlrkt::glm::row_selection;
+using cumlrkt::glm::scaled_sum;
+using cumlrkt::glm::stage_weighted;
+using cumlrkt::glm::staging;
+using cumlrkt::glm::to_host;
+using cumlrkt::test::filled;
+using cumlrkt::test::resources;
+
+constexpr int64_t rows = 100;
+
+struct planned_case {
+  std::vector<int> exponent;
+  std::vector<double> largest;
+  int y_exponent;
+};
+
+staging planned(const planned_case& c) {
+  staging s;
+  s.column_exponent = c.exponent;
+  s.largest = c.largest;
+  s.y_exponent = c.y_exponent;
+  for (std::size_t j = 0; j < s.largest.size(); ++j) {
+    s.kept.push_back(static_cast<int64_t>(j));
+  }
+  return s;
+}
+
+struct cap_case {
+  const char* binding;
+  planned_case plan;
+  int cap;
+};
+
+const std::array<cap_case, 3> float_caps{{
+    {"(a) the columns' squared spread", {{0}, {1.5}, 10}, 57},
+    {"(b) the cross products", {{0}, {1.5}, -10}, 52},
+    {"(c) m times y", {{0}, {0x1p-40}, -100}, 17},
+}};
+
+TEST(CdStaging, EachOverflowCapBindsInTurn) {
+  for (const cap_case& c : float_caps) {
+    EXPECT_EQ(cd_shared_cap<float>(planned(c.plan), rows), c.cap) << c.binding;
+  }
+}
+
+TEST(CdStaging, TheColumnCapIsNeverBelowCapA) {
+  const std::array<double, 3> largest{0x1p-60, 1.5, 0x1p60};
+  for (const double l : largest) {
+    const staging s = planned({{0}, {l}, 0});
+    const int columns = cumlrkt::unit_exponent(l) +
+                        cumlrkt::glm::column_reach<float>(rows);
+    EXPECT_GT(columns, cd_shared_cap<float>(s, rows)) << l;
+  }
+}
+
+struct scale_case {
+  planned_case plan;
+  double alpha;
+  int shared;
+};
+
+const std::array<scale_case, 3> float_scales{{
+    {{{2, 5}, {1.5, 1.5}, 10}, 0.75, 5},
+    {{{19, 20}, {0x1p-40, 0x1p-40}, -100}, 0.75, 17},
+    {{{16, 21}, {0x1p-40, 0x1p-40}, -100}, 0.75, 17},
+}};
+
+TEST(CdStaging, OneExponentPutsTheNarrowestColumnAtUnitSpreadUnderTheCaps) {
+  for (const scale_case& c : float_scales) {
+    const auto r = cd_scale_of<float>(planned(c.plan), rows, c.alpha);
+    EXPECT_EQ(r.shared, c.shared);
+    EXPECT_EQ(r.alpha, static_cast<float>(std::ldexp(c.alpha, 2 * c.shared)));
+  }
+}
+
+template <typename F>
+std::string refusal_of(F f) {
+  try {
+    f();
+  } catch (const cumlrkt::logic_error& e) {
+    return e.what();
+  }
+  return "accepted";
+}
+
+TEST(CdStaging, AColumnMoreThanFourBitsTooNarrowIsRefused) {
+  const staging s = planned({{19, 22}, {0x1p-40, 0x1p-40}, -100});
+  EXPECT_EQ(refusal_of([&] { cd_scale_of<float>(s, rows, 1.0); }),
+            "X: column 1 is too narrow beside the other columns and y for "
+            "float32 coordinate descent");
+}
+
+TEST(CdStaging, AnAlphaWhoseRowMultipleOverflowsIsRefused) {
+  const staging s = planned({{0}, {1.5}, 0});
+  const std::string got =
+      refusal_of([&] { cd_scale_of<float>(s, rows, 1e38); });
+  EXPECT_EQ(got.rfind("alpha: expected at most ", 0), 0U) << got;
+  EXPECT_NE(got.find(" for this X in float32, got 1e+38"), std::string::npos)
+      << got;
+  EXPECT_EQ(refusal_of([&] { cd_scale_of<float>(s, rows, 1e35); }),
+            "accepted");
+}
+
+scaled_sum sum(double value, int exponent) {
+  return {value, exponent};
+}
+
+residual_terms hand_built_epoch() {
+  return {{moment{sum(1, 2), sum(1.53125, 1)},
+           moment{sum(1, 0), sum(1.25, 1)},
+           moment{sum(0, 0), sum(1.5625, 6)}},
+          {1, 1, 0},
+          sum(1, 4)};
+}
+
+const std::vector<double> epoch_coef{1, 0, 0};
+constexpr double epoch_weight = 4;
+constexpr double epoch_tol = 0.1;
+constexpr double epoch_l1 = 0.5;
+constexpr double epoch_l2 = 0.25;
+constexpr int epoch_iters = 4;
+constexpr int64_t epoch_rows = 9;
+constexpr double float_roundoff = 0x1p-24;
+
+TEST(CdCheck, KBAndAOnAHandBuiltEpoch) {
+  const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
+  const kkt_terms k = kkt_of(hand_built_epoch(), epoch_coef, epoch_weight,
+                             {epoch_l1, epoch_l2}, epochs);
+  EXPECT_DOUBLE_EQ(k.residual, 0.125);
+  EXPECT_DOUBLE_EQ(k.bound, epoch_tol * 0.75);
+  EXPECT_DOUBLE_EQ(k.allowance, float_roundoff * 1.75 * 6);
+  const std::string got = refusal_of([&] { require_kkt(k, epochs); });
+  EXPECT_EQ(got.rfind("X: coordinate descent stopped after 4 epochs with every "
+                      "coefficient under tol 0.1 and KKT residual 0.125 > ",
+                      0),
+            0U)
+      << got;
+  EXPECT_NE(got.find("; tol is absolute in the coefficients' units, so scale "
+                     "y up or X down"),
+            std::string::npos);
+}
+
+TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
+  const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
+  EXPECT_EQ(refusal_of([&] { require_kkt({0.075, 0.075, 0}, epochs); }),
+            "accepted");
+  EXPECT_NE(refusal_of([&] {
+              require_kkt({std::numeric_limits<double>::quiet_NaN(), 1, 1},
+                          epochs);
+            }),
+            "accepted");
+}
+
+struct stop_case {
+  int n_iter;
+  int max_iter;
+  double largest;
+  bool checked;
+};
+
+const std::array<stop_case, 5> stops{{
+    {3, 10, 1e-4, true},
+    {10, 10, 1e-4, false},
+    {3, 10, 0.0, false},
+    {3, 10, 1e-3, false},
+    {3, 10, 1.0, false},
+}};
+
+TEST(CdCheck, OnlyStopsTheAbsoluteTestCouldMakeAreChecked) {
+  for (const stop_case& c : stops) {
+    EXPECT_EQ(absolute_stop(c.n_iter, c.max_iter, c.largest, 1e-3), c.checked)
+        << c.n_iter << " " << c.largest;
+  }
+}
+
+constexpr int64_t dyadic_rows = 64;
+constexpr std::array<std::pair<float, int64_t>, 3> dyadic_weights{
+    {{1.0F, 32}, {4.0F, 24}, {16.0F, 8}}};
+constexpr std::array<float, 3> dyadic_roots{0.5F, 1.0F, 2.0F};
+
+TEST(CdWeighting, RootWeightsAreExactOnTheDyadicCase) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  std::vector<float> w;
+  std::vector<float> expected;
+  for (std::size_t g = 0; g < dyadic_weights.size(); ++g) {
+    for (int64_t i = 0; i < dyadic_weights[g].second; ++i) {
+      w.push_back(dyadic_weights[g].first);
+      expected.push_back(dyadic_roots[g]);
+    }
+  }
+  const std::vector<float> ones(dyadic_rows, 1.0F);
+  const filled<float> x(res, ones, {dyadic_rows, 1});
+  const filled<float> y(res, ones, {dyadic_rows});
+  const filled<float> weights(res, w, {dyadic_rows});
+  const raft::handle_t& h = raftrkt::handle_of(res.handle);
+  const auto stream = raft::resource::get_cuda_stream(h);
+  const staging s = planned({{0}, {1.0}, 0});
+  const cd_centres none{{0.0}, {0.0}, centre{0.0, 0.0}};
+  const auto p = stage_weighted(
+      h, matrix<float, int64_t>{static_cast<float*>(x.array.view.data),
+                                dyadic_rows, 1},
+      static_cast<const float*>(y.array.view.data),
+      static_cast<const float*>(weights.array.view.data),
+      row_selection{nullptr, dyadic_rows}, s, none,
+      cumlrkt::glm::weight_total(
+          static_cast<const float*>(weights.array.view.data),
+          row_selection{nullptr, dyadic_rows}, stream));
+  EXPECT_EQ(to_host(p.x, stream), expected);
+  EXPECT_EQ(to_host(p.y, stream), expected);
+}
+
+}  // namespace

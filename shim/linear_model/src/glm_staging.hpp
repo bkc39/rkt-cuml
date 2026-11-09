@@ -35,12 +35,14 @@ struct row_selection {
   int64_t count;
 };
 
-enum class glm_family : std::uint8_t { ols, ridge };
+enum class glm_family : std::uint8_t { ols, ridge, cd };
 
 struct glm_solver {
   glm_family family;
   int algorithm;
 };
+
+inline constexpr int cd_algorithm = -1;
 
 int even_floor(int x);
 
