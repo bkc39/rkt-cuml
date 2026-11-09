@@ -44,7 +44,8 @@ int shared_cap(const staging& s, int64_t n) {
 }
 
 template <typename T>
-bool negligible_alpha(double alpha, int power, const staging& s, int shared) {
+bool negligible_alpha(const staging& s, int shared, ridge_penalty penalty) {
+  const auto [alpha, weight_power] = penalty;
   if (alpha == 0) {
     return true;
   }
@@ -57,7 +58,8 @@ bool negligible_alpha(double alpha, int power, const staging& s, int shared) {
         spread_power + shared - unit_exponent(s.largest[j]);
     return spread_mantissa > 0 &&
            std::ldexp(alpha_mantissa / spread_mantissa / spread_mantissa,
-                      alpha_power + power - (2 * staged_exponent)) <=
+                      alpha_power + (2 * shared) + weight_power -
+                          (2 * staged_exponent)) <=
                std::ldexp(1.0, -std::numeric_limits<T>::digits);
   });
 }
@@ -88,9 +90,8 @@ ridge_scale<T> ridge_scale_of(const staging& s, int64_t n,
   const int shared = std::min({spread + ridge_headroom<T>, shared_cap<T>(s, n),
                                std::max(alpha_exponent<T>(alpha, weight_power),
                                         spread + ridge_floor<T>)});
-  const int power = (2 * shared) + weight_power;
-  return {shared, staged_alpha<T>(alpha, power),
-          negligible_alpha<T>(alpha, power, s, shared)};
+  return {shared, staged_alpha<T>(alpha, (2 * shared) + weight_power),
+          negligible_alpha<T>(s, shared, penalty)};
 }
 
 staging shared_at(staging s, int shared) {
