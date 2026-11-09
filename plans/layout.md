@@ -1362,3 +1362,62 @@ Follow-ups are GitHub issues.
   0.129 to 4.1e-7, and every α′ = 0 cosine (17892) is unchanged bitwise.
   Q2 is unchanged: float32 'eig refused at 0.385 and 0.203, 'svd accepted at
   4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
+
+## Decisions recorded in leg L3 (#89)
+
+Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
+1.8.0); the spec's findings F1–F21 are summarised where they bind.
+
+- **L3-a.** `cdFit` minimises (1/2Σw)Σw(y − b₀ − x·b)² + αρ‖b‖₁ +
+  ½α(1−ρ)‖b‖² (F1: 2.4e-14 against a high-precision host CD over 216
+  configurations). The L1 term scales as 2^(s+t) and the L2 term as 4^s
+  under X·2^s, y·2^t, and `cdFit` takes (α, ρ), so α′ and ρ′ are exact only
+  with t = s. Every kept column and y are staged at one exponent
+  s = min(max_j e_j, s_hi), e_j being L1's capped exponent, with
+  s_hi = min(min_j c_j, ⌊(E−6−β)/2⌋ − p, ⌊(E−6−β−p−q)/2⌋, E−4−β−q)
+  (E the dtype's max_exponent, β = bit_width(m), p and q the ilogb of the
+  largest |x| and |y|; `cd_staging.cpp`). α′ = (T)(α·4^s) from double;
+  coefficients need no shift and the intercept is b′₀·2^−s. Every kept
+  column's staged spread is at least 2^−4, so `cd.cuh:68`'s 1e-5 cut never
+  fires (F4: X·1e-4 at 100 rows gives rel 1.0 raw, 2.3e-4 staged), and
+  within [e_max − 4, s_hi] the fit is raw `cdFit`'s bit for bit (F3: 108/144;
+  the misses are raw fits under the cut). The column cap min_j c_j is never
+  the binding one, since c_j − (a) = 62 (float32) or 510 (float64) for the
+  widest column. A y on its own exponent (F6) removes the absolute stop but
+  puts the L2 term off by up to 6.9e-4.
+- **L3-b.** `cd.cuh:271` stops when every coefficient is under tol in the
+  caller's units, after one epoch (F5: rel 0.12 to 2.08 at X·1e5). The shim
+  refuses such a stop when the subgradient residual K = max_j v_j/(σ_jσ_y)
+  exceeds B + A, B = tol·max|b|·Σσ_k/σ_y the bound a relative stop meets
+  (F10: K/B ≤ 0.615 over 2337 relative stops per dtype) and
+  A = u(1 + max|b|Σσ/σ_y)√(n_iter·m) for rounding (F11). It refused 72/72
+  absolute stops with rel > 1e-2 per dtype (F12). What it promises: a fit
+  returned before max-iter meets the elastic-net optimality conditions to
+  within what the relative test allows. What it does not: the coefficients'
+  error, bounded only by K·σ_y‖σ‖₂/μ (F14; 7.9e-2 of max|b| at correlation
+  0.99 is sound under it), and fits at max-iter (L3-e).
+- **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
+  against lstsq at tol 1e-14).
+- **L3-d.** K is computed only when n-iter < max-iter and
+  0 < max|b′| < tol′, the only stops the absolute test makes.
+- **L3-e.** At max-iter, n-iter = max-iter is reported; no refusal and no
+  warning (Python is silent; K catches only 18/27 bad cutoffs, F13).
+- **L3-f.** No `#:random-state`: `initShuffle` reseeds the generator with 0
+  (`shuffle.h:18`), so `'random` is one fixed order and `srand` changes
+  nothing (F7). L5 should re-probe SGD, which has the same pattern.
+- **L3-g.** `cdFit`'s Σw is not deterministic (F8: 2–6 distinct results at
+  50000 rows), so the shim centres with L1-e's weighted means, scales each
+  row by √(w′·m/W′) and calls `cdFit` unweighted without an intercept (F9:
+  1 distinct result, 2.8e-7 / 4.9e-16 against weighted `cdFit`). The
+  intercept is (ȳ′ − Σ_j v̄′_j b′_j)·2^−s in double, rounded once. Python
+  parity for weighted fits holds on dyadic fixtures only (E11).
+- **L3-h.** Two result structs, `lasso-result` and `elastic-net-result`,
+  each (coef intercept n-iter); one C job, lasso passing l1-ratio 1.
+- **L3-i.** NaN, ±inf, α < 0, l1-ratio ∉ [0, 1], tol < 0 and
+  max-iter ∉ [1, 2³¹−1] are refused; tol 0 and α 0 are accepted.
+- **L3-j.** Python cuML's quasi-Newton solver is not bound; it can come as
+  `#:solver` after L4's QN core.
+- **L3-k.** n-iter is 0 when nothing was solved (constant y or no varying
+  column).
+- **L3-l.** A column more than 4 bits too narrow to stage beside the others
+  and y is refused (V13), where raw cuML would zero it silently.

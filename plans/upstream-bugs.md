@@ -88,6 +88,13 @@ packet (§4) has the detail.
 | L2 #88 | `ridgeSolve` zeroes singular values ≤ 1e-10 and drops every direction with s² + α < 1e-10, whatever the data's scale | `cpp/src/glm/ridge.cuh` (`zero_small_values`, `binary_div_skip_zero`) | one shared power-of-two staging with max(σ′², α′) ≈ 2^(2H) (L2-a) |
 | L2 #88 | algo 0 (svdQR, `cusolverDngesvd`) throws `CUSOLVER_STATUS_INVALID_VALUE` when n_rows < n_cols | `ridge.cuh` `ridgeSVD` → raft `svdQR` | routed to eig |
 | L2 #88 | `ridgeFit` accepts a negative α (an indefinite solve) without a check | `ridge.cuh` | refused (V8) |
+| L3 #89 | a column with Σw̃x² + l2 ≤ 1e-5 gets coefficient 0, whatever the scale | `cd.cuh:68` | staging (L3-a) |
+| L3 #89 | `coefMax < tol` stops CD after one epoch whenever every coefficient is under tol in the caller's units (rel to 2.08) | `cd.cuh:271` | refused (V16, L3-b) |
+| L3 #89 | `initShuffle` reseeds the `mt19937(rand())` with 0: `'random` is one fixed order, `srand` has no effect, and one `rand()` is consumed per fit. The same in SGD. | `cd.cuh:198-199`, `shuffle.h:18`, `sgd.cuh:143-144` | no `#:random-state` (L3-f) |
+| L3 #89 | Σw by `raft::stats::sum` is not deterministic, so weighted fits differ between runs from about 3000 rows, with or without intercept | `cd.cuh:158` | shim-side weighting (L3-g) |
+| L3 #89 | α < 0 and l1_ratio ∉ [0,1] are accepted silently | `cd.cuh` | refused (V8, V8b) |
+| L3 #89 | the residual starts from y, so a non-zero coef on entry is solved wrongly (no warm start) | `cd.cuh:210` | coef zeroed |
+| L3 #89 | `int n_rows`/`n_cols`; the weighted `binary_mult` uses an `int` index (not probed) | `cd.cuh:127,184` | V12; weights never passed |
 
 ## cuVS
 
@@ -166,3 +173,5 @@ packet (§4) has the detail.
 | L1 #87 | one-column X goes to a CuPy SVD, which disagrees with olsFit in the last bits | `linear_regression.pyx` | bound to olsFit |
 | L2 #88 | `Ridge` accepts α = nan (NaN coefficients) and α = inf (zero coefficients); it refuses only α < 0 | `ridge.pyx` | refused |
 | L2 #88 | `solver='auto'` with one column uses a CuPy SVD, which differs from `ridgeFit` in the last bits | `ridge.pyx` | bound to `ridgeFit` |
+| L3 #89 | `ElasticNet`/`Lasso` accept α NaN/inf and l1_ratio NaN (zero coefficients), tol ≤ 0 or NaN (runs to max_iter) and max_iter ≤ 0 (zeros, n_iter 0) | `elastic_net.py`, `lasso.py` | refused |
+| L3 #89 | the docstring says tol checks the dual gap; the code doesn't. There is no warning at max_iter. | `elastic_net.py`, `cd.pyx` | documented; n-iter reported |
