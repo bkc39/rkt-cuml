@@ -23,6 +23,8 @@ namespace cumlrkt::glm {
 namespace {
 
 constexpr int32_t most_cd_rows = std::numeric_limits<int32_t>::max();
+constexpr int moment_headroom = 6;
+constexpr int label_headroom = 4;
 
 int half_floor(int x) {
   return even_floor(x) / 2;
@@ -32,6 +34,13 @@ long double value_of(scaled_sum s) {
   return s.value == 0
              ? 0.0L
              : std::ldexp(static_cast<long double>(s.value), s.exponent);
+}
+
+long double ratio_of(long double v, long double norm, long double y_norm) {
+  if (y_norm != 0) {
+    return v / (norm * y_norm);
+  }
+  return v == 0 ? 0.0L : INFINITY;
 }
 
 long double violation(long double cross, double coef, long double weight,
@@ -69,8 +78,10 @@ int cd_shared_cap(const staging& s, int64_t rows) {
       s.kept | std::views::transform([&](int64_t j) {
         return unit_exponent(s.largest[j]) + column_reach<T>(rows);
       }));
-  return std::min({columns, half_floor(reach - 6 - beta) - p,
-                   half_floor(reach - 6 - beta - p - q), reach - 4 - beta - q});
+  const int moments = reach - moment_headroom - beta;
+  return std::min({columns, half_floor(moments) - p,
+                   half_floor(moments - p - q),
+                   reach - label_headroom - beta - q});
 }
 
 template <typename T>
@@ -107,8 +118,7 @@ kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
     const long double v =
         violation(value_of(t.moments[k].cross), coef[k], weight, penalty);
     const long double norm = std::sqrt(square);
-    const long double ratio =
-        y_norm == 0 ? (v == 0 ? 0.0L : INFINITY) : v / (norm * y_norm);
+    const long double ratio = ratio_of(v, norm, y_norm);
     worst =
         std::isnan(ratio) || std::isnan(worst) ? NAN : std::max(worst, ratio);
     norms += norm;
@@ -159,7 +169,8 @@ void require_cd_codes(const cd_request& request) {
         std::format("alpha: expected a finite value at least 0, got {}",
                     printed(request.alpha)));
   }
-  if (!(request.l1_ratio >= 0 && request.l1_ratio <= 1)) {
+  if (std::isnan(request.l1_ratio) || request.l1_ratio < 0 ||
+      request.l1_ratio > 1) {
     throw logic_error(
         std::format("l1-ratio: expected a finite value from 0 to 1, got {}",
                     printed(request.l1_ratio)));

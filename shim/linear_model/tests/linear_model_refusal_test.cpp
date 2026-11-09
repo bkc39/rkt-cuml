@@ -225,6 +225,14 @@ const std::vector<cd_refusal> cd_refusals{
     {{.tol = inf}, "tol: expected a finite value of at least 0, got inf"},
 };
 
+void expect_code_refused(const resources& res, const rr_view* x,
+                         const rr_view* y, const cd_refusal& r) {
+  fitted f(res);
+  EXPECT_EQ(elastic_net_into(res, f, x, y, r.settings), r.message);
+  EXPECT_EQ(cuml_linear_model_last_error_kind(), RR_ERROR_LOGIC) << r.message;
+  expect_untouched(f.out);
+}
+
 TEST(ElasticNetRefusal, CodesAreRefusedAfterTheViewsAndBeforeTheValues) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -233,14 +241,8 @@ TEST(ElasticNetRefusal, CodesAreRefusedAfterTheViewsAndBeforeTheValues) {
   const filled<double> x_nan(res, with(grid, 10, nan), {5, 3});
   const filled<float> y32(res, {1, 2, 3, 4, 5}, {5});
   for (const cd_refusal& r : cd_refusals) {
-    fitted f(res);
-    EXPECT_EQ(elastic_net_into(res, f, x.view(), y.view(), r.settings),
-              r.message);
-    EXPECT_EQ(cuml_linear_model_last_error_kind(), RR_ERROR_LOGIC) << r.message;
-    expect_untouched(f.out);
-    fitted g(res);
-    EXPECT_EQ(elastic_net_into(res, g, x_nan.view(), y.view(), r.settings),
-              r.message);
+    expect_code_refused(res, x.view(), y.view(), r);
+    expect_code_refused(res, x_nan.view(), y.view(), r);
     fitted v(res);
     EXPECT_EQ(elastic_net_into(res, v, x.view(), y32.view(), r.settings),
               "y: expected float64, got float32");

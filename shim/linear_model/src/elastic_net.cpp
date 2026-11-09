@@ -88,6 +88,15 @@ double weighted_intercept(const cd_centres& c, const std::vector<T>& b,
 }
 
 template <typename T>
+T unscaled_intercept(bool weighted, const cd_centres& c,
+                     const std::vector<T>& b, T staged, int shared) {
+  if (weighted) {
+    return static_cast<T>(weighted_intercept(c, b, shared));
+  }
+  return std::ldexp(staged, -shared);
+}
+
+template <typename T>
 cd_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                        const fit_plan& plan, const cd_request& request,
                        cd_scale<T> scale) {
@@ -121,9 +130,9 @@ cd_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   check_stop(handle, in, plan, request, b, scale, n_iter);
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   const T unscaled =
-      !plan.fit_intercept ? T{0}
-      : weighted ? static_cast<T>(weighted_intercept(centres, b, scale.shared))
-                 : std::ldexp(intercept, -scale.shared);
+      plan.fit_intercept
+          ? unscaled_intercept(weighted, centres, b, intercept, scale.shared)
+          : T{0};
   require_in_range(unstage_coef(handle, cs.data(), s, x.d, coef->data()),
                    unscaled);
   return {{std::move(coef), static_cast<double>(unscaled)}, n_iter};

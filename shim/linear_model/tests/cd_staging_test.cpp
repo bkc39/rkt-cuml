@@ -126,23 +126,33 @@ TEST(CdStaging, AColumnMoreThanFourBitsTooNarrowIsRefused) {
             "float32 coordinate descent");
 }
 
+constexpr double overflowing_alpha = 1e38;
+constexpr double fitting_alpha = 1e35;
+
 TEST(CdStaging, AnAlphaWhoseRowMultipleOverflowsIsRefused) {
   const staging s = planned({{0}, {1.5}, 0});
   const std::string got =
-      refusal_of([&] { cd_scale_of<float>(s, rows, 1e38); });
+      refusal_of([&] { cd_scale_of<float>(s, rows, overflowing_alpha); });
   EXPECT_EQ(got.rfind("alpha: expected at most ", 0), 0U) << got;
   EXPECT_NE(got.find(" for this X in float32, got 1e+38"), std::string::npos)
       << got;
-  EXPECT_EQ(refusal_of([&] { cd_scale_of<float>(s, rows, 1e35); }), "accepted");
+  EXPECT_EQ(refusal_of([&] { cd_scale_of<float>(s, rows, fitting_alpha); }),
+            "accepted");
 }
 
 scaled_sum sum(double value, int exponent) {
   return {value, exponent};
 }
 
+constexpr double first_cross = 1.53125;
+constexpr double second_cross = 1.25;
+constexpr double dropped_cross = 1.5625;
+constexpr int dropped_exponent = 6;
+
 residual_terms hand_built_epoch() {
-  return {{moment{sum(1, 2), sum(1.53125, 1)}, moment{sum(1, 0), sum(1.25, 1)},
-           moment{sum(0, 0), sum(1.5625, 6)}},
+  return {{moment{sum(1, 2), sum(first_cross, 1)},
+           moment{sum(1, 0), sum(second_cross, 1)},
+           moment{sum(0, 0), sum(dropped_cross, dropped_exponent)}},
           {1, 1, 0},
           sum(1, 4)};
 }
@@ -176,7 +186,8 @@ TEST(CdCheck, KBAndAOnAHandBuiltEpoch) {
 
 TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
   const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
-  EXPECT_EQ(refusal_of([&] { require_kkt({0.075, 0.075, 0}, epochs); }),
+  constexpr double at_bound = epoch_tol * 0.75;
+  EXPECT_EQ(refusal_of([&] { require_kkt({at_bound, at_bound, 0}, epochs); }),
             "accepted");
   EXPECT_NE(refusal_of([&] {
               require_kkt({std::numeric_limits<double>::quiet_NaN(), 1, 1},
