@@ -176,7 +176,7 @@ ill-conditioned for @racket[alpha] (@racket['svd], float64 or a larger
 range. The coefficients are accurate to about u·κ@subscript{α} relative to the
 largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
 (λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the
-eigenvalues λ of XᵀWX, X centred as above. Where u·κ@subscript{α} is 1 or more, as
+eigenvalues λ of XᵀWX on the varying columns, X centred as above. Where u·κ@subscript{α} is 1 or more, as
 with columns of very different scales or nearly collinear columns, either solver
 may refuse the fit as ill-conditioned or return it wrong; @tt{plans/layout.md}
 (L2-j, L2-k) has the measurements.

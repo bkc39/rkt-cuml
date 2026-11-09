@@ -1208,11 +1208,11 @@ Follow-ups are GitHub issues.
   (float64); a penalty term past the double range gives g = ∞. L1's residual
   cosine is its α′ = 0 case, computed by L1's own arithmetic, so it is L1's
   value bit for bit: one `stationarity_cosine`. Until review r3 M1′ the
-  penalty term was column j's own α′|b′_j|: under α ≥ σ²_widest 'svd's
-  normwise error of about u·max|b| in b_j then gave the narrow columns a
-  cosine of about u·σ_wide/σ_narrow, which refused sound three-column fits
-  (L2-k). Until review r2 H1 the
-  denominator was √(Σw′(v′_j − v̄′_j)² + α′)·√Σw′(y′ − ȳ′)², the residual
+  penalty term was column j's own α′|b′_j|: once α′ dominated the narrow
+  columns' spreads, 'svd's normwise error of about u·max|b| in b_j gave them
+  a cosine of about u·σ_wide/σ_narrow, which refused sound three-column fits
+  at α from 2^−8·σ²_widest (float64 g = 25 and 30) to 2^10·σ²_widest (L2-k).
+  Until review r2 H1 the denominator was √(Σw′(v′_j − v̄′_j)² + α′)·√Σw′(y′ − ȳ′)², the residual
   cosine of the augmented problem [X; √α′·I]. Once α′ ≫ σ′_j² that scales
   column j's gradient down by σ′_j/√α′, so a coefficient the solve zeroed
   passed at about corr·σ_j/√α: float32 columns 2^±44 apart at
