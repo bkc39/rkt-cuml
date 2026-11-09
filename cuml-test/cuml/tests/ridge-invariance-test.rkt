@@ -95,7 +95,7 @@
                                    #:solver s
                                    #:fit-intercept fi))))))
 
-(test-gpu "a constant (or, without an intercept, zero) column gets 0.0 and moves nothing (B6)"
+(test-gpu "a constant or zero column gets 0.0 and moves nothing (B6)"
   (for* ([fi (in-list '(#t #f))]
          [c (in-list (list base (normal-case 2000 7 9)))]
          [dt (in-list dtypes)]

@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model ridge-fit ridge-result-coef ridge-result-intercept)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
@@ -82,7 +82,7 @@
     (for* ([o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi alpha-ratios))]
            [dt (in-list dtypes)]
            [s (in-list solvers)])
-      (match-define (ridge-solution alpha c* b* kappa _ _ _) o)
+      (match-define (struct* ridge-solution ([alpha alpha] [coef c*] [intercept b*] [kappa kappa])) o)
       (test-case (format "~a ~a alpha ~a ~a ~a" (lcase-name c) fi alpha dt s)
         (define u (unit-roundoff dt))
         (match-define (list coef b)

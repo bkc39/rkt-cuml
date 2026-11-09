@@ -52,27 +52,26 @@
   (for/list ([b (in-list bits)])
     (floating-point-bytes->real (integer->integer-bytes b size #f))))
 
-(define (case-request op c dt fi . settings)
-  (apply hash-set*
-         (hasheq 'op op
-                 'dtype (symbol->string dt)
-                 'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
-                 'y (bits-of dt (map exact->inexact (lcase-y c)))
-                 'w (if (lcase-w c)
-                        (bits-of dt (map exact->inexact (lcase-w c)))
-                        'null)
-                 'fit_intercept fi)
-         settings))
+(define (case-request op c dt fi settings)
+  (for/fold ([request (hasheq 'op op
+                              'dtype (symbol->string dt)
+                              'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
+                              'y (bits-of dt (map exact->inexact (lcase-y c)))
+                              'w (if (lcase-w c)
+                                     (bits-of dt (map exact->inexact (lcase-w c)))
+                                     'null)
+                              'fit_intercept fi)])
+            ([(key value) (in-hash settings)])
+    (hash-set request key value)))
 
 (define (request op c dt a fi)
   (case-request op
                 c
                 dt
                 fi
-                'algorithm
-                (if (eq? a 'auto)
-                    "eig"
-                    (symbol->string a))))
+                (hasheq 'algorithm (if (eq? a 'auto)
+                                       "eig"
+                                       (symbol->string a)))))
 
 (define (twin-results script requests)
   (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))

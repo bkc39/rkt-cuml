@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require (only-in racket/match match-define)
+(require (only-in racket/match match-define struct*)
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
@@ -36,7 +36,7 @@
   (/ (for/sum ([x (in-list xs)] [w (in-list ws)]) (* x w)) (apply + ws)))
 
 (define (check-ridge-solution c dt s fi alpha)
-  (match-define (ridge-solution _ c* b* kappa _ _ _)
+  (match-define (struct* ridge-solution ([coef c*] [intercept b*] [kappa kappa]))
     (oracle-ridge (lcase-X c) (lcase-y c) (lcase-w c) alpha fi))
   (define u (unit-roundoff dt))
   (match-define (list coef b)
@@ -55,7 +55,7 @@
                                     (list (expt 2 -40) (expt 2 -20) (expt 2 -10))))]
          [dt (in-list dtypes)]
          [s (in-list solvers)])
-    (match-define (ridge-solution alpha _ _ _ top bottom _) o)
+    (match-define (struct* ridge-solution ([alpha alpha] [top top] [bottom bottom])) o)
     (test-case (format "~a ~a alpha ~a ~a ~a" (lcase-name c) fi alpha dt s)
       (match-define (list coef _)
         (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)))
@@ -66,7 +66,7 @@
                  (* (+ (/ alpha (+ bottom alpha)) (* 256 (unit-roundoff dt) (/ top bottom)))
                     (norm2 lstsq))))))
 
-(test-gpu "an alpha either side of rounding against the narrowest column spread solves the ridge problem"
+(test-gpu "an alpha either side of rounding solves the ridge problem"
   (for* ([c (in-list cases)]
          [fi (in-list '(#t #f))]
          [dt (in-list dtypes)]
@@ -82,7 +82,9 @@
              (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi (list 1 (expt 2 20) (expt 2 60))))]
          [dt (in-list dtypes)]
          [s (in-list solvers)])
-    (match-define (ridge-solution alpha _ _ kappa top bottom xty) o)
+    (match-define (struct* ridge-solution
+                           ([alpha alpha] [kappa kappa] [top top] [bottom bottom] [xty xty]))
+      o)
     (test-case (format "~a ~a alpha ~a ~a ~a" (lcase-name c) fi alpha dt s)
       (define u (unit-roundoff dt))
       (match-define (list coef b)
@@ -101,7 +103,7 @@
 (define (refused-ratio dt)
   (if (eq? dt 'float32) 113 961))
 
-(test-gpu "an alpha far past the widest column spread still solves the ridge problem (R6)"
+(test-gpu "an alpha far past the widest spread still solves the ridge problem (R6)"
   (for* ([c (in-list (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t)))]
          [fi (in-list '(#t #f))]
          [dt (in-list dtypes)]
@@ -110,39 +112,27 @@
     (test-case (format "~a ~a ~a ~a 2^~a" (lcase-name c) fi dt s k)
       (check-ridge-solution c dt s fi (* (expt 2 k) (widest-spread c fi))))))
 
+(define (check-alpha-refused c dt s fi alpha)
+  (test-case (format "~a ~a ~a ~a" (lcase-name c) dt s fi)
+    (check-cuml-error
+     'logic
+     #rx"^ridge-fit: alpha: expected at most [0-9.e+]+ for this X in float(32|64), got "
+     (lambda () (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)))))
+
 (test-gpu "an alpha whose staged value overflows the dtype is refused"
   (for* ([c (in-list (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t)))]
          [fi (in-list '(#t #f))]
          [dt (in-list dtypes)]
          [s (in-list solvers)])
-    (define k (refused-ratio dt))
-    (test-case (format "~a ~a ~a ~a 2^~a" (lcase-name c) fi dt s k)
-      (check-cuml-error
-       'logic
-       #rx"^ridge-fit: alpha: expected at most [0-9.e+]+ for this X in float(32|64), got "
-       (lambda ()
-         (ridge-case-fit c
-                         dt
-                         #:alpha (* (expt 2 k) (widest-spread c fi))
-                         #:solver s
-                         #:fit-intercept fi))))))
+    (check-alpha-refused c dt s fi (* (expt 2 (refused-ratio dt)) (widest-spread c fi)))))
 
 (test-gpu "an alpha whose staged value overflows is refused for a constant y too"
   (define c (normal-case 200 7 0))
   (define constant (lcase "constant y" (lcase-X c) (map (lambda (_) 5/2) (lcase-y c)) #f))
-  (for* ([dt (in-list dtypes)]
-         [s (in-list solvers)]
-         [fi (in-list '(#t #f))])
-    (test-case (format "~a ~a ~a" dt s fi)
-      (check-cuml-error
-       'logic
-       #rx"^ridge-fit: alpha: expected at most [0-9.e+]+ for this X in float(32|64), got "
-       (lambda ()
-         (ridge-case-fit constant
-                         dt
-                         #:alpha (* (expt 2 (refused-ratio dt)) (widest-spread c fi))
-                         #:solver s
-                         #:fit-intercept fi))))))
+  (for* ([fi (in-list '(#t #f))]
+         [dt (in-list dtypes)]
+         [s (in-list solvers)])
+    (check-alpha-refused constant dt s fi (* (expt 2 (refused-ratio dt)) (widest-spread c fi)))))
 
 (define kept-one
   (let ([c (normal-case 200 1 3 #:weighted? #t)])
@@ -160,13 +150,13 @@
         (routing (normal-case 5 8 4) '(svd))
         (routing (normal-case 6 8 5 #:weighted? #t) '(svd))))
 
-(test-gpu "one kept column and svd on wide X are routed and still solve the ridge problem (R7)"
+(test-gpu "routed shapes still solve the ridge problem (R7)"
   (for* ([r (in-list routed)]
          #:do [(match-define (routing c ss) r)]
          [o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) #t (list (expt 2 -7) 1)))]
          [dt (in-list dtypes)]
          [s (in-list ss)])
-    (match-define (ridge-solution alpha c* b* kappa _ _ _) o)
+    (match-define (struct* ridge-solution ([alpha alpha] [coef c*] [intercept b*] [kappa kappa])) o)
     (test-case (format "~a alpha ~a ~a ~a" (lcase-name c) alpha dt s)
       (define u (unit-roundoff dt))
       (match-define (list coef b) (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver s)))

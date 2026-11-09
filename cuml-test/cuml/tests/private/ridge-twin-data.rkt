@@ -1,6 +1,6 @@
 #lang racket/base
 
-(require (only-in racket/match match-define)
+(require (only-in racket/match match-define struct*)
          racket/runtime-path
          (only-in racket/sequence in-slice)
          (only-in rackunit check-equal? test-case)
@@ -18,18 +18,23 @@
                   normal-case
                   ridge-oracles
                   ridge-solution
+                  scaled-case
                   unit-roundoff)
          (only-in "linear-twin-data.rkt" case-request theirs twin-results)
          (only-in "ridge-data.rkt" ridge-case-fit solvers widest-spread))
 
-(provide check-sklearn-parity
-         check-staged-parity
-         check-raw-parity)
+(provide check-raw-parity
+         check-sklearn-parity
+         check-staged-parity)
 
 (define-runtime-path twin "../python/ridge_twin.py")
 
 (define (request op c dt alpha solver fi)
-  (case-request op c dt fi 'alpha (real->double-flonum alpha) 'solver (symbol->string solver)))
+  (case-request op
+                c
+                dt
+                fi
+                (hasheq 'alpha (real->double-flonum alpha) 'solver (symbol->string solver))))
 
 (define (results requests)
   (twin-results twin requests))
@@ -40,11 +45,7 @@
 (define (staged-case c dt fi)
   (define sx (expt 2 (- (headroom dt) (quotient (floor-log2 (widest-spread c fi)) 2))))
   (define sy (expt 2 (- (floor-log2 (max-abs (lcase-y c))))))
-  (lcase (format "staged ~a" (lcase-name c))
-         (for/list ([row (in-list (lcase-X c))])
-           (map (lambda (x) (* sx x)) row))
-         (map (lambda (v) (* sy v)) (lcase-y c))
-         (lcase-w c)))
+  (struct-copy lcase (scaled-case c #:X sx #:y sy) [name (format "staged ~a" (lcase-name c))]))
 
 (define staged-sources
   (list (normal-case 300 7 0)
@@ -85,7 +86,7 @@
 (define (check-against dt rows references name)
   (for ([row (in-list rows)]
         [refs (in-list references)])
-    (match-define (list c fi (ridge-solution alpha _ _ kappa _ _ _)) row)
+    (match-define (list c fi (struct* ridge-solution ([alpha alpha] [kappa kappa]))) row)
     (define u (unit-roundoff dt))
     (for* ([ours (in-list solvers)]
            [reference (in-list refs)])
@@ -111,7 +112,7 @@
   (define asked
     (for*/list ([row (in-list rows)]
                 [s (in-list labels)])
-      (match-define (list c fi (ridge-solution alpha _ _ _ _ _ _)) row)
+      (match-define (list c fi (struct* ridge-solution ([alpha alpha]))) row)
       (request op c dt alpha (solver-of c s) fi)))
   (for/list ([pair (in-slice (length labels) (results asked))])
     (for/list ([label (in-list labels)]

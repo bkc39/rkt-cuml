@@ -114,12 +114,12 @@
      (<= growth device-slack)
      (format "this process's device memory grew ~a bytes, past the ~a slack" growth device-slack))))
 
+(define warm-up-rounds 5)
+
 (define (test-fit-memory what
                          #:rounds rounds
                          #:sample-every every
-                         #:data data
-                         #:round one-round
-                         #:refusals refusals
+                         #:setup setup
                          #:refusals-per-sample [refusals-per-sample 5]
                          #:buffers-per-round [buffers-per-round 2])
   (define (refuse-all calls)
@@ -130,10 +130,9 @@
   (test-process-memory (format "~a ~a rounds free every output and leave device memory flat"
                                rounds
                                what)
-    (define inputs (data))
-    (define calls (apply refusals inputs))
-    (for ([_ (in-range 5)])
-      (apply one-round inputs)
+    (define-values (one-round calls) (setup))
+    (for ([_ (in-range warm-up-rounds)])
+      (one-round)
       (refuse-all calls))
     (define failures (settled-count release-failure-count))
     (match-define (list base-used base-bytes) (baseline-sample))
@@ -147,7 +146,7 @@
                  #:result (values (reverse samples) (reverse refused-drops)))
                 ([_ (in-range (quotient rounds every))])
         (for ([_ (in-range every)])
-          (apply one-round inputs))
+          (one-round))
         (define sample (pool-sample))
         (define before (settled-count buffer-drop-count))
         (refuse-all calls)
@@ -160,7 +159,7 @@
     (define wanted (* buffers-per-round rounds))
     (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
     (define freed (- (buffer-drop-count) drops))
-    (void/reference-sink inputs calls)
+    (void/reference-sink one-round calls)
     (define used (map sample-used samples))
     (define growth (device-growth base-bytes samples))
     (printf
