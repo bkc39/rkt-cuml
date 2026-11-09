@@ -74,6 +74,69 @@
     (test-case (format "~a ~a ~a ~a ~a" (lcase-name c) dt solver fi alpha)
       (same-as-lstsq c dt solver fi alpha))))
 
+(define (columns-apart lo hi)
+  (define c (normal-case 60 2 3))
+  (lcase (format "columns at 2^~a and 2^~a" lo hi)
+         (for/list ([row (in-list (lcase-X c))])
+           (match-define (list a b) row)
+           (list (* a (expt 2 lo)) (* b (expt 2 hi))))
+         (for/list ([row (in-list (lcase-X c))]
+                    [y (in-list (lcase-y c))])
+           (match-define (list a b) row)
+           (+ a (* 1/2 b) (* 1/16 (- y 3))))
+         #f))
+
+(define subnormal-weight
+  (let ([c (normal-case 40 1 4)])
+    (lcase "a column varying only on a row of weight 2^-1074"
+           (for/list ([row (in-list (lcase-X c))]
+                      [i (in-naturals)])
+             (list (if (= i 39) 3/4 1) (car row)))
+           (lcase-y c)
+           (for/list ([i (in-range 40)])
+             (if (= i 39)
+                 (expt 2 -1074)
+                 1)))))
+
+(test-gpu "alpha 0 is linear-regression-fit's fit on float64 spreads that underflow when staged (B1)"
+  (for* ([c (in-list (list (columns-apart -1000 1000) (columns-apart -950 950) subnormal-weight))]
+         [solver (in-list '(auto eig svd))]
+         [fi (in-list '(#t #f))])
+    (test-case (format "~a ~a ~a" (lcase-name c) solver fi)
+      (same-as-lstsq c 'float64 solver fi 0))))
+
+(define (kept-one)
+  (define c (normal-case 30 1 3 #:weighted? #t))
+  (lcase "one of three columns kept"
+         (for/list ([row (in-list (lcase-X c))])
+           (list 2 (car row) 0))
+         (lcase-y c)
+         (lcase-w c)))
+
+(define (weights-only-at c rows)
+  (lcase (format "~a, weights only at rows ~a" (lcase-name c) rows)
+         (lcase-X c)
+         (lcase-y c)
+         (for/list ([i (in-range (length (lcase-y c)))])
+           (if (memv i rows) 1 0))))
+
+(define shape-cases
+  (list (normal-case 5 8 4)
+        (normal-case 6 8 5 #:weighted? #t)
+        (kept-one)
+        (weights-only-at (normal-case 10 3 2) '(4))
+        (weights-only-at (normal-case 10 3 2) '(0 3))
+        (normal-case 3 3 1)))
+
+(test-gpu "alpha 0 or under rounding is linear-regression-fit's fit on m < d, one kept column and one positive row (B1)"
+  (for* ([c (in-list shape-cases)]
+         [dt (in-list dtypes)]
+         [solver (in-list '(auto eig svd))]
+         [fi (in-list '(#t #f))]
+         [alpha (in-list '(0 1e-300))])
+    (test-case (format "~a ~a ~a ~a ~a" (lcase-name c) dt solver fi alpha)
+      (same-as-lstsq c dt solver fi alpha))))
+
 (define threshold-cases
   (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t) (normal-case 20 2 0)))
 

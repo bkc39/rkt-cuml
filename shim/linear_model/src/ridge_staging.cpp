@@ -43,11 +43,23 @@ int shared_cap(const staging& s, int64_t n) {
                           }));
 }
 
-double narrowest_spread(const staging& s, int shared) {
-  return std::ranges::min(
-      s.kept | std::views::transform([&](int64_t j) {
-        return std::ldexp(s.spread[j], shared - unit_exponent(s.largest[j]));
-      }));
+template <typename T>
+bool negligible_alpha(double alpha, int power, const staging& s, int shared) {
+  if (alpha == 0) {
+    return true;
+  }
+  int alpha_power = 0;
+  const double alpha_mantissa = std::frexp(alpha, &alpha_power);
+  return std::ranges::all_of(s.kept, [&](int64_t j) {
+    int spread_power = 0;
+    const double spread_mantissa = std::frexp(s.spread[j], &spread_power);
+    const int staged_exponent =
+        spread_power + shared - unit_exponent(s.largest[j]);
+    return spread_mantissa > 0 &&
+           std::ldexp(alpha_mantissa / spread_mantissa / spread_mantissa,
+                      alpha_power + power - (2 * staged_exponent)) <=
+               std::ldexp(1.0, -std::numeric_limits<T>::digits);
+  });
 }
 
 template <typename T>
@@ -76,11 +88,9 @@ ridge_scale<T> ridge_scale_of(const staging& s, int64_t n,
   const int shared = std::min({spread + ridge_headroom<T>, shared_cap<T>(s, n),
                                std::max(alpha_exponent<T>(alpha, weight_power),
                                         spread + ridge_floor<T>)});
-  const T staged = staged_alpha<T>(alpha, (2 * shared) + weight_power);
-  const double narrowest = narrowest_spread(s, shared);
-  return {shared, staged,
-          static_cast<double>(staged) / narrowest / narrowest <=
-              std::ldexp(1.0, -std::numeric_limits<T>::digits)};
+  const int power = (2 * shared) + weight_power;
+  return {shared, staged_alpha<T>(alpha, power),
+          negligible_alpha<T>(alpha, power, s, shared)};
 }
 
 staging shared_at(staging s, int shared) {

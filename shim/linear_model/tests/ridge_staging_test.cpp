@@ -172,6 +172,20 @@ TEST(RidgeStaging, AnAlphaUnderRoundingAgainstTheNarrowestSpreadIsNegligible) {
   }
 }
 
+TEST(RidgeStaging, AnAlphaOfZeroIsNegligibleWhateverTheSpreads) {
+  const staged_case far_apart{
+      {1000, -1000}, {0x1p-1000, 0x1p1000}, 0.0, 0, 60, -936, 0.0, true};
+  expect_staged<double>(far_apart);
+  const std::vector<double> underflowed{0.0};
+  const std::vector<staged_case> zero_spread{
+      {{0}, {1.5}, 0.0, 0, 40, 64, 0.0, true},
+      {{0}, {1.5}, 1.0, 0, 40, 64, 0x1p128, false},
+  };
+  for (const staged_case& c : zero_spread) {
+    expect_staged<double>(c, underflowed);
+  }
+}
+
 TEST(RidgeStaging, RoutesTheCasesRidgeFitCannotTake) {
   const std::vector<routed_case> routes{
       {CUML_LINEAR_MODEL_RIDGE_EIG, 10, 3, CUML_LINEAR_MODEL_RIDGE_EIG},
