@@ -162,33 +162,25 @@ penalised. @racket[X], @racket[y] and @racket[sample-weight] are as for
 @racket[linear-regression-fit].
 
 @racket['auto] and @racket['eig] eigendecompose XᵀWX; @racket['svd] takes a
-QR-based SVD of X. Every column and @racket[alpha] are first scaled by powers of
-two. An @racket[alpha] of at most u times every column's weighted spread
-Σ@subscript{i}w@subscript{i}(x@subscript{ij} − x̄@subscript{j})² (x̄@subscript{j}
-0 without @racket[fit-intercept]), u being the dtype's unit roundoff, is below
-rounding against every column and is taken as 0: that fit is
+QR-based SVD of X. An @racket[alpha] of at most u times every column's weighted
+spread Σ@subscript{i}w@subscript{i}(x@subscript{ij} − x̄@subscript{j})², X centred
+by its weighted mean x̄ with @racket[fit-intercept] (x̄ = 0 without), u being the
+dtype's unit roundoff, is below rounding and is taken as 0: that fit is
 @racket[linear-regression-fit]'s with the same @racket[solver] (@racket['auto] is
-@racket['eig]), refusals included, so exactly collinear X is refused. A column
-constant over the rows of positive weight (zero, without @racket[fit-intercept])
-gets coefficient 0.
+@racket['eig]), refusals included. A column constant over the rows of positive
+weight (zero, without @racket[fit-intercept]) gets coefficient 0.
 
-The fit is refused when the solve misses the ridge solution by more than
-2@superscript{-8} (float32) or 2@superscript{-18} (float64) in gradient cosine, as
-when X is ill-conditioned for @racket[alpha] (float32 @racket['eig] on columns of
-very different scales); @racket['svd] or float64 often fits. It is refused too when
-@racket[alpha] scaled with X passes the dtype's range. Coefficients are accurate to
-about u·(σ@subscript{max}² + @racket[alpha])/(σ@subscript{min}² + @racket[alpha]),
-σ² being the eigenvalues of XᵀWX (X centred with @racket[fit-intercept]). Where
-@racket[alpha] is under u times the widest column's spread and X has (nearly)
-collinear columns, that bound is at least 1: @racket['eig] refuses the fits it
-does not solve there, and @racket['svd] may return one wrong in the near-null
-directions by many times the coefficients' size, which the gradient check
-cannot see.
+The fit is refused when the solve is not a ridge solution, as when X is
+ill-conditioned for @racket[alpha], and when @racket[alpha] scaled with X passes
+the dtype's range; an accepted fit is accurate relative to its largest
+coefficient, less so when y is nearly orthogonal to X. Where @racket[alpha] is over
+u times the narrowest column's spread and under u times the widest's, a solve
+that loses the narrow columns of very different scales is refused, but on nearly
+collinear columns either solver may return coefficients wrong by many times their
+size, which the refusal cannot see.
 
-Weighted fits with an intercept can differ in the last bits between runs from
-about 2000 rows, as in Python cuML; unweighted fits, and fits without an
-intercept, repeat bitwise. @racket[X], @racket[y] and @racket[sample-weight] are
-not modified.
+Fits repeat as @racket[linear-regression-fit]'s, and @racket[X], @racket[y] and
+@racket[sample-weight] are not modified.
 @examples[#:eval ev #:label #f
 (~> (ridge-fit X y #:alpha 0) ridge-result-coef device-vector->list (decimals 6 _))
 (~> (ridge-fit X y #:alpha 1e6) ridge-result-coef device-vector->list (decimals 9 _))

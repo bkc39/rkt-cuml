@@ -1202,12 +1202,20 @@ Follow-ups are GitHub issues.
   alpha in Racket; an exact alpha past the double range becomes +inf.0 and
   is refused.
 - **L2-e.** After the solve the shim computes, on the staged data,
-  g_j = |Σw′(v′_j − v̄′_j)r′ − α′b′_j| / (√(Σw′(v′_j − v̄′_j)² + α′)·√Σw′(y′ − ȳ′)²),
-  the residual cosine of the augmented problem [X; √α′·I], and refuses the
-  fit when max g > 2^−8 (float32) or 2^−18 (float64). L1's residual cosine is
-  its α′ = 0 case: one `stationarity_cosine`. The check bounds the solve, not
-  the conditioning: a float32 'svd fit 5× off on collinear X passes at
-  2.6e-3, as the Scribble says.
+  g_j = |Σw′(v′_j − v̄′_j)r′ − α′b′_j| / (√Σw′(v′_j − v̄′_j)²·√Σw′(y′ − ȳ′)² + α′|b′_j|),
+  each column's gradient against the size of its own two terms, and refuses
+  the fit when max g > 2^−8 (float32) or 2^−18 (float64). L1's residual
+  cosine is its α′ = 0 case, computed by L1's own arithmetic, so it is L1's
+  value bit for bit: one `stationarity_cosine`. Until review r2 H1 the
+  denominator was √(Σw′(v′_j − v̄′_j)² + α′)·√Σw′(y′ − ȳ′)², the residual
+  cosine of the augmented problem [X; √α′·I]. Once α′ ≫ σ′_j² that scales
+  column j's gradient down by σ′_j/√α′, so a coefficient the solve zeroed
+  passed at about corr·σ_j/√α: float32 columns 2^±44 apart at
+  α = 2^30·σ²_narrow, and float64 columns 2^±100 apart at 2^40, returned the
+  narrow column's coefficient as 1.7e-41 and 4.7e-92 against 1.4e4 and
+  1.0e18, under both solvers. Those fits are now refused. The check bounds
+  the solve, not the conditioning: a float32 'svd fit 4.7× off on exactly
+  collinear columns in the L2-i window passes (L2-i).
 - **L2-f.** One kept column runs `ridgeFit`'s SVD under either solver
   (`ridgeFit` does this itself); 'svd with fewer positive-weight rows than
   kept columns runs eig, since gesvd aborts there. Both are covered by law R7.
@@ -1263,6 +1271,42 @@ Follow-ups are GitHub issues.
   every window row, 8.3e-8 on both Q2 rows (float32), 1.5e-16 (float64) and
   ≤ 2.9e-10 on the nearly collinear eps rows: it separates them, but is not
   the ruled detector; an owner decision.
+  Columns of very different scales without collinearity are the window's
+  other case (review r2 H1): two columns 2^±g apart, α = 2^k·σ²_narrow. Under
+  L2-e's old normaliser both solvers returned the narrow coefficient as 0
+  (relative error 1) at float32 g = 44, k = 30 and 57, g = 60, k = 57, and
+  float64 g = 100, k = 40; the old check also accepted g = 44, k = 15, 20 and 40
+  and g = 100, k = 57, unmeasured against the oracle there. With L2-e's normaliser every such fit is refused, at
+  cosine 0.59 to 0.60, while every fit at float32 g = 8, 13 and 20 (k from −10
+  to 57) and float64 g = 30 is unchanged: accepted within 3e-7 (float32) and
+  8e-16 (float64) of the ridge solution, or, at float32 g = 20 and k ≤ 10,
+  refused as before. The collinear window rows above are unchanged by it:
+  'svd is still accepted there, and 'eig still refuses the wide-at-2^13 rows
+  and fits the all-at-1 rows to 1.7e-4 (float32) and 1.9e-13 (float64).
+  The exact α (not α′ rounded in the dtype) moved the route where α′ is 0 or
+  subnormal in T but α > u·σ²_min exactly (review r2 M3): such a fit took
+  L1's path before and takes the ridge path now. On float32 columns 2^±60
+  apart, α/σ²_narrow from 2^−23 to 2^56, L1's bits had been off the ridge
+  solution by 9.8e-4 at 2^−10, 0.999 at 2^0 and 1e3 to 1e17 beyond; those
+  fits are now refused, including 2^−23 to 2^−20, where L1's answer was
+  within 8.3e-7. The rule is kept, since it refuses misfits the old one
+  returned silently. Pinned by the gtest
+  `AnAlphaRoundingToZeroInTheDtypeIsNegligibleOnlyUnderRounding` (staged
+  spreads 2^120 apart, α′ = 0 in float32 with α at and over u·σ′²_min) and the
+  float32 g = 60, k = 0 refusal rows; deciding from the rounded α′ fails both.
+- **L2-j, refusal and accuracy.** A fit is refused when L2-e's max g passes
+  2^−8 (float32) or 2^−18 (float64). An accepted fit's coefficients are off
+  the ridge solution by about
+  u·(σ²_max + α)/(σ²_min + α) + u·σ_max·‖y‖/(σ²_min + α), relative to the
+  largest coefficient, σ² the eigenvalues of XᵀWX with X centred by its
+  weighted mean with an intercept. The second term is the cancellation in
+  X′ᵀy′ and dominates when y is nearly orthogonal to X (review r2 M2): at
+  κ ≈ 1, float32 with corr(y, X) = 2^−10 is off by 1.3e-5 against the first
+  term's 7.6e-6, corr 2^−30 by 7.65, and float64 corr 2^−60 by 8.30. A
+  narrow column's own coefficient can lose everything inside that bound:
+  float32, a column 2^−40 narrower than the widest, past α/σ²_max ≈ 2^100
+  (L2-a). The R1 laws run on `normal-case` data (noise 1/10, corr ≈ 1), where
+  the second term is about u.
   Q2's float32 columns at 2^−13, 1, 2^13, 1 at α = 1 are past the threshold:
   'eig is refused and 'svd is within 2^−10·max|c*| of the ridge solution. On
   p3's collinear X both solvers are refused, as L1's 'eig and 'svd refuse it.
