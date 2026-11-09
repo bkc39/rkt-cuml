@@ -10,7 +10,7 @@
                   lasso-result?
                   linear-regression-predict
                   linear-regression-result)
-         (only-in racket/list take)
+         (only-in racket/list make-list take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-vector->list)
@@ -44,8 +44,8 @@
   (map (lambda (v) (real->decimal-string v k)) xs))
 
 (test-gpu "the docs data fits as F21 records, in float64"
-  (define (fit-of . settings)
-    (apply en-case-fit docs 'float64 settings))
+  (define (fit-of #:alpha alpha #:l1-ratio r #:max-iter [k 1000])
+    (en-case-fit docs 'float64 #:alpha alpha #:l1-ratio r #:max-iter k))
   (match-define (list lc lb lk) (fit-of #:alpha 0.1 #:l1-ratio 1))
   (check-equal? (rounded 6 (cons lb lc)) '("3.599023" "0.601953" "1.999023"))
   (check-equal? lk 11)
@@ -78,14 +78,14 @@
                  #:fit-intercept fi
                  #:selection s)))
     (check-equal? (on lasso-fit)
-                  (on (lambda (X y #:sample-weight w #:alpha a #:fit-intercept fi #:selection s)
+                  (on (lambda (X y #:sample-weight w #:alpha a #:fit-intercept i #:selection m)
                         (elastic-net-fit X
                                          y
                                          #:sample-weight w
                                          #:alpha a
                                          #:l1-ratio 1
-                                         #:fit-intercept fi
-                                         #:selection s))))))
+                                         #:fit-intercept i
+                                         #:selection m))))))
 
 (test-gpu "a constant or zero column leaves the others bitwise and gets 0.0 (E5)"
   (define c (correlated-case 200 4 0.5 2))
@@ -125,14 +125,10 @@
     (match-define (list coef b k)
       (en-case-fit c dt #:alpha (* factor (law-alpha p 1 r)) #:l1-ratio r))
     (test-case (format "~a l1-ratio ~a factor ~a" dt r factor)
-      (check-equal? coef (make-list-of 7 0.0))
+      (check-equal? coef (make-list 7 0.0))
       (check-equal? k 1)
       (check-true (<= (abs (- (inexact->exact b) mean))
                       (* 4 (inexact->exact (unit-roundoff dt)) (max-abs (lcase-y c))))))))
-
-(define (make-list-of n v)
-  (for/list ([_ (in-range n)])
-    v))
 
 (test-gpu "alpha 0 runs coordinate descent, and tol 0 runs max-iter epochs (Q3, L3-c)"
   (match-define (list _ _ k0) (en-case-fit docs 'float64 #:alpha 0))

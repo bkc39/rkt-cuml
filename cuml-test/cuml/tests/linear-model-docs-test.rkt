@@ -97,5 +97,5 @@
                     "elastic-net-fit: l1-ratio: expected a finite value from 0 to 1, got 1.5"
                     (lambda () (elastic-net-fit X y #:l1-ratio 1.5)))
   (check-equal? (~> (elastic-net #:alpha 0.1) (fit X y) (score X y) (real->decimal-string 6))
-                "SCORE")
+                "0.986786")
   (check-cuml-error 'logic "fit: lasso needs y" (lambda () (fit (lasso) X))))

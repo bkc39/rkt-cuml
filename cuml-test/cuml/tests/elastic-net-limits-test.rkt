@@ -31,14 +31,15 @@
   (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma])) (oracle-elastic-net p alpha r))
   (match-define (list coef _ k) (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol tol #:max-iter max-iter))
   (define u (unit-roundoff dt))
-  (if (> mu 0)
-      (check-law "S2"
-                 (distance coef c*)
-                 (+ (/ (* tol (max-abs coef) (apply + sigma) (norm2 sigma)) mu)
-                    (* 64 u (norm2 (map exact->inexact c*)))))
-      (let ()
-        (match-define (kkt K B A) (host-kkt p coef alpha r tol k (length (lcase-y c)) u))
-        (check-law "S1" K (+ B A)))))
+  (cond
+    [(> mu 0)
+     (check-law "S2"
+                (distance coef c*)
+                (+ (/ (* tol (max-abs coef) (apply + sigma) (norm2 sigma)) mu)
+                   (* 64 u (norm2 (map exact->inexact c*)))))]
+    [else
+     (match-define (kkt K B A) (host-kkt p coef alpha r tol k (length (lcase-y c)) u))
+     (check-law "S1" K (+ B A))]))
 
 (test-gpu "small l1-ratio approaches ridge at alpha times the weight sum (S5)"
   (define c (correlated-case 200 7 0.9 51 #:weighted? #t))

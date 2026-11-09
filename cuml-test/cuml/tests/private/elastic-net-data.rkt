@@ -178,5 +178,5 @@
                 (check-law "S3"
                            (abs (- (inexact->exact b) b*))
                            (+ (* x̄ bound)
-                              (* 8 u (+ (abs b*) (* x̄ (norm2 (map exact->inexact c*)))))))))
+                              (* 8 u (+ (abs b*) (* x̄ (norm2 (map exact->inexact c*))))))))))
           (check-true (exact-nonnegative-integer? k)))))))

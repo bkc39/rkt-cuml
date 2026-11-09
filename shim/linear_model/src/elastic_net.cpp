@@ -75,7 +75,7 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
                          roundoff<T>};
   require_kkt(kkt_of(terms, coef, weight,
                      {alpha * ratio, alpha * (1 - ratio)}, epochs),
-              epochs);
+              {n_iter, rows.count, request.tol, roundoff<T>});
 }
 
 template <typename T>
