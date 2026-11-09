@@ -457,6 +457,7 @@
       (- yi intercept (dot row coef))))
   (define yc (centre y))
   (define y-norm (sqrt (for/sum ([v (in-list yc)] [wi (in-list weights)]) (* wi v v))))
+  (define widest (* alpha (max-abs coef)))
   (for/fold ([worst 0.0])
             ([col (in-list (columns-of X))]
              [cj (in-list coef)])
@@ -467,7 +468,7 @@
     (define square (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x)))
     (if (zero? square)
         worst
-        (max worst (exact->inexact (/ (abs num) (+ (* (sqrt square) y-norm) (* alpha (abs cj)))))))))
+        (max worst (exact->inexact (/ (abs num) (+ (* (sqrt square) y-norm) widest)))))))
 
 (module+ test
   (require (only-in rackunit check-equal? check-true))

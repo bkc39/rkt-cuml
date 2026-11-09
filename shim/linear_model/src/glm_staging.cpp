@@ -47,6 +47,15 @@ device_columns columns_of(const staging& s, rmm::cuda_stream_view stream) {
   return {to_device(s.kept, stream), to_device(e, stream)};
 }
 
+template <typename T>
+double largest_magnitude(const std::vector<T>& b) {
+  double largest = 0;
+  for (const T bk : b) {
+    largest = std::max(largest, std::abs(static_cast<double>(bk)));
+  }
+  return largest;
+}
+
 }  // namespace
 
 int even_floor(int x) {
@@ -60,22 +69,25 @@ double cosine_of(const moment& m, scaled_sum y) {
       ratio, (2 * m.cross.exponent) - m.square.exponent - y.exponent));
 }
 
-double stationarity_of(const moment& m, scaled_sum y, double alpha, double b) {
-  if (alpha == 0) {
+double stationarity_of(const moment& m, scaled_sum y, ridge_penalty p) {
+  if (p.alpha == 0) {
     return cosine_of(m, y);
   }
-  const double penalty = alpha * b;
+  const double penalty = p.alpha * p.coefficient;
+  const double widest = p.alpha * p.largest;
+  if (!std::isfinite(widest)) {
+    return INFINITY;
+  }
   const int product = m.square.exponent + y.exponent;
   const int half = even_floor(product) / 2;
   const double norms =
       std::sqrt(std::ldexp(m.square.value * y.value, product - (2 * half)));
-  const int top = penalty == 0
+  const int top = widest == 0
                       ? std::max(m.cross.exponent, half)
-                      : std::max({m.cross.exponent, half, std::ilogb(penalty)});
+                      : std::max({m.cross.exponent, half, std::ilogb(widest)});
   const double gradient = std::ldexp(m.cross.value, m.cross.exponent - top) -
                           std::ldexp(penalty, -top);
-  const double size =
-      std::ldexp(norms, half - top) + std::ldexp(std::abs(penalty), -top);
+  const double size = std::ldexp(norms, half - top) + std::ldexp(widest, -top);
   return std::abs(gradient) / size;
 }
 
@@ -252,14 +264,16 @@ double stationarity_cosine(const raft::handle_t& handle,
   const std::optional<std::vector<T>> b =
       alpha == 0 ? std::nullopt
                  : std::optional(to_host(coef, count, stream_of(handle)));
+  const double largest = b ? largest_magnitude(*b) : 0.0;
   double worst = 0;
   for (int64_t k = 0; k < count; ++k) {
     if (terms.largest[k] == 0) {
       continue;
     }
-    const double g = stationarity_of(terms.moments[k], terms.y_square,
-                                     static_cast<double>(alpha),
-                                     b ? static_cast<double>((*b)[k]) : 0.0);
+    const double g =
+        stationarity_of(terms.moments[k], terms.y_square,
+                        {static_cast<double>(alpha),
+                         b ? static_cast<double>((*b)[k]) : 0.0, largest});
     worst = std::isnan(g) || std::isnan(worst) ? NAN : std::max(worst, g);
   }
   return worst;

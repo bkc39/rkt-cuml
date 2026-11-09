@@ -32,6 +32,7 @@ using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
 using cumlrkt::glm::profiles;
 using cumlrkt::glm::require_finite_solution;
+using cumlrkt::glm::ridge_penalty;
 using cumlrkt::glm::row_selection;
 using cumlrkt::glm::scaled_sum;
 using cumlrkt::glm::spread_exponent;
@@ -347,12 +348,11 @@ TEST(FiniteSolution, ANonFiniteInterceptIsRefused) {
 struct stationarity_row {
   moment m;
   scaled_sum y;
-  double alpha;
-  double b;
+  ridge_penalty penalty;
   double cosine;
 };
 
-TEST(Stationarity, WithoutAPenaltyItIsTheResidualCosineBitwise) {
+TEST(Stationarity, PinWithoutAPenaltyItIsTheResidualCosineBitwise) {
   const std::vector<moment> moments{
       {{0x1.4p-1, 4}, {0x1.8p-1, 3}},
       {{0x1.fffffp-1, -1021}, {-0x1.3p-1, -40}},
@@ -363,8 +363,11 @@ TEST(Stationarity, WithoutAPenaltyItIsTheResidualCosineBitwise) {
   for (const moment& m : moments) {
     for (const scaled_sum& y : ys) {
       for (const double b : coefficients) {
-        EXPECT_EQ(stationarity_of(m, y, 0.0, b), cosine_of(m, y)) << b;
-        EXPECT_EQ(stationarity_of(m, y, -0.0, b), cosine_of(m, y)) << b;
+        const double largest = std::abs(b);
+        EXPECT_EQ(stationarity_of(m, y, {0.0, b, largest}), cosine_of(m, y))
+            << b;
+        EXPECT_EQ(stationarity_of(m, y, {-0.0, b, largest}), cosine_of(m, y))
+            << b;
       }
     }
   }
@@ -372,24 +375,48 @@ TEST(Stationarity, WithoutAPenaltyItIsTheResidualCosineBitwise) {
 
 TEST(Stationarity, ACoefficientTheSolveZeroedUnderALargePenaltyIsSeen) {
   const std::vector<stationarity_row> rows{
-      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, 0x1p40, 0.0, 0.5},
-      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, 0x1p40, 0x1p-41, 0.0},
-      {{{1.0, 2000}, {0.5, 1050}}, {1.0, 100}, 0x1p1000, 0.0, 0.5},
-      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, 1.0, 0.25, 0.2},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p40, 0.0, 0.0}, 0.5},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p40, 0x1p-41, 0x1p-41}, 0.0},
+      {{{1.0, 2000}, {0.5, 1050}}, {1.0, 100}, {0x1p1000, 0.0, 0.0}, 0.5},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {1.0, 0.25, 0.25}, 0.2},
   };
   for (const stationarity_row& r : rows) {
-    EXPECT_EQ(stationarity_of(r.m, r.y, r.alpha, r.b), r.cosine) << r.alpha;
+    EXPECT_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
+        << r.penalty.alpha;
+  }
+}
+
+TEST(Stationarity, ThePenaltyScaleIsTheLargestCoefficients) {
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {1.0, 0.25, 4.0}, 0.05},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p40, 0.0, 0x1p-40}, 0.25},
+      {{{1.0, 1900}, {0.5, 1000}}, {1.0, 100}, {0x1p950, 0.0, 0x1p50}, 0.25},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
+        << r.penalty.largest;
+  }
+}
+
+TEST(Stationarity, APenaltyPastTheDoubleRangeIsNotStationary) {
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p1000, 0x1p100, 0x1p100}, INFINITY},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p1000, 0.0, 0x1p100}, INFINITY},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
+        << r.penalty.coefficient;
   }
 }
 
 TEST(Stationarity, AnOddSpreadExponentSplitsBetweenTheTwoNorms) {
   const double root_half = std::sqrt(0.5);
   const std::vector<stationarity_row> rows{
-      {{{1.0, 3}, {0.5, 2}}, {1.0, 0}, 0x1p-60, 0.0, root_half},
-      {{{1.0, -3}, {0.5, -1}}, {1.0, 0}, 0x1p-60, 0.0, root_half},
+      {{{1.0, 3}, {0.5, 2}}, {1.0, 0}, {0x1p-60, 0.0, 0.0}, root_half},
+      {{{1.0, -3}, {0.5, -1}}, {1.0, 0}, {0x1p-60, 0.0, 0.0}, root_half},
   };
   for (const stationarity_row& r : rows) {
-    EXPECT_DOUBLE_EQ(stationarity_of(r.m, r.y, r.alpha, r.b), r.cosine)
+    EXPECT_DOUBLE_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
         << r.m.square.exponent;
   }
 }

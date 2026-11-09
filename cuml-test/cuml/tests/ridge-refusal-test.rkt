@@ -145,11 +145,13 @@
            (in-dtype (+ a b (* 1/10 (- yi 5)))))
          #f))
 
-(define (narrow-alpha c k)
-  (define narrow (map cadr (lcase-X c)))
-  (~> (* (expt 2 k) (weighted-spread narrow (map (lambda (_) 1) narrow)))
+(define (spread-alpha column k)
+  (~> (* (expt 2 k) (weighted-spread column (map (lambda (_) 1) column)))
       real->double-flonum
       inexact->exact))
+
+(define (narrow-alpha c k)
+  (spread-alpha (map cadr (lcase-X c)) k))
 
 (test-gpu "a narrow column's coefficient lost under a large alpha is refused"
   (for* ([p (in-list '((float32 44 30) (float64 100 40) (float32 60 0)))]
@@ -189,3 +191,56 @@
     (ridge-fit X y #:sample-weight W #:alpha 1/2 #:solver s #:fit-intercept fi)
     (test-case (format "~a ~a ~a ~a" dt s (and w #t) fi)
       (check-equal? (snapshot) before))))
+
+(define (one-wide-two-narrow g)
+  (define base (normal-case 200 3 5))
+  (define (in-dtype x)
+    (inexact->exact (rounded 'float32 x)))
+  (lcase (format "a at 2^~a, c + a/2 and c + b at 2^-~a" g g)
+         (for/list ([row (in-list (lcase-X base))])
+           (match-define (list a b c) row)
+           (map in-dtype
+                (list (* (expt 2 g) a) (* (expt 2 (- g)) (+ c (/ a 2))) (* (expt 2 (- g)) (+ c b)))))
+         (for/list ([row (in-list (lcase-X base))]
+                    [yi (in-list (lcase-y base))])
+           (match-define (list a b c) row)
+           (in-dtype (+ a (+ c (/ a 2)) (+ c b) (* 1/10 (- yi 5)))))
+         #f))
+
+(test-gpu "three correlated columns 2^40 apart in spread fit svd under a large alpha"
+  (define c (one-wide-two-narrow 10))
+  (define alpha (spread-alpha (map car (lcase-X c)) 10))
+  (for ([fi (in-list '(#t #f))])
+    (test-case (format "~a ~a" (lcase-name c) fi)
+      (match-define (struct* ridge-solution ([coef c*]))
+        (oracle-ridge (lcase-X c) (lcase-y c) #f alpha fi))
+      (match-define (list coef _)
+        (exact-fit (ridge-case-fit c 'float32 #:alpha alpha #:solver 'svd #:fit-intercept fi)))
+      (check-law "gap" (gap coef c*) (* 64 (unit-roundoff 'float32) (max-abs c*))))))
+
+(define (weak-narrow dt g m)
+  (define base (normal-case 200 3 5))
+  (define (in-dtype x)
+    (inexact->exact (rounded dt x)))
+  (lcase (format "columns at 2^~a and 2^-~a, y = a + 2^-~a b + 2^-20 c" g g m)
+         (for/list ([row (in-list (lcase-X base))])
+           (match-define (list a b _) row)
+           (list (in-dtype (* (expt 2 g) a)) (in-dtype (* (expt 2 (- g)) b))))
+         (for/list ([row (in-list (lcase-X base))])
+           (match-define (list a b c) row)
+           (in-dtype (+ a (* (expt 2 (- m)) b) (* (expt 2 -20) c))))
+         #f))
+
+(test-gpu "a narrow column carrying under 2^-8 (f32) or 2^-18 (f64) of y can be lost when u·κ_α ≥ 1 (known, #104)"
+  (for* ([p (in-list '((float32 44 30 9) (float64 100 40 19)))]
+         [s (in-list solvers)]
+         [fi (in-list '(#t #f))])
+    (match-define (list dt g k m) p)
+    (define c (weak-narrow dt g m))
+    (define alpha (narrow-alpha c k))
+    (test-case (format "~a ~a alpha 2^~a ~a ~a" dt (lcase-name c) k s fi)
+      (match-define (struct* ridge-solution ([coef (list _ narrow*)]))
+        (oracle-ridge (lcase-X c) (lcase-y c) #f alpha fi))
+      (match-define (list (list _ narrow) _)
+        (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)))
+      (check-law "narrow" (abs narrow) (* (expt 2 -30) (abs narrow*))))))
