@@ -352,6 +352,12 @@ struct stationarity_row {
   double cosine;
 };
 
+void expect_the_residual_cosine(const moment& m, scaled_sum y, double b) {
+  const double largest = std::abs(b);
+  EXPECT_EQ(stationarity_of(m, y, {0.0, b, largest}), cosine_of(m, y)) << b;
+  EXPECT_EQ(stationarity_of(m, y, {-0.0, b, largest}), cosine_of(m, y)) << b;
+}
+
 TEST(Stationarity, PinWithoutAPenaltyItIsTheResidualCosineBitwise) {
   const std::vector<moment> moments{
       {{0x1.4p-1, 4}, {0x1.8p-1, 3}},
@@ -363,11 +369,7 @@ TEST(Stationarity, PinWithoutAPenaltyItIsTheResidualCosineBitwise) {
   for (const moment& m : moments) {
     for (const scaled_sum& y : ys) {
       for (const double b : coefficients) {
-        const double largest = std::abs(b);
-        EXPECT_EQ(stationarity_of(m, y, {0.0, b, largest}), cosine_of(m, y))
-            << b;
-        EXPECT_EQ(stationarity_of(m, y, {-0.0, b, largest}), cosine_of(m, y))
-            << b;
+        expect_the_residual_cosine(m, y, b);
       }
     }
   }
