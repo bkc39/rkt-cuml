@@ -171,13 +171,15 @@ dtype's unit roundoff, is below rounding and is taken as 0: that fit is
 weight (zero, without @racket[fit-intercept]) gets coefficient 0.
 
 The fit is refused when the solve is not a ridge solution, as when X is
-ill-conditioned for @racket[alpha], and when @racket[alpha] scaled with X passes
-the dtype's range; an accepted fit is accurate relative to its largest
-coefficient, less so when y is nearly orthogonal to X. Where @racket[alpha] is over
-u times the narrowest column's spread and under u times the widest's, a solve
-that loses the narrow columns of very different scales is refused, but on nearly
-collinear columns either solver may return coefficients wrong by many times their
-size, which the refusal cannot see.
+ill-conditioned for @racket[alpha] (@racket['svd], float64 or a larger
+@racket[alpha] may fit), and when @racket[alpha] scaled with X passes the dtype's
+range. The coefficients are accurate to about u·κ@subscript{α} relative to the
+largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
+(λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the
+eigenvalues λ of XᵀWX, X centred as above. Where u·κ@subscript{α} is 1 or more, as
+with columns of very different scales or nearly collinear columns, either solver
+may refuse the fit as ill-conditioned or return it wrong; @tt{plans/layout.md}
+(L2-j, L2-k) has the measurements.
 
 Fits repeat as @racket[linear-regression-fit]'s, and @racket[X], @racket[y] and
 @racket[sample-weight] are not modified.

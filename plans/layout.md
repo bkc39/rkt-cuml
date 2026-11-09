@@ -1202,20 +1202,27 @@ Follow-ups are GitHub issues.
   alpha in Racket; an exact alpha past the double range becomes +inf.0 and
   is refused.
 - **L2-e.** After the solve the shim computes, on the staged data,
-  g_j = |Σw′(v′_j − v̄′_j)r′ − α′b′_j| / (√Σw′(v′_j − v̄′_j)²·√Σw′(y′ − ȳ′)² + α′|b′_j|),
-  each column's gradient against the size of its own two terms, and refuses
-  the fit when max g > 2^−8 (float32) or 2^−18 (float64). L1's residual
+  g_j = |Σw′(v′_j − v̄′_j)r′ − α′b′_j| / (√Σw′(v′_j − v̄′_j)²·√Σw′(y′ − ȳ′)² + α′·max_k|b′_k|),
+  each column's gradient against its cross term's size plus the largest
+  penalty term, and refuses the fit when max g > 2^−8 (float32) or 2^−18
+  (float64); a penalty term past the double range gives g = ∞. L1's residual
   cosine is its α′ = 0 case, computed by L1's own arithmetic, so it is L1's
-  value bit for bit: one `stationarity_cosine`. Until review r2 H1 the
+  value bit for bit: one `stationarity_cosine`. Until review r3 M1′ the
+  penalty term was column j's own α′|b′_j|: under α ≥ σ²_widest 'svd's
+  normwise error of about u·max|b| in b_j then gave the narrow columns a
+  cosine of about u·σ_wide/σ_narrow, which refused sound three-column fits
+  (L2-k). Until review r2 H1 the
   denominator was √(Σw′(v′_j − v̄′_j)² + α′)·√Σw′(y′ − ȳ′)², the residual
   cosine of the augmented problem [X; √α′·I]. Once α′ ≫ σ′_j² that scales
   column j's gradient down by σ′_j/√α′, so a coefficient the solve zeroed
   passed at about corr·σ_j/√α: float32 columns 2^±44 apart at
   α = 2^30·σ²_narrow, and float64 columns 2^±100 apart at 2^40, returned the
   narrow column's coefficient as 1.7e-41 and 4.7e-92 against 1.4e4 and
-  1.0e18, under both solvers. Those fits are now refused. The check bounds
-  the solve, not the conditioning: a float32 'svd fit 4.7× off on exactly
-  collinear columns in the L2-i window passes (L2-i).
+  1.0e18, under both solvers. Those fits are now refused, but the same
+  zeroed coefficient passes when its column carries under the threshold's
+  share of y (L2-k). The check bounds the solve, not the conditioning: a
+  float32 'svd fit 4.7× off on exactly collinear columns in the L2-i window
+  passes (L2-i).
 - **L2-f.** One kept column runs `ridgeFit`'s SVD under either solver
   (`ridgeFit` does this itself); 'svd with fewer positive-weight rows than
   kept columns runs eig, since gesvd aborts there. Both are covered by law R7.
@@ -1276,9 +1283,12 @@ Follow-ups are GitHub issues.
   L2-e's old normaliser both solvers returned the narrow coefficient as 0
   (relative error 1) at float32 g = 44, k = 30 and 57, g = 60, k = 57, and
   float64 g = 100, k = 40; the old check also accepted g = 44, k = 15, 20 and 40
-  and g = 100, k = 57, unmeasured against the oracle there. With L2-e's normaliser every such fit is refused, at
-  cosine 0.59 to 0.60, while every fit at float32 g = 8, 13 and 20 (k from −10
-  to 57) and float64 g = 30 is unchanged: accepted within 3e-7 (float32) and
+  and g = 100, k = 57, unmeasured against the oracle there. With L2-e's
+  normaliser each of these fits, y = a + b + noise, is refused, at cosine
+  0.59 to 0.60. When the narrow column carries under 2^−8 (float32) or 2^−18
+  (float64) of y, the same fits are accepted and wrong (L2-k). Every fit at
+  float32 g = 8, 13 and 20 (k from −10 to 57) and float64 g = 30 is
+  unchanged: accepted within 3e-7 (float32) and
   8e-16 (float64) of the ridge solution, or, at float32 g = 20 and k ≤ 10,
   refused as before. The collinear window rows above are unchanged by it:
   'svd is still accepted there, and 'eig still refuses the wide-at-2^13 rows
@@ -1297,12 +1307,14 @@ Follow-ups are GitHub issues.
 - **L2-j, refusal and accuracy.** A fit is refused when L2-e's max g passes
   2^−8 (float32) or 2^−18 (float64). An accepted fit's coefficients are off
   the ridge solution by about
-  u·(σ²_max + α)/(σ²_min + α) + u·σ_max·‖y‖/(σ²_min + α), relative to the
-  largest coefficient, σ² the eigenvalues of XᵀWX with X centred by its
-  weighted mean with an intercept. The second term is the cancellation in
-  X′ᵀy′ and dominates when y is nearly orthogonal to X (review r2 M2): at
-  κ ≈ 1, float32 with corr(y, X) = 2^−10 is off by 1.3e-5 against the first
-  term's 7.6e-6, corr 2^−30 by 7.65, and float64 corr 2^−60 by 8.30. A
+  u·(σ²_max + α)/(σ²_min + α) + u·σ_max·‖y‖/((σ²_min + α)·max|b|), relative
+  to the largest coefficient max|b|, σ² the eigenvalues of XᵀWX with X
+  centred by its weighted mean with an intercept. The second term is the
+  cancellation in X′ᵀy′; at κ ≈ 1 it is about u/corr(y, X), so it dominates
+  when y is nearly orthogonal to X (review r2 M2; until review r3 M2′ it
+  lacked the 1/max|b| and was not relative). Measured at κ ≈ 1: float32 with
+  corr 2^−10 is off by 1.3e-5 (u/corr 6.1e-5, the first term 7.6e-6), corr
+  2^−30 by 7.65 (u/corr 64), and float64 corr 2^−60 by 8.30 (u/corr 128). A
   narrow column's own coefficient can lose everything inside that bound:
   float32, a column 2^−40 narrower than the widest, past α/σ²_max ≈ 2^100
   (L2-a). The R1 laws run on `normal-case` data (noise 1/10, corr ≈ 1), where
@@ -1310,3 +1322,43 @@ Follow-ups are GitHub issues.
   Q2's float32 columns at 2^−13, 1, 2^13, 1 at α = 1 are past the threshold:
   'eig is refused and 'svd is within 2^−10·max|c*| of the ridge solution. On
   p3's collinear X both solvers are refused, as L1's 'eig and 'svd refuse it.
+- **L2-k, the scope of the check.** Every silently wrong fit found in
+  review (the L2-i window, review r2 H1, review r3 H1′) lies where
+  u·κ_α ≥ 1. There the wrong answer is stationary to rounding, so L2-e's
+  check is a best-effort detector, not a bound. A sound refusal needs a
+  solve equilibrated per column, which `ridgeFit`'s scalar α cannot give
+  (#104); no further detector is added in L2. The Scribble says the
+  coefficients are accurate to about u·κ_α, and that past u·κ_α ≥ 1 a fit may
+  be refused or returned wrong under either solver.
+  Measured cases (review r3 probes r1, r4, r5, r6; `.scratch` runs at r4):
+  - Accepted and wrong (H1′): columns 2^±g, α = 2^k·σ²_narrow,
+    y = a + 2^−m·b + 2^−20·c with c independent, so the narrow column carries
+    about 2^−m of y and its coefficient is still max|c*|. A solve that zeroes
+    it leaves a cosine of about 2^−m. float32 g = 44, k = 30 and 57, and
+    g = 60, k = 30, are accepted at m = 9, 10, 12 and 16 with relative error
+    1.0 (g = 44, k = 30, m = 9: 1.4e-41 against 31.8), and refused at m = 4,
+    7 and 8 (cosine 0.064, 8.1e-3, 4.0e-3). float64 g = 100, k = 40 and 57,
+    and g = 300, k = 57, are accepted at m = 19, 20 and 24 (g = 100, k = 40,
+    m = 19: 3.8e-92 against 2.1e12) and refused at m = 17 and 18. Both
+    solvers and both intercepts agree on every row. The float32 g = 44,
+    k = 30, m = 9 and float64 g = 100, k = 40, m = 19 rows are pinned as
+    known accepted-wrong fits in `ridge-refusal-test`, so a future detector
+    flips them consciously.
+  - Refused and sound (review r3 M1′, fixed in L2-e): three correlated
+    columns, one or two of them 2^±g apart (a, a + b, c + a/2 and
+    reorderings), α = 2^k·σ²_widest. Under the own-coefficient penalty term,
+    'svd was refused on 34 fits of probe r1 and 50 of probe r4 (float32
+    g = 10 and 13, float64 g = 25 and 30), at cosines up to 0.133 and at
+    κ_α ≤ 3.6 for k ≥ 0. With the normwise term every one is accepted, within 5.1e-7
+    (float32) and 6.1e-15 (float64) of max|c*|. Probe r4's 240 fits match the
+    pre-r2 normaliser's row for row. Probes q1, q4 and r2's edges keep every
+    decision: the H1 rows stay refused at cosine 0.59 to 0.60, and r5 and r6
+    are unchanged. Pinned by the float32 g = 10, k = 10 'svd row in
+    `ridge-refusal-test`.
+  Over the L1 and L2 test files (3209 tests) the largest accepted cosine
+  outside the pinned H1′ rows is 4.0e-4 (float32, Q2 'svd) and 2.7e-15
+  (float64) under either penalty term. The pinned rows sit at 2.0e-3 and
+  1.9e-6, just under the threshold. The two M1′ rows fall from 0.133 and
+  0.129 to 4.1e-7, and every α′ = 0 cosine (17892) is unchanged bitwise.
+  Q2 is unchanged: float32 'eig refused at 0.385 and 0.203, 'svd accepted at
+  4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
