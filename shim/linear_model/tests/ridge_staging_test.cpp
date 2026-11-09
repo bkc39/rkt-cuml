@@ -67,7 +67,7 @@ void expect_staged(const staged_case& c,
   const auto r = ridge_scale_of<T>(planned(c.exponent, c.largest, spread), c.n,
                                    {c.alpha, c.weight_power});
   ASSERT_EQ(r.has_value(), c.expected.has_value()) << c.alpha;
-  if (r) {
+  if (r && c.expected) {
     EXPECT_EQ(r->shared, c.expected->shared) << c.alpha;
     EXPECT_EQ(r->alpha, static_cast<T>(c.expected->alpha)) << c.alpha;
   }
