@@ -21,7 +21,8 @@
                   host-kkt
                   kkt
                   oracle-elastic-net
-                  problem-of)
+                  problem-of
+                  s2-bound)
          (only-in "linear-data.rkt"
                   check-law
                   dot
@@ -39,7 +40,9 @@
 
 (provide alpha-ratios
          check-elastic-net-laws
+         check-s2
          correlated-case
+         distance
          dyadic-weight-case
          en-case-fit
          en-fit
@@ -148,7 +151,19 @@
     [#f (length (lcase-y c))]
     [w (for/sum ([v (in-list w)] #:when (positive? v)) 1)]))
 
+(define law-runs (make-hash))
+
+(define (check-ran law got bound)
+  (hash-update! law-runs law add1 0)
+  (check-law law got bound))
+
+(define (check-laws-ran laws)
+  (for ([(law least) (in-hash laws)])
+    (check-true (>= (hash-ref law-runs law 0) least)
+                (format "~a ran ~a times, expected at least ~a" law (hash-ref law-runs law 0) least))))
+
 (define (check-elastic-net-laws cases intercepts #:dtypes [dts dtypes] #:tols [ts tols])
+  (hash-clear! law-runs)
   (for* ([c (in-list cases)]
          [fi (in-list intercepts)])
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
@@ -156,7 +171,7 @@
            [ratio (in-list alpha-ratios)])
       (define alpha (law-alpha p ratio r))
       (define o (oracle-elastic-net p alpha r))
-      (match-define (struct* en-solution ([coef c*] [intercept b*] [mu mu] [sigma sigma] [mx mx])) o)
+      (match-define (struct* en-solution ([coef c*] [intercept b*] [mu mu] [mx mx])) o)
       (for* ([dt (in-list dts)]
              [tol (in-list ts)]
              [s (in-list selections)])
@@ -173,19 +188,43 @@
             (en-case-fit c dt #:alpha alpha #:l1-ratio r #:fit-intercept fi #:tol tol #:selection s))
           (when (< k 1000)
             (match-define (kkt K B A) (host-kkt p coef alpha r tol k (rows-of c) u))
-            (check-law "S1" K (+ B A))
+            (check-ran "S1" K (+ B A))
             (when (>= (max-abs coef) tol)
-              (check-law "S1 relative" K B))
+              (check-ran "S1 relative" K B))
             (when (> mu 0)
               (define x̄ (norm2 (map exact->inexact mx)))
               (define gap (norm2 (map (lambda (a e) (- (inexact->exact a) e)) coef c*)))
-              (define bound
-                (+ (/ (* tol (max-abs coef) (apply + sigma) (norm2 sigma)) mu)
-                   (* 64 u (norm2 (map exact->inexact c*)))))
-              (check-law "S2" gap bound)
+              (define bound (s2-bound o coef alpha r tol u))
+              (check-ran "S2" gap bound)
               (when fi
-                (check-law "S3"
+                (check-ran "S3"
                            (abs (- (inexact->exact b) b*))
                            (+ (* x̄ bound)
                               (* 8 u (+ (abs b*) (* x̄ (norm2 (map exact->inexact c*))))))))))
-          (check-true (exact-nonnegative-integer? k)))))))
+          (check-true (exact-nonnegative-integer? k))))))
+  (define fits (* (length cases) (length intercepts) (length l1-ratios) (length alpha-ratios)
+                  (length dts) (length ts) (length selections)))
+  (test-case "each tolerance law ran on at least half the fits"
+    (check-laws-ran (hash "S1" (quotient fits 2)
+                          "S1 relative" (quotient fits 2)
+                          "S2" (quotient fits 2)
+                          "S3" (if (memq #t intercepts) (quotient fits (* 2 (length intercepts))) 0)))))
+
+(define (check-s2 c dt alpha r tol #:max-iter [max-iter 1000])
+  (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
+  (define o (oracle-elastic-net p alpha r))
+  (match-define (struct* en-solution ([coef c*] [mu mu])) o)
+  (match-define (list coef _ k)
+    (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol tol #:max-iter max-iter))
+  (define u (unit-roundoff dt))
+  (cond
+    [(> mu 0)
+     (check-law "S2" (distance coef c*) (s2-bound o coef alpha r tol u))
+     "S2"]
+    [else
+     (match-define (kkt K B A) (host-kkt p coef alpha r tol k (rows-of c) u))
+     (check-law "S1" K (+ B A))
+     "S1"]))
+
+(define (distance a b)
+  (norm2 (map (lambda (x y) (exact->inexact (- (inexact->exact x) y))) a b)))

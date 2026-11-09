@@ -270,8 +270,16 @@ every coefficient is under @racket[tol]. That last test is absolute, in y's unit
 stops short of what the first test allows is refused, as when X's units are large against y's. A
 fit with @racket[n-iter] equal to @racket[max-iter] may not have converged. @racket[tol] bounds an
 epoch's change, not the error, which grows on correlated columns (to 8% of the largest coefficient
-at correlation 0.99 in @tt{plans/layout.md}, L3-b). An @racket[alpha] at or above
-max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]) gives coefficients 0. A column
+at correlation 0.99 in @tt{plans/layout.md}, L3-b). An accepted fit's error is bounded only through
+its optimality residual K, at most @racket[tol] plus rounding, by
+K·max|b|·‖d‖@subscript{2}/(λ@subscript{min} + λ), where λ = @racket[alpha](1 − @racket[l1-ratio]),
+d@subscript{j} = max(σ@subscript{j}² + λ, σ@subscript{j}Σ@subscript{k}σ@subscript{k}), σ@subscript{j} is
+column j's weighted RMS and λ@subscript{min} the least eigenvalue of XᵀWX/Σw, X centred as for
+@racket[ridge-fit]; the check is best effort where u(λ@subscript{max} + λ)/(λ@subscript{min} + λ) is 1
+or more, u being the dtype's unit roundoff. An
+@racket[alpha] more than rounding above max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]),
+or max@subscript{j}|x@subscript{j}ᵀWy|/(Σw·@racket[l1-ratio]) without @racket[fit-intercept], gives
+coefficients 0. A column
 constant over the rows of positive weight (zero, without @racket[fit-intercept]) gets coefficient 0.
 
 Unlike scikit-learn, the default @racket[tol] is 10@superscript{−3}, not 10@superscript{−4}, and it is

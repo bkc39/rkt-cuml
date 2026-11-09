@@ -13,7 +13,12 @@
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/elastic-net-data.rkt" correlated-case en-case-fit law-alpha norm2)
+         (only-in "private/elastic-net-data.rkt"
+                  check-s2
+                  correlated-case
+                  en-case-fit
+                  law-alpha
+                  norm2)
          (only-in "private/elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
@@ -224,11 +229,42 @@
    "elastic-net-fit: X: column 0 is too narrow beside the other columns and y for float32 coordinate descent"
    (lambda ()
      (en-case-fit (scaled-columns c (list (expt 2 -60) (expt 2 60)) 1) 'float32 #:alpha 1e-3)))
-  (check-true
-   (list? (en-case-fit (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1) 'float32 #:alpha 1e-3))))
+  (check-equal? (check-s2 (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1) 'float32 1e-3 0.5 1e-3)
+                "S2"))
 
 (test-gpu "an alpha whose row multiple overflows float32 is refused with ridge's message (Q5)"
   (check-cuml-error
    'logic
    #rx"^elastic-net-fit: alpha: expected at most .* for this X in float32, got 1e\\+38$"
    (lambda () (en-case-fit (correlated-case 20 2 0 24) 'float32 #:alpha 1e38))))
+
+(define stop-message
+  #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol ")
+
+(test-gpu "under a heavy L2 penalty, an absolute stop short of tol is still refused (L3-m)"
+  (define c (scaled-case (correlated-case 200 7 0.9 31) #:y (expt 2 -10)))
+  (for ([dt (in-list dtypes)])
+    (check-cuml-error 'logic
+                      stop-message
+                      (lambda () (en-case-fit c dt #:alpha 1e4 #:l1-ratio 0 #:tol 1e-5)))))
+
+(define tall-rows (expt 2 17))
+
+(define nearly-orthogonal
+  (let ([X (for/list ([i (in-range tall-rows)])
+             (define a (if (even? i) 1 -1))
+             (define b (if (even? (quotient i 2)) 1 -1))
+             (list a (* (expt 2 10) (+ b (* (expt 2 -8) a)))))])
+    (lcase "a column 2^-8 from orthogonal to one 2^10 wider"
+           X
+           (for/list ([row (in-list X)])
+             (+ (* (expt 2 -21) (car row)) (* (expt 2 -30) (cadr row))))
+           #f)))
+
+(test-gpu "a float32 one-epoch stop 0.8% off is refused at 2^17 rows (Lo3)"
+  (check-cuml-error 'logic
+                    stop-message
+                    (lambda () (en-case-fit nearly-orthogonal 'float32 #:alpha 0 #:tol 1e-6)))
+  (match-define (list (list b0 _) _ 1)
+    (en-case-fit nearly-orthogonal 'float32 #:alpha 0 #:tol 1e-6 #:max-iter 1))
+  (check-true (> (abs (- (inexact->exact b0) (expt 2 -21))) (* 1e-3 (expt 2 -21)))))

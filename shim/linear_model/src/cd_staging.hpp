@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "fit_checks.hpp"
@@ -38,7 +39,7 @@ struct cd_epochs {
 };
 
 struct kkt_terms {
-  double residual;
+  std::optional<double> residual;
   double bound;
   double allowance;
 };

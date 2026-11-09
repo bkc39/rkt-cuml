@@ -7,6 +7,8 @@
 #include <cstdint>
 #include <format>
 #include <limits>
+#include <numeric>
+#include <optional>
 #include <ranges>
 #include <vector>
 
@@ -25,6 +27,7 @@ namespace {
 constexpr int32_t most_cd_rows = std::numeric_limits<int32_t>::max();
 constexpr int moment_headroom = 6;
 constexpr int label_headroom = 4;
+constexpr long double coefficient_rounding = 2;
 
 int half_floor(int x) {
   return even_floor(x) / 2;
@@ -34,13 +37,6 @@ long double value_of(scaled_sum s) {
   return s.value == 0
              ? 0.0L
              : std::ldexp(static_cast<long double>(s.value), s.exponent);
-}
-
-long double ratio_of(long double v, long double norm, long double y_norm) {
-  if (y_norm != 0) {
-    return v / (norm * y_norm);
-  }
-  return v == 0 ? 0.0L : INFINITY;
 }
 
 long double violation(long double cross, double coef, long double weight,
@@ -55,12 +51,14 @@ long double violation(long double cross, double coef, long double weight,
 }
 
 template <typename T>
+constexpr int penalty_exponent = std::numeric_limits<T>::max_exponent - 1;
+
+template <typename T>
 void refuse_alpha(double alpha, int64_t rows, int shared) {
   throw logic_error(std::format(
       "alpha: expected at most {} for this X in {}, got {}",
-      printed(std::ldexp(static_cast<double>(std::numeric_limits<T>::max()) /
-                             static_cast<double>(rows),
-                         -2 * shared)),
+      printed(std::ldexp(1.0 / static_cast<double>(rows),
+                         penalty_exponent<T> - 2 * shared)),
       raftrkt::dtype_name(raftrkt::dtype_code<T>), printed(alpha)));
 }
 
@@ -97,7 +95,10 @@ cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha) {
         narrowest, raftrkt::dtype_name(raftrkt::dtype_code<T>)));
   }
   const auto staged = static_cast<T>(std::ldexp(alpha, 2 * shared));
-  if (!std::isfinite(staged) || !std::isfinite(staged * static_cast<T>(rows))) {
+  // Cap (a) keeps cdFit's column sums of squares under 2^(E-4), so with
+  // alpha'm <= 2^(E-1) its denominator sum + alpha'(1-rho)m stays finite.
+  if (static_cast<long double>(staged) * static_cast<long double>(rows) >
+      std::ldexp(1.0L, penalty_exponent<T>)) {
     refuse_alpha<T>(alpha, rows, shared);
   }
   return {shared, staged};
@@ -105,43 +106,54 @@ cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha) {
 
 kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
                  double weight, cd_penalty penalty, cd_epochs epochs) {
-  const long double y_square = value_of(t.y_square);
-  const long double y_norm = std::sqrt(y_square);
-  long double worst = 0;
-  long double norms = 0;
-  double largest = 0;
-  for (size_t k = 0; k < t.moments.size(); ++k) {
-    const long double square = value_of(t.moments[k].square);
-    if (square == 0) {
+  const long double total = weight;
+  std::vector<long double> sigma;
+  sigma.reserve(t.moments.size());
+  for (const moment& m : t.moments) {
+    sigma.push_back(std::sqrt(value_of(m.square) / total));
+  }
+  const long double sigmas = std::accumulate(sigma.begin(), sigma.end(), 0.0L);
+  const long double largest =
+      std::ranges::max(coef | std::views::transform([](double c) {
+                         return static_cast<long double>(std::abs(c));
+                       }));
+  std::optional<long double> worst = 0.0L;
+  long double reach = 0;
+  for (size_t k = 0; k < sigma.size(); ++k) {
+    if (sigma[k] == 0) {
       continue;
     }
-    const long double v =
-        violation(value_of(t.moments[k].cross), coef[k], weight, penalty);
-    const long double norm = std::sqrt(square);
-    const long double ratio = ratio_of(v, norm, y_norm);
-    worst =
-        std::isnan(ratio) || std::isnan(worst) ? NAN : std::max(worst, ratio);
-    norms += norm;
-    largest = std::max(largest, std::abs(coef[k]));
+    const long double curvature =
+        std::max(sigma[k] * sigma[k] + penalty.l2, sigma[k] * sigmas);
+    const long double move = violation(value_of(t.moments[k].cross), coef[k],
+                                       total, penalty) /
+                             (total * curvature * largest);
+    worst = worst && !std::isnan(move)
+                ? std::optional(std::max(*worst, move))
+                : std::nullopt;
+    reach = std::max(reach, sigma[k] / curvature);
   }
-  const long double spread =
-      y_norm == 0 ? 0.0L : static_cast<long double>(largest) * norms / y_norm;
-  const long double epochs_rows = static_cast<long double>(epochs.n_iter) *
-                                  static_cast<long double>(epochs.rows);
-  return {static_cast<double>(worst), static_cast<double>(epochs.tol * spread),
-          static_cast<double>(epochs.roundoff * (1 + spread) *
-                              std::sqrt(epochs_rows))};
+  const long double y_sigma = std::sqrt(value_of(t.y_square) / total);
+  const long double gradient =
+      std::sqrt(static_cast<long double>(epochs.rows)) * y_sigma * reach /
+      largest;
+  return {worst ? std::optional(static_cast<double>(*worst)) : std::nullopt,
+          epochs.tol,
+          static_cast<double>(
+              epochs.roundoff *
+              std::sqrt(static_cast<long double>(epochs.n_iter)) *
+              (coefficient_rounding + gradient))};
 }
 
 void require_kkt(const kkt_terms& k, cd_epochs epochs) {
   const double bound = k.bound + k.allowance;
-  if (k.residual > bound || std::isnan(k.residual)) {
+  if (!k.residual || *k.residual > bound) {
     throw logic_error(std::format(
         "X: coordinate descent stopped after {} epochs with every coefficient "
         "under tol {} and KKT residual {} > {}; tol is absolute in the "
         "coefficients' units, so scale y up or X down",
-        epochs.n_iter, printed(epochs.tol), printed(k.residual),
-        printed(bound)));
+        epochs.n_iter, printed(epochs.tol),
+        k.residual ? printed(*k.residual) : "nan", printed(bound)));
   }
 }
 

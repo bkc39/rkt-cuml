@@ -15,9 +15,11 @@
          (struct-out en-solution)
          (struct-out kkt)
          alpha-max
+         curvatures
          host-kkt
          oracle-elastic-net
-         problem-of)
+         problem-of
+         s2-bound)
 
 (struct en-problem (G b mx my total yy) #:transparent)
 (struct en-solution (coef intercept mu sigma sigma-y mx) #:transparent)
@@ -149,28 +151,54 @@
                (sqrt (exact->inexact (/ yy total)))
                mx))
 
+(define coefficient-rounding 2)
+
+(define (curvatures sigma l2)
+  (define sigmas (apply + sigma))
+  (for/list ([s (in-list sigma)])
+    (max (+ (* s s) (exact->inexact l2)) (* s sigmas))))
+
 (define (host-kkt p coef alpha l1-ratio tol n-iter rows roundoff)
   (match-define (en-problem G b _ _ total yy) p)
   (define-values (l1 l2) (penalties alpha l1-ratio))
   (define c (map inexact->exact coef))
+  (define largest (exact->inexact (max-abs c)))
   (define sigma-y (sqrt (exact->inexact (/ yy total))))
-  (define-values (worst norms)
-    (for/fold ([worst 0.0]
-               [norms 0.0])
-              ([row (in-list G)]
-               [bj (in-list b)]
-               [cj (in-list c)]
+  (define kept
+    (for/list ([row (in-list G)]
                [j (in-naturals)]
                #:unless (zero? (list-ref row j)))
-      (define g (- (/ (- bj (dot row c)) total) (* l2 cj)))
+      j))
+  (define sigma
+    (for/list ([j (in-list kept)])
+      (sqrt (exact->inexact (/ (list-ref (list-ref G j) j) total)))))
+  (define-values (worst reach)
+    (for/fold ([worst 0.0]
+               [reach 0.0])
+              ([j (in-list kept)]
+               [s (in-list sigma)]
+               [d (in-list (curvatures sigma l2))])
+      (define cj (list-ref c j))
+      (define g (- (/ (- (list-ref b j) (dot (list-ref G j) c)) total) (* l2 cj)))
       (define v
         (if (zero? cj)
             (max 0 (- (abs g) l1))
             (abs (- g (* l1 (sgn cj))))))
-      (define sigma (sqrt (exact->inexact (/ (list-ref row j) total))))
-      (values (max worst (/ (exact->inexact v) (* sigma sigma-y))) (+ norms sigma))))
-  (define spread (/ (* (exact->inexact (max-abs c)) norms) sigma-y))
-  (kkt worst (* tol spread) (* roundoff (+ 1 spread) (sqrt (* n-iter rows)))))
+      (values (max worst (/ (exact->inexact v) d)) (max reach (/ s d)))))
+  (define rounding (* roundoff (sqrt n-iter)))
+  (define gradient (* (sqrt rows) sigma-y reach))
+  (if (zero? largest)
+      (kkt worst 0.0 (* rounding gradient))
+      (kkt (/ worst largest) tol (* rounding (+ coefficient-rounding (/ gradient largest))))))
+
+(define (s2-bound o coef alpha l1-ratio tol roundoff)
+  (match-define (en-solution c* _ mu sigma _ _) o)
+  (define-values (_ l2) (penalties alpha l1-ratio))
+  (+ (/ (* tol (exact->inexact (max-abs coef)) (norm (curvatures sigma l2))) mu)
+     (* 64 roundoff (norm (map exact->inexact c*)))))
+
+(define (norm xs)
+  (sqrt (for/sum ([x (in-list xs)]) (* x x))))
 
 (module+ test
   (require (only-in rackunit check-equal? check-true))

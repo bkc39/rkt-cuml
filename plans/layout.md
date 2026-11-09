@@ -1384,18 +1384,34 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   the misses are raw fits under the cut). The column cap min_j c_j is never
   the binding one, since c_j − (a) = 62 (float32) or 510 (float64) for the
   widest column. A y on its own exponent (F6) removes the absolute stop but
-  puts the L2 term off by up to 6.9e-4.
+  puts the L2 term off by up to 6.9e-4. α′·m > 2^(E−1) is refused (V14):
+  cap (a) keeps `cdFit`'s Σw̃(x′ − x̄′)² ≤ Σw̃x′² < 2^(E−4), so its denominator
+  Σx′² + α′(1−ρ)m stays below 2^(E−4) + 2^(E−1)(1 + 2u), and ρα′m, the soft
+  threshold (which only shrinks |x′ᵀr′|) and the quotient stay finite. Only
+  "α′·m finite" (round 0) let that sum reach inf and return a coefficient 0
+  with no refusal (f32 columns 2^58 apart, α within 1e-4 of the old bound).
+  V12 (m > 2³¹ − 1) is defensive: `require_index` already refuses
+  n·d > 2³¹ − 1, so the public path cannot reach it; a gtest calls it.
 - **L3-b.** `cd.cuh:271` stops when every coefficient is under tol in the
   caller's units, after one epoch (F5: rel 0.12 to 2.08 at X·1e5). The shim
-  refuses such a stop when the subgradient residual K = max_j v_j/(σ_jσ_y)
-  exceeds B + A, B = tol·max|b|·Σσ_k/σ_y the bound a relative stop meets
-  (F10: K/B ≤ 0.615 over 2337 relative stops per dtype) and
-  A = u(1 + max|b|Σσ/σ_y)√(n_iter·m) for rounding (F11). It refused 72/72
-  absolute stops with rel > 1e-2 per dtype (F12). What it promises: a fit
-  returned before max-iter meets the elastic-net optimality conditions to
-  within what the relative test allows. What it does not: the coefficients'
-  error, bounded only by K·σ_y‖σ‖₂/μ (F14; 7.9e-2 of max|b| at correlation
-  0.99 is sound under it), and fits at max-iter (L3-e).
+  refuses such a stop when K = max_j v_j/(max|b|·D_j) exceeds B + A, with
+  v_j the subgradient violation, D_j = max(σ_j² + λ₂, σ_jΣ_kσ_k),
+  λ₂ = α(1−ρ), B = tol and A = u√n_iter·(2 + √m·σ_y·max_j(σ_j/D_j)/max|b|)
+  (L3-m, round 1). A relative stop has v_j ≤ tol·max|b|·σ_jΣ_{k≠j}σ_k, so
+  K < B (F10); where λ₂ dominates, v_j/(σ_j² + λ₂) is the move the next
+  update of j would make, and K ≤ tol is the relative test applied one step
+  ahead. Below λ₂ = σ_jΣ_{k≠j}σ_k this is round 0's check,
+  K_old = max_j v_j/(σ_jσ_y) against tol·max|b|Σσ/σ_y, which refused every
+  ridge-heavy one-epoch stop (α(1−ρ) ≫ σ²) however accurate: 200×7,
+  corr 0.9, α 1e4 and 1e6 are 4.9e-4 and 4.9e-6 of max|c*| off after one
+  epoch. A's √m stays on the gradient term only: near α_max the rounding in
+  K reaches 30.8·u√n·σ_y·max(σ_j/D_j)/max|b| in float64 at m = 1e6 (28.4 at
+  1e4), while the coefficient term needs under 1 (L3-m measurements below).
+  What it promises: a fit returned before max-iter meets the elastic-net
+  optimality conditions to within what the relative test allows. What it
+  does not: the coefficients' error, bounded only by K·max|b|·‖D‖₂/μ (F14;
+  7.9e-2 of max|b| at correlation 0.99 is sound under it), and fits at
+  max-iter (L3-e).
 - **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
   against lstsq at tol 1e-14).
 - **L3-d.** K is computed only when n-iter < max-iter and

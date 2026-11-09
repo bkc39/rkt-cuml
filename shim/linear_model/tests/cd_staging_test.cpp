@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cuda_stream.hpp>
 #include <string>
@@ -32,6 +33,7 @@ using cumlrkt::glm::centre;
 using cumlrkt::glm::kkt_of;
 using cumlrkt::glm::kkt_terms;
 using cumlrkt::glm::moment;
+using cumlrkt::glm::require_cd_rows;
 using cumlrkt::glm::require_kkt;
 using cumlrkt::glm::residual_terms;
 using cumlrkt::glm::row_selection;
@@ -140,6 +142,21 @@ TEST(CdStaging, AnAlphaWhoseRowMultipleOverflowsIsRefused) {
             "accepted");
 }
 
+constexpr double past_half_range = 1.71e36;
+constexpr double under_half_range = 1.70e36;
+
+TEST(CdStaging, AnAlphaWhoseRowMultiplePassesHalfTheRangeIsRefused) {
+  const staging s = planned({{0}, {1.5}, 0});
+  EXPECT_EQ(
+      refusal_of([&] { cd_scale_of<float>(s, rows, past_half_range); }),
+      "alpha: expected at most 1.7014118346046923e+36 for this X in float32, "
+      "got "
+      "1.71e+36");
+  EXPECT_EQ(
+      refusal_of([&] { cd_scale_of<float>(s, rows, under_half_range); }),
+      "accepted");
+}
+
 scaled_sum sum(double value, int exponent) {
   return {value, exponent};
 }
@@ -161,21 +178,37 @@ const std::vector<double> epoch_coef{1, 0, 0};
 constexpr double epoch_weight = 4;
 constexpr double epoch_tol = 0.1;
 constexpr double epoch_l1 = 0.5;
-constexpr double epoch_l2 = 0.25;
+constexpr double light_l2 = 0.25;
+constexpr double heavy_l2 = 1;
 constexpr int epoch_iters = 4;
 constexpr int64_t epoch_rows = 9;
 constexpr double float_roundoff = 0x1p-24;
+constexpr double light_residual = 1.0 / 6;
+constexpr double heavy_residual = 0.3671875;
+constexpr double light_allowance = float_roundoff * 2 * (2 + 3 * 2 * (2.0 / 3));
+constexpr double heavy_allowance = float_roundoff * 2 * (2 + 3 * 2 * 0.5);
 
-TEST(CdCheck, KBAndAOnAHandBuiltEpoch) {
+TEST(CdCheck, KBAndAOnAHandBuiltEpochUnderALightL2Penalty) {
   const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
   const kkt_terms k = kkt_of(hand_built_epoch(), epoch_coef, epoch_weight,
-                             {epoch_l1, epoch_l2}, epochs);
-  EXPECT_DOUBLE_EQ(k.residual, 0.125);
-  EXPECT_DOUBLE_EQ(k.bound, epoch_tol * 0.75);
-  EXPECT_DOUBLE_EQ(k.allowance, float_roundoff * 1.75 * 6);
+                             {epoch_l1, light_l2}, epochs);
+  ASSERT_TRUE(k.residual.has_value());
+  EXPECT_DOUBLE_EQ(*k.residual, light_residual);
+  EXPECT_DOUBLE_EQ(k.bound, epoch_tol);
+  EXPECT_DOUBLE_EQ(k.allowance, light_allowance);
+}
+
+TEST(CdCheck, KBAndAOnAHandBuiltEpochUnderAHeavyL2Penalty) {
+  const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
+  const kkt_terms k = kkt_of(hand_built_epoch(), epoch_coef, epoch_weight,
+                             {epoch_l1, heavy_l2}, epochs);
+  ASSERT_TRUE(k.residual.has_value());
+  EXPECT_DOUBLE_EQ(*k.residual, heavy_residual);
+  EXPECT_DOUBLE_EQ(k.bound, epoch_tol);
+  EXPECT_DOUBLE_EQ(k.allowance, heavy_allowance);
   const std::string got = refusal_of([&] { require_kkt(k, epochs); });
   EXPECT_EQ(got.rfind("X: coordinate descent stopped after 4 epochs with every "
-                      "coefficient under tol 0.1 and KKT residual 0.125 > ",
+                      "coefficient under tol 0.1 and KKT residual 0.3671875 > ",
                       0),
             0U)
       << got;
@@ -186,14 +219,12 @@ TEST(CdCheck, KBAndAOnAHandBuiltEpoch) {
 
 TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
   const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
-  constexpr double at_bound = epoch_tol * 0.75;
-  EXPECT_EQ(refusal_of([&] { require_kkt({at_bound, at_bound, 0}, epochs); }),
-            "accepted");
-  EXPECT_NE(refusal_of([&] {
-              require_kkt({std::numeric_limits<double>::quiet_NaN(), 1, 1},
-                          epochs);
-            }),
-            "accepted");
+  EXPECT_EQ(
+      refusal_of([&] { require_kkt({epoch_tol, epoch_tol, 0}, epochs); }),
+      "accepted");
+  EXPECT_NE(
+      refusal_of([&] { require_kkt({std::nullopt, epoch_tol, 1}, epochs); }),
+      "accepted");
 }
 
 struct stop_case {
@@ -216,6 +247,15 @@ TEST(CdCheck, OnlyStopsTheAbsoluteTestCouldMakeAreChecked) {
     EXPECT_EQ(absolute_stop(c.n_iter, c.max_iter, c.largest, 1e-3), c.checked)
         << c.n_iter << " " << c.largest;
   }
+}
+
+constexpr int64_t most_rows = std::numeric_limits<int32_t>::max();
+
+TEST(CdStaging, RowsPastInt32AreRefused) {
+  EXPECT_EQ(refusal_of([] { require_cd_rows(most_rows + 1); }),
+            "X: 2147483648 rows of positive weight exceed coordinate "
+            "descent's 2147483647");
+  EXPECT_EQ(refusal_of([] { require_cd_rows(most_rows); }), "accepted");
 }
 
 constexpr int64_t dyadic_rows = 64;
