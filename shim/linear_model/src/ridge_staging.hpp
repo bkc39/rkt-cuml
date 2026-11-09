@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <type_traits>
 
 #include "fit_checks.hpp"
@@ -28,12 +29,11 @@ template <typename T>
 struct ridge_scale {
   int shared;
   T alpha;
-  bool negligible;
 };
 
 template <typename T>
-ridge_scale<T> ridge_scale_of(const staging& s, int64_t n,
-                              ridge_penalty penalty);
+std::optional<ridge_scale<T>> ridge_scale_of(const staging& s, int64_t n,
+                                             ridge_penalty penalty);
 
 staging shared_at(staging s, int shared);
 

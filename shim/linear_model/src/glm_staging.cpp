@@ -4,10 +4,12 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <raft/core/handle.hpp>
 #include <ranges>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -32,11 +34,23 @@ struct device_columns {
   }
 };
 
+struct stationarity_terms {
+  std::string_view solution;
+  std::string_view residual;
+  std::string_view cause;
+};
+
 device_columns columns_of(const staging& s, rmm::cuda_stream_view stream) {
   std::vector<int> e(s.kept.size());
   std::ranges::transform(s.kept, e.begin(),
                          [&](int64_t j) { return s.column_exponent[j]; });
   return {to_device(s.kept, stream), to_device(e, stream)};
+}
+
+}  // namespace
+
+int even_floor(int x) {
+  return x - (((x % 2) + 2) % 2);
 }
 
 double cosine_of(const moment& m, scaled_sum y) {
@@ -51,22 +65,18 @@ double stationarity_of(const moment& m, scaled_sum y, double alpha, double b) {
     return cosine_of(m, y);
   }
   const double penalty = alpha * b;
+  const int product = m.square.exponent + y.exponent;
+  const int half = even_floor(product) / 2;
+  const double norms =
+      std::sqrt(std::ldexp(m.square.value * y.value, product - (2 * half)));
   const int top = penalty == 0
-                      ? m.cross.exponent
-                      : std::max(m.cross.exponent, std::ilogb(penalty));
+                      ? std::max(m.cross.exponent, half)
+                      : std::max({m.cross.exponent, half, std::ilogb(penalty)});
   const double gradient = std::ldexp(m.cross.value, m.cross.exponent - top) -
                           std::ldexp(penalty, -top);
-  const int base = std::max(m.square.exponent, std::ilogb(alpha));
-  const double square = std::ldexp(m.square.value, m.square.exponent - base) +
-                        std::ldexp(alpha, -base);
-  const double ratio = (gradient * gradient) / (square * y.value);
-  return std::sqrt(std::ldexp(ratio, (2 * top) - base - y.exponent));
-}
-
-}  // namespace
-
-int even_floor(int x) {
-  return x - (((x % 2) + 2) % 2);
+  const double size =
+      std::ldexp(norms, half - top) + std::ldexp(std::abs(penalty), -top);
+  return std::abs(gradient) / size;
 }
 
 std::string algorithm_name(int algorithm) {
@@ -206,17 +216,16 @@ void require_stationary(double cosine, glm_solver solver) {
   if (cosine <= std::ldexp(1.0, -tolerance_bits<T>)) {
     return;
   }
-  const std::string name = algorithm_name(solver.algorithm);
-  if (solver.family == glm_family::ridge) {
-    throw logic_error(std::format(
-        "X: the {} solve is not a ridge solution (gradient cosine {} > 2^-{}); "
-        "X is ill-conditioned for this alpha",
-        name, printed(cosine), tolerance_bits<T>));
-  }
+  const auto [solution, residual, cause] =
+      solver.family == glm_family::ridge
+          ? stationarity_terms{"ridge", "gradient",
+                               "X is ill-conditioned for this alpha"}
+          : stationarity_terms{"least-squares", "residual",
+                               "X may have collinear columns"};
   throw logic_error(std::format(
-      "X: the {} solve is not a least-squares solution (residual cosine {} "
-      "> 2^-{}); X may have collinear columns",
-      name, printed(cosine), tolerance_bits<T>));
+      "X: the {} solve is not a {} solution ({} cosine {} > 2^-{}); {}",
+      algorithm_name(solver.algorithm), solution, residual, printed(cosine),
+      tolerance_bits<T>, cause));
 }
 
 template <typename T>
@@ -240,16 +249,17 @@ double stationarity_cosine(const raft::handle_t& handle,
   const residual_terms terms =
       residual_moments(handle, x, y, w, rows, s, coef, fit_intercept);
   const auto count = static_cast<int64_t>(terms.moments.size());
-  const std::vector<T> b =
-      alpha == 0 ? std::vector<T>{} : to_host(coef, count, stream_of(handle));
+  const std::optional<std::vector<T>> b =
+      alpha == 0 ? std::nullopt
+                 : std::optional(to_host(coef, count, stream_of(handle)));
   double worst = 0;
   for (int64_t k = 0; k < count; ++k) {
     if (terms.largest[k] == 0) {
       continue;
     }
-    const double g = stationarity_of(
-        terms.moments[k], terms.y_square, static_cast<double>(alpha),
-        b.empty() ? 0.0 : static_cast<double>(b[k]));
+    const double g = stationarity_of(terms.moments[k], terms.y_square,
+                                     static_cast<double>(alpha),
+                                     b ? static_cast<double>((*b)[k]) : 0.0);
     worst = std::isnan(g) || std::isnan(worst) ? NAN : std::max(worst, g);
   }
   return worst;

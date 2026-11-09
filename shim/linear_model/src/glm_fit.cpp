@@ -43,30 +43,6 @@ counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
   return {std::move(index), rows};
 }
 
-}  // namespace
-
-template <typename T>
-prepared_fit<T> prepare_fit(const raft::handle_t& handle,
-                            const checked_fit<T>& checked,
-                            int32_t fit_intercept) {
-  const fit_inputs<T>& raw = checked.in;
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  buffer<T> weights =
-      staged_weights(handle, raw.w, raw.x.n, checked.largest_weight);
-  const fit_inputs<T> in{raw.x, raw.y,
-                         raw.w == nullptr ? nullptr : weights.data()};
-  const bool intercepted = fit_intercept == 1;
-  const int64_t positive = positive_count(in.w, in.x.n, stream);
-  counted_rows counted = counted_rows_of(in.w, in.x.n, positive, stream);
-  staging planned =
-      plan_staging(handle, in.x, in.y, in.w, counted.rows, intercepted);
-  const int weight_power =
-      raw.w == nullptr ? 0 : even_floor(unit_exponent(checked.largest_weight));
-  return {std::move(weights), in,       intercepted,
-          weight_power,       positive, std::move(counted),
-          std::move(planned)};
-}
-
 template <typename T>
 fit_result<T> nothing_to_solve(const raft::handle_t& handle,
                                const fit_inputs<T>& in, const fit_plan& plan,
@@ -136,27 +112,53 @@ double deposit_fit(const raft::handle_t& handle, fit_result<T> r,
   return r.intercept;
 }
 
+}  // namespace
+
+template <typename T>
+prepared_fit<T> prepare_fit(const raft::handle_t& handle,
+                            const checked_fit<T>& checked,
+                            int32_t fit_intercept) {
+  const fit_inputs<T>& raw = checked.in;
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  buffer<T> weights =
+      staged_weights(handle, raw.w, raw.x.n, checked.largest_weight);
+  const fit_inputs<T> in{raw.x, raw.y,
+                         raw.w == nullptr ? nullptr : weights.data()};
+  const bool intercepted = fit_intercept == 1;
+  const int64_t positive = positive_count(in.w, in.x.n, stream);
+  counted_rows counted = counted_rows_of(in.w, in.x.n, positive, stream);
+  staging planned =
+      plan_staging(handle, in.x, in.y, in.w, counted.rows, intercepted);
+  const int weight_power =
+      raw.w == nullptr ? 0 : even_floor(unit_exponent(checked.largest_weight));
+  return {std::move(weights), in,       intercepted,
+          weight_power,       positive, std::move(counted),
+          std::move(planned)};
+}
+
+template <typename T>
+double finish_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
+                  const fit_plan& plan, T alpha, rr_deposit* out) {
+  const bool constant_y =
+      constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);
+  return deposit_fit(handle,
+                     constant_y || plan.s.kept.empty()
+                         ? nothing_to_solve(handle, in, plan, constant_y)
+                         : solved(handle, in, plan, alpha),
+                     out);
+}
+
 template prepared_fit<float> prepare_fit<float>(const raft::handle_t&,
                                                 const checked_fit<float>&,
                                                 int32_t);
 template prepared_fit<double> prepare_fit<double>(const raft::handle_t&,
                                                   const checked_fit<double>&,
                                                   int32_t);
-template fit_result<float> nothing_to_solve<float>(const raft::handle_t&,
-                                                   const fit_inputs<float>&,
-                                                   const fit_plan&, bool);
-template fit_result<double> nothing_to_solve<double>(const raft::handle_t&,
-                                                     const fit_inputs<double>&,
-                                                     const fit_plan&, bool);
-template fit_result<float> solved<float>(const raft::handle_t&,
-                                         const fit_inputs<float>&,
-                                         const fit_plan&, float);
-template fit_result<double> solved<double>(const raft::handle_t&,
-                                           const fit_inputs<double>&,
-                                           const fit_plan&, double);
-template double deposit_fit<float>(const raft::handle_t&, fit_result<float>,
-                                   rr_deposit*);
-template double deposit_fit<double>(const raft::handle_t&, fit_result<double>,
-                                    rr_deposit*);
+template double finish_fit<float>(const raft::handle_t&,
+                                  const fit_inputs<float>&, const fit_plan&,
+                                  float, rr_deposit*);
+template double finish_fit<double>(const raft::handle_t&,
+                                   const fit_inputs<double>&, const fit_plan&,
+                                   double, rr_deposit*);
 
 }  // namespace cumlrkt::glm

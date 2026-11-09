@@ -34,13 +34,7 @@ double ols_fit_prepared(const raft::handle_t& handle, prepared_fit<T> prepared,
                         int algorithm, rr_deposit* out) {
   const fit_inputs<T> in = prepared.in;
   const fit_plan plan = plan_fit(prepared, algorithm);
-  const bool constant_y =
-      constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);
-  return deposit_fit(handle,
-                     constant_y || plan.s.kept.empty()
-                         ? nothing_to_solve(handle, in, plan, constant_y)
-                         : solved(handle, in, plan, T{0}),
-                     out);
+  return finish_fit(handle, in, plan, T{0}, out);
 }
 
 template <typename T>

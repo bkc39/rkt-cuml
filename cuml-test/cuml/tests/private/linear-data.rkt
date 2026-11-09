@@ -6,7 +6,7 @@
                   linear-regression-result-intercept)
          (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
-         (only-in racket/list drop last make-list take)
+         (only-in racket/list drop first last make-list take)
          (only-in racket/match match match-define)
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true)
@@ -430,7 +430,7 @@
                   (sqrt (dot b b))))
 
 (define (oracle-ridge X y w alpha fit-intercept)
-  (car (ridge-oracles X y w fit-intercept (list alpha) #:relative? #f)))
+  (first (ridge-oracles X y w fit-intercept (list alpha) #:relative? #f)))
 
 (define (ridge-oracles X y w fit-intercept ratios #:relative? [relative? #t])
   (define-values (G b mx my) (weighted-gram X y w fit-intercept))
@@ -464,10 +464,10 @@
     (define num
       (- (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri))
          (* alpha cj)))
-    (define square (+ alpha (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x))))
+    (define square (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x)))
     (if (zero? square)
         worst
-        (max worst (exact->inexact (/ (abs num) (* (sqrt square) y-norm)))))))
+        (max worst (exact->inexact (/ (abs num) (+ (* (sqrt square) y-norm) (* alpha (abs cj)))))))))
 
 (module+ test
   (require (only-in rackunit check-equal? check-true))

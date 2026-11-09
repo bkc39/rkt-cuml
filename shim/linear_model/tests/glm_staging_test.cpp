@@ -18,6 +18,7 @@
 #include "glm_staging_device.hpp"
 #include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
+#include "residual_check.hpp"
 
 namespace {
 
@@ -25,14 +26,18 @@ using cumlrkt::matrix;
 using cumlrkt::glm::column_profile;
 using cumlrkt::glm::column_profiles;
 using cumlrkt::glm::constant_vector;
+using cumlrkt::glm::cosine_of;
+using cumlrkt::glm::moment;
 using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
 using cumlrkt::glm::profiles;
 using cumlrkt::glm::require_finite_solution;
 using cumlrkt::glm::row_selection;
+using cumlrkt::glm::scaled_sum;
 using cumlrkt::glm::spread_exponent;
 using cumlrkt::glm::staged_weights;
 using cumlrkt::glm::staging;
+using cumlrkt::glm::stationarity_of;
 using cumlrkt::glm::to_host;
 using cumlrkt::glm::uniform;
 using cumlrkt::glm::unstage_coef;
@@ -337,6 +342,56 @@ TEST(FiniteSolution, ANonFiniteInterceptIsRefused) {
   EXPECT_EQ(finite_refusal(res, good, std::numeric_limits<double>::infinity(),
                            CUML_LINEAR_MODEL_OLS_EIG),
             "X: the eig solve gave a non-finite coefficient");
+}
+
+struct stationarity_row {
+  moment m;
+  scaled_sum y;
+  double alpha;
+  double b;
+  double cosine;
+};
+
+TEST(Stationarity, WithoutAPenaltyItIsTheResidualCosineBitwise) {
+  const std::vector<moment> moments{
+      {{0x1.4p-1, 4}, {0x1.8p-1, 3}},
+      {{0x1.fffffp-1, -1021}, {-0x1.3p-1, -40}},
+      {{0x1.1p-1, 900}, {0x1.7p-1, 950}},
+  };
+  const std::vector<scaled_sum> ys{{0x1.2p-1, 5}, {0x1.9p-1, -3}};
+  const std::vector<double> coefficients{0.0, 0x1.5p-30, -0x1.5p300};
+  for (const moment& m : moments) {
+    for (const scaled_sum& y : ys) {
+      for (const double b : coefficients) {
+        EXPECT_EQ(stationarity_of(m, y, 0.0, b), cosine_of(m, y)) << b;
+        EXPECT_EQ(stationarity_of(m, y, -0.0, b), cosine_of(m, y)) << b;
+      }
+    }
+  }
+}
+
+TEST(Stationarity, ACoefficientTheSolveZeroedUnderALargePenaltyIsSeen) {
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, 0x1p40, 0.0, 0.5},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, 0x1p40, 0x1p-41, 0.0},
+      {{{1.0, 2000}, {0.5, 1050}}, {1.0, 100}, 0x1p1000, 0.0, 0.5},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, 1.0, 0.25, 0.2},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_EQ(stationarity_of(r.m, r.y, r.alpha, r.b), r.cosine) << r.alpha;
+  }
+}
+
+TEST(Stationarity, AnOddSpreadExponentSplitsBetweenTheTwoNorms) {
+  const double root_half = std::sqrt(0.5);
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 3}, {0.5, 2}}, {1.0, 0}, 0x1p-60, 0.0, root_half},
+      {{{1.0, -3}, {0.5, -1}}, {1.0, 0}, 0x1p-60, 0.0, root_half},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_DOUBLE_EQ(stationarity_of(r.m, r.y, r.alpha, r.b), r.cosine)
+        << r.m.square.exponent;
+  }
 }
 
 }  // namespace

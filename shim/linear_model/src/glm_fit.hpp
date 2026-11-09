@@ -47,17 +47,8 @@ prepared_fit<T> prepare_fit(const raft::handle_t& handle,
                             int32_t fit_intercept);
 
 template <typename T>
-fit_result<T> nothing_to_solve(const raft::handle_t& handle,
-                               const fit_inputs<T>& in, const fit_plan& plan,
-                               bool constant_y);
-
-template <typename T>
-fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
-                     const fit_plan& plan, T alpha);
-
-template <typename T>
-double deposit_fit(const raft::handle_t& handle, fit_result<T> r,
-                   rr_deposit* out);
+double finish_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
+                  const fit_plan& plan, T alpha, rr_deposit* out);
 
 template <typename T>
 double ols_fit_prepared(const raft::handle_t& handle, prepared_fit<T> prepared,

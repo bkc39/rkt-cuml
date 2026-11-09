@@ -2,10 +2,11 @@
 
 (require (only-in cuml fit ridge)
          (only-in cuml/linear-model linear-regression-result ridge-fit ridge-params ridge-predict)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
@@ -14,6 +15,7 @@
                   exact-fit
                   gap
                   lcase
+                  lcase-name
                   lcase-X
                   lcase-y
                   max-abs
@@ -21,7 +23,10 @@
                   oracle-ridge
                   [on-matrix matrix]
                   [on-vector vector]
-                  ridge-solution)
+                  ridge-solution
+                  rounded
+                  unit-roundoff
+                  weighted-spread)
          (only-in "private/linear-refusal-rows.rkt"
                   grid
                   overflow-X
@@ -116,15 +121,59 @@
            (lcase-y c)
            #f)))
 
-(test-gpu "float32 eig on columns of very different scales is refused; svd fits them (Q2)"
+(test-gpu "on mixed scales float32 eig is refused and svd fits (Q2)"
   (check-cuml-error 'logic
                     #rx"^ridge-fit: X: the eig solve is not a ridge solution "
                     (lambda () (ridge-case-fit mixed-scales 'float32 #:alpha 1 #:solver 'eig)))
-  (match-define (ridge-solution _ c* _ _ _ _ _)
+  (match-define (struct* ridge-solution ([coef c*]))
     (oracle-ridge (lcase-X mixed-scales) (lcase-y mixed-scales) #f 1 #t))
   (match-define (list coef _)
     (exact-fit (ridge-case-fit mixed-scales 'float32 #:alpha 1 #:solver 'svd)))
   (check-law "svd gap" (gap coef c*) (* (expt 2 -10) (max-abs c*))))
+
+(define (scales-apart dt g)
+  (define c (normal-case 200 3 5))
+  (define (in-dtype x)
+    (inexact->exact (rounded dt x)))
+  (lcase (format "columns at 2^~a and 2^-~a" g g)
+         (for/list ([row (in-list (lcase-X c))])
+           (match-define (list a b _) row)
+           (list (in-dtype (* (expt 2 g) a)) (in-dtype (* (expt 2 (- g)) b))))
+         (for/list ([row (in-list (lcase-X c))]
+                    [yi (in-list (lcase-y c))])
+           (match-define (list a b _) row)
+           (in-dtype (+ a b (* 1/10 (- yi 5)))))
+         #f))
+
+(define (narrow-alpha c k)
+  (define narrow (map cadr (lcase-X c)))
+  (~> (* (expt 2 k) (weighted-spread narrow (map (lambda (_) 1) narrow)))
+      real->double-flonum
+      inexact->exact))
+
+(test-gpu "a narrow column's coefficient lost under a large alpha is refused"
+  (for* ([p (in-list '((float32 44 30) (float64 100 40) (float32 60 0)))]
+         [s (in-list solvers)]
+         [fi (in-list '(#t #f))])
+    (match-define (list dt g k) p)
+    (define c (scales-apart dt g))
+    (test-case (format "~a ~a alpha 2^~a ~a ~a" dt (lcase-name c) k s fi)
+      (check-cuml-error
+       'logic
+       #rx"^ridge-fit: X: the (eig|svd) solve is not a ridge solution .*; X is ill-conditioned for this alpha$"
+       (lambda () (ridge-case-fit c dt #:alpha (narrow-alpha c k) #:solver s #:fit-intercept fi))))))
+
+(test-gpu "columns 2^40 apart in spread fit under a large alpha"
+  (for* ([s (in-list solvers)]
+         [fi (in-list '(#t #f))])
+    (define c (scales-apart 'float32 20))
+    (define alpha (narrow-alpha c 20))
+    (test-case (format "~a ~a" s fi)
+      (match-define (struct* ridge-solution ([coef c*]))
+        (oracle-ridge (lcase-X c) (lcase-y c) #f alpha fi))
+      (match-define (list coef _)
+        (exact-fit (ridge-case-fit c 'float32 #:alpha alpha #:solver s #:fit-intercept fi)))
+      (check-law "gap" (gap coef c*) (* 64 (unit-roundoff 'float32) (max-abs c*))))))
 
 (test-gpu "X, y and w are unchanged after every fit"
   (for* ([dt (in-list dtypes)]

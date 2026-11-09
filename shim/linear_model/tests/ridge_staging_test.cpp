@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -46,15 +47,18 @@ staging planned(std::vector<int> exponent, std::vector<double> largest,
   return s;
 }
 
+struct scaled {
+  int shared;
+  double alpha;
+};
+
 struct staged_case {
   std::vector<int> exponent;
   std::vector<double> largest;
   double alpha;
   int weight_power;
   int64_t n;
-  int shared;
-  double alpha_staged;
-  bool negligible;
+  std::optional<scaled> expected;
 };
 
 template <typename T>
@@ -62,9 +66,11 @@ void expect_staged(const staged_case& c,
                    const std::vector<double>& spread = {}) {
   const auto r = ridge_scale_of<T>(planned(c.exponent, c.largest, spread), c.n,
                                    {c.alpha, c.weight_power});
-  EXPECT_EQ(r.shared, c.shared) << c.alpha;
-  EXPECT_EQ(r.alpha, static_cast<T>(c.alpha_staged)) << c.alpha;
-  EXPECT_EQ(r.negligible, c.negligible) << c.alpha;
+  ASSERT_EQ(r.has_value(), c.expected.has_value()) << c.alpha;
+  if (r) {
+    EXPECT_EQ(r->shared, c.expected->shared) << c.alpha;
+    EXPECT_EQ(r->alpha, static_cast<T>(c.expected->alpha)) << c.alpha;
+  }
 }
 
 template <typename T>
@@ -114,18 +120,18 @@ void expect_least_squares(const resources& res, const filled<float>& x,
 
 TEST(RidgeStaging, SharesOneExponentAndScalesAlphaByItsSquare) {
   const std::vector<staged_case> f32{
-      {{-3, 2}, {12.0, 0.5}, 1.0, 0, 100, 13, 0x1p26, false},
-      {{-3, 2}, {12.0, 0.5}, 0x1p20, 0, 100, 6, 0x1p32, false},
-      {{-3, 2}, {12.0, 0.5}, 0x1p21, 0, 100, 5, 0x1p31, false},
-      {{-3, 2}, {12.0, 0.5}, 3.0, -4, 100, 13, 0x3p22, false},
-      {{-3, 2}, {12.0, 0.5}, 0x1p-190, 0, 100, 13, 0.0, true},
+      {{-3, 2}, {12.0, 0.5}, 1.0, 0, 100, scaled{13, 0x1p26}},
+      {{-3, 2}, {12.0, 0.5}, 0x1p20, 0, 100, scaled{6, 0x1p32}},
+      {{-3, 2}, {12.0, 0.5}, 0x1p21, 0, 100, scaled{5, 0x1p31}},
+      {{-3, 2}, {12.0, 0.5}, 3.0, -4, 100, scaled{13, 0x3p22}},
+      {{-3, 2}, {12.0, 0.5}, 0x1p-190, 0, 100, std::nullopt},
   };
   for (const staged_case& c : f32) {
     expect_staged<float>(c);
   }
   const std::vector<staged_case> f64{
-      {{0}, {1.5}, 1e-300, 0, 10, 64, std::ldexp(1e-300, 128), true},
-      {{18}, {0x1p1000}, 1.0, 0, 10, 18, 0x1p36, true},
+      {{0}, {1.5}, 1e-300, 0, 10, std::nullopt},
+      {{18}, {0x1p1000}, 1.0, 0, 10, std::nullopt},
   };
   for (const staged_case& c : f64) {
     expect_staged<double>(c);
@@ -133,10 +139,10 @@ TEST(RidgeStaging, SharesOneExponentAndScalesAlphaByItsSquare) {
 }
 
 TEST(RidgeStaging, AnAlphaFarPastTheSpreadKeepsTheWidestColumnAtTheFloor) {
-  const staged_case floored_f32{{0}, {1.5}, 0x1p100, 0, 10, 8, 0x1p116, false};
+  const staged_case floored_f32{{0}, {1.5}, 0x1p100, 0, 10, scaled{8, 0x1p116}};
   expect_staged<float>(floored_f32);
   const staged_case floored_f64{
-      {0}, {1.5}, 0x1p500, -2, 10, 32, std::ldexp(0x1p500, 62), false};
+      {0}, {1.5}, 0x1p500, -2, 10, scaled{32, std::ldexp(0x1p500, 62)}};
   expect_staged<double>(floored_f64);
   EXPECT_EQ(scale_refusal<float>(0x1p120),
             "alpha: expected at most 5.192296549049818e+33 for this X in "
@@ -148,38 +154,51 @@ TEST(RidgeStaging, AnAlphaFarPastTheSpreadKeepsTheWidestColumnAtTheFloor) {
 
 TEST(RidgeStaging, AnAlphaUnderRoundingAgainstTheNarrowestSpreadIsNegligible) {
   const std::vector<staged_case> one_column_f32{
-      {{0}, {1.5}, 0x1p-24, 0, 10, 16, 0x1p8, true},
-      {{0}, {1.5}, 0x1p-23, 0, 10, 16, 0x1p9, false},
+      {{0}, {1.5}, 0x1p-24, 0, 10, std::nullopt},
+      {{0}, {1.5}, 0x1p-23, 0, 10, scaled{16, 0x1p9}},
   };
   for (const staged_case& c : one_column_f32) {
     expect_staged<float>(c);
   }
   const std::vector<staged_case> one_column_f64{
-      {{0}, {1.5}, 0x1p-53, 0, 10, 64, 0x1p75, true},
-      {{0}, {1.5}, 0x1p-52, 0, 10, 64, 0x1p76, false},
+      {{0}, {1.5}, 0x1p-53, 0, 10, std::nullopt},
+      {{0}, {1.5}, 0x1p-52, 0, 10, scaled{64, 0x1p76}},
   };
   for (const staged_case& c : one_column_f64) {
     expect_staged<double>(c);
   }
   const std::vector<double> mixed_spread{1.0, 0x1p-8};
   const std::vector<staged_case> mixed_f32{
-      {{0, 0}, {1.5, 1.5}, 0x1p-40, 0, 10, 16, 0x1p-8, true},
-      {{0, 0}, {1.5, 1.5}, 0x1p-39, 0, 10, 16, 0x1p-7, false},
-      {{0, 0}, {1.5, 1.5}, 0x1p-24, 0, 10, 16, 0x1p8, false},
+      {{0, 0}, {1.5, 1.5}, 0x1p-40, 0, 10, std::nullopt},
+      {{0, 0}, {1.5, 1.5}, 0x1p-39, 0, 10, scaled{16, 0x1p-7}},
+      {{0, 0}, {1.5, 1.5}, 0x1p-24, 0, 10, scaled{16, 0x1p8}},
   };
   for (const staged_case& c : mixed_f32) {
     expect_staged<float>(c, mixed_spread);
   }
 }
 
+TEST(RidgeStaging,
+     AnAlphaRoundingToZeroInTheDtypeIsNegligibleOnlyUnderRounding) {
+  const std::vector<double> far_spread{1.0, 0x1p-120};
+  const std::vector<staged_case> rounded_away{
+      {{0, 0}, {1.5, 1.5}, 0x1p-264, 0, 10, std::nullopt},
+      {{0, 0}, {1.5, 1.5}, 0x1p-263, 0, 10, scaled{16, 0.0}},
+      {{0, 0}, {1.5, 1.5}, 0x1p-200, 0, 10, scaled{16, 0.0}},
+  };
+  for (const staged_case& c : rounded_away) {
+    expect_staged<float>(c, far_spread);
+  }
+}
+
 TEST(RidgeStaging, AnAlphaOfZeroIsNegligibleWhateverTheSpreads) {
-  const staged_case far_apart{
-      {1000, -1000}, {0x1p-1000, 0x1p1000}, 0.0, 0, 60, -936, 0.0, true};
+  const staged_case far_apart{{1000, -1000}, {0x1p-1000, 0x1p1000}, 0.0, 0, 60,
+                              std::nullopt};
   expect_staged<double>(far_apart);
   const std::vector<double> underflowed{0.0};
   const std::vector<staged_case> zero_spread{
-      {{0}, {1.5}, 0.0, 0, 40, 64, 0.0, true},
-      {{0}, {1.5}, 1.0, 0, 40, 64, 0x1p128, false},
+      {{0}, {1.5}, 0.0, 0, 40, std::nullopt},
+      {{0}, {1.5}, 1.0, 0, 40, scaled{64, 0x1p128}},
   };
   for (const staged_case& c : zero_spread) {
     expect_staged<double>(c, underflowed);
