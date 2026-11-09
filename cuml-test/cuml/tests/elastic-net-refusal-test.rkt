@@ -14,10 +14,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/elastic-net-data.rkt" correlated-case en-case-fit law-alpha norm2)
-         (only-in "private/elastic-net-oracle.rkt"
-                  en-solution
-                  oracle-elastic-net
-                  problem-of)
+         (only-in "private/elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
                   check-law
@@ -39,72 +36,71 @@
   (define X (matrix grid))
   (define y (vector targets))
   (define bad-X (blank-matrix 5 3 'int32))
-  (append
-   (list (row "non-boolean fit-intercept before every other fault"
-              "fit-intercept: expected #t or #f, got 'yes"
-              (lambda () (go bad-X y #:fit-intercept 'yes #:alpha 'x #:tol 'x)))
-         (row "non-real alpha before l1-ratio"
-              "alpha: expected a real number, got 'x"
-              (lambda () (go bad-X y #:alpha 'x #:max-iter 0 #:tol 'x))))
-   (if l1-ratio?
-       (list (row "non-real l1-ratio before max-iter"
-                  "l1-ratio: expected a real number, got 'x"
-                  (lambda () (go bad-X y #:l1-ratio 'x #:max-iter 0))))
-       '())
-   (list (row "max-iter 0 before tol"
-              "max-iter: expected an exact integer from 1 to 2147483647, got 0"
-              (lambda () (go bad-X y #:max-iter 0 #:tol 'x)))
-         (row "max-iter past int32"
-              "max-iter: expected an exact integer from 1 to 2147483647, got 2147483648"
-              (lambda () (go X y #:max-iter 2147483648)))
-         (row "non-integer max-iter"
-              "max-iter: expected an exact integer from 1 to 2147483647, got 1.5"
-              (lambda () (go X y #:max-iter 1.5)))
-         (row "negative max-iter"
-              "max-iter: expected an exact integer from 1 to 2147483647, got -1"
-              (lambda () (go X y #:max-iter -1)))
-         (row "non-real tol before the X views"
-              "tol: expected a real number, got 'x"
-              (lambda () (go bad-X y #:tol 'x)))
-         (row "X dtype before selection"
-              "X: expected float32 or float64, got int32"
-              (lambda () (go bad-X y #:selection 'shuffled)))
-         (row "unknown selection before alpha"
-              "selection: expected cyclic or random"
-              (lambda () (go X y #:selection 'shuffled #:alpha -1)))
-         (row "negative alpha before l1-ratio"
-              "alpha: expected a finite value at least 0, got -1"
-              (lambda () (go X y #:alpha -1 #:tol -1)))
-         (row "infinite alpha"
-              "alpha: expected a finite value at least 0, got inf"
-              (lambda () (go X y #:alpha +inf.0)))
-         (row "nan alpha"
-              "alpha: expected a finite value at least 0, got nan"
-              (lambda () (go X y #:alpha +nan.0)))
-         (row "negative tol"
-              "tol: expected a finite value of at least 0, got -1"
-              (lambda () (go X y #:tol -1)))
-         (row "nan tol"
-              "tol: expected a finite value of at least 0, got nan"
-              (lambda () (go X y #:tol +nan.0)))
-         (row "infinite tol"
-              "tol: expected a finite value of at least 0, got inf"
-              (lambda () (go X y #:tol +inf.0)))
-         (row "tol before a non-finite X"
-              "tol: expected a finite value of at least 0, got -1"
-              (lambda () (go (matrix '((1 2) (+nan.0 1) (2 2))) (vector '(1 2 3)) #:tol -1))))
-   (if l1-ratio?
-       (list (row "l1-ratio below 0"
-                  "l1-ratio: expected a finite value from 0 to 1, got -0.5"
-                  (lambda () (go X y #:l1-ratio -0.5)))
-             (row "l1-ratio above 1"
-                  "l1-ratio: expected a finite value from 0 to 1, got 1.5"
-                  (lambda () (go X y #:l1-ratio 1.5)))
-             (row "nan l1-ratio"
-                  "l1-ratio: expected a finite value from 0 to 1, got nan"
-                  (lambda () (go X y #:l1-ratio +nan.0))))
-       '())
-   (filter (lambda (r) (not (equal? (row-id r) "intercept overflow"))) (shared-fit-rows go))))
+  (append (list (row "non-boolean fit-intercept before every other fault"
+                     "fit-intercept: expected #t or #f, got 'yes"
+                     (lambda () (go bad-X y #:fit-intercept 'yes #:alpha 'x #:tol 'x)))
+                (row "non-real alpha before l1-ratio"
+                     "alpha: expected a real number, got 'x"
+                     (lambda () (go bad-X y #:alpha 'x #:max-iter 0 #:tol 'x))))
+          (if l1-ratio?
+              (list (row "non-real l1-ratio before max-iter"
+                         "l1-ratio: expected a real number, got 'x"
+                         (lambda () (go bad-X y #:l1-ratio 'x #:max-iter 0))))
+              '())
+          (list (row "max-iter 0 before tol"
+                     "max-iter: expected an exact integer from 1 to 2147483647, got 0"
+                     (lambda () (go bad-X y #:max-iter 0 #:tol 'x)))
+                (row "max-iter past int32"
+                     "max-iter: expected an exact integer from 1 to 2147483647, got 2147483648"
+                     (lambda () (go X y #:max-iter 2147483648)))
+                (row "non-integer max-iter"
+                     "max-iter: expected an exact integer from 1 to 2147483647, got 1.5"
+                     (lambda () (go X y #:max-iter 1.5)))
+                (row "negative max-iter"
+                     "max-iter: expected an exact integer from 1 to 2147483647, got -1"
+                     (lambda () (go X y #:max-iter -1)))
+                (row "non-real tol before the X views"
+                     "tol: expected a real number, got 'x"
+                     (lambda () (go bad-X y #:tol 'x)))
+                (row "X dtype before selection"
+                     "X: expected float32 or float64, got int32"
+                     (lambda () (go bad-X y #:selection 'shuffled)))
+                (row "unknown selection before alpha"
+                     "selection: expected cyclic or random"
+                     (lambda () (go X y #:selection 'shuffled #:alpha -1)))
+                (row "negative alpha before l1-ratio"
+                     "alpha: expected a finite value at least 0, got -1"
+                     (lambda () (go X y #:alpha -1 #:tol -1)))
+                (row "infinite alpha"
+                     "alpha: expected a finite value at least 0, got inf"
+                     (lambda () (go X y #:alpha +inf.0)))
+                (row "nan alpha"
+                     "alpha: expected a finite value at least 0, got nan"
+                     (lambda () (go X y #:alpha +nan.0)))
+                (row "negative tol"
+                     "tol: expected a finite value of at least 0, got -1"
+                     (lambda () (go X y #:tol -1)))
+                (row "nan tol"
+                     "tol: expected a finite value of at least 0, got nan"
+                     (lambda () (go X y #:tol +nan.0)))
+                (row "infinite tol"
+                     "tol: expected a finite value of at least 0, got inf"
+                     (lambda () (go X y #:tol +inf.0)))
+                (row "tol before a non-finite X"
+                     "tol: expected a finite value of at least 0, got -1"
+                     (lambda () (go (matrix '((1 2) (+nan.0 1) (2 2))) (vector '(1 2 3)) #:tol -1))))
+          (if l1-ratio?
+              (list (row "l1-ratio below 0"
+                         "l1-ratio: expected a finite value from 0 to 1, got -0.5"
+                         (lambda () (go X y #:l1-ratio -0.5)))
+                    (row "l1-ratio above 1"
+                         "l1-ratio: expected a finite value from 0 to 1, got 1.5"
+                         (lambda () (go X y #:l1-ratio 1.5)))
+                    (row "nan l1-ratio"
+                         "l1-ratio: expected a finite value from 0 to 1, got nan"
+                         (lambda () (go X y #:l1-ratio +nan.0))))
+              '())
+          (filter (lambda (r) (not (equal? (row-id r) "intercept overflow"))) (shared-fit-rows go))))
 
 (define (estimator-fit make)
   (lambda (X
@@ -176,9 +172,10 @@
   (define p (problem-of (lcase-X c) (lcase-y c) #f #t))
   (define alpha (law-alpha p 0.01 1))
   (for ([dt (in-list dtypes)])
-    (check-cuml-error 'logic
-                      #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol 0.001 and KKT residual "
-                      (lambda () (en-case-fit wide dt #:alpha 1e4 #:l1-ratio 1)))
+    (check-cuml-error
+     'logic
+     #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol 0.001 and KKT residual "
+     (lambda () (en-case-fit wide dt #:alpha 1e4 #:l1-ratio 1)))
     (check-cuml-error 'logic
                       #rx"; tol is absolute in the coefficients' units, so scale y up or X down$"
                       (lambda () (en-case-fit c dt #:alpha alpha #:l1-ratio 1)))
@@ -186,7 +183,8 @@
     (define p-up (problem-of (lcase-X up) (lcase-y up) #f #t))
     (define alpha-up (law-alpha p-up 0.01 1))
     (match-define (list coef _ k) (en-case-fit up dt #:alpha alpha-up #:l1-ratio 1))
-    (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma])) (oracle-elastic-net p-up alpha-up 1))
+    (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma]))
+      (oracle-elastic-net p-up alpha-up 1))
     (check-true (< k 1000))
     (check-law "S2"
                (norm2 (map (lambda (a e) (- (inexact->exact a) e)) coef c*))
@@ -194,36 +192,43 @@
                   (* 64 (unit-roundoff dt) (norm2 (map exact->inexact c*))))))
   (check-cuml-error 'logic
                     #rx"^elastic-net-fit: X: coordinate descent stopped after "
-                    (lambda () (en-case-fit (scaled-case docs #:X (expt 10 20)) 'float32 #:alpha 1e-3))))
+                    (lambda ()
+                      (en-case-fit (scaled-case docs #:X (expt 10 20)) 'float32 #:alpha 1e-3))))
 
 (test-gpu "hyperparameter edges: nan, inf and out-of-range values refused, tol 0 and alpha 0 run (Q3)"
   (define c (correlated-case 20 2 0 22))
   (for ([alpha (in-list '(+nan.0 +inf.0 -1.0))])
-    (check-cuml-error 'logic #rx"^elastic-net-fit: alpha: expected a finite value at least 0, got "
+    (check-cuml-error 'logic
+                      #rx"^elastic-net-fit: alpha: expected a finite value at least 0, got "
                       (lambda () (en-case-fit c 'float64 #:alpha alpha))))
   (for ([r (in-list '(-0.5 1.5 +nan.0))])
-    (check-cuml-error 'logic #rx"^elastic-net-fit: l1-ratio: expected a finite value from 0 to 1, got "
+    (check-cuml-error 'logic
+                      #rx"^elastic-net-fit: l1-ratio: expected a finite value from 0 to 1, got "
                       (lambda () (en-case-fit c 'float64 #:alpha 0.1 #:l1-ratio r))))
   (for ([tol (in-list '(-1 +nan.0 +inf.0))])
-    (check-cuml-error 'logic #rx"^elastic-net-fit: tol: expected a finite value of at least 0, got "
+    (check-cuml-error 'logic
+                      #rx"^elastic-net-fit: tol: expected a finite value of at least 0, got "
                       (lambda () (en-case-fit c 'float64 #:alpha 0.1 #:tol tol))))
   (for ([k (in-list (list 0 -1 (expt 2 31) 1.5))])
-    (check-cuml-error 'logic #rx"^elastic-net-fit: max-iter: expected an exact integer from 1 to 2147483647, got "
-                      (lambda () (en-case-fit c 'float64 #:alpha 0.1 #:max-iter k))))
+    (check-cuml-error
+     'logic
+     #rx"^elastic-net-fit: max-iter: expected an exact integer from 1 to 2147483647, got "
+     (lambda () (en-case-fit c 'float64 #:alpha 0.1 #:max-iter k))))
   (check-equal? (caddr (en-case-fit c 'float64 #:alpha 0.1 #:tol 0 #:max-iter 9)) 9)
   (check-true (> (caddr (en-case-fit c 'float64 #:alpha 0)) 1)))
 
 (test-gpu "float32 columns 2^120 apart are refused as too narrow; 2^60 apart fit (Q4)"
   (define c (correlated-case 100 2 0 23))
-  (check-cuml-error 'logic
-                    "elastic-net-fit: X: column 0 is too narrow beside the other columns and y for float32 coordinate descent"
-                    (lambda ()
-                      (en-case-fit (scaled-columns c (list (expt 2 -60) (expt 2 60)) 1) 'float32 #:alpha 1e-3)))
-  (check-true (list? (en-case-fit (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1)
-                                  'float32
-                                  #:alpha 1e-3))))
+  (check-cuml-error
+   'logic
+   "elastic-net-fit: X: column 0 is too narrow beside the other columns and y for float32 coordinate descent"
+   (lambda ()
+     (en-case-fit (scaled-columns c (list (expt 2 -60) (expt 2 60)) 1) 'float32 #:alpha 1e-3)))
+  (check-true
+   (list? (en-case-fit (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1) 'float32 #:alpha 1e-3))))
 
 (test-gpu "an alpha whose row multiple overflows float32 is refused with ridge's message (Q5)"
-  (check-cuml-error 'logic
-                    #rx"^elastic-net-fit: alpha: expected at most .* for this X in float32, got 1e\\+38$"
-                    (lambda () (en-case-fit (correlated-case 20 2 0 24) 'float32 #:alpha 1e38))))
+  (check-cuml-error
+   'logic
+   #rx"^elastic-net-fit: alpha: expected at most .* for this X in float32, got 1e\\+38$"
+   (lambda () (en-case-fit (correlated-case 20 2 0 24) 'float32 #:alpha 1e38))))

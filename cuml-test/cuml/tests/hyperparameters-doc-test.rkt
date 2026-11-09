@@ -393,19 +393,20 @@
                                '()
                                '#:sample-weight)
                          (estimator-entry 'ridge ridge)))
-   (table-bindings elastic-net-params
-                   elastic-net-keys
-                   (list (list 'elastic-net-params elastic-net-params '() (list (argument #f 'base #f)) '() '())
-                         (list 'elastic-net-fit
-                               elastic-net-fit
-                               '(#:params #:resources)
-                               (list (argument #f 'X 'none) (argument #f 'y 'none))
-                               (list (argument '#:sample-weight 'sample-weight #f)
-                                     (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources)))
-                               '()
-                               '#:sample-weight)
-                         (estimator-entry 'elastic-net elastic-net)))
+   (table-bindings
+    elastic-net-params
+    elastic-net-keys
+    (list (list 'elastic-net-params elastic-net-params '() (list (argument #f 'base #f)) '() '())
+          (list 'elastic-net-fit
+                elastic-net-fit
+                '(#:params #:resources)
+                (list (argument #f 'X 'none) (argument #f 'y 'none))
+                (list (argument '#:sample-weight 'sample-weight #f)
+                      (argument '#:params 'params #f)
+                      (argument '#:resources 'resources '(current-device-resources)))
+                '()
+                '#:sample-weight)
+          (estimator-entry 'elastic-net elastic-net)))
    (table-bindings lasso-params
                    lasso-keys
                    (list (list 'lasso-params lasso-params '() (list (argument #f 'base #f)) '() '())

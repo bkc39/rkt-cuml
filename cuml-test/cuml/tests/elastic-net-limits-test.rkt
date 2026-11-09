@@ -28,8 +28,10 @@
 
 (define (check-s2 c dt alpha r tol #:max-iter [max-iter 1000])
   (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
-  (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma])) (oracle-elastic-net p alpha r))
-  (match-define (list coef _ k) (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol tol #:max-iter max-iter))
+  (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma]))
+    (oracle-elastic-net p alpha r))
+  (match-define (list coef _ k)
+    (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol tol #:max-iter max-iter))
   (define u (unit-roundoff dt))
   (cond
     [(> mu 0)
@@ -46,13 +48,18 @@
   (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
   (define alpha (law-alpha p 0.01 1))
   (match-define (struct* ridge-solution ([coef ridge-coef]))
-    (oracle-ridge (lcase-X c) (lcase-y c) (lcase-w c) (* (inexact->exact alpha) (en-problem-total p)) #t))
+    (oracle-ridge (lcase-X c)
+                  (lcase-y c)
+                  (lcase-w c)
+                  (* (inexact->exact alpha) (en-problem-total p))
+                  #t))
   (for* ([dt (in-list dtypes)]
          [r (in-list '(0 1e-6 1e-3 0.1))])
     (test-case (format "~a l1-ratio ~a" dt r)
       (match-define (struct* en-solution ([mu mu] [sigma sigma] [sigma-y sigma-y]))
         (oracle-elastic-net p alpha r))
-      (match-define (list coef _ k) (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol 1e-8 #:max-iter 100000))
+      (match-define (list coef _ k)
+        (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol 1e-8 #:max-iter 100000))
       (match-define (kkt K _ _) (host-kkt p coef alpha r 1e-8 k 200 (unit-roundoff dt)))
       (check-law "S5"
                  (distance coef ridge-coef)

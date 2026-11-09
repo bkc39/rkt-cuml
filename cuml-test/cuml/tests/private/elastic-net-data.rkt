@@ -99,11 +99,13 @@
   (match-define (lcase _ X y _) (correlated-case 32 4 1/2 seed))
   (define w (dyadic-weights))
   (define (mirror rows)
-    (for/fold ([out '()] #:result (reverse out))
+    (for/fold ([out '()]
+               #:result (reverse out))
               ([row (in-list rows)])
       (list* (map - row) row out)))
   (define pairs
-    (for/fold ([out '()] #:result (reverse out))
+    (for/fold ([out '()]
+               #:result (reverse out))
               ([v (in-list y)])
       (list* (- v) v out)))
   (lcase (format "mirrored dyadic weights seed ~a" seed)
@@ -158,7 +160,14 @@
       (for* ([dt (in-list dts)]
              [tol (in-list ts)]
              [s (in-list selections)])
-        (test-case (format "~a ~a l1-ratio ~a alpha ~a tol ~a ~a ~a" (lcase-name c) fi r ratio tol dt s)
+        (test-case (format "~a ~a l1-ratio ~a alpha ~a tol ~a ~a ~a"
+                           (lcase-name c)
+                           fi
+                           r
+                           ratio
+                           tol
+                           dt
+                           s)
           (define u (unit-roundoff dt))
           (match-define (list coef b k)
             (en-case-fit c dt #:alpha alpha #:l1-ratio r #:fit-intercept fi #:tol tol #:selection s))

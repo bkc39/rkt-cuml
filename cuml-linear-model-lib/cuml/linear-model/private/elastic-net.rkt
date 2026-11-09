@@ -47,7 +47,17 @@
 
 (define-codes selection-code [cyclic 0] [random 1])
 
-(define (cd-fit/who who result X y sample-weight resources alpha l1-ratio fit-intercept max-iter tol
+(define (cd-fit/who who
+                    result
+                    X
+                    y
+                    sample-weight
+                    resources
+                    alpha
+                    l1-ratio
+                    fit-intercept
+                    max-iter
+                    tol
                     selection)
   (define flag (intercept-flag/who who fit-intercept))
   (define penalty (alpha-value/who who alpha))
@@ -96,7 +106,18 @@
                        #:sample-weight [sample-weight #f]
                        #:hyperparameters lasso-params
                        #:resources [resources (current-device-resources)])
-  (cd-fit/who who lasso-result X y sample-weight resources alpha 1.0 fit-intercept max-iter tol selection))
+  (cd-fit/who who
+              lasso-result
+              X
+              y
+              sample-weight
+              resources
+              alpha
+              1.0
+              fit-intercept
+              max-iter
+              tol
+              selection))
 
 (define/who (elastic-net-predict who result X #:resources [resources (current-device-resources)])
   (match result

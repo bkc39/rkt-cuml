@@ -4,8 +4,8 @@
 #include <cuml/solvers/solver.hpp>
 #include <limits>
 #include <memory>
-#include <ranges>
 #include <raft/core/handle.hpp>
+#include <ranges>
 #include <rmm/cuda_stream_view.hpp>
 #include <utility>
 #include <vector>
@@ -61,10 +61,9 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
     return;
   }
   const row_selection rows = plan.counted.rows;
-  const residual_terms terms =
-      residual_moments(handle, in.x, in.y, in.w, rows, plan.s,
-                       to_device(b, stream_of(handle)).data(),
-                       plan.fit_intercept);
+  const residual_terms terms = residual_moments(
+      handle, in.x, in.y, in.w, rows, plan.s,
+      to_device(b, stream_of(handle)).data(), plan.fit_intercept);
   const double weight = in.w == nullptr
                             ? static_cast<double>(rows.count)
                             : weight_total(in.w, rows, stream_of(handle));
@@ -73,9 +72,9 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
   const std::vector<double> coef(b.begin(), b.end());
   const cd_epochs epochs{n_iter, rows.count, static_cast<double>(tol),
                          roundoff<T>};
-  require_kkt(kkt_of(terms, coef, weight,
-                     {alpha * ratio, alpha * (1 - ratio)}, epochs),
-              {n_iter, rows.count, request.tol, roundoff<T>});
+  require_kkt(
+      kkt_of(terms, coef, weight, {alpha * ratio, alpha * (1 - ratio)}, epochs),
+      {n_iter, rows.count, request.tol, roundoff<T>});
 }
 
 template <typename T>
@@ -98,12 +97,12 @@ cd_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   const row_selection rows = plan.counted.rows;
   const auto kept = static_cast<int64_t>(s.kept.size());
   const bool weighted = w != nullptr;
-  const cd_centres centres = centres_of(
-      y, w, rows, s, weighted && plan.fit_intercept, stream);
-  staged_problem<T> p =
-      weighted ? stage_weighted(handle, x, y, w, rows, s, centres,
-                                weight_total(w, rows, stream))
-               : stage_problem(handle, x, y, w, s, rows);
+  const cd_centres centres =
+      centres_of(y, w, rows, s, weighted && plan.fit_intercept, stream);
+  staged_problem<T> p = weighted
+                            ? stage_weighted(handle, x, y, w, rows, s, centres,
+                                             weight_total(w, rows, stream))
+                            : stage_problem(handle, x, y, w, s, rows);
   buffer<T> cs = scratch<T>(kept, stream);
   raftrkt::cuda_check(
       cudaMemsetAsync(cs.data(), 0, cs.size() * sizeof(T), stream.value()),
@@ -112,8 +111,8 @@ cd_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   const int n_iter = ML::Solver::cdFit(
       const_cast<raft::handle_t&>(handle), p.x.data(),
       static_cast<int>(rows.count), static_cast<int>(kept), p.y.data(),
-      cs.data(), &intercept, plan.fit_intercept && !weighted,
-      request.max_iter, 0, scale.alpha, static_cast<T>(request.l1_ratio),
+      cs.data(), &intercept, plan.fit_intercept && !weighted, request.max_iter,
+      0, scale.alpha, static_cast<T>(request.l1_ratio),
       request.fit.algorithm == CUML_LINEAR_MODEL_CD_RANDOM,
       static_cast<T>(request.tol), nullptr);
   settle(handle);
@@ -123,9 +122,8 @@ cd_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   const T unscaled =
       !plan.fit_intercept ? T{0}
-      : weighted          ? static_cast<T>(
-                       weighted_intercept(centres, b, scale.shared))
-                          : std::ldexp(intercept, -scale.shared);
+      : weighted ? static_cast<T>(weighted_intercept(centres, b, scale.shared))
+                 : std::ldexp(intercept, -scale.shared);
   require_in_range(unstage_coef(handle, cs.data(), s, x.d, coef->data()),
                    unscaled);
   return {{std::move(coef), static_cast<double>(unscaled)}, n_iter};
@@ -140,10 +138,11 @@ cd_outputs cd_fit_into(const raft::handle_t& handle, const cd_request& request,
       prepare_fit(handle, checked, request.fit.fit_intercept);
   require_cd_rows(prepared.counted.rows.count);
   const fit_inputs<T> in = prepared.in;
-  const bool constant_y = constant_vector(handle, in.y, in.x.n, in.w,
-                                          prepared.fit_intercept);
+  const bool constant_y =
+      constant_vector(handle, in.y, in.x.n, in.w, prepared.fit_intercept);
   if (constant_y || prepared.planned.kept.empty()) {
-    const fit_plan plan{std::move(prepared.planned), prepared.fit_intercept,
+    const fit_plan plan{std::move(prepared.planned),
+                        prepared.fit_intercept,
                         {glm_family::cd, cd_algorithm},
                         std::move(prepared.counted)};
     return {deposit_fit(handle, nothing_to_solve(handle, in, plan, constant_y),
@@ -155,7 +154,8 @@ cd_outputs cd_fit_into(const raft::handle_t& handle, const cd_request& request,
   staging s = std::move(prepared.planned);
   std::ranges::fill(s.column_exponent, scale.shared);
   s.y_exponent = scale.shared;
-  const fit_plan plan{std::move(s), prepared.fit_intercept,
+  const fit_plan plan{std::move(s),
+                      prepared.fit_intercept,
                       {glm_family::cd, cd_algorithm},
                       std::move(prepared.counted)};
   cd_result<T> r = cd_solved(handle, in, plan, request, scale);
@@ -168,14 +168,11 @@ cd_outputs cd_fit_into(const raft::handle_t& handle, const cd_request& request,
 
 extern "C" {
 
-int cuml_linear_model_elastic_net_fit(void* handle, const rr_view* x,
-                                      const rr_view* y,
-                                      const rr_view* sample_weight,
-                                      rr_deposit* out, double alpha,
-                                      double l1_ratio, int32_t fit_intercept,
-                                      int32_t max_iter, double tol,
-                                      int32_t selection, double* intercept,
-                                      int32_t* n_iter) {
+int cuml_linear_model_elastic_net_fit(
+    void* handle, const rr_view* x, const rr_view* y,
+    const rr_view* sample_weight, rr_deposit* out, double alpha,
+    double l1_ratio, int32_t fit_intercept, int32_t max_iter, double tol,
+    int32_t selection, double* intercept, int32_t* n_iter) {
   return cumlrkt::guarded(
       handle, {{"X", x}, {"y", y}, {"sample-weight", sample_weight}},
       [&](const raft::handle_t& h) {

@@ -59,13 +59,10 @@
          [s (in-list selections)])
     (define fit0 (en-case-fit c dt #:alpha 0.01 #:fit-intercept fi #:selection s))
     (for ([m (in-list '(-5 -1 1 3))])
-      (check-equal? (en-case-fit (scaled-case c #:w (expt 2 m))
-                                 dt
-                                 #:alpha 0.01
-                                 #:fit-intercept fi
-                                 #:selection s)
-                    fit0
-                    (format "~a ~a ~a 2^~a" dt fi s m)))))
+      (check-equal?
+       (en-case-fit (scaled-case c #:w (expt 2 m)) dt #:alpha 0.01 #:fit-intercept fi #:selection s)
+       fit0
+       (format "~a ~a ~a 2^~a" dt fi s m)))))
 
 (define gone '(3 50 101))
 

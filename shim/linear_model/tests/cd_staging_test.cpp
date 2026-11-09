@@ -83,8 +83,8 @@ TEST(CdStaging, TheColumnCapIsNeverBelowCapA) {
   const std::array<double, 3> largest{0x1p-60, 1.5, 0x1p60};
   for (const double l : largest) {
     const staging s = planned({{0}, {l}, 0});
-    const int columns = cumlrkt::unit_exponent(l) +
-                        cumlrkt::glm::column_reach<float>(rows);
+    const int columns =
+        cumlrkt::unit_exponent(l) + cumlrkt::glm::column_reach<float>(rows);
     EXPECT_GT(columns, cd_shared_cap<float>(s, rows)) << l;
   }
 }
@@ -133,8 +133,7 @@ TEST(CdStaging, AnAlphaWhoseRowMultipleOverflowsIsRefused) {
   EXPECT_EQ(got.rfind("alpha: expected at most ", 0), 0U) << got;
   EXPECT_NE(got.find(" for this X in float32, got 1e+38"), std::string::npos)
       << got;
-  EXPECT_EQ(refusal_of([&] { cd_scale_of<float>(s, rows, 1e35); }),
-            "accepted");
+  EXPECT_EQ(refusal_of([&] { cd_scale_of<float>(s, rows, 1e35); }), "accepted");
 }
 
 scaled_sum sum(double value, int exponent) {
@@ -142,8 +141,7 @@ scaled_sum sum(double value, int exponent) {
 }
 
 residual_terms hand_built_epoch() {
-  return {{moment{sum(1, 2), sum(1.53125, 1)},
-           moment{sum(1, 0), sum(1.25, 1)},
+  return {{moment{sum(1, 2), sum(1.53125, 1)}, moment{sum(1, 0), sum(1.25, 1)},
            moment{sum(0, 0), sum(1.5625, 6)}},
           {1, 1, 0},
           sum(1, 4)};
@@ -234,8 +232,9 @@ TEST(CdWeighting, RootWeightsAreExactOnTheDyadicCase) {
   const staging s = planned({{0}, {1.0}, 0});
   const cd_centres none{{0.0}, {0.0}, centre{0.0, 0.0}};
   const auto p = stage_weighted(
-      h, matrix<float, int64_t>{static_cast<float*>(x.array.view.data),
-                                dyadic_rows, 1},
+      h,
+      matrix<float, int64_t>{static_cast<float*>(x.array.view.data),
+                             dyadic_rows, 1},
       static_cast<const float*>(y.array.view.data),
       static_cast<const float*>(weights.array.view.data),
       row_selection{nullptr, dyadic_rows}, s, none,

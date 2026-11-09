@@ -118,7 +118,8 @@
   (define c (correlated-case 200 7 0.5 4 #:weighted? #t))
   (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
   (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
-  (define mean (/ (for/sum ([w (in-list weights)] [v (in-list (lcase-y c))]) (* w v)) (apply + weights)))
+  (define mean
+    (/ (for/sum ([w (in-list weights)] [v (in-list (lcase-y c))]) (* w v)) (apply + weights)))
   (for* ([dt (in-list dtypes)]
          [r (in-list '(1 0.5))]
          [factor (in-list (list (+ 1 (expt 2 -8)) 2 (expt 2 20)))])
@@ -149,18 +150,17 @@
                 (device-vector->list (linear-regression-predict as-ols X)))
   (match-define (list lcoef lb _) (en-fit fitted-l))
   (check-equal? (device-vector->list (lasso-predict fitted-l X))
-                (device-vector->list
-                 (linear-regression-predict (linear-regression-result (on-vector lcoef 'float32) lb) X)))
+                (device-vector->list (linear-regression-predict
+                                      (linear-regression-result (on-vector lcoef 'float32) lb)
+                                      X)))
   (define e (fit (elastic-net #:alpha 0.01) X y #:sample-weight w))
   (define l (fit (lasso #:alpha 0.01) X y #:sample-weight w))
   (check-true (elastic-net-result? (elastic-net-model e)))
   (check-true (lasso-result? (lasso-model l)))
   (check-equal? (en-fit (elastic-net-model e)) (en-fit fitted))
   (check-equal? (en-fit (lasso-model l)) (en-fit fitted-l))
-  (check-equal? (score e X y #:sample-weight w)
-                (r2-score y (predict e X) #:sample-weight w))
-  (check-equal? (device-vector->list (predict l X))
-                (device-vector->list (lasso-predict fitted-l X)))
+  (check-equal? (score e X y #:sample-weight w) (r2-score y (predict e X) #:sample-weight w))
+  (check-equal? (device-vector->list (predict l X)) (device-vector->list (lasso-predict fitted-l X)))
   (check-false (elastic-net-model (elastic-net)))
   (check-false (lasso-model (lasso)))
   (check-equal? (take (device-vector->list (predict e X)) 1)

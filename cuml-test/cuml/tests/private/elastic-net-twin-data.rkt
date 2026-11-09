@@ -32,16 +32,11 @@
                 c
                 dt
                 fi
-                (hasheq 'alpha
-                        (real->double-flonum alpha)
-                        'l1_ratio
-                        (real->double-flonum r)
-                        'max_iter
-                        max-iter
-                        'tol
-                        tol
-                        'selection
-                        (symbol->string s))))
+                (hasheq 'alpha (real->double-flonum alpha)
+                        'l1_ratio (real->double-flonum r)
+                        'max_iter max-iter
+                        'tol tol
+                        'selection (symbol->string s))))
 
 (define (alpha-of c fi r)
   (law-alpha (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) 0.01 r))
@@ -101,7 +96,8 @@
     (match-define (list c fi r) row)
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
     (define alpha (alpha-of c fi r))
-    (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma])) (oracle-elastic-net p alpha r))
+    (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma]))
+      (oracle-elastic-net p alpha r))
     (test-case (format "~a ~a ~a l1-ratio ~a" (lcase-name c) dt fi r)
       (match-define (list coef _ k) (en-case-fit c dt #:alpha alpha #:l1-ratio r #:fit-intercept fi))
       (define theirs-coef (map inexact->exact (hash-ref t 'coef)))

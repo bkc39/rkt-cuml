@@ -254,8 +254,8 @@ inline std::string elastic_net_into(const resources& res, fitted& f,
                                     const cd_settings& c = {}) {
   int32_t n_iter = -1;
   f.status = outcome(cuml_linear_model_elastic_net_fit(
-      res.handle, x, y, nullptr, &f.out.r, c.alpha, c.l1_ratio,
-      c.fit_intercept, c.max_iter, c.tol, c.selection, &f.intercept, &n_iter));
+      res.handle, x, y, nullptr, &f.out.r, c.alpha, c.l1_ratio, c.fit_intercept,
+      c.max_iter, c.tol, c.selection, &f.intercept, &n_iter));
   return f.status;
 }
 

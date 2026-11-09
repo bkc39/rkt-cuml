@@ -43,7 +43,9 @@
 
 (define (host-cd C c l1 l2)
   (define d (length c))
-  (define rows (for/vector ([row (in-list C)]) (apply flvector (map exact->inexact row))))
+  (define rows
+    (for/vector ([row (in-list C)])
+      (apply flvector (map exact->inexact row))))
   (define rhs (apply flvector (map exact->inexact c)))
   (define fl1 (exact->inexact l1))
   (define fl2 (exact->inexact l2))
@@ -59,11 +61,14 @@
            (define old (flvector-ref b j))
            (define z
              (- (flvector-ref rhs j)
-                (for/sum ([i (in-range d)] #:unless (= i j)) (* (flvector-ref row i) (flvector-ref b i)))))
+                (for/sum ([i (in-range d)] #:unless (= i j))
+                         (* (flvector-ref row i) (flvector-ref b i)))))
            (define new (/ (* (sgn z) (max 0.0 (- (abs z) fl1))) (+ cjj fl2)))
            (flvector-set! b j new)
            (max moved (abs (- new old)))])))
-    (define top (for/fold ([m 0.0]) ([j (in-range d)]) (max m (abs (flvector-ref b j)))))
+    (define top
+      (for/fold ([m 0.0]) ([j (in-range d)])
+        (max m (abs (flvector-ref b j)))))
     (unless (or (<= moved (* 1e-15 top)) (>= k 20000))
       (epoch (add1 k))))
   (for/list ([j (in-range d)])
@@ -102,7 +107,11 @@
       (if at
           (list-ref bS at)
           0)))
-  (define gradient (map - c (for/list ([row (in-list C)]) (dot row coef))))
+  (define gradient
+    (map -
+         c
+         (for/list ([row (in-list C)])
+           (dot row coef))))
   (define signs-hold?
     (or (zero? l1)
         (for/and ([b (in-list bS)]

@@ -24,8 +24,7 @@
       (real->double-flonum v)
       (logic-error "~a: ~a: expected a real number, got ~e" who key v)))
 
-(define/who (alpha-value who alpha)
-  (real-value/who who 'alpha alpha))
+(define/who (alpha-value who alpha) (real-value/who who 'alpha alpha))
 
 (define/who (iteration-count who n)
   (if (and (exact-integer? n) (<= 1 n 2147483647))

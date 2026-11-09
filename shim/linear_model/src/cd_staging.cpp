@@ -29,8 +29,9 @@ int half_floor(int x) {
 }
 
 long double value_of(scaled_sum s) {
-  return s.value == 0 ? 0.0L
-                      : std::ldexp(static_cast<long double>(s.value), s.exponent);
+  return s.value == 0
+             ? 0.0L
+             : std::ldexp(static_cast<long double>(s.value), s.exponent);
 }
 
 long double violation(long double cross, double coef, long double weight,
@@ -40,7 +41,8 @@ long double violation(long double cross, double coef, long double weight,
     return std::max(0.0L, std::abs(cross) - l1);
   }
   const long double l2 = weight * p.l2 * coef;
-  return std::abs(cross - l2 - std::copysign(l1, static_cast<long double>(coef)));
+  return std::abs(cross - l2 -
+                  std::copysign(l1, static_cast<long double>(coef)));
 }
 
 template <typename T>
@@ -63,20 +65,18 @@ int cd_shared_cap(const staging& s, int64_t rows) {
                                    return std::ilogb(s.largest[j]);
                                  }));
   const int q = -s.y_exponent;
-  const int columns =
-      std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
-                         return unit_exponent(s.largest[j]) +
-                                column_reach<T>(rows);
-                       }));
+  const int columns = std::ranges::min(
+      s.kept | std::views::transform([&](int64_t j) {
+        return unit_exponent(s.largest[j]) + column_reach<T>(rows);
+      }));
   return std::min({columns, half_floor(reach - 6 - beta) - p,
                    half_floor(reach - 6 - beta - p - q), reach - 4 - beta - q});
 }
 
 template <typename T>
 cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha) {
-  const auto narrowest = std::ranges::max(s.kept, {}, [&](int64_t j) {
-    return s.column_exponent[j];
-  });
+  const auto narrowest = std::ranges::max(
+      s.kept, {}, [&](int64_t j) { return s.column_exponent[j]; });
   const int widest_exponent = s.column_exponent[narrowest];
   const int shared = std::min(widest_exponent, cd_shared_cap<T>(s, rows));
   if (shared < widest_exponent - narrowest_spread_bits) {
@@ -86,8 +86,7 @@ cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha) {
         narrowest, raftrkt::dtype_name(raftrkt::dtype_code<T>)));
   }
   const auto staged = static_cast<T>(std::ldexp(alpha, 2 * shared));
-  if (!std::isfinite(staged) ||
-      !std::isfinite(staged * static_cast<T>(rows))) {
+  if (!std::isfinite(staged) || !std::isfinite(staged * static_cast<T>(rows))) {
     refuse_alpha<T>(alpha, rows, shared);
   }
   return {shared, staged};
@@ -110,7 +109,8 @@ kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
     const long double norm = std::sqrt(square);
     const long double ratio =
         y_norm == 0 ? (v == 0 ? 0.0L : INFINITY) : v / (norm * y_norm);
-    worst = std::isnan(ratio) || std::isnan(worst) ? NAN : std::max(worst, ratio);
+    worst =
+        std::isnan(ratio) || std::isnan(worst) ? NAN : std::max(worst, ratio);
     norms += norm;
     largest = std::max(largest, std::abs(coef[k]));
   }
@@ -165,8 +165,8 @@ void require_cd_codes(const cd_request& request) {
                     printed(request.l1_ratio)));
   }
   if (request.max_iter < 1) {
-    throw logic_error(std::format("max-iter: expected at least 1, got {}",
-                                  request.max_iter));
+    throw logic_error(
+        std::format("max-iter: expected at least 1, got {}", request.max_iter));
   }
   if (!std::isfinite(request.tol) || !(request.tol >= 0)) {
     throw logic_error(
@@ -178,7 +178,6 @@ void require_cd_codes(const cd_request& request) {
 template int cd_shared_cap<float>(const staging&, int64_t);
 template int cd_shared_cap<double>(const staging&, int64_t);
 template cd_scale<float> cd_scale_of<float>(const staging&, int64_t, double);
-template cd_scale<double> cd_scale_of<double>(const staging&, int64_t,
-                                              double);
+template cd_scale<double> cd_scale_of<double>(const staging&, int64_t, double);
 
 }  // namespace cumlrkt::glm

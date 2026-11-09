@@ -16,7 +16,10 @@
          lasso-model
          lasso?)
 
-(define-regressor lasso #:hyperparameters lasso-params #:fit lasso-fit/who #:predict lasso-predict/who)
+(define-regressor lasso
+  #:hyperparameters lasso-params
+  #:fit lasso-fit/who
+  #:predict lasso-predict/who)
 
 (define-regressor elastic-net
   #:hyperparameters elastic-net-params

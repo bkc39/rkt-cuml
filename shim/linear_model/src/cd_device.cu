@@ -69,8 +69,8 @@ cd_centres centres_of(const T* y, const T* w, row_selection rows,
                       const staging& s, bool fit_intercept,
                       rmm::cuda_stream_view stream) {
   const auto count = s.kept.size();
-  cd_centres c{std::vector<double>(count, 0.0),
-               std::vector<double>(count, 0.0), centre{0.0, 0.0}};
+  cd_centres c{std::vector<double>(count, 0.0), std::vector<double>(count, 0.0),
+               centre{0.0, 0.0}};
   if (!fit_intercept) {
     return c;
   }
@@ -115,8 +115,8 @@ staged_problem<T> stage_weighted(const raft::handle_t& handle,
   return p;
 }
 
-template cd_centres centres_of<float>(const float*, const float*,
-                                      row_selection, const staging&, bool,
+template cd_centres centres_of<float>(const float*, const float*, row_selection,
+                                      const staging&, bool,
                                       rmm::cuda_stream_view);
 template cd_centres centres_of<double>(const double*, const double*,
                                        row_selection, const staging&, bool,
