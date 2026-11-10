@@ -17,6 +17,8 @@
          alpha-max
          curvatures
          host-kkt
+         inexact-norm
+         norm2
          oracle-elastic-net
          problem-of
          s2-bound
@@ -203,8 +205,11 @@
 (define (s2-bound o coef alpha l1-ratio tol roundoff)
   (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma])) o)
   (define-values (_ l2) (penalties alpha l1-ratio))
-  (+ (/ (* tol (exact->inexact (max-abs coef)) (norm (curvatures sigma l2))) mu)
-     (* s2-rounding roundoff (norm (map exact->inexact c*)))))
+  (+ (/ (* tol (exact->inexact (max-abs coef)) (norm2 (curvatures sigma l2))) mu)
+     (* s2-rounding roundoff (inexact-norm c*))))
 
-(define (norm xs)
+(define (norm2 xs)
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))
+
+(define (inexact-norm xs)
+  (norm2 (map exact->inexact xs)))

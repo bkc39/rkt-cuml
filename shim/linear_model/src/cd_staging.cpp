@@ -10,6 +10,7 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <type_traits>
 #include <vector>
 
 #include "cumlrkt/linear_model.h"
@@ -54,11 +55,32 @@ template <typename T>
 constexpr int penalty_exponent = std::numeric_limits<T>::max_exponent - 1;
 
 template <typename T>
+bool row_multiple_fits(T staged, int64_t rows) {
+  return std::ldexp(
+             static_cast<long double>(staged) * static_cast<long double>(rows),
+             -penalty_exponent<T>) <= 1;
+}
+
+template <typename T>
+double largest_alpha(int64_t rows, int shared) {
+  const double bound = std::ldexp(1.0 / static_cast<double>(rows),
+                                  penalty_exponent<T> - 2 * shared);
+  if (row_multiple_fits(static_cast<T>(std::ldexp(bound, 2 * shared)), rows)) {
+    return bound;
+  }
+  auto staged = static_cast<T>(std::ldexp(
+      1.0L / static_cast<long double>(rows), penalty_exponent<T>));
+  while (!row_multiple_fits(staged, rows)) {
+    staged = std::nextafter(staged, T{0});
+  }
+  return std::ldexp(static_cast<double>(staged), -2 * shared);
+}
+
+template <typename T>
 void refuse_alpha(double alpha, int64_t rows, int shared) {
   throw logic_error(
       std::format("alpha: expected at most {} for this X in {}, got {}",
-                  printed(std::ldexp(1.0 / static_cast<double>(rows),
-                                     penalty_exponent<T> - 2 * shared)),
+                  printed(largest_alpha<T>(rows, shared)),
                   raftrkt::dtype_name(raftrkt::dtype_code<T>), printed(alpha)));
 }
 
@@ -93,11 +115,7 @@ cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha) {
         narrowest, raftrkt::dtype_name(raftrkt::dtype_code<T>)));
   }
   const auto staged = static_cast<T>(std::ldexp(alpha, 2 * shared));
-  // Cap (a) keeps cdFit's column sums of squares under 2^(E-4), so with
-  // alpha'm <= 2^(E-1) its denominator sum + alpha'(1-rho)m stays finite.
-  if (std::ldexp(
-          static_cast<long double>(staged) * static_cast<long double>(rows),
-          -penalty_exponent<T>) > 1) {
+  if (!row_multiple_fits(staged, rows)) {
     refuse_alpha<T>(alpha, rows, shared);
   }
   return {shared, staged};
@@ -155,6 +173,21 @@ void require_kkt(const kkt_terms& k, int n_iter, double tol) {
   }
 }
 
+template <typename T>
+void require_resolved(const kkt_terms& k, int n_iter, double tol,
+                      double largest) {
+  if (k.allowance > k.bound) {
+    constexpr bool narrow = std::is_same_v<T, float>;
+    throw logic_error(std::format(
+        "X: coordinate descent stopped after {} epochs with every coefficient "
+        "under tol {}, and {} cannot check that stop; lower tol below the "
+        "largest coefficient ({}){}",
+        n_iter, printed(tol), raftrkt::dtype_name(raftrkt::dtype_code<T>),
+        printed<T>(static_cast<T>(largest)),
+        narrow ? " or fit in float64" : ""));
+  }
+}
+
 bool absolute_stop(int n_iter, int max_iter, double largest, double tol) {
   return n_iter < max_iter && largest > 0 && largest < tol;
 }
@@ -201,5 +234,7 @@ template int cd_shared_cap<float>(const staging&, int64_t);
 template int cd_shared_cap<double>(const staging&, int64_t);
 template cd_scale<float> cd_scale_of<float>(const staging&, int64_t, double);
 template cd_scale<double> cd_scale_of<double>(const staging&, int64_t, double);
+template void require_resolved<float>(const kkt_terms&, int, double, double);
+template void require_resolved<double>(const kkt_terms&, int, double, double);
 
 }  // namespace cumlrkt::glm

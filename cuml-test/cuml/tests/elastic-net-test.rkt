@@ -40,28 +40,24 @@
                   unit-roundoff
                   weights-or-ones))
 
-(define intercept-rounding 4)
+(define zero-fit-rounding 4)
+
+(define docs-fits
+  '((0.1 1 1000 ("3.599023" "0.601953" "1.999023") 11)
+    (0.1 0.5 1000 ("3.645965" "0.829906" "1.804588") 9)
+    (0 1 1000 ("2.999023" "1.001953" "1.999023") 11)
+    (0.1 0 1000 ("3.711697" "0.932454" "1.694811") 8)
+    (0.1 1 2 ("3.100000" "1.600000" "1.500000") 2)))
 
 (test-gpu "the docs data fits as recorded, in float64"
-  (define (fit-of #:alpha alpha #:l1-ratio r #:max-iter [k 1000])
-    (en-case-fit docs-case 'float64 #:alpha alpha #:l1-ratio r #:max-iter k))
-  (match-define (en-run lc lb lk) (fit-of #:alpha 0.1 #:l1-ratio 1))
-  (check-equal? (decimals 6 (cons lb lc)) '("3.599023" "0.601953" "1.999023"))
-  (check-equal? lk 11)
-  (match-define (en-run ec eb ek) (fit-of #:alpha 0.1 #:l1-ratio 0.5))
-  (check-equal? (decimals 6 (cons eb ec)) '("3.645965" "0.829906" "1.804588"))
-  (check-equal? ek 9)
-  (match-define (struct* en-run ([coef zc] [n-iter zk])) (fit-of #:alpha 0 #:l1-ratio 1))
-  (check-equal? (decimals 6 zc) '("1.001953" "1.999023"))
-  (check-equal? zk 11)
-  (match-define (struct* en-run ([coef rc] [n-iter rk])) (fit-of #:alpha 0.1 #:l1-ratio 0))
-  (check-equal? (decimals 6 rc) '("0.932454" "1.694811"))
-  (check-equal? rk 8)
-  (check-equal? (fit-of #:alpha 3 #:l1-ratio 1) (en-run '(0.0 0.0) 8.5 1))
-  (match-define (struct* en-run ([coef mc] [n-iter mk]))
-    (fit-of #:alpha 0.1 #:l1-ratio 1 #:max-iter 2))
-  (check-equal? (decimals 6 mc) '("1.600000" "1.500000"))
-  (check-equal? mk 2))
+  (for ([row (in-list docs-fits)])
+    (match-define (list alpha r max-iter printed n-iter) row)
+    (test-case (format "alpha ~a l1-ratio ~a max-iter ~a" alpha r max-iter)
+      (match-define (en-run coef b k)
+        (en-case-fit docs-case 'float64 #:alpha alpha #:l1-ratio r #:max-iter max-iter))
+      (check-equal? (decimals 6 (cons b coef)) printed)
+      (check-equal? k n-iter)))
+  (check-equal? (en-case-fit docs-case 'float64 #:alpha 3 #:l1-ratio 1) (en-run '(0.0 0.0) 8.5 1)))
 
 (test-gpu "lasso-fit is elastic-net-fit at l1-ratio 1, bitwise"
   (define c (correlated-case 200 7 0.9 1 #:weighted? #t))
@@ -117,7 +113,7 @@
       (check-equal? k 1)
       (check-true
        (<= (abs (- (inexact->exact b) mean))
-           (* intercept-rounding (inexact->exact (unit-roundoff dt)) (max-abs (lcase-y c))))))))
+           (* zero-fit-rounding (inexact->exact (unit-roundoff dt)) (max-abs (lcase-y c))))))))
 
 (test-gpu "alpha 0 runs coordinate descent, and tol 0 runs max-iter epochs"
   (check-true (> (en-run-n-iter (en-case-fit docs-case 'float64 #:alpha 0)) 1))
@@ -144,6 +140,8 @@
   (check-true (lasso-result? (lasso-model l)))
   (check-equal? (en-fit (elastic-net-model e)) (en-fit fitted))
   (check-equal? (en-fit (lasso-model l)) (en-fit lasso-fitted))
+  (check-equal? (device-vector->list (predict e X))
+                (device-vector->list (elastic-net-predict fitted X)))
   (check-equal? (score e X y #:sample-weight w) (r2-score y (predict e X) #:sample-weight w))
   (check-equal? (device-vector->list (predict l X))
                 (device-vector->list (lasso-predict lasso-fitted X)))

@@ -269,13 +269,12 @@ Coordinate descent starts from b = 0 and visits every column once an epoch, in c
 fit that last test stops short of the first is refused, as when X's units are large against y's. A
 fit with @racket[n-iter] equal to @racket[max-iter] may not have converged.
 
-@racket[tol] bounds an epoch's change, not the error. An accepted fit's error is bounded through its
-optimality residual K, at most @racket[tol] plus rounding, by
-K·max|b|·‖d‖@subscript{2}/(λ@subscript{min} + λ), where λ = @racket[alpha](1 − @racket[l1-ratio]),
-d@subscript{j} = max(σ@subscript{j}² + λ, σ@subscript{j}Σ@subscript{k}σ@subscript{k}), σ@subscript{j} is
-column j's weighted RMS and λ@subscript{min} the least eigenvalue of XᵀWX/Σw, X centred as for
-@racket[ridge-fit]; the check is best effort where u(λ@subscript{max} + λ)/(λ@subscript{min} + λ) is 1
-or more, u being the dtype's unit roundoff. An
+@racket[tol] bounds an epoch's change, not the error. An accepted fit is within @racket[tol] of a
+stop the relative test would accept, and an absolute stop the dtype's rounding cannot check is
+refused. The check is best effort where u(λ@subscript{max} + λ)/(λ@subscript{min} + λ) is 1 or more,
+λ = @racket[alpha](1 − @racket[l1-ratio]), λ@subscript{max} and λ@subscript{min} being the extreme
+eigenvalues of XᵀWX/Σw, X centred as for @racket[ridge-fit], and u the dtype's unit roundoff;
+@tt{plans/layout.md} (L3-b) has the error bound and the measurements. An
 @racket[alpha] more than rounding above max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]),
 or max@subscript{j}|x@subscript{j}ᵀWy|/(Σw·@racket[l1-ratio]) without @racket[fit-intercept], gives
 coefficients 0. A column constant over the rows of positive weight (zero, without

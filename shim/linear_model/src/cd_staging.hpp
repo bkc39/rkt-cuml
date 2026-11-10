@@ -55,6 +55,10 @@ kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
 
 void require_kkt(const kkt_terms& k, int n_iter, double tol);
 
+template <typename T>
+void require_resolved(const kkt_terms& k, int n_iter, double tol,
+                      double largest);
+
 bool absolute_stop(int n_iter, int max_iter, double largest, double tol);
 
 void require_cd_rows(int64_t rows);

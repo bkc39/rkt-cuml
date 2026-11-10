@@ -35,6 +35,7 @@ using cumlrkt::glm::kkt_terms;
 using cumlrkt::glm::moment;
 using cumlrkt::glm::require_cd_rows;
 using cumlrkt::glm::require_kkt;
+using cumlrkt::glm::require_resolved;
 using cumlrkt::glm::residual_terms;
 using cumlrkt::glm::row_selection;
 using cumlrkt::glm::scaled_sum;
@@ -156,6 +157,28 @@ TEST(CdStaging, AnAlphaWhoseRowMultiplePassesHalfTheRangeIsRefused) {
             "accepted");
 }
 
+template <typename T>
+double printed_largest_alpha(const staging& s) {
+  const std::string got = refusal_of(
+      [&] { cd_scale_of<T>(s, rows, std::numeric_limits<double>::max()); });
+  const std::string lead = "alpha: expected at most ";
+  return std::stod(got.substr(lead.size(), got.find(" for ") - lead.size()));
+}
+
+TEST(CdStaging, ThePrintedLargestAlphaIsAccepted) {
+  const staging s = planned({{0}, {1.5}, 0});
+  EXPECT_EQ(printed_largest_alpha<double>(s),
+            std::nextafter(std::ldexp(1.0 / rows, 1023), 0.0));
+  EXPECT_EQ(refusal_of([&] {
+              cd_scale_of<double>(s, rows, printed_largest_alpha<double>(s));
+            }),
+            "accepted");
+  EXPECT_EQ(refusal_of([&] {
+              cd_scale_of<float>(s, rows, printed_largest_alpha<float>(s));
+            }),
+            "accepted");
+}
+
 scaled_sum sum(double value, int exponent) {
   return {value, exponent};
 }
@@ -223,6 +246,31 @@ TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
             "accepted");
   EXPECT_NE(refusal_of([&] {
               require_kkt({std::nullopt, epoch_tol, 1}, epoch_iters, epoch_tol);
+            }),
+            "accepted");
+}
+
+TEST(CdCheck, AnAllowanceAboveBIsRefusedAsUncheckable) {
+  const kkt_terms unresolved{epoch_tol / 2, epoch_tol, 2 * epoch_tol};
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<float>(unresolved, epoch_iters,
+                                                    epoch_tol, 0.0625);
+            }),
+            "X: coordinate descent stopped after 4 epochs with every "
+            "coefficient under tol 0.1, and float32 cannot check that stop; "
+            "lower tol below the largest coefficient (0.0625) or fit in "
+            "float64");
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<double>(unresolved, epoch_iters,
+                                                     epoch_tol, 0.0625);
+            }),
+            "X: coordinate descent stopped after 4 epochs with every "
+            "coefficient under tol 0.1, and float64 cannot check that stop; "
+            "lower tol below the largest coefficient (0.0625)");
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<float>(
+                  {epoch_tol / 2, epoch_tol, epoch_tol}, epoch_iters,
+                  epoch_tol, 0.0625);
             }),
             "accepted");
 }

@@ -8,6 +8,8 @@
                   coef-distance
                   converged?
                   correlated-case
+                  default-max-iter
+                  default-tol
                   dyadic-weight-case
                   en-case-fit
                   en-run
@@ -23,26 +25,26 @@
 (define-runtime-path twin "../python/elastic_net_twin.py")
 
 (struct twin-row
-        (case fit-intercept
-          l1-ratio
-          selection))
+        (source fit-intercept
+                l1-ratio
+                selection))
 
 (define twin-alpha-ratio 0.01)
 
 (define (row-alpha row)
-  (match-define (struct* twin-row ((case c) [fit-intercept fi] [l1-ratio r])) row)
+  (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r])) row)
   (case-alpha c twin-alpha-ratio r #:fit-intercept fi))
 
-(define (request op row dt #:max-iter [max-iter 1000] #:tol [tol 1e-3])
-  (match-define (struct* twin-row ((case c) [fit-intercept fi] [l1-ratio r] [selection s])) row)
+(define (request op row dt)
+  (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r] [selection s])) row)
   (case-request op
                 c
                 dt
                 fi
                 (hasheq 'alpha (real->double-flonum (row-alpha row))
                         'l1_ratio (real->double-flonum r)
-                        'max_iter max-iter
-                        'tol tol
+                        'max_iter default-max-iter
+                        'tol default-tol
                         'selection (symbol->string s))))
 
 (define raw-sources
@@ -57,9 +59,9 @@
           (for*/list ([seed (in-list '(44 45))]
                       [r (in-list '(1 0.5))]
                       [s (in-list selections)]
-                      [weighted (in-list (list (twin-row (dyadic-weight-case seed) #f r s)
-                                               (twin-row (mirrored-weight-case seed) #t r s)))])
-            weighted)))
+                      [row (in-list (list (twin-row (dyadic-weight-case seed) #f r s)
+                                          (twin-row (mirrored-weight-case seed) #t r s)))])
+            row)))
 
 (define (check-raw-parity dt)
   (define rows (raw-rows))
@@ -69,7 +71,7 @@
                     (request "cuml" row dt))))
   (for ([row (in-list rows)]
         [t (in-list fits)])
-    (match-define (struct* twin-row ((case c) [fit-intercept fi] [l1-ratio r] [selection s])) row)
+    (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r] [selection s])) row)
     (test-case (format "~a ~a ~a l1-ratio ~a ~a" (lcase-name c) dt fi r s)
       (match-define (struct* en-run ([coef coef] [intercept b] [n-iter k]))
         (en-case-fit c dt #:alpha (row-alpha row) #:l1-ratio r #:fit-intercept fi #:selection s))
@@ -94,7 +96,7 @@
                     (request "sklearn" row dt))))
   (define ran
     (for/sum ([row (in-list rows)] [t (in-list fits)])
-             (match-define (struct* twin-row ((case c) [fit-intercept fi] [l1-ratio r])) row)
+             (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r])) row)
              (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
              (define alpha (row-alpha row))
              (define o (oracle-elastic-net p alpha r))
@@ -107,7 +109,7 @@
                 (test-case (format "~a ~a ~a l1-ratio ~a" (lcase-name c) dt fi r)
                   (check-law "sklearn-distance"
                              (coef-distance coef theirs-coef)
-                             (+ (s2-bound o coef alpha r 1e-3 (unit-roundoff dt))
+                             (+ (s2-bound o coef alpha r default-tol (unit-roundoff dt))
                                 (coef-distance theirs-coef c*))))
                 1]
                [else 0])))

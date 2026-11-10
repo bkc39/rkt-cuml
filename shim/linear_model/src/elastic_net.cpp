@@ -33,6 +33,12 @@ struct cd_outputs {
 };
 
 template <typename T>
+struct cd_solution {
+  fit_result<T> fit;
+  int32_t n_iter;
+};
+
+template <typename T>
 double largest_of(const std::vector<T>& b) {
   double largest = 0;
   for (const T bk : b) {
@@ -47,7 +53,8 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
                 const cd_request& request, const std::vector<T>& b,
                 cd_scale<T> scale, int n_iter) {
   const T tol = static_cast<T>(request.tol);
-  if (!absolute_stop(n_iter, request.max_iter, largest_of(b),
+  const double largest = largest_of(b);
+  if (!absolute_stop(n_iter, request.max_iter, largest,
                      static_cast<double>(tol))) {
     return;
   }
@@ -63,9 +70,10 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
   const std::vector<double> coef(b.begin(), b.end());
   const cd_epochs epochs{n_iter, rows.count, static_cast<double>(tol),
                          unit_roundoff<T>};
-  require_kkt(
-      kkt_of(terms, coef, weight, {alpha * ratio, alpha * (1 - ratio)}, epochs),
-      n_iter, request.tol);
+  const kkt_terms k =
+      kkt_of(terms, coef, weight, {alpha * ratio, alpha * (1 - ratio)}, epochs);
+  require_kkt(k, n_iter, request.tol);
+  require_resolved<T>(k, n_iter, request.tol, largest);
 }
 
 template <typename T>
@@ -88,9 +96,8 @@ T unscaled_intercept(const std::optional<cd_centres>& centres,
 }
 
 template <typename T>
-fit_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
-                        const fit_plan& plan, const cd_request& request,
-                        int32_t& n_iter) {
+cd_solution<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
+                         const fit_plan& plan, const cd_request& request) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const auto& [x, y, w] = in;
   const row_selection rows = plan.counted.rows;
@@ -110,7 +117,7 @@ fit_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
       "cudaMemsetAsync");
   T intercept{0};
   T* const unweighted = nullptr;
-  n_iter = ML::Solver::cdFit(
+  const int32_t n_iter = ML::Solver::cdFit(
       const_cast<raft::handle_t&>(handle), p.x.data(),
       static_cast<int>(rows.count), static_cast<int>(kept), p.y.data(),
       cs.data(), &intercept, plan.fit_intercept && !weighted, request.max_iter,
@@ -128,7 +135,7 @@ fit_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
           : T{0};
   require_in_range(unstage_coef(handle, cs.data(), s, x.d, coef->data()),
                    unscaled);
-  return {std::move(coef), static_cast<double>(unscaled)};
+  return {{std::move(coef), static_cast<double>(unscaled)}, n_iter};
 }
 
 template <typename T>
@@ -147,7 +154,12 @@ cd_outputs cd_fit_into(const raft::handle_t& handle, const cd_request& request,
   int32_t n_iter = 0;
   const double intercept = finish_fit<T>(
       handle, in, plan,
-      [&] { return cd_solved(handle, in, plan, request, n_iter); }, out);
+      [&] {
+        cd_solution<T> solution = cd_solved(handle, in, plan, request);
+        n_iter = solution.n_iter;
+        return std::move(solution.fit);
+      },
+      out);
   return {intercept, n_iter};
 }
 

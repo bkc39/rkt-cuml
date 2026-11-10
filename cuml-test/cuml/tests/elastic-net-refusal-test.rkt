@@ -10,27 +10,33 @@
                   lasso-result
                   linear-regression-result)
          (only-in racket/list filter-not)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define match-lambda match-lambda**)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/blob-data.rkt" normal-source)
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/elastic-net-data.rkt"
-                  apply-sorted
+                  apply-keywords
                   case-alpha
                   check-accuracy
+                  coef-distance
                   converged?
                   correlated-case
                   en-case-fit
                   en-run
+                  en-run-coef
                   en-run-n-iter
-                  keyword-split)
+                  en-run?
+                  keyword-hash)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
                   docs-case
                   dtypes
+                  dyadic
                   lcase
                   lcase-X
                   lcase-y
+                  max-abs
                   [on-matrix matrix]
                   [on-vector vector]
                   scaled-case
@@ -112,9 +118,13 @@
           (filter-not (lambda (r) (equal? (row-id r) "intercept overflow")) (shared-fit-rows go))))
 
 (define (estimator-fit make)
-  (make-keyword-procedure (lambda (kws vals X y)
-                            (define-values (w given) (keyword-split '#:sample-weight kws vals #f))
-                            (fit (apply-sorted make given '()) X y #:sample-weight w))))
+  (make-keyword-procedure
+   (lambda (kws vals X y)
+     (define given (keyword-hash kws vals))
+     (fit (apply-keywords make (hash-remove given '#:sample-weight) '())
+          X
+          y
+          #:sample-weight (hash-ref given '#:sample-weight #f)))))
 
 (test-gpu "elastic-net-fit refuses each row, the earlier fault first"
   (for ([r (in-list (fit-rows elastic-net-fit))])
@@ -161,7 +171,7 @@
     (define up (scaled-case c #:y (expt 2 17)))
     (define alpha-up (case-alpha up 0.01 1))
     (check-true (converged? (en-case-fit up dt #:alpha alpha-up #:l1-ratio 1)))
-    (check-equal? (check-accuracy up dt alpha-up 1 1e-3) "coefficient-distance"))
+    (check-accuracy up dt alpha-up 1 1e-3))
   (check-cuml-error 'logic
                     #rx"^elastic-net-fit: X: coordinate descent stopped after "
                     (lambda ()
@@ -195,9 +205,7 @@
    "elastic-net-fit: X: column 0 is too narrow beside the other columns and y for float32 coordinate descent"
    (lambda ()
      (en-case-fit (scaled-columns c (list (expt 2 -60) (expt 2 60)) 1) 'float32 #:alpha 1e-3)))
-  (check-equal?
-   (check-accuracy (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1) 'float32 1e-3 0.5 1e-3)
-   "coefficient-distance"))
+  (check-accuracy (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1) 'float32 1e-3 0.5 1e-3))
 
 (test-gpu "an alpha whose row multiple overflows float32 is refused as ridge's"
   (check-cuml-error
@@ -208,13 +216,13 @@
 (define (columns-apart narrow)
   (define c (correlated-case 100 2 0 23))
   (lcase "a narrow column beside one 2^28 wide"
-         (for/list ([row (in-list (lcase-X c))])
-           (match-define (list x0 x1) row)
-           (list (* (expt 2 narrow) x0) (* (expt 2 28) x1)))
-         (for/list ([row (in-list (lcase-X c))]
-                    [v (in-list (lcase-y c))])
-           (match-define (list _ x1) row)
-           (+ x1 (/ v 1000)))
+         (map (match-lambda
+                [(list x0 x1) (list (* (expt 2 narrow) x0) (* (expt 2 28) x1))])
+              (lcase-X c))
+         (map (match-lambda**
+                [((list _ x1) v) (+ x1 (/ v 1000))])
+              (lcase-X c)
+              (lcase-y c))
          #f))
 
 (test-gpu "an alpha past half the row-multiple range is refused"
@@ -233,6 +241,15 @@
     (define at-limit (scaled-wide-coef (* limit (- 1 1e-4))))
     (check-true (> at-limit 0))
     (check-true (< (abs (- at-limit (scaled-wide-coef (* limit 0.99)))) (* 1e-3 at-limit)))))
+
+(test-gpu "the largest alpha a refusal prints fits"
+  (for ([dt (in-list dtypes)]
+        [narrow (in-list '(-30 -480))])
+    (define c (columns-apart narrow))
+    (define message
+      (exn-message (raised (lambda () (en-case-fit c dt #:alpha 1e300 #:l1-ratio 1e-13)))))
+    (define printed (string->number (cadr (regexp-match #rx"at most ([^ ]+) for" message))))
+    (check-true (en-run? (en-case-fit c dt #:alpha printed #:l1-ratio 1e-13)))))
 
 (define stop-message
   #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol ")
@@ -253,9 +270,9 @@
              (list a (* (expt 2 10) (+ b (* (expt 2 -8) a)))))])
     (lcase "a column 2^-8 from orthogonal to one 2^10 wider"
            X
-           (for/list ([row (in-list X)])
-             (match-define (list x0 x1) row)
-             (+ (* (expt 2 -21) x0) (* (expt 2 -30) x1)))
+           (map (match-lambda
+                  [(list x0 x1) (+ (* (expt 2 -21) x0) (* (expt 2 -30) x1))])
+                X)
            #f)))
 
 (test-gpu "a float32 one-epoch stop 0.8% off is refused at 2^17 rows"
@@ -265,3 +282,30 @@
   (match-define (en-run (list b0 _) _ 1)
     (en-case-fit nearly-orthogonal 'float32 #:alpha 0 #:tol 1e-6 #:max-iter 1))
   (check-true (> (abs (- (inexact->exact b0) (expt 2 -21))) (* 1e-3 (expt 2 -21)))))
+
+(define weak-signal
+  (let* ([next (normal-source 41868)]
+         [X (for/list ([_ (in-range (expt 2 15))])
+              (define shared (next))
+              (for/list ([_ (in-range 4)])
+                (dyadic (+ (* (sqrt 0.9) shared) (* (sqrt 0.1) (next))))))])
+    (lcase "four columns at correlation 0.9 and a y of pure noise"
+           X
+           (for/list ([_ (in-list X)])
+             (dyadic (next)))
+           #f)))
+
+(test-gpu "a float32 absolute stop its rounding cannot check is refused; a lower tol fits"
+  (check-cuml-error
+   'logic
+   (pregexp (string-append "^elastic-net-fit: X: coordinate descent stopped after 1 epochs with "
+                           "every coefficient under tol 0\\.001, and float32 cannot check that "
+                           "stop; lower tol below the largest coefficient \\([^)]+\\) or fit in "
+                           "float64$"))
+   (lambda () (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0)))
+  (define (fit-at tol #:max-iter [max-iter 1000])
+    (en-run-coef (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0 #:tol tol
+                              #:max-iter max-iter)))
+  (define fitted (fit-at 1e-7))
+  (check-true (> (coef-distance (fit-at 1e-3 #:max-iter 1) fitted) (* 1e-3 (max-abs fitted)))))
+

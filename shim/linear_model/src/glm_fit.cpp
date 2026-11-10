@@ -44,6 +44,27 @@ counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
 }
 
 template <typename T>
+fit_result<T> nothing_to_solve(const raft::handle_t& handle,
+                               const fit_inputs<T>& in, const fit_plan& plan,
+                               bool constant_y) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  const auto& [x, y, w] = in;
+  auto coef = zero_coef<T>(x.d, stream);
+  double intercept = 0;
+  if (plan.fit_intercept && constant_y) {
+    intercept = static_cast<double>(
+        read_one(y, first_positive(w, x.n, stream), stream));
+  } else if (plan.fit_intercept) {
+    const centre c =
+        target_centre(y, w, plan.counted.rows, plan.s.y_exponent, stream);
+    intercept = static_cast<double>(static_cast<T>(
+        std::ldexp(static_cast<T>(c.mean + c.remainder), -plan.s.y_exponent)));
+  }
+  settle(handle);
+  return {std::move(coef), intercept};
+}
+
+template <typename T>
 fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                      const fit_plan& plan, T alpha) {
   const rmm::cuda_stream_view stream = stream_of(handle);
@@ -79,27 +100,6 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                    unscaled);
   return {std::move(coef),
           plan.fit_intercept ? static_cast<double>(unscaled) : 0.0};
-}
-
-template <typename T>
-fit_result<T> nothing_to_solve(const raft::handle_t& handle,
-                               const fit_inputs<T>& in, const fit_plan& plan,
-                               bool constant_y) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const auto& [x, y, w] = in;
-  auto coef = zero_coef<T>(x.d, stream);
-  double intercept = 0;
-  if (plan.fit_intercept && constant_y) {
-    intercept = static_cast<double>(
-        read_one(y, first_positive(w, x.n, stream), stream));
-  } else if (plan.fit_intercept) {
-    const centre c =
-        target_centre(y, w, plan.counted.rows, plan.s.y_exponent, stream);
-    intercept = static_cast<double>(static_cast<T>(
-        std::ldexp(static_cast<T>(c.mean + c.remainder), -plan.s.y_exponent)));
-  }
-  settle(handle);
-  return {std::move(coef), intercept};
 }
 
 template <typename T>
