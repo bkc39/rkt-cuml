@@ -253,24 +253,23 @@ TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
 TEST(CdCheck, AnAllowanceAboveBIsRefusedAsUncheckable) {
   const kkt_terms unresolved{epoch_tol / 2, epoch_tol, 2 * epoch_tol};
   EXPECT_EQ(refusal_of([&] {
-              require_resolved<float>(unresolved, epoch_iters,
-                                                    epoch_tol, 0.0625);
+              require_resolved<float>(unresolved, epoch_iters, epoch_tol,
+                                      0.0625);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
             "coefficient under tol 0.1, and float32 cannot check that stop; "
             "lower tol below the largest coefficient (0.0625) or fit in "
             "float64");
   EXPECT_EQ(refusal_of([&] {
-              require_resolved<double>(unresolved, epoch_iters,
-                                                     epoch_tol, 0.0625);
+              require_resolved<double>(unresolved, epoch_iters, epoch_tol,
+                                       0.0625);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
             "coefficient under tol 0.1, and float64 cannot check that stop; "
             "lower tol below the largest coefficient (0.0625)");
   EXPECT_EQ(refusal_of([&] {
-              require_resolved<float>(
-                  {epoch_tol / 2, epoch_tol, epoch_tol}, epoch_iters,
-                  epoch_tol, 0.0625);
+              require_resolved<float>({epoch_tol / 2, epoch_tol, epoch_tol},
+                                      epoch_iters, epoch_tol, 0.0625);
             }),
             "accepted");
 }

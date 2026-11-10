@@ -24,10 +24,7 @@
 
 (define-runtime-path twin "../python/elastic_net_twin.py")
 
-(struct twin-row
-        (source fit-intercept
-                l1-ratio
-                selection))
+(struct twin-row (source fit-intercept l1-ratio selection))
 
 (define twin-alpha-ratio 0.01)
 

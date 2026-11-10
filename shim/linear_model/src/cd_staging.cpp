@@ -68,8 +68,8 @@ double largest_alpha(int64_t rows, int shared) {
   if (row_multiple_fits(static_cast<T>(std::ldexp(bound, 2 * shared)), rows)) {
     return bound;
   }
-  auto staged = static_cast<T>(std::ldexp(
-      1.0L / static_cast<long double>(rows), penalty_exponent<T>));
+  auto staged = static_cast<T>(
+      std::ldexp(1.0L / static_cast<long double>(rows), penalty_exponent<T>));
   while (!row_multiple_fits(staged, rows)) {
     staged = std::nextafter(staged, T{0});
   }

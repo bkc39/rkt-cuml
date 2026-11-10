@@ -118,13 +118,12 @@
           (filter-not (lambda (r) (equal? (row-id r) "intercept overflow")) (shared-fit-rows go))))
 
 (define (estimator-fit make)
-  (make-keyword-procedure
-   (lambda (kws vals X y)
-     (define given (keyword-hash kws vals))
-     (fit (apply-keywords make (hash-remove given '#:sample-weight) '())
-          X
-          y
-          #:sample-weight (hash-ref given '#:sample-weight #f)))))
+  (make-keyword-procedure (lambda (kws vals X y)
+                            (define given (keyword-hash kws vals))
+                            (fit (apply-keywords make (hash-remove given '#:sample-weight) '())
+                                 X
+                                 y
+                                 #:sample-weight (hash-ref given '#:sample-weight #f)))))
 
 (test-gpu "elastic-net-fit refuses each row, the earlier fault first"
   (for ([r (in-list (fit-rows elastic-net-fit))])
@@ -304,8 +303,7 @@
                            "float64$"))
    (lambda () (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0)))
   (define (fit-at tol #:max-iter [max-iter 1000])
-    (en-run-coef (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0 #:tol tol
-                              #:max-iter max-iter)))
+    (en-run-coef
+     (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0 #:tol tol #:max-iter max-iter)))
   (define fitted (fit-at 1e-7))
   (check-true (> (coef-distance (fit-at 1e-3 #:max-iter 1) fitted) (* 1e-3 (max-abs fitted)))))
-

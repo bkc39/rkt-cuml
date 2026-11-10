@@ -122,7 +122,8 @@
   (< (en-run-n-iter run) default-max-iter))
 
 (define (keyword-hash kws vals)
-  (for/hasheq ([k (in-list kws)] [v (in-list vals)])
+  (for/hasheq ([k (in-list kws)]
+               [v (in-list vals)])
     (values k v)))
 
 (define (apply-keywords f options positional)
@@ -133,11 +134,10 @@
   (make-keyword-procedure
    (lambda (kws vals c dt)
      (define given (keyword-hash kws vals))
-     (en-fit (apply-keywords (hash-ref given '#:fit (lambda () elastic-net-fit))
-                             (hash-set (hash-remove given '#:fit)
-                                       '#:sample-weight
-                                       (on-vector (lcase-w c) dt))
-                             (list (on-matrix (lcase-X c) dt) (on-vector (lcase-y c) dt)))))))
+     (en-fit (apply-keywords
+              (hash-ref given '#:fit (lambda () elastic-net-fit))
+              (hash-set (hash-remove given '#:fit) '#:sample-weight (on-vector (lcase-w c) dt))
+              (list (on-matrix (lcase-X c) dt) (on-vector (lcase-y c) dt)))))))
 
 (define (law-alpha p ratio l1-ratio)
   (* ratio (exact->inexact (alpha-max p (if (zero? l1-ratio) 1 l1-ratio)))))
@@ -226,7 +226,11 @@
                                                    (quotient fits (* 2 (length intercepts)))
                                                    0)))))
 
-(define (check-accuracy c dt alpha r tol
+(define (check-accuracy c
+                        dt
+                        alpha
+                        r
+                        tol
                         #:max-iter [max-iter default-max-iter]
                         #:law [law "coefficient-distance"])
   (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
@@ -237,8 +241,7 @@
   (define u (unit-roundoff dt))
   (check-equal? (if (> mu 0) "coefficient-distance" "kkt-residual") law "the law that applies")
   (match law
-    ["coefficient-distance"
-     (check-law law (coef-distance coef c*) (s2-bound o coef alpha r tol u))]
+    ["coefficient-distance" (check-law law (coef-distance coef c*) (s2-bound o coef alpha r tol u))]
     ["kkt-residual"
      (match-define (kkt K B A) (host-kkt p coef alpha r tol k (rows-of c) u))
      (check-law law K (+ B A))]))
