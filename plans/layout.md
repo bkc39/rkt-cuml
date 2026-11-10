@@ -1419,7 +1419,9 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
 - **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
   against lstsq at tol 1e-14).
 - **L3-d.** K is computed only when n-iter < max-iter and
-  0 < max|b′| < tol′, the only stops the absolute test makes.
+  0 < max|b′| < tol′, the only stops the absolute test makes. It costs one
+  device pass for the column moments: about 10 ms at 1e6 × 100 float32
+  (35 against 25 ms for the unchecked one-epoch fit).
 - **L3-e.** At max-iter, n-iter = max-iter is reported; no refusal and no
   warning (Python is silent; K catches only 18/27 bad cutoffs, F13).
 - **L3-f.** No `#:random-state`: `initShuffle` reseeds the generator with 0
