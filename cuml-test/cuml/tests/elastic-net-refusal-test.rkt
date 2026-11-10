@@ -238,6 +238,34 @@
    #rx"^elastic-net-fit: alpha: expected at most .* for this X in float32, got 1e\\+38$"
    (lambda () (en-case-fit (correlated-case 20 2 0 24) 'float32 #:alpha 1e38))))
 
+(define (columns-apart narrow)
+  (define c (correlated-case 100 2 0 23))
+  (lcase "a narrow column beside one 2^28 wide"
+         (for/list ([row (in-list (lcase-X c))])
+           (list (* (expt 2 narrow) (car row)) (* (expt 2 28) (cadr row))))
+         (for/list ([row (in-list (lcase-X c))]
+                    [v (in-list (lcase-y c))])
+           (+ (cadr row) (/ v 1000)))
+         #f))
+
+(test-gpu "an alpha past half the row-multiple range is refused before cdFit's denominator overflows (H1)"
+  (for ([dt (in-list dtypes)]
+        [narrow (in-list '(-30 -480))]
+        [limit (in-list '(94447329657392906240 23611832414348226560))]
+        [past (in-list '(1.888757e20 4.721894e19))])
+    (define c (columns-apart narrow))
+    (check-cuml-error 'logic
+                      (regexp (format "^elastic-net-fit: alpha: expected at most ~a for this X in ~a, got "
+                                      limit
+                                      dt))
+                      (lambda () (en-case-fit c dt #:alpha past #:l1-ratio 1e-13)))
+    (define (scaled-wide-coef alpha)
+      (match-define (list (list _ b1) _ _) (en-case-fit c dt #:alpha alpha #:l1-ratio 1e-13))
+      (* alpha b1))
+    (define at-limit (scaled-wide-coef (* limit (- 1 1e-4))))
+    (check-true (> at-limit 0))
+    (check-true (< (abs (- at-limit (scaled-wide-coef (* limit 0.99)))) (* 1e-3 at-limit)))))
+
 (define stop-message
   #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol ")
 
