@@ -26,10 +26,12 @@
 
 (define/who (alpha-value who alpha) (real-value/who who 'alpha alpha))
 
+(define int32-max (sub1 (expt 2 31)))
+
 (define/who (iteration-count who n)
-  (if (and (exact-integer? n) (<= 1 n 2147483647))
+  (if (and (exact-integer? n) (<= 1 n int32-max))
       n
-      (logic-error "~a: max-iter: expected an exact integer from 1 to 2147483647, got ~e" who n)))
+      (logic-error "~a: max-iter: expected an exact integer from 1 to ~a, got ~e" who int32-max n)))
 
 (define (intercept-value who intercept)
   (if (real? intercept)

@@ -79,20 +79,21 @@
   (pattern (~or* test-gpu test-model-probe test-process-memory test-twin test-without-gpu)))
 
 (define-syntax-class reviewed-form
-  #:datum-literals (define-definition-context-refactoring-rule define-estimator
-                                                               define-generics
-                                                               define-regressor
-                                                               define-refactoring-rule
-                                                               define-hyperparameters
-                                                               define-page-helpers
-                                                               define-splicing-syntax-class
-                                                               define-syntax-class
-                                                               define-syntax-parse-rule
-                                                               define/who
-                                                               quasiquote
-                                                               quote
-                                                               struct
-                                                               test-unless-skipped)
+  #:datum-literals (define-cd-result define-definition-context-refactoring-rule
+                     define-estimator
+                     define-generics
+                     define-regressor
+                     define-refactoring-rule
+                     define-hyperparameters
+                     define-page-helpers
+                     define-splicing-syntax-class
+                     define-syntax-class
+                     define-syntax-parse-rule
+                     define/who
+                     quasiquote
+                     quote
+                     struct
+                     test-unless-skipped)
   (pattern (quote (_ . _))
     #:attr review void)
   (pattern (quasiquote datum)
@@ -138,6 +139,13 @@
     #:attr review (lambda ()
                     (recur #'head)
                     (for-each track-binding (attribute name))))
+  (pattern ((~and head define-cd-result) result:id predict:id)
+    #:with predict/who (format-id #'predict "~a/who" #'predict #:source #'predict)
+    #:attr review (lambda ()
+                    (recur #'head)
+                    (track-binding #'result #:check-usages? #f)
+                    (track-binding #'predict #:check-usages? #f)
+                    (track-binding #'predict/who #:check-usages? #f)))
   (pattern ((~and head define/who) (name:id . formals:formal-list) body ...+)
     #:with name/who (format-id #'name "~a/who" #'name #:source #'name)
     #:attr review (lambda ()

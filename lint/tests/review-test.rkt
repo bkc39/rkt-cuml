@@ -209,6 +209,12 @@
       #:fit gauge-fit/who
       #:predict gauge-predict/who)))
 
+(define cd-result-definition
+  '((provide (struct-out gauge-result)
+             gauge-predict
+             gauge-predict/who)
+    (define-cd-result gauge-result gauge-predict)))
+
 (define helper-used-in-a-template
   '((require (for-syntax racket/base)) (provide m)
                                        (define (helper x)
@@ -243,6 +249,9 @@
 
 (test-case "define-regressor binds the constructor, the predicate and the model accessor"
   (check-equal? (problems-in regressor-definition) '()))
+
+(test-case "define-cd-result binds the result struct, the predict and its who form"
+  (check-equal? (problems-in cd-result-definition) '()))
 
 (test-case "a binding used only in a macro's template is used"
   (check-equal? (problems-in helper-used-in-a-template) '()))

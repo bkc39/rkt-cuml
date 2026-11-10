@@ -1,15 +1,11 @@
 #lang racket/base
 
-(require (for-syntax racket/base
-                     (only-in syntax/parse/pre ~optional ~seq attribute))
-         (only-in cuml/core/private/hyperparameters define-codes key->keyword table-id)
+(require (only-in cuml/core/private/hyperparameters define-codes)
          (only-in racket/match match)
          (only-in racket/math infinite? nan?)
-         (only-in raft device-array? shape)
-         (only-in syntax/parse/define define-syntax-parse-rule))
+         (only-in raft device-array? shape))
 
-(provide bound-params
-         drawn-seed
+(provide drawn-seed
          finite-real?
          flag
          metric-code
@@ -32,13 +28,3 @@
 
 (define (flag v)
   (if v 1 0))
-
-(define-syntax-parse-rule (bound-params table:table-id
-                                        (~optional (~seq #:ignoring (skipped ...))
-                                                   #:defaults ([(skipped 1) '()])))
-  #:do [(define ignored (syntax->datum #'(skipped ...)))]
-  #:with (key ...) (for/list ([key (in-list (attribute table.keys))]
-                              #:unless (memq key ignored))
-                     (datum->syntax #'table key #'table))
-  #:with (keyword ...) (map key->keyword (syntax->datum #'(key ...)))
-  (table (~@ keyword key) ...))

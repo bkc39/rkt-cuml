@@ -95,7 +95,7 @@
   (case name
     [("_fun") format-fun]
     [("hash" "hasheq" "hasheqv" "hashalw") format-hash-pairs]
-    [("define-raft" "define-kc" "define/who" "define-estimator" "define-regressor")
+    [("define-raft" "define-kc" "define/who" "define-estimator" "define-regressor" "define-cd-result")
      (format-define-like)]
     [("define-hyperparameters") (format-uniform-body/helper 1 #:body-formatter format-entry)]
     [("define-cstruct") (format-uniform-body/helper 1 #:body-formatter format-binding-pairs/indirect)]

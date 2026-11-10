@@ -2,13 +2,13 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
          (only-in racket/match match-define)
          (only-in racket/math exact-ceiling)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt" cuml-manifold-tsne-fit-job)
-         (only-in "support.rkt" bound-params drawn-seed finite-real? metric-code))
+         (only-in "support.rkt" drawn-seed finite-real? metric-code))
 
 (provide (struct-out tsne-result)
          tsne-fit
