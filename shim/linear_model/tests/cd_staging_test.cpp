@@ -298,6 +298,19 @@ TEST(CdCheck, AResidualWithinBIsAcceptedWhateverTheAllowance) {
   }
 }
 
+TEST(CdCheck, AResidualBetweenAFloat32RoundedBAndTolIsAccepted) {
+  constexpr double tol = 1e-4;
+  const auto bound = static_cast<double>(static_cast<float>(tol));
+  const double residual = 9.9999999e-05;
+  ASSERT_LT(bound, residual);
+  ASSERT_LT(residual, tol);
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<float>({residual, bound, 2 * bound},
+                                      epoch_iters, tol, epoch_largest);
+            }),
+            "accepted");
+}
+
 struct stop_case {
   int n_iter;
   int max_iter;

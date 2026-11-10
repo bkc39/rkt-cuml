@@ -176,7 +176,7 @@ void require_kkt(const kkt_terms& k, int n_iter, double tol) {
 template <typename T>
 void require_resolved(const kkt_terms& k, int n_iter, double tol,
                       double largest) {
-  const bool over = !k.residual || *k.residual > k.bound;
+  const bool over = !k.residual || *k.residual > std::max(k.bound, tol);
   if (over && k.allowance > k.bound) {
     constexpr bool narrow = std::is_same_v<T, float>;
     throw logic_error(std::format(
