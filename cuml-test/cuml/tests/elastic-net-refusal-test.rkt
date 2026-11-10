@@ -298,7 +298,7 @@
   (check-cuml-error
    'logic
    (pregexp (string-append "^elastic-net-fit: X: coordinate descent stopped after 1 epochs with "
-                           "every coefficient under tol 0\\.001 and KKT residual [^ ]+ > 0\\.001, "
+                           "every coefficient under tol 0\\.001 and KKT residual [^ ]+ > tol, "
                            "within float32's rounding of the solve; lower tol below the largest "
                            "coefficient \\([^)]+\\) or fit in float64$"))
    (lambda () (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0)))
@@ -320,9 +320,8 @@
     (lcase "three columns at correlation 0.6 in units 1, 30 and 1000, and a weak signal"
            X
            (for/list ([row (in-list X)])
-             (dyadic (+ (for/sum ([x (in-list row)]
-                                  [scale (in-list unit-scales)])
-                          (* 1/1000 (/ x scale)))
+             (dyadic (+ (for/sum ([x (in-list row)] [scale (in-list unit-scales)])
+                                 (* 1/1000 (/ x scale)))
                         (next))))
            #f)))
 

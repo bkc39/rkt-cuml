@@ -181,10 +181,10 @@ void require_resolved(const kkt_terms& k, int n_iter, double tol,
     constexpr bool narrow = std::is_same_v<T, float>;
     throw logic_error(std::format(
         "X: coordinate descent stopped after {} epochs with every coefficient "
-        "under tol {} and KKT residual {} > {}, within {}'s rounding of the "
+        "under tol {} and KKT residual {} > tol, within {}'s rounding of the "
         "solve; lower tol below the largest coefficient ({}){}",
         n_iter, printed(tol), k.residual ? printed(*k.residual) : "nan",
-        printed(k.bound), raftrkt::dtype_name(raftrkt::dtype_code<T>),
+        raftrkt::dtype_name(raftrkt::dtype_code<T>),
         printed<T>(static_cast<T>(largest)),
         narrow ? " or fit in float64" : ""));
   }

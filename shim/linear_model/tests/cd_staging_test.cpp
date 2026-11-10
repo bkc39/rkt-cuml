@@ -259,7 +259,7 @@ TEST(CdCheck, AResidualAboveBWithAnAllowanceAboveBIsRefused) {
                                       epoch_largest);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
-            "coefficient under tol 0.1 and KKT residual 0.15 > 0.1, within "
+            "coefficient under tol 0.1 and KKT residual 0.15 > tol, within "
             "float32's rounding of the solve; lower tol below the largest "
             "coefficient (0.0625) or fit in float64");
   EXPECT_EQ(refusal_of([&] {
@@ -267,7 +267,7 @@ TEST(CdCheck, AResidualAboveBWithAnAllowanceAboveBIsRefused) {
                                        epoch_largest);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
-            "coefficient under tol 0.1 and KKT residual 0.15 > 0.1, within "
+            "coefficient under tol 0.1 and KKT residual 0.15 > tol, within "
             "float64's rounding of the solve; lower tol below the largest "
             "coefficient (0.0625)");
   EXPECT_NE(refusal_of([&] {
