@@ -203,6 +203,7 @@ constexpr double epoch_l1 = 0.5;
 constexpr double light_l2 = 0.25;
 constexpr double heavy_l2 = 1;
 constexpr int epoch_iters = 4;
+constexpr double epoch_largest = 0.0625;
 constexpr int64_t epoch_rows = 9;
 constexpr double float_roundoff = 0x1p-24;
 constexpr double light_residual = 1.0 / 6;
@@ -254,7 +255,7 @@ TEST(CdCheck, AnAllowanceAboveBIsRefusedAsUncheckable) {
   const kkt_terms unresolved{epoch_tol / 2, epoch_tol, 2 * epoch_tol};
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>(unresolved, epoch_iters, epoch_tol,
-                                      0.0625);
+                                      epoch_largest);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
             "coefficient under tol 0.1, and float32 cannot check that stop; "
@@ -262,14 +263,14 @@ TEST(CdCheck, AnAllowanceAboveBIsRefusedAsUncheckable) {
             "float64");
   EXPECT_EQ(refusal_of([&] {
               require_resolved<double>(unresolved, epoch_iters, epoch_tol,
-                                       0.0625);
+                                       epoch_largest);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
             "coefficient under tol 0.1, and float64 cannot check that stop; "
             "lower tol below the largest coefficient (0.0625)");
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>({epoch_tol / 2, epoch_tol, epoch_tol},
-                                      epoch_iters, epoch_tol, 0.0625);
+                                      epoch_iters, epoch_tol, epoch_largest);
             }),
             "accepted");
 }
