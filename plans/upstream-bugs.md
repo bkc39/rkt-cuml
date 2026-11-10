@@ -89,7 +89,7 @@ packet (§4) has the detail.
 | L2 #88 | algo 0 (svdQR, `cusolverDngesvd`) throws `CUSOLVER_STATUS_INVALID_VALUE` when n_rows < n_cols | `ridge.cuh` `ridgeSVD` → raft `svdQR` | routed to eig |
 | L2 #88 | `ridgeFit` accepts a negative α (an indefinite solve) without a check | `ridge.cuh` | refused (V8) |
 | L3 #89 | a column with Σw̃x² + l2 ≤ 1e-5 gets coefficient 0, whatever the scale | `cd.cuh:68` | staging (L3-a) |
-| L3 #89 | `coefMax < tol` stops CD after one epoch whenever every coefficient is under tol in the caller's units (rel to 2.08) | `cd.cuh:271` | refused (V16, L3-b) |
+| L3 #89 | `coefMax < tol` stops CD after one epoch whenever every coefficient is under tol in the caller's units (rel to 2.08) | `cd.cuh:271` | refused (V16, V16b, L3-b) |
 | L3 #89 | `initShuffle` reseeds the `mt19937(rand())` with 0: `'random` is one fixed order, `srand` has no effect, and one `rand()` is consumed per fit. The same in SGD. | `cd.cuh:198-199`, `shuffle.h:18`, `sgd.cuh:143-144` | no `#:random-state` (L3-f) |
 | L3 #89 | Σw by `raft::stats::sum` is not deterministic, so weighted fits differ between runs from about 3000 rows, with or without intercept | `cd.cuh:158` | shim-side weighting (L3-g) |
 | L3 #89 | α < 0 and l1_ratio ∉ [0,1] are accepted silently | `cd.cuh` | refused (V8, V8b) |

@@ -1409,13 +1409,31 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   K reaches 30.8·u√n·σ_y·max(σ_j/D_j)/max|b| in float64 at m = 1e6 (28.4 at
   1e4), while the coefficient term needs under 1. F12 still refuses 72/72
   bad absolute stops (err > 1e-2) in both dtypes, and of 13 large-α
-  (1e4, 1e6) stops off by more than tol, 13 (float64) and 11 (float32; the
-  two misses are tol 1e-7, errors 2.2e-7 and 1.5e-6, inside S2's 64u).
+  (1e4, 1e6) stops off by more than tol, 13 in both dtypes since L3-o
+  (round 1 missed two in float32, at tol 1e-7 with errors 2.2e-7 and
+  1.5e-6 of max|c*|: there A/tol was 17 and 15.8, so V16b now refuses them).
+  An absolute stop with A > B is refused (V16b, L3-o, round 2), after V16:
+  there K ≤ B + A cannot tell a stop within tol from one many times past
+  it. Under a heavy L2 penalty A ≈ u√m/corr(x, y), so a weak signal on many
+  rows puts it past the default tol (H2: 2^18 × 4 float32, corr(x, y) 1e-4,
+  α 30, ρ 0 was accepted after one epoch 5.8% off; 2^15 rows with y pure
+  noise, α 1500, 2.1e-3 off). A lower tol makes CD stop on its relative
+  test, which needs no check (that fit at tol 1e-7: 4 epochs, 2.4e-7 off).
+  What V16b refuses that V16 accepted: no law-grid or twin fit (the law
+  grid makes no absolute stop); none of F10's 866 accepted large-α
+  absolute stops; near α_max (1000 × 10, α_max·(1 − 2⁻¹², 1 − 2⁻²⁰, 1)),
+  39 of 44 float32 absolute stops, of which 15 at 1 − 2⁻¹² were within
+  tol (errors ≤ 5e-4) and 20 at 1 − 2⁻²⁰ were off by 0.7% to 15% (V16 let
+  them through), and 9 of 49 float64 ones, every one at α_max itself with
+  max|b| ≤ 1.9e-15, the rounding of an exact 0.
   What it promises: a fit returned before max-iter meets the elastic-net
-  optimality conditions to within what the relative test allows. What it
-  does not: the coefficients' error, bounded only by K·max|b|·‖D‖₂/μ (F14;
-  7.9e-2 of max|b| at correlation 0.99 is sound under it), and fits at
-  max-iter (L3-e).
+  optimality conditions to within what the relative test allows, as the
+  `elastic-net-fit` entry says (within tol of a stop the relative test
+  would accept). What it does not: the coefficients' error, bounded only
+  by ‖b − b*‖₂ ≤ K·max|b|·‖D‖₂/(λ_min + λ₂) for K computed exactly, λ_min
+  the least eigenvalue of XᵀWX/Σw on the centred columns (F14; 7.9e-2 of
+  max|b| at correlation 0.99 is sound under it); fits at max-iter (L3-e);
+  and, as for ridge (L2-k), fits where u(λ_max + λ₂)/(λ_min + λ₂) ≥ 1.
 - **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
   against lstsq at tol 1e-14).
 - **L3-d.** K is computed only when n-iter < max-iter and

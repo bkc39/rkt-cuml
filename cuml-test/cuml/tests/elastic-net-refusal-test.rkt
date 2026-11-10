@@ -228,7 +228,7 @@
 (test-gpu "an alpha past half the row-multiple range is refused"
   (for ([dt (in-list dtypes)]
         [narrow (in-list '(-30 -480))]
-        [limit (in-list '(94447329657392906240 23611832414348226560))]
+        [limit (in-list '(94447329657392906240 23611832414348222464))]
         [past (in-list '(1.888757e20 4.721894e19))])
     (define c (columns-apart narrow))
     (check-cuml-error

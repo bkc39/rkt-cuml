@@ -133,7 +133,7 @@
   (make-keyword-procedure
    (lambda (kws vals c dt)
      (define given (keyword-hash kws vals))
-     (en-fit (apply-keywords (hash-ref given '#:fit elastic-net-fit)
+     (en-fit (apply-keywords (hash-ref given '#:fit (lambda () elastic-net-fit))
                              (hash-set (hash-remove given '#:fit)
                                        '#:sample-weight
                                        (on-vector (lcase-w c) dt))
