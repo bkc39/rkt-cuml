@@ -1437,7 +1437,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   tol, errors ≤ 5e-4) and one at 1 − 2⁻²⁰ (K 0.68·tol, 0.66% off: float32
   rounding, the cost L3-o accepts), and float64's 4 at α_max with K = 0
   and max|b| ≤ 4.4e-16. F12 is unchanged (72/72 and 13/13 in both dtypes).
-  GRID_PLACEHOLDER
+  The round-2 review's bad-stop grid (9 configurations × 2 dtypes,
+  2^16 to 2^20 rows) accepts 24 one-epoch absolute stops per dtype, none
+  with K > B (largest K 7.3e-4 in float32, 5.9e-4 in float64); float32
+  refuses 2 by V16b (K 5.9e-3 and 2.0e-3, 0.59% and 0.20% off) and 6 by
+  V16, where round 2 refused 24 by V16b. One accepted float32 stop is more
+  than tol off: 0.99999·α_max at correlation 0.999, K 3.7e-4, 2.2e-3 off,
+  which a lower tol returns unchanged.
   What it promises: a fit returned before max-iter meets the elastic-net
   optimality conditions to within what the relative test allows, as the
   `elastic-net-fit` entry says (within tol of a stop the relative test
