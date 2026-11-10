@@ -305,8 +305,8 @@ TEST(CdCheck, AResidualBetweenAFloat32RoundedBAndTolIsAccepted) {
   ASSERT_LT(bound, residual);
   ASSERT_LT(residual, tol);
   EXPECT_EQ(refusal_of([&] {
-              require_resolved<float>({residual, bound, 2 * bound},
-                                      epoch_iters, tol, epoch_largest);
+              require_resolved<float>({residual, bound, 2 * bound}, epoch_iters,
+                                      tol, epoch_largest);
             }),
             "accepted");
 }
