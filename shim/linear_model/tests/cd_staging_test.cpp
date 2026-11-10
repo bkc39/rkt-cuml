@@ -149,7 +149,7 @@ TEST(CdStaging, AnAlphaWhoseRowMultiplePassesHalfTheRangeIsRefused) {
   const staging s = planned({{0}, {1.5}, 0});
   EXPECT_EQ(
       refusal_of([&] { cd_scale_of<float>(s, rows, past_half_range); }),
-      "alpha: expected at most 1.7014118346046923e+36 for this X in float32, "
+      "alpha: expected at most 1.7014118346046924e+36 for this X in float32, "
       "got "
       "1.71e+36");
   EXPECT_EQ(
