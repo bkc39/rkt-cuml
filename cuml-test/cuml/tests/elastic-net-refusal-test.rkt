@@ -10,7 +10,7 @@
                   lasso-result
                   linear-regression-result)
          (only-in racket/list filter-not)
-         (only-in racket/match match-define match-lambda match-lambda**)
+         (only-in racket/match match-define match-lambda match-lambda** struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source)
@@ -22,25 +22,34 @@
                   coef-distance
                   converged?
                   correlated-case
+                  default-tol
                   en-case-fit
                   en-run
                   en-run-coef
                   en-run-n-iter
                   en-run?
                   keyword-hash)
+         (only-in "private/elastic-net-oracle.rkt"
+                  en-solution
+                  host-kkt
+                  kkt
+                  oracle-elastic-net
+                  problem-of)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
                   docs-case
                   dtypes
                   dyadic
                   lcase
+                  lcase-w
                   lcase-X
                   lcase-y
                   max-abs
                   [on-matrix matrix]
                   [on-vector vector]
                   scaled-case
-                  scaled-columns)
+                  scaled-columns
+                  unit-roundoff)
          (only-in "private/linear-refusal-rows.rkt" grid shared-fit-rows targets)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
@@ -325,7 +334,20 @@
                         (next))))
            #f)))
 
+(define (check-accepted-within-tol c dt alpha r)
+  (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
+  (match-define (en-run coef _ n-iter) (en-case-fit c dt #:alpha alpha #:l1-ratio r))
+  (check-equal? n-iter 1)
+  (match-define (kkt K B A)
+    (host-kkt p coef alpha r default-tol n-iter (length (lcase-y c)) (unit-roundoff dt)))
+  (check-true (<= K B))
+  (check-true (> A B))
+  (match-define (struct* en-solution ([coef c*])) (oracle-elastic-net p alpha r))
+  (check-true (< (coef-distance coef c*) (* default-tol (max-abs c*)))))
+
 (test-gpu "a float32 absolute stop within tol is accepted where its rounding exceeds tol"
-  (define alpha (case-alpha mixed-units 0.1 0.2))
-  (check-equal? (en-run-n-iter (en-case-fit mixed-units 'float32 #:alpha alpha #:l1-ratio 0.2)) 1)
-  (check-accuracy mixed-units 'float32 alpha 0.2 1e-3))
+  (check-accepted-within-tol mixed-units 'float32 (case-alpha mixed-units 0.1 0.2) 0.2))
+
+(test-gpu "a float64 lasso stop 1e-12 below alpha-max is accepted within tol where its A exceeds tol"
+  (define c (correlated-case (expt 2 16) 4 0.5 11))
+  (check-accepted-within-tol c 'float64 (case-alpha c (- 1 1e-12) 1) 1))

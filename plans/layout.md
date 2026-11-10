@@ -1421,8 +1421,16 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   A lower tol makes CD stop on its relative test, which needs no check
   (that fit at tol 1e-7: 4 epochs, 2.4e-7 off). K itself is computed in
   double (double residuals, exact product sums, `kkt_of` in long double),
-  so A, built from the dtype's u, bounds what CD can reach, not K's own
-  error: a stop with K ≤ B has passed the check. Round 2 refused every
+  so in float32 A, built from float32's u, bounds what CD can reach, not
+  K's own error: a float32 stop with K ≤ B has passed the check. In
+  float64 A is built from the check's own u, so that argument does not
+  hold there and float64 rests on measurement: 2^16 × 4, lasso with
+  intercept, at α_max·(1 − ε) for ε 1e-11, 1e-12, 3e-13 and 1e-13,
+  against an exact-rational oracle and an exact K, has A/B from 1.6 to
+  161; round 2 refused all four, and the amendment accepts them at n-iter
+  1, 8.3e-6, 8.3e-5, 2.8e-4 and 8.3e-4 of max|b*| off (exact K ≤ 2.1e-4),
+  with the shim's K far closer to the exact K than A (2.82e-5 against
+  2.09e-5 at ε 1e-12, where A is 0.016). Round 2 refused every
   A > B, and so refused float32 stops far inside tol on ordinary data
   (2^20 rows of one column with σ 2e4 at 0.5·α_max: K 1.3e-7, A 1.2e-3;
   2^17 × 3 in units 1, 30 and 1000 at 0.1·α_max: K 3e-8, A 1.1e-2, 2.8e-8
@@ -1434,9 +1442,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   1 − 2⁻²⁰, 1.1% to 15%; 4 at α_max), and 5 of 49 float64 ones, all at
   α_max itself with max|b| ≤ 1.9e-15, the rounding of an exact 0. Of
   round 2's refusals the amendment accepts float32's 15 at 1 − 2⁻¹² (within
-  tol, errors ≤ 5e-4) and one at 1 − 2⁻²⁰ (K 0.68·tol, 0.66% off: float32
-  rounding, the cost L3-o accepts), and float64's 4 at α_max with K = 0
-  and max|b| ≤ 4.4e-16. F12 is unchanged (72/72 and 13/13 in both dtypes).
+  tol, errors ≤ 5e-4) and one at 1 − 2⁻²⁰ (numpy model: K 0.68·tol,
+  0.66% off), and float64's 4 at α_max with K = 0 and max|b| ≤ 4.4e-16,
+  and at 2^16 × 4 the four float64 stops at α_max·(1 − ε) for ε 1e-11 to
+  1e-13 above. On the shim, float32 rounding, the cost L3-o accepts,
+  is F5 at 0.99999·α_max (2^16 × 8, correlation 0.99): accepted 1.14e-3
+  off with K 1.4e-4, and its tol 1e-7 refit gives the same coefficients.
+  F12 is unchanged (72/72 and 13/13 in both dtypes).
   The round-2 review's bad-stop grid (9 configurations × 2 dtypes,
   2^16 to 2^20 rows) accepts 24 one-epoch absolute stops per dtype, none
   with K > B (largest K 7.3e-4 in float32, 5.9e-4 in float64); float32
