@@ -158,23 +158,23 @@ TEST(CdStaging, AnAlphaWhoseRowMultiplePassesHalfTheRangeIsRefused) {
 }
 
 template <typename T>
-double printed_largest_alpha(const staging& s) {
+double printed_alpha_bound(const staging& s) {
   const std::string got = refusal_of(
       [&] { cd_scale_of<T>(s, rows, std::numeric_limits<double>::max()); });
   const std::string lead = "alpha: expected at most ";
   return std::stod(got.substr(lead.size(), got.find(" for ") - lead.size()));
 }
 
-TEST(CdStaging, ThePrintedLargestAlphaIsAccepted) {
+TEST(CdStaging, ThePrintedAlphaBoundIsAccepted) {
   const staging s = planned({{0}, {1.5}, 0});
-  EXPECT_EQ(printed_largest_alpha<double>(s),
+  EXPECT_EQ(printed_alpha_bound<double>(s),
             std::nextafter(std::ldexp(1.0 / rows, 1023), 0.0));
   EXPECT_EQ(refusal_of([&] {
-              cd_scale_of<double>(s, rows, printed_largest_alpha<double>(s));
+              cd_scale_of<double>(s, rows, printed_alpha_bound<double>(s));
             }),
             "accepted");
   EXPECT_EQ(refusal_of([&] {
-              cd_scale_of<float>(s, rows, printed_largest_alpha<float>(s));
+              cd_scale_of<float>(s, rows, printed_alpha_bound<float>(s));
             }),
             "accepted");
 }
@@ -204,6 +204,7 @@ constexpr double light_l2 = 0.25;
 constexpr double heavy_l2 = 1;
 constexpr int epoch_iters = 4;
 constexpr double epoch_largest = 0.0625;
+constexpr double over_residual = 0.15;
 constexpr int64_t epoch_rows = 9;
 constexpr double float_roundoff = 0x1p-24;
 constexpr double light_residual = 1.0 / 6;
@@ -251,28 +252,50 @@ TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
             "accepted");
 }
 
-TEST(CdCheck, AnAllowanceAboveBIsRefusedAsUncheckable) {
-  const kkt_terms unresolved{epoch_tol / 2, epoch_tol, 2 * epoch_tol};
+TEST(CdCheck, AResidualAboveBWithAnAllowanceAboveBIsRefused) {
+  const kkt_terms unresolved{over_residual, epoch_tol, 2 * epoch_tol};
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>(unresolved, epoch_iters, epoch_tol,
                                       epoch_largest);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
-            "coefficient under tol 0.1, and float32 cannot check that stop; "
-            "lower tol below the largest coefficient (0.0625) or fit in "
-            "float64");
+            "coefficient under tol 0.1 and KKT residual 0.15 > 0.1, within "
+            "float32's rounding of the solve; lower tol below the largest "
+            "coefficient (0.0625) or fit in float64");
   EXPECT_EQ(refusal_of([&] {
               require_resolved<double>(unresolved, epoch_iters, epoch_tol,
                                        epoch_largest);
             }),
             "X: coordinate descent stopped after 4 epochs with every "
-            "coefficient under tol 0.1, and float64 cannot check that stop; "
-            "lower tol below the largest coefficient (0.0625)");
-  EXPECT_EQ(refusal_of([&] {
-              require_resolved<float>({epoch_tol / 2, epoch_tol, epoch_tol},
+            "coefficient under tol 0.1 and KKT residual 0.15 > 0.1, within "
+            "float64's rounding of the solve; lower tol below the largest "
+            "coefficient (0.0625)");
+  EXPECT_NE(refusal_of([&] {
+              require_resolved<float>({std::nullopt, epoch_tol, 2 * epoch_tol},
                                       epoch_iters, epoch_tol, epoch_largest);
             }),
             "accepted");
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<float>({over_residual, epoch_tol, epoch_tol},
+                                      epoch_iters, epoch_tol, epoch_largest);
+            }),
+            "accepted");
+}
+
+TEST(CdCheck, AResidualWithinBIsAcceptedWhateverTheAllowance) {
+  for (const kkt_terms& k : {kkt_terms{epoch_tol / 2, epoch_tol, 2 * epoch_tol},
+                             kkt_terms{epoch_tol, epoch_tol, 2 * epoch_tol}}) {
+    EXPECT_EQ(refusal_of([&] {
+                require_resolved<float>(k, epoch_iters, epoch_tol,
+                                        epoch_largest);
+              }),
+              "accepted");
+    EXPECT_EQ(refusal_of([&] {
+                require_resolved<double>(k, epoch_iters, epoch_tol,
+                                         epoch_largest);
+              }),
+              "accepted");
+  }
 }
 
 struct stop_case {

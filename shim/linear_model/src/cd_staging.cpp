@@ -62,7 +62,7 @@ bool row_multiple_fits(T staged, int64_t rows) {
 }
 
 template <typename T>
-double largest_alpha(int64_t rows, int shared) {
+double accepted_alpha_bound(int64_t rows, int shared) {
   const double bound = std::ldexp(1.0 / static_cast<double>(rows),
                                   penalty_exponent<T> - 2 * shared);
   if (row_multiple_fits(static_cast<T>(std::ldexp(bound, 2 * shared)), rows)) {
@@ -80,7 +80,7 @@ template <typename T>
 void refuse_alpha(double alpha, int64_t rows, int shared) {
   throw logic_error(
       std::format("alpha: expected at most {} for this X in {}, got {}",
-                  printed(largest_alpha<T>(rows, shared)),
+                  printed(accepted_alpha_bound<T>(rows, shared)),
                   raftrkt::dtype_name(raftrkt::dtype_code<T>), printed(alpha)));
 }
 
@@ -176,13 +176,15 @@ void require_kkt(const kkt_terms& k, int n_iter, double tol) {
 template <typename T>
 void require_resolved(const kkt_terms& k, int n_iter, double tol,
                       double largest) {
-  if (k.allowance > k.bound) {
+  const bool over = !k.residual || *k.residual > k.bound;
+  if (over && k.allowance > k.bound) {
     constexpr bool narrow = std::is_same_v<T, float>;
     throw logic_error(std::format(
         "X: coordinate descent stopped after {} epochs with every coefficient "
-        "under tol {}, and {} cannot check that stop; lower tol below the "
-        "largest coefficient ({}){}",
-        n_iter, printed(tol), raftrkt::dtype_name(raftrkt::dtype_code<T>),
+        "under tol {} and KKT residual {} > {}, within {}'s rounding of the "
+        "solve; lower tol below the largest coefficient ({}){}",
+        n_iter, printed(tol), k.residual ? printed(*k.residual) : "nan",
+        printed(k.bound), raftrkt::dtype_name(raftrkt::dtype_code<T>),
         printed<T>(static_cast<T>(largest)),
         narrow ? " or fit in float64" : ""));
   }

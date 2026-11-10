@@ -1412,20 +1412,32 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   (1e4, 1e6) stops off by more than tol, 13 in both dtypes since L3-o
   (round 1 missed two in float32, at tol 1e-7 with errors 2.2e-7 and
   1.5e-6 of max|c*|: there A/tol was 17 and 15.8, so V16b now refuses them).
-  An absolute stop with A > B is refused (V16b, L3-o, round 2), after V16:
-  there K ≤ B + A cannot tell a stop within tol from one many times past
-  it. Under a heavy L2 penalty A ≈ u√m/corr(x, y), so a weak signal on many
-  rows puts it past the default tol (H2: 2^18 × 4 float32, corr(x, y) 1e-4,
-  α 30, ρ 0 was accepted after one epoch 5.8% off; 2^15 rows with y pure
-  noise, α 1500, 2.1e-3 off). A lower tol makes CD stop on its relative
-  test, which needs no check (that fit at tol 1e-7: 4 epochs, 2.4e-7 off).
+  An absolute stop with K > B and A > B is refused (V16b; L3-o, amended in
+  round 3), after V16: there K ≤ B + A cannot tell a stop within tol from
+  one many times past it. Under a heavy L2 penalty A ≈ u√m/corr(x, y), so a
+  weak signal on many rows puts it past the default tol (H2: 2^18 × 4
+  float32, corr(x, y) 1e-4, α 30, ρ 0 was accepted after one epoch 5.8%
+  off, K 0.058; 2^15 rows with y pure noise, α 1500, 2.1e-3 off, K 1.7e-3).
+  A lower tol makes CD stop on its relative test, which needs no check
+  (that fit at tol 1e-7: 4 epochs, 2.4e-7 off). K itself is computed in
+  double (double residuals, exact product sums, `kkt_of` in long double),
+  so A, built from the dtype's u, bounds what CD can reach, not K's own
+  error: a stop with K ≤ B has passed the check. Round 2 refused every
+  A > B, and so refused float32 stops far inside tol on ordinary data
+  (2^20 rows of one column with σ 2e4 at 0.5·α_max: K 1.3e-7, A 1.2e-3;
+  2^17 × 3 in units 1, 30 and 1000 at 0.1·α_max: K 3e-8, A 1.1e-2, 2.8e-8
+  off, where the advised tol 1e-7 fit was 3.2e-7 off).
   What V16b refuses that V16 accepted: no law-grid or twin fit (the law
   grid makes no absolute stop); none of F10's 866 accepted large-α
   absolute stops; near α_max (1000 × 10, α_max·(1 − 2⁻¹², 1 − 2⁻²⁰, 1)),
-  39 of 44 float32 absolute stops, of which 15 at 1 − 2⁻¹² were within
-  tol (errors ≤ 5e-4) and 20 at 1 − 2⁻²⁰ were off by 0.7% to 15% (V16 let
-  them through), and 9 of 49 float64 ones, every one at α_max itself with
-  max|b| ≤ 1.9e-15, the rounding of an exact 0.
+  23 of 44 float32 absolute stops, every one more than tol off (19 at
+  1 − 2⁻²⁰, 1.1% to 15%; 4 at α_max), and 5 of 49 float64 ones, all at
+  α_max itself with max|b| ≤ 1.9e-15, the rounding of an exact 0. Of
+  round 2's refusals the amendment accepts float32's 15 at 1 − 2⁻¹² (within
+  tol, errors ≤ 5e-4) and one at 1 − 2⁻²⁰ (K 0.68·tol, 0.66% off: float32
+  rounding, the cost L3-o accepts), and float64's 4 at α_max with K = 0
+  and max|b| ≤ 4.4e-16. F12 is unchanged (72/72 and 13/13 in both dtypes).
+  GRID_PLACEHOLDER
   What it promises: a fit returned before max-iter meets the elastic-net
   optimality conditions to within what the relative test allows, as the
   `elastic-net-fit` entry says (within tol of a stop the relative test

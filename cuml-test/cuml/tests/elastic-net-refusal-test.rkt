@@ -241,7 +241,7 @@
     (check-true (> at-limit 0))
     (check-true (< (abs (- at-limit (scaled-wide-coef (* limit 0.99)))) (* 1e-3 at-limit)))))
 
-(test-gpu "the largest alpha a refusal prints fits"
+(test-gpu "the alpha bound a refusal prints fits"
   (for ([dt (in-list dtypes)]
         [narrow (in-list '(-30 -480))])
     (define c (columns-apart narrow))
@@ -294,16 +294,39 @@
              (dyadic (next)))
            #f)))
 
-(test-gpu "a float32 absolute stop its rounding cannot check is refused; a lower tol fits"
+(test-gpu "a float32 absolute stop over tol within its rounding is refused; a lower tol fits"
   (check-cuml-error
    'logic
    (pregexp (string-append "^elastic-net-fit: X: coordinate descent stopped after 1 epochs with "
-                           "every coefficient under tol 0\\.001, and float32 cannot check that "
-                           "stop; lower tol below the largest coefficient \\([^)]+\\) or fit in "
-                           "float64$"))
+                           "every coefficient under tol 0\\.001 and KKT residual [^ ]+ > 0\\.001, "
+                           "within float32's rounding of the solve; lower tol below the largest "
+                           "coefficient \\([^)]+\\) or fit in float64$"))
    (lambda () (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0)))
   (define (fit-at tol #:max-iter [max-iter 1000])
-    (en-run-coef
-     (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0 #:tol tol #:max-iter max-iter)))
+    (en-case-fit weak-signal 'float32 #:alpha 1500 #:l1-ratio 0 #:tol tol #:max-iter max-iter))
   (define fitted (fit-at 1e-7))
-  (check-true (> (coef-distance (fit-at 1e-3 #:max-iter 1) fitted) (* 1e-3 (max-abs fitted)))))
+  (check-true (converged? fitted))
+  (check-true (> (coef-distance (en-run-coef (fit-at 1e-3 #:max-iter 1)) (en-run-coef fitted))
+                 (* 1e-3 (max-abs (en-run-coef fitted))))))
+
+(define unit-scales '(1 30 1000))
+
+(define mixed-units
+  (let* ([next (normal-source 7)]
+         [X (for/list ([_ (in-range tall-rows)])
+              (define shared (next))
+              (for/list ([scale (in-list unit-scales)])
+                (dyadic (* scale (+ (* (sqrt 0.6) shared) (* (sqrt 0.4) (next)))))))])
+    (lcase "three columns at correlation 0.6 in units 1, 30 and 1000, and a weak signal"
+           X
+           (for/list ([row (in-list X)])
+             (dyadic (+ (for/sum ([x (in-list row)]
+                                  [scale (in-list unit-scales)])
+                          (* 1/1000 (/ x scale)))
+                        (next))))
+           #f)))
+
+(test-gpu "a float32 absolute stop within tol is accepted where its rounding exceeds tol"
+  (define alpha (case-alpha mixed-units 0.1 0.2))
+  (check-equal? (en-run-n-iter (en-case-fit mixed-units 'float32 #:alpha alpha #:l1-ratio 0.2)) 1)
+  (check-accuracy mixed-units 'float32 alpha 0.2 1e-3))
