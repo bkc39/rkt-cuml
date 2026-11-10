@@ -52,10 +52,9 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
     return;
   }
   const row_selection rows = plan.counted.rows;
-  const residual_terms terms =
-      residual_moments(handle, in.x, in.y, in.w, rows, s,
-                       to_device(b, stream_of(handle)).data(),
-                       plan.fit_intercept);
+  const residual_terms terms = residual_moments(
+      handle, in.x, in.y, in.w, rows, s, to_device(b, stream_of(handle)).data(),
+      plan.fit_intercept);
   const double weight = in.w == nullptr
                             ? static_cast<double>(rows.count)
                             : weight_total(in.w, rows, stream_of(handle));
@@ -115,8 +114,7 @@ fit_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
       const_cast<raft::handle_t&>(handle), p.x.data(),
       static_cast<int>(rows.count), static_cast<int>(kept), p.y.data(),
       cs.data(), &intercept, plan.fit_intercept && !weighted, request.max_iter,
-      ML::loss_funct::SQRD_LOSS, scale.alpha,
-      static_cast<T>(request.l1_ratio),
+      ML::loss_funct::SQRD_LOSS, scale.alpha, static_cast<T>(request.l1_ratio),
       plan.solver.algorithm == CUML_LINEAR_MODEL_CD_RANDOM,
       static_cast<T>(request.tol), unweighted);
   settle(handle);
@@ -124,9 +122,10 @@ fit_result<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   const std::vector<T> b = to_host(cs, stream);
   check_stop(handle, in, plan, s, request, b, scale, n_iter);
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
-  const T unscaled = plan.fit_intercept ? unscaled_intercept(
-                                              centres, b, intercept, scale.shared)
-                                        : T{0};
+  const T unscaled =
+      plan.fit_intercept
+          ? unscaled_intercept(centres, b, intercept, scale.shared)
+          : T{0};
   require_in_range(unstage_coef(handle, cs.data(), s, x.d, coef->data()),
                    unscaled);
   return {std::move(coef), static_cast<double>(unscaled)};

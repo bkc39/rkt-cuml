@@ -228,9 +228,8 @@ template <typename T>
 void require_finite_solution(const T* staged, int64_t d, T intercept,
                              glm_solver solver, rmm::cuda_stream_view stream) {
   if (first_non_finite(staged, d, stream) >= 0 || !std::isfinite(intercept)) {
-    throw logic_error(
-        std::format("X: the {} solve gave a non-finite coefficient",
-                    solver_name(solver)));
+    throw logic_error(std::format(
+        "X: the {} solve gave a non-finite coefficient", solver_name(solver)));
   }
 }
 

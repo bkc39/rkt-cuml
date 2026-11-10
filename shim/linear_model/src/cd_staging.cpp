@@ -150,8 +150,8 @@ void require_kkt(const kkt_terms& k, int n_iter, double tol) {
         "X: coordinate descent stopped after {} epochs with every coefficient "
         "under tol {} and KKT residual {} > {}; tol is absolute in the "
         "coefficients' units, so scale y up or X down",
-        n_iter, printed(tol),
-        k.residual ? printed(*k.residual) : "nan", printed(bound)));
+        n_iter, printed(tol), k.residual ? printed(*k.residual) : "nan",
+        printed(bound)));
   }
 }
 
@@ -186,9 +186,9 @@ void require_cd_codes(const cd_request& request) {
                     printed(request.l1_ratio)));
   }
   if (request.max_iter < 1) {
-    throw logic_error(std::format(
-        "max-iter: expected an exact integer from 1 to {}, got {}",
-        std::numeric_limits<int32_t>::max(), request.max_iter));
+    throw logic_error(
+        std::format("max-iter: expected an exact integer from 1 to {}, got {}",
+                    std::numeric_limits<int32_t>::max(), request.max_iter));
   }
   if (!std::isfinite(request.tol) || !(request.tol >= 0)) {
     throw logic_error(

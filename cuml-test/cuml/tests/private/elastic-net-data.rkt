@@ -115,8 +115,8 @@
                        w))))
 
 (define (en-fit r)
-  (match r
-    [(or (elastic-net-result c b k) (lasso-result c b k)) (en-run (device-vector->list c) b k)]))
+  (match-define (or (elastic-net-result c b k) (lasso-result c b k)) r)
+  (en-run (device-vector->list c) b k))
 
 (define (converged? run)
   (< (en-run-n-iter run) default-max-iter))

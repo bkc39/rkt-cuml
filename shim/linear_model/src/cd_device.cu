@@ -46,8 +46,8 @@ struct weighted_column {
     const int64_t i = source_row(rows, o - (k * rows.count));
     const double v =
         static_cast<double>(scaled_by(x[(i * d) + kept[k]], stage));
-    out[o] = root(i) *
-             static_cast<T>(centred ? (v - mean[k]) - remainder[k] : v);
+    out[o] =
+        root(i) * static_cast<T>(centred ? (v - mean[k]) - remainder[k] : v);
   }
 };
 
@@ -113,13 +113,12 @@ staged_problem<T> stage_weighted(const raft::handle_t& handle,
   const root_weight<T> root{w, static_cast<double>(rows.count), total};
   const power_of_two<T> stage = power_of_two_of<T>(s.y_exponent);
   each(handle, rows.count * count,
-       weighted_column<T>{x.data, root, rows, kept.data(), stage,
-                          c.has_value(), means.data(), remainders.data(), x.d,
-                          p.x.data()});
-  each(handle, rows.count,
-       weighted_element<T>{staged_target<T>{y, stage}, root, rows,
-                           c.has_value(), c ? c->y : centre{0.0, 0.0},
-                           p.y.data()});
+       weighted_column<T>{x.data, root, rows, kept.data(), stage, c.has_value(),
+                          means.data(), remainders.data(), x.d, p.x.data()});
+  each(
+      handle, rows.count,
+      weighted_element<T>{staged_target<T>{y, stage}, root, rows, c.has_value(),
+                          c ? c->y : centre{0.0, 0.0}, p.y.data()});
   settle(handle);
   return p;
 }
