@@ -43,8 +43,7 @@
   (for* ([dt (in-list dtypes)]
          [r (in-list '(0 1e-6 1e-3 0.1))])
     (test-case (format "~a l1-ratio ~a" dt r)
-      (match-define (struct* en-solution ([mu mu] [sigma sigma]))
-        (oracle-elastic-net p alpha r))
+      (match-define (struct* en-solution ([mu mu] [sigma sigma])) (oracle-elastic-net p alpha r))
       (match-define (list coef _ k)
         (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol 1e-8 #:max-iter 100000))
       (match-define (kkt K _ _) (host-kkt p coef alpha r 1e-8 k 200 (unit-roundoff dt)))

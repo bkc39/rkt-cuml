@@ -12,13 +12,7 @@
                   mirrored-weight-case
                   selections)
          (only-in "elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of s2-bound)
-         (only-in "linear-data.rkt"
-                  check-law
-                  lcase-name
-                  lcase-w
-                  lcase-X
-                  lcase-y
-                  unit-roundoff)
+         (only-in "linear-data.rkt" check-law lcase-name lcase-w lcase-X lcase-y unit-roundoff)
          (only-in "linear-twin-data.rkt" case-request theirs twin-results))
 
 (provide check-raw-parity
@@ -91,22 +85,22 @@
                     (match-define (list c fi r) row)
                     (request "sklearn" c dt (alpha-of c fi r) r fi 'cyclic))))
   (define ran
-    (for/sum ([row (in-list rows)]
-              [t (in-list fits)])
-      (match-define (list c fi r) row)
-      (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
-      (define alpha (alpha-of c fi r))
-      (define o (oracle-elastic-net p alpha r))
-      (match-define (struct* en-solution ([coef c*] [mu mu])) o)
-      (match-define (list coef _ k) (en-case-fit c dt #:alpha alpha #:l1-ratio r #:fit-intercept fi))
-      (define theirs-coef (map inexact->exact (hash-ref t 'coef)))
-      (cond
-        [(and (< k 1000) (> mu 0))
-         (test-case (format "~a ~a ~a l1-ratio ~a" (lcase-name c) dt fi r)
-           (check-law "S4"
-                      (distance coef theirs-coef)
-                      (+ (s2-bound o coef alpha r 1e-3 (unit-roundoff dt)) (distance theirs-coef c*))))
-         1]
-        [else 0])))
+    (for/sum
+     ([row (in-list rows)] [t (in-list fits)])
+     (match-define (list c fi r) row)
+     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
+     (define alpha (alpha-of c fi r))
+     (define o (oracle-elastic-net p alpha r))
+     (match-define (struct* en-solution ([coef c*] [mu mu])) o)
+     (match-define (list coef _ k) (en-case-fit c dt #:alpha alpha #:l1-ratio r #:fit-intercept fi))
+     (define theirs-coef (map inexact->exact (hash-ref t 'coef)))
+     (cond
+       [(and (< k 1000) (> mu 0))
+        (test-case (format "~a ~a ~a l1-ratio ~a" (lcase-name c) dt fi r)
+          (check-law "S4"
+                     (distance coef theirs-coef)
+                     (+ (s2-bound o coef alpha r 1e-3 (unit-roundoff dt)) (distance theirs-coef c*))))
+        1]
+       [else 0])))
   (test-case (format "S4 ran on every ~a fit" dt)
     (check-equal? ran (length rows))))

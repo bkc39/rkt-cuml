@@ -152,9 +152,8 @@ TEST(CdStaging, AnAlphaWhoseRowMultiplePassesHalfTheRangeIsRefused) {
       "alpha: expected at most 1.7014118346046924e+36 for this X in float32, "
       "got "
       "1.71e+36");
-  EXPECT_EQ(
-      refusal_of([&] { cd_scale_of<float>(s, rows, under_half_range); }),
-      "accepted");
+  EXPECT_EQ(refusal_of([&] { cd_scale_of<float>(s, rows, under_half_range); }),
+            "accepted");
 }
 
 scaled_sum sum(double value, int exponent) {
@@ -185,6 +184,7 @@ constexpr int64_t epoch_rows = 9;
 constexpr double float_roundoff = 0x1p-24;
 constexpr double light_residual = 1.0 / 6;
 constexpr double heavy_residual = 0.3671875;
+constexpr double missing = std::numeric_limits<double>::quiet_NaN();
 constexpr double light_allowance = float_roundoff * 2 * (2 + 3 * 2 * (2.0 / 3));
 constexpr double heavy_allowance = float_roundoff * 2 * (2 + 3 * 2 * 0.5);
 
@@ -192,8 +192,7 @@ TEST(CdCheck, KBAndAOnAHandBuiltEpochUnderALightL2Penalty) {
   const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
   const kkt_terms k = kkt_of(hand_built_epoch(), epoch_coef, epoch_weight,
                              {epoch_l1, light_l2}, epochs);
-  ASSERT_TRUE(k.residual.has_value());
-  EXPECT_DOUBLE_EQ(*k.residual, light_residual);
+  EXPECT_DOUBLE_EQ(k.residual.value_or(missing), light_residual);
   EXPECT_DOUBLE_EQ(k.bound, epoch_tol);
   EXPECT_DOUBLE_EQ(k.allowance, light_allowance);
 }
@@ -202,8 +201,7 @@ TEST(CdCheck, KBAndAOnAHandBuiltEpochUnderAHeavyL2Penalty) {
   const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
   const kkt_terms k = kkt_of(hand_built_epoch(), epoch_coef, epoch_weight,
                              {epoch_l1, heavy_l2}, epochs);
-  ASSERT_TRUE(k.residual.has_value());
-  EXPECT_DOUBLE_EQ(*k.residual, heavy_residual);
+  EXPECT_DOUBLE_EQ(k.residual.value_or(missing), heavy_residual);
   EXPECT_DOUBLE_EQ(k.bound, epoch_tol);
   EXPECT_DOUBLE_EQ(k.allowance, heavy_allowance);
   const std::string got = refusal_of([&] { require_kkt(k, epochs); });
@@ -219,9 +217,8 @@ TEST(CdCheck, KBAndAOnAHandBuiltEpochUnderAHeavyL2Penalty) {
 
 TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
   const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
-  EXPECT_EQ(
-      refusal_of([&] { require_kkt({epoch_tol, epoch_tol, 0}, epochs); }),
-      "accepted");
+  EXPECT_EQ(refusal_of([&] { require_kkt({epoch_tol, epoch_tol, 0}, epochs); }),
+            "accepted");
   EXPECT_NE(
       refusal_of([&] { require_kkt({std::nullopt, epoch_tol, 1}, epochs); }),
       "accepted");

@@ -159,8 +159,9 @@
 
 (define (check-laws-ran laws)
   (for ([(law least) (in-hash laws)])
-    (check-true (>= (hash-ref law-runs law 0) least)
-                (format "~a ran ~a times, expected at least ~a" law (hash-ref law-runs law 0) least))))
+    (check-true
+     (>= (hash-ref law-runs law 0) least)
+     (format "~a ran ~a times, expected at least ~a" law (hash-ref law-runs law 0) least))))
 
 (define (check-elastic-net-laws cases intercepts #:dtypes [dts dtypes] #:tols [ts tols])
   (hash-clear! law-runs)
@@ -202,13 +203,21 @@
                            (+ (* x̄ bound)
                               (* 8 u (+ (abs b*) (* x̄ (norm2 (map exact->inexact c*))))))))))
           (check-true (exact-nonnegative-integer? k))))))
-  (define fits (* (length cases) (length intercepts) (length l1-ratios) (length alpha-ratios)
-                  (length dts) (length ts) (length selections)))
+  (define fits
+    (* (length cases)
+       (length intercepts)
+       (length l1-ratios)
+       (length alpha-ratios)
+       (length dts)
+       (length ts)
+       (length selections)))
   (test-case "each tolerance law ran on at least half the fits"
     (check-laws-ran (hash "S1" (quotient fits 2)
                           "S1 relative" (quotient fits 2)
                           "S2" (quotient fits 2)
-                          "S3" (if (memq #t intercepts) (quotient fits (* 2 (length intercepts))) 0)))))
+                          "S3" (if (memq #t intercepts)
+                                   (quotient fits (* 2 (length intercepts)))
+                                   0)))))
 
 (define (check-s2 c dt alpha r tol #:max-iter [max-iter 1000])
   (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))

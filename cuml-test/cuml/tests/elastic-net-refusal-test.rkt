@@ -13,12 +13,7 @@
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/elastic-net-data.rkt"
-                  check-s2
-                  correlated-case
-                  en-case-fit
-                  law-alpha
-                  norm2)
+         (only-in "private/elastic-net-data.rkt" check-s2 correlated-case en-case-fit law-alpha norm2)
          (only-in "private/elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
@@ -254,11 +249,10 @@
         [limit (in-list '(94447329657392906240 23611832414348226560))]
         [past (in-list '(1.888757e20 4.721894e19))])
     (define c (columns-apart narrow))
-    (check-cuml-error 'logic
-                      (regexp (format "^elastic-net-fit: alpha: expected at most ~a for this X in ~a, got "
-                                      limit
-                                      dt))
-                      (lambda () (en-case-fit c dt #:alpha past #:l1-ratio 1e-13)))
+    (check-cuml-error
+     'logic
+     (regexp (format "^elastic-net-fit: alpha: expected at most ~a for this X in ~a, got " limit dt))
+     (lambda () (en-case-fit c dt #:alpha past #:l1-ratio 1e-13)))
     (define (scaled-wide-coef alpha)
       (match-define (list (list _ b1) _ _) (en-case-fit c dt #:alpha alpha #:l1-ratio 1e-13))
       (* alpha b1))
