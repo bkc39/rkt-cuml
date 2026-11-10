@@ -114,18 +114,20 @@
     (for ([k (in-list (list 1 (quotient n0 2) (sub1 n0)))])
       (check-equal? (caddr (en-case-fit c dt #:alpha 0.001 #:max-iter k)) k))))
 
-(test-gpu "alpha past alpha-max gives zero coefficients in one epoch and the weighted mean (E9)"
+(test-gpu "alpha past alpha-max gives zero coefficients in one epoch and the weighted mean (E9, Lo1)"
   (define c (correlated-case 200 7 0.5 4 #:weighted? #t))
-  (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
   (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
-  (define mean
+  (define weighted-mean
     (/ (for/sum ([w (in-list weights)] [v (in-list (lcase-y c))]) (* w v)) (apply + weights)))
-  (for* ([dt (in-list dtypes)]
+  (for* ([fi (in-list '(#t #f))]
+         [dt (in-list dtypes)]
          [r (in-list '(1 0.5))]
          [factor (in-list (list (+ 1 (expt 2 -8)) 2 (expt 2 20)))])
+    (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
+    (define mean (if fi weighted-mean 0))
     (match-define (list coef b k)
-      (en-case-fit c dt #:alpha (* factor (law-alpha p 1 r)) #:l1-ratio r))
-    (test-case (format "~a l1-ratio ~a factor ~a" dt r factor)
+      (en-case-fit c dt #:alpha (* factor (law-alpha p 1 r)) #:l1-ratio r #:fit-intercept fi))
+    (test-case (format "~a l1-ratio ~a factor ~a fit-intercept ~a" dt r factor fi)
       (check-equal? coef (make-list 7 0.0))
       (check-equal? k 1)
       (check-true (<= (abs (- (inexact->exact b) mean))
