@@ -19,7 +19,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/linear-data.rkt" [on-matrix matrix] [on-vector vector]))
+         (only-in "private/linear-data.rkt" decimals [on-matrix matrix] [on-vector vector]))
 
 (test-gpu "the linear-regression examples print what the manual shows"
   (define X (matrix '((1 1) (1 2) (2 2) (2 3))))
@@ -52,9 +52,6 @@
                     (lambda () (linear-regression-predict fitted (matrix '((1 2 3))))))
   (check-cuml-error 'logic "fit: linear-regression needs y" (lambda () (fit (linear-regression) X))))
 
-(define (decimals k cs)
-  (map (lambda (c) (real->decimal-string c k)) cs))
-
 (test-gpu "the ridge examples print what the manual shows"
   (define X (matrix '((1 1) (1 2) (2 2) (2 3))))
   (define y (vector '(6 8 9 11)))
@@ -78,10 +75,10 @@
 (test-gpu "the elastic-net and lasso examples print what the manual shows"
   (define X (matrix '((1 1) (1 2) (2 2) (2 3))))
   (define y (vector '(6 8 9 11)))
-  (define fitted-l (lasso-fit X y #:alpha 0.1))
-  (check-equal? (~> fitted-l lasso-result-coef device-vector->list (decimals 6 _))
+  (define lasso-fitted (lasso-fit X y #:alpha 0.1))
+  (check-equal? (~> lasso-fitted lasso-result-coef device-vector->list (decimals 6 _))
                 '("0.601953" "1.999023"))
-  (check-equal? (lasso-result-n-iter fitted-l) 11)
+  (check-equal? (lasso-result-n-iter lasso-fitted) 11)
   (check-equal? (~> (elastic-net-fit X y #:alpha 0.1 #:l1-ratio 0.5)
                     elastic-net-result-coef
                     device-vector->list

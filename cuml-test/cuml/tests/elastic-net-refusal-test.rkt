@@ -9,28 +9,50 @@
                   lasso-predict
                   lasso-result
                   linear-regression-result)
-         (only-in racket/match match-define struct*)
+         (only-in racket/list filter-not)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/elastic-net-data.rkt" check-s2 correlated-case en-case-fit law-alpha norm2)
-         (only-in "private/elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of)
+         (only-in "private/elastic-net-data.rkt"
+                  apply-sorted
+                  case-alpha
+                  check-accuracy
+                  converged?
+                  correlated-case
+                  en-case-fit
+                  en-run
+                  en-run-n-iter
+                  keyword-split)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
-                  check-law
+                  docs-case
                   dtypes
                   lcase
-                  lcase-w
                   lcase-X
                   lcase-y
-                  max-abs
                   [on-matrix matrix]
                   [on-vector vector]
                   scaled-case
-                  scaled-columns
-                  unit-roundoff)
+                  scaled-columns)
          (only-in "private/linear-refusal-rows.rkt" grid shared-fit-rows targets)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
+
+(define max-iter-message "max-iter: expected an exact integer from 1 to 2147483647, got ")
+
+(define (l1-ratio-rows go X y bad-X)
+  (list (row "non-real l1-ratio before max-iter"
+             "l1-ratio: expected a real number, got 'x"
+             (lambda () (go bad-X y #:l1-ratio 'x #:max-iter 0)))
+        (row "l1-ratio below 0"
+             "l1-ratio: expected a finite value from 0 to 1, got -0.5"
+             (lambda () (go X y #:l1-ratio -0.5)))
+        (row "l1-ratio above 1"
+             "l1-ratio: expected a finite value from 0 to 1, got 1.5"
+             (lambda () (go X y #:l1-ratio 1.5)))
+        (row "nan l1-ratio"
+             "l1-ratio: expected a finite value from 0 to 1, got nan"
+             (lambda () (go X y #:l1-ratio +nan.0)))))
 
 (define (fit-rows go #:l1-ratio? [l1-ratio? #t])
   (define X (matrix grid))
@@ -41,23 +63,18 @@
                      (lambda () (go bad-X y #:fit-intercept 'yes #:alpha 'x #:tol 'x)))
                 (row "non-real alpha before l1-ratio"
                      "alpha: expected a real number, got 'x"
-                     (lambda () (go bad-X y #:alpha 'x #:max-iter 0 #:tol 'x))))
-          (if l1-ratio?
-              (list (row "non-real l1-ratio before max-iter"
-                         "l1-ratio: expected a real number, got 'x"
-                         (lambda () (go bad-X y #:l1-ratio 'x #:max-iter 0))))
-              '())
-          (list (row "max-iter 0 before tol"
-                     "max-iter: expected an exact integer from 1 to 2147483647, got 0"
+                     (lambda () (go bad-X y #:alpha 'x #:max-iter 0 #:tol 'x)))
+                (row "max-iter 0 before tol"
+                     (string-append max-iter-message "0")
                      (lambda () (go bad-X y #:max-iter 0 #:tol 'x)))
                 (row "max-iter past int32"
-                     "max-iter: expected an exact integer from 1 to 2147483647, got 2147483648"
-                     (lambda () (go X y #:max-iter 2147483648)))
+                     (string-append max-iter-message "2147483648")
+                     (lambda () (go X y #:max-iter (expt 2 31))))
                 (row "non-integer max-iter"
-                     "max-iter: expected an exact integer from 1 to 2147483647, got 1.5"
+                     (string-append max-iter-message "1.5")
                      (lambda () (go X y #:max-iter 1.5)))
                 (row "negative max-iter"
-                     "max-iter: expected an exact integer from 1 to 2147483647, got -1"
+                     (string-append max-iter-message "-1")
                      (lambda () (go X y #:max-iter -1)))
                 (row "non-real tol before the X views"
                      "tol: expected a real number, got 'x"
@@ -90,57 +107,22 @@
                      "tol: expected a finite value of at least 0, got -1"
                      (lambda () (go (matrix '((1 2) (+nan.0 1) (2 2))) (vector '(1 2 3)) #:tol -1))))
           (if l1-ratio?
-              (list (row "l1-ratio below 0"
-                         "l1-ratio: expected a finite value from 0 to 1, got -0.5"
-                         (lambda () (go X y #:l1-ratio -0.5)))
-                    (row "l1-ratio above 1"
-                         "l1-ratio: expected a finite value from 0 to 1, got 1.5"
-                         (lambda () (go X y #:l1-ratio 1.5)))
-                    (row "nan l1-ratio"
-                         "l1-ratio: expected a finite value from 0 to 1, got nan"
-                         (lambda () (go X y #:l1-ratio +nan.0))))
+              (l1-ratio-rows go X y bad-X)
               '())
-          (filter (lambda (r) (not (equal? (row-id r) "intercept overflow"))) (shared-fit-rows go))))
+          (filter-not (lambda (r) (equal? (row-id r) "intercept overflow")) (shared-fit-rows go))))
 
 (define (estimator-fit make)
-  (lambda (X
-           y
-           #:sample-weight [w #f]
-           #:alpha [alpha 1.0]
-           #:l1-ratio [r 0.5]
-           #:fit-intercept [fi #t]
-           #:max-iter [k 1000]
-           #:tol [tol 1e-3]
-           #:selection [s 'cyclic])
-    (fit (make #:alpha alpha #:l1-ratio r #:fit-intercept fi #:max-iter k #:tol tol #:selection s)
-         X
-         y
-         #:sample-weight w)))
+  (make-keyword-procedure (lambda (kws vals X y)
+                            (define-values (w given) (keyword-split '#:sample-weight kws vals #f))
+                            (fit (apply-sorted make given '()) X y #:sample-weight w))))
 
-(define (lasso-go X
-                  y
-                  #:sample-weight [w #f]
-                  #:alpha [alpha 1.0]
-                  #:fit-intercept [fi #t]
-                  #:max-iter [k 1000]
-                  #:tol [tol 1e-3]
-                  #:selection [s 'cyclic])
-  (lasso-fit X
-             y
-             #:sample-weight w
-             #:alpha alpha
-             #:fit-intercept fi
-             #:max-iter k
-             #:tol tol
-             #:selection s))
-
-(test-gpu "elastic-net-fit refuses each row, the earlier fault first (Q1)"
+(test-gpu "elastic-net-fit refuses each row, the earlier fault first"
   (for ([r (in-list (fit-rows elastic-net-fit))])
     (test-case (row-id r)
       (check-row "elastic-net-fit" r))))
 
-(test-gpu "lasso-fit refuses each row but l1-ratio's, the earlier fault first (Q1)"
-  (for ([r (in-list (fit-rows lasso-go #:l1-ratio? #f))])
+(test-gpu "lasso-fit refuses each row but l1-ratio's"
+  (for ([r (in-list (fit-rows lasso-fit #:l1-ratio? #f))])
     (test-case (row-id r)
       (check-row "lasso-fit" r))))
 
@@ -164,13 +146,10 @@
                     "elastic-net-params: elastic-net has no parameter solver"
                     (lambda () (elastic-net-params (hasheq 'solver 'cd)))))
 
-(define docs (lcase "docs" '((1 1) (1 2) (2 2) (2 3)) '(6 8 9 11) #f))
-
-(test-gpu "an absolute stop short of the relative test is refused, and y scaled up fits (Q2)"
-  (define wide (scaled-case docs #:X 100000))
+(test-gpu "an absolute stop short of the relative test is refused; y scaled up fits"
+  (define wide (scaled-case docs-case #:X 100000))
   (define c (scaled-case (correlated-case 500 8 0.9 21) #:X 100000))
-  (define p (problem-of (lcase-X c) (lcase-y c) #f #t))
-  (define alpha (law-alpha p 0.01 1))
+  (define alpha (case-alpha c 0.01 1))
   (for ([dt (in-list dtypes)])
     (check-cuml-error
      'logic
@@ -180,22 +159,15 @@
                       #rx"; tol is absolute in the coefficients' units, so scale y up or X down$"
                       (lambda () (en-case-fit c dt #:alpha alpha #:l1-ratio 1)))
     (define up (scaled-case c #:y (expt 2 17)))
-    (define p-up (problem-of (lcase-X up) (lcase-y up) #f #t))
-    (define alpha-up (law-alpha p-up 0.01 1))
-    (match-define (list coef _ k) (en-case-fit up dt #:alpha alpha-up #:l1-ratio 1))
-    (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma]))
-      (oracle-elastic-net p-up alpha-up 1))
-    (check-true (< k 1000))
-    (check-law "S2"
-               (norm2 (map (lambda (a e) (- (inexact->exact a) e)) coef c*))
-               (+ (/ (* 1e-3 (max-abs coef) (apply + sigma) (norm2 sigma)) mu)
-                  (* 64 (unit-roundoff dt) (norm2 (map exact->inexact c*))))))
+    (define alpha-up (case-alpha up 0.01 1))
+    (check-true (converged? (en-case-fit up dt #:alpha alpha-up #:l1-ratio 1)))
+    (check-equal? (check-accuracy up dt alpha-up 1 1e-3) "coefficient-distance"))
   (check-cuml-error 'logic
                     #rx"^elastic-net-fit: X: coordinate descent stopped after "
                     (lambda ()
-                      (en-case-fit (scaled-case docs #:X (expt 10 20)) 'float32 #:alpha 1e-3))))
+                      (en-case-fit (scaled-case docs-case #:X (expt 10 20)) 'float32 #:alpha 1e-3))))
 
-(test-gpu "hyperparameter edges: nan, inf and out-of-range values refused, tol 0 and alpha 0 run (Q3)"
+(test-gpu "nan, infinite and out-of-range hyperparameters are refused"
   (define c (correlated-case 20 2 0 22))
   (for ([alpha (in-list '(+nan.0 +inf.0 -1.0))])
     (check-cuml-error 'logic
@@ -210,24 +182,24 @@
                       #rx"^elastic-net-fit: tol: expected a finite value of at least 0, got "
                       (lambda () (en-case-fit c 'float64 #:alpha 0.1 #:tol tol))))
   (for ([k (in-list (list 0 -1 (expt 2 31) 1.5))])
-    (check-cuml-error
-     'logic
-     #rx"^elastic-net-fit: max-iter: expected an exact integer from 1 to 2147483647, got "
-     (lambda () (en-case-fit c 'float64 #:alpha 0.1 #:max-iter k))))
-  (check-equal? (caddr (en-case-fit c 'float64 #:alpha 0.1 #:tol 0 #:max-iter 9)) 9)
-  (check-true (> (caddr (en-case-fit c 'float64 #:alpha 0)) 1)))
+    (check-cuml-error 'logic
+                      (regexp (string-append "^elastic-net-fit: " max-iter-message))
+                      (lambda () (en-case-fit c 'float64 #:alpha 0.1 #:max-iter k))))
+  (check-equal? (en-run-n-iter (en-case-fit c 'float64 #:alpha 0.1 #:tol 0 #:max-iter 9)) 9)
+  (check-true (> (en-run-n-iter (en-case-fit c 'float64 #:alpha 0)) 1)))
 
-(test-gpu "float32 columns 2^120 apart are refused as too narrow; 2^60 apart fit (Q4)"
+(test-gpu "float32 columns 2^120 apart are too narrow; 2^60 apart fit"
   (define c (correlated-case 100 2 0 23))
   (check-cuml-error
    'logic
    "elastic-net-fit: X: column 0 is too narrow beside the other columns and y for float32 coordinate descent"
    (lambda ()
      (en-case-fit (scaled-columns c (list (expt 2 -60) (expt 2 60)) 1) 'float32 #:alpha 1e-3)))
-  (check-equal? (check-s2 (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1) 'float32 1e-3 0.5 1e-3)
-                "S2"))
+  (check-equal?
+   (check-accuracy (scaled-columns c (list (expt 2 -30) (expt 2 30)) 1) 'float32 1e-3 0.5 1e-3)
+   "coefficient-distance"))
 
-(test-gpu "an alpha whose row multiple overflows float32 is refused with ridge's message (Q5)"
+(test-gpu "an alpha whose row multiple overflows float32 is refused as ridge's"
   (check-cuml-error
    'logic
    #rx"^elastic-net-fit: alpha: expected at most .* for this X in float32, got 1e\\+38$"
@@ -237,13 +209,15 @@
   (define c (correlated-case 100 2 0 23))
   (lcase "a narrow column beside one 2^28 wide"
          (for/list ([row (in-list (lcase-X c))])
-           (list (* (expt 2 narrow) (car row)) (* (expt 2 28) (cadr row))))
+           (match-define (list x0 x1) row)
+           (list (* (expt 2 narrow) x0) (* (expt 2 28) x1)))
          (for/list ([row (in-list (lcase-X c))]
                     [v (in-list (lcase-y c))])
-           (+ (cadr row) (/ v 1000)))
+           (match-define (list _ x1) row)
+           (+ x1 (/ v 1000)))
          #f))
 
-(test-gpu "an alpha past half the row-multiple range is refused before cdFit's denominator overflows (H1)"
+(test-gpu "an alpha past half the row-multiple range is refused"
   (for ([dt (in-list dtypes)]
         [narrow (in-list '(-30 -480))]
         [limit (in-list '(94447329657392906240 23611832414348226560))]
@@ -254,7 +228,7 @@
      (regexp (format "^elastic-net-fit: alpha: expected at most ~a for this X in ~a, got " limit dt))
      (lambda () (en-case-fit c dt #:alpha past #:l1-ratio 1e-13)))
     (define (scaled-wide-coef alpha)
-      (match-define (list (list _ b1) _ _) (en-case-fit c dt #:alpha alpha #:l1-ratio 1e-13))
+      (match-define (en-run (list _ b1) _ _) (en-case-fit c dt #:alpha alpha #:l1-ratio 1e-13))
       (* alpha b1))
     (define at-limit (scaled-wide-coef (* limit (- 1 1e-4))))
     (check-true (> at-limit 0))
@@ -263,7 +237,7 @@
 (define stop-message
   #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol ")
 
-(test-gpu "under a heavy L2 penalty, an absolute stop short of tol is still refused (L3-m)"
+(test-gpu "under a heavy L2 penalty, an absolute stop short of tol is refused"
   (define c (scaled-case (correlated-case 200 7 0.9 31) #:y (expt 2 -10)))
   (for ([dt (in-list dtypes)])
     (check-cuml-error 'logic
@@ -280,13 +254,14 @@
     (lcase "a column 2^-8 from orthogonal to one 2^10 wider"
            X
            (for/list ([row (in-list X)])
-             (+ (* (expt 2 -21) (car row)) (* (expt 2 -30) (cadr row))))
+             (match-define (list x0 x1) row)
+             (+ (* (expt 2 -21) x0) (* (expt 2 -30) x1)))
            #f)))
 
-(test-gpu "a float32 one-epoch stop 0.8% off is refused at 2^17 rows (Lo3)"
+(test-gpu "a float32 one-epoch stop 0.8% off is refused at 2^17 rows"
   (check-cuml-error 'logic
                     stop-message
                     (lambda () (en-case-fit nearly-orthogonal 'float32 #:alpha 0 #:tol 1e-6)))
-  (match-define (list (list b0 _) _ 1)
+  (match-define (en-run (list b0 _) _ 1)
     (en-case-fit nearly-orthogonal 'float32 #:alpha 0 #:tol 1e-6 #:max-iter 1))
   (check-true (> (abs (- (inexact->exact b0) (expt 2 -21))) (* 1e-3 (expt 2 -21)))))

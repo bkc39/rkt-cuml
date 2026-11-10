@@ -231,9 +231,9 @@ The @racket[ridge-result] of the fit that made @racket[estimator], or @racket[#f
 @declare-exporting[cuml/linear-model cuml]
 
 @examples[#:eval ev
-(define fitted-l (lasso-fit X y #:alpha 0.1))
-(~> fitted-l lasso-result-coef device-vector->list (decimals 6 _))
-(lasso-result-n-iter fitted-l)
+(define lasso-fitted (lasso-fit X y #:alpha 0.1))
+(~> lasso-fitted lasso-result-coef device-vector->list (decimals 6 _))
+(lasso-result-n-iter lasso-fitted)
 (~> (elastic-net-fit X y #:alpha 0.1 #:l1-ratio 0.5) elastic-net-result-coef device-vector->list (decimals 6 _))
 ]
 
@@ -263,15 +263,14 @@ objective of scikit-learn's and Python cuML's @tt{ElasticNet}; the intercept is 
 @racket[X], @racket[y] and @racket[sample-weight] are as for @racket[linear-regression-fit].
 
 Coordinate descent starts from b = 0 and visits every column once an epoch, in column order
-(@racket['cyclic]) or in cuML's shuffled order (@racket['random]), which is the same in every fit:
-cuML seeds it itself, so there is no random state. It stops after @racket[max-iter] epochs, or after
-the first epoch in which no coefficient moved by more than @racket[tol] times the largest, or in which
-every coefficient is under @racket[tol]. That last test is absolute, in y's units over X's; a fit it
-stops short of what the first test allows is refused, as when X's units are large against y's. A
-fit with @racket[n-iter] equal to @racket[max-iter] may not have converged. @racket[tol] bounds an
-epoch's change, not the error, which grows on correlated columns (to 8% of the largest coefficient
-at correlation 0.99 in @tt{plans/layout.md}, L3-b). An accepted fit's error is bounded only through
-its optimality residual K, at most @racket[tol] plus rounding, by
+(@racket['cyclic]) or in cuML's fixed shuffled order (@racket['random]). It stops after
+@racket[max-iter] epochs, after the first epoch in which no coefficient moved by more than
+@racket[tol] times the largest, or after one in which every coefficient is under @racket[tol]; a
+fit that last test stops short of the first is refused, as when X's units are large against y's. A
+fit with @racket[n-iter] equal to @racket[max-iter] may not have converged.
+
+@racket[tol] bounds an epoch's change, not the error. An accepted fit's error is bounded through its
+optimality residual K, at most @racket[tol] plus rounding, by
 K·max|b|·‖d‖@subscript{2}/(λ@subscript{min} + λ), where λ = @racket[alpha](1 − @racket[l1-ratio]),
 d@subscript{j} = max(σ@subscript{j}² + λ, σ@subscript{j}Σ@subscript{k}σ@subscript{k}), σ@subscript{j} is
 column j's weighted RMS and λ@subscript{min} the least eigenvalue of XᵀWX/Σw, X centred as for
@@ -279,14 +278,11 @@ column j's weighted RMS and λ@subscript{min} the least eigenvalue of XᵀWX/Σw
 or more, u being the dtype's unit roundoff. An
 @racket[alpha] more than rounding above max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]),
 or max@subscript{j}|x@subscript{j}ᵀWy|/(Σw·@racket[l1-ratio]) without @racket[fit-intercept], gives
-coefficients 0. A column
-constant over the rows of positive weight (zero, without @racket[fit-intercept]) gets coefficient 0.
+coefficients 0. A column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0.
 
-Unlike scikit-learn, the default @racket[tol] is 10@superscript{−3}, not 10@superscript{−4}, and it is
-not a duality-gap tolerance. A fit at @racket[max-iter] does not warn, and @tt{random_state},
-@tt{positive}, @tt{precompute} and @tt{warm_start} are not offered. Python cuML's quasi-Newton solver
-is not bound. Fits repeat bit for bit, and @racket[X], @racket[y] and @racket[sample-weight] are not
-modified.
+Unlike scikit-learn, the default @racket[tol] is 10@superscript{−3}, not 10@superscript{−4}, and it
+is not a duality-gap tolerance.
 @examples[#:eval ev #:label #f
 (~> (elastic-net-fit X y #:alpha 3) elastic-net-result-coef device-vector->list)
 (define X-wide (list*->device-matrix '((1e5 1e5) (1e5 2e5) (2e5 2e5) (2e5 3e5)) #:dtype 'float64))

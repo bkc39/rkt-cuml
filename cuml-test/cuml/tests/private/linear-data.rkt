@@ -22,6 +22,8 @@
          case-result
          check-law
          columns-of
+         decimals
+         docs-case
          dot
          dtypes
          dyadic
@@ -71,6 +73,11 @@
   (if (eq? dtype 'float32)
       (expt 2.0 -24)
       (expt 2.0 -53)))
+
+(define docs-case (lcase "docs" '((1 1) (1 2) (2 2) (2 3)) '(6 8 9 11) #f))
+
+(define (decimals k cs)
+  (map (lambda (c) (real->decimal-string c k)) cs))
 
 (define (dyadic x [bits 10])
   (/ (round (* (inexact->exact x) (expt 2 bits))) (expt 2 bits)))

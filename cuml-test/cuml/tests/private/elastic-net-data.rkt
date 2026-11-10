@@ -1,19 +1,10 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model
-                  elastic-net-fit
-                  elastic-net-result-coef
-                  elastic-net-result-intercept
-                  elastic-net-result-n-iter
-                  lasso-result
-                  lasso-result-coef
-                  lasso-result-intercept
-                  lasso-result-n-iter)
-         (only-in racket/list append* make-list)
+(require (only-in cuml/linear-model elastic-net-fit elastic-net-result lasso-result)
+         (only-in racket/list append* append-map make-list partition)
          (only-in racket/match match match-define struct*)
          (only-in rackunit check-true test-case)
          (only-in raft device-vector->list)
-         (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source)
          (only-in "elastic-net-oracle.rkt"
                   alpha-max
@@ -38,20 +29,31 @@
                   on-vector
                   unit-roundoff))
 
-(provide alpha-ratios
+(provide (struct-out en-run)
+         alpha-ratios
+         apply-sorted
+         case-alpha
+         check-accuracy
          check-elastic-net-laws
-         check-s2
+         coef-distance
+         converged?
          correlated-case
-         distance
+         default-max-iter
          dyadic-weight-case
          en-case-fit
          en-fit
+         keyword-split
          l1-ratios
          law-alpha
          mirrored-weight-case
          norm2
          selections
          tols)
+
+(struct en-run (coef intercept n-iter) #:transparent)
+
+(define default-max-iter 1000)
+(define intercept-rounding 8)
 
 (define l1-ratios '(1 0.5 0.05 0))
 (define alpha-ratios '(0.3 0.01 1e-4))
@@ -95,56 +97,54 @@
              (make-list k w))))
 
 (define (dyadic-weight-case seed)
-  (match-define (lcase _ X y _) (correlated-case 64 4 1/2 seed))
+  (match-define (struct* lcase ([X X] [y y])) (correlated-case 64 4 1/2 seed))
   (lcase (format "dyadic weights seed ~a" seed) X y (dyadic-weights)))
 
+(define (mirrored xs negate)
+  (append-map (lambda (x) (list x (negate x))) xs))
+
 (define (mirrored-weight-case seed)
-  (match-define (lcase _ X y _) (correlated-case 32 4 1/2 seed))
-  (define w (dyadic-weights))
-  (define (mirror rows)
-    (for/fold ([out '()]
-               #:result (reverse out))
-              ([row (in-list rows)])
-      (list* (map - row) row out)))
-  (define pairs
-    (for/fold ([out '()]
-               #:result (reverse out))
-              ([v (in-list y)])
-      (list* (- v) v out)))
+  (match-define (struct* lcase ([X X] [y y])) (correlated-case 32 4 1/2 seed))
   (lcase (format "mirrored dyadic weights seed ~a" seed)
-         (mirror X)
-         pairs
-         (for/list ([k (in-range 64)])
-           (list-ref w (* 2 (quotient k 2))))))
+         (mirrored X (lambda (row) (map - row)))
+         (mirrored y -)
+         (append-map (lambda (w) (list w w))
+                     (for/list ([w (in-list (dyadic-weights))]
+                                [i (in-naturals)]
+                                #:when (even? i))
+                       w))))
 
 (define (en-fit r)
   (match r
-    [(lasso-result c b k) (list (device-vector->list c) b k)]
-    [_
-     (list (~> r elastic-net-result-coef device-vector->list)
-           (elastic-net-result-intercept r)
-           (elastic-net-result-n-iter r))]))
+    [(or (elastic-net-result c b k) (lasso-result c b k)) (en-run (device-vector->list c) b k)]))
 
-(define (en-case-fit c
-                     dt
-                     #:alpha alpha
-                     #:l1-ratio [l1-ratio 0.5]
-                     #:fit-intercept [fi #t]
-                     #:max-iter [max-iter 1000]
-                     #:tol [tol 1e-3]
-                     #:selection [selection 'cyclic])
-  (en-fit (elastic-net-fit (on-matrix (lcase-X c) dt)
-                           (on-vector (lcase-y c) dt)
-                           #:sample-weight (on-vector (lcase-w c) dt)
-                           #:alpha alpha
-                           #:l1-ratio l1-ratio
-                           #:fit-intercept fi
-                           #:max-iter max-iter
-                           #:tol tol
-                           #:selection selection)))
+(define (converged? run)
+  (< (en-run-n-iter run) default-max-iter))
+
+(define (keyword-split kw kws vals default)
+  (define-values (found rest) (partition (lambda (p) (eq? (car p) kw)) (map cons kws vals)))
+  (values (match found
+            [(list (cons _ v)) v]
+            ['() default])
+          rest))
+
+(define (apply-sorted f pairs positional)
+  (define sorted (sort pairs keyword<? #:key car))
+  (keyword-apply f (map car sorted) (map cdr sorted) positional))
+
+(define en-case-fit
+  (make-keyword-procedure
+   (lambda (kws vals c dt)
+     (define-values (fit given) (keyword-split '#:fit kws vals elastic-net-fit))
+     (en-fit (apply-sorted fit
+                           (cons (cons '#:sample-weight (on-vector (lcase-w c) dt)) given)
+                           (list (on-matrix (lcase-X c) dt) (on-vector (lcase-y c) dt)))))))
 
 (define (law-alpha p ratio l1-ratio)
   (* ratio (exact->inexact (alpha-max p (if (zero? l1-ratio) 1 l1-ratio)))))
+
+(define (case-alpha c ratio l1-ratio #:fit-intercept [fi #t])
+  (law-alpha (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) ratio l1-ratio))
 
 (define (rows-of c)
   (match (lcase-w c)
@@ -185,23 +185,24 @@
                            dt
                            s)
           (define u (unit-roundoff dt))
-          (match-define (list coef b k)
+          (define run
             (en-case-fit c dt #:alpha alpha #:l1-ratio r #:fit-intercept fi #:tol tol #:selection s))
-          (when (< k 1000)
+          (match-define (struct* en-run ([coef coef] [intercept b] [n-iter k])) run)
+          (when (converged? run)
             (match-define (kkt K B A) (host-kkt p coef alpha r tol k (rows-of c) u))
-            (check-ran "S1" K (+ B A))
+            (check-ran "kkt-residual" K (+ B A))
             (when (>= (max-abs coef) tol)
-              (check-ran "S1 relative" K B))
+              (check-ran "relative kkt-residual" K B))
             (when (> mu 0)
               (define x̄ (norm2 (map exact->inexact mx)))
-              (define gap (norm2 (map (lambda (a e) (- (inexact->exact a) e)) coef c*)))
               (define bound (s2-bound o coef alpha r tol u))
-              (check-ran "S2" gap bound)
+              (check-ran "coefficient-distance" (coef-distance coef c*) bound)
               (when fi
-                (check-ran "S3"
-                           (abs (- (inexact->exact b) b*))
-                           (+ (* x̄ bound)
-                              (* 8 u (+ (abs b*) (* x̄ (norm2 (map exact->inexact c*))))))))))
+                (check-ran
+                 "intercept-distance"
+                 (abs (- (inexact->exact b) b*))
+                 (+ (* x̄ bound)
+                    (* intercept-rounding u (+ (abs b*) (* x̄ (norm2 (map exact->inexact c*))))))))))
           (check-true (exact-nonnegative-integer? k))))))
   (define fits
     (* (length cases)
@@ -212,28 +213,28 @@
        (length ts)
        (length selections)))
   (test-case "each tolerance law ran on at least half the fits"
-    (check-laws-ran (hash "S1" (quotient fits 2)
-                          "S1 relative" (quotient fits 2)
-                          "S2" (quotient fits 2)
-                          "S3" (if (memq #t intercepts)
-                                   (quotient fits (* 2 (length intercepts)))
-                                   0)))))
+    (check-laws-ran (hash "kkt-residual" (quotient fits 2)
+                          "relative kkt-residual" (quotient fits 2)
+                          "coefficient-distance" (quotient fits 2)
+                          "intercept-distance" (if (memq #t intercepts)
+                                                   (quotient fits (* 2 (length intercepts)))
+                                                   0)))))
 
-(define (check-s2 c dt alpha r tol #:max-iter [max-iter 1000])
+(define (check-accuracy c dt alpha r tol #:max-iter [max-iter default-max-iter])
   (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
   (define o (oracle-elastic-net p alpha r))
   (match-define (struct* en-solution ([coef c*] [mu mu])) o)
-  (match-define (list coef _ k)
+  (match-define (struct* en-run ([coef coef] [n-iter k]))
     (en-case-fit c dt #:alpha alpha #:l1-ratio r #:tol tol #:max-iter max-iter))
   (define u (unit-roundoff dt))
   (cond
     [(> mu 0)
-     (check-law "S2" (distance coef c*) (s2-bound o coef alpha r tol u))
-     "S2"]
+     (check-law "coefficient-distance" (coef-distance coef c*) (s2-bound o coef alpha r tol u))
+     "coefficient-distance"]
     [else
      (match-define (kkt K B A) (host-kkt p coef alpha r tol k (rows-of c) u))
-     (check-law "S1" K (+ B A))
-     "S1"]))
+     (check-law "kkt-residual" K (+ B A))
+     "kkt-residual"]))
 
-(define (distance a b)
+(define (coef-distance a b)
   (norm2 (map (lambda (x y) (exact->inexact (- (inexact->exact x) y))) a b)))

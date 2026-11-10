@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/flonum flvector flvector-ref flvector-set! make-flvector)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in racket/math sgn sqr)
          (only-in "linear-data.rkt"
                   dot
@@ -19,7 +19,8 @@
          host-kkt
          oracle-elastic-net
          problem-of
-         s2-bound)
+         s2-bound
+         s2-rounding)
 
 (struct en-problem (G b mx my total yy) #:transparent)
 (struct en-solution (coef intercept mu sigma sigma-y mx) #:transparent)
@@ -37,6 +38,21 @@
 
 (define (alpha-max p l1-ratio)
   (/ (max-abs (en-problem-b p)) (en-problem-total p) (inexact->exact l1-ratio)))
+
+(define host-cd-stop 1e-15)
+(define host-cd-epochs 20000)
+(define s2-rounding 64)
+
+(define (diagonal G)
+  (for/list ([row (in-list G)]
+             [j (in-naturals)])
+    (list-ref row j)))
+
+(define (picked xs S)
+  (for/list ([x (in-list xs)]
+             [i (in-naturals)]
+             #:when (memv i S))
+    x))
 
 (define (penalties alpha l1-ratio)
   (define a (inexact->exact alpha))
@@ -71,25 +87,22 @@
     (define top
       (for/fold ([m 0.0]) ([j (in-range d)])
         (max m (abs (flvector-ref b j)))))
-    (unless (or (<= moved (* 1e-15 top)) (>= k 20000))
+    (unless (or (<= moved (* host-cd-stop top)) (>= k host-cd-epochs))
       (epoch (add1 k))))
   (for/list ([j (in-range d)])
     (flvector-ref b j)))
 
 (define (sub-matrix C S)
-  (for/list ([i (in-list S)])
-    (for/list ([j (in-list S)])
-      (list-ref (list-ref C i) j))))
+  (for/list ([row (in-list (picked C S))])
+    (picked row S)))
 
 (define (exact-on-support C c l1 l2 approx)
-  (define d (length c))
   (define S
-    (for/list ([j (in-range d)]
-               #:unless (zero? (list-ref approx j)))
+    (for/list ([a (in-list approx)]
+               [j (in-naturals)]
+               #:unless (zero? a))
       j))
-  (define signs
-    (for/list ([j (in-list S)])
-      (sgn (list-ref approx j))))
+  (define signs (map sgn (picked approx S)))
   (define bS
     (if (null? S)
         '()
@@ -100,15 +113,16 @@
                             (if (= i j)
                                 (+ g l2)
                                 g)))
-                        (for/list ([j (in-list S)]
+                        (for/list ([cj (in-list (picked c S))]
                                    [s (in-list signs)])
-                          (- (list-ref c j) (* l1 s))))))
+                          (- cj (* l1 s))))))
+  (define on-support
+    (for/hasheqv ([j (in-list S)]
+                  [b (in-list bS)])
+      (values j b)))
   (define coef
-    (for/list ([j (in-range d)])
-      (define at (index-of S j))
-      (if at
-          (list-ref bS at)
-          0)))
+    (for/list ([j (in-range (length c))])
+      (hash-ref on-support j 0)))
   (define gradient
     (map -
          c
@@ -120,21 +134,16 @@
                   [s (in-list signs)])
           (= (sgn b) s))))
   (define off-support-holds?
-    (for/and ([j (in-range d)]
-              #:unless (index-of S j))
-      (<= (abs (list-ref gradient j)) l1)))
+    (for/and ([g (in-list gradient)]
+              [j (in-naturals)]
+              #:unless (memv j S))
+      (<= (abs g) l1)))
   (unless (and signs-hold? off-support-holds?)
     (error 'oracle-elastic-net "the certificate failed on support ~a" S))
   coef)
 
-(define (index-of xs v)
-  (for/first ([x (in-list xs)]
-              [i (in-naturals)]
-              #:when (= x v))
-    i))
-
 (define (oracle-elastic-net p alpha l1-ratio)
-  (match-define (en-problem G b mx my total yy) p)
+  (match-define (struct* en-problem ([G G] [b b] [mx mx] [my my] [total total] [yy yy])) p)
   (define-values (l1 l2) (penalties alpha l1-ratio))
   (define C
     (for/list ([row (in-list G)])
@@ -145,9 +154,8 @@
   (en-solution coef
                (- my (dot mx coef))
                (+ (max 0.0 (/ bottom (exact->inexact total))) (exact->inexact l2))
-               (for/list ([row (in-list G)]
-                          [j (in-naturals)])
-                 (sqrt (exact->inexact (/ (list-ref row j) total))))
+               (for/list ([g (in-list (diagonal G))])
+                 (sqrt (exact->inexact (/ g total))))
                (sqrt (exact->inexact (/ yy total)))
                mx))
 
@@ -159,27 +167,28 @@
     (max (+ (* s s) (exact->inexact l2)) (* s sigmas))))
 
 (define (host-kkt p coef alpha l1-ratio tol n-iter rows roundoff)
-  (match-define (en-problem G b _ _ total yy) p)
+  (match-define (struct* en-problem ([G G] [b b] [total total] [yy yy])) p)
   (define-values (l1 l2) (penalties alpha l1-ratio))
   (define c (map inexact->exact coef))
   (define largest (exact->inexact (max-abs c)))
   (define sigma-y (sqrt (exact->inexact (/ yy total))))
   (define kept
-    (for/list ([row (in-list G)]
+    (for/list ([g (in-list (diagonal G))]
                [j (in-naturals)]
-               #:unless (zero? (list-ref row j)))
+               #:unless (zero? g))
       j))
   (define sigma
-    (for/list ([j (in-list kept)])
-      (sqrt (exact->inexact (/ (list-ref (list-ref G j) j) total)))))
+    (for/list ([g (in-list (picked (diagonal G) kept))])
+      (sqrt (exact->inexact (/ g total)))))
   (define-values (worst reach)
     (for/fold ([worst 0.0]
                [reach 0.0])
-              ([j (in-list kept)]
+              ([row (in-list (picked G kept))]
+               [bj (in-list (picked b kept))]
+               [cj (in-list (picked c kept))]
                [s (in-list sigma)]
                [d (in-list (curvatures sigma l2))])
-      (define cj (list-ref c j))
-      (define g (- (/ (- (list-ref b j) (dot (list-ref G j) c)) total) (* l2 cj)))
+      (define g (- (/ (- bj (dot row c)) total) (* l2 cj)))
       (define v
         (if (zero? cj)
             (max 0 (- (abs g) l1))
@@ -192,19 +201,10 @@
       (kkt (/ worst largest) tol (* rounding (+ coefficient-rounding (/ gradient largest))))))
 
 (define (s2-bound o coef alpha l1-ratio tol roundoff)
-  (match-define (en-solution c* _ mu sigma _ _) o)
+  (match-define (struct* en-solution ([coef c*] [mu mu] [sigma sigma])) o)
   (define-values (_ l2) (penalties alpha l1-ratio))
   (+ (/ (* tol (exact->inexact (max-abs coef)) (norm (curvatures sigma l2))) mu)
-     (* 64 roundoff (norm (map exact->inexact c*)))))
+     (* s2-rounding roundoff (norm (map exact->inexact c*)))))
 
 (define (norm xs)
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))
-
-(module+ test
-  (require (only-in rackunit check-equal? check-true))
-  (define p (problem-of '((1 1) (1 2) (2 2) (2 3)) '(6 8 9 11) #f #t))
-  (check-equal? (alpha-max p 1) 5/4)
-  (check-equal? (alpha-max p 1/2) 5/2)
-  (define lasso (oracle-elastic-net p 0.1 1))
-  (check-true (< (abs (- (car (en-solution-coef lasso)) 0.6)) 1e-12))
-  (check-equal? (en-solution-coef (oracle-elastic-net p 3 1)) '(0 0)))

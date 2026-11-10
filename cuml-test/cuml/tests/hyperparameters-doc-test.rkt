@@ -185,6 +185,23 @@
 (define spectral-embedding-keys
   '(n-components n-neighbors norm-laplacian drop-first random-state affinity))
 
+(define (linear-table-bindings name table keys fit-proc estimator)
+  (define (named suffix)
+    (string->symbol (format "~a~a" name suffix)))
+  (table-bindings table
+                  keys
+                  (list (list (named "-params") table '() (list (argument #f 'base #f)) '() '())
+                        (list (named "-fit")
+                              fit-proc
+                              '(#:params #:resources)
+                              (list (argument #f 'X 'none) (argument #f 'y 'none))
+                              (list (argument '#:sample-weight 'sample-weight #f)
+                                    (argument '#:params 'params #f)
+                                    (argument '#:resources 'resources '(current-device-resources)))
+                              '()
+                              '#:sample-weight)
+                        (estimator-entry name estimator))))
+
 (define (estimator-entry name proc)
   (list name
         proc
@@ -362,64 +379,18 @@
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '(affinity))
                          (estimator-entry 'spectral-embedding spectral-embedding)))
-   (table-bindings linear-regression-params
-                   linear-regression-keys
-                   (list (list 'linear-regression-params
-                               linear-regression-params
-                               '()
-                               (list (argument #f 'base #f))
-                               '()
-                               '())
-                         (list 'linear-regression-fit
-                               linear-regression-fit
-                               '(#:params #:resources)
-                               (list (argument #f 'X 'none) (argument #f 'y 'none))
-                               (list (argument '#:sample-weight 'sample-weight #f)
-                                     (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources)))
-                               '()
-                               '#:sample-weight)
-                         (estimator-entry 'linear-regression linear-regression)))
-   (table-bindings ridge-params
-                   ridge-keys
-                   (list (list 'ridge-params ridge-params '() (list (argument #f 'base #f)) '() '())
-                         (list 'ridge-fit
-                               ridge-fit
-                               '(#:params #:resources)
-                               (list (argument #f 'X 'none) (argument #f 'y 'none))
-                               (list (argument '#:sample-weight 'sample-weight #f)
-                                     (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources)))
-                               '()
-                               '#:sample-weight)
-                         (estimator-entry 'ridge ridge)))
-   (table-bindings
-    elastic-net-params
-    elastic-net-keys
-    (list (list 'elastic-net-params elastic-net-params '() (list (argument #f 'base #f)) '() '())
-          (list 'elastic-net-fit
-                elastic-net-fit
-                '(#:params #:resources)
-                (list (argument #f 'X 'none) (argument #f 'y 'none))
-                (list (argument '#:sample-weight 'sample-weight #f)
-                      (argument '#:params 'params #f)
-                      (argument '#:resources 'resources '(current-device-resources)))
-                '()
-                '#:sample-weight)
-          (estimator-entry 'elastic-net elastic-net)))
-   (table-bindings lasso-params
-                   lasso-keys
-                   (list (list 'lasso-params lasso-params '() (list (argument #f 'base #f)) '() '())
-                         (list 'lasso-fit
-                               lasso-fit
-                               '(#:params #:resources)
-                               (list (argument #f 'X 'none) (argument #f 'y 'none))
-                               (list (argument '#:sample-weight 'sample-weight #f)
-                                     (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources)))
-                               '()
-                               '#:sample-weight)
-                         (estimator-entry 'lasso lasso)))))
+   (linear-table-bindings 'linear-regression
+                          linear-regression-params
+                          linear-regression-keys
+                          linear-regression-fit
+                          linear-regression)
+   (linear-table-bindings 'ridge ridge-params ridge-keys ridge-fit ridge)
+   (linear-table-bindings 'elastic-net
+                          elastic-net-params
+                          elastic-net-keys
+                          elastic-net-fit
+                          elastic-net)
+   (linear-table-bindings 'lasso lasso-params lasso-keys lasso-fit lasso)))
 
 (define-namespace-anchor anchor)
 
