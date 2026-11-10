@@ -204,7 +204,8 @@ TEST(CdCheck, KBAndAOnAHandBuiltEpochUnderAHeavyL2Penalty) {
   EXPECT_DOUBLE_EQ(k.residual.value_or(missing), heavy_residual);
   EXPECT_DOUBLE_EQ(k.bound, epoch_tol);
   EXPECT_DOUBLE_EQ(k.allowance, heavy_allowance);
-  const std::string got = refusal_of([&] { require_kkt(k, epochs); });
+  const std::string got =
+      refusal_of([&] { require_kkt(k, epochs.n_iter, epochs.tol); });
   EXPECT_EQ(got.rfind("X: coordinate descent stopped after 4 epochs with every "
                       "coefficient under tol 0.1 and KKT residual 0.3671875 > ",
                       0),
@@ -216,12 +217,14 @@ TEST(CdCheck, KBAndAOnAHandBuiltEpochUnderAHeavyL2Penalty) {
 }
 
 TEST(CdCheck, AResidualWithinBPlusAIsAccepted) {
-  const cd_epochs epochs{epoch_iters, epoch_rows, epoch_tol, float_roundoff};
-  EXPECT_EQ(refusal_of([&] { require_kkt({epoch_tol, epoch_tol, 0}, epochs); }),
+  EXPECT_EQ(refusal_of([&] {
+              require_kkt({epoch_tol, epoch_tol, 0}, epoch_iters, epoch_tol);
+            }),
             "accepted");
-  EXPECT_NE(
-      refusal_of([&] { require_kkt({std::nullopt, epoch_tol, 1}, epochs); }),
-      "accepted");
+  EXPECT_NE(refusal_of([&] {
+              require_kkt({std::nullopt, epoch_tol, 1}, epoch_iters, epoch_tol);
+            }),
+            "accepted");
 }
 
 struct stop_case {

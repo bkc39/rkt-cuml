@@ -69,8 +69,7 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                     plan.fit_intercept, plan.solver.algorithm, staged_w);
   }
   settle(handle);
-  require_finite_solution(cs.data(), kept, intercept, plan.solver.algorithm,
-                          stream);
+  require_finite_solution(cs.data(), kept, intercept, plan.solver, stream);
   require_stationary<T>(stationarity_cosine(handle, x, y, w, rows, s, cs.data(),
                                             plan.fit_intercept, alpha),
                         plan.solver);
@@ -81,8 +80,6 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   return {std::move(coef),
           plan.fit_intercept ? static_cast<double>(unscaled) : 0.0};
 }
-
-}  // namespace
 
 template <typename T>
 fit_result<T> nothing_to_solve(const raft::handle_t& handle,
@@ -114,6 +111,8 @@ double deposit_fit(const raft::handle_t& handle, fit_result<T> r,
   return r.intercept;
 }
 
+}  // namespace
+
 template <typename T>
 prepared_fit<T> prepare_fit(const raft::handle_t& handle,
                             const checked_fit<T>& checked,
@@ -138,26 +137,33 @@ prepared_fit<T> prepare_fit(const raft::handle_t& handle,
 
 template <typename T>
 double finish_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
-                  const fit_plan& plan, T alpha, rr_deposit* out) {
+                  const fit_plan& plan,
+                  const std::function<fit_result<T>()>& solve,
+                  rr_deposit* out) {
   const bool constant_y =
       constant_vector(handle, in.y, in.x.n, in.w, plan.fit_intercept);
   return deposit_fit(handle,
                      constant_y || plan.s.kept.empty()
                          ? nothing_to_solve(handle, in, plan, constant_y)
-                         : solved(handle, in, plan, alpha),
+                         : solve(),
                      out);
 }
 
-template fit_result<float> nothing_to_solve<float>(const raft::handle_t&,
-                                                   const fit_inputs<float>&,
-                                                   const fit_plan&, bool);
-template fit_result<double> nothing_to_solve<double>(const raft::handle_t&,
-                                                     const fit_inputs<double>&,
-                                                     const fit_plan&, bool);
-template double deposit_fit<float>(const raft::handle_t&, fit_result<float>,
+template <typename T>
+double finish_fit(const raft::handle_t& handle, const fit_inputs<T>& in,
+                  const fit_plan& plan, T alpha, rr_deposit* out) {
+  return finish_fit<T>(
+      handle, in, plan, [&] { return solved(handle, in, plan, alpha); }, out);
+}
+
+template double finish_fit<float>(const raft::handle_t&,
+                                  const fit_inputs<float>&, const fit_plan&,
+                                  const std::function<fit_result<float>()>&,
+                                  rr_deposit*);
+template double finish_fit<double>(const raft::handle_t&,
+                                   const fit_inputs<double>&, const fit_plan&,
+                                   const std::function<fit_result<double>()>&,
                                    rr_deposit*);
-template double deposit_fit<double>(const raft::handle_t&, fit_result<double>,
-                                    rr_deposit*);
 template prepared_fit<float> prepare_fit<float>(const raft::handle_t&,
                                                 const checked_fit<float>&,
                                                 int32_t);

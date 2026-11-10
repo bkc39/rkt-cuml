@@ -25,8 +25,8 @@ namespace cumlrkt::glm {
 namespace {
 
 constexpr int32_t most_cd_rows = std::numeric_limits<int32_t>::max();
-constexpr int moment_headroom = 6;
-constexpr int label_headroom = 4;
+constexpr int moment_sum_guard_bits = 6;
+constexpr int label_sum_guard_bits = 4;
 constexpr long double coefficient_rounding = 2;
 
 int half_floor(int x) {
@@ -67,28 +67,26 @@ void refuse_alpha(double alpha, int64_t rows, int shared) {
 template <typename T>
 int cd_shared_cap(const staging& s, int64_t rows) {
   constexpr int reach = std::numeric_limits<T>::max_exponent;
-  const int beta = std::bit_width(static_cast<uint64_t>(rows));
-  const int p = std::ranges::max(s.kept | std::views::transform([&](int64_t j) {
-                                   return std::ilogb(s.largest[j]);
-                                 }));
-  const int q = -s.y_exponent;
-  const int columns = std::ranges::min(
-      s.kept | std::views::transform([&](int64_t j) {
-        return unit_exponent(s.largest[j]) + column_reach<T>(rows);
-      }));
-  const int moments = reach - moment_headroom - beta;
-  return std::min({columns, half_floor(moments) - p,
-                   half_floor(moments - p - q),
-                   reach - label_headroom - beta - q});
+  const int row_bits = std::bit_width(static_cast<uint64_t>(rows));
+  const int column_magnitude =
+      std::ranges::max(s.kept | std::views::transform([&](int64_t j) {
+                         return std::ilogb(s.largest[j]);
+                       }));
+  const int y_magnitude = -s.y_exponent;
+  const int moments = reach - moment_sum_guard_bits - row_bits;
+  return std::min({shared_cap<T>(s, rows),
+                   half_floor(moments) - column_magnitude,
+                   half_floor(moments - column_magnitude - y_magnitude),
+                   reach - label_sum_guard_bits - row_bits - y_magnitude});
 }
 
 template <typename T>
 cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha) {
   const auto narrowest = std::ranges::max(
       s.kept, {}, [&](int64_t j) { return s.column_exponent[j]; });
-  const int widest_exponent = s.column_exponent[narrowest];
-  const int shared = std::min(widest_exponent, cd_shared_cap<T>(s, rows));
-  if (shared < widest_exponent - narrowest_spread_bits) {
+  const int narrowest_exponent = s.column_exponent[narrowest];
+  const int shared = std::min(narrowest_exponent, cd_shared_cap<T>(s, rows));
+  if (shared < narrowest_exponent - narrowest_column_slack_bits) {
     throw logic_error(std::format(
         "X: column {} is too narrow beside the other columns and y for {} "
         "coordinate descent",
@@ -145,14 +143,14 @@ kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
                           (coefficient_rounding + gradient))};
 }
 
-void require_kkt(const kkt_terms& k, cd_epochs epochs) {
+void require_kkt(const kkt_terms& k, int n_iter, double tol) {
   const double bound = k.bound + k.allowance;
   if (!k.residual || *k.residual > bound) {
     throw logic_error(std::format(
         "X: coordinate descent stopped after {} epochs with every coefficient "
         "under tol {} and KKT residual {} > {}; tol is absolute in the "
         "coefficients' units, so scale y up or X down",
-        epochs.n_iter, printed(epochs.tol),
+        n_iter, printed(tol),
         k.residual ? printed(*k.residual) : "nan", printed(bound)));
   }
 }
@@ -188,8 +186,9 @@ void require_cd_codes(const cd_request& request) {
                     printed(request.l1_ratio)));
   }
   if (request.max_iter < 1) {
-    throw logic_error(
-        std::format("max-iter: expected at least 1, got {}", request.max_iter));
+    throw logic_error(std::format(
+        "max-iter: expected an exact integer from 1 to {}, got {}",
+        std::numeric_limits<int32_t>::max(), request.max_iter));
   }
   if (!std::isfinite(request.tol) || !(request.tol >= 0)) {
     throw logic_error(

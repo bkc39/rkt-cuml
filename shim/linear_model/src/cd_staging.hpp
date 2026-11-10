@@ -10,7 +10,7 @@
 
 namespace cumlrkt::glm {
 
-inline constexpr int narrowest_spread_bits = 4;
+inline constexpr int narrowest_column_slack_bits = 4;
 
 struct cd_request {
   fit_request fit;
@@ -53,7 +53,7 @@ cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha);
 kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
                  double weight, cd_penalty penalty, cd_epochs epochs);
 
-void require_kkt(const kkt_terms& k, cd_epochs epochs);
+void require_kkt(const kkt_terms& k, int n_iter, double tol);
 
 bool absolute_stop(int n_iter, int max_iter, double largest, double tol);
 
