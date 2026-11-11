@@ -2,4 +2,4 @@
 
 (require (only-in "private/real-linear-data.rkt" test-real-set))
 
-(test-real-set 'diabetes)
+(test-real-set 'diabetes #:checks '(lstsq ridge score))

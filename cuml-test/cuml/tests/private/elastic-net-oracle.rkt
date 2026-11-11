@@ -3,7 +3,7 @@
 (require (only-in racket/flonum flvector flvector-ref flvector-set! make-flvector)
          (only-in racket/match match-define struct*)
          (only-in racket/math sgn sqr)
-         (only-in "exact-algebra.rkt" dot eigen-range min-norm-solve)
+         (only-in "exact-algebra.rkt" dot eigen-range mat*vec min-norm-solve)
          (only-in "linear-data.rkt" max-abs weighted-gram weights-or-ones))
 
 (provide (struct-out en-problem)
@@ -120,11 +120,7 @@
   (define coef
     (for/list ([j (in-range (length c))])
       (hash-ref on-support j 0)))
-  (define gradient
-    (map -
-         c
-         (for/list ([row (in-list C)])
-           (dot row coef))))
+  (define gradient (map - c (mat*vec C coef)))
   (define signs-hold?
     (or (zero? l1)
         (for/and ([b (in-list bS)]
@@ -139,7 +135,7 @@
     (error 'oracle-elastic-net "the certificate failed on support ~a" S))
   coef)
 
-(define (oracle-elastic-net p alpha l1-ratio)
+(define (oracle-elastic-net p alpha l1-ratio #:bottom [known-bottom #f])
   (match-define (struct* en-problem ([G G] [b b] [mx mx] [my my] [total total] [yy yy])) p)
   (define-values (l1 l2) (penalties alpha l1-ratio))
   (define C
@@ -147,7 +143,10 @@
       (map (lambda (g) (/ g total)) row)))
   (define c (map (lambda (v) (/ v total)) b))
   (define coef (exact-on-support C c l1 l2 (host-cd C c l1 l2)))
-  (define-values (_ bottom) (eigen-range G))
+  (define-values (_ bottom)
+    (if known-bottom
+        (values #f known-bottom)
+        (eigen-range G)))
   (en-solution coef
                (- my (dot mx coef))
                (+ (max 0.0 (/ bottom (exact->inexact total))) (exact->inexact l2))

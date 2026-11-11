@@ -7,13 +7,13 @@
          (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
          (only-in racket/list drop first make-list take)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "exact-algebra.rkt" condition dot eigen-range min-norm-solve))
+         (only-in "exact-algebra.rkt" condition dot eigen-bracket min-norm-solve))
 
 (provide (struct-out lcase)
          (struct-out ridge-solution)
@@ -64,7 +64,7 @@
 
 (struct lcase (name X y w) #:transparent)
 (struct solution (coef intercept kappa) #:transparent)
-(struct ridge-solution (alpha coef intercept kappa top bottom xty) #:transparent)
+(struct ridge-solution (alpha coef intercept kappa kappa₀ top bottom xty) #:transparent)
 
 (define algorithms '(auto svd qr svd-qr))
 (define dtypes '(float32 float64))
@@ -332,7 +332,8 @@
   (define c (min-norm-solve G b))
   (solution c (- my (dot mx c)) (condition G)))
 
-(define (ridge-solve G b mx my top bottom alpha)
+(define (ridge-solve G b mx my inner outer alpha)
+  (match-define (cons top bottom) outer)
   (define c
     (min-norm-solve (for/list ([row (in-list G)]
                                [i (in-naturals)])
@@ -346,6 +347,9 @@
                   c
                   (- my (dot mx c))
                   (/ (+ top alpha) (+ bottom alpha))
+                  (match inner
+                    [(cons _ 0) +inf.0]
+                    [(cons high low) (/ high low)])
                   top
                   bottom
                   (sqrt (dot b b))))
@@ -355,38 +359,38 @@
 
 (define (ridge-oracles X y w fit-intercept ratios #:relative? [relative? #t])
   (define-values (G b mx my) (weighted-gram X y w fit-intercept))
-  (define-values (top bottom) (eigen-range G))
+  (define-values (inner outer) (eigen-bracket G))
+  (match-define (cons top _) outer)
   (define unit
     (if relative?
         (expt 2 (exact-round (/ (log top) (log 2))))
         1))
   (for/list ([r (in-list ratios)])
-    (ridge-solve G b mx my top bottom (* r unit))))
+    (ridge-solve G b mx my inner outer (* r unit))))
 
 (define (host-cosine X y w coef intercept fit-intercept #:alpha [alpha 0])
-  (define weights (weights-or-ones w y))
-  (define total (apply + weights))
-  (define (centre xs)
-    (define m
-      (if fit-intercept
-          (/ (dot weights xs) total)
-          0))
-    (map (lambda (x) (- x m)) xs))
+  (match-define (cons sw W) (integer-scaled (weights-or-ones w y)))
+  (define W-total (apply + W))
+  (define (centred-product xs vs)
+    (match-define (cons su U) xs)
+    (match-define (cons sv V) vs)
+    (define raw (for/sum ([u (in-list U)] [v (in-list V)] [wi (in-list W)]) (* wi u v)))
+    (/ (if fit-intercept
+           (- raw (/ (* (dot W U) (dot W V)) W-total))
+           raw)
+       (* sw su sv)))
   (define r
-    (for/list ([row (in-list X)]
-               [yi (in-list y)])
-      (- yi intercept (dot row coef))))
-  (define yc (centre y))
-  (define y-norm (sqrt (for/sum ([v (in-list yc)] [wi (in-list weights)]) (* wi v v))))
+    (integer-scaled (for/list ([row (in-list X)]
+                               [yi (in-list y)])
+                      (- yi intercept (dot row coef)))))
+  (define y-norm (sqrt (centred-product (integer-scaled y) (integer-scaled y))))
   (define widest (* alpha (max-abs coef)))
   (for/fold ([worst 0.0])
             ([col (in-list (columns-of X))]
              [cj (in-list coef)])
-    (define xc (centre col))
-    (define num
-      (- (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri))
-         (* alpha cj)))
-    (define square (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x)))
+    (define xc (integer-scaled col))
+    (define num (- (centred-product xc r) (* alpha cj)))
+    (define square (centred-product xc xc))
     (if (zero? square)
         worst
         (max worst (exact->inexact (/ (abs num) (+ (* (sqrt square) y-norm) widest)))))))

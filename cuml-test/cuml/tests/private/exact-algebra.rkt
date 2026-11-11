@@ -13,9 +13,21 @@
 (define (dot u v)
   (for/sum ([a (in-list u)] [b (in-list v)]) (* a b)))
 
+(define (common-denominator xs)
+  (for/fold ([d 1]) ([x (in-list xs)])
+    (lcm d (denominator x))))
+
 (define (mat*vec A v)
-  (for/list ([row (in-list A)])
-    (dot row v)))
+  (cond
+    [(and (andmap exact? v) (andmap (lambda (row) (andmap exact? row)) A))
+     (define dA (common-denominator (apply append A)))
+     (define dv (common-denominator v))
+     (define iv (map (lambda (x) (* dv x)) v))
+     (for/list ([row (in-list A)])
+       (/ (dot (map (lambda (x) (* dA x)) row) iv) (* dA dv)))]
+    [else
+     (for/list ([row (in-list A)])
+       (dot row v))]))
 
 (define (swapped M r p)
   (define row-r (list-ref M r))
@@ -58,11 +70,7 @@
       [else (loop M r (add1 c) pivots)])))
 
 (define (scaled-to-integers rows)
-  (define d
-    (for*/fold ([d 1])
-               ([row (in-list rows)]
-                [x (in-list row)])
-      (lcm d (denominator x))))
+  (define d (common-denominator (apply append rows)))
   (for/list ([row (in-list rows)])
     (map (lambda (x) (* d x)) row)))
 
@@ -82,10 +90,16 @@
      (and below (cons top below))]))
 
 (define (back-substituted rows)
-  (for/foldr ([x '()])
-             ([row (in-list rows)])
-             (match-define (cons pivot tail) row)
-             (cons (/ (- (last tail) (dot tail x)) pivot) x)))
+  (match rows
+    ['() '()]
+    [_
+     (match-define (cons determinant _) (last rows))
+     (define scaled
+       (for/foldr ([x '()])
+                  ([row (in-list rows)])
+                  (match-define (cons pivot tail) row)
+                  (cons (/ (- (* determinant (last tail)) (dot tail x)) pivot) x)))
+     (map (lambda (x) (/ x determinant)) scaled)]))
 
 (define (nonsingular-solve A b)
   (define M (map (lambda (row bi) (append row (list bi))) A b))
@@ -285,6 +299,11 @@
   (define b '(1 2 3))
   (check-equal? (min-norm-solve A b) (rref-min-norm-solve A b))
   (check-equal? (min-norm-solve '((0 1) (1 0)) '(2 3)) '(3 2))
+  (check-equal? (min-norm-solve '() '()) '())
+  (check-equal? (mat*vec '((1/3 2) (1/6 -1/4)) '(3/7 1/2)) '(8/7 -3/56))
+  (check-equal? (mat*vec '((1.0 2)) '(1/2 1)) '(2.5))
+  (check-equal? (min-norm-solve '((0 2 1) (3 0 1/2) (1 1 5)) '(1 2 3))
+                (rref-min-norm-solve '((0 2 1) (3 0 1/2) (1 1 5)) '(1 2 3)))
   (check-equal? (min-norm-solve '((1 2) (2 4)) '(1 2)) '(1/5 2/5))
   (check-equal? (nonsingular-solve '((1 2) (2 4)) '(1 2)) #f)
   (check-equal? (nonsingular-solve '((1.0 0) (0 1)) '(1 2)) #f)

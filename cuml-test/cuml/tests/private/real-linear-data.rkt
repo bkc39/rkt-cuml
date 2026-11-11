@@ -28,7 +28,7 @@
                   en-solution-coef
                   oracle-elastic-net
                   problem-of)
-         (only-in "exact-algebra.rkt" dot eigen-bracket min-norm-solve)
+         (only-in "exact-algebra.rkt" dot eigen-bracket mat*vec min-norm-solve)
          (only-in "linear-data.rkt"
                   case-fit
                   columns-of
@@ -61,7 +61,8 @@
                              (wine "alcohol" ("cultivar"))
                              (breast-cancer "texture-mean" ("diagnosis" "id"))))
 
-(define arms '((raw #f) (raw #t) (standardised #f) (standardised #t)))
+(define all-arms '((raw #f) (raw #t) (standardised #f) (standardised #t)))
+(define all-dtypes '(float32 float64))
 
 (define lstsq-algorithms '(auto eig svd svd-jacobi qr svd-qr))
 (define l1-ratios '(1 0.5 0.1))
@@ -111,10 +112,10 @@
 
 (define made-cases (make-hash))
 
-(define (real-cases name #:dtypes [dts '(float32 float64)])
-  (hash-ref! made-cases (list name dts) (lambda () (made-real-cases name dts))))
+(define (real-cases name #:dtypes [dts all-dtypes] #:arms [arms all-arms])
+  (hash-ref! made-cases (list name dts arms) (lambda () (made-real-cases name dts arms))))
 
-(define (made-real-cases name dts)
+(define (made-real-cases name dts arms)
   (define-values (X y) (set-data name))
   (for*/list ([arm (in-list arms)]
               [dt (in-list dts)])
@@ -132,17 +133,17 @@
     (define-values (inner outer) (eigen-bracket (en-problem-G p)))
     (real-case c dt p inner outer)))
 
-(define (kappa-alpha range alpha)
-  (match-define (cons top bottom) range)
-  (/ (+ top alpha) (+ bottom alpha)))
-
 (define (conditioning rc alpha)
-  (* (inexact->exact (unit-roundoff (real-case-dt rc))) (kappa-alpha (real-case-inner rc) alpha)))
+  (match-define (struct* real-case ([dt dt] [inner (cons top bottom)])) rc)
+  (* (inexact->exact (unit-roundoff dt)) (/ (+ top alpha) (+ bottom alpha))))
 
 (define (lstsq-solution rc)
-  (match-define (struct* real-case ([p (struct* en-problem ([G G] [b b] [mx mx] [my my]))])) rc)
+  (match-define (struct* real-case
+                         ([p (struct* en-problem ([G G] [b b] [mx mx] [my my]))] [outer
+                                                                                  (cons top bottom)]))
+    rc)
   (define coef (min-norm-solve G b))
-  (solution coef (- my (dot mx coef)) (sqrt (exact->inexact (kappa-alpha (real-case-outer rc) 0)))))
+  (solution coef (- my (dot mx coef)) (sqrt (exact->inexact (/ top bottom)))))
 
 (define (ridge-lambda-max rc)
   (match-define (struct* real-case ([p (and p (struct* en-problem ([total total] [yy yy])))])) rc)
@@ -155,9 +156,11 @@
   (* (exact->inexact (en-problem-total (real-case-p rc))) (path-alpha (ridge-lambda-max rc) k)))
 
 (define (ridge-oracle rc alpha)
-  (match-define (struct* en-problem ([G G] [b b] [mx mx] [my my])) (real-case-p rc))
-  (match-define (cons top bottom) (real-case-outer rc))
-  (ridge-solve G b mx my top bottom (inexact->exact alpha)))
+  (match-define (struct* real-case
+                         ([p (struct* en-problem ([G G] [b b] [mx mx] [my my]))] [inner inner]
+                                                                                 [outer outer]))
+    rc)
+  (ridge-solve G b mx my inner outer (inexact->exact alpha)))
 
 (define (check-real-lstsq rc)
   (match-define (struct* real-case ([c c] [dt dt])) rc)
@@ -174,12 +177,12 @@
     (define o (ridge-oracle rc alpha))
     (for ([s (in-list solvers)])
       (test-case (format "~a ridge ~a k ~a" (lcase-name c) s k)
-        (parameterize ([current-conditioning (conditioning rc (inexact->exact alpha))])
-          (check-ridge-fit c
-                           #t
-                           (unit-roundoff dt)
-                           (ridge-case-fit c dt #:alpha alpha #:solver s)
-                           o))))))
+        (check-ridge-fit c
+                         #t
+                         (unit-roundoff dt)
+                         s
+                         (ridge-case-fit c dt #:alpha alpha #:solver s)
+                         o)))))
 
 (define (en-options r alpha tol max-iter)
   (if (= r 1)
@@ -191,16 +194,8 @@
   (keyword-apply en-case-fit kws (map (lambda (k) (hash-ref options k)) kws) (list c dt)))
 
 (define (en-oracle rc alpha r)
-  (match-define (struct* real-case
-                         ([p (and p (struct* en-problem ([total total])))] [outer (cons _ bottom)]))
-    rc)
-  (define o (oracle-elastic-net p alpha r))
-  (define l2 (* (inexact->exact alpha) (- 1 (inexact->exact r))))
-  (struct-copy en-solution o [mu (exact->inexact (+ (/ bottom total) l2))]))
-
-(define (en-conditioning rc alpha r)
-  (define total (en-problem-total (real-case-p rc)))
-  (conditioning rc (* total (inexact->exact alpha) (- 1 (inexact->exact r)))))
+  (match-define (struct* real-case ([p p] [outer (cons _ bottom)])) rc)
+  (oracle-elastic-net p alpha r #:bottom bottom))
 
 (define (check-en-fit rc o alpha r tol max-iter)
   (match-define (struct* real-case ([c c] [dt dt] [p p])) rc)
@@ -208,17 +203,16 @@
   (define run (en-run-of c dt (en-options r alpha tol max-iter)))
   (match-define (struct* en-run ([n-iter k])) run)
   (check-true (< k max-iter) (format "converged: ~a epochs of ~a" k max-iter))
-  (parameterize ([current-conditioning (en-conditioning rc alpha r)])
-    (check-kkt-laws p
-                    run
-                    alpha
-                    r
-                    tol
-                    (rows-of c)
-                    u
-                    #:relative? (not (and (eq? dt 'float32) (< tol default-tol))))
-    (when (< tol default-tol)
-      (check-distance-laws o run alpha r tol u #t))))
+  (check-kkt-laws p
+                  run
+                  alpha
+                  r
+                  tol
+                  (rows-of c)
+                  u
+                  #:relative? (not (and (eq? dt 'float32) (< tol default-tol))))
+  (when (< tol default-tol)
+    (check-distance-laws o run alpha r tol u #t)))
 
 (define (check-real-elastic-net rc)
   (match-define (struct* real-case ([c c] [dt dt] [p p])) rc)
@@ -260,7 +254,7 @@
   (define (exact-of o)
     (match o
       [(solution coef _ _) coef]
-      [(ridge-solution _ coef _ _ _ _ _) coef]
+      [(struct* ridge-solution ([coef coef])) coef]
       [(en-solution coef _ _ _ _ _) coef]))
   `((linear-regression ,(linear-regression) ,(exact-of (lstsq-solution rc)))
     (ridge ,(ridge #:alpha ridge-at) ,(exact-of (ridge-oracle rc ridge-at)))
@@ -272,14 +266,16 @@
 (define (squared-distance rc coef q)
   (match-define (struct* real-case ([c c] [p (struct* en-problem ([G G] [mx mx] [my my]))])) rc)
   (define weights (or (lcase-w c) (make-list (length q) 1)))
-  (define shifted (map (lambda (v) (- v my)) q))
+  (define wq (map * weights q))
+  (define sq (apply + wq))
+  (match-define (list qq) (mat*vec (list q) wq))
   (define Xq
-    (for/list ([column (in-list (columns-of (lcase-X c)))]
+    (for/list ([s (in-list (mat*vec (columns-of (lcase-X c)) wq))]
                [m (in-list mx)])
-      (for/sum ([x (in-list column)] [v (in-list shifted)] [wi (in-list weights)]) (* wi (- x m) v))))
-  (+ (for/sum ([v (in-list shifted)] [wi (in-list weights)]) (* wi v v))
+      (- s (* m sq))))
+  (+ (- qq (* 2 my sq) (- (* my my (apply + weights))))
      (* -2 (dot coef Xq))
-     (dot coef (map (lambda (row) (dot row coef)) G))))
+     (dot coef (mat*vec G coef))))
 
 (define (check-real-score rc)
   (match-define (struct* real-case ([c c] [dt dt] [p (struct* en-problem ([yy spread]))])) rc)
@@ -307,22 +303,19 @@
        (<= (exact->inexact (abs (- got r2))) bound)
        (format "score ~a, exact ~a, bound ~a" (exact->inexact got) (exact->inexact r2) bound)))))
 
-(define (test-real-set name #:dtypes [dts '(float32 float64)])
-  (define (cases)
-    (real-cases name #:dtypes dts))
-  (test-gpu (format "~a ~a: least squares and ridge are within the laws' bounds of the exact solve"
-                    name
-                    dts)
-    (for ([rc (in-list (cases))])
-      (check-real-lstsq rc)
-      (check-real-ridge rc)))
-  (test-gpu (format
-             "~a ~a: lasso and elastic net meet the KKT laws, and the distance laws at a tight tol"
-             name
-             dts)
-    (for-each check-real-elastic-net (cases)))
-  (test-gpu (format
-             "~a ~a: each estimator's score is the exact solution's R² within its predictions' reach"
-             name
-             dts)
-    (for-each check-real-score (cases))))
+(define real-checks
+  `((lstsq ,check-real-lstsq "least squares is within the laws' bounds of the exact solve")
+    (ridge ,check-real-ridge "ridge is within the laws' bounds of the exact solve")
+    (elastic-net ,check-real-elastic-net
+                 "lasso and elastic net meet the KKT laws, and the distance laws at a tight tol")
+    (score ,check-real-score
+           "each estimator's score is the exact solution's R² within its predictions' reach")))
+
+(define (test-real-set name
+                       #:dtypes [dts all-dtypes]
+                       #:arms [arms all-arms]
+                       #:checks [checks (map car real-checks)])
+  (for ([check (in-list checks)])
+    (match-define (list _ run claim) (assq check real-checks))
+    (test-gpu (format "~a ~a ~a: ~a" name dts arms claim)
+      (for-each run (real-cases name #:dtypes dts #:arms arms)))))

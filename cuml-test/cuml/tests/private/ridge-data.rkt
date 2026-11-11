@@ -8,6 +8,7 @@
          (only-in "linear-data.rkt"
                   check-law
                   columns-of
+                  current-conditioning
                   dtypes
                   exact-fit
                   gap
@@ -76,15 +77,18 @@
 
 (define ridge-case-fit (compose1 ridge-result-fit ridge-case-result))
 
-(define (check-ridge-fit c fi u fit o)
-  (match-define (struct* ridge-solution ([alpha alpha] [coef c*] [intercept b*] [kappa kappa])) o)
+(define (check-ridge-fit c fi u solver fit o)
+  (match-define (struct* ridge-solution
+                         ([alpha alpha] [coef c*] [intercept b*] [kappa kappa] [kappa₀ kappa₀]))
+    o)
   (match-define (list coef b) (exact-fit fit))
-  (check-law "R1" (gap coef c*) (* 128 u kappa (max-abs c*)))
-  (check-law "R3"
-             (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
-             (* 64 u kappa))
-  (when fi
-    (check-law "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))))
+  (parameterize ([current-conditioning (and (memq solver '(auto eig)) (* (inexact->exact u) kappa₀))])
+    (check-law "R1" (gap coef c*) (* 128 u kappa (max-abs c*)))
+    (check-law "R3"
+               (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
+               (* 64 u kappa))
+    (when fi
+      (check-law "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c)))))))
 
 (define (check-ridge-laws cases intercepts)
   (for* ([c (in-list cases)]
@@ -97,5 +101,6 @@
         (check-ridge-fit c
                          fi
                          (unit-roundoff dt)
+                         s
                          (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)
                          o)))))
