@@ -28,7 +28,7 @@
                   en-solution-coef
                   oracle-elastic-net
                   problem-of)
-         (only-in "exact-algebra.rkt" dot min-norm-solve rayleigh-range)
+         (only-in "exact-algebra.rkt" dot eigen-bracket min-norm-solve)
          (only-in "linear-data.rkt"
                   case-fit
                   columns-of
@@ -54,7 +54,7 @@
          real-cases
          test-real-set)
 
-(struct real-case (c dt p top bottom) #:transparent)
+(struct real-case (c dt p inner outer) #:transparent)
 
 (define real-sets
   '((diabetes "response" ()) (mtcars "mpg" ("model"))
@@ -129,20 +129,20 @@
        (lcase (format "~a ~a~a ~a" name scaling (if weighted? " weighted" "") dt) rows y w)
        dt))
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
-    (define-values (top bottom) (rayleigh-range (en-problem-G p)))
-    (real-case c dt p top bottom)))
+    (define-values (inner outer) (eigen-bracket (en-problem-G p)))
+    (real-case c dt p inner outer)))
 
-(define (kappa-alpha rc alpha)
-  (match-define (struct* real-case ([top top] [bottom bottom])) rc)
+(define (kappa-alpha range alpha)
+  (match-define (cons top bottom) range)
   (/ (+ top alpha) (+ bottom alpha)))
 
 (define (conditioning rc alpha)
-  (* (inexact->exact (unit-roundoff (real-case-dt rc))) (kappa-alpha rc alpha)))
+  (* (inexact->exact (unit-roundoff (real-case-dt rc))) (kappa-alpha (real-case-inner rc) alpha)))
 
 (define (lstsq-solution rc)
   (match-define (struct* real-case ([p (struct* en-problem ([G G] [b b] [mx mx] [my my]))])) rc)
   (define coef (min-norm-solve G b))
-  (solution coef (- my (dot mx coef)) (sqrt (exact->inexact (kappa-alpha rc 0)))))
+  (solution coef (- my (dot mx coef)) (sqrt (exact->inexact (kappa-alpha (real-case-outer rc) 0)))))
 
 (define (ridge-lambda-max rc)
   (match-define (struct* real-case ([p (and p (struct* en-problem ([total total] [yy yy])))])) rc)
@@ -155,10 +155,8 @@
   (* (exact->inexact (en-problem-total (real-case-p rc))) (path-alpha (ridge-lambda-max rc) k)))
 
 (define (ridge-oracle rc alpha)
-  (match-define (struct* real-case
-                         ([p (struct* en-problem ([G G] [b b] [mx mx] [my my]))] [top top]
-                                                                                 [bottom bottom]))
-    rc)
+  (match-define (struct* en-problem ([G G] [b b] [mx mx] [my my])) (real-case-p rc))
+  (match-define (cons top bottom) (real-case-outer rc))
   (ridge-solve G b mx my top bottom (inexact->exact alpha)))
 
 (define (check-real-lstsq rc)
@@ -193,7 +191,8 @@
   (keyword-apply en-case-fit kws (map (lambda (k) (hash-ref options k)) kws) (list c dt)))
 
 (define (en-oracle rc alpha r)
-  (match-define (struct* real-case ([p (and p (struct* en-problem ([total total])))] [bottom bottom]))
+  (match-define (struct* real-case
+                         ([p (and p (struct* en-problem ([total total])))] [outer (cons _ bottom)]))
     rc)
   (define o (oracle-elastic-net p alpha r))
   (define l2 (* (inexact->exact alpha) (- 1 (inexact->exact r))))

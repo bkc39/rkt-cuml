@@ -1,14 +1,14 @@
 #lang racket/base
 
-(require (only-in racket/list last make-list splitf-at)
+(require (only-in racket/list argmax last splitf-at)
          (only-in racket/match match match-define))
 
 (provide condition
          dot
+         eigen-bracket
          eigen-range
          mat*vec
-         min-norm-solve
-         rayleigh-range)
+         min-norm-solve)
 
 (define (dot u v)
   (for/sum ([a (in-list u)] [b (in-list v)]) (* a b)))
@@ -135,57 +135,153 @@
                 [u (in-list N)])
        (map (lambda (xj uj) (- xj (* a uj))) x u))]))
 
-(define (power-top G steps)
-  (define d (length G))
-  (for/fold ([v (make-list d 1.0)]
-             [lam 0.0]
-             #:result lam)
-            ([_ (in-range steps)])
-    (define Gv (mat*vec G v))
-    (define norm (sqrt (dot Gv Gv)))
-    (if (zero? norm)
-        (values v 0.0)
-        (values (map (lambda (x) (/ x norm)) Gv) norm))))
-
-(define (eigen-range G-exact)
-  (define G
-    (for/list ([row (in-list G-exact)])
-      (map exact->inexact row)))
-  (define top (power-top G 300))
-  (define shifted
-    (for/list ([row (in-list G)]
-               [i (in-naturals)])
-      (for/list ([g (in-list row)]
-                 [j (in-naturals)])
-        (- (if (= i j) top 0.0) g))))
-  (values top (- top (power-top shifted 600))))
-
-(define (condition G-exact)
-  (define-values (top bottom) (eigen-range G-exact))
-  (if (> bottom (* 1e-14 top))
-      (sqrt (/ top bottom))
-      +inf.0))
-
 (define (unit v)
-  (define norm (sqrt (dot v v)))
-  (map (lambda (x) (/ x norm)) v))
+  (define largest
+    (for/fold ([m 0.0]) ([x (in-list v)])
+      (max m (abs x))))
+  (define scaled
+    (map (lambda (x) (/ x largest)) v))
+  (define norm (sqrt (dot scaled scaled)))
+  (and (positive? largest)
+       (< largest +inf.0)
+       (andmap rational? scaled)
+       (map (lambda (x) (/ x norm)) scaled)))
 
 (define (rayleigh G v)
   (define e (map inexact->exact v))
   (/ (dot e (mat*vec G e)) (dot e e)))
 
+(define (iterated step start steps)
+  (for/fold ([v start]) ([_ (in-range steps)])
+    (or (unit (step v)) v)))
+
+(define singular-pivot (expt 2.0 -60))
+
+(define (float-eliminated M)
+  (match M
+    ['() '()]
+    [_
+     (define top (argmax (lambda (row) (abs (car row))) M))
+     (match-define (cons pivot pivot-tail) top)
+     (define p
+       (if (zero? pivot)
+           singular-pivot
+           pivot))
+     (cons (cons p pivot-tail)
+           (float-eliminated (for/list ([row (in-list (remq top M))])
+                               (match-define (cons f tail) row)
+                               (map (lambda (x q) (- x (* (/ f p) q))) tail pivot-tail))))]))
+
+(define (float-solve A b)
+  (back-substituted (float-eliminated (map (lambda (row bi) (append row (list bi))) A b))))
+
 (define (rayleigh-range G)
   (define G-inexact
     (for/list ([row (in-list G)])
       (map exact->inexact row)))
-  (define ones (make-list (length G) 1.0))
-  (define top-vector
-    (for/fold ([v ones]) ([_ (in-range 300)])
-      (unit (mat*vec G-inexact v))))
-  (define bottom-vector
-    (for/fold ([v ones]) ([_ (in-range 3)])
-      (unit (map exact->inexact (min-norm-solve G (map inexact->exact v))))))
+  (define start
+    (for/list ([i (in-range (length G))])
+      (/ 1.0 (+ i 1))))
+  (define top-vector (iterated (lambda (v) (mat*vec G-inexact v)) start 300))
+  (define bottom-vector (iterated (lambda (v) (float-solve G-inexact v)) start 3))
   (values (rayleigh G top-vector) (rayleigh G bottom-vector)))
+
+(define (positive-definite? A)
+  (let loop ([M (scaled-to-integers A)]
+             [previous 1])
+    (match M
+      ['() #t]
+      [(cons (cons pivot pivot-tail) rest)
+       (and (positive? pivot)
+            (loop (for/list ([row (in-list rest)])
+                    (match-define (cons f tail) row)
+                    (map (lambda (x p) (quotient (- (* pivot x) (* f p)) previous)) tail pivot-tail))
+                  pivot))])))
+
+(define (shifted G s)
+  (for/list ([row (in-list G)]
+             [i (in-naturals)])
+    (for/list ([g (in-list row)]
+               [j (in-naturals)])
+      (if (= i j)
+          (- g s)
+          g))))
+
+(define (negated G)
+  (for/list ([row (in-list G)])
+    (map - row)))
+
+(define bracket-margin (expt 2 -10))
+
+(define (binade x)
+  (- (integer-length (numerator x)) (integer-length (denominator x))))
+
+(define (coarse x)
+  (define step (expt 2 (- (binade x) 14)))
+  (* step (round (/ x step))))
+
+(define (narrowed holds? fails holds)
+  (define mid (coarse (/ (+ fails holds) 2)))
+  (cond
+    [(<= (abs (- fails holds)) (* 2 bracket-margin (max fails holds))) (values fails holds)]
+    [(holds? mid) (narrowed holds? fails mid)]
+    [else (narrowed holds? mid holds)]))
+
+(define (bottom-bracket G bottom)
+  (define (holds? s)
+    (positive-definite? (shifted G s)))
+  (define (widened fails s)
+    (if (holds? s)
+        (narrowed holds? fails s)
+        (widened s (/ s 2))))
+  (define first (coarse (* bottom (- 1 bracket-margin))))
+  (cond
+    [(holds? first) (narrowed holds? bottom first)]
+    [(positive-definite? G) (widened first (/ first 2))]
+    [else (values 0 0)]))
+
+(define (top-bracket G top)
+  (define (holds? t)
+    (positive-definite? (shifted (negated G) (- t))))
+  (define (widened fails t)
+    (if (holds? t)
+        (narrowed holds? fails t)
+        (widened t (* 2 t))))
+  (if (positive? top)
+      (widened top (coarse (* top (+ 1 bracket-margin))))
+      (values 0 (* (length G) (largest-entry G)))))
+
+(define (largest-entry G)
+  (for*/fold ([m 0])
+             ([row (in-list G)]
+              [g (in-list row)])
+    (max m (abs g))))
+
+(define (eigen-bracket G)
+  (define largest (largest-entry G))
+  (define scale
+    (if (zero? largest)
+        1
+        (expt 2 (binade largest))))
+  (define (rescaled pair)
+    (cons (* scale (car pair)) (* scale (cdr pair))))
+  (define unit-G
+    (for/list ([row (in-list G)])
+      (map (lambda (g) (/ g scale)) row)))
+  (define-values (top bottom) (rayleigh-range unit-G))
+  (define-values (top-in top-out) (top-bracket unit-G top))
+  (define-values (bottom-in bottom-out) (bottom-bracket unit-G bottom))
+  (values (rescaled (cons top-in bottom-in)) (rescaled (cons top-out bottom-out))))
+
+(define (eigen-range G)
+  (define-values (_ outer) (eigen-bracket G))
+  (values (car outer) (cdr outer)))
+
+(define (condition G)
+  (define-values (top bottom) (eigen-range G))
+  (if (> bottom (* 1e-14 top))
+      (sqrt (exact->inexact (/ top bottom)))
+      +inf.0))
 
 (module+ test
   (require (only-in rackunit check-equal? check-true))
@@ -201,4 +297,28 @@
   (define-values (top bottom) (rayleigh-range '((4 0 0) (0 2 0) (0 0 1/1000))))
   (check-true (and (exact? top) (exact? bottom)))
   (check-true (<= (* 999/1000 4) top 4))
-  (check-true (<= 1/1000 bottom (* 1001/1000 1/1000))))
+  (check-true (<= 1/1000 bottom (* 1001/1000 1/1000)))
+  (define (bracketed? G low high)
+    (define-values (hi lo) (eigen-range G))
+    (and (<= (* (- 1 (* 2 bracket-margin)) low) lo low) (<= high hi (* (+ 1 (* 2 bracket-margin)) high))))
+  (define hilbert
+    (for/list ([i (in-range 6)])
+      (for/list ([j (in-range 6)])
+        (/ 1 (+ i j 1)))))
+  (check-true (bracketed? hilbert 1.0828e-7 1.6188))
+  (check-true (bracketed? (for/list ([row (in-list hilbert)])
+                            (map (lambda (h) (* h #e1e400)) row))
+                          (* #e1.0828e-7 #e1e400)
+                          (* #e1.6188 #e1e400)))
+  (define-values (zero-top zero-bottom) (eigen-range '((0 0) (0 0))))
+  (check-equal? (list zero-top zero-bottom) '(0 0))
+  (define rotation '((1/3 2/3 2/3) (2/3 1/3 -2/3) (2/3 -2/3 1/3)))
+  (define spectrum (list 1 (expt 10 -8) (* 2 (expt 10 -8))))
+  (define rotated
+    (for/list ([u (in-list rotation)])
+      (for/list ([v (in-list rotation)])
+        (for/sum ([a (in-list u)] [b (in-list v)] [s (in-list spectrum)]) (* a s b)))))
+  (check-true (bracketed? rotated (expt 10 -8) 1))
+  (check-true (<= 1e4 (condition rotated) (* 1e4 (+ 1 bracket-margin))))
+  (define-values (_ singular) (eigen-range '((1 2) (2 4))))
+  (check-equal? singular 0))
