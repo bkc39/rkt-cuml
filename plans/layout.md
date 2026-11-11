@@ -1362,6 +1362,45 @@ Follow-ups are GitHub issues.
   0.129 to 4.1e-7, and every α′ = 0 cosine (17892) is unchanged bitwise.
   Q2 is unchanged: float32 'eig refused at 0.385 and 0.203, 'svd accepted at
   4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
+- **L2-k, float32 'eig on a Gram singular to the dtype (L3r, #111).**
+  Breast-cancer (569×29, texture-mean on raw X, column sds 0.0026 to 569,
+  intercept): XᵀWX has λ_max 2.5e8 and λ_min 4.0e-4, u·κ₀ = 3.8e4, and 19 of
+  its 29 eigenvalues lie below u·λ_max ≈ 15. No other real case (diabetes,
+  mtcars, wine, raw or standardised, either weighting) has any. On the ridge
+  path α_k = Σw·λ_max·10^(−3k/5), float32 'eig is 4.1e-4 to 2.6e-3 off the
+  exact solve relative to max|c*|, 15 to 880 times u·κ_α; 'svd is 1.4e-7 to
+  7.0e-7. Entries below are error/(u·κ_α), each row of X, y and w repeated
+  r times and α scaled by r, so the exact solve and κ_α are unchanged:
+
+  | fit | r = 1 | r = 2 | r = 4 | r = 8 |
+  |---|---|---|---|---|
+  | 'eig k = 1 | 682 | 680 | 92 | 97 |
+  | 'eig k = 3 | 211 | 211 | 29 | 30 |
+  | 'eig k = 5 | 15.6 | 15.6 | 2.1 | 2.2 |
+  | 'eig k = 1, weights 1–4 | 882 | 72 | 854 | 98 |
+  | 'svd, any k | 0.23 | 0.49 | 0.27 | 0.80 |
+
+  The error does not grow with the row count. Swept over α/λ_max from 1e-4
+  to 1e4, 'eig stays at 3.1e-3 to 4.5e-5 while 'svd stays at 3.3e-7 to
+  1.1e-7; at α = 1e4·λ_max, where κ_α = 1.000, 'eig is 4.5e-5 (750·u) off and
+  'svd 1.1e-7. Below α = 1e-6·λ_max 'eig is refused. Reversing the rows leaves
+  'eig at 1.81e-3. Standardised X (κ_α ≤ 15), float64 and 'svd are within
+  u·κ_α. Python cuML 26.08 `Ridge(solver='eig')` on the same float32 rows
+  matches rkt-cuml's error to three digits at every k in both weightings
+  (4.08e-4 against 4.08e-4 at k = 1, 2.59e-3 against 2.59e-3 at weighted
+  k = 5); its 'svd is 2.3e-7 to 8.4e-7. The likely mechanism, unverified:
+  `ridgeEig` forms U = XVΣ⁻¹ from float32 eigenpairs of XᵀX, so rounding in
+  Xv_j on the noise-floor eigenpairs is not damped by σ_j.
+  **L3r-a (decision).** Disclosed, behaviour unchanged: the Scribble says
+  'auto and 'eig can lose accuracy whatever α is when XᵀWX has eigenvalues
+  below u·λ_max (u·κ₀ ≥ 1), as in Python cuML, and that 'svd does not. R1–R3
+  bound an 'eig fit only where u·κ₀ < 1; past it a fit over the bound must
+  have u·κ₀ ≥ 1 by the certified lower bound on κ₀ (the inner pair of
+  `eigen-bracket`). 'svd keeps R1–R3 unconditionally. This keeps the Python
+  twins bitwise and needs no threshold; refusing float32 'eig past u·κ₀ ≥ 1
+  by its own eigenvalues, or routing float32 'auto to 'svd (which breaks
+  parity with cuML's defaults, Q-L4), are the owner's alternatives, and
+  float64 refinement (#107) is the systemic fix.
 
 ## Decisions recorded in leg L3 (#89)
 

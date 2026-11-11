@@ -178,8 +178,10 @@ largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
 (λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the
 eigenvalues λ of XᵀWX on the varying columns, X centred as above. Where u·κ@subscript{α} is 1 or more, as
 with columns of very different scales or nearly collinear columns, either solver
-may refuse the fit as ill-conditioned or return it wrong; @tt{plans/layout.md}
-(L2-j, L2-k) has the measurements.
+may refuse the fit as ill-conditioned or return it wrong. @racket['auto] and
+@racket['eig] can also lose accuracy whatever @racket[alpha] is when XᵀWX has
+eigenvalues below u·λ@subscript{max} (u·κ@subscript{0} ≥ 1), as in Python cuML;
+@racket['svd] does not. @tt{plans/layout.md} (L2-j, L2-k) has the measurements.
 
 Fits repeat as @racket[linear-regression-fit]'s, and @racket[X], @racket[y] and
 @racket[sample-weight] are not modified.
