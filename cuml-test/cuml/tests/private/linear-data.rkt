@@ -7,13 +7,19 @@
          (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
          (only-in racket/list drop first make-list take)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match-define struct*)
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "exact-algebra.rkt" condition dot eigen-bracket min-norm-solve))
+         (only-in "exact-algebra.rkt"
+                  condition
+                  dot
+                  eigen-bracket
+                  integer-scaled
+                  min-norm-solve
+                  varying-inner))
 
 (provide (struct-out lcase)
          (struct-out ridge-solution)
@@ -23,7 +29,6 @@
          case-result
          check-law
          columns-of
-         current-conditioning
          decimals
          docs-case
          dtypes
@@ -270,15 +275,9 @@
       (if (zero? got) 0.0 +inf.0)
       (exact->inexact (/ got bound))))
 
-(define current-conditioning (make-parameter #f))
-
 (define (check-law name got bound)
   (define ratio (within got bound))
-  (define conditioning (current-conditioning))
-  (check-true (or (<= ratio 1) (and conditioning (>= conditioning 1)))
-              (if conditioning
-                  (format "~a: ~a of the bound, u·κ ~a" name ratio (exact->inexact conditioning))
-                  (format "~a: ~a of the bound" name ratio))))
+  (check-true (<= ratio 1) (format "~a: ~a of the bound" name ratio)))
 
 (define (columns-of rows)
   (apply map list rows))
@@ -286,12 +285,6 @@
 (define (max-abs xs)
   (for/fold ([m 0]) ([x (in-list xs)])
     (max m (abs x))))
-
-(define (integer-scaled xs)
-  (define d
-    (for/fold ([d 1]) ([x (in-list xs)])
-      (lcm d (denominator x))))
-  (cons d (map (lambda (x) (* d x)) xs)))
 
 (define (weighted-gram X y w fit-intercept)
   (define weights (weights-or-ones w y))
@@ -360,13 +353,14 @@
 (define (ridge-oracles X y w fit-intercept ratios #:relative? [relative? #t])
   (define-values (G b mx my) (weighted-gram X y w fit-intercept))
   (define-values (inner outer) (eigen-bracket G))
+  (define inner₀ (varying-inner G inner))
   (match-define (cons top _) outer)
   (define unit
     (if relative?
         (expt 2 (exact-round (/ (log top) (log 2))))
         1))
   (for/list ([r (in-list ratios)])
-    (ridge-solve G b mx my inner outer (* r unit))))
+    (ridge-solve G b mx my inner₀ outer (* r unit))))
 
 (define (host-cosine X y w coef intercept fit-intercept #:alpha [alpha 0])
   (match-define (cons sw W) (integer-scaled (weights-or-ones w y)))
@@ -406,4 +400,7 @@
   (check-equal? b2 0)
   (match-define (solution c3 b3 _) (oracle-lstsq '((1 0 0) (0 1 0) (0 0 1)) '(1 2 3) #f #t))
   (check-equal? c3 '(-1 0 1))
-  (check-equal? b3 2))
+  (check-equal? b3 2)
+  (match-define (list (struct* ridge-solution ([kappa₀ constant-kappa₀])))
+    (ridge-oracles '((1 5) (2 5) (4 5)) '(1 2 3) #f #t '(1)))
+  (check-true (<= 1 constant-kappa₀ 2) (format "κ₀ over the varying column ~a" constant-kappa₀)))

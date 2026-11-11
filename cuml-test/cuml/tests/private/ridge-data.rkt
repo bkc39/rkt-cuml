@@ -8,7 +8,6 @@
          (only-in "linear-data.rkt"
                   check-law
                   columns-of
-                  current-conditioning
                   dtypes
                   exact-fit
                   gap
@@ -77,18 +76,28 @@
 
 (define ridge-case-fit (compose1 ridge-result-fit ridge-case-result))
 
-(define (check-ridge-fit c fi u solver fit o)
+(define (eig-envelope? dt solver kappa₀)
+  (and (eq? dt 'float32)
+       (memq solver '(auto eig))
+       (>= (* (inexact->exact (unit-roundoff dt)) kappa₀) 1)))
+
+(define (r1-factor dt solver kappa₀)
+  (if (eig-envelope? dt solver kappa₀)
+      (expt 2 10)
+      128))
+
+(define (check-ridge-fit c fi dt solver fit o)
   (match-define (struct* ridge-solution
                          ([alpha alpha] [coef c*] [intercept b*] [kappa kappa] [kappa₀ kappa₀]))
     o)
   (match-define (list coef b) (exact-fit fit))
-  (parameterize ([current-conditioning (and (memq solver '(auto eig)) (* (inexact->exact u) kappa₀))])
-    (check-law "R1" (gap coef c*) (* 128 u kappa (max-abs c*)))
-    (check-law "R3"
-               (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
-               (* 64 u kappa))
-    (when fi
-      (check-law "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c)))))))
+  (define u (unit-roundoff dt))
+  (check-law "R1" (gap coef c*) (* (r1-factor dt solver kappa₀) u kappa (max-abs c*)))
+  (check-law "R3"
+             (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
+             (* 64 u kappa))
+  (when fi
+    (check-law "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))))
 
 (define (check-ridge-laws cases intercepts)
   (for* ([c (in-list cases)]
@@ -100,7 +109,15 @@
       (test-case (format "~a ~a alpha ~a ~a ~a" (lcase-name c) fi alpha dt s)
         (check-ridge-fit c
                          fi
-                         (unit-roundoff dt)
+                         dt
                          s
                          (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)
                          o)))))
+
+(module+ test
+  (require (only-in rackunit check-equal?))
+  (check-equal? (r1-factor 'float32 'eig (expt 2 24)) (expt 2 10))
+  (check-equal? (r1-factor 'float32 'auto +inf.0) (expt 2 10))
+  (check-equal? (r1-factor 'float32 'eig (- (expt 2 24) 1)) 128)
+  (check-equal? (r1-factor 'float32 'svd +inf.0) 128)
+  (check-equal? (r1-factor 'float64 'eig +inf.0) 128))

@@ -3,12 +3,15 @@
 (require (only-in racket/list argmax last splitf-at)
          (only-in racket/match match match-define))
 
-(provide condition
+(provide bracket-condition
+         condition
          dot
          eigen-bracket
          eigen-range
+         integer-scaled
          mat*vec
-         min-norm-solve)
+         min-norm-solve
+         varying-inner)
 
 (define (dot u v)
   (for/sum ([a (in-list u)] [b (in-list v)]) (* a b)))
@@ -17,12 +20,15 @@
   (for/fold ([d 1]) ([x (in-list xs)])
     (lcm d (denominator x))))
 
+(define (integer-scaled xs)
+  (define d (common-denominator xs))
+  (cons d (map (lambda (x) (* d x)) xs)))
+
 (define (mat*vec A v)
   (cond
     [(and (andmap exact? v) (andmap (lambda (row) (andmap exact? row)) A))
      (define dA (common-denominator (apply append A)))
-     (define dv (common-denominator v))
-     (define iv (map (lambda (x) (* dv x)) v))
+     (match-define (cons dv iv) (integer-scaled v))
      (for/list ([row (in-list A)])
        (/ (dot (map (lambda (x) (* dA x)) row) iv) (* dA dv)))]
     [else
@@ -56,9 +62,12 @@
               #:unless (zero? (list-ref row c)))
     i))
 
+(define (augmented A b)
+  (map (lambda (row bi) (append row (list bi))) A b))
+
 (define (rref A b)
   (define d (length A))
-  (let loop ([M (map (lambda (row bi) (append row (list bi))) A b)]
+  (let loop ([M (augmented A b)]
              [r 0]
              [c 0]
              [pivots '()])
@@ -78,21 +87,25 @@
   (define-values (zeros rest) (splitf-at M (lambda (row) (zero? (car row)))))
   (and (pair? rest) (cons (car rest) (append zeros (cdr rest)))))
 
+(define (eliminated rows pivot pivot-tail previous)
+  (for/list ([row (in-list rows)])
+    (match-define (cons f tail) row)
+    (map (lambda (x p) (quotient (- (* pivot x) (* f p)) previous)) tail pivot-tail)))
+
 (define (bareiss M previous)
-  (match (and (pair? M) (pivot-first M))
-    [#f (and (null? M) '())]
-    [(cons (and top (cons pivot pivot-tail)) rest)
-     (define below
-       (bareiss (for/list ([row (in-list rest)])
-                  (match-define (cons f tail) row)
-                  (map (lambda (x p) (quotient (- (* pivot x) (* f p)) previous)) tail pivot-tail))
-                pivot))
+  (define arranged (pivot-first M))
+  (cond
+    [(null? M) '()]
+    [(not arranged) #f]
+    [else
+     (match-define (cons (and top (cons pivot pivot-tail)) rest) arranged)
+     (define below (bareiss (eliminated rest pivot pivot-tail previous) pivot))
      (and below (cons top below))]))
 
 (define (back-substituted rows)
-  (match rows
-    ['() '()]
-    [_
+  (cond
+    [(null? rows) '()]
+    [else
      (match-define (cons determinant _) (last rows))
      (define scaled
        (for/foldr ([x '()])
@@ -102,7 +115,7 @@
      (map (lambda (x) (/ x determinant)) scaled)]))
 
 (define (nonsingular-solve A b)
-  (define M (map (lambda (row bi) (append row (list bi))) A b))
+  (define M (augmented A b))
   (define rows
     (and (for*/and ([row (in-list M)]
                     [x (in-list row)])
@@ -135,9 +148,9 @@
            1]
           [#f 0]
           [row (- (list-ref row f))]))))
-  (match N
-    ['() p]
-    [_
+  (cond
+    [(null? N) p]
+    [else
      (define alpha
        (min-norm-solve (for/list ([u (in-list N)])
                          (for/list ([v (in-list N)])
@@ -171,9 +184,9 @@
 (define singular-pivot (expt 2.0 -60))
 
 (define (float-eliminated M)
-  (match M
-    ['() '()]
-    [_
+  (cond
+    [(null? M) '()]
+    [else
      (define top (argmax (lambda (row) (abs (car row))) M))
      (match-define (cons pivot pivot-tail) top)
      (define p (if (zero? pivot) singular-pivot pivot))
@@ -183,7 +196,7 @@
                                (map (lambda (x q) (- x (* (/ f p) q))) tail pivot-tail))))]))
 
 (define (float-solve A b)
-  (back-substituted (float-eliminated (map (lambda (row bi) (append row (list bi))) A b))))
+  (back-substituted (float-eliminated (augmented A b))))
 
 (define (rayleigh-range G)
   (define G-inexact
@@ -202,11 +215,7 @@
     (match M
       ['() #t]
       [(cons (cons pivot pivot-tail) rest)
-       (and (positive? pivot)
-            (loop (for/list ([row (in-list rest)])
-                    (match-define (cons f tail) row)
-                    (map (lambda (x p) (quotient (- (* pivot x) (* f p)) previous)) tail pivot-tail))
-                  pivot))])))
+       (and (positive? pivot) (loop (eliminated rest pivot pivot-tail previous) pivot))])))
 
 (define (shifted G s)
   (for/list ([row (in-list G)]
@@ -274,7 +283,8 @@
         1
         (expt 2 (binade largest))))
   (define (rescaled pair)
-    (cons (* scale (car pair)) (* scale (cdr pair))))
+    (match-define (cons top bottom) pair)
+    (cons (* scale top) (* scale bottom)))
   (define unit-G
     (for/list ([row (in-list G)])
       (map (lambda (g) (/ g scale)) row)))
@@ -285,13 +295,33 @@
 
 (define (eigen-range G)
   (define-values (_ outer) (eigen-bracket G))
-  (values (car outer) (cdr outer)))
+  (match-define (cons top bottom) outer)
+  (values top bottom))
 
-(define (condition G)
-  (define-values (top bottom) (eigen-range G))
+(define (bracket-condition pair)
+  (match-define (cons top bottom) pair)
   (if (> bottom (* 1e-14 top))
       (sqrt (exact->inexact (/ top bottom)))
       +inf.0))
+
+(define (condition G)
+  (define-values (_ outer) (eigen-bracket G))
+  (bracket-condition outer))
+
+(define (varying-inner G inner)
+  (define kept
+    (for/list ([row (in-list G)]
+               [i (in-naturals)]
+               #:unless (zero? (list-ref row i)))
+      i))
+  (define (kept-of row)
+    (map (lambda (i) (list-ref row i)) kept))
+  (cond
+    [(= (length kept) (length G)) inner]
+    [(null? kept) (cons 0 0)]
+    [else
+     (define-values (varying _) (eigen-bracket (map kept-of (kept-of G))))
+     varying]))
 
 (module+ test
   (require (only-in rackunit check-equal? check-true))
@@ -337,4 +367,43 @@
   (check-true (bracketed? rotated (expt 10 -8) 1))
   (check-true (<= 1e4 (condition rotated) (* 1e4 (+ 1 bracket-margin))))
   (define-values (_ singular) (eigen-range '((1 2) (2 4))))
-  (check-equal? singular 0))
+  (check-equal? singular 0)
+  (define (exactly-bracketed? G spectrum)
+    (define-values (inner outer) (eigen-bracket G))
+    (match-define (cons in-top in-bottom) inner)
+    (match-define (cons out-top out-bottom) outer)
+    (and (<= in-top (apply max spectrum) out-top) (<= out-bottom (apply min spectrum) in-bottom)))
+  (define (rotated-by spectrum [scale 1])
+    (for/list ([u (in-list rotation)])
+      (for/list ([v (in-list rotation)])
+        (for/sum ([a (in-list u)] [b (in-list v)] [s (in-list spectrum)]) (* scale a s b)))))
+  (define (diagonal spectrum)
+    (for/list ([s (in-list spectrum)]
+               [i (in-naturals)])
+      (for/list ([j (in-range (length spectrum))])
+        (if (= i j) s 0))))
+  (for ([spectrum (in-list (list '(5) '(1 1 1) '(4 2 1/1000) (list #e1e30 1 #e1e-30) '(0 0 3)))])
+    (check-true (exactly-bracketed? (diagonal spectrum) spectrum) (format "diagonal ~a" spectrum)))
+  (for ([spectrum
+         (in-list
+          (list spectrum (list 1 1 (expt 10 -8)) (list 1 (expt 10 -8) (expt 10 -8)) '(0 1 2)))])
+    (check-true (exactly-bracketed? (rotated-by spectrum) spectrum) (format "rotated ~a" spectrum))
+    (check-true (exactly-bracketed? (rotated-by spectrum (expt 2 -1100))
+                                    (map (lambda (s) (* s (expt 2 -1100))) spectrum))
+                (format "rotated ~a at 2^-1100" spectrum)))
+  (check-true (exactly-bracketed? '((1 2) (2 4)) '(0 5)))
+  (define-values (singular-inner _o) (eigen-bracket '((1 2) (2 4))))
+  (match-define (cons _t singular-bottom) singular-inner)
+  (check-equal? singular-bottom 0)
+  (check-equal? (integer-scaled '(1/2 1/3 2)) '(6 3 2 12))
+  (check-equal? (integer-scaled '()) '(1))
+  (check-equal? (bracket-condition '(4 . 1)) 2.0)
+  (check-equal? (bracket-condition '(4 . 0)) +inf.0)
+  (check-equal? (bracket-condition '(0 . 0)) +inf.0)
+  (define-values (with-constant-inner _w) (eigen-bracket (diagonal '(4 0 1))))
+  (check-equal? (bracket-condition with-constant-inner) +inf.0)
+  (match-define (cons varying-top varying-bottom)
+    (varying-inner (diagonal '(4 0 1)) with-constant-inner))
+  (check-true (and (<= varying-top 4) (<= 1 varying-bottom (* 1001/1000 1))))
+  (check-equal? (varying-inner (diagonal '(0 0)) '(0 . 0)) '(0 . 0))
+  (check-equal? (varying-inner (diagonal '(4 1)) 'kept) 'kept))

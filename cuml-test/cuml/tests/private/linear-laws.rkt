@@ -5,11 +5,13 @@
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
+         (only-in "exact-algebra.rkt" dot)
          (only-in "linear-data.rkt"
                   algorithms
                   case-fit
                   case-result
                   check-law
+                  columns-of
                   dtypes
                   exact-fit
                   gap
@@ -44,9 +46,14 @@
     (define residual-sum
       (for/sum ([row (in-list (lcase-X c))] [yi (in-list (lcase-y c))] [wi (in-list weights)])
                (* wi (- yi b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))))
+    (define total (apply + weights))
+    (define cancelled
+      (for/sum ([column (in-list (columns-of (lcase-X c)))] [cj (in-list coef)])
+               (abs (* (/ (dot weights column) total) cj))))
     (check-law "T4"
                (abs residual-sum)
-               (* 4 (sqrt (length weights)) u (norm2 (lcase-y c)) (max-abs weights)))))
+               (+ (* 4 (sqrt (length weights)) u (norm2 (lcase-y c)) (max-abs weights))
+                  (* u total (+ (abs b) cancelled))))))
 
 (define (check-oracle-laws cases intercepts)
   (for* ([c (in-list cases)]

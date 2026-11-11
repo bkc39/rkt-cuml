@@ -2,4 +2,7 @@
 
 (require (only-in "private/real-linear-data.rkt" test-real-set))
 
-(test-real-set 'breast-cancer #:checks '(elastic-net) #:dtypes '(float32) #:arms '((raw #f) (raw #t)))
+(test-real-set 'breast-cancer
+               #:checks '(elastic-net)
+               #:dtypes '(float32)
+               #:arms '((raw . unweighted) (raw . weighted)))

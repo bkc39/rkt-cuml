@@ -29,6 +29,8 @@
          permute
          pow2-scaled
          projection
+         r2-bound
+         r2-gap
          random-permutation
          regression-cases
          regression-pair
@@ -305,6 +307,11 @@
   (define spread
     (- (for/sum ([a (in-list ys)] [c (in-list ws)]) (* c a a)) (/ (sqr first-moment) total)))
   (- 1 (/ (for/sum ([a (in-list ys)] [b (in-list ps)] [c (in-list ws)]) (* c (sqr (- a b)))) spread)))
+
+(define r2-bound 1e-14)
+
+(define (r2-gap ours exact)
+  (/ (abs (- (inexact->exact ours) exact)) (max 1 (abs (- 1 exact)))))
 
 (define (row-of v)
   (if (list? v)
