@@ -12,6 +12,8 @@
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true current-test-name test-case)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
+         ;; whole-module: its syntax classes come with it
+         syntax/parse/define
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "exact-algebra.rkt"
@@ -20,9 +22,7 @@
                   eigen-bracket
                   integer-scaled
                   min-norm-solve
-                  varying-inner)
-         ;; whole-module: its syntax classes come with it
-         syntax/parse/define)
+                  varying-inner))
 
 (provide (struct-out lcase)
          (struct-out ridge-solution)
