@@ -1396,7 +1396,8 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   caller's units, after one epoch (F5: rel 0.12 to 2.08 at X·1e5). The shim
   refuses such a stop when K = max_j v_j/(max|b|·D_j) exceeds B + A, with
   v_j the subgradient violation, D_j = max(σ_j² + λ₂, σ_jΣ_kσ_k),
-  λ₂ = α(1−ρ), B = tol and A = u√n_iter·(2 + √m·σ_y·max_j(σ_j/D_j)/max|b|)
+  λ₂ = α(1−ρ), B = tol rounded to the dtype and
+  A = u√n_iter·(2 + √m·σ_y·max_j(σ_j/D_j)/max|b|)
   (L3-m, round 1). A relative stop has v_j ≤ tol·max|b|·σ_jΣ_{k≠j}σ_k, so
   K < B (F10: 3372 relative stops per dtype, K/tol ≤ 0.63; in float32
   rounding puts 128 of 444 over tol, at most 0.085 of A, F11); where λ₂
@@ -1412,9 +1413,9 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   (1e4, 1e6) stops off by more than tol, 13 in both dtypes since L3-o
   (round 1 missed two in float32, at tol 1e-7 with errors 2.2e-7 and
   1.5e-6 of max|c*|: there A/tol was 17 and 15.8, so V16b now refuses them).
-  An absolute stop with K > B and A > B is refused (V16b; L3-o, amended in
-  round 3), after V16: there K ≤ B + A cannot tell a stop within tol from
-  one many times past it. Under a heavy L2 penalty A ≈ u√m/corr(x, y), so a
+  An absolute stop with A > B and K > max(B, tol) is refused (V16b; L3-o,
+  amended in rounds 3 and 4), after V16: there K ≤ B + A cannot tell a
+  stop within tol from one many times past it. Under a heavy L2 penalty A ≈ u√m/corr(x, y), so a
   weak signal on many rows puts it past the default tol (H2: 2^18 × 4
   float32, corr(x, y) 1e-4, α 30, ρ 0 was accepted after one epoch 5.8%
   off, K 0.058; 2^15 rows with y pure noise, α 1500, 2.1e-3 off, K 1.7e-3).
