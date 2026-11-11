@@ -104,7 +104,7 @@
                [j (in-naturals)]
                #:unless (zero? a))
       j))
-  (define signs (map sgn (picked approx S)))
+  (define signs (map (lambda (a) (inexact->exact (sgn a))) (picked approx S)))
   (define bS
     (if (null? S)
         '()
