@@ -139,8 +139,7 @@
   (define largest
     (for/fold ([m 0.0]) ([x (in-list v)])
       (max m (abs x))))
-  (define scaled
-    (map (lambda (x) (/ x largest)) v))
+  (define scaled (map (lambda (x) (/ x largest)) v))
   (define norm (sqrt (dot scaled scaled)))
   (and (positive? largest)
        (< largest +inf.0)
@@ -163,10 +162,7 @@
     [_
      (define top (argmax (lambda (row) (abs (car row))) M))
      (match-define (cons pivot pivot-tail) top)
-     (define p
-       (if (zero? pivot)
-           singular-pivot
-           pivot))
+     (define p (if (zero? pivot) singular-pivot pivot))
      (cons (cons p pivot-tail)
            (float-eliminated (for/list ([row (in-list (remq top M))])
                                (match-define (cons f tail) row)
@@ -300,7 +296,8 @@
   (check-true (<= 1/1000 bottom (* 1001/1000 1/1000)))
   (define (bracketed? G low high)
     (define-values (hi lo) (eigen-range G))
-    (and (<= (* (- 1 (* 2 bracket-margin)) low) lo low) (<= high hi (* (+ 1 (* 2 bracket-margin)) high))))
+    (and (<= (* (- 1 (* 2 bracket-margin)) low) lo low)
+         (<= high hi (* (+ 1 (* 2 bracket-margin)) high))))
   (define hilbert
     (for/list ([i (in-range 6)])
       (for/list ([j (in-range 6)])
