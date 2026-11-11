@@ -1144,6 +1144,19 @@ Follow-ups are GitHub issues.
   stable, within T1's κ of the unscaled X), and eig ('auto) can lose it
   entirely once w/w_max is below about u²; the wrong fit's residual is then at
   rounding level, so the check cannot see it (review r3 M2).
+- **L1-e, T4's intercept term (L3r, #111).** With an intercept every
+  algorithm returns b = ȳ − Σⱼ x̄ⱼcⱼ from its own c, x̄ and ȳ the weighted
+  means, so for any c the T4 sum is Σᵢ wᵢ(yᵢ − b − xᵢ·c) = Σw·(ȳ − Σⱼ x̄ⱼcⱼ − b)
+  exactly: T4 sees the rounding of that formula, never c's error. To first
+  order that rounding is u·|b| for the result and u·|x̄ⱼcⱼ| for each term,
+  one rounding per term, and ȳ's own rounding is the existing
+  4·√n·u·‖y‖₂·max w. T4's bound is therefore
+  4·√n·u·‖y‖₂·max w + u·Σw·(|b| + Σⱼ |x̄ⱼcⱼ|), b and c as returned. The
+  second term was missing, and it dominates where |b| ≪ Σ|x̄ⱼcⱼ|: on
+  breast-cancer raw float32 (|b*| = 1.85, Σ|x̄ⱼc*ⱼ| = 78.6) 'auto, 'eig, 'qr
+  and 'svd-qr were 1.03 to 1.36 of the old bound, and the new term alone is
+  2.73e-3 against the old bound's 2.68e-3. T1 to T4 hold there with no
+  conditioning gate.
 - **L1-e, ordering.** The workspace bound (V7) is checked after staging is
   planned, so it follows the compacted row index, plan_staging's d-sized
   scratch, the column profiles and, for svd, a gesvdj info handle; all are
@@ -1393,14 +1406,16 @@ Follow-ups are GitHub issues.
   Xv_j on the noise-floor eigenpairs is not damped by σ_j.
   **L3r-a (decision).** Disclosed, behaviour unchanged: the Scribble says
   'auto and 'eig can lose accuracy whatever α is when XᵀWX has eigenvalues
-  below u·λ_max (u·κ₀ ≥ 1), as in Python cuML, and that 'svd does not. R1–R3
-  bound an 'eig fit only where u·κ₀ < 1; past it a fit over the bound must
-  have u·κ₀ ≥ 1 by the certified lower bound on κ₀ (the inner pair of
-  `eigen-bracket`). 'svd keeps R1–R3 unconditionally. This keeps the Python
-  twins bitwise and needs no threshold; refusing float32 'eig past u·κ₀ ≥ 1
-  by its own eigenvalues, or routing float32 'auto to 'svd (which breaks
-  parity with cuML's defaults, Q-L4), are the owner's alternatives, and
-  float64 refinement (#107) is the systemic fix.
+  below u·λ_max (u·κ₀ ≥ 1), as in Python cuML, and that 'svd does not. R2
+  and R3 bound every fit. Where u·κ₀ ≥ 1, by the certified lower bound on κ₀
+  over the varying columns (the inner pair of `eigen-bracket`), R1 holds a
+  float32 'auto or 'eig fit to 2¹⁰·u·κ_α·max|c*| in place of 128·u·κ_α·max|c*|.
+  That is a measured envelope, not a guarantee: 8 times R1, above the worst
+  error/(u·κ_α) of 882 in the table. 'svd and float64 keep R1 at 128.
+  This keeps the Python twins bitwise and needs no threshold; refusing
+  float32 'eig past u·κ₀ ≥ 1 by its own eigenvalues, or routing float32
+  'auto to 'svd (which breaks parity with cuML's defaults, Q-L4), are the
+  owner's alternatives, and float64 refinement (#107) is the systemic fix.
 
 ## Decisions recorded in leg L3 (#89)
 
