@@ -82,9 +82,10 @@
      (and below (cons top below))]))
 
 (define (back-substituted rows)
-  (for/foldr ([x '()]) ([row (in-list rows)])
-    (match-define (cons pivot tail) row)
-    (cons (/ (- (last tail) (dot tail x)) pivot) x)))
+  (for/foldr ([x '()])
+             ([row (in-list rows)])
+             (match-define (cons pivot tail) row)
+             (cons (/ (- (last tail) (dot tail x)) pivot) x)))
 
 (define (nonsingular-solve A b)
   (define M (map (lambda (row bi) (append row (list bi))) A b))

@@ -57,13 +57,11 @@
 (struct real-case (c dt p top bottom) #:transparent)
 
 (define real-sets
-  '((diabetes "response" ())
-    (mtcars "mpg" ("model"))
-    (wine "alcohol" ("cultivar"))
-    (breast-cancer "texture-mean" ("diagnosis" "id"))))
+  '((diabetes "response" ()) (mtcars "mpg" ("model"))
+                             (wine "alcohol" ("cultivar"))
+                             (breast-cancer "texture-mean" ("diagnosis" "id"))))
 
-(define arms
-  '((raw #f) (raw #t) (standardised #f) (standardised #t)))
+(define arms '((raw #f) (raw #t) (standardised #f) (standardised #t)))
 
 (define lstsq-algorithms '(auto eig svd svd-jacobi qr svd-qr))
 (define l1-ratios '(1 0.5 0.1))
@@ -127,8 +125,9 @@
         ['raw X]
         ['standardised (standardised X (or w (make-list (length y) 1)))]))
     (define c
-      (rounded-case (lcase (format "~a ~a~a ~a" name scaling (if weighted? " weighted" "") dt) rows y w)
-                    dt))
+      (rounded-case
+       (lcase (format "~a ~a~a ~a" name scaling (if weighted? " weighted" "") dt) rows y w)
+       dt))
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
     (define-values (top bottom) (rayleigh-range (en-problem-G p)))
     (real-case c dt p top bottom)))
@@ -156,9 +155,9 @@
   (* (exact->inexact (en-problem-total (real-case-p rc))) (path-alpha (ridge-lambda-max rc) k)))
 
 (define (ridge-oracle rc alpha)
-  (match-define (struct* real-case ([p (struct* en-problem ([G G] [b b] [mx mx] [my my]))]
-                                    [top top]
-                                    [bottom bottom]))
+  (match-define (struct* real-case
+                         ([p (struct* en-problem ([G G] [b b] [mx mx] [my my]))] [top top]
+                                                                                 [bottom bottom]))
     rc)
   (ridge-solve G b mx my top bottom (inexact->exact alpha)))
 
@@ -178,7 +177,11 @@
     (for ([s (in-list solvers)])
       (test-case (format "~a ridge ~a k ~a" (lcase-name c) s k)
         (parameterize ([current-conditioning (conditioning rc (inexact->exact alpha))])
-          (check-ridge-fit c #t (unit-roundoff dt) (ridge-case-fit c dt #:alpha alpha #:solver s) o))))))
+          (check-ridge-fit c
+                           #t
+                           (unit-roundoff dt)
+                           (ridge-case-fit c dt #:alpha alpha #:solver s)
+                           o))))))
 
 (define (en-options r alpha tol max-iter)
   (if (= r 1)
@@ -190,7 +193,8 @@
   (keyword-apply en-case-fit kws (map (lambda (k) (hash-ref options k)) kws) (list c dt)))
 
 (define (en-oracle rc alpha r)
-  (match-define (struct* real-case ([p (and p (struct* en-problem ([total total])))] [bottom bottom])) rc)
+  (match-define (struct* real-case ([p (and p (struct* en-problem ([total total])))] [bottom bottom]))
+    rc)
   (define o (oracle-elastic-net p alpha r))
   (define l2 (* (inexact->exact alpha) (- 1 (inexact->exact r))))
   (struct-copy en-solution o [mu (exact->inexact (+ (/ bottom total) l2))]))
@@ -230,7 +234,12 @@
       (define o (en-oracle rc alpha r))
       (for ([tol (list default-tol (tight-tol dt))])
         (test-case (format "~a l1-ratio ~a k ~a tol ~a" (lcase-name c) r k tol)
-          (check-en-fit rc o alpha r tol (if (= tol default-tol) default-max-iter tight-max-iter)))))))
+          (check-en-fit rc
+                        o
+                        alpha
+                        r
+                        tol
+                        (if (= tol default-tol) default-max-iter tight-max-iter)))))))
 
 (define (check-real-refusal rc)
   (match-define (struct* real-case ([c c] [dt dt])) rc)
@@ -285,27 +294,36 @@
       (define residual (squared-distance rc coef (lcase-y c)))
       (define r2 (- 1 (/ residual spread)))
       (define gap
-        (~> fitted (predict X) device-vector->list (map inexact->exact _) (squared-distance rc coef _)))
+        (~> fitted
+            (predict X)
+            device-vector->list
+            (map inexact->exact _)
+            (squared-distance rc coef _)))
       (define reach
         (/ (+ (* 2 (sqrt (exact->inexact gap)) (sqrt (exact->inexact residual))) (exact->inexact gap))
            (exact->inexact spread)))
       (define bound (+ reach (* score-rounding (max 1 (exact->inexact (abs (- 1 r2)))))))
       (define got (inexact->exact (score fitted X y #:sample-weight w)))
-      (check-true (<= (exact->inexact (abs (- got r2))) bound)
-                  (format "score ~a, exact ~a, bound ~a" (exact->inexact got) (exact->inexact r2) bound)))))
+      (check-true
+       (<= (exact->inexact (abs (- got r2))) bound)
+       (format "score ~a, exact ~a, bound ~a" (exact->inexact got) (exact->inexact r2) bound)))))
 
 (define (test-real-set name #:dtypes [dts '(float32 float64)])
   (define (cases)
     (real-cases name #:dtypes dts))
-  (test-gpu (format "~a ~a: least squares and ridge are within the laws' bounds of the exact solve" name dts)
+  (test-gpu (format "~a ~a: least squares and ridge are within the laws' bounds of the exact solve"
+                    name
+                    dts)
     (for ([rc (in-list (cases))])
       (check-real-lstsq rc)
       (check-real-ridge rc)))
-  (test-gpu (format "~a ~a: lasso and elastic net meet the KKT laws, and the distance laws at a tight tol"
-                    name
-                    dts)
+  (test-gpu (format
+             "~a ~a: lasso and elastic net meet the KKT laws, and the distance laws at a tight tol"
+             name
+             dts)
     (for-each check-real-elastic-net (cases)))
-  (test-gpu (format "~a ~a: each estimator's score is the exact solution's R² within its predictions' reach"
-                    name
-                    dts)
+  (test-gpu (format
+             "~a ~a: each estimator's score is the exact solution's R² within its predictions' reach"
+             name
+             dts)
     (for-each check-real-score (cases))))

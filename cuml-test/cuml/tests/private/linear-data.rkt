@@ -26,10 +26,8 @@
          current-conditioning
          decimals
          docs-case
-         dot
          dtypes
          dyadic
-         eigen-range
          exact-fit
          fit-gap
          fit-of
@@ -43,7 +41,6 @@
          law-cases
          reach-fixtures
          max-abs
-         min-norm-solve
          normal-case
          on-matrix
          on-vector

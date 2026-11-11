@@ -3,13 +3,8 @@
 (require (only-in racket/flonum flvector flvector-ref flvector-set! make-flvector)
          (only-in racket/match match-define struct*)
          (only-in racket/math sgn sqr)
-         (only-in "linear-data.rkt"
-                  dot
-                  eigen-range
-                  max-abs
-                  min-norm-solve
-                  weighted-gram
-                  weights-or-ones))
+         (only-in "exact-algebra.rkt" dot eigen-range min-norm-solve)
+         (only-in "linear-data.rkt" max-abs weighted-gram weights-or-ones))
 
 (provide (struct-out en-problem)
          (struct-out en-solution)

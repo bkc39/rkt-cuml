@@ -16,9 +16,9 @@
                   oracle-elastic-net
                   problem-of
                   s2-bound)
+         (only-in "exact-algebra.rkt" dot)
          (only-in "linear-data.rkt"
                   check-law
-                  dot
                   dtypes
                   dyadic
                   lcase
