@@ -1407,11 +1407,25 @@ Follow-ups are GitHub issues.
   **L3r-a (decision).** Disclosed, behaviour unchanged: the Scribble says
   'auto and 'eig can lose accuracy whatever α is when XᵀWX has eigenvalues
   below u·λ_max (u·κ₀ ≥ 1), as in Python cuML, and that 'svd does not. R2
-  and R3 bound every fit. Where u·κ₀ ≥ 1, by the certified lower bound on κ₀
-  over the varying columns (the inner pair of `eigen-bracket`), R1 holds a
-  float32 'auto or 'eig fit to 2¹⁰·u·κ_α·max|c*| in place of 128·u·κ_α·max|c*|.
-  That is a measured envelope, not a guarantee: 8 times R1, above the worst
-  error/(u·κ_α) of 882 in the table. 'svd and float64 keep R1 at 128.
+  bounds every fit. Where u·κ₀ ≥ 1, by the certified lower bound on κ₀
+  over the varying columns (the inner pair of `eigen-bracket`), a float32
+  'auto or 'eig fit is held to two measured envelopes, not guarantees:
+  R1 at 2¹⁰·u·κ_α·max|c*| in place of 128·u·κ_α·max|c*| (8 times R1, above
+  the worst error/(u·κ_α) of 882 in the table), and R3 at 2¹⁰·u·κ_α in place
+  of 64·u·κ_α (16 times R3, above the worst 11.58 times below). 'svd and
+  float64 keep R1 at 128 and R3 at 64. Measured on the breast-cancer ridge
+  path, each law's error over its normal bound (R1 over the 2¹⁰ envelope),
+  raw X, float32 'eig:
+
+  | law, weighting | k = 1 | k = 2 | k = 3 | k = 4 | k = 5 |
+  |---|---|---|---|---|---|
+  | R3, unweighted | 9.15 | 6.02 | 1.91 | 0.49 | 0.13 |
+  | R3, weighted | 11.58 | 7.45 | 2.15 | 0.55 | 0.15 |
+  | R1 / 2¹⁰, unweighted | 0.67 | 0.57 | 0.21 | 0.054 | 0.015 |
+  | R1 / 2¹⁰, weighted | 0.86 | 0.75 | 0.23 | 0.061 | 0.017 |
+
+  R2 is at most 0.024 of its bound there, and every 'svd law, raw or
+  standardised, at most 0.073.
   This keeps the Python twins bitwise and needs no threshold; refusing
   float32 'eig past u·κ₀ ≥ 1 by its own eigenvalues, or routing float32
   'auto to 'svd (which breaks parity with cuML's defaults, Q-L4), are the
