@@ -6,13 +6,14 @@
                   linear-regression-result-intercept)
          (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
-         (only-in racket/list drop first last make-list take)
-         (only-in racket/match match match-define)
+         (only-in racket/list drop first make-list take)
+         (only-in racket/match match-define)
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in threading ~>)
-         (only-in "blob-data.rkt" normal-source uniform-source))
+         (only-in "blob-data.rkt" normal-source uniform-source)
+         (only-in "exact-algebra.rkt" condition dot eigen-range min-norm-solve))
 
 (provide (struct-out lcase)
          (struct-out ridge-solution)
@@ -22,6 +23,7 @@
          case-result
          check-law
          columns-of
+         current-conditioning
          decimals
          docs-case
          dot
@@ -52,6 +54,7 @@
          power-spread-gone
          remove-at
          result-fit
+         ridge-solve
          rounded
          rounded-case
          scaled-case
@@ -270,9 +273,15 @@
       (if (zero? got) 0.0 +inf.0)
       (exact->inexact (/ got bound))))
 
+(define current-conditioning (make-parameter #f))
+
 (define (check-law name got bound)
   (define ratio (within got bound))
-  (check-true (<= ratio 1) (format "~a: ~a of the bound" name ratio)))
+  (define conditioning (current-conditioning))
+  (check-true (or (<= ratio 1) (and conditioning (>= conditioning 1)))
+              (if conditioning
+                  (format "~a: ~a of the bound, u·κ ~a" name ratio (exact->inexact conditioning))
+                  (format "~a: ~a of the bound" name ratio))))
 
 (define (columns-of rows)
   (apply map list rows))
@@ -281,141 +290,45 @@
   (for/fold ([m 0]) ([x (in-list xs)])
     (max m (abs x))))
 
-(define (dot u v)
-  (for/sum ([a (in-list u)] [b (in-list v)]) (* a b)))
-
-(define (mat*vec A v)
-  (for/list ([row (in-list A)])
-    (dot row v)))
+(define (integer-scaled xs)
+  (define d
+    (for/fold ([d 1]) ([x (in-list xs)])
+      (lcm d (denominator x))))
+  (cons d (map (lambda (x) (* d x)) xs)))
 
 (define (weighted-gram X y w fit-intercept)
   (define weights (weights-or-ones w y))
   (define total (apply + weights))
-  (define (mean xs)
+  (match-define (cons dw ws) (integer-scaled weights))
+  (define columns (map integer-scaled (columns-of X)))
+  (define ys (integer-scaled y))
+  (define (moment u v)
+    (match-define (cons du us) u)
+    (match-define (cons dv vs) v)
+    (/ (for/sum ([a (in-list us)] [b (in-list vs)] [c (in-list ws)]) (* c a b)) (* dw du dv)))
+  (define (first-moment u)
+    (match-define (cons du us) u)
+    (/ (for/sum ([a (in-list us)] [c (in-list ws)]) (* c a)) (* dw du)))
+  (define sums (map first-moment columns))
+  (define sy (first-moment ys))
+  (define (centred su sv m)
     (if fit-intercept
-        (/ (dot weights xs) total)
+        (- m (/ (* su sv) total))
+        m))
+  (define (mean s)
+    (if fit-intercept
+        (/ s total)
         0))
-  (define (centred xs)
-    (define m (mean xs))
-    (map (lambda (x) (- x m)) xs))
-  (define columns (map centred (columns-of X)))
-  (define yc (centred y))
-  (define (weighted-dot u v)
-    (for/sum ([a (in-list u)] [b (in-list v)] [wi (in-list weights)]) (* wi a b)))
-  (values (for/list ([u (in-list columns)])
-            (for/list ([v (in-list columns)])
-              (weighted-dot u v)))
-          (for/list ([u (in-list columns)])
-            (weighted-dot u yc))
-          (map mean (columns-of X))
-          (mean y)))
-
-(define (swapped M r p)
-  (define row-r (list-ref M r))
-  (define row-p (list-ref M p))
-  (for/list ([row (in-list M)]
-             [i (in-naturals)])
-    (cond
-      [(= i r) row-p]
-      [(= i p) row-r]
-      [else row])))
-
-(define (pivoted M r c)
-  (define row (list-ref M r))
-  (define pivot (map (lambda (x) (/ x (list-ref row c))) row))
-  (for/list ([row (in-list M)]
-             [i (in-naturals)])
-    (define f (list-ref row c))
-    (cond
-      [(= i r) pivot]
-      [(zero? f) row]
-      [else (map (lambda (x p) (- x (* f p))) row pivot)])))
-
-(define (pivot-row M r c)
-  (for/first ([row (in-list (list-tail M r))]
-              [i (in-naturals r)]
-              #:unless (zero? (list-ref row c)))
-    i))
-
-(define (rref A b)
-  (define d (length A))
-  (let loop ([M (map (lambda (row bi) (append row (list bi))) A b)]
-             [r 0]
-             [c 0]
-             [pivots '()])
-    (cond
-      [(or (= r d) (= c d)) (values M (reverse pivots))]
-      [(pivot-row M r c)
-       =>
-       (lambda (p) (loop (pivoted (swapped M r p) r c) (add1 r) (add1 c) (cons c pivots)))]
-      [else (loop M r (add1 c) pivots)])))
-
-(define (min-norm-solve A b)
-  (define d (length A))
-  (define-values (M pivots) (rref A b))
-  (define pivot-rows
-    (for/hash ([c (in-list pivots)]
-               [row (in-list M)])
-      (values c row)))
-  (define p
-    (for/list ([c (in-range d)])
-      (match (hash-ref pivot-rows c #f)
-        [#f 0]
-        [row (last row)])))
-  (define N
-    (for/list ([f (in-range d)]
-               #:unless (hash-has-key? pivot-rows f))
-      (for/list ([c (in-range d)])
-        (match (hash-ref pivot-rows c #f)
-          [_
-           #:when (= c f)
-           1]
-          [#f 0]
-          [row (- (list-ref row f))]))))
-  (match N
-    ['() p]
-    [_
-     (define alpha
-       (min-norm-solve (for/list ([u (in-list N)])
-                         (for/list ([v (in-list N)])
-                           (dot u v)))
-                       (for/list ([u (in-list N)])
-                         (dot u p))))
-     (for/fold ([x p])
-               ([a (in-list alpha)]
-                [u (in-list N)])
-       (map (lambda (xj uj) (- xj (* a uj))) x u))]))
-
-(define (power-top G steps)
-  (define d (length G))
-  (for/fold ([v (make-list d 1.0)]
-             [lam 0.0]
-             #:result lam)
-            ([_ (in-range steps)])
-    (define Gv (mat*vec G v))
-    (define norm (sqrt (dot Gv Gv)))
-    (if (zero? norm)
-        (values v 0.0)
-        (values (map (lambda (x) (/ x norm)) Gv) norm))))
-
-(define (eigen-range G-exact)
-  (define G
-    (for/list ([row (in-list G-exact)])
-      (map exact->inexact row)))
-  (define top (power-top G 300))
-  (define shifted
-    (for/list ([row (in-list G)]
-               [i (in-naturals)])
-      (for/list ([g (in-list row)]
-                 [j (in-naturals)])
-        (- (if (= i j) top 0.0) g))))
-  (values top (- top (power-top shifted 600))))
-
-(define (condition G-exact)
-  (define-values (top bottom) (eigen-range G-exact))
-  (if (> bottom (* 1e-14 top))
-      (sqrt (/ top bottom))
-      +inf.0))
+  (values (for/list ([u (in-list columns)]
+                     [su (in-list sums)])
+            (for/list ([v (in-list columns)]
+                       [sv (in-list sums)])
+              (centred su sv (moment u v))))
+          (for/list ([u (in-list columns)]
+                     [su (in-list sums)])
+            (centred su sy (moment u ys)))
+          (map mean sums)
+          (mean sy)))
 
 (define (oracle-lstsq X y w fit-intercept)
   (define-values (G b mx my) (weighted-gram X y w fit-intercept))

@@ -26,6 +26,7 @@
                   weights-or-ones))
 
 (provide alpha-ratios
+         check-ridge-fit
          check-ridge-laws
          lstsq-algorithm
          norm2
@@ -75,21 +76,26 @@
 
 (define ridge-case-fit (compose1 ridge-result-fit ridge-case-result))
 
+(define (check-ridge-fit c fi u fit o)
+  (match-define (struct* ridge-solution ([alpha alpha] [coef c*] [intercept b*] [kappa kappa])) o)
+  (match-define (list coef b) (exact-fit fit))
+  (check-law "R1" (gap coef c*) (* 128 u kappa (max-abs c*)))
+  (check-law "R3"
+             (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
+             (* 64 u kappa))
+  (when fi
+    (check-law "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))))
+
 (define (check-ridge-laws cases intercepts)
   (for* ([c (in-list cases)]
          [fi (in-list intercepts)])
-    (define y∞ (max-abs (lcase-y c)))
     (for* ([o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi alpha-ratios))]
            [dt (in-list dtypes)]
            [s (in-list solvers)])
-      (match-define (struct* ridge-solution ([alpha alpha] [coef c*] [intercept b*] [kappa kappa])) o)
+      (match-define (struct* ridge-solution ([alpha alpha])) o)
       (test-case (format "~a ~a alpha ~a ~a ~a" (lcase-name c) fi alpha dt s)
-        (define u (unit-roundoff dt))
-        (match-define (list coef b)
-          (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)))
-        (check-law "R1" (gap coef c*) (* 128 u kappa (max-abs c*)))
-        (check-law "R3"
-                   (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
-                   (* 64 u kappa))
-        (when fi
-          (check-law "R2" (abs (- b b*)) (* 8 u kappa y∞)))))))
+        (check-ridge-fit c
+                         fi
+                         (unit-roundoff dt)
+                         (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)
+                         o)))))

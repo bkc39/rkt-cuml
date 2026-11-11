@@ -26,33 +26,40 @@
                   unit-roundoff
                   weights-or-ones))
 
-(provide check-oracle-laws
+(provide check-lstsq-fit
+         check-oracle-laws
          check-prediction-law)
 
 (define (norm2 xs)
   (sqrt (for/sum ([x (in-list xs)]) (* x x))))
 
+(define (check-lstsq-fit c fi u fit o)
+  (match-define (solution c* b* kappa) o)
+  (match-define (list coef b) (exact-fit fit))
+  (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
+  (check-law "T1" (gap coef c*) (* 128 u kappa kappa (max (max-abs c*) 1)))
+  (check-law "T3" (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi) (* 64 u kappa))
+  (when fi
+    (check-law "T2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))
+    (define residual-sum
+      (for/sum ([row (in-list (lcase-X c))] [yi (in-list (lcase-y c))] [wi (in-list weights)])
+               (* wi (- yi b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))))
+    (check-law "T4"
+               (abs residual-sum)
+               (* 4 (sqrt (length weights)) u (norm2 (lcase-y c)) (max-abs weights)))))
+
 (define (check-oracle-laws cases intercepts)
   (for* ([c (in-list cases)]
          [fi (in-list intercepts)])
-    (match-define (solution c* b* kappa) (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi))
-    (define y∞ (max-abs (lcase-y c)))
-    (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
+    (define o (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi))
     (for* ([dt (in-list dtypes)]
            [a (in-list algorithms)])
       (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)
-        (define u (unit-roundoff dt))
-        (match-define (list coef b) (exact-fit (case-fit c dt #:algorithm a #:fit-intercept fi)))
-        (check-law "T1" (gap coef c*) (* 128 u kappa kappa (max (max-abs c*) 1)))
-        (check-law "T3" (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi) (* 64 u kappa))
-        (when fi
-          (check-law "T2" (abs (- b b*)) (* 8 u kappa y∞))
-          (define residual-sum
-            (for/sum ([row (in-list (lcase-X c))] [yi (in-list (lcase-y c))] [wi (in-list weights)])
-                     (* wi (- yi b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))))
-          (check-law "T4"
-                     (abs residual-sum)
-                     (* 4 (sqrt (length weights)) u (norm2 (lcase-y c)) (max-abs weights))))))))
+        (check-lstsq-fit c
+                         fi
+                         (unit-roundoff dt)
+                         (case-fit c dt #:algorithm a #:fit-intercept fi)
+                         o)))))
 
 (define (check-prediction-law cases)
   (for* ([c (in-list cases)]

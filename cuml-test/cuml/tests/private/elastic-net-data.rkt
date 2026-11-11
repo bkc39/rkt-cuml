@@ -36,7 +36,9 @@
          apply-keywords
          case-alpha
          check-accuracy
+         check-distance-laws
          check-elastic-net-laws
+         check-kkt-laws
          coef-distance
          converged?
          correlated-case
@@ -49,6 +51,7 @@
          l1-ratios
          law-alpha
          mirrored-weight-case
+         rows-of
          selections
          tols)
 
@@ -162,11 +165,11 @@
      (>= (hash-ref law-runs law 0) least)
      (format "~a ran ~a times, expected at least ~a" law (hash-ref law-runs law 0) least))))
 
-(define (check-kkt-laws p run alpha r tol rows u)
+(define (check-kkt-laws p run alpha r tol rows u #:relative? [relative? #t])
   (match-define (struct* en-run ([coef coef] [n-iter k])) run)
   (match-define (kkt K B A) (host-kkt p coef alpha r tol k rows u))
   (check-ran "kkt-residual" K (+ B A))
-  (when (>= (max-abs coef) tol)
+  (when (and relative? (>= (max-abs coef) tol))
     (check-ran "relative kkt-residual" K B)))
 
 (define (check-distance-laws o run alpha r tol u fi)
