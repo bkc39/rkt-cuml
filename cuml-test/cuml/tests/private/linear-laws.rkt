@@ -11,6 +11,7 @@
                   case-fit
                   case-result
                   check-law
+                  check-law-case
                   columns-of
                   dtypes
                   exact-fit
@@ -20,6 +21,7 @@
                   lcase-name
                   lcase-w
                   lcase-y
+                  law-case
                   max-abs
                   on-matrix
                   oracle-lstsq
@@ -39,21 +41,22 @@
   (match-define (solution c* b* kappa) o)
   (match-define (list coef b) (exact-fit fit))
   (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
-  (check-law "T1" (gap coef c*) (* 128 u kappa kappa (max (max-abs c*) 1)))
-  (check-law "T3" (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi) (* 64 u kappa))
+  (check-law-case "T1" (gap coef c*) (* 128 u kappa kappa (max (max-abs c*) 1)))
+  (check-law-case "T3" (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi) (* 64 u kappa))
   (when fi
-    (check-law "T2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))
-    (define residual-sum
-      (for/sum ([row (in-list (lcase-X c))] [yi (in-list (lcase-y c))] [wi (in-list weights)])
-               (* wi (- yi b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))))
-    (define total (apply + weights))
-    (define cancelled
-      (for/sum ([column (in-list (columns-of (lcase-X c)))] [cj (in-list coef)])
-               (abs (* (/ (dot weights column) total) cj))))
-    (check-law "T4"
-               (abs residual-sum)
-               (+ (* 4 (sqrt (length weights)) u (norm2 (lcase-y c)) (max-abs weights))
-                  (* u total (+ (abs b) cancelled))))))
+    (check-law-case "T2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))
+    (law-case "T4"
+      (define residual-sum
+        (for/sum ([row (in-list (lcase-X c))] [yi (in-list (lcase-y c))] [wi (in-list weights)])
+                 (* wi (- yi b (for/sum ([x (in-list row)] [cj (in-list coef)]) (* x cj))))))
+      (define total (apply + weights))
+      (define cancelled
+        (for/sum ([column (in-list (columns-of (lcase-X c)))] [cj (in-list coef)])
+                 (abs (* (/ (dot weights column) total) cj))))
+      (check-law "T4"
+                 (abs residual-sum)
+                 (+ (* 4 (sqrt (length weights)) u (norm2 (lcase-y c)) (max-abs weights))
+                    (* u total (+ (abs b) cancelled)))))))
 
 (define (check-oracle-laws cases intercepts)
   (for* ([c (in-list cases)]

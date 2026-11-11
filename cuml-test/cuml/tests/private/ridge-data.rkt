@@ -6,7 +6,7 @@
          (only-in raft device-vector->list)
          (only-in threading ~>)
          (only-in "linear-data.rkt"
-                  check-law
+                  check-law-case
                   columns-of
                   dtypes
                   exact-fit
@@ -81,10 +81,12 @@
        (memq solver '(auto eig))
        (>= (* (inexact->exact (unit-roundoff dt)) kappa₀) 1)))
 
-(define (r1-factor dt solver kappa₀)
+(define envelopes (hash "R1" 8 "R3" 16))
+
+(define (envelope law dt solver kappa₀)
   (if (eig-envelope? dt solver kappa₀)
-      (expt 2 10)
-      128))
+      (hash-ref envelopes law)
+      1))
 
 (define (check-ridge-fit c fi dt solver fit o)
   (match-define (struct* ridge-solution
@@ -92,12 +94,14 @@
     o)
   (match-define (list coef b) (exact-fit fit))
   (define u (unit-roundoff dt))
-  (check-law "R1" (gap coef c*) (* (r1-factor dt solver kappa₀) u kappa (max-abs c*)))
-  (check-law "R3"
-             (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
-             (* 64 u kappa))
+  (define (enveloped law bound)
+    (* (envelope law dt solver kappa₀) bound))
+  (check-law-case "R1" (gap coef c*) (enveloped "R1" (* 128 u kappa (max-abs c*))))
+  (check-law-case "R3"
+                  (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
+                  (enveloped "R3" (* 64 u kappa)))
   (when fi
-    (check-law "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))))
+    (check-law-case "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))))
 
 (define (check-ridge-laws cases intercepts)
   (for* ([c (in-list cases)]
@@ -116,8 +120,10 @@
 
 (module+ test
   (require (only-in rackunit check-equal?))
-  (check-equal? (r1-factor 'float32 'eig (expt 2 24)) (expt 2 10))
-  (check-equal? (r1-factor 'float32 'auto +inf.0) (expt 2 10))
-  (check-equal? (r1-factor 'float32 'eig (- (expt 2 24) 1)) 128)
-  (check-equal? (r1-factor 'float32 'svd +inf.0) 128)
-  (check-equal? (r1-factor 'float64 'eig +inf.0) 128))
+  (check-equal? (envelope "R1" 'float32 'eig (expt 2 24)) 8)
+  (check-equal? (envelope "R3" 'float32 'eig (expt 2 24)) 16)
+  (check-equal? (envelope "R3" 'float32 'auto +inf.0) 16)
+  (check-equal? (envelope "R1" 'float32 'eig (- (expt 2 24) 1)) 1)
+  (check-equal? (envelope "R3" 'float32 'eig (- (expt 2 24) 1)) 1)
+  (check-equal? (envelope "R3" 'float32 'svd +inf.0) 1)
+  (check-equal? (envelope "R3" 'float64 'eig +inf.0) 1))

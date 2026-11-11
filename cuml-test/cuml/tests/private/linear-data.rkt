@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model
+(require (for-syntax racket/base)
+         (only-in cuml/linear-model
                   linear-regression-fit
                   linear-regression-result-coef
                   linear-regression-result-intercept)
@@ -9,7 +10,7 @@
          (only-in racket/list drop first make-list take)
          (only-in racket/match match match-define struct*)
          (only-in racket/math exact-round sqr)
-         (only-in rackunit check-true)
+         (only-in rackunit check-true current-test-name test-case)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
@@ -19,7 +20,9 @@
                   eigen-bracket
                   integer-scaled
                   min-norm-solve
-                  varying-inner))
+                  varying-inner)
+         ;; whole-module: its syntax classes come with it
+         syntax/parse/define)
 
 (provide (struct-out lcase)
          (struct-out ridge-solution)
@@ -28,6 +31,7 @@
          case-fit
          case-result
          check-law
+         check-law-case
          columns-of
          decimals
          docs-case
@@ -43,6 +47,7 @@
          insert-column
          kept-rows
          kappa-of
+         law-case
          law-cases
          reach-fixtures
          max-abs
@@ -278,6 +283,21 @@
 (define (check-law name got bound)
   (define ratio (within got bound))
   (check-true (<= ratio 1) (format "~a: ~a of the bound" name ratio)))
+
+(define (law-name name)
+  (define outer (current-test-name))
+  (if outer
+      (format "~a ~a" outer name)
+      name))
+
+(define-syntax-parse-rule (law-case name:expr body:expr ...+)
+  (test-case (law-name name)
+    body ...))
+
+(define-syntax-parse-rule (check-law-case name:expr got:expr bound:expr)
+  (let ([law name])
+    (law-case law
+      (check-law law got bound))))
 
 (define (columns-of rows)
   (apply map list rows))

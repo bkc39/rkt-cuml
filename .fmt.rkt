@@ -100,14 +100,15 @@
     [("define-hyperparameters") (format-uniform-body/helper 1 #:body-formatter format-entry)]
     [("define-cstruct") (format-uniform-body/helper 1 #:body-formatter format-binding-pairs/indirect)]
     [("define-pretty" "generator") (format-uniform-body/helper 1)]
-    [("test-canary" "test-gpu"
-                    "test-host-probe"
-                    "test-pools"
-                    "test-probe"
-                    "test-process-memory"
-                    "test-twin"
-                    "test-without-gpu"
-                    "with-device-resources")
+    [("law-case" "test-canary"
+                 "test-gpu"
+                 "test-host-probe"
+                 "test-pools"
+                 "test-probe"
+                 "test-process-memory"
+                 "test-twin"
+                 "test-without-gpu"
+                 "with-device-resources")
      (format-body-form 1)]
     [("with-array-views" "with-release") format-with-release]
     [("test-unless-skipped") (format-body-form 2)]

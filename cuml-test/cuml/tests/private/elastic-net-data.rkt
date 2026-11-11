@@ -19,6 +19,7 @@
          (only-in "exact-algebra.rkt" dot)
          (only-in "linear-data.rkt"
                   check-law
+                  check-law-case
                   dtypes
                   dyadic
                   lcase
@@ -157,7 +158,7 @@
 
 (define (check-ran law got bound)
   (hash-update! law-runs law add1 0)
-  (check-law law got bound))
+  (check-law-case law got bound))
 
 (define (check-laws-ran laws)
   (for ([(law least) (in-hash laws)])

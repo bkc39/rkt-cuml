@@ -42,6 +42,7 @@
                   lcase-w
                   lcase-X
                   lcase-y
+                  law-case
                   max-abs
                   on-matrix
                   on-vector
@@ -195,7 +196,8 @@
   (define u (unit-roundoff dt))
   (define run (en-run-at rc r alpha tol max-iter))
   (match-define (struct* en-run ([n-iter k])) run)
-  (check-true (< k max-iter) (format "converged: ~a epochs of ~a" k max-iter))
+  (law-case "converged"
+    (check-true (< k max-iter) (format "converged: ~a epochs of ~a" k max-iter)))
   (check-kkt-laws p
                   run
                   alpha
@@ -232,10 +234,12 @@
   (define alpha (path-alpha (ridge-lambda-max rc) 0))
   (define o (en-oracle rc alpha 0))
   (test-case (format "~a l1-ratio 0 k 0" (lcase-name c))
-    (check-true (< (max-abs (en-solution-coef o)) default-tol))
-    (check-cuml-error 'logic
-                      #rx"; tol is absolute in the coefficients' units, so scale y up or X down$"
-                      (lambda () (en-run-at rc 0 alpha default-tol default-max-iter)))
+    (law-case "exact coefficients below the default tol"
+      (check-true (< (max-abs (en-solution-coef o)) default-tol)))
+    (law-case "refused at the default tol"
+      (check-cuml-error 'logic
+                        #rx"; tol is absolute in the coefficients' units, so scale y up or X down$"
+                        (lambda () (en-run-at rc 0 alpha default-tol default-max-iter))))
     (check-en-fit rc o alpha 0 (tight-tol dt) tight-max-iter)))
 
 (define (score-estimators rc)
