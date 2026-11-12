@@ -1218,14 +1218,30 @@ Follow-ups are GitHub issues.
     max|c̃ − c̃*|. The solver's own error is about c̃, so T1's first term
     takes max|c̃| ≤ max|c̃*| + C1. On breast-cancer float32 the first-order
     form is 358 and 2465 times max|c̃*| at 2¹⁰ (unweighted, weighted), 5833
-    and 40449 at 2¹²; the cap is 3.7, 9.6, 15 and 39 times. The
-    discriminating case is two well-conditioned float32 columns offset by
-    2¹⁶ (an 8 × 8 grid), their means moved by ε̄ along G̃'s bottom
-    eigenvector and solved exactly (`linear-laws-centring-test`): T1 is
-    0.62 of its bound with C1 and 51.9 without it. Breast-cancer cannot be
-    that case: the ε̄ box limits the step along its bottom eigenvector to
-    a few 10⁻⁵, which moves c̃ by at most 1.4·10⁻³ against a solver term of
-    3.8 to 18.7.
+    and 40449 at 2¹²; the cap is 3.7, 9.6, 15 and 39 times. Three host
+    cases, each solved exactly with its means moved inside the ε̄ box
+    (`linear-laws-centring-test`), make C1 decide T1:
+    - two well-conditioned float32 columns offset by 2¹⁶ (an 8 × 8 grid),
+      their means moved by ε̄ along G̃'s bottom eigenvector: the
+      first-order term is the one used (0.022 against a cap of 0.164), and
+      T1 is 0.62 of its bound with C1 and 51.9 without it;
+    - the same grid offset by 2²⁰, moved to the box's edge along the
+      bottom eigenvector, where Σw̃·ẽᵀG̃⁻¹ẽ = 0.77 and x/(1 + x²) is 0.99
+      of its ½: the cap is the term used (2.62 against 5.57), and T1 is
+      0.75 with it and 1.50 with it halved, so a cap too small by 2
+      fails, and a removed cap (C1 then the first-order 5.57) lets the
+      halved check pass. The review's 2²² point, Σw̃·ẽᵀG̃⁻¹ẽ = 1, is in
+      the box but moves t̃ by a quarter of τ (T1 0.22, 0.43 halved), and
+      at 2²⁰ that point is outside the box (1.14 times ε̄₁);
+    - the real-data case, breast-cancer float32 offset by 2¹⁰ weighted,
+      its means at a point of the ε̄ box found by local search (review
+      r4): C1 is the cap (19.0 against 4886), and T1 is 0.079 with C1 and
+      1.46 without it.
+    Breast-cancer discriminates C1 at 2¹⁰ weighted (1.46 without it) and
+    at 2¹² (about 1.13 unweighted and 1.02 weighted), not on the kept arm,
+    2¹⁰ unweighted (0.60). The box's corners move c̃ by 0.9 to 6.2 across
+    the four arms; an earlier probe that tried only multiples of the
+    bottom eigenvector found 1.4·10⁻³.
   - On breast-cancer float32 offset by 2¹⁴, the exact solve of the problem
     centred with raft's medium-kernel means (simulated on the host,
     `linear-laws-centring-test`) has a cosine of 1.32 times 64·u·κ̃: a
@@ -1270,7 +1286,8 @@ Follow-ups are GitHub issues.
   probabilistic and about 4 times smaller on breast-cancer). The earlier
   u·Σw·(|b| + Σⱼ|x̄ⱼcⱼ|) counted one rounding per term. Breast-cancer
   offset by 2¹⁰ with means summed serially in float32 (the review r1
-  t4sim case, `linear-laws-centring-test`) is 18.9 times the old bound
+  t4sim case, `linear-laws-centring-test`, which computes the old term
+  and asserts the residual sum exceeds it) is 18.9 times the old bound
   and 0.63 of this one; the device's compensated reduction keeps x̂ⱼ
   near its first rounding, so the GPU offset set does not tell the two
   apart (at most 0.56 of the old bound). A serial float32 sum of 569
@@ -1285,7 +1302,22 @@ Follow-ups are GitHub issues.
   and the host mutation test). The host test takes the exact c* scaled by
   0.9 with a consistent intercept on every kept arm and requires a law to
   fail: T3 at 2.39 in float32; T1 at 4.6·10⁷ to 4.9·10⁷ and T3 at
-  3.3·10¹⁰ to 3.4·10¹⁰ in float64. The other float32 arms are out:
+  3.3·10¹⁰ to 3.4·10¹⁰ in float64. It also requires, on every kept arm,
+  that a halved intercept fail T4 (1.0·10⁵ of its bound in float32,
+  3.7·10¹³ to 5.4·10¹³ in float64), and on every float64 arm that c*
+  moved by a tenth of ‖c̃*‖ along G̃'s bottom eigenvector fail T1
+  (4.8·10⁷ to 7.9·10⁷).
+  The kept float32 arm detects a coefficient error only through T3, in
+  the well-conditioned directions: 0.99·c* is 0.218 of T3's bound and c*
+  plus 1% along the top eigenvector, in raw units, 0.949. Along the
+  bottom eigenvector, changes up to about 5·‖c̃*‖ fall inside the model's
+  allowed error and pass all four laws: c* plus a tenth of ‖c̃*‖ is T1
+  0.011 and T3 4.3·10⁻⁴, plus 5·‖c̃*‖ T1 0.567 and T3 0.016. There T1's
+  bound is about 29 in staged units against a reachable worst case of
+  about 2.3 + 3.8: the cap (11.8) is 5 times the largest move the box
+  makes (2.28), and max|c̃*| + C1 counts C1 again, at 128·u·κ̃′² ≈ 1.17
+  (review r4 L2). Raw float32 fails at 5·‖c̃*‖ (4.47). The other float32
+  arms are out:
   2¹⁰ weighted and 2¹² both weightings pass that mutation (above), so a
   law check there would be vacuous, and acceptance-only smoke is not kept.
   Float32 at 2¹⁴ is out too: unweighted, every fit is accepted under a

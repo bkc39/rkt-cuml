@@ -116,7 +116,14 @@
   (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
   (gamma (mean-roundings (count positive? weights) (lcase-w c)) u))
 
-(define (check-lstsq-fit c fi u fit exact staged #:coef-centring? [coef-centring? #t])
+(define (check-lstsq-fit c
+                         fi
+                         u
+                         fit
+                         exact
+                         staged
+                         #:coef-centring? [coef-centring? #t]
+                         #:cap-scale [cap-scale 1])
   (match-define (solution c* b* _) exact)
   (match-define (staging scale y-scale weight-scale kept _ top bottom) staged)
   (match-define (list coef b) (exact-fit fit))
@@ -154,7 +161,7 @@
       [else
        (define t (* y-scale (shift c*)))
        (min (/ (* staged-spread staged-total t) bottom)
-            (/ (* t (sqrt staged-total)) (* 2 (sqrt bottom))))]))
+            (/ (* cap-scale t (sqrt staged-total)) (* 2 (sqrt bottom))))]))
   (define solved-kappa
     (bracket-condition (cons (+ top (* staged-total staged-spread staged-spread)) bottom)))
   (define coef-bound
