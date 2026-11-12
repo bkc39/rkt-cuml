@@ -1141,22 +1141,62 @@ Follow-ups are GitHub issues.
   Law T4 tests Σ w r = 0. The bound is on that cosine, not on the
   coefficients: a coefficient fixed only by rows of low weight w carries an
   error of about u·√(w_max/w) under every algorithm (normwise backward
-  stable, within T1's κ of the unscaled X), and eig ('auto) can lose it
+  stable, within T1's κ̃ of the staged X), and eig ('auto) can lose it
   entirely once w/w_max is below about u²; the wrong fit's residual is then at
   rounding level, so the check cannot see it (review r3 M2).
+- **L1-e, the T laws' coordinates (L3r, #111).** Every fit solves the
+  staged problem: column j times D_j = 2^(−⌊log₂ s_j⌋), s_j² = G_jj the
+  weighted (centred with an intercept) Gram's diagonal, the spread
+  `plan_staging` measures; one shared D_j = min over the kept columns for a
+  wide fit (L1-c); y times 2^(−⌊log₂ max|y|⌋) over the positive-weight rows.
+  The staged coefficients are c̃ = 2^(e_y)·D⁻¹c, the problem's condition is
+  κ̃ = κ(G̃)^½ over the kept columns of G̃ = DGD, and `staging-of` computes
+  D, 2^(e_y) and κ̃ exactly from the rationals (`spread_exponent`'s overflow
+  cap binds only for a spread below 2^(−reach) of the column's largest, which
+  a kept dtype column cannot have; a spread within ulps of a power of two can
+  stage one column a factor 2 off the host's D, which moves κ̃ by at most 2).
+  The laws are the earlier ones restated there:
+  - T1: max|c̃ − c̃*| ≤ 128·u·κ̃²·max(max|c̃*|, 1).
+  - T3: the residual cosine is invariant under D and y's power, so only κ
+    changes: ≤ 64·u·κ̃.
+  - T2: b − b* = (b − (ȳ − x̄ᵀc)) − x̄ᵀ(c − c*) exactly, so
+    |b − b*| ≤ B4/Σw + 2^(−e_y)·Σⱼ|x̄ⱼ|D_j·B1, B1 and B4 T1's and T4's
+    bounds. The earlier 8·u·κ·max|y| left out x̄ᵀ(c − c*), which grows with
+    the means where κ̃ does not (the offset set below). On raw and offset
+    data the second term dominates, so T2 there is implied by T1 and T4
+    (ratios ≤ 2.2e-5); with centred columns it is 0.024 at most.
+  With κ of the unscaled X these bounds could not fail on breast-cancer raw
+  float32 (κ = 7.96e5, κ̃ = 390): coefficients halved, with b consistent,
+  passed all four (review r1 H1). In the staged coordinates T3 refuses them
+  at 307 to 316 times its bound on raw float32 (0.9·c*: 61 to 63; c = 0: 614
+  to 633), and T1 at 2.3e8 on raw float64; T1 alone does not, its κ̃² term
+  being 0.92 in float32. Every fit of the breast-cancer lstsq file and the
+  offset file is within 0.52 of every bound.
 - **L1-e, T4's intercept term (L3r, #111).** With an intercept every
   algorithm returns b = ȳ − Σⱼ x̄ⱼcⱼ from its own c, x̄ and ȳ the weighted
   means, so for any c the T4 sum is Σᵢ wᵢ(yᵢ − b − xᵢ·c) = Σw·(ȳ − Σⱼ x̄ⱼcⱼ − b)
-  exactly: T4 sees the rounding of that formula, never c's error. To first
-  order that rounding is u·|b| for the result and u·|x̄ⱼcⱼ| for each term,
-  one rounding per term, and ȳ's own rounding is the existing
-  4·√n·u·‖y‖₂·max w. T4's bound is therefore
-  4·√n·u·‖y‖₂·max w + u·Σw·(|b| + Σⱼ |x̄ⱼcⱼ|), b and c as returned. The
-  second term was missing, and it dominates where |b| ≪ Σ|x̄ⱼcⱼ|: on
-  breast-cancer raw float32 (|b*| = 1.85, Σ|x̄ⱼc*ⱼ| = 78.6) 'auto, 'eig, 'qr
-  and 'svd-qr were 1.03 to 1.36 of the old bound, and the new term alone is
-  2.73e-3 against the old bound's 2.68e-3. T1 to T4 hold there with no
-  conditioning gate.
+  exactly: T4 sees the rounding of that formula, never c's error. cuML's
+  preProcessData takes x̄ⱼ with raft's `mean` (sum, then times fl(1/n)) or
+  `weightedMean` (Σ v·w over Σw, Σw by `raft::stats::sum`), both through
+  raft 26.08's coalesced reduction: each thread sums its strided rows with
+  Kahan–Babuška–Neumaier compensation (at most 2u), then the partials meet in
+  a 32-lane warp tree (thin policy, n ≤ 512: 5 levels) or a cub raking block
+  reduce of 256 (medium, below 2¹⁷ rows: 7 serial adds and 5 levels), and the
+  compensation is added once. Any one value's path holds at most 15 roundings
+  of the sum, so |x̂ⱼ − x̄ⱼ| ≤ γ_h·Σw|xⱼ|/Σw with h = 17 unweighted (the sum, the
+  reciprocal, the product) and h = 32 weighted (the products, the sum, the
+  division, and Σw's own 15). postProcessData's gemm 1×d·d×1 adds γ_d·Σ|x̂ⱼcⱼ|
+  in any order, and the subtraction u·|b|. That is the worst case for the
+  device's order; ȳ keeps the probabilistic 4·√n·u·‖y‖₂·max w as before.
+  T4's bound is therefore 4·√n·u·‖y‖₂·max w + u·Σw·|b| +
+  (γ_h + γ_d)·Σⱼ(Σᵢwᵢ|xᵢⱼ|)·|cⱼ|, b and c as returned. The earlier
+  u·Σw·(|b| + Σⱼ|x̄ⱼcⱼ|) counted one rounding per term; it passed breast-cancer
+  raw float32 only on the ȳ term's headroom (0.68 of it). On the offset set
+  (every column plus 2¹⁰, both dtypes, unweighted and weighted) the measured
+  sums are at most 0.56 of the old bound and 0.016 of the new: the device's
+  compensated reduction keeps x̂ⱼ near its first rounding, so the 18.9 a
+  serial float32 sum would give (review r1 t4sim) does not occur, but nothing
+  in the old count excluded it.
 - **L1-e, ordering.** The workspace bound (V7) is checked after staging is
   planned, so it follows the compacted row index, plan_staging's d-sized
   scratch, the column profiles and, for svd, a gesvdj info handle; all are
