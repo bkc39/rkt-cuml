@@ -6,7 +6,7 @@
                   linear-regression-result-intercept)
          (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
-         (only-in racket/list drop last make-list take)
+         (only-in racket/list drop first last make-list take)
          (only-in racket/match match match-define)
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true)
@@ -15,6 +15,7 @@
          (only-in "blob-data.rkt" normal-source uniform-source))
 
 (provide (struct-out lcase)
+         (struct-out ridge-solution)
          (struct-out solution)
          algorithms
          case-fit
@@ -27,6 +28,7 @@
          fit-gap
          fit-of
          fit-size
+         floor-log2
          gap
          host-cosine
          insert-column
@@ -39,19 +41,24 @@
          on-matrix
          on-vector
          oracle-lstsq
+         oracle-ridge
+         ridge-oracles
          power-spread-case
          power-spread-gone
          remove-at
          result-fit
          rounded
          rounded-case
+         scaled-case
          scaled-columns
          unit-roundoff
+         weighted-spread
          weights-or-ones
          zeroed)
 
 (struct lcase (name X y w) #:transparent)
 (struct solution (coef intercept kappa) #:transparent)
+(struct ridge-solution (alpha coef intercept kappa top bottom xty) #:transparent)
 
 (define algorithms '(auto svd qr svd-qr))
 (define dtypes '(float32 float64))
@@ -137,6 +144,14 @@
 (define (kappa-of c fi)
   (solution-kappa (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi)))
 
+(define (scaled-case c #:X [x-factor 1] #:y [y-factor 1] #:w [w-factor 1])
+  (define (by f xs)
+    (and xs (map (lambda (v) (* f v)) xs)))
+  (lcase (lcase-name c)
+         (map (lambda (row) (by x-factor row)) (lcase-X c))
+         (by y-factor (lcase-y c))
+         (by w-factor (lcase-w c))))
+
 (define (scaled-columns c factors y-factor)
   (lcase (lcase-name c)
          (for/list ([row (in-list (lcase-X c))])
@@ -180,6 +195,13 @@
 
 (define (remove-at xs at)
   (append (take xs at) (drop xs (add1 at))))
+
+(define (floor-log2 x)
+  (let loop ([e (- (integer-length (numerator x)) (integer-length (denominator x)))])
+    (cond
+      [(> (expt 2 e) x) (loop (sub1 e))]
+      [(<= (expt 2 (add1 e)) x) (loop (add1 e))]
+      [else e])))
 
 (define (weighted-spread xs ws)
   (define m (/ (for/sum ([x (in-list xs)] [w (in-list ws)]) (* w x)) (apply + ws)))
@@ -365,7 +387,7 @@
         (values v 0.0)
         (values (map (lambda (x) (/ x norm)) Gv) norm))))
 
-(define (condition G-exact)
+(define (eigen-range G-exact)
   (define G
     (for/list ([row (in-list G-exact)])
       (map exact->inexact row)))
@@ -376,7 +398,10 @@
       (for/list ([g (in-list row)]
                  [j (in-naturals)])
         (- (if (= i j) top 0.0) g))))
-  (define bottom (- top (power-top shifted 600)))
+  (values top (- top (power-top shifted 600))))
+
+(define (condition G-exact)
+  (define-values (top bottom) (eigen-range G-exact))
   (if (> bottom (* 1e-14 top))
       (sqrt (/ top bottom))
       +inf.0))
@@ -386,7 +411,38 @@
   (define c (min-norm-solve G b))
   (solution c (- my (dot mx c)) (condition G)))
 
-(define (host-cosine X y w coef intercept fit-intercept)
+(define (ridge-solve G b mx my top bottom alpha)
+  (define c
+    (min-norm-solve (for/list ([row (in-list G)]
+                               [i (in-naturals)])
+                      (for/list ([g (in-list row)]
+                                 [j (in-naturals)])
+                        (if (= i j)
+                            (+ g alpha)
+                            g)))
+                    b))
+  (ridge-solution alpha
+                  c
+                  (- my (dot mx c))
+                  (/ (+ top alpha) (+ bottom alpha))
+                  top
+                  bottom
+                  (sqrt (dot b b))))
+
+(define (oracle-ridge X y w alpha fit-intercept)
+  (first (ridge-oracles X y w fit-intercept (list alpha) #:relative? #f)))
+
+(define (ridge-oracles X y w fit-intercept ratios #:relative? [relative? #t])
+  (define-values (G b mx my) (weighted-gram X y w fit-intercept))
+  (define-values (top bottom) (eigen-range G))
+  (define unit
+    (if relative?
+        (expt 2 (exact-round (/ (log top) (log 2))))
+        1))
+  (for/list ([r (in-list ratios)])
+    (ridge-solve G b mx my top bottom (* r unit))))
+
+(define (host-cosine X y w coef intercept fit-intercept #:alpha [alpha 0])
   (define weights (weights-or-ones w y))
   (define total (apply + weights))
   (define (centre xs)
@@ -401,11 +457,18 @@
       (- yi intercept (dot row coef))))
   (define yc (centre y))
   (define y-norm (sqrt (for/sum ([v (in-list yc)] [wi (in-list weights)]) (* wi v v))))
-  (for/fold ([worst 0.0]) ([col (in-list (columns-of X))])
+  (define widest (* alpha (max-abs coef)))
+  (for/fold ([worst 0.0])
+            ([col (in-list (columns-of X))]
+             [cj (in-list coef)])
     (define xc (centre col))
-    (define num (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri)))
-    (define norm (sqrt (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x))))
-    (max worst (exact->inexact (/ (abs num) (* norm y-norm))))))
+    (define num
+      (- (for/sum ([x (in-list xc)] [ri (in-list r)] [wi (in-list weights)]) (* wi x ri))
+         (* alpha cj)))
+    (define square (for/sum ([x (in-list xc)] [wi (in-list weights)]) (* wi x x)))
+    (if (zero? square)
+        worst
+        (max worst (exact->inexact (/ (abs num) (+ (* (sqrt square) y-norm) widest)))))))
 
 (module+ test
   (require (only-in rackunit check-equal? check-true))

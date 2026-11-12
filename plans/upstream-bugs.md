@@ -85,6 +85,9 @@ packet (§4) has the detail.
 | L1 #87 | a constant column (or zero column, without an intercept) gives NaN under qr and an arbitrary coefficient under svd | `ols.cuh` | dropped; coefficient 0 |
 | L1 #87 | eig returns results that are not least-squares solutions on collinear float32 data, without any error | `lstsqEig` | residual-cosine refusal |
 | L1 #87 | olsFit asserts on n < 2, d < 1 and unknown algorithm ids; the header documents only algorithms 0–2 | `ols.cuh`, `glm.hpp` | refused before the call |
+| L2 #88 | `ridgeSolve` zeroes singular values ≤ 1e-10 and drops every direction with s² + α < 1e-10, whatever the data's scale | `cpp/src/glm/ridge.cuh` (`zero_small_values`, `binary_div_skip_zero`) | one shared power-of-two staging with max(σ′², α′) ≈ 2^(2H) (L2-a) |
+| L2 #88 | algo 0 (svdQR, `cusolverDngesvd`) throws `CUSOLVER_STATUS_INVALID_VALUE` when n_rows < n_cols | `ridge.cuh` `ridgeSVD` → raft `svdQR` | routed to eig |
+| L2 #88 | `ridgeFit` accepts a negative α (an indefinite solve) without a check | `ridge.cuh` | refused (V8) |
 
 ## cuVS
 
@@ -144,7 +147,7 @@ packet (§4) has the detail.
 | A5 #48 | Gram underflow: below about 1e-19 (float32) or 1e-154 (float64) XᵀX is subnormal or 0, so σ, ev and ratio are 0 and the components arbitrary; at float32 1e-20 the subnormal total variance's reciprocal overflows and the ratio is 0 | `linalg/detail/tsvd.cuh` (Gram gemm, ratio) | X fitted at a power-of-two scale, results scaled back, as A4 #47; fit-transform's matrix is the transform of the unscaled X |
 | A5 #48 | `tsvdTransform` and `tsvdInverseTransform` overflow to ±inf on finite X | `linalg/detail/tsvd.cuh` (gemm) | refused past max/(4·d) and max/(4·k) |
 | L1 #87 | `DivideByNonZero` uses an absolute eps of 1e-10 and returns the numerator below it, so small singular directions are lost whatever the data's scale | `raft/linalg/lstsq.cuh` | per-column power-of-two prescale |
-| L1 #87 | `weightedMean` is not deterministic from run to run above a few thousand rows | `raft/stats/weighted_mean.cuh`, via `preProcessData` | documented (L1-h) |
+| L1 #87 | `weightedMean` is not deterministic from run to run above a few thousand rows | `raft/stats/weighted_mean.cuh`, via `preProcessData` (olsFit, ridgeFit) | documented (L1-h) |
 | L1 #87 | lstsq takes int sizes and sums workspace sizes in int | `raft/linalg/lstsq.cuh` | refused above INT32_MAX |
 
 ## Python cuML
@@ -161,3 +164,5 @@ packet (§4) has the detail.
 | B3 #27 | default n_neighbors max(n/10, 1) is 1 below 20 rows: an all-zero embedding without error | `spectral_embedding.pyx` | default floored at 2, s14 |
 | B3 #27 | no sign rule (sklearn flips each column to a positive largest entry) | `spectral_embedding.pyx` | sign rule in the shim (B3-e) |
 | L1 #87 | one-column X goes to a CuPy SVD, which disagrees with olsFit in the last bits | `linear_regression.pyx` | bound to olsFit |
+| L2 #88 | `Ridge` accepts α = nan (NaN coefficients) and α = inf (zero coefficients); it refuses only α < 0 | `ridge.pyx` | refused |
+| L2 #88 | `solver='auto'` with one column uses a CuPy SVD, which differs from `ridgeFit` in the last bits | `ridge.pyx` | bound to `ridgeFit` |

@@ -230,6 +230,16 @@ inline std::string fit_into(const resources& res, fitted& f, const rr_view* x,
   return f.status;
 }
 
+inline std::string ridge_into(const resources& res, fitted& f, const rr_view* x,
+                              const rr_view* y, const rr_view* w = nullptr,
+                              double alpha = 1.0, int32_t fit_intercept = 1,
+                              int32_t solver = CUML_LINEAR_MODEL_RIDGE_EIG) {
+  f.status =
+      outcome(cuml_linear_model_ridge_fit(res.handle, x, y, w, &f.out.r, alpha,
+                                          fit_intercept, solver, &f.intercept));
+  return f.status;
+}
+
 inline std::string predict_into(const resources& res, record& out,
                                 const rr_view* x, const rr_view* coef,
                                 double intercept) {

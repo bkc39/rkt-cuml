@@ -4,10 +4,12 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
+#include <optional>
 #include <raft/core/handle.hpp>
 #include <ranges>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -23,9 +25,6 @@ namespace cumlrkt::glm {
 
 namespace {
 
-template <typename T>
-constexpr int tolerance_bits = std::is_same_v<T, float> ? 8 : 18;
-
 struct device_columns {
   buffer<int64_t> kept;
   buffer<int> exponent;
@@ -35,11 +34,32 @@ struct device_columns {
   }
 };
 
+struct stationarity_terms {
+  std::string_view solution;
+  std::string_view residual;
+  std::string_view cause;
+};
+
 device_columns columns_of(const staging& s, rmm::cuda_stream_view stream) {
   std::vector<int> e(s.kept.size());
   std::ranges::transform(s.kept, e.begin(),
                          [&](int64_t j) { return s.column_exponent[j]; });
   return {to_device(s.kept, stream), to_device(e, stream)};
+}
+
+template <typename T>
+double largest_magnitude(const std::vector<T>& b) {
+  double largest = 0;
+  for (const T bk : b) {
+    largest = std::max(largest, std::abs(static_cast<double>(bk)));
+  }
+  return largest;
+}
+
+}  // namespace
+
+int even_floor(int x) {
+  return x - (((x % 2) + 2) % 2);
 }
 
 double cosine_of(const moment& m, scaled_sum y) {
@@ -49,10 +69,26 @@ double cosine_of(const moment& m, scaled_sum y) {
       ratio, (2 * m.cross.exponent) - m.square.exponent - y.exponent));
 }
 
-}  // namespace
-
-int even_floor(int x) {
-  return x - (((x % 2) + 2) % 2);
+double stationarity_of(const moment& m, scaled_sum y, ridge_penalty p) {
+  if (p.alpha == 0) {
+    return cosine_of(m, y);
+  }
+  const double penalty = p.alpha * p.coefficient;
+  const double widest = p.alpha * p.largest;
+  if (!std::isfinite(widest)) {
+    return INFINITY;
+  }
+  const int product = m.square.exponent + y.exponent;
+  const int half = even_floor(product) / 2;
+  const double norms =
+      std::sqrt(std::ldexp(m.square.value * y.value, product - (2 * half)));
+  const int top = widest == 0
+                      ? std::max(m.cross.exponent, half)
+                      : std::max({m.cross.exponent, half, std::ilogb(widest)});
+  const double gradient = std::ldexp(m.cross.value, m.cross.exponent - top) -
+                          std::ldexp(penalty, -top);
+  const double size = std::ldexp(norms, half - top) + std::ldexp(widest, -top);
+  return std::abs(gradient) / size;
 }
 
 std::string algorithm_name(int algorithm) {
@@ -98,6 +134,7 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   staging s;
   s.column_exponent.resize(x.d);
   s.largest.resize(x.d);
+  s.spread.resize(x.d);
   s.normalised_mean.resize(x.d);
   s.normalised_remainder.resize(x.d);
   for (int64_t j = 0; j < x.d; ++j) {
@@ -105,6 +142,7 @@ staging plan_staging(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     s.column_exponent[j] =
         spread_exponent<T>(unit[j], spread[j].spread, rows.count);
     s.largest[j] = p.largest;
+    s.spread[j] = spread[j].spread;
     s.normalised_mean[j] = p.mean;
     s.normalised_remainder[j] = spread[j].remainder;
     if (p.varies) {
@@ -186,13 +224,20 @@ void require_finite_solution(const T* staged, int64_t d, T intercept,
 }
 
 template <typename T>
-void require_least_squares(double cosine, int algorithm) {
-  if (!(cosine <= std::ldexp(1.0, -tolerance_bits<T>))) {
-    throw logic_error(std::format(
-        "X: the {} solve is not a least-squares solution (residual cosine {} "
-        "> 2^-{}); X may have collinear columns",
-        algorithm_name(algorithm), printed(cosine), tolerance_bits<T>));
+void require_stationary(double cosine, glm_solver solver) {
+  if (cosine <= std::ldexp(1.0, -tolerance_bits<T>)) {
+    return;
   }
+  const auto [solution, residual, cause] =
+      solver.family == glm_family::ridge
+          ? stationarity_terms{"ridge", "gradient",
+                               "X is ill-conditioned for this alpha"}
+          : stationarity_terms{"least-squares", "residual",
+                               "X may have collinear columns"};
+  throw logic_error(std::format(
+      "X: the {} solve is not a {} solution ({} cosine {} > 2^-{}); {}",
+      algorithm_name(solver.algorithm), solution, residual, printed(cosine),
+      tolerance_bits<T>, cause));
 }
 
 template <typename T>
@@ -209,18 +254,26 @@ void require_in_range(int64_t column, T intercept) {
 }
 
 template <typename T>
-double residual_cosine(const raft::handle_t& handle,
-                       const matrix<T, int64_t>& x, const T* y, const T* w,
-                       row_selection rows, const staging& s, const T* coef,
-                       bool fit_intercept) {
+double stationarity_cosine(const raft::handle_t& handle,
+                           const matrix<T, int64_t>& x, const T* y, const T* w,
+                           row_selection rows, const staging& s, const T* coef,
+                           bool fit_intercept, T alpha) {
   const residual_terms terms =
       residual_moments(handle, x, y, w, rows, s, coef, fit_intercept);
+  const auto count = static_cast<int64_t>(terms.moments.size());
+  const std::optional<std::vector<T>> b =
+      alpha == 0 ? std::nullopt
+                 : std::optional(to_host(coef, count, stream_of(handle)));
+  const double largest = b ? largest_magnitude(*b) : 0.0;
   double worst = 0;
-  for (size_t k = 0; k < terms.moments.size(); ++k) {
+  for (int64_t k = 0; k < count; ++k) {
     if (terms.largest[k] == 0) {
       continue;
     }
-    const double g = cosine_of(terms.moments[k], terms.y_square);
+    const double g =
+        stationarity_of(terms.moments[k], terms.y_square,
+                        {static_cast<double>(alpha),
+                         b ? static_cast<double>((*b)[k]) : 0.0, largest});
     worst = std::isnan(g) || std::isnan(worst) ? NAN : std::max(worst, g);
   }
   return worst;
@@ -252,19 +305,19 @@ template void require_finite_solution<float>(const float*, int64_t, float, int,
                                              rmm::cuda_stream_view);
 template void require_finite_solution<double>(const double*, int64_t, double,
                                               int, rmm::cuda_stream_view);
-template void require_least_squares<float>(double, int);
-template void require_least_squares<double>(double, int);
+template void require_stationary<float>(double, glm_solver);
+template void require_stationary<double>(double, glm_solver);
 template void require_in_range<float>(int64_t, float);
 template void require_in_range<double>(int64_t, double);
-template double residual_cosine<float>(const raft::handle_t&,
-                                       const matrix<float, int64_t>&,
-                                       const float*, const float*,
-                                       row_selection, const staging&,
-                                       const float*, bool);
-template double residual_cosine<double>(const raft::handle_t&,
-                                        const matrix<double, int64_t>&,
-                                        const double*, const double*,
-                                        row_selection, const staging&,
-                                        const double*, bool);
+template double stationarity_cosine<float>(const raft::handle_t&,
+                                           const matrix<float, int64_t>&,
+                                           const float*, const float*,
+                                           row_selection, const staging&,
+                                           const float*, bool, float);
+template double stationarity_cosine<double>(const raft::handle_t&,
+                                            const matrix<double, int64_t>&,
+                                            const double*, const double*,
+                                            row_selection, const staging&,
+                                            const double*, bool, double);
 
 }  // namespace cumlrkt::glm

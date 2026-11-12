@@ -196,6 +196,19 @@
       #:labels values
       #:settings ())))
 
+(define regressor-definition
+  '((provide gauge
+             gauge?
+             gauge-model)
+    (define (gauge-fit/who who X y)
+      (list who X y))
+    (define (gauge-predict/who who model X)
+      (list who model X))
+    (define-regressor gauge
+      #:hyperparameters gauge-params
+      #:fit gauge-fit/who
+      #:predict gauge-predict/who)))
+
 (define helper-used-in-a-template
   '((require (for-syntax racket/base)) (provide m)
                                        (define (helper x)
@@ -227,6 +240,9 @@
 
 (test-case "define-estimator binds the constructor, the predicate and the model accessor"
   (check-equal? (problems-in estimator-definition) '()))
+
+(test-case "define-regressor binds the constructor, the predicate and the model accessor"
+  (check-equal? (problems-in regressor-definition) '()))
 
 (test-case "a binding used only in a macro's template is used"
   (check-equal? (problems-in helper-used-in-a-template) '()))

@@ -7,6 +7,7 @@
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "cumlrkt/scale.hpp"
@@ -19,6 +20,7 @@ struct staging {
   int y_exponent;
   std::vector<int64_t> kept;
   std::vector<double> largest;
+  std::vector<double> spread;
   std::vector<double> normalised_mean;
   std::vector<double> normalised_remainder;
 };
@@ -33,14 +35,28 @@ struct row_selection {
   int64_t count;
 };
 
+enum class glm_family : std::uint8_t { ols, ridge };
+
+struct glm_solver {
+  glm_family family;
+  int algorithm;
+};
+
 int even_floor(int x);
 
 template <typename T>
+constexpr int tolerance_bits = std::is_same_v<T, float> ? 8 : 18;
+
+template <typename T>
+int column_reach(int64_t n) {
+  return std::numeric_limits<T>::max_exponent - 2 -
+         std::bit_width(static_cast<uint64_t>(n));
+}
+
+template <typename T>
 int spread_exponent(int largest, double spread, int64_t n) {
-  const int reach = std::numeric_limits<T>::max_exponent - 2 -
-                    std::bit_width(static_cast<uint64_t>(n));
   const int e = spread > 0 ? largest + unit_exponent(spread) : largest;
-  return std::min(e, largest + reach);
+  return std::min(e, largest + column_reach<T>(n));
 }
 
 int64_t ols_workspace(int algorithm, ols_shape shape, int64_t cusolver_lwork);
@@ -94,15 +110,15 @@ void require_finite_solution(const T* staged, int64_t d, T intercept,
                              int algorithm, rmm::cuda_stream_view stream);
 
 template <typename T>
-void require_least_squares(double cosine, int algorithm);
+void require_stationary(double cosine, glm_solver solver);
 
 template <typename T>
 void require_in_range(int64_t column, T intercept);
 
 template <typename T>
-double residual_cosine(const raft::handle_t& handle,
-                       const matrix<T, int64_t>& x, const T* y, const T* w,
-                       row_selection rows, const staging& s, const T* coef,
-                       bool fit_intercept);
+double stationarity_cosine(const raft::handle_t& handle,
+                           const matrix<T, int64_t>& x, const T* y, const T* w,
+                           row_selection rows, const staging& s, const T* coef,
+                           bool fit_intercept, T alpha);
 
 }  // namespace cumlrkt::glm

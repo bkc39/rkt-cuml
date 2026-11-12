@@ -24,6 +24,16 @@ struct residual_terms {
   scaled_sum y_square;
 };
 
+double cosine_of(const moment& m, scaled_sum y);
+
+struct ridge_penalty {
+  double alpha;
+  double coefficient;
+  double largest;
+};
+
+double stationarity_of(const moment& m, scaled_sum y, ridge_penalty p);
+
 template <typename T>
 residual_terms residual_moments(const raft::handle_t& handle,
                                 const matrix<T, int64_t>& x, const T* y,

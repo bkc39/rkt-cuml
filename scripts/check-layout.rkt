@@ -25,6 +25,9 @@
                              linear-regression-model
                              linear-regression?
                              pca
+                             ridge
+                             ridge-model
+                             ridge?
                              single-linkage
                              spectral-clustering
                              spectral-embedding

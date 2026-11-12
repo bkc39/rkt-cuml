@@ -12,6 +12,7 @@
 
 (provide cuml-linear-model-gemm-predict-job
          cuml-linear-model-linear-regression-fit-job
+         cuml-linear-model-ridge-fit-job
          libcuml-version)
 
 (define-runtime-path native-libs-dir "../native-libs")
@@ -24,6 +25,12 @@
             library
             "cuml_linear_model_linear_regression_fit_job"
             (handle view view view deposit _int32 _int32 (out _double))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-ridge-fit-job
+            library
+            "cuml_linear_model_ridge_fit_job"
+            (handle view view view deposit _double _int32 _int32 (out _double))
             #:exn exn:fail:cuml)
 
 (define-job cuml-linear-model-gemm-predict-job

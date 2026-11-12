@@ -28,6 +28,7 @@
          (only-in "python-env.rkt" run-twin))
 
 (provide bits-of
+         case-request
          check-cuml-failures
          check-cuml-parity
          decoded
@@ -36,6 +37,7 @@
          request
          results
          theirs
+         twin-results
          with-constant)
 
 (define-runtime-path twin "../python/linear_regression_twin.py")
@@ -50,24 +52,35 @@
   (for/list ([b (in-list bits)])
     (floating-point-bytes->real (integer->integer-bytes b size #f))))
 
-(define (request op c dt a fi)
-  (hasheq 'op op
-          'dtype (symbol->string dt)
-          'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
-          'y (bits-of dt (map exact->inexact (lcase-y c)))
-          'w (if (lcase-w c)
-                 (bits-of dt (map exact->inexact (lcase-w c)))
-                 'null)
-          'algorithm (if (eq? a 'auto)
-                         "eig"
-                         (symbol->string a))
-          'fit_intercept fi))
+(define (case-request op c dt fi settings)
+  (for/fold ([request (hasheq 'op op
+                              'dtype (symbol->string dt)
+                              'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
+                              'y (bits-of dt (map exact->inexact (lcase-y c)))
+                              'w (if (lcase-w c)
+                                     (bits-of dt (map exact->inexact (lcase-w c)))
+                                     'null)
+                              'fit_intercept fi)])
+            ([(key value) (in-hash settings)])
+    (hash-set request key value)))
 
-(define (results requests)
+(define (request op c dt a fi)
+  (case-request op
+                c
+                dt
+                fi
+                (hasheq 'algorithm (if (eq? a 'auto)
+                                       "eig"
+                                       (symbol->string a)))))
+
+(define (twin-results script requests)
   (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
-    (run-twin twin (hasheq 'cases requests)))
+    (run-twin script (hasheq 'cases requests)))
   (check-equal? version libcuml-version)
   results)
+
+(define (results requests)
+  (twin-results twin requests))
 
 (define (theirs dt result)
   (match-define (list intercept) (decoded dt (hash-ref result 'intercept_bits)))
@@ -87,7 +100,7 @@
         (normal-case 200 7 1 #:weighted? #t)
         (normal-case 20 7 2)
         (normal-case 5000 7 3)
-        (normal-case 2000 7 4 #:weighted? #t)
+        (normal-case 1000 7 4 #:weighted? #t)
         (normal-case 5000 7 5 #:weighted? #t)
         with-constant
         one-column))

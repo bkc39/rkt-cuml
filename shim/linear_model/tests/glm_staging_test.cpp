@@ -18,6 +18,7 @@
 #include "glm_staging_device.hpp"
 #include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
+#include "residual_check.hpp"
 
 namespace {
 
@@ -25,20 +26,29 @@ using cumlrkt::matrix;
 using cumlrkt::glm::column_profile;
 using cumlrkt::glm::column_profiles;
 using cumlrkt::glm::constant_vector;
+using cumlrkt::glm::cosine_of;
+using cumlrkt::glm::moment;
 using cumlrkt::glm::ols_workspace;
 using cumlrkt::glm::plan_staging;
 using cumlrkt::glm::profiles;
 using cumlrkt::glm::require_finite_solution;
-using cumlrkt::glm::require_workspace;
+using cumlrkt::glm::ridge_penalty;
 using cumlrkt::glm::row_selection;
+using cumlrkt::glm::scaled_sum;
 using cumlrkt::glm::spread_exponent;
 using cumlrkt::glm::staged_weights;
 using cumlrkt::glm::staging;
+using cumlrkt::glm::stationarity_of;
 using cumlrkt::glm::to_host;
 using cumlrkt::glm::uniform;
 using cumlrkt::glm::unstage_coef;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
+
+void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork) {
+  cumlrkt::glm::require_workspace({cumlrkt::glm::glm_family::ols, algorithm},
+                                  {n, d}, lwork);
+}
 
 std::string refusal_of(void (*f)(int, int64_t, int64_t, int64_t), int a,
                        int64_t n, int64_t d, int64_t lwork) {
@@ -101,7 +111,7 @@ TEST(OlsWorkspace, CusolverWorkspacesAtTheSvdBoundaries) {
   const int64_t n = 40000;
   for (const int64_t d : {int64_t{20000}, int64_t{26000}}) {
     const int64_t lwork = cumlrkt::glm::cusolver_lwork_of<float>(
-        h, CUML_LINEAR_MODEL_OLS_SVD, {n, d});
+        h, {cumlrkt::glm::glm_family::ols, CUML_LINEAR_MODEL_OLS_SVD}, {n, d});
     EXPECT_GE(lwork, 0) << d;
     const int64_t size =
         ols_workspace(CUML_LINEAR_MODEL_OLS_SVD, {n, d}, lwork);
@@ -281,7 +291,7 @@ TEST(UnstageCoef, ZerosDroppedColumnsAndReportsTheFirstOverflow) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const raft::handle_t& h = handle_of(res);
-  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}, {}, {}, {}};
+  staging s{{3, 0, -2, 1}, 1, {0, 2, 3}, {}, {}, {}, {}};
   const filled<float> staged(res, {1.5F, -2.0F, 4.0F}, {3});
   filled<float> coef(res, {poison, poison, poison, poison}, {4});
   EXPECT_EQ(unstage_coef(h, data_of(staged), s, 4,
@@ -333,6 +343,84 @@ TEST(FiniteSolution, ANonFiniteInterceptIsRefused) {
   EXPECT_EQ(finite_refusal(res, good, std::numeric_limits<double>::infinity(),
                            CUML_LINEAR_MODEL_OLS_EIG),
             "X: the eig solve gave a non-finite coefficient");
+}
+
+struct stationarity_row {
+  moment m;
+  scaled_sum y;
+  ridge_penalty penalty;
+  double cosine;
+};
+
+void expect_the_residual_cosine(const moment& m, scaled_sum y, double b) {
+  const double largest = std::abs(b);
+  EXPECT_EQ(stationarity_of(m, y, {0.0, b, largest}), cosine_of(m, y)) << b;
+  EXPECT_EQ(stationarity_of(m, y, {-0.0, b, largest}), cosine_of(m, y)) << b;
+}
+
+TEST(Stationarity, PinWithoutAPenaltyItIsTheResidualCosineBitwise) {
+  const std::vector<moment> moments{
+      {{0x1.4p-1, 4}, {0x1.8p-1, 3}},
+      {{0x1.fffffp-1, -1021}, {-0x1.3p-1, -40}},
+      {{0x1.1p-1, 900}, {0x1.7p-1, 950}},
+  };
+  const std::vector<scaled_sum> ys{{0x1.2p-1, 5}, {0x1.9p-1, -3}};
+  const std::vector<double> coefficients{0.0, 0x1.5p-30, -0x1.5p300};
+  for (const moment& m : moments) {
+    for (const scaled_sum& y : ys) {
+      for (const double b : coefficients) {
+        expect_the_residual_cosine(m, y, b);
+      }
+    }
+  }
+}
+
+TEST(Stationarity, ACoefficientTheSolveZeroedUnderALargePenaltyIsSeen) {
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p40, 0.0, 0.0}, 0.5},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p40, 0x1p-41, 0x1p-41}, 0.0},
+      {{{1.0, 2000}, {0.5, 1050}}, {1.0, 100}, {0x1p1000, 0.0, 0.0}, 0.5},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {1.0, 0.25, 0.25}, 0.2},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
+        << r.penalty.alpha;
+  }
+}
+
+TEST(Stationarity, ThePenaltyScaleIsTheLargestCoefficients) {
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {1.0, 0.25, 4.0}, 0.05},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p40, 0.0, 0x1p-40}, 0.25},
+      {{{1.0, 1900}, {0.5, 1000}}, {1.0, 100}, {0x1p950, 0.0, 0x1p50}, 0.25},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
+        << r.penalty.largest;
+  }
+}
+
+TEST(Stationarity, APenaltyPastTheDoubleRangeIsNotStationary) {
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p1000, 0x1p100, 0x1p100}, INFINITY},
+      {{{1.0, 0}, {0.5, 0}}, {1.0, 0}, {0x1p1000, 0.0, 0x1p100}, INFINITY},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
+        << r.penalty.coefficient;
+  }
+}
+
+TEST(Stationarity, AnOddSpreadExponentSplitsBetweenTheTwoNorms) {
+  const double root_half = std::sqrt(0.5);
+  const std::vector<stationarity_row> rows{
+      {{{1.0, 3}, {0.5, 2}}, {1.0, 0}, {0x1p-60, 0.0, 0.0}, root_half},
+      {{{1.0, -3}, {0.5, -1}}, {1.0, 0}, {0x1p-60, 0.0, 0.0}, root_half},
+  };
+  for (const stationarity_row& r : rows) {
+    EXPECT_DOUBLE_EQ(stationarity_of(r.m, r.y, r.penalty), r.cosine)
+        << r.m.square.exponent;
+  }
 }
 
 }  // namespace

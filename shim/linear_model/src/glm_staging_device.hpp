@@ -29,6 +29,17 @@ std::vector<T> to_host(const buffer<T>& b, rmm::cuda_stream_view stream) {
 }
 
 template <typename T>
+std::vector<T> to_host(const T* v, int64_t n, rmm::cuda_stream_view stream) {
+  std::vector<T> host(n);
+  raftrkt::cuda_check(cudaMemcpyAsync(host.data(), v, n * sizeof(T),
+                                      cudaMemcpyDeviceToHost, stream.value()),
+                      "cudaMemcpyAsync");
+  raftrkt::cuda_check(cudaStreamSynchronize(stream.value()),
+                      "cudaStreamSynchronize");
+  return host;
+}
+
+template <typename T>
 buffer<T> to_device(const std::vector<T>& host, rmm::cuda_stream_view stream) {
   buffer<T> b = scratch<T>(static_cast<int64_t>(host.size()), stream);
   if (!host.empty()) {

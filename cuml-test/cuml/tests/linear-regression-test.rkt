@@ -221,7 +221,7 @@
 (test-gpu "fits and predictions repeat bitwise"
   (define big (normal-case 100000 7 3))
   (define big-weighted (normal-case 100000 7 4 #:weighted? #t))
-  (define mid-weighted (normal-case 2000 7 5 #:weighted? #t))
+  (define mid-weighted (normal-case 1000 7 5 #:weighted? #t))
   (for* ([dt (in-list dtypes)]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" dt a)

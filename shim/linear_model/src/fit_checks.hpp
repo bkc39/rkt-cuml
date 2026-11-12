@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <raft/core/handle.hpp>
 
 #include "cumlrkt/support.hpp"
@@ -30,14 +31,21 @@ struct fit_request {
   int32_t algorithm;
 };
 
-void require_workspace(int algorithm, int64_t n, int64_t d, int64_t lwork);
+int64_t workspace_of(glm_solver solver, ols_shape shape, int64_t lwork);
+
+void require_workspace(glm_solver solver, ols_shape shape, int64_t lwork);
 
 template <typename T>
-int64_t cusolver_lwork_of(const raft::handle_t& handle, int algorithm,
+int64_t cusolver_lwork_of(const raft::handle_t& handle, glm_solver solver,
                           ols_shape shape);
+
+void require_fit_intercept(int32_t fit_intercept);
+
+void require_ols_codes(const fit_request& request);
 
 template <typename T>
 checked_fit<T> checked_inputs(const raft::handle_t& handle,
-                              const fit_request& request);
+                              const fit_request& request,
+                              const std::function<void()>& require_codes);
 
 }  // namespace cumlrkt::glm

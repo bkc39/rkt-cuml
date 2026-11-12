@@ -22,7 +22,7 @@
   [algorithm 'auto]
   [fit-intercept #t])
 
-(define-codes algorithm-code [auto 1] [eig 1] [svd 0] [svd-jacobi 0] [qr 2] [svd-qr 3])
+(define-codes algorithm-code [(auto eig) 1] [(svd svd-jacobi) 0] [qr 2] [svd-qr 3])
 
 (define/who (linear-regression-fit who
                                    X
