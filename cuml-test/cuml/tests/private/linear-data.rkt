@@ -358,8 +358,7 @@
       (and (positive? g) (- (floor (/ (floor-log2 g) 2))))))
   (define kept (filter values exponents))
   (define rows (length (filter positive? weights)))
-  (define shared
-    (and (> (length kept) (- rows (if fit-intercept 1 0))) (apply min kept)))
+  (define shared (and (> (length kept) (- rows (if fit-intercept 1 0))) (apply min kept)))
   (define scale
     (for/list ([e (in-list exponents)])
       (expt 2 (or shared e 0))))
@@ -470,7 +469,8 @@
                                           (list (* 2500 (expt 2 -12)) (* 8750000 (expt 2 -22)))))))
   (match-define (staging wide-scale _ _) (staging-of '((1 64) (2 0)) '(1 2) #f #t))
   (check-equal? wide-scale (list 1/32 1/32))
-  (match-define (staging constant-scale _ constant-kappa) (staging-of '((1 5) (2 5) (4 5)) '(1 2 3) #f #t))
+  (match-define (staging constant-scale _ constant-kappa)
+    (staging-of '((1 5) (2 5) (4 5)) '(1 2 3) #f #t))
   (check-equal? constant-scale (list 1/2 1))
   (check-true (<= 1 constant-kappa 2) (format "κ over the varying column ~a" constant-kappa))
   (match-define (list (struct* ridge-solution ([kappa₀ constant-kappa₀])))
