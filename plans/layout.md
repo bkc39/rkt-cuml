@@ -1218,11 +1218,14 @@ Follow-ups are GitHub issues.
     max|c̃ − c̃*|. The solver's own error is about c̃, so T1's first term
     takes max|c̃| ≤ max|c̃*| + C1. On breast-cancer float32 the first-order
     form is 358 and 2465 times max|c̃*| at 2¹⁰ (unweighted, weighted), 5833
-    and 40449 at 2¹²; the cap is 3.7, 9.6, 15 and 39 times. The discriminating
-    case is two float32 columns offset by 2¹⁶ (an 8 × 8 grid, κ̃ about 2),
-    their means moved by ε̄ along G̃'s bottom eigenvector and solved
-    exactly (`linear-laws-centring-test`): T1 is 0.62 of its bound with C1
-    and 51.9 without it.
+    and 40449 at 2¹²; the cap is 3.7, 9.6, 15 and 39 times. The
+    discriminating case is two well-conditioned float32 columns offset by
+    2¹⁶ (an 8 × 8 grid), their means moved by ε̄ along G̃'s bottom
+    eigenvector and solved exactly (`linear-laws-centring-test`): T1 is
+    0.62 of its bound with C1 and 51.9 without it. Breast-cancer cannot be
+    that case: the ε̄ box limits the step along its bottom eigenvector to
+    a few 10⁻⁵, which moves c̃ by at most 1.4·10⁻³ against a solver term of
+    3.8 to 18.7.
   - On breast-cancer float32 offset by 2¹⁴, the exact solve of the problem
     centred with raft's medium-kernel means (simulated on the host,
     `linear-laws-centring-test`) has a cosine of 1.32 times 64·u·κ̃: a
@@ -1235,9 +1238,9 @@ Follow-ups are GitHub issues.
     2¹⁰ weighted on it passes materially wrong fits (0.9·c* at 0.62 of
     T3's bound at 2¹⁰ weighted, 0.15 at 2¹² unweighted, 0.04 at 2¹²
     weighted; review r3 M1). The device's means are far better than their
-    worst case; the bound does not assume so. A library fix (centre with the shim's
-    compensated v̄ + ρ, then call olsFit without an intercept) removes the
-    term; it is its own issue.
+    worst case; the bound does not assume so. A library fix (centre with
+    the shim's compensated v̄ + ρ, then call olsFit without an intercept)
+    removes the term; it is its own issue (#112).
 - **L1-e, T4's intercept term (L3r, #111).** With an intercept every
   algorithm returns b = ȳ − Σⱼ x̄ⱼcⱼ from its own c, x̄ and ȳ the weighted
   means, so for any c the T4 sum is Σᵢ wᵢ(yᵢ − b − xᵢ·c) = Σw·(ȳ − Σⱼ x̄ⱼcⱼ − b)
