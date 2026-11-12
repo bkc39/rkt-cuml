@@ -1159,12 +1159,13 @@ Follow-ups are GitHub issues.
   which a kept dtype column cannot have; a spread within ulps of a power of
   two can stage one column a factor 2 off the host's D, which moves κ̃ by at
   most 2). The weights' power of four moves every e_j by the same integer,
-  so κ̃ does not see it; D and c̃ do, and with them T1's max(max|c̃*|, 1).
+  so κ̃ does not see it; D and c̃ do, and with them T1's
+  max(max|c̃*| + C1, 1).
   The laws are the earlier ones restated there, plus cuML's centring error
   (the next bullet), C1 and C3 below:
-  - T1: max|c̃ − c̃*| ≤ 128·u·κ̃²·max(max|c̃*|, 1) + C1.
+  - T1: max|c̃ − c̃*| ≤ 128·u·κ̃′²·max(max|c̃*| + C1, 1) + C1.
   - T3: the residual cosine is invariant under D, the weights' power and
-    y's power, so only κ changes: ≤ 64·u·κ̃·S + C3.
+    y's power, so only κ changes: ≤ 64·u·κ̃′·S + C3.
   - T2: b − b* = (b − (ȳ − x̄ᵀc)) − x̄ᵀ(c − c*) exactly, so
     |b − b*| ≤ B4/Σw + 2^(−e_y)·Σⱼ|x̄ⱼ|D_j·B1 over the kept columns (a
     dropped column's c_j and c*_j are both 0), B1 and B4 T1's and T4's
@@ -1192,29 +1193,49 @@ Follow-ups are GitHub issues.
   X̂_cᵀW(ŷ_c − X̂_c·c) = X_cᵀWr + Σw·ε·(ε_y − εᵀc)
   exactly: the residual the host measures differs from the one the solver
   makes small by Σw·ε·(ε_y − εᵀc).
-  - C3: the solver's cosine is ≤ 64·u·κ̃ in its own norms,
+  - κ̃′: cuML solves with G̃ + Σw·Dεεᵀ D, whose top eigenvalue is at most
+    λ̄ + Σw·‖Dε̄‖₂² (λ̄ the outer bracket's upper end) and whose bottom one
+    is at least λ̲, so κ̃′² = (λ̄ + Σw·‖Dε̄‖₂²)/λ̲ bounds the condition of
+    the problem it solves, and both solver terms use it. Without an
+    intercept ε = 0 and κ̃′ = κ̃. The shift is not small: on breast-cancer
+    float32 κ̃′/κ̃ is 1.008 and 1.056 at 2¹⁰ (unweighted, weighted), 1.12
+    and 1.69 at 2¹²; float64 1.000.
+  - C3: the solver's cosine is ≤ 64·u·κ̃′ in its own norms,
     ‖x̂_c,j‖² = ‖x_c,j‖² + Σw·εⱼ² and ‖ŷ_c‖² = ‖y_c‖² + Σw·ε_y², so
     S = √((1 + maxⱼ Σw·ε̄ⱼ²/‖x_c,j‖²)·(1 + Σw·ε̄_y²/‖y_c‖²)) and
     C3 = maxⱼ Σw·ε̄ⱼ·(ε̄_y + Σₖ ε̄ₖ|cₖ|)/(‖x_c,j‖·‖y_c‖), over the kept
     columns, norms weighted, c as returned.
   - C1: at the exact solution c̃ of cuML's problem the left side is 0, and
     at c* X_cᵀWr* = 0, so (G + Σw·εεᵀ)(c̃ − c*) = Σw·ε·(ε_y − εᵀc*).
-    Staged (the weights as staged, in Σw too), G̃ + Σw·Dεεᵀ D ⪰ G̃, so
-    C1 = 2^(e_y)·‖Dε̄‖₂·Σw·(ε̄_y + Σₖ ε̄ₖ|c*ₖ|)/λ̲, over the kept columns,
-    is a bound on max|c̃ − c̃*|; the solver's own error about c̃ is T1's
-    first term.
-  - Not modelled: the rank-one Σw·εεᵀ also moves the κ̃ of the problem cuML
-    solves; it is second order in ε̄.
+    Staged (the weights as staged, in Σw too), with ẽ = Dε, t̃ =
+    2^(e_y)·(ε_y − εᵀc*) and |t̃| ≤ τ = 2^(e_y)·(ε̄_y + Σₖ ε̄ₖ|c*ₖ|):
+    - first order: G̃ + Σw·ẽẽᵀ ⪰ G̃, so ‖c̃ − c̃*‖₂ ≤ ‖Dε̄‖₂·Σw·τ/λ̲;
+    - Sherman–Morrison: c̃ − c̃* = Σw·t̃·G̃⁻¹ẽ/(1 + Σw·q), q = ẽᵀG̃⁻¹ẽ, and
+      ‖G̃⁻¹ẽ‖₂ ≤ q^½/λ_min^½, so ‖c̃ − c̃*‖₂ ≤ τ·√Σw/√λ̲·√(Σw·q)/(1 + Σw·q)
+      ≤ τ·√Σw/(2√λ̲), as x/(1 + x²) ≤ ½. It holds for any ε in the box,
+      with no smallness assumption.
+    C1 is the smaller of the two, over the kept columns, a bound on
+    max|c̃ − c̃*|. The solver's own error is about c̃, so T1's first term
+    takes max|c̃| ≤ max|c̃*| + C1. On breast-cancer float32 the first-order
+    form is 358 and 2465 times max|c̃*| at 2¹⁰ (unweighted, weighted), 5833
+    and 40449 at 2¹²; the cap is 3.7, 9.6, 15 and 39 times. The discriminating
+    case is two float32 columns offset by 2¹⁶ (an 8 × 8 grid, κ̃ about 2),
+    their means moved by ε̄ along G̃'s bottom eigenvector and solved
+    exactly (`linear-laws-centring-test`): T1 is 0.62 of its bound with C1
+    and 51.9 without it.
   - On breast-cancer float32 offset by 2¹⁴, the exact solve of the problem
     centred with raft's medium-kernel means (simulated on the host,
     `linear-laws-centring-test`) has a cosine of 1.32 times 64·u·κ̃: a
     perfect solver fails T3 without C3. With C1 and C3 it meets all four
-    laws. With ε̄ at its worst case C3 is 27 times 64·u·κ̃ at 2¹⁰,
-    446 at 2¹² and 7253 at 2¹⁴ in float32 (64·u·κ̃ = 1.5·10⁻³), so the
-    float32 offset bound is 0.04, 0.66 and 10.8: from 2¹² T3 barely pins
-    a float32 fit's cosine and at 2¹⁴ it cannot fail, and C1 swamps T1
-    the same way. The device's means are far better than their worst
-    case; the bound does not assume so. A library fix (centre with the shim's
+    laws. With ε̄ at its worst case the float32 T3 bound at c* is 0.042
+    (2¹⁰ unweighted), 0.162 (2¹⁰ weighted), 0.665 (2¹² unweighted) and
+    2.61 (2¹² weighted), and 10.8 at 2¹⁴ unweighted. A consistent b is
+    exact by construction, so T4 cannot see a coefficient error, T2
+    follows T1, and C1 leaves T1 loose: T3 is the only guard, and from
+    2¹⁰ weighted on it passes materially wrong fits (0.9·c* at 0.62 of
+    T3's bound at 2¹⁰ weighted, 0.15 at 2¹² unweighted, 0.04 at 2¹²
+    weighted; review r3 M1). The device's means are far better than their
+    worst case; the bound does not assume so. A library fix (centre with the shim's
     compensated v̄ + ρ, then call olsFit without an intercept) removes the
     term; it is its own issue.
 - **L1-e, T4's intercept term (L3r, #111).** With an intercept every
@@ -1249,17 +1270,28 @@ Follow-ups are GitHub issues.
   t4sim case, `linear-laws-centring-test`) is 18.9 times the old bound
   and 0.63 of this one; the device's compensated reduction keeps x̂ⱼ
   near its first rounding, so the GPU offset set does not tell the two
-  apart (at most 0.56 of the old bound).
+  apart (at most 0.56 of the old bound). A serial float32 sum of 569
+  values makes up to 568 roundings, so serial order is outside this
+  model (h = 17 is raft's medium kernel) and the 0.63 is an empirical
+  margin; the case stands as the old term's discriminator, not as a
+  consequence of the model.
 - **L1-e, the offset set (L3r, #111).** Breast-cancer with every column
-  plus 2¹⁰ and 2¹² in both dtypes and 2¹⁴ in float64, unweighted and
-  weighted, every algorithm. The worst ratios to the bounds are 0.016
-  (2¹⁰), 0.049 (2¹²) and 0.71 (2¹⁴ float64, T3 unweighted). Float32 at 2¹⁴
-  is excluded: unweighted, every fit is accepted (T4 at most 0.013, T3
-  1.8·10⁻⁴ of its now loose bound), but weighted, the shim refuses every
-  algorithm by V13 (the eig solve: residual cosine 7.7·10⁻³ > 2⁻⁸), a
-  sound problem (κ̃ = 389) refused because cuML centres with its own
-  float32 means. The library fix above is its issue; until then the file
-  does not codify the refusal.
+  plus a power of two, every algorithm, only on arms where the laws
+  discriminate: float32 at 2¹⁰ unweighted, and float64 at 2¹⁰, 2¹² and
+  2¹⁴, unweighted and weighted (`offset-law-arms`, shared by the GPU file
+  and the host mutation test). The host test takes the exact c* scaled by
+  0.9 with a consistent intercept on every kept arm and requires a law to
+  fail: T3 at 2.39 in float32; T1 at 4.6·10⁷ to 4.9·10⁷ and T3 at
+  3.3·10¹⁰ to 3.4·10¹⁰ in float64. The other float32 arms are out:
+  2¹⁰ weighted and 2¹² both weightings pass that mutation (above), so a
+  law check there would be vacuous, and acceptance-only smoke is not kept.
+  Float32 at 2¹⁴ is out too: unweighted, every fit is accepted under a
+  bound that cannot fail, and weighted, the shim refuses every algorithm
+  by V13 (the eig solve: residual cosine 7.7·10⁻³ > 2⁻⁸), a sound problem
+  (κ̃ = 389) refused because cuML centres with its own float32 means. All
+  of them return under the library fix above (#112), once the
+  compensated centring makes ε̄ small enough for the laws to
+  discriminate.
 - **L1-e, ordering.** The workspace bound (V7) is checked after staging is
   planned, so it follows the compacted row index, plan_staging's d-sized
   scratch, the column profiles and, for svd, a gesvdj info handle; all are
