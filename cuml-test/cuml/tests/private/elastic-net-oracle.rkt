@@ -3,7 +3,7 @@
 (require (only-in racket/flonum flvector flvector-ref flvector-set! make-flvector)
          (only-in racket/match match-define struct*)
          (only-in racket/math sgn sqr)
-         (only-in "exact-algebra.rkt" dot eigen-range mat*vec min-norm-solve)
+         (only-in "exact-algebra.rkt" dot eigen-bottom mat*vec min-norm-solve norm2)
          (only-in "linear-data.rkt" max-abs weighted-gram weights-or-ones))
 
 (provide (struct-out en-problem)
@@ -13,7 +13,6 @@
          curvatures
          host-kkt
          inexact-norm
-         norm2
          oracle-elastic-net
          problem-of
          s2-bound
@@ -143,10 +142,7 @@
       (map (lambda (g) (/ g total)) row)))
   (define c (map (lambda (v) (/ v total)) b))
   (define coef (exact-on-support C c l1 l2 (host-cd C c l1 l2)))
-  (define-values (_ bottom)
-    (if known-bottom
-        (values #f known-bottom)
-        (eigen-range G)))
+  (define bottom (or known-bottom (eigen-bottom G)))
   (en-solution coef
                (- my (dot mx coef))
                (+ (max 0.0 (/ bottom (exact->inexact total))) (exact->inexact l2))
@@ -201,9 +197,6 @@
   (define-values (_ l2) (penalties alpha l1-ratio))
   (+ (/ (* tol (exact->inexact (max-abs coef)) (norm2 (curvatures sigma l2))) mu)
      (* s2-rounding roundoff (inexact-norm c*))))
-
-(define (norm2 xs)
-  (sqrt (for/sum ([x (in-list xs)]) (* x x))))
 
 (define (inexact-norm xs)
   (norm2 (map exact->inexact xs)))

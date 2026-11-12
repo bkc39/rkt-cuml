@@ -5,6 +5,7 @@
          (only-in racket/match match match-define)
          (only-in racket/math exact-floor pi sqr)
          (only-in raft list*->device-matrix list->device-vector)
+         (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "scaler-data.rkt" rows-of))
 
@@ -311,7 +312,7 @@
 (define r2-bound 1e-14)
 
 (define (r2-gap ours exact)
-  (/ (abs (- (inexact->exact ours) exact)) (max 1 (abs (- 1 exact)))))
+  (/ (~> ours inexact->exact (- exact) abs) (max 1 (abs (- 1 exact)))))
 
 (define (row-of v)
   (if (list? v)

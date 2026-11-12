@@ -1,20 +1,27 @@
 #lang racket/base
 
 (require (only-in racket/list argmax last splitf-at)
-         (only-in racket/match match match-define))
+         (only-in racket/match match match-define)
+         (only-in threading ~>))
 
 (provide bracket-condition
          condition
          dot
+         eigen-bottom
          eigen-bracket
          eigen-range
          integer-scaled
          mat*vec
          min-norm-solve
+         norm2
+         outer-bracket
          varying-inner)
 
 (define (dot u v)
   (for/sum ([a (in-list u)] [b (in-list v)]) (* a b)))
+
+(define (norm2 xs)
+  (sqrt (dot xs xs)))
 
 (define (common-denominator xs)
   (for/fold ([d 1]) ([x (in-list xs)])
@@ -135,19 +142,17 @@
       (values c row)))
   (define p
     (for/list ([c (in-range d)])
-      (match (hash-ref pivot-rows c #f)
-        [#f 0]
-        [row (last row)])))
+      (cond
+        [(hash-ref pivot-rows c #f) => last]
+        [else 0])))
   (define N
     (for/list ([f (in-range d)]
                #:unless (hash-has-key? pivot-rows f))
       (for/list ([c (in-range d)])
-        (match (hash-ref pivot-rows c #f)
-          [_
-           #:when (= c f)
-           1]
-          [#f 0]
-          [row (- (list-ref row f))]))))
+        (cond
+          [(= c f) 1]
+          [(hash-ref pivot-rows c #f) => (lambda (row) (- (list-ref row f)))]
+          [else 0]))))
   (cond
     [(null? N) p]
     [else
@@ -237,10 +242,10 @@
 
 (define (coarse x)
   (define step (expt 2 (- (binade x) 14)))
-  (* step (round (/ x step))))
+  (~> (/ x step) round (* step)))
 
 (define (narrowed holds? fails holds)
-  (define mid (coarse (/ (+ fails holds) 2)))
+  (define mid (~> (+ fails holds) (/ 2) coarse))
   (cond
     [(<= (abs (- fails holds)) (* 2 bracket-margin (max fails holds))) (values fails holds)]
     [(holds? mid) (narrowed holds? fails mid)]
@@ -253,7 +258,7 @@
     (if (holds? s)
         (narrowed holds? fails s)
         (widened s (/ s 2))))
-  (define first (coarse (* bottom (- 1 bracket-margin))))
+  (define first (~> (- 1 bracket-margin) (* bottom) coarse))
   (cond
     [(holds? first) (narrowed holds? bottom first)]
     [(positive-definite? G) (widened first (/ first 2))]
@@ -267,7 +272,7 @@
         (narrowed holds? fails t)
         (widened t (* 2 t))))
   (if (positive? top)
-      (widened top (coarse (* top (+ 1 bracket-margin))))
+      (widened top (~> (+ 1 bracket-margin) (* top) coarse))
       (values 0 (* (length G) (largest-entry G)))))
 
 (define (largest-entry G)
@@ -293,20 +298,25 @@
   (define-values (bottom-in bottom-out) (bottom-bracket unit-G bottom))
   (values (rescaled (cons top-in bottom-in)) (rescaled (cons top-out bottom-out))))
 
+(define (outer-bracket G)
+  (let-values ([(_ outer) (eigen-bracket G)])
+    outer))
+
 (define (eigen-range G)
-  (define-values (_ outer) (eigen-bracket G))
-  (match-define (cons top bottom) outer)
+  (match-define (cons top bottom) (outer-bracket G))
   (values top bottom))
+
+(define (eigen-bottom G)
+  (cdr (outer-bracket G)))
 
 (define (bracket-condition pair)
   (match-define (cons top bottom) pair)
   (if (> bottom (* 1e-14 top))
-      (sqrt (exact->inexact (/ top bottom)))
+      (~> (/ top bottom) exact->inexact sqrt)
       +inf.0))
 
 (define (condition G)
-  (define-values (_ outer) (eigen-bracket G))
-  (bracket-condition outer))
+  (bracket-condition (outer-bracket G)))
 
 (define (varying-inner G inner)
   (define kept
@@ -360,24 +370,23 @@
   (check-equal? (list zero-top zero-bottom) '(0 0))
   (define rotation '((1/3 2/3 2/3) (2/3 1/3 -2/3) (2/3 -2/3 1/3)))
   (define spectrum (list 1 (expt 10 -8) (* 2 (expt 10 -8))))
-  (define rotated
+  (define (rotated-by eigenvalues [scale 1])
     (for/list ([u (in-list rotation)])
       (for/list ([v (in-list rotation)])
-        (for/sum ([a (in-list u)] [b (in-list v)] [s (in-list spectrum)]) (* a s b)))))
+        (for/sum ([a (in-list u)] [b (in-list v)] [s (in-list eigenvalues)]) (* scale a s b)))))
+  (define rotated (rotated-by spectrum))
   (check-true (bracketed? rotated (expt 10 -8) 1))
   (check-true (<= 1e4 (condition rotated) (* 1e4 (+ 1 bracket-margin))))
-  (define-values (_ singular) (eigen-range '((1 2) (2 4))))
-  (check-equal? singular 0)
+  (check-equal? (eigen-bottom '((1 2) (2 4))) 0)
+  (match-define (cons four one) (outer-bracket '((4 0) (0 1))))
+  (check-true (and (<= 4 four) (<= one 1) (= one (eigen-bottom '((4 0) (0 1))))))
+  (check-equal? (norm2 '(3 4)) 5)
   (define (exactly-bracketed? G eigenvalues)
     (define-values (inner outer) (eigen-bracket G))
     (match-define (cons in-top in-bottom) inner)
     (match-define (cons out-top out-bottom) outer)
     (and (<= in-top (apply max eigenvalues) out-top)
          (<= out-bottom (apply min eigenvalues) in-bottom)))
-  (define (rotated-by eigenvalues [scale 1])
-    (for/list ([u (in-list rotation)])
-      (for/list ([v (in-list rotation)])
-        (for/sum ([a (in-list u)] [b (in-list v)] [s (in-list eigenvalues)]) (* scale a s b)))))
   (define (diagonal eigenvalues)
     (for/list ([s (in-list eigenvalues)]
                [i (in-naturals)])

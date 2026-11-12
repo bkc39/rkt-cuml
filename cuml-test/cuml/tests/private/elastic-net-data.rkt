@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model elastic-net-fit elastic-net-result lasso-result)
-         (only-in racket/list append* append-map make-list)
+         (only-in racket/list append* append-map count make-list)
          (only-in racket/match match match-define struct*)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list)
@@ -12,11 +12,10 @@
                   host-kkt
                   inexact-norm
                   kkt
-                  norm2
                   oracle-elastic-net
                   problem-of
                   s2-bound)
-         (only-in "exact-algebra.rkt" dot)
+         (only-in "exact-algebra.rkt" dot norm2)
          (only-in "linear-data.rkt"
                   check-law
                   check-law-case
@@ -52,7 +51,7 @@
          l1-ratios
          law-alpha
          mirrored-weight-case
-         rows-of
+         positive-rows-of
          selections
          tols)
 
@@ -149,10 +148,10 @@
 (define (case-alpha c ratio l1-ratio #:fit-intercept [fi #t])
   (law-alpha (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) ratio l1-ratio))
 
-(define (rows-of c)
+(define (positive-rows-of c)
   (match (lcase-w c)
     [#f (length (lcase-y c))]
-    [w (for/sum ([v (in-list w)] #:when (positive? v)) 1)]))
+    [w (count positive? w)]))
 
 (define law-runs (make-hash))
 
@@ -210,7 +209,7 @@
             (en-case-fit c dt #:alpha alpha #:l1-ratio r #:fit-intercept fi #:tol tol #:selection s))
           (define checked (converged? run))
           (when checked
-            (check-kkt-laws p run alpha r tol (rows-of c) u))
+            (check-kkt-laws p run alpha r tol (positive-rows-of c) u))
           (when (and checked (> mu 0))
             (check-distance-laws o run alpha r tol u fi))
           (check-true (exact-nonnegative-integer? (en-run-n-iter run)))))))
@@ -247,7 +246,7 @@
   (match law
     ["coefficient-distance" (check-law law (coef-distance coef c*) (s2-bound o coef alpha r tol u))]
     ["kkt-residual"
-     (match-define (kkt K B A) (host-kkt p coef alpha r tol k (rows-of c) u))
+     (match-define (kkt K B A) (host-kkt p coef alpha r tol k (positive-rows-of c) u))
      (check-law law K (+ B A))]))
 
 (define (coef-distance a b)

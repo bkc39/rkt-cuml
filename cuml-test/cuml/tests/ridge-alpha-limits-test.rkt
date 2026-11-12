@@ -4,6 +4,7 @@
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/exact-algebra.rkt" norm2)
          (only-in "private/linear-data.rkt"
                   case-fit
                   check-law
@@ -24,7 +25,6 @@
                   weights-or-ones)
          (only-in "private/ridge-data.rkt"
                   lstsq-algorithm
-                  norm2
                   ridge-case-fit
                   rounding-alpha
                   solvers
