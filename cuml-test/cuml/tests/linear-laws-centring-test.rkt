@@ -58,7 +58,8 @@
                ([t (in-range 256)])
                (compensated (for/list ([i (in-range t n 256)])
                               (vector-ref v i)))))
-  (~> (f32 (+ (block-sum sums) (block-sum compensations))) (* (f32 (/ 1.0 n))) f32 inexact->exact))
+  (define total (f32 (+ (block-sum sums) (block-sum compensations))))
+  (~> (* total (f32 (/ 1.0 n))) f32 inexact->exact))
 
 (define (serial-mean xs)
   (define total

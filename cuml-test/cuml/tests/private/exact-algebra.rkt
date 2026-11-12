@@ -246,7 +246,7 @@
 
 (define (coarse x)
   (define step (expt 2 (- (binade x) 14)))
-  (~> (/ x step) round (* step)))
+  (~> (/ x step) round (* step _)))
 
 (define (narrowed holds? fails holds)
   (define mid (~> (+ fails holds) (/ 2) coarse))
@@ -262,7 +262,7 @@
     (if (holds? s)
         (narrowed holds? fails s)
         (widened s (/ s 2))))
-  (define first (~> (- 1 bracket-margin) (* bottom) coarse))
+  (define first (~> (- 1 bracket-margin) (* bottom _) coarse))
   (cond
     [(holds? first) (narrowed holds? bottom first)]
     [(positive-definite? G) (widened first (/ first 2))]
@@ -276,7 +276,7 @@
         (narrowed holds? fails t)
         (widened t (* 2 t))))
   (if (positive? top)
-      (widened top (~> (+ 1 bracket-margin) (* top) coarse))
+      (widened top (~> (+ 1 bracket-margin) (* top _) coarse))
       (values 0 (* (length G) (largest-entry G)))))
 
 (define (largest-entry G)
