@@ -308,7 +308,7 @@
 
 (define corner-signs '(1 -1 -1 0 1 1 0 -1 0 -1 1 1 1 -1 -1 -1 -1 -1 0 -1 -1 1 1 1 -1 1 -1 1 1))
 
-(test-case "breast-cancer float32 offset by 2^10 weighted, means at a point of their error box: T1 holds by C1, the Sherman–Morrison cap, and fails without it"
+(test-case "breast-cancer float32 offset by 2^10 weighted, means at a point of their error box: T1 holds by C1 and fails without it"
   (define c (real-lcase 'breast-cancer '((offset . 10) . weighted) 'float32))
   (define u (unit-roundoff 'float32))
   (define exact (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) #t))

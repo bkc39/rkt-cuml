@@ -1236,11 +1236,13 @@ Follow-ups are GitHub issues.
     - the real-data case, breast-cancer float32 offset by 2¹⁰ weighted,
       its means at a point of the ε̄ box found by local search (review
       r4): C1 is the cap (19.0 against 4886), and T1 is 0.079 with C1 and
-      1.46 without it.
+      1.46 without it. It does not test the cap's size (T1 is 0.15 with
+      the cap halved and 0.53 at a tenth); the 2²⁰ grid case does.
     Breast-cancer discriminates C1 at 2¹⁰ weighted (1.46 without it) and
     at 2¹² (about 1.13 unweighted and 1.02 weighted), not on the kept arm,
-    2¹⁰ unweighted (0.60). The box's corners move c̃ by 0.9 to 6.2 across
-    the four arms; an earlier probe that tried only multiples of the
+    2¹⁰ unweighted (0.60). Across the four arms the corners signed like the
+    bottom eigenvector move c̃ by 0.9 to 2.1, and points found by local
+    search by 2.3 to 6.2; an earlier probe that tried only multiples of the
     bottom eigenvector found 1.4·10⁻³.
   - On breast-cancer float32 offset by 2¹⁴, the exact solve of the problem
     centred with raft's medium-kernel means (simulated on the host,
