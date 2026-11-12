@@ -1184,8 +1184,8 @@ Follow-ups are GitHub issues.
 - **L1-e, cuML's centring error (L3r, #111).** With an intercept cuML
   centres the staged problem with its own means, x̂̄ⱼ = x̄ⱼ + εⱼ and
   ŷ̄ = ȳ + ε_y, bounded as T4 bounds them: |εⱼ| ≤ ε̄ⱼ = γ_h·Σw|xⱼ|/Σw and
-  |ε_y| ≤ ε̄_y = γ_h·Σw|y|/Σw, h for raft's order and the row count (next
-  bullet). Rounding to the dtype makes |εⱼ| at least about u·|x̄ⱼ| in any
+  |ε_y| ≤ ε̄_y = γ_(h_y)·Σw|y|/Σw, h and h_y for raft's order and the row
+  count (next bullet; h_y = h but for the weighted ȳ). Rounding to the dtype makes |εⱼ| at least about u·|x̄ⱼ| in any
   order, and the staging normalises the spread, not the mean, so nothing
   in κ̃ bounds it (review r2 M1). Write X_c, y_c for the data centred
   exactly (X_cᵀW1 = 0, 1ᵀWy_c = 0), so cuML solves with X̂_c = X_c − 1εᵀ
@@ -1264,11 +1264,16 @@ Follow-ups are GitHub issues.
   means, so for any c the T4 sum is Σᵢ wᵢ(yᵢ − b − xᵢ·c) = Σw·(ȳ − Σⱼ x̄ⱼcⱼ − b)
   exactly: T4 sees the rounding of that formula, never c's error. cuML's
   preProcessData takes x̄ⱼ and ȳ with raft's `mean` (sum, then times
-  fl(1/n)) or `weightedMean` (Σ v·w over Σw, Σw by `raft::stats::sum`), all
-  through raft 26.08's coalesced reduction (`coalesced_reduction-inl.cuh`)
-  over the n rows the shim passes (the positive-weight rows). Each thread
-  sums its strided rows with Kahan–Babuška–Neumaier compensation (at most
-  2u), the partials meet, and the compensation is added once:
+  fl(1/n)) or `weightedMean` (Σ v·w over Σw, Σw by `raft::stats::sum`)
+  over the n rows the shim passes (the positive-weight rows). Every sum
+  but one goes through raft 26.08's coalesced reduction
+  (`coalesced_reduction-inl.cuh`): x̄ⱼ, the unweighted ȳ and Σw. The
+  weighted ȳ, `weightedMean<true, false>` on the n × 1 labels
+  (`glm/preprocess.cuh:64`), is row-major and not along rows, so
+  `linalg/detail/reduce.cuh:39-41` sends it to the strided reduction (next
+  bullet but one). In the coalesced one each thread sums its strided rows
+  with Kahan–Babuška–Neumaier compensation (at most 2u), the partials meet,
+  and the compensation is added once:
   - thin (n ≤ 512, or many columns and n < 2048): a 32-lane warp tree,
     5 levels, so 8 roundings;
   - medium (below 2¹⁷ rows): a cub raking block reduce of 256, 7 serial
@@ -1280,9 +1285,36 @@ Follow-ups are GitHub issues.
   The sum's count s is 15 below 2¹⁷ rows and 21 at or above, and
   |x̂ⱼ − x̄ⱼ| ≤ γ_h·Σw|xⱼ|/Σw with h = s + 2 unweighted (the reciprocal and
   the product: 17, 23) and h = 2s + 2 weighted (the products, the sum, the
-  division and Σw's own s: 32, 44). postProcessData's gemm 1×d·d×1 adds
+  division and Σw's own s: 32, 44).
+  - The weighted ȳ (review r3 M2): `stridedSummationKernel`
+    (`linalg/detail/strided_reduction.cuh`) runs blocks of 8 × 32 threads,
+    of which the 32 in column 0 work on a single output, over G =
+    min(8192, ⌈n/512⌉) blocks (lines 147-155). Each thread KBN-sums its
+    rows (lines 37-49, Fast2Sum exact under the branch), each block
+    atomically adds its 32 thread sums, keeping each add's exact error in
+    the compensation (lines 63-69), and accumulates the compensations by
+    atomic add (line 70). The block's partial is fl(sum + compensation),
+    and the G partials are atomically added onto the output, which is an
+    exact 0 beforehand (lines 75 and 141), in no fixed order. Per term:
+    one rounding for w·y, two for the block (the final add, and one more
+    for the rounded accumulation of the compensations, a second-order
+    (n_t + 30)(n_t + 32)·u² with n_t = ⌈n/(32G)⌉ rows per thread, at most
+    u while n < 2³⁰ in float32), and G − 1 for the grid's adds, so G + 2;
+    then Σw's s and the division. The weighted ȳ's count is h_y = G + 3 +
+    s: G + 18 below 2¹⁷ rows, G + 24 at or above, up to 8216 once G is
+    capped (n > 8191·512). The review's G + 19 counted the first grid add,
+    onto the exact 0, as a rounding. h_y is 20 on breast-cancer (G = 2)
+    and 28 on the 5000-row law case (G = 10), below the coalesced 32, and
+    passes it from 7169 rows (G = 15). L2-g corroborates the atomics:
+    weighted fits stop repeating bitwise between 1000 rows (G = 2, whose
+    two adds onto 0 commute) and 2000 (G = 4). T4's ȳ term and ε̄_y (C1,
+    C3) use h_y; x̄ⱼ keeps h. A host case (`linear-laws-centring-test`,
+    2¹⁵ weighted float32 rows, G = 64, one partial 1 + 2⁻²³ and 63 just
+    over half its ulp, added largest first) has b = ŷ̄ at 1.92 times T4’s
+    bound under the coalesced count and 0.764 under h_y.
+  postProcessData's gemm 1×d·d×1 adds
   γ_d·Σ|x̂ⱼcⱼ| in any order, and the subtraction u·|b|. T4's bound is
-  therefore γ_h·Σw|y| + u·Σw·|b| + (γ_h + γ_d)·Σⱼ(Σᵢwᵢ|xᵢⱼ|)·|cⱼ|, b and c
+  therefore γ_(h_y)·Σw|y| + u·Σw·|b| + (γ_h + γ_d)·Σⱼ(Σᵢwᵢ|xᵢⱼ|)·|cⱼ|, b and c
   as returned: every term is the worst case for the device's order, so the
   bound is one model (the earlier ȳ term, 4·√n·u·‖y‖₂·max w, was
   probabilistic and about 4 times smaller on breast-cancer). The earlier
