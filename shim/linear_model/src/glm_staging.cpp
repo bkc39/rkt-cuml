@@ -104,6 +104,17 @@ std::string algorithm_name(int algorithm) {
   }
 }
 
+std::string solver_name(glm_solver solver) {
+  return solver.family == glm_family::cd ? "cd"
+                                         : algorithm_name(solver.algorithm);
+}
+
+staging shared_at(staging s, int shared, std::optional<int> y_exponent) {
+  std::ranges::fill(s.column_exponent, shared);
+  s.y_exponent = y_exponent.value_or(s.y_exponent);
+  return s;
+}
+
 int64_t ols_workspace(int algorithm, ols_shape shape, int64_t cusolver_lwork) {
   const auto [n, d] = shape;
   const int64_t m = std::min(n, d);
@@ -215,11 +226,10 @@ int64_t unstage_coef(const raft::handle_t& handle, const T* staged,
 
 template <typename T>
 void require_finite_solution(const T* staged, int64_t d, T intercept,
-                             int algorithm, rmm::cuda_stream_view stream) {
+                             glm_solver solver, rmm::cuda_stream_view stream) {
   if (first_non_finite(staged, d, stream) >= 0 || !std::isfinite(intercept)) {
-    throw logic_error(
-        std::format("X: the {} solve gave a non-finite coefficient",
-                    algorithm_name(algorithm)));
+    throw logic_error(std::format(
+        "X: the {} solve gave a non-finite coefficient", solver_name(solver)));
   }
 }
 
@@ -301,10 +311,11 @@ template int64_t unstage_coef<float>(const raft::handle_t&, const float*,
                                      const staging&, int64_t, float*);
 template int64_t unstage_coef<double>(const raft::handle_t&, const double*,
                                       const staging&, int64_t, double*);
-template void require_finite_solution<float>(const float*, int64_t, float, int,
-                                             rmm::cuda_stream_view);
+template void require_finite_solution<float>(const float*, int64_t, float,
+                                             glm_solver, rmm::cuda_stream_view);
 template void require_finite_solution<double>(const double*, int64_t, double,
-                                              int, rmm::cuda_stream_view);
+                                              glm_solver,
+                                              rmm::cuda_stream_view);
 template void require_stationary<float>(double, glm_solver);
 template void require_stationary<double>(double, glm_solver);
 template void require_in_range<float>(int64_t, float);

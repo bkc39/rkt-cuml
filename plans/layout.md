@@ -1362,3 +1362,141 @@ Follow-ups are GitHub issues.
   0.129 to 4.1e-7, and every α′ = 0 cosine (17892) is unchanged bitwise.
   Q2 is unchanged: float32 'eig refused at 0.385 and 0.203, 'svd accepted at
   4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
+
+## Decisions recorded in leg L3 (#89)
+
+Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
+1.8.0); the spec's findings F1–F21 are summarised where they bind.
+
+- **L3-a.** `cdFit` minimises (1/2Σw)Σw(y − b₀ − x·b)² + αρ‖b‖₁ +
+  ½α(1−ρ)‖b‖² (F1: 2.4e-14 against a high-precision host CD over 216
+  configurations). The L1 term scales as 2^(s+t) and the L2 term as 4^s
+  under X·2^s, y·2^t, and `cdFit` takes (α, ρ), so α′ and ρ′ are exact only
+  with t = s. Every kept column and y are staged at one exponent
+  s = min(max_j e_j, s_hi), e_j being L1's capped exponent, with
+  s_hi = min(min_j c_j, ⌊(E−6−β)/2⌋ − p, ⌊(E−6−β−p−q)/2⌋, E−4−β−q)
+  (E the dtype's max_exponent, β = bit_width(m), p and q the ilogb of the
+  largest |x| and |y|; `cd_staging.cpp`). α′ = (T)(α·4^s) from double;
+  coefficients need no shift and the intercept is b′₀·2^−s. Every kept
+  column's staged spread is at least 2^−4, so `cd.cuh:68`'s 1e-5 cut never
+  fires (F4: X·1e-4 at 100 rows gives rel 1.0 raw, 2.3e-4 staged), and
+  within [e_max − 4, s_hi] the fit is raw `cdFit`'s bit for bit (F3: 108/144;
+  the misses are raw fits under the cut). The column cap min_j c_j is never
+  the binding one, since c_j − (a) = 62 (float32) or 510 (float64) for the
+  widest column. A y on its own exponent (F6) removes the absolute stop but
+  puts the L2 term off by up to 6.9e-4. α′·m > 2^(E−1) is refused (V14):
+  cap (a) keeps `cdFit`'s Σw̃(x′ − x̄′)² ≤ Σw̃x′² < 2^(E−4), so its denominator
+  Σx′² + α′(1−ρ)m stays below 2^(E−4) + 2^(E−1)(1 + 2u), and ρα′m, the soft
+  threshold (which only shrinks |x′ᵀr′|) and the quotient stay finite. Only
+  "α′·m finite" (round 0) let that sum reach inf and return a coefficient 0
+  with no refusal (f32 columns 2^58 apart, α within 1e-4 of the old bound).
+  V12 (m > 2³¹ − 1) is defensive: `require_index` already refuses
+  n·d > 2³¹ − 1, so the public path cannot reach it; a gtest calls it.
+- **L3-b.** `cd.cuh:271` stops when every coefficient is under tol in the
+  caller's units, after one epoch (F5: rel 0.12 to 2.08 at X·1e5). The shim
+  refuses such a stop when K = max_j v_j/(max|b|·D_j) exceeds B + A, with
+  v_j the subgradient violation, D_j = max(σ_j² + λ₂, σ_jΣ_kσ_k),
+  λ₂ = α(1−ρ), B = tol rounded to the dtype and
+  A = u√n_iter·(2 + √m·σ_y·max_j(σ_j/D_j)/max|b|)
+  (L3-m, round 1). A relative stop has v_j ≤ tol·max|b|·σ_jΣ_{k≠j}σ_k, so
+  K < B (F10: 3372 relative stops per dtype, K/tol ≤ 0.63; in float32
+  rounding puts 128 of 444 over tol, at most 0.085 of A, F11); where λ₂
+  dominates, v_j/(σ_j² + λ₂) is the move the next update of j would make,
+  and K ≤ tol is the relative test applied one step ahead. Below λ₂ = σ_jΣ_{k≠j}σ_k this is round 0's check,
+  K_old = max_j v_j/(σ_jσ_y) against tol·max|b|Σσ/σ_y, which refused every
+  ridge-heavy one-epoch stop (α(1−ρ) ≫ σ²) however accurate: 200×7,
+  corr 0.9, α 1e4 and 1e6 are 4.9e-4 and 4.9e-6 of max|c*| off after one
+  epoch. A's √m stays on the gradient term only: near α_max the rounding in
+  K reaches 30.8·u√n·σ_y·max(σ_j/D_j)/max|b| in float64 at m = 1e6 (28.4 at
+  1e4), while the coefficient term needs under 1. F12 still refuses 72/72
+  bad absolute stops (err > 1e-2) in both dtypes, and of 13 large-α
+  (1e4, 1e6) stops off by more than tol, 13 in both dtypes since L3-o
+  (round 1 missed two in float32, at tol 1e-7 with errors 2.2e-7 and
+  1.5e-6 of max|c*|: there A/tol was 17 and 15.8, so V16b now refuses them).
+  An absolute stop with A > B and K > max(B, tol) is refused (V16b; L3-o,
+  amended in rounds 3 and 4), after V16: there K ≤ B + A cannot tell a
+  stop within tol from one many times past it. Under a heavy L2 penalty A ≈ u√m/corr(x, y), so a
+  weak signal on many rows puts it past the default tol (H2: 2^18 × 4
+  float32, corr(x, y) 1e-4, α 30, ρ 0 was accepted after one epoch 5.8%
+  off, K 0.058; 2^15 rows with y pure noise, α 1500, 2.1e-3 off, K 1.7e-3).
+  A lower tol makes CD stop on its relative test, which needs no check
+  (that fit at tol 1e-7: 4 epochs, 2.4e-7 off). K itself is computed in
+  double (double residuals, exact product sums, `kkt_of` in long double),
+  so in float32 A, built from float32's u, bounds what CD can reach, not
+  K's own error: a float32 stop with K ≤ B has passed the check. In
+  float64 A is built from the check's own u, so that argument does not
+  hold there and float64 rests on measurement: 2^16 × 4, lasso with
+  intercept, at α_max·(1 − ε) for ε 1e-11, 1e-12, 3e-13 and 1e-13,
+  against an exact-rational oracle and an exact K, has A/B from 1.6 to
+  161; round 2 refused all four, and the amendment accepts them at n-iter
+  1, 8.3e-6, 8.3e-5, 2.8e-4 and 8.3e-4 of max|b*| off (exact K ≤ 2.1e-4),
+  with the shim's K far closer to the exact K than A (2.82e-5 against
+  2.09e-5 at ε 1e-12, where A is 0.016). Round 2 refused every
+  A > B, and so refused float32 stops far inside tol on ordinary data
+  (2^20 rows of one column with σ 2e4 at 0.5·α_max: K 1.3e-7, A 1.2e-3;
+  2^17 × 3 in units 1, 30 and 1000 at 0.1·α_max: K 3e-8, A 1.1e-2, 2.8e-8
+  off, where the advised tol 1e-7 fit was 3.2e-7 off).
+  What V16b refuses that V16 accepted: no law-grid or twin fit (the law
+  grid makes no absolute stop); none of F10's 866 accepted large-α
+  absolute stops; near α_max (1000 × 10, α_max·(1 − 2⁻¹², 1 − 2⁻²⁰, 1)),
+  23 of 44 float32 absolute stops, every one more than tol off (19 at
+  1 − 2⁻²⁰, 1.1% to 15%; 4 at α_max), and 5 of 49 float64 ones, all at
+  α_max itself with max|b| ≤ 1.9e-15, the rounding of an exact 0. Of
+  round 2's refusals the amendment accepts float32's 15 at 1 − 2⁻¹² (within
+  tol, errors ≤ 5e-4) and one at 1 − 2⁻²⁰ (numpy model: K 0.68·tol,
+  0.66% off), and float64's 4 at α_max with K = 0 and max|b| ≤ 4.4e-16,
+  and at 2^16 × 4 the four float64 stops at α_max·(1 − ε) for ε 1e-11 to
+  1e-13 above. On the shim, float32 rounding, the cost L3-o accepts,
+  is F5 at 0.99999·α_max (2^16 × 8, correlation 0.99): accepted 1.14e-3
+  off with K 1.4e-4, and its tol 1e-7 refit gives the same coefficients.
+  F12 is unchanged (72/72 and 13/13 in both dtypes).
+  The round-2 review's bad-stop grid (9 configurations × 2 dtypes,
+  2^16 to 2^20 rows) accepts 24 one-epoch absolute stops per dtype, none
+  with K > B (largest K 7.3e-4 in float32, 5.9e-4 in float64); float32
+  refuses 2 by V16b (K 5.9e-3 and 2.0e-3, 0.59% and 0.20% off) and 6 by
+  V16, where round 2 refused 24 by V16b. One accepted float32 stop is more
+  than tol off: 0.99999·α_max at correlation 0.999, K 3.7e-4, 2.2e-3 off,
+  which a lower tol returns unchanged.
+  What it promises: a fit returned before max-iter meets the elastic-net
+  optimality conditions to within what the relative test allows, as the
+  `elastic-net-fit` entry says (within tol of a stop the relative test
+  would accept). What it does not: the coefficients' error, bounded only
+  by ‖b − b*‖₂ ≤ K·max|b|·‖D‖₂/(λ_min + λ₂) for K computed exactly, λ_min
+  the least eigenvalue of XᵀWX/Σw on the centred columns (F14; 7.9e-2 of
+  max|b| at correlation 0.99 is sound under it); fits at max-iter (L3-e);
+  and, as for ridge (L2-k), fits where u(λ_max + λ₂)/(λ_min + λ₂) ≥ 1.
+- **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
+  against lstsq at tol 1e-14).
+- **L3-d.** K is computed only when n-iter < max-iter and
+  0 < max|b′| < tol′, the only stops the absolute test makes. It costs one
+  device pass for the column moments: about 10 ms at 1e6 × 100 float32
+  (35 against 25 ms for the unchecked one-epoch fit).
+- **L3-e.** At max-iter, n-iter = max-iter is reported; no refusal and no
+  warning (Python is silent; K catches only 18/27 bad cutoffs, F13).
+- **L3-f.** No `#:random-state`: `initShuffle` reseeds the generator with 0
+  (`shuffle.h:18`), so `'random` is one fixed order and `srand` changes
+  nothing (F7). L5 should re-probe SGD, which has the same pattern.
+- **L3-g.** `cdFit`'s Σw is not deterministic (F8: 2–6 distinct results at
+  50000 rows), so the shim centres with L1-e's weighted means, scales each
+  row by √(w′·m/W′) and calls `cdFit` unweighted without an intercept (F9:
+  1 distinct result, 2.8e-7 / 4.9e-16 against weighted `cdFit`). The
+  intercept is (ȳ′ − Σ_j v̄′_j b′_j)·2^−s in double, rounded once. Python
+  parity for weighted fits holds on dyadic fixtures only (E11).
+- **L3-h.** Two result structs, `lasso-result` and `elastic-net-result`,
+  each (coef intercept n-iter), with their predicts generated by one
+  `define-cd-result`; one C job, lasso passing l1-ratio 1.
+- **L3-i.** NaN, ±inf, α < 0, l1-ratio ∉ [0, 1], tol < 0 and
+  max-iter ∉ [1, 2³¹−1] are refused; tol 0 and α 0 are accepted.
+- **L3-j.** Python cuML's quasi-Newton solver is not bound; it can come as
+  `#:solver` after L4's QN core.
+- **L3-k.** n-iter is 0 when nothing was solved (constant y or no varying
+  column).
+- **L3-l.** A column more than 4 bits too narrow to stage beside the others
+  and y is refused (V13), where raw cuML would zero it silently.
+- **L3-n.** What the `elastic-net-fit` entry leaves out: `'random` has no
+  random state because cuML seeds the shuffle itself (L3-f); the error
+  bound's looseness on correlated columns is L3-b's 8% of the largest
+  coefficient at correlation 0.99; a fit at max-iter does not warn (L3-e);
+  `random_state`, `positive`, `precompute` and `warm_start` are not offered,
+  nor is the quasi-Newton solver (L3-j); fits repeat bit for bit and X, y and
+  sample-weight are not modified, as for `linear-regression-fit` (E6).

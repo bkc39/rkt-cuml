@@ -240,6 +240,25 @@ inline std::string ridge_into(const resources& res, fitted& f, const rr_view* x,
   return f.status;
 }
 
+struct cd_settings {
+  double alpha = 1.0;
+  double l1_ratio = 0.5;
+  int32_t fit_intercept = 1;
+  int32_t max_iter = 1000;
+  double tol = 1e-3;
+  int32_t selection = CUML_LINEAR_MODEL_CD_CYCLIC;
+};
+
+inline std::string elastic_net_into(const resources& res, fitted& f,
+                                    const rr_view* x, const rr_view* y,
+                                    const cd_settings& c = {}) {
+  int32_t n_iter = -1;
+  f.status = outcome(cuml_linear_model_elastic_net_fit(
+      res.handle, x, y, nullptr, &f.out.r, c.alpha, c.l1_ratio, c.fit_intercept,
+      c.max_iter, c.tol, c.selection, &f.intercept, &n_iter));
+  return f.status;
+}
+
 inline std::string predict_into(const resources& res, record& out,
                                 const rr_view* x, const rr_view* coef,
                                 double intercept) {

@@ -19,8 +19,14 @@
 (define dependency-fields '(deps build-deps implies))
 (define reserved-names
   '(agglomerative-clustering dbscan
+                             elastic-net
+                             elastic-net-model
+                             elastic-net?
                              hdbscan
                              kmeans
+                             lasso
+                             lasso-model
+                             lasso?
                              linear-regression
                              linear-regression-model
                              linear-regression?

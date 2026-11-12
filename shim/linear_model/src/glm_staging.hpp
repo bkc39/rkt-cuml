@@ -4,7 +4,9 @@
 #include <bit>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <raft/core/handle.hpp>
+#include <ranges>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
 #include <type_traits>
@@ -35,7 +37,7 @@ struct row_selection {
   int64_t count;
 };
 
-enum class glm_family : std::uint8_t { ols, ridge };
+enum class glm_family : std::uint8_t { ols, ridge, cd };
 
 struct glm_solver {
   glm_family family;
@@ -43,6 +45,10 @@ struct glm_solver {
 };
 
 int even_floor(int x);
+
+template <typename T>
+constexpr double unit_roundoff =
+    1.0 / static_cast<double>(uint64_t{1} << std::numeric_limits<T>::digits);
 
 template <typename T>
 constexpr int tolerance_bits = std::is_same_v<T, float> ? 8 : 18;
@@ -59,9 +65,22 @@ int spread_exponent(int largest, double spread, int64_t n) {
   return std::min(e, largest + column_reach<T>(n));
 }
 
+template <typename T>
+int shared_cap(const staging& s, int64_t n) {
+  return std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
+                            return unit_exponent(s.largest[j]) +
+                                   column_reach<T>(n);
+                          }));
+}
+
+staging shared_at(staging s, int shared,
+                  std::optional<int> y_exponent = std::nullopt);
+
 int64_t ols_workspace(int algorithm, ols_shape shape, int64_t cusolver_lwork);
 
 std::string algorithm_name(int algorithm);
+
+std::string solver_name(glm_solver solver);
 
 template <typename T>
 buffer<T> staged_weights(const raft::handle_t& handle, const T* w, int64_t n,
@@ -107,7 +126,7 @@ int64_t unstage_coef(const raft::handle_t& handle, const T* staged,
 
 template <typename T>
 void require_finite_solution(const T* staged, int64_t d, T intercept,
-                             int algorithm, rmm::cuda_stream_view stream);
+                             glm_solver solver, rmm::cuda_stream_view stream);
 
 template <typename T>
 void require_stationary(double cosine, glm_solver solver);

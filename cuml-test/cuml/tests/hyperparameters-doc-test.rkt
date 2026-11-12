@@ -3,8 +3,10 @@
 (require (only-in cuml
                   agglomerative-clustering
                   dbscan
+                  elastic-net
                   hdbscan
                   kmeans
+                  lasso
                   linear-regression
                   pca
                   ridge
@@ -34,6 +36,10 @@
                   tsvd-fit-transform
                   tsvd-params)
          (only-in cuml/linear-model
+                  elastic-net-fit
+                  elastic-net-params
+                  lasso-fit
+                  lasso-params
                   linear-regression-fit
                   linear-regression-params
                   ridge-fit
@@ -172,8 +178,29 @@
 
 (define ridge-keys '(alpha solver fit-intercept))
 
+(define elastic-net-keys '(alpha l1-ratio fit-intercept max-iter tol selection))
+
+(define lasso-keys '(alpha fit-intercept max-iter tol selection))
+
 (define spectral-embedding-keys
   '(n-components n-neighbors norm-laplacian drop-first random-state affinity))
+
+(define (linear-table-bindings name table keys fit-proc estimator)
+  (define (named suffix)
+    (string->symbol (format "~a~a" name suffix)))
+  (table-bindings table
+                  keys
+                  (list (list (named "-params") table '() (list (argument #f 'base #f)) '() '())
+                        (list (named "-fit")
+                              fit-proc
+                              '(#:params #:resources)
+                              (list (argument #f 'X 'none) (argument #f 'y 'none))
+                              (list (argument '#:sample-weight 'sample-weight #f)
+                                    (argument '#:params 'params #f)
+                                    (argument '#:resources 'resources '(current-device-resources)))
+                              '()
+                              '#:sample-weight)
+                        (estimator-entry name estimator))))
 
 (define (estimator-entry name proc)
   (list name
@@ -352,37 +379,18 @@
                                      (argument '#:resources 'resources '(current-device-resources)))
                                '(affinity))
                          (estimator-entry 'spectral-embedding spectral-embedding)))
-   (table-bindings linear-regression-params
-                   linear-regression-keys
-                   (list (list 'linear-regression-params
-                               linear-regression-params
-                               '()
-                               (list (argument #f 'base #f))
-                               '()
-                               '())
-                         (list 'linear-regression-fit
-                               linear-regression-fit
-                               '(#:params #:resources)
-                               (list (argument #f 'X 'none) (argument #f 'y 'none))
-                               (list (argument '#:sample-weight 'sample-weight #f)
-                                     (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources)))
-                               '()
-                               '#:sample-weight)
-                         (estimator-entry 'linear-regression linear-regression)))
-   (table-bindings ridge-params
-                   ridge-keys
-                   (list (list 'ridge-params ridge-params '() (list (argument #f 'base #f)) '() '())
-                         (list 'ridge-fit
-                               ridge-fit
-                               '(#:params #:resources)
-                               (list (argument #f 'X 'none) (argument #f 'y 'none))
-                               (list (argument '#:sample-weight 'sample-weight #f)
-                                     (argument '#:params 'params #f)
-                                     (argument '#:resources 'resources '(current-device-resources)))
-                               '()
-                               '#:sample-weight)
-                         (estimator-entry 'ridge ridge)))))
+   (linear-table-bindings 'linear-regression
+                          linear-regression-params
+                          linear-regression-keys
+                          linear-regression-fit
+                          linear-regression)
+   (linear-table-bindings 'ridge ridge-params ridge-keys ridge-fit ridge)
+   (linear-table-bindings 'elastic-net
+                          elastic-net-params
+                          elastic-net-keys
+                          elastic-net-fit
+                          elastic-net)
+   (linear-table-bindings 'lasso lasso-params lasso-keys lasso-fit lasso)))
 
 (define-namespace-anchor anchor)
 

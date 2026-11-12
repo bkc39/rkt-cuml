@@ -2,14 +2,14 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters bound-params define-hyperparameters)
          (only-in racket/match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt"
                   cuml-manifold-spectral-embedding-fit-graph-job
                   cuml-manifold-spectral-embedding-fit-job)
-         (only-in "support.rkt" bound-params drawn-seed flag rows-or-zero))
+         (only-in "support.rkt" drawn-seed flag rows-or-zero))
 
 (provide (struct-out spectral-embedding-result)
          spectral-embedding-fit

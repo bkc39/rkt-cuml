@@ -14,6 +14,7 @@
                      proc-name
                      table-id)
          absent
+         bound-params
          define-codes
          define-hyperparameters
          given-hash)
@@ -254,3 +255,13 @@
 
 (define-syntax-parse-rule (define-codes code:id e:code-entry ...)
   (define code (let ([table (hasheq e.entry ... ...)]) (lambda (key) (hash-ref table key -1)))))
+
+(define-syntax-parse-rule (bound-params table:table-id
+                                        (~optional (~seq #:ignoring (skipped ...))
+                                                   #:defaults ([(skipped 1) '()])))
+  #:do [(define ignored (syntax->datum #'(skipped ...)))]
+  #:with (key ...) (for/list ([key (in-list (attribute table.keys))]
+                              #:unless (memq key ignored))
+                     (datum->syntax #'table key #'table))
+  #:with (keyword ...) (map key->keyword (syntax->datum #'(key ...)))
+  (table (~@ keyword key) ...))

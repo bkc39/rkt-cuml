@@ -226,4 +226,146 @@ and @racket[score] is the weighted @racket[r2-score].
 @defproc[(ridge-model [estimator ridge?]) (or/c #f ridge-result?)]{
 The @racket[ridge-result] of the fit that made @racket[estimator], or @racket[#f].}
 
+@section[#:tag "elastic-net"]{Elastic net and lasso}
+
+@declare-exporting[cuml/linear-model cuml]
+
+@examples[#:eval ev
+(define lasso-fitted (lasso-fit X y #:alpha 0.1))
+(~> lasso-fitted lasso-result-coef device-vector->list (decimals 6 _))
+(lasso-result-n-iter lasso-fitted)
+(~> (elastic-net-fit X y #:alpha 0.1 #:l1-ratio 0.5) elastic-net-result-coef device-vector->list (decimals 6 _))
+]
+
+@defstruct*[elastic-net-result ([coef device-vector?] [intercept flonum?]
+                                [n-iter exact-nonnegative-integer?])]{
+The result of @racket[elastic-net-fit], as @racket[linear-regression-result], and @racket[n-iter], the
+coordinate-descent epochs run (0 when nothing was solved).}
+
+@defstruct*[lasso-result ([coef device-vector?] [intercept flonum?]
+                          [n-iter exact-nonnegative-integer?])]{
+The result of @racket[lasso-fit], as @racket[elastic-net-result].}
+
+@defproc[(elastic-net-fit [X device-matrix?] [y device-vector?]
+                          [#:sample-weight sample-weight (or/c #f device-vector?) #f]
+                          [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
+                          [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
+                          [#:fit-intercept fit-intercept boolean? #t]
+                          [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                          [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
+                          [#:selection selection (or/c 'cyclic 'random) 'cyclic]
+                          [#:params params (or/c #f hash?) #f]
+                          [#:resources resources device-resources? (current-device-resources)])
+         elastic-net-result?]{
+Minimises (1/2Σw)Σ@subscript{i}w@subscript{i}(y@subscript{i} − b@subscript{0} − x@subscript{i}·b)² +
+@racket[alpha]·@racket[l1-ratio]·‖b‖@subscript{1} + ½@racket[alpha](1 − @racket[l1-ratio])‖b‖², the
+objective of scikit-learn's and Python cuML's @tt{ElasticNet}; the intercept is not penalised.
+@racket[X], @racket[y] and @racket[sample-weight] are as for @racket[linear-regression-fit].
+
+Coordinate descent starts from b = 0 and visits every column once an epoch, in column order
+(@racket['cyclic]) or in cuML's fixed shuffled order (@racket['random]). It stops after
+@racket[max-iter] epochs, after the first epoch in which no coefficient moved by more than
+@racket[tol] times the largest, or after one in which every coefficient is under @racket[tol]; a
+fit that last test stops short of the first is refused, as when X's units are large against y's. A
+fit with @racket[n-iter] equal to @racket[max-iter] may not have converged.
+
+@racket[tol] bounds an epoch's change, not the error. A fit accepted before @racket[max-iter] is
+within @racket[tol] of a stop the relative test would accept; an absolute stop whose KKT residual
+exceeds @racket[tol] is refused where the dtype's rounding could hide it. The check is best effort
+where u(λ@subscript{max} + λ)/(λ@subscript{min} + λ) is 1 or more,
+λ = @racket[alpha](1 − @racket[l1-ratio]), λ@subscript{max} and λ@subscript{min} being the extreme
+eigenvalues of XᵀWX/Σw, X centred as for @racket[ridge-fit], and u the dtype's unit roundoff;
+@tt{plans/layout.md} (L3-b) has the error bound and the measurements. An
+@racket[alpha] more than rounding above max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]),
+or max@subscript{j}|x@subscript{j}ᵀWy|/(Σw·@racket[l1-ratio]) without @racket[fit-intercept], gives
+coefficients 0. A column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0.
+
+Unlike scikit-learn, the default @racket[tol] is 10@superscript{−3}, not 10@superscript{−4}, and it
+is not a duality-gap tolerance.
+@examples[#:eval ev #:label #f
+(~> (elastic-net-fit X y #:alpha 3) elastic-net-result-coef device-vector->list)
+(define X-wide (list*->device-matrix '((1e5 1e5) (1e5 2e5) (2e5 2e5) (2e5 3e5)) #:dtype 'float64))
+(eval:error (lasso-fit X-wide y #:alpha 1e4))
+(eval:error (elastic-net-fit X y #:l1-ratio 1.5))
+]}
+
+@defproc[(elastic-net-predict [result elastic-net-result?] [X device-matrix?]
+                              [#:resources resources device-resources? (current-device-resources)])
+         device-vector?]{
+As @racket[linear-regression-predict], for an @racket[elastic-net-result].}
+
+@defproc[(elastic-net-params [base (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
+                             [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
+                             [#:fit-intercept fit-intercept boolean? #t]
+                             [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                             [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
+                             [#:selection selection (or/c 'cyclic 'random) 'cyclic])
+         (and/c hash? hash-eq? immutable?)]{
+The hyperparameters of @racket[elastic-net-fit] and @racket[elastic-net], as @racket[kmeans-params].}
+
+@defproc[(lasso-fit [X device-matrix?] [y device-vector?]
+                    [#:sample-weight sample-weight (or/c #f device-vector?) #f]
+                    [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
+                    [#:fit-intercept fit-intercept boolean? #t]
+                    [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                    [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
+                    [#:selection selection (or/c 'cyclic 'random) 'cyclic]
+                    [#:params params (or/c #f hash?) #f]
+                    [#:resources resources device-resources? (current-device-resources)])
+         lasso-result?]{
+@racket[elastic-net-fit] with @racket[l1-ratio] 1, bit for bit, as scikit-learn's @tt{Lasso}.}
+
+@defproc[(lasso-predict [result lasso-result?] [X device-matrix?]
+                        [#:resources resources device-resources? (current-device-resources)])
+         device-vector?]{
+As @racket[linear-regression-predict], for a @racket[lasso-result].}
+
+@defproc[(lasso-params [base (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
+                       [#:fit-intercept fit-intercept boolean? #t]
+                       [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                       [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
+                       [#:selection selection (or/c 'cyclic 'random) 'cyclic])
+         (and/c hash? hash-eq? immutable?)]{
+The hyperparameters of @racket[lasso-fit] and @racket[lasso], as @racket[kmeans-params].}
+
+@section[#:tag "elastic-net-estimator"]{Elastic net and lasso estimators}
+
+@declare-exporting[cuml]
+
+@defproc[(elastic-net [params (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
+                      [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
+                      [#:fit-intercept fit-intercept boolean? #t]
+                      [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                      [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
+                      [#:selection selection (or/c 'cyclic 'random) 'cyclic]
+                      [#:resources resources (or/c #f device-resources?) #f])
+         elastic-net?]{
+An unfitted elastic net with the hyperparameters @racket[(elastic-net-params params ...)], as
+@racket[ridge]: @racket[fit] is @racket[elastic-net-fit] and needs @racket[y], @racket[predict] is
+@racket[elastic-net-predict], and @racket[score] is the weighted @racket[r2-score].
+@examples[#:eval ev #:label #f
+(real->decimal-string (score (fit (elastic-net #:alpha 0.1) X y) X y) 6)
+]}
+
+@defproc[(elastic-net? [v any/c]) boolean?]{Whether @racket[v] is an elastic-net estimator.}
+@defproc[(elastic-net-model [estimator elastic-net?]) (or/c #f elastic-net-result?)]{
+The @racket[elastic-net-result] of the fit that made @racket[estimator], or @racket[#f].}
+
+@defproc[(lasso [params (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
+                [#:fit-intercept fit-intercept boolean? #t]
+                [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
+                [#:selection selection (or/c 'cyclic 'random) 'cyclic]
+                [#:resources resources (or/c #f device-resources?) #f])
+         lasso?]{
+As @racket[elastic-net], with @racket[lasso-fit] and @racket[lasso-predict].
+@examples[#:eval ev #:label #f
+(eval:error (fit (lasso) X))
+]}
+
+@defproc[(lasso? [v any/c]) boolean?]{Whether @racket[v] is a lasso estimator.}
+@defproc[(lasso-model [estimator lasso?]) (or/c #f lasso-result?)]{
+The @racket[lasso-result] of the fit that made @racket[estimator], or @racket[#f].}
+
 @(close-eval ev)

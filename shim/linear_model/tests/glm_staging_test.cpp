@@ -310,7 +310,8 @@ constexpr double finite_intercept = 0.5;
 std::string finite_refusal(const resources& res, const filled<double>& coef,
                            double intercept, int algorithm) {
   try {
-    require_finite_solution(data_of(coef), 2, intercept, algorithm,
+    require_finite_solution(data_of(coef), 2, intercept,
+                            {cumlrkt::glm::glm_family::ols, algorithm},
                             raft::resource::get_cuda_stream(handle_of(res)));
   } catch (const cumlrkt::logic_error& e) {
     return e.what();

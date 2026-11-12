@@ -9,7 +9,9 @@
 
 (provide alpha-value/who
          glm-predict/who
-         intercept-flag/who)
+         intercept-flag/who
+         iteration-count/who
+         real-value/who)
 
 (define/who (intercept-flag who fit-intercept)
   (match fit-intercept
@@ -17,10 +19,19 @@
     [#f 0]
     [v (logic-error "~a: fit-intercept: expected #t or #f, got ~e" who v)]))
 
-(define/who (alpha-value who alpha)
-  (if (real? alpha)
-      (real->double-flonum alpha)
-      (logic-error "~a: alpha: expected a real number, got ~e" who alpha)))
+(define/who (real-value who key v)
+  (if (real? v)
+      (real->double-flonum v)
+      (logic-error "~a: ~a: expected a real number, got ~e" who key v)))
+
+(define/who (alpha-value who alpha) (real-value/who who 'alpha alpha))
+
+(define int32-max (sub1 (expt 2 31)))
+
+(define/who (iteration-count who n)
+  (if (and (exact-integer? n) (<= 1 n int32-max))
+      n
+      (logic-error "~a: max-iter: expected an exact integer from 1 to ~a, got ~e" who int32-max n)))
 
 (define (intercept-value who intercept)
   (if (real? intercept)

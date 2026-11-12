@@ -34,18 +34,6 @@ int shared_spread(const staging& s) {
 }
 
 template <typename T>
-int shared_cap(const staging& s, int64_t n) {
-  return std::ranges::min(s.kept | std::views::transform([&](int64_t j) {
-                            return unit_exponent(s.largest[j]) +
-                                   column_reach<T>(n);
-                          }));
-}
-
-template <typename T>
-constexpr double unit_roundoff =
-    1.0 / static_cast<double>(uint64_t{1} << std::numeric_limits<T>::digits);
-
-template <typename T>
 auto negligible_against(const staging& s, int shared, ridge_penalty penalty) {
   int alpha_power = 0;
   const double alpha_mantissa = std::frexp(penalty.alpha, &alpha_power);
@@ -95,11 +83,6 @@ std::optional<ridge_scale<T>> ridge_scale_of(const staging& s, int64_t n,
     return std::nullopt;
   }
   return ridge_scale<T>{shared, staged};
-}
-
-staging shared_at(staging s, int shared) {
-  std::ranges::fill(s.column_exponent, shared);
-  return s;
 }
 
 int ridge_algorithm(int solver, int64_t rows, int64_t kept) {

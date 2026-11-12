@@ -35,8 +35,6 @@ template <typename T>
 std::optional<ridge_scale<T>> ridge_scale_of(const staging& s, int64_t n,
                                              ridge_penalty penalty);
 
-staging shared_at(staging s, int shared);
-
 int ridge_algorithm(int solver, int64_t rows, int64_t kept);
 
 int lstsq_algorithm(int solver);
