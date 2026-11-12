@@ -6,7 +6,7 @@
          (only-in raft device-vector->list)
          (only-in threading ~>)
          (only-in "linear-data.rkt"
-                  check-law
+                  check-law-case
                   columns-of
                   dtypes
                   exact-fit
@@ -26,9 +26,9 @@
                   weights-or-ones))
 
 (provide alpha-ratios
+         check-ridge-fit
          check-ridge-laws
          lstsq-algorithm
-         norm2
          ridge-case-fit
          ridge-case-result
          ridge-result-fit
@@ -41,9 +41,6 @@
 
 (define (lstsq-algorithm solver)
   (if (eq? solver 'svd) 'svd 'eig))
-
-(define (norm2 xs)
-  (sqrt (for/sum ([x (in-list xs)]) (* x x))))
 
 (define (column-spreads c fi)
   (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
@@ -75,21 +72,47 @@
 
 (define ridge-case-fit (compose1 ridge-result-fit ridge-case-result))
 
+(define (eig-envelope? dt solver kappa₀)
+  (and (eq? dt 'float32)
+       (memq solver '(auto eig))
+       (>= (* (inexact->exact (unit-roundoff dt)) kappa₀) 1)))
+
+(define (check-ridge-fit c fi dt solver fit exact)
+  (match-define (struct* ridge-solution
+                         ([alpha alpha] [coef c*] [intercept b*] [kappa kappa] [kappa₀ kappa₀]))
+    exact)
+  (match-define (list coef b) (exact-fit fit))
+  (define u (unit-roundoff dt))
+  (define (enveloped factor bound)
+    (if (eig-envelope? dt solver kappa₀)
+        (* factor bound)
+        bound))
+  (check-law-case "R1" (gap coef c*) (enveloped 8 (* 128 u kappa (max-abs c*))))
+  (check-law-case "R3"
+                  (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
+                  (enveloped 16 (* 64 u kappa)))
+  (when fi
+    (check-law-case "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))))
+
 (define (check-ridge-laws cases intercepts)
   (for* ([c (in-list cases)]
          [fi (in-list intercepts)])
-    (define y∞ (max-abs (lcase-y c)))
     (for* ([o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) fi alpha-ratios))]
            [dt (in-list dtypes)]
            [s (in-list solvers)])
-      (match-define (struct* ridge-solution ([alpha alpha] [coef c*] [intercept b*] [kappa kappa])) o)
+      (match-define (struct* ridge-solution ([alpha alpha])) o)
       (test-case (format "~a ~a alpha ~a ~a ~a" (lcase-name c) fi alpha dt s)
-        (define u (unit-roundoff dt))
-        (match-define (list coef b)
-          (exact-fit (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)))
-        (check-law "R1" (gap coef c*) (* 128 u kappa (max-abs c*)))
-        (check-law "R3"
-                   (host-cosine (lcase-X c) (lcase-y c) (lcase-w c) coef b fi #:alpha alpha)
-                   (* 64 u kappa))
-        (when fi
-          (check-law "R2" (abs (- b b*)) (* 8 u kappa y∞)))))))
+        (check-ridge-fit c
+                         fi
+                         dt
+                         s
+                         (ridge-case-fit c dt #:alpha alpha #:solver s #:fit-intercept fi)
+                         o)))))
+
+(module+ test
+  (require (only-in rackunit check-false check-true))
+  (check-true (eig-envelope? 'float32 'eig (expt 2 24)))
+  (check-true (eig-envelope? 'float32 'auto +inf.0))
+  (check-false (eig-envelope? 'float32 'eig (- (expt 2 24) 1)))
+  (check-false (eig-envelope? 'float32 'svd +inf.0))
+  (check-false (eig-envelope? 'float64 'eig +inf.0)))

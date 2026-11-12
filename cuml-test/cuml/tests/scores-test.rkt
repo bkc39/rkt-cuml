@@ -13,12 +13,11 @@
                   exact-r2
                   mean
                   pow2-scaled
+                  r2-bound
+                  r2-gap
                   regression-cases)
          (only-in "private/scaler-data.rkt" rows-of)
          (only-in "private/scores-data.rkt" accuracy integer-weights label-cases mse r2))
-
-(define (r2-gap ours exact)
-  (/ (abs (- (inexact->exact ours) exact)) (max 1 (abs (- 1 exact)))))
 
 (define (relative-gap ours exact)
   (/ (abs (- (inexact->exact ours) exact)) exact))
@@ -79,7 +78,7 @@
       (define gap (r2-gap ours (exact-r2 y p w)))
       (test-case (format "case ~a ~a" i dt)
         (check-true (<= ours 1.0) "R2")
-        (check-true (<= gap 1e-14) (format "R5: ~a off the exact value" (exact->inexact gap))))
+        (check-true (<= gap r2-bound) (format "R5: ~a off the exact value" (exact->inexact gap))))
       (max worst gap)))
   (printf "R5: worst r2 gap ~a\n" (exact->inexact worst)))
 

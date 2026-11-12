@@ -3,13 +3,8 @@
 (require (only-in racket/flonum flvector flvector-ref flvector-set! make-flvector)
          (only-in racket/match match-define struct*)
          (only-in racket/math sgn sqr)
-         (only-in "linear-data.rkt"
-                  dot
-                  eigen-range
-                  max-abs
-                  min-norm-solve
-                  weighted-gram
-                  weights-or-ones))
+         (only-in "exact-algebra.rkt" dot eigen-bottom mat*vec min-norm-solve norm2)
+         (only-in "linear-data.rkt" max-abs weighted-gram weights-or-ones))
 
 (provide (struct-out en-problem)
          (struct-out en-solution)
@@ -18,7 +13,6 @@
          curvatures
          host-kkt
          inexact-norm
-         norm2
          oracle-elastic-net
          problem-of
          s2-bound
@@ -125,11 +119,7 @@
   (define coef
     (for/list ([j (in-range (length c))])
       (hash-ref on-support j 0)))
-  (define gradient
-    (map -
-         c
-         (for/list ([row (in-list C)])
-           (dot row coef))))
+  (define gradient (map - c (mat*vec C coef)))
   (define signs-hold?
     (or (zero? l1)
         (for/and ([b (in-list bS)]
@@ -144,7 +134,7 @@
     (error 'oracle-elastic-net "the certificate failed on support ~a" S))
   coef)
 
-(define (oracle-elastic-net p alpha l1-ratio)
+(define (oracle-elastic-net p alpha l1-ratio #:bottom [known-bottom #f])
   (match-define (struct* en-problem ([G G] [b b] [mx mx] [my my] [total total] [yy yy])) p)
   (define-values (l1 l2) (penalties alpha l1-ratio))
   (define C
@@ -152,7 +142,7 @@
       (map (lambda (g) (/ g total)) row)))
   (define c (map (lambda (v) (/ v total)) b))
   (define coef (exact-on-support C c l1 l2 (host-cd C c l1 l2)))
-  (define-values (_ bottom) (eigen-range G))
+  (define bottom (or known-bottom (eigen-bottom G)))
   (en-solution coef
                (- my (dot mx coef))
                (+ (max 0.0 (/ bottom (exact->inexact total))) (exact->inexact l2))
@@ -207,9 +197,6 @@
   (define-values (_ l2) (penalties alpha l1-ratio))
   (+ (/ (* tol (exact->inexact (max-abs coef)) (norm2 (curvatures sigma l2))) mu)
      (* s2-rounding roundoff (inexact-norm c*))))
-
-(define (norm2 xs)
-  (sqrt (for/sum ([x (in-list xs)]) (* x x))))
 
 (define (inexact-norm xs)
   (norm2 (map exact->inexact xs)))

@@ -17,10 +17,10 @@
                   host-kkt
                   inexact-norm
                   kkt-residual
-                  norm2
                   oracle-elastic-net
                   problem-of
                   s2-rounding)
+         (only-in "private/exact-algebra.rkt" norm2)
          (only-in "private/linear-data.rkt"
                   check-law
                   columns-of
