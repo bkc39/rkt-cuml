@@ -1299,7 +1299,9 @@ Follow-ups are GitHub issues.
     one rounding for w·y, two for the block (the final add, and one more
     for the rounded accumulation of the compensations, a second-order
     (n_t + 30)(n_t + 32)·u² with n_t = ⌈n/(32G)⌉ rows per thread, at most
-    u while n < 2³⁰ in float32), and G − 1 for the grid's adds, so G + 2;
+    u while n ≤ 2²⁹ in float32, where n_t ≤ 2048 and the term is about
+    0.26u; it exceeds u from n_t = 4066, so `weighted-y-roundings`
+    refuses n > 2²⁹), and G − 1 for the grid's adds, so G + 2;
     then Σw's s and the division. The weighted ȳ's count is h_y = G + 3 +
     s: G + 18 below 2¹⁷ rows, G + 24 at or above, up to 8216 once G is
     capped (n > 8191·512). The review's G + 19 counted the first grid add,

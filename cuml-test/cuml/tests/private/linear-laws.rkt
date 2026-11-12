@@ -1,6 +1,8 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model linear-regression-predict)
+         (only-in racket/contract/base -> integer-in)
+         (only-in racket/contract/region define/contract)
          (only-in racket/list count)
          (only-in racket/match match-define)
          (only-in rackunit test-case)
@@ -116,7 +118,10 @@
 (define (strided-blocks rows)
   (min strided-block-cap (ceiling (/ rows strided-block-rows))))
 
-(define (weighted-y-roundings rows)
+(define strided-row-limit (expt 2 29))
+
+(define/contract (weighted-y-roundings rows)
+  (-> (integer-in 0 strided-row-limit) exact-nonnegative-integer?)
   (+ (strided-blocks rows) 3 (sum-roundings rows)))
 
 (define (y-roundings rows weighted?)
@@ -257,7 +262,7 @@
         (check-law "T12" (abs (- (inexact->exact pi) exact)) (* 2 d u size))))))
 
 (module+ test
-  (require (only-in rackunit check-equal? check-true)
+  (require (only-in rackunit check-equal? check-exn check-true)
            (only-in "exact-algebra.rkt" condition))
   (define two-column-gram
     (list (list 5/4 (* 2500 (expt 2 -12))) (list (* 2500 (expt 2 -12)) (* 8750000 (expt 2 -22)))))
@@ -295,6 +300,10 @@
   (check-equal? (map strided-blocks (list (* 8191 512) (add1 (* 8191 512)) (expt 2 24)))
                 '(8191 8192 8192))
   (check-equal? (weighted-y-roundings (expt 2 24)) 8216)
+  (check-equal? (weighted-y-roundings strided-row-limit) 8216)
+  (check-exn exn:fail:contract?
+             (lambda () (weighted-y-roundings (add1 strided-row-limit)))
+             "above 2^29 rows the block's compensation term can exceed u, so the count is refused")
   (check-true (for/and ([rows (in-range 7169 (* 2 thick-rows) 509)])
                 (> (y-roundings rows #t) (mean-roundings rows #t)))
               "from 7169 positive rows the weighted ȳ makes more roundings than a weighted x̄")
