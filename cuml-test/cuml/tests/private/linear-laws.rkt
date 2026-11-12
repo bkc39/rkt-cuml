@@ -34,12 +34,13 @@
                   weights-or-ones))
 
 (provide (struct-out staging)
+         centring-gamma
          check-lstsq-fit
          check-oracle-laws
          check-prediction-law
          staging-of)
 
-(struct staging (scale y-scale weight-scale kept kappa bottom) #:transparent)
+(struct staging (scale y-scale weight-scale kept kappa top bottom) #:transparent)
 
 (define (even-floor k)
   (- k (modulo k 2)))
@@ -94,6 +95,7 @@
            p
            (map (lambda (e) (and e #t)) exponents)
            (bracket-condition outer)
+           (car outer)
            (cdr outer)))
 
 (define thick-rows (expt 2 17))
@@ -110,16 +112,20 @@
 (define (gamma k u)
   (/ (* k u) (- 1 (* k u))))
 
-(define (check-lstsq-fit c fi u fit exact staged)
+(define (centring-gamma c u)
+  (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
+  (gamma (mean-roundings (count positive? weights) (lcase-w c)) u))
+
+(define (check-lstsq-fit c fi u fit exact staged #:coef-centring? [coef-centring? #t])
   (match-define (solution c* b* _) exact)
-  (match-define (staging scale y-scale weight-scale kept kappa bottom) staged)
+  (match-define (staging scale y-scale weight-scale kept _ top bottom) staged)
   (match-define (list coef b) (exact-fit fit))
   (define X (lcase-X c))
   (define y (lcase-y c))
   (define weights (weights-or-ones (lcase-w c) y))
   (define total (apply + weights))
   (define columns (columns-of X))
-  (define mean-gamma (gamma (mean-roundings (count positive? weights) (lcase-w c)) u))
+  (define mean-gamma (centring-gamma c u))
   (define (abs-sum xs)
     (dot weights (map abs xs)))
   (define (mean-error xs)
@@ -139,12 +145,21 @@
                [k (in-list kept)]
                #:when k)
       (* dj e)))
+  (define staged-total (* weight-scale total))
+  (define staged-spread (norm2 staged-errors))
   (define centring-coef
     (cond
-      [(not fi) 0]
+      [(not (and fi coef-centring?)) 0]
       [(zero? bottom) +inf.0]
-      [else (/ (* y-scale (norm2 staged-errors) weight-scale total (shift c*)) bottom)]))
-  (define coef-bound (+ (* 128 u kappa kappa (max (max-abs (staged-coef c*)) 1)) centring-coef))
+      [else
+       (define t (* y-scale (shift c*)))
+       (min (/ (* staged-spread staged-total t) bottom)
+            (/ (* t (sqrt staged-total)) (* 2 (sqrt bottom))))]))
+  (define solved-kappa
+    (bracket-condition (cons (+ top (* staged-total staged-spread staged-spread)) bottom)))
+  (define coef-bound
+    (+ (* 128 u solved-kappa solved-kappa (max (+ (max-abs (staged-coef c*)) centring-coef) 1))
+       centring-coef))
   (check-law-case "T1" (gap (staged-coef coef) (staged-coef c*)) coef-bound)
   (define y-square (and fi (weighted-spread y weights)))
   (define-values (centring-cosine column-stretch)
@@ -163,7 +178,7 @@
         1))
   (check-law-case "T3"
                   (host-cosine X y (lcase-w c) coef b fi)
-                  (+ (* 64 u kappa stretch) centring-cosine))
+                  (+ (* 64 u solved-kappa stretch) centring-cosine))
   (when fi
     (define sum-bound
       (+ (* u total (abs b))
@@ -224,17 +239,18 @@
                          1
                          '(#t #t)
                          (condition two-column-gram)
+                         (car (outer-bracket two-column-gram))
                          (cdr (outer-bracket two-column-gram))))
-  (match-define (staging weighted-scale weighted-y-scale weighted-power _ weighted-kappa _)
+  (match-define (staging weighted-scale weighted-y-scale weighted-power _ weighted-kappa _ _)
     (staging-of '((1 1000) (2 3000) (4 2000) (3 5000)) '(1 3 2 4) '(1 4 4 1) #t))
   (check-equal? (list weighted-scale weighted-y-scale weighted-power)
                 (list (list 1 (expt 2 -10)) 1/4 1/4))
   (check-equal? weighted-kappa
                 (condition (list (list 29/10 (* -200 (expt 2 -10)))
                                  (list (* -200 (expt 2 -10)) (* 2600000 (expt 2 -20))))))
-  (match-define (staging wide-scale _ _ _ _ _) (staging-of '((1 64) (2 0)) '(1 2) #f #t))
+  (match-define (staging wide-scale _ _ _ _ _ _) (staging-of '((1 64) (2 0)) '(1 2) #f #t))
   (check-equal? wide-scale (list 1/32 1/32))
-  (match-define (staging constant-scale _ _ constant-kept constant-kappa _)
+  (match-define (staging constant-scale _ _ constant-kept constant-kappa _ _)
     (staging-of '((1 5) (2 5) (4 5)) '(1 2 3) #f #t))
   (check-equal? constant-scale (list 1/2 1))
   (check-equal? constant-kept '(#t #f))

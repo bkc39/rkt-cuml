@@ -1,11 +1,9 @@
 #lang racket/base
 
-(require (only-in "private/real-linear-data.rkt" test-real-set))
+(require (only-in "private/real-linear-data.rkt" offset-law-arms test-real-set))
 
-(define (offset-arms powers)
-  (for*/list ([power (in-list powers)]
-              [weighting (in-list '(unweighted weighted))])
-    (cons (cons 'offset power) weighting)))
-
-(test-real-set 'breast-cancer #:dtypes '(float32) #:arms (offset-arms '(10 12)) #:checks '(lstsq))
-(test-real-set 'breast-cancer #:dtypes '(float64) #:arms (offset-arms '(10 12 14)) #:checks '(lstsq))
+(for ([dt (in-list '(float32 float64))])
+  (test-real-set 'breast-cancer
+                 #:dtypes (list dt)
+                 #:arms (hash-ref offset-law-arms dt)
+                 #:checks '(lstsq)))

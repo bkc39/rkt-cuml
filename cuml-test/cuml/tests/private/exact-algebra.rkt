@@ -4,7 +4,8 @@
          (only-in racket/match match match-define)
          (only-in threading ~>))
 
-(provide bracket-condition
+(provide bottom-vector
+         bracket-condition
          condition
          dot
          eigen-bottom
@@ -207,16 +208,22 @@
 (define (float-solve A b)
   (back-substituted (float-eliminated (augmented A b))))
 
+(define (inexact-rows G)
+  (for/list ([row (in-list G)])
+    (map exact->inexact row)))
+
+(define (start-vector G)
+  (for/list ([i (in-range (length G))])
+    (/ 1.0 (+ i 1))))
+
+(define (bottom-vector G)
+  (define G-inexact (inexact-rows G))
+  (iterated (lambda (v) (float-solve G-inexact v)) (start-vector G) 3))
+
 (define (rayleigh-range G)
-  (define G-inexact
-    (for/list ([row (in-list G)])
-      (map exact->inexact row)))
-  (define start
-    (for/list ([i (in-range (length G))])
-      (/ 1.0 (+ i 1))))
-  (define top-vector (iterated (lambda (v) (mat*vec G-inexact v)) start 300))
-  (define bottom-vector (iterated (lambda (v) (float-solve G-inexact v)) start 3))
-  (values (rayleigh G top-vector) (rayleigh G bottom-vector)))
+  (define G-inexact (inexact-rows G))
+  (define top-vector (iterated (lambda (v) (mat*vec G-inexact v)) (start-vector G) 300))
+  (values (rayleigh G top-vector) (rayleigh G (bottom-vector G))))
 
 (define (positive-definite? A)
   (let loop ([M (scaled-to-integers A)]
@@ -357,6 +364,8 @@
   (check-true (and (exact? top) (exact? bottom)))
   (check-true (<= (* 999/1000 4) top 4))
   (check-true (<= 1/1000 bottom (* 1001/1000 1/1000)))
+  (match-define (list b1 b2 b3) (bottom-vector '((4 0 0) (0 2 0) (0 0 1/1000))))
+  (check-true (and (< (abs b1) 1e-6) (< (abs b2) 1e-6) (< 0.999999 (abs b3))))
   (define (bracketed? G low high)
     (define-values (hi lo) (eigen-range G))
     (and (<= (* (- 1 (* 2 bracket-margin)) low) lo low)
