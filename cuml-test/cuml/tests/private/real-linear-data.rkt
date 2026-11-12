@@ -49,6 +49,7 @@
                   ridge-solve
                   rounded-case
                   solution
+                  staging-of
                   unit-roundoff)
          (only-in "linear-laws.rkt" check-lstsq-fit)
          (only-in "metrics-data.rkt" exact-r2 r2-bound r2-gap)
@@ -81,6 +82,7 @@
 (define ridge-path-l1-ratio 1/1000)
 (define tight-max-iter 100000)
 (define weight-seed 2026)
+(define column-offset (expt 2 10))
 
 (define (tight-tol dt)
   (if (eq? dt 'float32) 1e-7 1e-10))
@@ -129,10 +131,14 @@
   (for*/list ([arm (in-list arms)]
               [dt (in-list dts)])
     (match-define (cons scaling weighting) arm)
-    (define w (and (eq? weighting 'weighted) (seeded-weights (length y))))
+    (define w
+      (match weighting
+        ['weighted (seeded-weights (length y))]
+        ['unweighted #f]))
     (define rows
       (match scaling
         ['raw X]
+        ['offset (map (lambda (row) (map (lambda (x) (+ x column-offset)) row)) X)]
         ['standardised (standardised X (or w (make-list (length y) 1)))]))
     (define c (rounded-case (lcase (format "~a ~a ~a ~a" name scaling weighting dt) rows y w) dt))
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
@@ -165,9 +171,10 @@
 (define (check-real-lstsq rc)
   (match-define (struct* real-case ((case c) [dtype dt])) rc)
   (define o (lstsq-solution rc))
+  (define s (staging-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
   (for ([a (in-list lstsq-algorithms)])
     (test-case (format "~a ~a" (lcase-name c) a)
-      (check-lstsq-fit c #t (unit-roundoff dt) (case-fit c dt #:algorithm a) o))))
+      (check-lstsq-fit c #t (unit-roundoff dt) (case-fit c dt #:algorithm a) o s))))
 
 (define (check-real-ridge rc)
   (match-define (struct* real-case ((case c) [dtype dt])) rc)
@@ -289,11 +296,13 @@
       (for-each run (real-cases name dts arms)))))
 
 (module+ test
-  (require (only-in rackunit check-equal?))
+  (require (only-in racket/match exn:misc:match?)
+           (only-in rackunit check-equal? check-exn))
   (define c (lcase "duplicated predictor" '((1 1) (2 2) (4 4)) '(1 2 3) #f))
   (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
   (define-values (inner outer) (eigen-bracket (en-problem-G p)))
   (match-define (solution coef _ kappa)
     (lstsq-solution (real-case c 'float64 p (varying-inner (en-problem-G p) inner) outer)))
   (check-equal? coef '(9/28 9/28))
-  (check-equal? kappa +inf.0))
+  (check-equal? kappa +inf.0)
+  (check-exn exn:misc:match? (lambda () (made-real-cases 'mtcars '(float64) '((raw . weigthed))))))
