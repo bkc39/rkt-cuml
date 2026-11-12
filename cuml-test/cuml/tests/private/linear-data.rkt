@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (for-syntax racket/base
-                     (only-in syntax/parse ...+ expr))
+                     (only-in syntax/parse/pre ...+ expr))
          (only-in cuml/linear-model
                   linear-regression-fit
                   linear-regression-result-coef
