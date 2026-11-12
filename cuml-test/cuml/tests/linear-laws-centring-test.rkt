@@ -88,20 +88,20 @@
   (define n (vector-length products))
   (define blocks (min 8192 (ceiling (/ n 512))))
   (define (block-partial b)
-    (define-values (block-sum block-c)
-      (for/fold ([block-sum 0.0]
-                 [block-c 0.0])
+    (define-values (partial-sum partial-c)
+      (for/fold ([held 0.0]
+                 [held-c 0.0])
                 ([ty (in-range 32)])
         (define-values (s c)
           (compensated (for/list ([j (in-range (+ (* 32 b) ty) n (* 32 blocks))])
                          (vector-ref products j))))
-        (define t (f32 (+ block-sum s)))
+        (define t (f32 (+ held s)))
         (define lost
-          (if (>= (abs block-sum) (abs s))
-              (f32 (+ (f32 (- block-sum t)) s))
-              (f32 (+ (f32 (- s t)) block-sum))))
-        (values t (f32 (+ block-c (f32 (+ c lost)))))))
-    (f32 (+ block-sum block-c)))
+          (if (>= (abs held) (abs s))
+              (f32 (+ (f32 (- held t)) s))
+              (f32 (+ (f32 (- s t)) held))))
+        (values t (f32 (+ held-c (f32 (+ c lost)))))))
+    (f32 (+ partial-sum partial-c)))
   (define partials (sort (map block-partial (range blocks)) > #:key abs))
   (define total
     (for/fold ([s 0.0]) ([p (in-list partials)])
@@ -380,8 +380,7 @@
   (define coalesced-term
     (+ (* u (apply + weights) (abs b))
        (* (/ (* 32 u) (- 1 (* 32 u))) (dot weights (map abs (lcase-y c))))))
-  (define residual-sum
-    (for/sum ([yi (in-list (lcase-y c))] [wi (in-list weights)]) (* wi (- yi b))))
+  (define residual-sum (for/sum ([yi (in-list (lcase-y c))] [wi (in-list weights)]) (* wi (- yi b))))
   (check-true (> (abs residual-sum) coalesced-term)
               (format "residual sum ~a of the coalesced-count term"
                       (exact->inexact (/ (abs residual-sum) coalesced-term))))
