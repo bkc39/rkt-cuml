@@ -9,6 +9,7 @@
            "cuml-core-lib"
            "cuml-cluster-lib"
            "cuml-decomposition-lib"
+           "cuml-linear-model-lib"
            "cuml-manifold-lib"
            "cuml-metrics-lib"
            "cuml-preprocessing-lib"
@@ -16,6 +17,7 @@
 (define implies
   '("cuml-core-lib" "cuml-cluster-lib"
                     "cuml-decomposition-lib"
+                    "cuml-linear-model-lib"
                     "cuml-manifold-lib"
                     "cuml-metrics-lib"
                     "cuml-preprocessing-lib"))

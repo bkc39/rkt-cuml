@@ -42,6 +42,18 @@
     [sample-weight (logic-error "~a: ~a takes no sample-weight" who owner)]
     [else absent]))
 
+(define (with-y proc owner y needs-y?)
+  (cond
+    [needs-y?
+     (make-keyword-procedure
+      (lambda (keywords keyword-values who . positional)
+        (keyword-apply proc
+                       keywords
+                       keyword-values
+                       who
+                       (append positional (list (or y (logic-error "~a: ~a needs y" who owner)))))))]
+    [else proc]))
+
 (define (call-fit proc who owner X y hyperparameters settings weighted? sample-weight)
   (define named
     (append (list (cons '#:params hyperparameters))
@@ -99,8 +111,8 @@
       #:attr kind #f
       #:attr weight (and (attribute weighted) #'w)
       #:with generic #'gen:scorer
-      #:with (method ...) #'((define (score e X [_y #f] #:sample-weight [w #f])
-                               (on-model proc 'score e X (~? weight (unweighted 'score w)))))))
+      #:with (method ...) #'((define (score e X [y #f] #:sample-weight [w #f])
+                               (on-score proc e X y (~? weight (unweighted 'score w)))))))
 
   (define (grouped generics methods)
     (for/list ([group (in-list (group-by car (map cons generics methods) free-identifier=?))])
@@ -123,7 +135,11 @@
                             #:hyperparameters table:table-id
                             #:fit fit/who:id
                             (~optional (~seq #:labels labels:expr))
-                            (~optional (~and supervised #:supervised))
+                            (~optional (~or* (~seq (~or* (~seq #:supervised #:needs-y)
+                                                         (~seq #:needs-y #:supervised))
+                                                   (~fail "#:needs-y and #:supervised are exclusive"))
+                                             (~and supervised #:supervised)
+                                             (~and needs-y #:needs-y)))
                             #:settings ((~var setting (setting-name (attribute table.keys))) ...)
                             (~optional (~and no-weight #:no-sample-weight))
                             (~optional (~seq #:apply model->argument:expr entry:applied ...+)
@@ -147,13 +163,16 @@
   #:with given-y (cond
                    [(attribute supervised) #'y]
                    [else #'absent])
+  #:with needs-y? (cond
+                    [(attribute needs-y) #'#t]
+                    [else #'#f])
   #:with weighted? (cond
                      [(attribute no-weight) #'#f]
                      [else #'#t])
   (begin
     (define argument-of (~? model->argument values))
     (define (fitted who e X y sample-weight)
-      (call-fit fit/who
+      (call-fit (with-y fit/who 'name y needs-y?)
                 who
                 'name
                 X
@@ -169,6 +188,8 @@
                     X
                     (settings-of e)
                     sample-weight))
+    (define (on-score proc e X y sample-weight)
+      (on-model (with-y proc 'name y needs-y?) 'score e X sample-weight))
     (define (on-fit proc who e X y sample-weight)
       (call-applied proc who (argument-of (fitted who e X y sample-weight)) X (settings-of e)))
     (define (unweighted who sample-weight)

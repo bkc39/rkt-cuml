@@ -10,7 +10,7 @@
                   get-ffi-obj)
          (only-in raft/unsafe raft-abi-pointer status-checker)
          (only-in "exn.rkt" exn:fail:cuml)
-         (only-in "install-native.rkt" not-staged-advice staged?))
+         (only-in "install-native.rkt" native-name not-staged-advice staged?))
 
 (provide (struct-out cuml-family)
          load-family)
@@ -21,11 +21,14 @@
   (if (staged? family dir)
       (format
        "libcumlrkt_~a is staged but would not load\n  found in: ~a\n  the loader said: ~a\n  check that a CUDA 13 driver is installed and LD_LIBRARY_PATH holds no other CUDA; if the library is stale, restage it: ~a"
-       family
+       (native-name family)
        dir
        loader-message
        not-staged-advice)
-      (format "libcumlrkt_~a is not staged\n  looked in: ~a\n  ~a" family dir not-staged-advice)))
+      (format "libcumlrkt_~a is not staged\n  looked in: ~a\n  ~a"
+              (native-name family)
+              dir
+              not-staged-advice)))
 
 (define (cuml-load-error family message)
   (exn:fail:cuml (format "cuml/~a: ~a" family message) (current-continuation-marks) 'generic))
@@ -34,13 +37,13 @@
   (with-handlers ([exn:fail? (lambda (e)
                                (raise (cuml-load-error family
                                                        (load-problem family dir (exn-message e)))))])
-    (ffi-lib (build-path dir (string-append "libcumlrkt_" family)))))
+    (ffi-lib (build-path dir (string-append "libcumlrkt_" (native-name family))))))
 
 (define ((stale-entry family dir name))
   (raise (cuml-load-error
           family
           (format "libcumlrkt_~a lacks entry ~a; it is stale, restage it\n  found in: ~a\n  ~a"
-                  family
+                  (native-name family)
                   name
                   dir
                   not-staged-advice))))
@@ -49,7 +52,7 @@
   (define dir (simplify-path native-libs-dir))
   (define library (family-library family dir))
   (define (entry name type)
-    (define c-name (format "cuml_~a_~a" family name))
+    (define c-name (format "cuml_~a_~a" (native-name family) name))
     (get-ffi-obj c-name library type (stale-entry family dir c-name)))
   (values library
           (entry "last_error" (_fun -> _bytes/nul-terminated))

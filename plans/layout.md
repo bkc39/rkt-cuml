@@ -1050,3 +1050,110 @@ Follow-ups are GitHub issues.
   own term is small, so it is accurate only to about n·2^-1075 against
   their sum.
 - **L0-g.** The Decomposition chapter gains its Reconstruction section.
+
+## Decisions recorded in leg L1 (#87)
+
+- **L1-a.** The family is package `cuml-linear-model-lib`, collection
+  `cuml/linear-model` and native name `linear_model`: one `-`→`_` rule in
+  `install-native.rkt`, `native.rkt`, `scripts/check-bindings.rkt`,
+  `flake.nix` and the CMake family name.
+- **L1-c.** Every column, y and the weights are scaled by powers of two before
+  olsFit and the results scaled back (`shim/linear_model/src/glm_staging.cpp`,
+  kernels in `glm_staging_device.cu`). Zero-weight rows are left out of the
+  staged copy (when at least two rows have positive weight), on the solve
+  and on the nothing-to-solve path, so a zero weight is a deleted row
+  bitwise. The weights are staged first, divided by 4^k,
+  the least power of 4 at or above 2^ilogb(max w); a row counts as
+  positive when its staged weight is: a weight at most 2^−150·4^k (float32)
+  or 2^−1075·4^k (float64) counts as zero. In float64 this is L0-f's
+  cutoff; in float32 it is not (r2-score stages float32 weights in double),
+  so the estimator's `score` can count a row its `fit` dropped, as the
+  Scribble says. The positive-row count
+  m and the wide rule, compaction, the constancy and nothing-to-solve checks,
+  the exponents and the residual check all read the staged weights.
+- **L1-c, exponents.** Column j's power of two is −ilogb of its weighted
+  spread over the positive rows: √Σw(x−x̄)² with fit-intercept, √Σw·x²
+  without. It is computed in double on the column divided by the power of
+  two of its largest |x|, falls back to that power when the sum underflows,
+  and is capped so that n times the staged max |x| times the staged max
+  weight (under 2) stays finite (review r3 L1). The mean's Σw·x is summed in
+  the pass that finds the largest |x|, carried as a significand and a power
+  of two, so it needs no largest first. The spread, and the mean and
+  weight total that feed it, are summed over the compacted positive rows one
+  column at a time, in a tree fixed by the row count alone, so a zero weight
+  is bitwise a deleted row (T6) and no other column, nor a column's position,
+  changes them (E4); round 2's one reduce_by_key over all n·d entries let
+  either move a spread within an ulp of a power of two across it (review r3
+  M1). Every such sum, the target's and the residual check's included, goes
+  through one chunked-fold kernel (`chunk_totals` in `glm_device.cuh`):
+  2048-row chunks, each folded in a fixed tree over a 256-thread block with
+  a column count the caller fixes, never chosen from d, then the chunk totals
+  folded in a fixed tree; a single vector is the one-column case (review
+  final C-1). y takes the
+  power of its largest |y|. Rounds 0 to 2 took every column's from its
+  largest |x|: a column with a large mean against its spread, or one whose
+  variation sits on low-weight rows, then had a centred, weighted Gram
+  eigenvalue under raft's absolute 1e-10 eps, and eig dropped its direction
+  (review r2 H1, H2). One power of two per column, so E1 holds on non-wide
+  fits: scaling a column by 2^k scales its coefficient by 2^−k exactly.
+- **L1-c, against other libraries.** Python cuML does not scale, so a float32
+  column at 1e-5, a float32 y at 1e37 and a constant column under qr give it
+  wrong or NaN coefficients; scikit-learn returns the minimum-norm solution
+  for collinear columns, where this fit can refuse (L1-e). With weights and
+  an intercept, fits above a few thousand rows can differ in the last bits
+  between runs, as in Python cuML. These were in the Scribble entry until
+  the final style read (R10) cut it to what the fit does and refuses; the
+  entry keeps the run-to-run disclosure.
+- **L1-c, wide rule (V1).** With m positive-weight rows, a fit is wide when the
+  kept columns d' exceed m − 1 with an intercept, or m without one. A wide fit
+  stages every kept column with one shared exponent (the least of the kept
+  columns' exponents, that of the widest spread) and solves with the Jacobi SVD whatever the algorithm, so the staged
+  problem is a uniform rescaling of the original and the SVD's minimum-norm
+  solution is scikit-learn's. In float32 with an intercept the SVD does not
+  reach the minimum-norm solution on every wide X: it interpolates y but can
+  differ from it by order 1 (spec F6); float64 reaches it to rounding.
+  Bitwise parity with raw Python cuML holds only on already-staged data (E8);
+  the staged recipe is bitwise (P1).
+- **L1-d.** Columns constant over the positive-weight rows (zero, without an
+  intercept) are dropped and get coefficient 0; with nothing left to solve, or
+  a constant y, olsFit is not called.
+- **L1-e.** A fit whose residual cosine on the staged data (the centred,
+  weighted cosine between each kept staged column and the residual
+  r = (y − ȳ) − Σ(v − v̄)·c, uncentred without fit-intercept, over the
+  compacted positive-weight rows, in each column's staged units, since its
+  power of two cancels in its cosine; v̄ is the planner's mean rounded to a
+  double, less the remainder ρ = Σw(v − v̄)/Σw that the spread pass sums
+  alongside the spread (and target_centre for y), so the centring carries
+  ρ's rounding error rather than v̄'s: without ρ, a float64 column at
+  10¹³ + U(0, 1) kept an error Σw·ε·(v − v̄) that read as a cosine of
+  2.5·10⁻⁵ and refused a sound fit (review r4 M1); each of
+  Σw·c², Σw·c·r and Σw(y − ȳ)² is carried as a significand and a power of two
+  rescaled at each addition, so no product underflows or overflows double)
+  exceeds
+  2⁻⁸ (float32) or 2⁻¹⁸ (float64) is refused (V13). A kept column whose staged
+  values are 0 on every positive-weight row (the shared exponent of a wide fit
+  underflowed it) is skipped: it cannot correlate with the residual, and its
+  coefficient is 0; any other column whose cosine is not finite is refused. The check
+  does not see the intercept: centring removes any constant error, so Σ w r = 0
+  is left to cuML's closed form ȳ − x̄ᵀc. A check of |Σ w r| against
+  √(Σ w)·‖ỹ_c‖ was not added because it refuses sound float32 fits whose y mean
+  dwarfs its spread (y = 10⁶ + N(0, 1): rounding alone gives about 6·10⁻²).
+  Law T4 tests Σ w r = 0. The bound is on that cosine, not on the
+  coefficients: a coefficient fixed only by rows of low weight w carries an
+  error of about u·√(w_max/w) under every algorithm (normwise backward
+  stable, within T1's κ of the unscaled X), and eig ('auto) can lose it
+  entirely once w/w_max is below about u²; the wrong fit's residual is then at
+  rounding level, so the check cannot see it (review r3 M2).
+- **L1-e, ordering.** The workspace bound (V7) is checked after staging is
+  planned, so it follows the compacted row index, plan_staging's d-sized
+  scratch, the column profiles and, for svd, a gesvdj info handle; all are
+  freed on the refusal. This departs from spec §3's "every refusal before any
+  allocation", as spec §2.7 orders it. Racket refuses a non-boolean
+  `fit-intercept` (V8's half; the algorithm half stays in C, after V1) and a
+  non-real intercept (W7's half; a non-finite one stays in C, after W1–W6)
+  before any view check, so they precede V1 and W1.
+- **L1-e, intercept overflow.** A finite solve whose unscaled intercept
+  overflows the dtype is refused with "y: the intercept exceeds the {dtype}
+  range", after V14; it is not in the spec's V table.
+- **L1-f.** `define-estimator` takes `#:needs-y`: y is positional, a missing y
+  is refused, and `[score …]` passes y through.

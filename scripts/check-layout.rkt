@@ -21,6 +21,9 @@
   '(agglomerative-clustering dbscan
                              hdbscan
                              kmeans
+                             linear-regression
+                             linear-regression-model
+                             linear-regression?
                              pca
                              single-linkage
                              spectral-clustering
