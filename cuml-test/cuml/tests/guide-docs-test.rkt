@@ -21,11 +21,14 @@
                   kmeans-params
                   kmeans-result-labels
                   kmeans-result?
+                  mean-squared-error
                   pca-fit
+                  pca-inverse-transform
                   pca-result-components
                   pca-result-explained-variance
                   pca-result-explained-variance-ratio
                   pca-result-singular-values
+                  pca-transform
                   predict
                   score
                   single-linkage-fit
@@ -357,6 +360,15 @@
   (check-equal? (map (curry components-for ratios) '(0.8 0.9)) '(5 8))
   (check-equal? (take (leading scaled-fit wine-measurements 2) 2)
                 '(("flavanoids" "total-phenols") ("color-intensity" "alcohol"))))
+
+(test-gpu "the guide: decomposition, two components' reconstruction error"
+  (define scaled (wine-scaled))
+  (define plane (pca-fit scaled #:n-components 2))
+  (check-equal? (~> (pca-transform plane scaled)
+                    (pca-inverse-transform plane _)
+                    (mean-squared-error scaled _)
+                    rounded)
+                "0.446"))
 
 (define (check-within name ours theirs bound)
   (check <= (worst ours theirs) bound name))

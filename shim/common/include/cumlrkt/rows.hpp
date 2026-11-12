@@ -33,6 +33,9 @@ int64_t first_non_finite(const T* x, int64_t count,
                          rmm::cuda_stream_view stream);
 
 template <typename T>
+int64_t first_negative(const T* x, int64_t count, rmm::cuda_stream_view stream);
+
+template <typename T>
 int64_t first_large_element(const T* x, int64_t count, double most,
                             rmm::cuda_stream_view stream);
 

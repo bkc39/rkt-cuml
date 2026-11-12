@@ -1,9 +1,12 @@
 #lang racket/base
 
 (require (only-in cuml
+                  mean-squared-error
                   pca-fit
+                  pca-inverse-transform
                   pca-result-explained-variance-ratio
                   pca-result-singular-values
+                  pca-transform
                   table->device-matrix
                   tsvd-fit
                   tsvd-result-explained-variance-ratio
@@ -15,6 +18,7 @@
          racket/runtime-path
          (only-in rackunit check check-equal? test-case)
          (only-in raft device-matrix->list* device-vector->list)
+         (only-in threading ~>)
          (only-in "private/guide-data.rkt" boundary-margin host scaled-matrix)
          (only-in "private/python-env.rkt" run-twin test-twin)
          (only-in "private/scaler-data.rkt" [float32-roundoff u]))
@@ -43,12 +47,14 @@
                                    (hash-table ['ratio ratio]
                                                ['singular_values singular]
                                                ['explained_variance variance])
-                                   (hash-table ['ratio svd-ratio] ['singular_values svd-singular]))]
+                                   (hash-table ['ratio svd-ratio] ['singular_values svd-singular])
+                                   (hash-table ['error reconstruction-error]))]
                             ['version version])
     (run-twin twin
               (hasheq 'cases (list (twin-case "pca" raw 2)
                                    (twin-case "pca" scaled 13)
-                                   (twin-case "tsvd" scaled 2)))))
+                                   (twin-case "tsvd" scaled 2)
+                                   (twin-case "reconstruction" scaled 2)))))
   (check-equal? version "1.8.0")
   (define raw-fit (pca-fit raw #:n-components 2))
   (define scaled-fit (pca-fit scaled))
@@ -91,4 +97,12 @@
                  (host (tsvd-result-singular-values svd-fit) 2)
                  svd-singular
                  (map (lambda (b) (+ b (* 64 u (first singular)))) pca-sigma-bounds)
-                 1))
+                 1)
+  (define plane (pca-fit scaled #:n-components 2))
+  (check-printed "reconstruction error"
+                 (list (~> (pca-transform plane scaled)
+                           (pca-inverse-transform plane _)
+                           (mean-squared-error scaled _)))
+                 (list reconstruction-error)
+                 (list (* 2 ratio-bound))
+                 10))

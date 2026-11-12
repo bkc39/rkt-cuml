@@ -1,13 +1,20 @@
 import json
+import math
 import sys
 
 import numpy as np
+from cuml.metrics import accuracy_score as cu_acc
 from cuml.metrics import adjusted_rand_score as cu_ari
+from cuml.metrics import mean_squared_error as cu_mse
+from cuml.metrics import r2_score as cu_r2
 from cuml.metrics import trustworthiness as cu_trustworthiness
 from cuml.metrics.cluster import silhouette_samples as cu_samples
 from cuml.metrics.cluster import silhouette_score as cu_score
 from sklearn.manifold import trustworthiness as sk_trustworthiness
+from sklearn.metrics import accuracy_score as sk_acc
 from sklearn.metrics import adjusted_rand_score as sk_ari
+from sklearn.metrics import mean_squared_error as sk_mse
+from sklearn.metrics import r2_score as sk_r2
 from sklearn.metrics import silhouette_samples as sk_samples
 from sklearn.metrics import silhouette_score as sk_score
 from sklearn.metrics.cluster import contingency_matrix as sk_contingency
@@ -64,6 +71,39 @@ def trustworthiness(case):
     }
 
 
+def nan_to_none(x):
+    x = float(x)
+    return None if math.isnan(x) else x
+
+
+def weight(case):
+    w = case["weight"]
+    return None if w is None else np.asarray(w, dtype=np.float64)
+
+
+def regression(case):
+    yt = np.asarray(case["y_true"], dtype=case["dtype_true"])
+    yp = np.asarray(case["y_pred"], dtype=case["dtype_pred"])
+    w = weight(case)
+    sk, cu = {"r2": (sk_r2, cu_r2), "mse": (sk_mse, cu_mse)}[case["op"]]
+    return {
+        "sklearn": nan_to_none(
+            sk(yt.astype(np.float64), yp.astype(np.float64), sample_weight=w)
+        ),
+        "cuml": nan_to_none(cu(yt, yp, sample_weight=w)),
+    }
+
+
+def accuracy(case):
+    a = np.asarray(case["y_true"], dtype=case["dtype_true"])
+    b = np.asarray(case["y_pred"], dtype=case["dtype_pred"])
+    w = weight(case)
+    return {
+        "sklearn": float(sk_acc(a, b, sample_weight=w)),
+        "cuml": float(cu_acc(a, b, sample_weight=w)),
+    }
+
+
 def version(case):
     return cuml.__version__
 
@@ -76,6 +116,9 @@ def main():
         "ari": ari,
         "silhouette": silhouette,
         "trustworthiness": trustworthiness,
+        "r2": regression,
+        "mse": regression,
+        "accuracy": accuracy,
         "version": version,
     }
     results = [ops[case["op"]](case) for case in cases]

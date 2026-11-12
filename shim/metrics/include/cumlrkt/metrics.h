@@ -70,6 +70,32 @@ CUMLRKT_API int cuml_metrics_trustworthiness(void* handle, const rr_view* x,
 CUMLRKT_API void cuml_metrics_trustworthiness_job(void* args, size_t args_len,
                                                   rr_job_outcome* outcome);
 
+CUMLRKT_API int cuml_metrics_r2_score(void* handle, const rr_view* y_true,
+                                      const rr_view* y_pred,
+                                      const rr_view* sample_weight,
+                                      double* score);
+CUMLRKT_API void cuml_metrics_r2_score_job(void* args, size_t args_len,
+                                           rr_job_outcome* outcome);
+
+CUMLRKT_API int cuml_metrics_mean_squared_error(void* handle,
+                                                const rr_view* y_true,
+                                                const rr_view* y_pred,
+                                                const rr_view* sample_weight,
+                                                double* error);
+CUMLRKT_API void cuml_metrics_mean_squared_error_job(void* args,
+                                                     size_t args_len,
+                                                     rr_job_outcome* outcome);
+
+/* score: the weight of matching samples over the weight sum, one division
+   in double; without weights both are exact counts, so the score is the
+   correctly rounded count over n. */
+CUMLRKT_API int cuml_metrics_accuracy_score(void* handle, const rr_view* y_true,
+                                            const rr_view* y_pred,
+                                            const rr_view* sample_weight,
+                                            double* score);
+CUMLRKT_API void cuml_metrics_accuracy_score_job(void* args, size_t args_len,
+                                                 rr_job_outcome* outcome);
+
 #ifdef __cplusplus
 }
 #endif

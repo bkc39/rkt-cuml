@@ -996,3 +996,57 @@ Follow-ups are GitHub issues.
 - **B4-j.** Repeatability is checked in one process; across processes it is
   B1 L6's and B2 L4's on digits.
 - **B4-k.** `scored` is a guide helper in `guide/helpers.rkt`.
+
+## Decisions recorded in leg L0 (#86)
+
+- **L0-a.** `r2-score`, `mean-squared-error` and `accuracy-score` are the
+  shim's own reductions (`shim/metrics/src/scores.cpp`, `scores_device.cu`):
+  one deterministic thrust/CUB tree per sum, accumulated in double, with
+  power-of-two prescaling. cuML's `r2_score_py` and `accuracy_score_py` are
+  not called.
+- **L0-b.** On a `y-true` that is constant over the samples of positive
+  weight (exact equality with the first), r2 is 1.0 when `y-pred` equals it
+  there and 0.0 otherwise, n = 1 included.
+- **L0-c.** `#:sample-weight` on all three; matrix input to
+  `mean-squared-error` with the uniform average over columns only.
+  `multioutput`, `force_finite`, `normalize` and `squared` are not bound.
+- **L0-d.** Mixed float32/float64 arguments are accepted, as the labels
+  accept int32 with int64.
+- **L0-e.** Negative weights are refused.
+- **L0-f.** No magnitude refusal. Every scaling is by a power of two, so r2
+  is exactly scale-invariant and the error is `+inf.0` only past the flonum
+  range. Weights are divided by 2^e_w, e_w = ilogb(max w); a sample is
+  positive when its scaled weight is (a weight at most 2^(e_w − 1075)
+  counts as zero), and a weight w below 2^(e_w − 1022) is held as a
+  subnormal multiple of 2^(e_w − 1074), a relative error of up to
+  2^(e_w − 1075)/w in that weight. Over the positive samples only, with
+  e = ilogb(max |y|, |ŷ|): r2 divides the values by 2^e, so that its
+  weighted mean ȳ cannot overflow; MSE divides them by 2^e_s,
+  e_s = max(0, e − 1021), only as far as the difference needs, so every
+  residual of values below 2^1022 is the correctly rounded y − ŷ. With s
+  that value scaling, each residual s·y − s·ŷ is divided again by 2^e_r,
+  e_r = ilogb(max |s·y − s·ŷ|), and for r2 each deviation s·y − ȳ by
+  2^e_d, e_d = ilogb(max |s·y − ȳ|), before squaring; both maxima are over
+  the positive samples, whatever their weights. The final ratio divides
+  the frexp mantissas and applies one ldexp, so it is rounded once, as a
+  normal number, whatever the exponents: with R′ = m_R·2^a,
+  D′ = m_D·2^b and d·W′ = m_W·2^c, MSE = ldexp(m_R/m_W,
+  a − c + 2(e_s + e_r)) and r2 = 1 − ldexp(m_R/m_D, a − b + 2(e_r − e_d)).
+  All-zero residuals give R′ = 0, so exactly 1.0 and 0.0. D′ can be 0
+  while y-true varies, when the 2^e scaling flushes every y-true to zero
+  (y-true 2^-60 and 2^-59 beside ŷ 2^1023); r2 is then −inf.0, which is
+  the rounded score.
+  Zero-weight samples never enter a maximum or a sum, so a large value
+  behind a zero weight changes nothing. In r2 a residual more than 2^1022
+  below the largest |y|, |ŷ| is rounded on the subnormal grid of the 2^e
+  scaling; MSE keeps its bits. A light weight costs precision in two
+  places. Its own term w′·r′² carries the weight's relative error. And
+  since e_r (or e_d) ignores the weights, when a light sample holds the
+  largest residual (or deviation), every other sample's scaled residual
+  r′ is below 1, and the term w′·r′² of any sample whose r′² falls below
+  2^-1022 (a residual more than 2^511 below the largest) is rounded on the
+  subnormal grid, an absolute error of up to 2^-1075 per term, normal
+  weights included. Those terms carry the score when the light sample's
+  own term is small, so it is accurate only to about n·2^-1075 against
+  their sum.
+- **L0-g.** The Decomposition chapter gains its Reconstruction section.

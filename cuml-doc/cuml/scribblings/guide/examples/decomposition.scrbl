@@ -54,6 +54,21 @@ Two components keep 0.554 of the variance, five 80% and eight 90%. The first
 is led by flavanoids and total phenols, the second by colour intensity and
 alcohol.
 
+@section[#:tag "ex-decomposition-reconstruction"]{Reconstruction}
+
+Mapped back to the 13 measurements, two components miss what the other
+eleven held:
+
+@examples[#:eval ev #:label #f
+(define plane (pca-fit scaled #:n-components 2))
+(~> (pca-transform plane scaled)
+    (pca-inverse-transform plane _)
+    (mean-squared-error scaled _)
+    rounded)
+]
+
+The mean squared error, 0.446, is the variance left out: 1 − 0.554.
+
 @section[#:tag "ex-decomposition-kmeans"]{k-means on two components}
 
 @racket[fit-transform] projects the wines on the first two components;

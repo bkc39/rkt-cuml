@@ -10,8 +10,11 @@
          racket/runtime-path
          (only-in raft/unsafe define-job))
 
-(provide cuml-metrics-adjusted-rand-score-job
+(provide cuml-metrics-accuracy-score-job
+         cuml-metrics-adjusted-rand-score-job
          cuml-metrics-contingency-matrix-job
+         cuml-metrics-mean-squared-error-job
+         cuml-metrics-r2-score-job
          cuml-metrics-silhouette-samples-job
          cuml-metrics-silhouette-score-job
          cuml-metrics-trustworthiness-job
@@ -51,4 +54,22 @@
             library
             "cuml_metrics_trustworthiness_job"
             (handle view view _int64 _int32 _int64 (out _double))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-metrics-r2-score-job
+            library
+            "cuml_metrics_r2_score_job"
+            (handle view view view (out _double))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-metrics-mean-squared-error-job
+            library
+            "cuml_metrics_mean_squared_error_job"
+            (handle view view view (out _double))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-metrics-accuracy-score-job
+            library
+            "cuml_metrics_accuracy_score_job"
+            (handle view view view (out _double))
             #:exn exn:fail:cuml)
