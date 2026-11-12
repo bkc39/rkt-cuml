@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/flonum flsingle)
-         (only-in racket/list split-at)
+         (only-in racket/list range split-at)
          (only-in racket/match match-define)
          (only-in racket/string string-prefix?)
          (only-in rackunit
@@ -28,7 +28,12 @@
                   unit-roundoff
                   weighted-gram
                   weights-or-ones)
-         (only-in "private/linear-laws.rkt" centring-gamma check-lstsq-fit staging staging-of)
+         (only-in "private/linear-laws.rkt"
+                  centring-gamma
+                  check-lstsq-fit
+                  staging
+                  staging-of
+                  y-centring-gamma)
          (only-in "private/real-linear-data.rkt" offset-law-arms real-lcase))
 
 (define (f32 x)
@@ -77,6 +82,31 @@
                         cons)))
   (define total (f32 (+ (block-sum (map car threads)) (block-sum (map cdr threads)))))
   (~> (* total (f32 (/ 1.0 n))) f32 inexact->exact))
+
+(define (strided-weighted-mean weights ys)
+  (define products (list->vector (map (lambda (w y) (f32 (* w y))) weights ys)))
+  (define n (vector-length products))
+  (define blocks (min 8192 (ceiling (/ n 512))))
+  (define (block-partial b)
+    (define-values (block-sum block-c)
+      (for/fold ([block-sum 0.0]
+                 [block-c 0.0])
+                ([ty (in-range 32)])
+        (define-values (s c)
+          (compensated (for/list ([j (in-range (+ (* 32 b) ty) n (* 32 blocks))])
+                         (vector-ref products j))))
+        (define t (f32 (+ block-sum s)))
+        (define lost
+          (if (>= (abs block-sum) (abs s))
+              (f32 (+ (f32 (- block-sum t)) s))
+              (f32 (+ (f32 (- s t)) block-sum))))
+        (values t (f32 (+ block-c (f32 (+ c lost)))))))
+    (f32 (+ block-sum block-c)))
+  (define partials (sort (map block-partial (range blocks)) > #:key abs))
+  (define total
+    (for/fold ([s 0.0]) ([p (in-list partials)])
+      (f32 (+ s p))))
+  (~> (/ total (f32 (apply + weights))) f32 inexact->exact))
 
 (define (serial-mean xs)
   (define total
@@ -179,13 +209,14 @@
 (define (staged-bottom-vector c)
   (~> c staged-gram bottom-vector (map inexact->exact _)))
 
+(define ((gamma-radius c g) xs)
+  (inexact->exact (* g (weighted-mean (case-weights c) (map abs xs)))))
+
 (define (mean-radius c u)
-  (define weights (case-weights c))
-  (define g (centring-gamma c u))
-  (lambda (xs) (inexact->exact (* g (weighted-mean weights (map abs xs))))))
+  (gamma-radius c (centring-gamma c u)))
 
 (define (worst-y-epsilon c u epsilon)
-  (define radius ((mean-radius c u) (lcase-y c)))
+  (define radius ((gamma-radius c (y-centring-gamma c u)) (lcase-y c)))
   (match-define (solution c* _ _) (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) #t))
   (if (positive? (dot epsilon c*))
       (- radius)
@@ -320,3 +351,38 @@
   (define fit (moved-solve c epsilon (worst-y-epsilon c u epsilon)))
   (check-equal? (failed-laws c 'float32 fit exact) '())
   (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:coef-centring? #f)))
+
+(define (atomic-case)
+  (define big (+ 1 (expt 2 -23)))
+  (define half-ulp (+ (expt 2 -24) (expt 2 -44)))
+  (define rows
+    (for/fold ([rows '()]
+               [sign 1]
+               #:result (reverse rows))
+              ([j (in-range (expt 2 15))])
+      (define b (quotient j 32))
+      (cond
+        [(and (zero? (modulo j 32)) (< b 64))
+         (values (cons (list 0 (/ (if (zero? b) big half-ulp) 2) 2) rows) sign)]
+        [else (values (cons (list sign 0 1) rows) (- sign))])))
+  (lcase "atomic partials"
+         (map (lambda (row) (list (car row))) rows)
+         (map cadr rows)
+         (map caddr rows)))
+
+(test-case "float32 weighted, 2^15 rows in 64 strided blocks, ȳ's block partials added largest first: c* = 0 and b = ŷ̄ exceed T4 under the coalesced count 32 and meet T1 to T4 under the strided count"
+  (define c (atomic-case))
+  (define exact (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) #t))
+  (check-equal? (solution-coef exact) '(0))
+  (define b (strided-weighted-mean (lcase-w c) (lcase-y c)))
+  (define u (inexact->exact (unit-roundoff 'float32)))
+  (define weights (lcase-w c))
+  (define coalesced-term
+    (+ (* u (apply + weights) (abs b))
+       (* (/ (* 32 u) (- 1 (* 32 u))) (dot weights (map abs (lcase-y c))))))
+  (define residual-sum
+    (for/sum ([yi (in-list (lcase-y c))] [wi (in-list weights)]) (* wi (- yi b))))
+  (check-true (> (abs residual-sum) coalesced-term)
+              (format "residual sum ~a of the coalesced-count term"
+                      (exact->inexact (/ (abs residual-sum) coalesced-term))))
+  (check-equal? (failed-laws c 'float32 (list '(0) b) exact) '()))

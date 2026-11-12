@@ -38,7 +38,8 @@
          check-lstsq-fit
          check-oracle-laws
          check-prediction-law
-         staging-of)
+         staging-of
+         y-centring-gamma)
 
 (struct staging (scale y-scale weight-scale kept kappa top bottom) #:transparent)
 
@@ -109,12 +110,31 @@
       (+ (* 2 h) 2)
       (+ h 2)))
 
+(define strided-block-rows 512)
+(define strided-block-cap 8192)
+
+(define (strided-blocks rows)
+  (min strided-block-cap (ceiling (/ rows strided-block-rows))))
+
+(define (weighted-y-roundings rows)
+  (+ (strided-blocks rows) 3 (sum-roundings rows)))
+
+(define (y-roundings rows weighted?)
+  (if weighted?
+      (weighted-y-roundings rows)
+      (mean-roundings rows #f)))
+
 (define (gamma k u)
   (/ (* k u) (- 1 (* k u))))
 
+(define (positive-rows c)
+  (count positive? (weights-or-ones (lcase-w c) (lcase-y c))))
+
 (define (centring-gamma c u)
-  (define weights (weights-or-ones (lcase-w c) (lcase-y c)))
-  (gamma (mean-roundings (count positive? weights) (lcase-w c)) u))
+  (gamma (mean-roundings (positive-rows c) (lcase-w c)) u))
+
+(define (y-centring-gamma c u)
+  (gamma (y-roundings (positive-rows c) (lcase-w c)) u))
 
 (define (check-lstsq-fit c
                          fi
@@ -133,14 +153,15 @@
   (define total (apply + weights))
   (define columns (columns-of X))
   (define mean-gamma (centring-gamma c u))
+  (define y-gamma (y-centring-gamma c u))
   (define (abs-sum xs)
     (dot weights (map abs xs)))
-  (define (mean-error xs)
+  (define ((mean-error g) xs)
     (if fi
-        (/ (* mean-gamma (abs-sum xs)) total)
+        (/ (* g (abs-sum xs)) total)
         0))
-  (define errors (map mean-error columns))
-  (define y-error (mean-error y))
+  (define errors (map (mean-error mean-gamma) columns))
+  (define y-error ((mean-error y-gamma) y))
   (define (shift cs)
     (+ y-error
        (for/sum ([e (in-list errors)] [cj (in-list cs)] [k (in-list kept)] #:when k) (* e (abs cj)))))
@@ -189,7 +210,7 @@
   (when fi
     (define sum-bound
       (+ (* u total (abs b))
-         (* mean-gamma (abs-sum y))
+         (* y-gamma (abs-sum y))
          (* (+ mean-gamma (gamma (length coef) u))
             (for/sum ([column (in-list columns)] [cj (in-list coef)])
                      (* (abs-sum column) (abs cj))))))
@@ -265,4 +286,18 @@
   (check-equal? (map (lambda (rows) (mean-roundings rows #f)) (list (- thick-rows 1) thick-rows))
                 '(17 23))
   (check-equal? (map (lambda (rows) (mean-roundings rows #t)) (list (- thick-rows 1) thick-rows))
-                '(32 44)))
+                '(32 44))
+  (check-equal? (map strided-blocks '(1 512 513 1024 1025 6656 6657 7168 7169))
+                '(1 1 2 2 3 13 14 14 15))
+  (check-equal? (map weighted-y-roundings '(569 1024 1025 5000 6656 6657 7168 7169))
+                '(20 20 21 28 31 32 32 33))
+  (check-equal? (map weighted-y-roundings (list (- thick-rows 1) thick-rows))
+                '(274 280))
+  (check-equal? (map strided-blocks (list (* 8191 512) (add1 (* 8191 512)) (expt 2 24)))
+                '(8191 8192 8192))
+  (check-equal? (weighted-y-roundings (expt 2 24)) 8216)
+  (check-true (for/and ([rows (in-range 7169 (* 2 thick-rows) 509)])
+                (> (y-roundings rows #t) (mean-roundings rows #t)))
+              "from 7169 positive rows the weighted ȳ makes more roundings than a weighted x̄")
+  (check-equal? (map (lambda (rows) (y-roundings rows #f)) (list 569 (- thick-rows 1) thick-rows))
+                '(17 17 23)))
