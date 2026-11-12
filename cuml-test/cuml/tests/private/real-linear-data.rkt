@@ -49,9 +49,8 @@
                   ridge-solve
                   rounded-case
                   solution
-                  staging-of
                   unit-roundoff)
-         (only-in "linear-laws.rkt" check-lstsq-fit)
+         (only-in "linear-laws.rkt" check-lstsq-fit staging-of)
          (only-in "metrics-data.rkt" exact-r2 r2-bound r2-gap)
          (only-in "ridge-data.rkt" check-ridge-fit ridge-case-fit solvers))
 
@@ -211,14 +210,7 @@
   (define float32-tight? (and (eq? dt 'float32) (< tol default-tol)))
   (law-case "converged"
     (check-true (< k max-iter) (format "converged: ~a epochs of ~a" k max-iter)))
-  (check-kkt-laws p
-                  run
-                  alpha
-                  r
-                  tol
-                  (positive-rows-of c)
-                  u
-                  #:relative? (not float32-tight?))
+  (check-kkt-laws p run alpha r tol (positive-rows-of c) u #:relative? (not float32-tight?))
   (when (< tol default-tol)
     (check-distance-laws o run alpha r tol u #t)))
 
@@ -281,20 +273,17 @@
                   (format "score ~a, exact ~a" got (exact->inexact exact))))))
 
 (define real-checks
-  (hasheq 'lstsq
-          (real-check check-real-lstsq "least squares is within the laws' bounds of the exact solve")
-          'ridge
-          (real-check check-real-ridge "ridge is within the laws' bounds of the exact solve")
-          'elastic-net
-          (real-check check-real-elastic-net
-                      "lasso and elastic net meet the KKT laws, and the distance laws at a tight tol")
-          'score
-          (real-check check-real-score
-                      "each estimator's score is the exact R² of its own predictions")
-          'refusal
-          (real-check
-           check-real-refusal
-           "l1-ratio 0 at the ridge path's start is refused at the default tol, exact at a tight one")))
+  (hasheq 'lstsq (real-check check-real-lstsq
+                             "least squares is within the laws' bounds of the exact solve")
+          'ridge (real-check check-real-ridge "ridge is within the laws' bounds of the exact solve")
+          'elastic-net (real-check
+                        check-real-elastic-net
+                        "lasso and elastic net meet the KKT laws, and the distance laws at a tight tol")
+          'score (real-check check-real-score
+                             "each estimator's score is the exact R² of its own predictions")
+          'refusal (real-check
+                    check-real-refusal
+                    "l1-ratio 0 at the ridge path's start is refused at the default tol, exact at a tight one")))
 
 (define default-checks '(lstsq ridge elastic-net score))
 

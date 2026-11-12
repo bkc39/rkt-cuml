@@ -1,13 +1,14 @@
 #lang racket/base
 
-(require (for-syntax racket/base (only-in syntax/parse ...+ expr))
+(require (for-syntax racket/base
+                     (only-in syntax/parse ...+ expr))
          (only-in cuml/linear-model
                   linear-regression-fit
                   linear-regression-result-coef
                   linear-regression-result-intercept)
          (only-in math/flonum flstep)
          (only-in racket/flonum flsingle)
-         (only-in racket/list count drop first make-list take)
+         (only-in racket/list drop first make-list take)
          (only-in racket/match match match-define struct*)
          (only-in racket/math exact-round sqr)
          (only-in rackunit check-true current-test-name test-case)
@@ -16,19 +17,16 @@
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "exact-algebra.rkt"
-                  bracket-condition
                   condition
                   dot
                   eigen-bracket
                   integer-scaled
                   min-norm-solve
-                  outer-bracket
                   varying-inner))
 
 (provide (struct-out lcase)
          (struct-out ridge-solution)
          (struct-out solution)
-         (struct-out staging)
          algorithms
          case-fit
          case-result
@@ -68,7 +66,6 @@
          rounded-case
          scaled-case
          scaled-columns
-         staging-of
          unit-roundoff
          weighted-gram
          weighted-spread
@@ -77,7 +74,6 @@
 
 (struct lcase (name X y w) #:transparent)
 (struct solution (coef intercept kappa) #:transparent)
-(struct staging (scale y-scale weight-scale kept kappa bottom) #:transparent)
 (struct ridge-solution (alpha coef intercept kappa kappa₀ top bottom xty) #:transparent)
 
 (define algorithms '(auto svd qr svd-qr))
@@ -349,61 +345,6 @@
   (define c (min-norm-solve G b))
   (solution c (- my (dot mx c)) (condition G)))
 
-(define (even-floor k)
-  (- k (modulo k 2)))
-
-(define (weight-scale w)
-  (if w
-      (expt 2 (~> w max-abs floor-log2 - even-floor))
-      1))
-
-(define (staging-of X y w fit-intercept)
-  (define p (weight-scale w))
-  (define-values (G _b _mx _my)
-    (weighted-gram X y (and w (map (lambda (v) (* p v)) w)) fit-intercept))
-  (define weights (weights-or-ones w y))
-  (define exponents
-    (for/list ([row (in-list G)]
-               [j (in-naturals)])
-      (define g (list-ref row j))
-      (and (positive? g) (~> g floor-log2 (/ 2) floor -))))
-  (define kept (filter values exponents))
-  (define rows (count positive? weights))
-  (define shared (and (> (length kept) (- rows (if fit-intercept 1 0))) (apply min kept)))
-  (define scale
-    (for/list ([e (in-list exponents)])
-      (expt 2 (or shared e 0))))
-  (define staged
-    (for/list ([row (in-list G)]
-               [di (in-list scale)]
-               [ei (in-list exponents)]
-               #:when ei)
-      (for/list ([g (in-list row)]
-                 [dj (in-list scale)]
-                 [ej (in-list exponents)]
-                 #:when ej)
-        (* di g dj))))
-  (define largest
-    (for/fold ([m 0])
-              ([yi (in-list y)]
-               [wi (in-list weights)]
-               #:when (positive? wi))
-      (max m (abs yi))))
-  (define y-scale
-    (cond
-      [(zero? largest) 1]
-      [else (expt 2 (- (floor-log2 largest)))]))
-  (define outer
-    (cond
-      [(null? staged) '(1 . 1)]
-      [else (outer-bracket staged)]))
-  (staging scale
-           y-scale
-           p
-           (map (lambda (e) (and e #t)) exponents)
-           (bracket-condition outer)
-           (cdr outer)))
-
 (define (ridge-solve G b mx my inner outer alpha)
   (match-define (cons top bottom) outer)
   (define kappa₀
@@ -483,28 +424,6 @@
   (match-define (solution c3 b3 _) (oracle-lstsq '((1 0 0) (0 1 0) (0 0 1)) '(1 2 3) #f #t))
   (check-equal? c3 '(-1 0 1))
   (check-equal? b3 2)
-  (define two-column-gram
-    (list (list 5/4 (* 2500 (expt 2 -12))) (list (* 2500 (expt 2 -12)) (* 8750000 (expt 2 -22)))))
-  (check-equal? (staging-of '((1 1000) (2 3000) (4 2000) (3 5000)) '(1 3 2 4) #f #t)
-                (staging (list 1/2 (expt 2 -11))
-                         1/4
-                         1
-                         '(#t #t)
-                         (condition two-column-gram)
-                         (cdr (outer-bracket two-column-gram))))
-  (match-define (staging weighted-scale weighted-y-scale weighted-power _ weighted-kappa _)
-    (staging-of '((1 1000) (2 3000) (4 2000) (3 5000)) '(1 3 2 4) '(1 4 4 1) #t))
-  (check-equal? (list weighted-scale weighted-y-scale weighted-power) (list (list 1 (expt 2 -10)) 1/4 1/4))
-  (check-equal? weighted-kappa
-                (condition (list (list 29/10 (* -200 (expt 2 -10)))
-                                 (list (* -200 (expt 2 -10)) (* 2600000 (expt 2 -20))))))
-  (match-define (staging wide-scale _ _ _ _ _) (staging-of '((1 64) (2 0)) '(1 2) #f #t))
-  (check-equal? wide-scale (list 1/32 1/32))
-  (match-define (staging constant-scale _ _ constant-kept constant-kappa _)
-    (staging-of '((1 5) (2 5) (4 5)) '(1 2 3) #f #t))
-  (check-equal? constant-scale (list 1/2 1))
-  (check-equal? constant-kept '(#t #f))
-  (check-true (<= 1 constant-kappa 2) (format "κ over the varying column ~a" constant-kappa))
   (match-define (list (struct* ridge-solution ([kappa₀ constant-kappa₀])))
     (ridge-oracles '((1 5) (2 5) (4 5)) '(1 2 3) #f #t '(1)))
   (check-true (<= 1 constant-kappa₀ 2) (format "κ₀ over the varying column ~a" constant-kappa₀)))

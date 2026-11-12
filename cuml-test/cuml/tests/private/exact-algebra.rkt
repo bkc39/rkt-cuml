@@ -143,7 +143,9 @@
   (define p
     (for/list ([c (in-range d)])
       (cond
-        [(hash-ref pivot-rows c #f) => last]
+        [(hash-ref pivot-rows c #f)
+         =>
+         last]
         [else 0])))
   (define N
     (for/list ([f (in-range d)]
@@ -151,7 +153,9 @@
       (for/list ([c (in-range d)])
         (cond
           [(= c f) 1]
-          [(hash-ref pivot-rows c #f) => (lambda (row) (- (list-ref row f)))]
+          [(hash-ref pivot-rows c #f)
+           =>
+           (lambda (row) (- (list-ref row f)))]
           [else 0]))))
   (cond
     [(null? N) p]
