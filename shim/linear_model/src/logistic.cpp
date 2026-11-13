@@ -31,6 +31,9 @@ namespace cumlrkt::glm::qn {
 
 namespace {
 
+constexpr int staging_window = 8;
+constexpr double change_tol_per_tol = 0.01;
+
 struct penalties {
   double l1;
   double l2;
@@ -207,7 +210,8 @@ int staging_exponent(const column_stats& s, int64_t m) {
   const double median =
       sig.size() % 2 == 1 ? sig[h] : (sig[h - 1] / 2) + (sig[h] / 2);
   if (!(median > 0) || !std::isfinite(median) ||
-      (median >= std::ldexp(1.0, -8) && median < std::ldexp(1.0, 8))) {
+      (median >= std::ldexp(1.0, -staging_window) &&
+       median < std::ldexp(1.0, staging_window))) {
     return 0;
   }
   const int cap = column_reach<T>(m) - std::ilogb(s.largest);
@@ -259,8 +263,8 @@ void require_resolved(const residual_sums& sums, const std::vector<T>& params,
 
 template <typename T>
 solved_fit<T> closed_form(const raft::handle_t& handle, const weighting& wt,
-                          const int32_t* codes, int64_t k, int64_t d,
-                          bool fit_intercept) {
+                          const int32_t* codes, int64_t k,
+                          const matrix<T, int64_t>& x, bool fit_intercept) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const int64_t kk = k == 2 ? 1 : k;
   std::vector<T> b(kk, T{0});
@@ -279,7 +283,7 @@ solved_fit<T> closed_form(const raft::handle_t& handle, const weighting& wt,
       b[c] = static_cast<T>(k == 2 ? logs[1] - logs[0] : logs[c] - mean);
     }
   }
-  buffer<T> coef = scratch<T>(kk * d, stream);
+  buffer<T> coef = scratch<T>(kk * x.d, stream);
   raftrkt::cuda_check(
       cudaMemsetAsync(coef.data(), 0, coef.size() * sizeof(T), stream.value()),
       "cudaMemsetAsync");
@@ -292,7 +296,7 @@ ML::GLM::qn_params params_of(const qn_request& r, int64_t k, penalties p) {
   q.penalty_l1 = p.l1;
   q.penalty_l2 = p.l2;
   q.grad_tol = r.tol;
-  q.change_tol = r.tol * 0.01;
+  q.change_tol = r.tol * change_tol_per_tol;
   q.max_iter = r.max_iter;
   q.linesearch_max_iter = r.linesearch_max_iter;
   q.lbfgs_memory = r.lbfgs_memory;
@@ -311,7 +315,7 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   const column_stats stats = column_stats_of<T>(
       x, wt.weighted ? wt.weights.data() : nullptr, wt.rows, fi, stream);
   if (stats.kept.empty()) {
-    return closed_form<T>(handle, wt, codes, k, x.d, fi);
+    return closed_form<T>(handle, wt, codes, k, x, fi);
   }
   const int s = staging_exponent<T>(stats, wt.rows.count);
   penalties pen = strengths(r);
@@ -428,7 +432,7 @@ void require_qn_codes(const qn_request& r) {
     throw logic_error(std::format("C: expected a positive finite real, got {}",
                                   printed(r.C)));
   }
-  if (!(r.l1_ratio >= 0 && r.l1_ratio <= 1)) {
+  if (std::isnan(r.l1_ratio) || r.l1_ratio < 0 || r.l1_ratio > 1) {
     throw logic_error(std::format(
         "l1-ratio: expected a real from 0 to 1, got {}", printed(r.l1_ratio)));
   }
