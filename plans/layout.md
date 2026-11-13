@@ -1884,13 +1884,22 @@ scratch, the source is `cpp/src/glm/qn/`.
   every row of positive weight (#23); equal weights fold to unweighted.
 - **L4-d labels.** Integral device vectors (int32, int64, float32, float64)
   or host lists of reals, strings or symbols, encoded to sorted codes;
-  predict gives y's kind back.
+  predict gives y's kind back. Host reals are made exact integers once,
+  after the integrality test, and one code table serves fit, predict and
+  score; `classes` are flonums when any label is (numpy's unification:
+  each label goes through float64 first), exact integers otherwise.
+  Non-finite device labels are refused as non-integral (#17).
 - **L4-e.** A class of zero total weight is refused (#22).
 - **L4-f check.** After the solve, in double: K = max(|∂F/∂b|∞,
   max_jc |pg_jc|/σ_j), F the normalised objective, pg its (pseudo-)gradient;
   refused when K > 64·τ·max(F, τ), τ = max(tol, 10⁻⁴), or the solution is not
-  finite. One pass over X. A garbage gate, not an accuracy promise: at the
-  default tol the coefficients are up to 7.2e-2 (f32) and 2.3e-2 (f64) off.
+  finite. One pass over X. A garbage gate, not an accuracy promise: it bounds
+  only the first-order residual, and nearly collinear columns leave accepted
+  coefficients far from the optimum. Measured (r0 probe q4, n 2000, columns
+  a, a + 1e-3·e, b, f64): `'none` accepted with coef (1.48 1.48) against
+  (−87.2 90.1) at tol 1e-12, gap 0.98; l2 C 100 accepted, gap 0.21; with
+  a + 1e-4·e, Python cuML's point (ours, unweighted, s = 0) is accepted at
+  gap 1.00 to the f64 oracle, max|Δz| 0.51.
 - **L4-f′.** No warm restarts in L4.
 - **L4-g.** At max-iter n-iter = max-iter and the check decides.
 - **L4-h.** Bitwise twins only at n ≤ 200; non-repeatability above a few
@@ -1902,11 +1911,23 @@ scratch, the source is `cpp/src/glm/qn/`.
   accuracy scorer through label codes and the generics `predict-proba`,
   `predict-log-proba` and `decision-function`. **L4-m.** Binary is one
   sigmoid row. **L4-n.** Softmax intercepts as cuML returns them; tests
-  centre. **L4-o.** A constant column gets coefficient 0 exactly.
+  centre. **L4-o.** A constant column gets coefficient 0 exactly, and so
+  does a column whose spread is at rounding level: σ_j ≤ 16·u_T·max|x_j|.
+  Measured (r1a): a column's own rounding noise, fl(fl(a + c) − a), gives
+  σ/(u·max|x|) ≤ 2.7; one row k ulps off gives 0.08·k. From 2⁵u to 2²⁴u
+  (f64) the solver stops short and the check refuses; the 2⁻²⁰ (f64) and
+  2⁻¹⁰ (f32) relative spreads fit at tight tol. K centres the column
+  gradient with an intercept (g_j − x̄_j·∂F/∂b): an offset column z + 2⁸
+  was accepted with coef −0.0042 against −0.367 uncentred, and is refused
+  centred. σ_j is computed as a·√(Σw((x − x̄)/a)²/W), a = 2^⌊log₂ max|x_j|⌋,
+  bitwise the old value in range; a kept column whose σ is not finite is
+  refused naming its magnitude. The staged penalty is range-checked in X's
+  dtype (#24 names that dtype). `'balanced` with uniform sample weights
+  takes its class weights from the counts, n/(k·n_c).
   **L4-q.** Separation is not refused.
 - **L4-p.** Raw breast-cancer is refused (R2): Python cuML's point there is
-  off the float64 oracle by more than S4's cap, or above the bound in a
-  128-bit recompute.
+  off the float64 oracle by more than S4's cap (measured 0.98 f64, 0.99
+  f32, against 3e-2 and 8e-2).
 - **Deviations accepted.** Missing classes weigh 1 (L4-r); house wording
   for the y length, negative weights, zero weight sum and #24; a
   column-reach cap in place of `shared_cap`; Racket refusals raise

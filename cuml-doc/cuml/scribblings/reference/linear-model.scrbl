@@ -422,9 +422,9 @@ weights must be equal on every row. Defaults are Python cuML's; scikit-learn's
 
 The fit is refused when the solver stops at a first-order residual above 64·max(@racket[tol],
 10⁻⁴) relative to the objective, in the columns' scale. This catches iteration cutoffs and
-solver collapse; it does not bound the coefficients' error, which at the default @racket[tol]
-reaches 10⁻² relative (@tt{plans/layout.md}, L4-f), and it refuses some fits on columns of
-widely mixed scale whatever @racket[max-iter]: standardise them. On separable data without a
+solver collapse. It bounds only the first-order residual: on nearly collinear columns an accepted
+fit's coefficients can be far from the optimum. It refuses some fits on columns of widely mixed
+scale whatever @racket[max-iter]: standardise them. On separable data without a
 penalty the coefficients grow until the solver stops. Fits of more than a few hundred rows do
 not repeat bitwise (L4-h).
 @examples[#:eval ev #:label #f
