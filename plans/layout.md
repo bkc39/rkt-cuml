@@ -1774,3 +1774,159 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   `random_state`, `positive`, `precompute` and `warm_start` are not offered,
   nor is the quasi-Newton solver (L3-j); fits repeat bit for bit and X, y and
   sample-weight are not modified, as for `linear-regression-fit` (E6).
+
+## Decisions recorded in leg L4 (#90): logistic regression (QN)
+
+Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
+1.8.0); the probes and the check study (p4, 2154 fits) are in the leg's
+scratch, the source is `cpp/src/glm/qn/`.
+
+### Findings
+
+- **F1 parity.** Raw `qnFit`, called in X's layout with Python's
+  parameters, equals Python `LogisticRegression` bit for bit in coef,
+  intercept and n_iter, and `qnDecisionFunction`/`qnPredict` equal its
+  `decision_function`/`predict` (12/12: f32/f64 × k 2, 3, 5 × intercept on
+  and off). Row- and column-major decisions differ in the last float32 bits.
+- **F2 objective.** With `penalty_normalized`, `qnFit` minimises
+  (1/N)Σl + (ρ/(C·N))‖W‖₁ + ((1−ρ)/(2C·N))‖W‖², sklearn's
+  C·Σl + ρ‖W‖₁ + (1−ρ)/2‖W‖² divided by C·N; the intercept is never
+  penalised. Against a float64 L-BFGS-B oracle at tol 1e-10 (400×5): cuML
+  ≤ 2.9e-9 (l2, none), ≤ 2.2e-8 (l1, elastic net); sklearn ≤ 5e-8.
+- **F3 binary weights.** The loss is divided by Σw and the gradient by N:
+  weights ×8 put the coefficients 0.13–0.45 off (l2), 0.03–0.26 (l1);
+  U(0.5, 1.5) weights 1.8e-4–3.2e-3; all weights 2 against C×2: 5.3e-3,
+  n_iter 16 against 9.
+- **F4 softmax weights.** `Softmax::getLossAndDZ` ignores the weights: k = 3
+  weighted fits are the unweighted fit bit for bit, 3–6e-2 off the weighted
+  optimum.
+- **F5 gauge.** Softmax intercepts (always) and coefficients (l1, none) are
+  fixed only up to a shift common to the classes: Σb = −0.44 (cuML) against
+  0 (oracle, sklearn); centred intercepts agree to 5e-7.
+- **F6 scale.** The stop is not scale-invariant (X·2^a, C rescaled to the
+  same problem): float32 l2 rel 6e-5 at a = 0, 0.2 at a = −10 (silent),
+  6e-3 at 10, 1–2 at ±20 and ±30 after 2 iterations (a silent line-search
+  failure); float64 6e-3 at 20, 2 at 30.
+- **F7 stops.** `check_convergence` stops on ‖g‖∞ ≤ tol·max(f, tol) or on
+  |f₋₁₀ − f| ≤ 0.01·tol·max(f, tol); for l1 g is the smooth part's gradient,
+  so OWL-QN stops almost only on change or line search; a line-search
+  failure is a silent stop; at max_iter n_iter = max_iter with a log line
+  only. Of 1052 full p4 fits at tol 1e-4: 288 gradient, 548 change, 7
+  line-search failures, 8 line-search advances, 2 at max_iter.
+- **F8 constants.** Absolute line-search cuts (min step 1e-20, max 1e20),
+  ftol = 1e-3·tol, the update skipped when sᵀy ≤ ε·yᵀy, `log_sigmoid` as
+  log(1 + exp).
+- **F9 check study.** p4: dtype × staging × tol {1e-4, 1e-6} × max_iter
+  {1, 3, 10, 1000} × (200, 4), (2000, 10), (20000, 20) × k {2, 4} × 6
+  penalties × separation {0.5, 2} × plain or 2^[−3..3] columns. Full runs
+  have K/max(F, tol) ≤ 4.6e-3 (f32), 3.8e-3 (f64) at tol 1e-4 and ≤ 1.5e-3,
+  3.6e-3 at tol 1e-6. Bad cutoffs (max_iter < 1000, coefficient error
+  > 1e-2): 366 f32, 437 f64, K/F ≥ 7.2e-4, first percentile 5.5e-3; the
+  bound 64·τ catches 360/366 and 430/437.
+- **F10 staging.** Staging the narrowest or the widest column hurts mixed
+  scales: 2^[−3..3] columns at tol 1e-4, e max 5.9e-3 (none), 7.2e-2
+  (narrow), 2.3e-2 (wide) in float32.
+- **F11 separation.** Separable data without a penalty stops on the
+  gradient as F → 0: 200×3, n_iter 35–36, max|coef| ≈ 1106, accuracy 1;
+  the check (L4-f) passes all 84 separable p4 fits.
+- **F12 repeat.** `atomicAdd` reductions: n ≤ 1000 repeat (8/8, one f32 k=6
+  case 2 distinct at rel 2e-6); 2000 rows: f32 rel up to 5e-4, f64 1e-14;
+  from 5e4 rows every run differs.
+- **F13 edges (Python).** One class is a ValueError; a zero-weight class
+  stays in `classes_` (binary: intercept 27.6); float labels 1.5 are
+  "Unknown label type: continuous"; C = 0 ZeroDivisionError, C = −1
+  garbage, C = inf no penalty, C or l1_ratio NaN zeros; tol ≤ 0 or NaN runs
+  to 1000; max_iter 0 and linesearch_max_iter ≤ 0 zeros; `lbfgs_memory` 0
+  segfaults, −1 throws; a negative class weight gives intercept 6.9e307;
+  negative sample weights zeros; a constant column with an intercept gets
+  −7.6e-5; zero-weight rows against deleted rows rel 2.3e-17.
+- **F14 apply.** Binary `predict_proba` is float64 with p0 = 1 − p1;
+  multiclass is a max-subtracted softmax in X's dtype; `predict_log_proba`
+  is log(proba). |Σp − 1| ≤ 2.4e-7 (f32, k = 7); argmax takes the first
+  index on ties; binary z = 0 and NaN are class 0.
+
+### Step 0 (implementation)
+
+- **Median staging (L4-a), p4 rerun.** 2880 fits, f32/f64 × the p4 sizes ×
+  k 2, 4 × 6 penalties × separation × plain or 2^[−3..3] columns, staging
+  `none` and `median`, at offsets X·2^a, a ∈ {0, ±10, ±20}, the penalty
+  rescaled to the same problem. Mixed scales: every a = 0 case has its
+  median spread inside [2⁻⁸, 2⁸), so median is none, bit for bit. Offsets:
+  median brings every fit back to a = 0's error (f32 plain max e 3.5e-3,
+  K/B ≤ 0.46) where none reaches e 566 and K/B 106.
+- **Raw breast-cancer (L4-p).** Column spreads 0.00264 to 569 (2^17 apart),
+  median 0.0727, inside the window, so s = 0. Accuracy at the defaults
+  equals sklearn's (545/569), but K/B is 12.8 (f64) and 17.3 (f32) at
+  max_iter 1000, 2.4–7.8 at convergence, 2.5–2.6 at tol 1e-3; l1 and elastic
+  net 1.5–20. Ruled: refused (R2), with the soundness test below.
+- **Class-weight mappings (L4-r), Python cuML 26.08.** A class missing from
+  the mapping weighs 1 (`{1: 2}` is `{0: 1, 1: 2}` bit for bit); a key that
+  is not a class is ignored when every class has a weight; Python raises
+  only when some class is missing and some key is not a class, and so does
+  `logistic-regression-fit` (#20, "class-weight: classes (...) are not in
+  class-weight").
+
+### Decisions
+
+- **L4-a staging.** One shared exponent s from the median spread σ_j
+  (weighted RMS over the counted rows, centred with an intercept) of the
+  kept columns: s = 0 inside [2⁻⁸, 2⁸), else −⌊log₂ M⌋, capped so the
+  largest |x| stays in range. X′ = X·2ˢ, l1′ = l1·2ˢ, l2′ = l2·4ˢ is the same
+  problem; coefficients are unstaged by 2ˢ. A copy is made only when s ≠ 0
+  or rows are compacted, so ordinary data is Python's input bit for bit.
+- **L4-b weights.** Class weights fold into w; zero-weight rows are
+  compacted (m rows remain); w̃ = w·m/W with W = Σw in double; the
+  penalties are ρ·m/(C·W) and (1−ρ)·m/(C·W) with `penalty-normalized`. The
+  fit minimises sklearn's C·Σwl + ρ‖W‖₁ + (1−ρ)/2‖W‖², Python cuML's
+  objective whenever Σw = N. Scaling every weight by 2ᵃ is scaling C by 2ᵃ
+  (E6, ruled).
+- **L4-c.** With 3 or more classes the effective weights must be equal on
+  every row of positive weight (#23); equal weights fold to unweighted.
+- **L4-d labels.** Integral device vectors (int32, int64, float32, float64)
+  or host lists of reals, strings or symbols, encoded to sorted codes;
+  predict gives y's kind back.
+- **L4-e.** A class of zero total weight is refused (#22).
+- **L4-f check.** After the solve, in double: K = max(|∂F/∂b|∞,
+  max_jc |pg_jc|/σ_j), F the normalised objective, pg its (pseudo-)gradient;
+  refused when K > 64·τ·max(F, τ), τ = max(tol, 10⁻⁴), or the solution is not
+  finite. One pass over X. A garbage gate, not an accuracy promise: at the
+  default tol the coefficients are up to 7.2e-2 (f32) and 2.3e-2 (f64) off.
+- **L4-f′.** No warm restarts in L4.
+- **L4-g.** At max-iter n-iter = max-iter and the check decides.
+- **L4-h.** Bitwise twins only at n ≤ 200; non-repeatability above a few
+  hundred rows is documented.
+- **L4-i.** Probabilities in X's dtype for every k; binary p₁ = σ(z),
+  p₀ = 1 − p₁; log-proba as a stable log-sigmoid or log-softmax.
+- **L4-j.** `#:C`. **L4-k.** `'none`; C positive finite; tol ≥ 0;
+  l1-ratio only with `'elasticnet`. **L4-l.** `define-classifier` with the
+  accuracy scorer through label codes and the generics `predict-proba`,
+  `predict-log-proba` and `decision-function`. **L4-m.** Binary is one
+  sigmoid row. **L4-n.** Softmax intercepts as cuML returns them; tests
+  centre. **L4-o.** A constant column gets coefficient 0 exactly.
+  **L4-q.** Separation is not refused.
+- **L4-p.** Raw breast-cancer is refused (R2): Python cuML's point there is
+  off the float64 oracle by more than S4's cap, or above the bound in a
+  128-bit recompute.
+- **Deviations accepted.** Missing classes weigh 1 (L4-r); house wording
+  for the y length, negative weights, zero weight sum and #24; a
+  column-reach cap in place of `shared_cap`; Racket refusals raise
+  `exn:fail:cuml`; X with no columns is refused.
+- **Bounds the implementation measured (disputes of the spec's).**
+  E9: the decision is within (p+1)u·Σ|terms| (spec u·Σ, measured
+  2.5u at p = 4). E12: binary Σp within u (measured 0.5u). E14:
+  |exp(l) − p| ≤ 4u(1+|l|)·(max(p, 1−p) binary | p), since binary
+  p₀ = 1 − p₁ is only absolutely accurate (spec 4u·p, measured 86849
+  binary, 8.3 multiclass; with the new bound ≤ 1.52). T4 multiclass:
+  (k+3)u(1+|log p|) relative (spec 4u, measured 18u in float32, from
+  Python's float32 z − max that exp amplifies). T1: X must be
+  row-major (house `rows_of`, as L1–L3), so the twins run row-major
+  and col-major X is a refusal row; float32 multiclass fits under l1
+  or elasticnet repeat on neither side at 150–200 rows, so those rows
+  compare within S3's 1e-3 and the rest stay bit for bit. R1 and R3:
+  sklearn's point is not a 1e-6 oracle on the real sets (lbfgs stops
+  on ftol = 64ε, breast-cancer l2 K 1.1e-8 at sklearn's point and
+  8.6e-7 off our tol-0 fit, iris 1.1e-6; saga takes 70 s for l1 and
+  lands 1.8e-6 off), so a float64 fit is certified by its 128-bit
+  residual, K ≤ 1e-7·max(F, 1) (measured ≤ 3.9e-8), l2 is held within
+  1e-5 of sklearn's, a float32 fit within 1e-2 of the float64 one
+  (measured 5.4e-3, l1), and accuracy to a row of sklearn's.
