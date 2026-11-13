@@ -6,6 +6,7 @@
                   logistic-regression-predict)
          (only-in racket/match match)
          (only-in rackunit check-exn test-case)
+         (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" [on-matrix matrix] [on-vector vector])
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id row-message))
@@ -62,7 +63,9 @@
 (define (shim-rows go)
   (define X (matrix grid))
   (define y (vector labels 'int32))
-  (list (row "y length" "y: expected 6 elements, got 5" (lambda () (go X (vector '(0 1 0 1 1) 'int32))))
+  (list (row "X layout" "X: expected row-major, got col-major 6x3"
+             (lambda () (go (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major) y)))
+        (row "y length" "y: expected 6 elements, got 5" (lambda () (go X (vector '(0 1 0 1 1) 'int32))))
         (row "non-integral label" "y: expected integral class labels, got 1.5"
              (lambda () (go X (vector '(0 1 0 1.5 1 0)))))
         (row "non-integral list label" "y: expected integral class labels, got 1.5"
@@ -109,6 +112,10 @@
                        (lambda () (logistic-regression-predict fitted 'X)))
                   (row "columns" "X: expected 3 columns, got 2"
                        (lambda () (logistic-regression-decision-function fitted (matrix '((1 2))))))
+                  (row "X layout" "X: expected row-major, got col-major 6x3"
+                       (lambda ()
+                         (logistic-regression-predict fitted
+                                                      (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major))))
                   (row "dtype" "X: expected dtype float64 (the fit's), got float32"
                        (lambda () (logistic-regression-predict fitted (matrix grid 'float32))))
                   (row "non-finite X" "X: row 0, column 0: expected a finite value, got inf"
