@@ -60,7 +60,9 @@ def cuml_apply(case):
 
 def sklearn_fit(case):
     X, y, w = inputs(case)
-    ratio = case["l1_ratio"] if case["penalty"] == "elasticnet" else RATIOS[case["penalty"]]
+    ratio = (
+        case["l1_ratio"] if case["penalty"] == "elasticnet" else RATIOS[case["penalty"]]
+    )
     m = SkLR(
         C=np.inf if case["penalty"] == "none" else case["C"],
         l1_ratio=ratio,

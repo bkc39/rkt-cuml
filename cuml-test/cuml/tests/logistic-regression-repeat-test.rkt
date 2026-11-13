@@ -24,5 +24,6 @@
   (for* ([dt (in-list dtypes)]
          [c (in-list large)])
     (test-case (format "~a ~a large" dt (lr-case-name c))
-      (define gap (relative-gap (flat (fit-parts (case-fit c dt))) (flat (fit-parts (case-fit c dt)))))
+      (define gap
+        (relative-gap (flat (fit-parts (case-fit c dt))) (flat (fit-parts (case-fit c dt)))))
       (check-true (<= gap (repeat-bound dt)) (format "gap ~a" gap)))))

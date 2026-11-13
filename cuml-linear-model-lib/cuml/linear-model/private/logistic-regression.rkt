@@ -71,7 +71,10 @@
 
 (define (y-kind who y)
   (match y
-    [(? device-vector?) (if (memq (dtype y) label-dtypes) 'device (y-refusal who y))]
+    [(? device-vector?)
+     (if (memq (dtype y) label-dtypes)
+         'device
+         (y-refusal who y))]
     [(cons first _)
      #:when (label-kind first)
      (define kind (label-kind first))
@@ -105,7 +108,9 @@
     [(eq? penalty 'elasticnet)
      (if (and (real? ratio) (<= 0 ratio 1))
          (real->double-flonum ratio)
-         (logic-error "~a: l1-ratio: expected a real from 0 to 1 with 'elasticnet, got ~e" who ratio))]
+         (logic-error "~a: l1-ratio: expected a real from 0 to 1 with 'elasticnet, got ~e"
+                      who
+                      ratio))]
     [ratio (logic-error "~a: l1-ratio: given with penalty ~e; expected #f" who penalty)]
     [else 0.0]))
 
@@ -129,9 +134,10 @@
               (and (real? v) (positive? v) (< v +inf.0)))
      2]
     [_
-     (logic-error "~a: class-weight: expected #f, 'balanced or a hash from labels to positive finite reals, got ~e"
-                  who
-                  cw)]))
+     (logic-error
+      "~a: class-weight: expected #f, 'balanced or a hash from labels to positive finite reals, got ~e"
+      who
+      cw)]))
 
 (define (weight-view who w)
   (if (or (not w) (device-vector? w))
@@ -149,9 +155,15 @@
   (define index
     (for/hash ([c (in-list classes)]
                [i (in-naturals)])
-      (values (if (eq? kind 'real) (exact->inexact c) c) i)))
+      (values (if (eq? kind 'real)
+                  (exact->inexact c)
+                  c)
+              i)))
   (for/list ([v (in-list y)])
-    (hash-ref index (if (eq? kind 'real) (exact->inexact v) v))))
+    (hash-ref index
+              (if (eq? kind 'real)
+                  (exact->inexact v)
+                  v))))
 
 (define (host-weights who kind classes cw)
   (define (key-of c)
@@ -172,7 +184,9 @@
     [(not (hash? cw)) (values #f #f)]
     [(eq? kind 'device)
      (values (list->device-vector (for/list ([k (in-hash-keys cw)])
-                                    (if (real? k) (real->double-flonum k) +nan.0))
+                                    (if (real? k)
+                                        (real->double-flonum k)
+                                        +nan.0))
                                   #:dtype 'float64
                                   #:resources resources)
              (list->device-vector (map real->double-flonum (hash-values cw))
@@ -237,7 +251,9 @@
   (logistic-regression-result coef
                               intercept
                               (or host-classes* (device-vector->list classes))
-                              (if host-classes* 'list (dtype y))
+                              (if host-classes*
+                                  'list
+                                  (dtype y))
                               n-iter))
 
 (define (checked-result who result X)
@@ -267,7 +283,10 @@
                                                    #:resources [resources (current-device-resources)])
   (applied who result X 0 #f resources))
 
-(define/who (logistic-regression-predict who result X #:resources [resources (current-device-resources)])
+(define/who (logistic-regression-predict who
+                                         result
+                                         X
+                                         #:resources [resources (current-device-resources)])
   (match result
     [(logistic-regression-result _ _ classes 'list _)
      (define codes (applied who result X 1 #f resources))
@@ -304,12 +323,11 @@
      (list->device-vector (map code y) #:dtype 'int32 #:resources resources)]
     [(logistic-regression-result _ _ classes label-type _)
      (define out (deposit-for/who who resources))
-     (cuml-linear-model-label-encode-job who
-                                         resources
-                                         y
-                                         (list->device-vector classes
-                                                              #:dtype label-type
-                                                              #:resources resources)
-                                         out)
+     (cuml-linear-model-label-encode-job
+      who
+      resources
+      y
+      (list->device-vector classes #:dtype label-type #:resources resources)
+      out)
      (match-define (list codes) (deposit->list out))
      codes]))

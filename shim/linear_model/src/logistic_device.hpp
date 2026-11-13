@@ -39,8 +39,8 @@ void encode_against(const raft::handle_t& handle, const L* y, int64_t n,
 
 template <typename T>
 buffer<double> effective_weights(const raft::handle_t& handle, const T* w,
-                                 const int32_t* codes, const double* class_weight,
-                                 int64_t n);
+                                 const int32_t* codes,
+                                 const double* class_weight, int64_t n);
 
 std::vector<double> class_totals(rmm::cuda_stream_view stream,
                                  const double* weights, const int32_t* codes,
@@ -80,9 +80,8 @@ void coef_to_params(const raft::handle_t& handle, const T* coef,
                     const T* intercept, int64_t d, int64_t k, T* params);
 
 template <typename T>
-residual_sums residuals_of(const raft::handle_t& handle, const T* x,
-                           const T* y, const T* w, const T* params,
-                           qn_shape shape);
+residual_sums residuals_of(const raft::handle_t& handle, const T* x, const T* y,
+                           const T* w, const T* params, qn_shape shape);
 
 template <typename T>
 void scores_to(const raft::handle_t& handle, const T* scores, int64_t n,

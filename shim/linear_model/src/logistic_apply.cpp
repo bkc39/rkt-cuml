@@ -1,6 +1,7 @@
+#include <cuml/linear_model/qn.h>
+
 #include <cstdint>
 #include <cuml/linear_model/glm.hpp>
-#include <cuml/linear_model/qn.h>
 #include <memory>
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
@@ -19,8 +20,7 @@ namespace cumlrkt::glm::qn {
 namespace {
 
 template <typename T>
-buffer<T> decision_of(const raft::handle_t& handle,
-                      const matrix<T, int64_t>& x,
+buffer<T> decision_of(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                       const matrix<T, int64_t>& coef, const T* intercept) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const int64_t kk = coef.n;
@@ -71,7 +71,8 @@ void apply_into(const raft::handle_t& handle, const rr_view* xv,
     return;
   }
   if (mode == CUML_LINEAR_MODEL_APPLY_LABELS && classesv == nullptr) {
-    auto codes = std::make_unique<buffer<int32_t>>(scratch<int32_t>(x.n, stream));
+    auto codes =
+        std::make_unique<buffer<int32_t>>(scratch<int32_t>(x.n, stream));
     labels_of<T, int32_t>(handle, scores.data(), x.n, kk, nullptr,
                           codes->data());
     const rr_view region = raftrkt::region(*codes);
@@ -81,7 +82,8 @@ void apply_into(const raft::handle_t& handle, const rr_view* xv,
   if (mode == CUML_LINEAR_MODEL_APPLY_LABELS) {
     on_class_labels(classesv, [&](auto tag) {
       using L = decltype(tag);
-      const L* values = raftrkt::vector_data<L, int32_t>(classesv, "classes", classes);
+      const L* values =
+          raftrkt::vector_data<L, int32_t>(classesv, "classes", classes);
       auto labels = std::make_unique<buffer<L>>(scratch<L>(x.n, stream));
       labels_of<T, L>(handle, scores.data(), x.n, kk, values, labels->data());
       const rr_view region = raftrkt::region(*labels);
@@ -102,8 +104,8 @@ void encode_into(const raft::handle_t& handle, const rr_view* yv,
   const rmm::cuda_stream_view stream = stream_of(handle);
   const L* y = raftrkt::vector_data<L, int32_t>(yv, "y", raftrkt::any_extent);
   const int64_t n = raftrkt::require(yv, "y")->shape[0];
-  const L* classes =
-      raftrkt::vector_data<L, int32_t>(classesv, "classes", raftrkt::any_extent);
+  const L* classes = raftrkt::vector_data<L, int32_t>(classesv, "classes",
+                                                      raftrkt::any_extent);
   const int64_t k = raftrkt::require(classesv, "classes")->shape[0];
   auto codes = std::make_unique<buffer<int32_t>>(scratch<int32_t>(n, stream));
   encode_against<L>(handle, y, n, classes, k, codes->data());
@@ -121,9 +123,9 @@ int cuml_linear_model_logistic_regression_fit(
     void* handle, const rr_view* x, const rr_view* y,
     const rr_view* sample_weight, const rr_view* class_keys,
     const rr_view* class_values, rr_deposit* out, int32_t penalty, double C,
-    double l1_ratio, double tol, int32_t max_iter,
-    int32_t linesearch_max_iter, int32_t lbfgs_memory, int32_t fit_intercept,
-    int32_t penalty_normalized, int32_t class_weight_mode, int32_t* n_iter) {
+    double l1_ratio, double tol, int32_t max_iter, int32_t linesearch_max_iter,
+    int32_t lbfgs_memory, int32_t fit_intercept, int32_t penalty_normalized,
+    int32_t class_weight_mode, int32_t* n_iter) {
   return cumlrkt::guarded(
       handle,
       {{"X", x},
@@ -134,15 +136,21 @@ int cuml_linear_model_logistic_regression_fit(
       [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
         int32_t* const iterations = raftrkt::require(n_iter, "n_iter");
-        const cumlrkt::glm::qn::qn_request request{
-            x,           y,
-            sample_weight, class_keys,
-            class_values, penalty,
-            C,           l1_ratio,
-            tol,         max_iter,
-            linesearch_max_iter, lbfgs_memory,
-            fit_intercept, penalty_normalized,
-            class_weight_mode};
+        const cumlrkt::glm::qn::qn_request request{x,
+                                                   y,
+                                                   sample_weight,
+                                                   class_keys,
+                                                   class_values,
+                                                   penalty,
+                                                   C,
+                                                   l1_ratio,
+                                                   tol,
+                                                   max_iter,
+                                                   linesearch_max_iter,
+                                                   lbfgs_memory,
+                                                   fit_intercept,
+                                                   penalty_normalized,
+                                                   class_weight_mode};
         cumlrkt::glm::qn::require_qn_codes(request);
         *iterations = cumlrkt::glm::qn::logistic_fit(h, request, into);
       });
@@ -150,13 +158,17 @@ int cuml_linear_model_logistic_regression_fit(
 
 CUMLRKT_JOB(cuml_linear_model_logistic_regression_fit)
 
-int cuml_linear_model_logistic_regression_apply(
-    void* handle, const rr_view* x, const rr_view* coef,
-    const rr_view* intercept, const rr_view* classes, int32_t mode,
-    rr_deposit* out) {
+int cuml_linear_model_logistic_regression_apply(void* handle, const rr_view* x,
+                                                const rr_view* coef,
+                                                const rr_view* intercept,
+                                                const rr_view* classes,
+                                                int32_t mode, rr_deposit* out) {
   return cumlrkt::guarded(
       handle,
-      {{"X", x}, {"coef", coef}, {"intercept", intercept}, {"classes", classes}},
+      {{"X", x},
+       {"coef", coef},
+       {"intercept", intercept},
+       {"classes", classes}},
       [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
         if (mode < CUML_LINEAR_MODEL_APPLY_DECISION ||

@@ -18,7 +18,9 @@
          check-sklearn-optimum
          labelled-set)
 
-(struct labelled (case labels classes))
+(struct labelled
+        (case labels
+          classes))
 
 (define (flonum-exact v)
   (inexact->exact (real->double-flonum v)))
@@ -27,7 +29,8 @@
   (define (scaled xs)
     (define n (length xs))
     (define m (/ (apply + xs) n))
-    (define s (~> (for/sum ([x (in-list xs)]) (expt (- x m) 2)) (/ n) exact->inexact sqrt inexact->exact))
+    (define s
+      (~> (for/sum ([x (in-list xs)]) (expt (- x m) 2)) (/ n) exact->inexact sqrt inexact->exact))
     (map (lambda (x) (flonum-exact (/ (- x m) s))) xs))
   (~> X columns-of (map scaled _) columns-of))
 
@@ -44,7 +47,9 @@
   (define labels (hash-ref named response))
   (define classes (sort (remove-duplicates labels) string<?))
   (labelled (lr-case (format "~a" name)
-                     (if standardise? (standardised X) X)
+                     (if standardise?
+                         (standardised X)
+                         X)
                      (map (lambda (l) (index-of classes l)) labels)
                      #f)
             labels
@@ -82,10 +87,20 @@
   (cond
     [(eq? dt 'float64)
      (match-define (residual K F _)
-       (residual-of (lr-case-X c) (lr-case-y c) #f coef intercept #:penalty penalty #:C C #:l1-ratio ratio #:tol 1e-10))
-     (check-true (<= K (* 1e-7 (max F 1))) (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
+       (residual-of (lr-case-X c)
+                    (lr-case-y c)
+                    #f
+                    coef
+                    intercept
+                    #:penalty penalty
+                    #:C C
+                    #:l1-ratio ratio
+                    #:tol 1e-10))
+     (check-true (<= K (* 1e-7 (max F 1)))
+                 (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
     [else
-     (match-define (list exact-coef exact-intercept _) (fit-parts (tight-fit set 'float64 penalty C ratio)))
+     (match-define (list exact-coef exact-intercept _)
+       (fit-parts (tight-fit set 'float64 penalty C ratio)))
      (define gap (relative-gap (gauged coef intercept) (gauged exact-coef exact-intercept)))
      (check-true (<= gap 1e-2) (format "gap to the float64 fit ~a" gap))]))
 
@@ -109,7 +124,9 @@
       (when (and (eq? dt 'float64) (l2? s))
         (match-define (list coef intercept _) (fit-parts r))
         (define sk (car tight))
-        (define gap (relative-gap (gauged coef intercept) (gauged (hash-ref sk 'coef) (hash-ref sk 'intercept))))
+        (define gap
+          (relative-gap (gauged coef intercept)
+                        (gauged (hash-ref sk 'coef) (hash-ref sk 'intercept))))
         (check-true (<= gap 1e-5) (format "coef gap to sklearn ~a" gap)))
       (define ours (correct (logistic-regression-predict r (on-matrix (lr-case-X c) dt)) labels))
       (define sklearn (correct (sklearn-labels set theirs) labels))
@@ -128,10 +145,14 @@
                                  (logistic-twin "sklearn-fit" c 'float64 (hasheq 'tol 1e-10)))))
   (define coef (decoded dt (hash-ref python 'coef_bits)))
   (define intercept (decoded dt (hash-ref python 'intercept_bits)))
-  (define gap (relative-gap (append coef intercept) (gauged (hash-ref oracle 'coef) (hash-ref oracle 'intercept))))
-  (match-define (residual K _ bound) (residual-of (lr-case-X c) (lr-case-y c) #f (list coef) intercept))
-  (check-true (or (> gap (s4-cap dt)) (> K bound))
-              (format "Python cuML's point: coef gap ~a (cap ~a), K ~a (bound ~a)" gap (s4-cap dt) K bound)))
+  (define gap
+    (relative-gap (append coef intercept)
+                  (gauged (hash-ref oracle 'coef) (hash-ref oracle 'intercept))))
+  (match-define (residual K _ bound)
+    (residual-of (lr-case-X c) (lr-case-y c) #f (list coef) intercept))
+  (check-true
+   (or (> gap (s4-cap dt)) (> K bound))
+   (format "Python cuML's point: coef gap ~a (cap ~a), K ~a (bound ~a)" gap (s4-cap dt) K bound)))
 
 (define (check-score set)
   (match-define (labelled c labels _) set)
@@ -139,4 +160,5 @@
   (match-define (list theirs)
     (logistic-twin-results (list (logistic-twin "sklearn-fit" c 'float64 (hasheq 'tol 1e-10)))))
   (define e (fit (logistic-regression #:tol 1e-10 #:max-iter 100000) X labels))
-  (check-equal? (score e X labels) (exact->inexact (/ (correct (sklearn-labels set theirs) labels) (length labels)))))
+  (check-equal? (score e X labels)
+                (exact->inexact (/ (correct (sklearn-labels set theirs) labels) (length labels)))))

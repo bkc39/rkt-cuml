@@ -96,9 +96,9 @@ CUMLRKT_API int cuml_linear_model_logistic_regression_fit(
     void* handle, const rr_view* x, const rr_view* y,
     const rr_view* sample_weight, const rr_view* class_keys,
     const rr_view* class_values, rr_deposit* out, int32_t penalty, double C,
-    double l1_ratio, double tol, int32_t max_iter,
-    int32_t linesearch_max_iter, int32_t lbfgs_memory, int32_t fit_intercept,
-    int32_t penalty_normalized, int32_t class_weight_mode, int32_t* n_iter);
+    double l1_ratio, double tol, int32_t max_iter, int32_t linesearch_max_iter,
+    int32_t lbfgs_memory, int32_t fit_intercept, int32_t penalty_normalized,
+    int32_t class_weight_mode, int32_t* n_iter);
 CUMLRKT_API void cuml_linear_model_logistic_regression_fit_job(
     void* args, size_t args_len, rr_job_outcome* outcome);
 
@@ -116,8 +116,7 @@ CUMLRKT_API void cuml_linear_model_logistic_regression_apply_job(
 CUMLRKT_API int cuml_linear_model_label_encode(void* handle, const rr_view* y,
                                                const rr_view* classes,
                                                rr_deposit* out);
-CUMLRKT_API void cuml_linear_model_label_encode_job(void* args,
-                                                    size_t args_len,
+CUMLRKT_API void cuml_linear_model_label_encode_job(void* args, size_t args_len,
                                                     rr_job_outcome* outcome);
 
 #ifdef __cplusplus

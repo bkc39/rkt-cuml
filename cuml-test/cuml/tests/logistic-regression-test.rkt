@@ -53,7 +53,8 @@
       (define r (case-fit c dt #:fit-intercept fi #:max-iter 200))
       (define k (length (remove-duplicates (lr-case-y c))))
       (define k* (if (= k 2) 1 k))
-      (check-equal? (shape (logistic-regression-result-coef r)) (list k* (length (car (lr-case-X c)))))
+      (check-equal? (shape (logistic-regression-result-coef r))
+                    (list k* (length (car (lr-case-X c)))))
       (check-equal? (length (device-vector->list (logistic-regression-result-intercept r))) k*)
       (unless fi
         (check-true (andmap zero? (device-vector->list (logistic-regression-result-intercept r)))))
@@ -85,7 +86,8 @@
   (for ([other (in-list (list mapped as-list as-strings as-symbols))])
     (check-equal? (fit-parts other) (fit-parts base)))
   (check-equal? (logistic-regression-predict mapped X)
-                (map (lambda (v) (+ (* 3 v) 7)) (device-vector->list (logistic-regression-predict base X)))))
+                (map (lambda (v) (+ (* 3 v) 7))
+                     (device-vector->list (logistic-regression-predict base X)))))
 
 (define (rows m)
   (device-matrix->list* m))
@@ -116,11 +118,21 @@
     (define k (length (car proba)))
     (for ([p (in-list proba)]
           [l (in-list logs)])
-      (check-true (<= (abs (- (apply + (map inexact->exact p)) 1)) (* (if (= k 2) 1 (add1 k)) u)))
+      (check-true (<= (abs (- (apply + (map inexact->exact p)) 1))
+                      (* (if (= k 2)
+                             1
+                             (add1 k))
+                         u)))
       (for ([pc (in-list p)]
             [lc (in-list l)])
         (check-true (rational? lc))
-        (check-true (<= (abs (- (exp lc) pc)) (* 4 u (+ 1 (abs lc)) (if (= k 2) (max pc (- 1 pc)) pc))))))))
+        (check-true (<= (abs (- (exp lc) pc))
+                        (* 4
+                           u
+                           (+ 1 (abs lc))
+                           (if (= k 2)
+                               (max pc (- 1 pc))
+                               pc))))))))
 
 (define (non-decreasing-by-score? pairs)
   (define sorted (sort pairs < #:key car))
@@ -136,7 +148,8 @@
     (define decision (rows (logistic-regression-decision-function r X)))
     (define proba (rows (logistic-regression-predict-proba r X)))
     (if (= 1 (length (car decision)))
-        (check-true (non-decreasing-by-score? (map (lambda (z p) (cons (car z) (cadr p))) decision proba)))
+        (check-true (non-decreasing-by-score?
+                     (map (lambda (z p) (cons (car z) (cadr p))) decision proba)))
         (for ([z (in-list decision)]
               [p (in-list proba)])
           (check-true (non-decreasing-by-score? (map cons z p)))))))

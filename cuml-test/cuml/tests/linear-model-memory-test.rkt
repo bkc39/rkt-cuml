@@ -51,4 +51,8 @@
                 (list "logistic-regression-predict: X: expected 7 columns, got 2"
                       (lambda () (logistic-regression-predict fitted X2))))))
 
-(test-fit-memory "logistic-regression" #:rounds 50 #:sample-every 10 #:setup logistic-setup #:buffers-per-round 6)
+(test-fit-memory "logistic-regression"
+                 #:rounds 50
+                 #:sample-every 10
+                 #:setup logistic-setup
+                 #:buffers-per-round 6)

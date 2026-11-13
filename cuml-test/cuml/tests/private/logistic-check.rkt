@@ -40,9 +40,14 @@
   (match z
     [(list s)
      (define p (bf/ one (bf+ one (bfexp (bf- zero s)))))
-     (values (bf- (softplus s) (if (= label 1) s zero)) (list (if (= label 1) (bf- p one) p)))]
+     (values (bf- (softplus s) (if (= label 1) s zero))
+             (list (if (= label 1)
+                       (bf- p one)
+                       p)))]
     [_
-     (define top (for/fold ([m (car z)]) ([s (in-list (cdr z))]) (bfmax m s)))
+     (define top
+       (for/fold ([m (car z)]) ([s (in-list (cdr z))])
+         (bfmax m s)))
      (define shifted (map (lambda (s) (bfexp (bf- s top))) z))
      (define total (bfsum shifted))
      (define lse (bf+ top (bflog1p (bf- total one))))
@@ -50,7 +55,9 @@
              (for/list ([e (in-list shifted)]
                         [c (in-naturals)])
                (define p (bf/ e total))
-               (if (= c label) (bf- p one) p)))]))
+               (if (= c label)
+                   (bf- p one)
+                   p)))]))
 
 (define (penalty-shares penalty ratio)
   (match penalty
@@ -66,10 +73,15 @@
       (if fi
           (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* wi x)) total)
           0))
-    (define square (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* wi (expt (- x mean) 2))) total))
+    (define square
+      (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* wi (expt (- x mean) 2))) total))
     (and (positive? square) (bfsqrt (bf square)))))
 
-(define (residual-of X y w coef intercept
+(define (residual-of X
+                     y
+                     w
+                     coef
+                     intercept
                      #:penalty [penalty 'l2]
                      #:C [C 1.0]
                      #:l1-ratio [ratio #f]
@@ -85,7 +97,8 @@
     (define p (length (car X)))
     (define-values (loss gradient slope)
       (for/fold ([loss zero]
-                 [gradient (for/list ([_ (in-range k)]) (map (lambda (_) zero) (range p)))]
+                 [gradient (for/list ([_ (in-range k)])
+                             (map (lambda (_) zero) (range p)))]
                  [slope (map (lambda (_) zero) (range k))])
                 ([x (in-list rows)]
                  [label (in-list y)]
@@ -110,7 +123,8 @@
     (define-values (F worst)
       (for*/fold ([F (bf/ loss big-total)]
                   [worst (if fi
-                             (for/fold ([m zero]) ([s (in-list slope)]) (bfmax m (bfabs (bf/ s big-total))))
+                             (for/fold ([m zero]) ([s (in-list slope)])
+                               (bfmax m (bfabs (bf/ s big-total))))
                              zero)])
                  ([(wc gc) (in-parallel (in-list W) (in-list gradient))]
                   [(v g0 s) (in-parallel (in-list wc) (in-list gc) (in-list sigma))])
@@ -121,7 +135,9 @@
             [(bf< v zero) (bf- g l1)]
             [else (bfmax zero (bf- (bfabs g) l1))]))
         (values (bf+ F (bf+ (bf* l1 (bfabs v)) (bf* (bf/ l2 (bf 2)) (bf* v v))))
-                (if s (bfmax worst (bf/ (bfabs pg) s)) worst))))
+                (if s
+                    (bfmax worst (bf/ (bfabs pg) s))
+                    worst))))
     (define tau (max (inexact->exact tol) 1/10000))
     (define F* (bigfloat->real F))
     (residual (bigfloat->real worst) F* (* 64 tau (max F* tau)))))

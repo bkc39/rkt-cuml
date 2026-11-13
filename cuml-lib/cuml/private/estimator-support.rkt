@@ -8,7 +8,13 @@
          (only-in cuml/core/private/define-who define-checked)
          (only-in cuml/core/private/hyperparameters absent given-hash key->keyword proc-name table-id)
          (only-in cuml/core/private/logic-error logic-error)
-         (only-in cuml/estimator gen:classifier gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
+         (only-in cuml/estimator
+                  gen:classifier
+                  gen:clusterer
+                  gen:estimator
+                  gen:predictor
+                  gen:scorer
+                  gen:transformer)
          (only-in cuml/metrics/private/metrics accuracy-score/who r2-score/who)
          (only-in racket/string string-append*)
          (only-in raft current-device-resources)
@@ -32,16 +38,17 @@
                 #:resources resources))
 
 (define ((accuracy-scorer predict/who codes/who) who
-                                                  result
-                                                  X
-                                                  y
-                                                  #:sample-weight [sample-weight #f]
-                                                  #:resources [resources (current-device-resources)])
-  (accuracy-score/who who
-                      (codes/who who result y resources)
-                      (codes/who who result (predict/who who result X #:resources resources) resources)
-                      #:sample-weight sample-weight
-                      #:resources resources))
+                                                 result
+                                                 X
+                                                 y
+                                                 #:sample-weight [sample-weight #f]
+                                                 #:resources [resources (current-device-resources)])
+  (accuracy-score/who
+   who
+   (codes/who who result y resources)
+   (codes/who who result (predict/who who result X #:resources resources) resources)
+   #:sample-weight sample-weight
+   #:resources resources))
 
 (define (params->string name keys hyperparameters defaults setting-names settings fitted?)
   (define shown

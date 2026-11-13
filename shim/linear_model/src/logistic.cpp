@@ -1,8 +1,9 @@
+#include <cuml/linear_model/qn.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cuml/linear_model/glm.hpp>
-#include <cuml/linear_model/qn.h>
 #include <format>
 #include <limits>
 #include <memory>
@@ -86,9 +87,8 @@ void require_integral(const L* y, int64_t n, rmm::cuda_stream_view stream) {
   if constexpr (!std::is_integral_v<L>) {
     const int64_t i = first_non_integral(y, n, stream);
     if (i >= 0) {
-      throw logic_error(
-          std::format("y: expected integral class labels, got {}",
-                      label_text(to_host(y + i, 1, stream)[0])));
+      throw logic_error(std::format("y: expected integral class labels, got {}",
+                                    label_text(to_host(y + i, 1, stream)[0])));
     }
   }
 }
@@ -120,9 +120,8 @@ std::vector<double> mapped_weights(const qn_request& r,
     for (const std::string& s : missing) {
       listed += (listed.empty() ? "" : " ") + s;
     }
-    throw logic_error(
-        std::format("class-weight: classes ({}) are not in class-weight",
-                    listed));
+    throw logic_error(std::format(
+        "class-weight: classes ({}) are not in class-weight", listed));
   }
   return cw;
 }
@@ -132,8 +131,8 @@ void require_weighted_classes(const std::vector<double>& totals,
                               const std::vector<L>& classes) {
   for (size_t c = 0; c < totals.size(); ++c) {
     if (!(totals[c] > 0)) {
-      throw logic_error(std::format("y: class {} has no weight",
-                                    label_text(classes[c])));
+      throw logic_error(
+          std::format("y: class {} has no weight", label_text(classes[c])));
     }
   }
 }
@@ -176,8 +175,8 @@ weighting weighting_of(const raft::handle_t& handle, const T* w,
   const auto n = static_cast<int64_t>(labels.codes.size());
   const buffer<double> device_cw =
       to_device(cw.value_or(std::vector<double>{}), stream);
-  buffer<double> eff = effective_weights<T>(
-      handle, w, labels.codes.data(), cw ? device_cw.data() : nullptr, n);
+  buffer<double> eff = effective_weights<T>(handle, w, labels.codes.data(),
+                                            cw ? device_cw.data() : nullptr, n);
   require_weighted_classes(
       class_totals(stream, eff.data(), labels.codes.data(), n, labels.k),
       classes);
@@ -240,8 +239,9 @@ void require_resolved(const residual_sums& sums, const std::vector<T>& params,
     const auto v = static_cast<double>(params[q]);
     f += (l1 * std::abs(v)) + (l2 / 2 * v * v);
     const double g = (sums.gradient[q] / m) + (l2 * v);
-    const double pg = v != 0 ? g + std::copysign(l1, v)
-                             : std::copysign(std::max(std::abs(g) - l1, 0.0), g);
+    const double pg = v != 0
+                          ? g + std::copysign(l1, v)
+                          : std::copysign(std::max(std::abs(g) - l1, 0.0), g);
     worst = std::max(worst, std::abs(pg) / c.sigma[q / k]);
   }
   for (int64_t q = 0; c.shape.fit_intercept && q < k; ++q) {
@@ -265,9 +265,9 @@ solved_fit<T> closed_form(const raft::handle_t& handle, const weighting& wt,
   const int64_t kk = k == 2 ? 1 : k;
   std::vector<T> b(kk, T{0});
   if (fit_intercept) {
-    const std::vector<double> totals = class_totals(
-        stream, wt.weights.data(), codes,
-        static_cast<int64_t>(wt.weights.size()), k);
+    const std::vector<double> totals =
+        class_totals(stream, wt.weights.data(), codes,
+                     static_cast<int64_t>(wt.weights.size()), k);
     std::vector<double> logs(k);
     std::ranges::transform(totals, logs.begin(),
                            [](double t) { return std::log(t); });
@@ -280,9 +280,9 @@ solved_fit<T> closed_form(const raft::handle_t& handle, const weighting& wt,
     }
   }
   buffer<T> coef = scratch<T>(kk * d, stream);
-  raftrkt::cuda_check(cudaMemsetAsync(coef.data(), 0, coef.size() * sizeof(T),
-                                      stream.value()),
-                      "cudaMemsetAsync");
+  raftrkt::cuda_check(
+      cudaMemsetAsync(coef.data(), 0, coef.size() * sizeof(T), stream.value()),
+      "cudaMemsetAsync");
   return {std::move(coef), to_device(b, stream), 0};
 }
 
@@ -333,9 +333,10 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   staged_targets<T>(handle, codes, wt.weights.data(), wt.scale, wt.rows,
                     y.data(), ws);
   buffer<T> params = scratch<T>((p + (fi ? 1 : 0)) * kk, stream);
-  raftrkt::cuda_check(cudaMemsetAsync(params.data(), 0,
-                                      params.size() * sizeof(T), stream.value()),
-                      "cudaMemsetAsync");
+  raftrkt::cuda_check(
+      cudaMemsetAsync(params.data(), 0, params.size() * sizeof(T),
+                      stream.value()),
+      "cudaMemsetAsync");
   T objective{0};
   int n_iter = 0;
   ML::GLM::qnFit<T, int>(handle, params_of(r, k, pen), xs, false, y.data(),
@@ -352,9 +353,9 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   std::ranges::transform(stats.kept, sigma.begin(), [&](int64_t j) {
     return std::ldexp(stats.sigma[j], s);
   });
-  require_resolved<T>(residuals_of<T>(handle, xs, y.data(), ws, params.data(), shape),
-                      to_host(params, stream), r,
-                      {shape, sigma, pen.l1, pen.l2, n_iter});
+  require_resolved<T>(
+      residuals_of<T>(handle, xs, y.data(), ws, params.data(), shape),
+      to_host(params, stream), r, {shape, sigma, pen.l1, pen.l2, n_iter});
   std::vector<int64_t> slot(x.d, -1);
   for (int64_t q = 0; q < p; ++q) {
     slot[stats.kept[q]] = q;
@@ -376,8 +377,8 @@ template <typename T, typename L>
 int32_t fit_into(const raft::handle_t& handle, const qn_request& r,
                  rr_deposit* out) {
   const rmm::cuda_stream_view stream = stream_of(handle);
-  const matrix<T, int64_t> x = rows_of<T, int64_t>(
-      r.x, "X", raftrkt::any_extent, raftrkt::any_extent);
+  const matrix<T, int64_t> x =
+      rows_of<T, int64_t>(r.x, "X", raftrkt::any_extent, raftrkt::any_extent);
   const L* y = raftrkt::vector_data<L, int32_t>(r.y, "y", x.n);
   const T* w = r.w == nullptr ? nullptr
                               : raftrkt::vector_data<T, int32_t>(
@@ -391,7 +392,8 @@ int32_t fit_into(const raft::handle_t& handle, const qn_request& r,
     require_sample_weights(w, x.n, stream);
   }
   dense_labels<L> labels = dense_codes(y, x.n, stream);
-  const std::vector<L> classes = to_host(labels.values.data(), labels.k, stream);
+  const std::vector<L> classes =
+      to_host(labels.values.data(), labels.k, stream);
   const std::optional<std::vector<double>> cw =
       class_weights<T, L>(handle, r, w, labels, classes);
   if (labels.k < 2) {
@@ -399,7 +401,8 @@ int32_t fit_into(const raft::handle_t& handle, const qn_request& r,
         std::format("y: expected at least 2 classes, got {}", labels.k));
   }
   const weighting wt = weighting_of<T, L>(handle, w, labels, cw, classes);
-  solved_fit<T> fit = solved<T>(handle, x, r, wt, labels.codes.data(), labels.k);
+  solved_fit<T> fit =
+      solved<T>(handle, x, r, wt, labels.codes.data(), labels.k);
   const int64_t kk = labels.k == 2 ? 1 : labels.k;
   auto outputs = std::make_unique<qn_outputs<T, L>>(qn_outputs<T, L>{
       std::move(fit.coef), std::move(fit.intercept), std::move(labels.values)});
@@ -426,8 +429,8 @@ void require_qn_codes(const qn_request& r) {
                                   printed(r.C)));
   }
   if (!(r.l1_ratio >= 0 && r.l1_ratio <= 1)) {
-    throw logic_error(std::format("l1-ratio: expected a real from 0 to 1, got {}",
-                                  printed(r.l1_ratio)));
+    throw logic_error(std::format(
+        "l1-ratio: expected a real from 0 to 1, got {}", printed(r.l1_ratio)));
   }
   require_finite_non_negative("tol", r.tol);
   require_at_least("max-iter", r.max_iter, 1);

@@ -25,10 +25,7 @@
 (define (dyadic v)
   (/ (round (* 256 (inexact->exact v))) 256))
 
-(define (blob-case name n p k seed
-                   #:sep [sep 1.0]
-                   #:scales [scales #f]
-                   #:weighted? [weighted? #f])
+(define (blob-case name n p k seed #:sep [sep 1.0] #:scales [scales #f] #:weighted? [weighted? #f])
   (define normal (normal-source seed))
   (define uniform (uniform-source (+ seed 1000)))
   (define centres
@@ -42,7 +39,10 @@
     (for/list ([label (in-list labels)])
       (for/list ([c (in-list (list-ref centres label))]
                  [j (in-naturals)])
-        (* (dyadic (+ c (normal))) (if scales (list-ref scales j) 1)))))
+        (* (dyadic (+ c (normal)))
+           (if scales
+               (list-ref scales j)
+               1)))))
   (lr-case name
            rows
            labels
@@ -74,18 +74,17 @@
   (on-vector (lr-case-y c) label-dtype))
 
 (define case-fit
-  (make-keyword-procedure
-   (lambda (kws vals c dt)
-     (define given (map cons kws vals))
-     (define named
-       (if (or (assq '#:sample-weight given) (not (lr-case-w c)))
-           given
-           (cons (cons '#:sample-weight (on-vector (lr-case-w c) dt)) given)))
-     (define sorted (sort named keyword<? #:key car))
-     (keyword-apply logistic-regression-fit
-                    (map car sorted)
-                    (map cdr sorted)
-                    (list (on-matrix (lr-case-X c) dt) (case-y c))))))
+  (make-keyword-procedure (lambda (kws vals c dt)
+                            (define given (map cons kws vals))
+                            (define named
+                              (if (or (assq '#:sample-weight given) (not (lr-case-w c)))
+                                  given
+                                  (cons (cons '#:sample-weight (on-vector (lr-case-w c) dt)) given)))
+                            (define sorted (sort named keyword<? #:key car))
+                            (keyword-apply logistic-regression-fit
+                                           (map car sorted)
+                                           (map cdr sorted)
+                                           (list (on-matrix (lr-case-X c) dt) (case-y c))))))
 
 (define (fit-parts r)
   (list (device-matrix->list* (logistic-regression-result-coef r))
@@ -110,8 +109,7 @@
 
 (define (relative-gap ours theirs)
   (define (largest xs)
-    (for/fold ([m 0])
-              ([x (in-list xs)])
+    (for/fold ([m 0]) ([x (in-list xs)])
       (max m (abs (inexact->exact x)))))
   (/ (largest (map (lambda (o t) (- (inexact->exact o) (inexact->exact t))) ours theirs))
      (max (largest theirs) 1e-300)))

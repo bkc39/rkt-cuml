@@ -47,12 +47,22 @@
       (check-equal? (cons (map cdr (car wide)) (cdr wide)) base))))
 
 (test-gpu "rows of weight 0 fit as deleted rows, bitwise (E5)"
-  (define zeroed (for/list ([w (in-list (lr-case-w binary))] [i (in-naturals)]) (if (zero? (modulo i 3)) 0 w)))
-  (define kept (for/list ([w (in-list zeroed)]) (positive? w)))
-  (define (keep xs) (for/list ([x (in-list xs)] [k (in-list kept)] #:when k) x))
+  (define zeroed
+    (for/list ([w (in-list (lr-case-w binary))]
+               [i (in-naturals)])
+      (if (zero? (modulo i 3)) 0 w)))
+  (define kept
+    (for/list ([w (in-list zeroed)])
+      (positive? w)))
+  (define (keep xs)
+    (for/list ([x (in-list xs)]
+               [k (in-list kept)]
+               #:when k)
+      x))
   (for ([dt (in-list dtypes)])
     (define with-zeros (lr-case "zeros" (lr-case-X binary) (lr-case-y binary) zeroed))
-    (define deleted (lr-case "deleted" (keep (lr-case-X binary)) (keep (lr-case-y binary)) (keep zeroed)))
+    (define deleted
+      (lr-case "deleted" (keep (lr-case-X binary)) (keep (lr-case-y binary)) (keep zeroed)))
     (check-equal? (fit-parts (case-fit with-zeros dt)) (fit-parts (case-fit deleted dt)))))
 
 (test-gpu "weights times 2^a fit as C times 2^a, bitwise, and leave 'none unchanged (E6)"
@@ -60,13 +70,22 @@
          [a (in-list '(-20 3 40))])
     (test-case (format "~a ~a" dt a)
       (define factor (expt 2 a))
-      (define scaled (lr-case "scaled" (lr-case-X binary) (lr-case-y binary)
-                              (map (lambda (w) (* w factor)) (lr-case-w binary))))
-      (check-equal? (fit-parts (case-fit scaled dt)) (fit-parts (case-fit binary dt #:C (exact->inexact factor))))
-      (check-equal? (fit-parts (case-fit scaled dt #:penalty 'none)) (fit-parts (case-fit binary dt #:penalty 'none)))
-      (define uniform (lr-case "uniform" (lr-case-X three) (lr-case-y three)
-                               (map (lambda (_) factor) (lr-case-y three))))
-      (check-equal? (fit-parts (case-fit uniform dt)) (fit-parts (case-fit three dt #:C (exact->inexact factor)))))))
+      (define scaled
+        (lr-case "scaled"
+                 (lr-case-X binary)
+                 (lr-case-y binary)
+                 (map (lambda (w) (* w factor)) (lr-case-w binary))))
+      (check-equal? (fit-parts (case-fit scaled dt))
+                    (fit-parts (case-fit binary dt #:C (exact->inexact factor))))
+      (check-equal? (fit-parts (case-fit scaled dt #:penalty 'none))
+                    (fit-parts (case-fit binary dt #:penalty 'none)))
+      (define uniform
+        (lr-case "uniform"
+                 (lr-case-X three)
+                 (lr-case-y three)
+                 (map (lambda (_) factor) (lr-case-y three))))
+      (check-equal? (fit-parts (case-fit uniform dt))
+                    (fit-parts (case-fit three dt #:C (exact->inexact factor)))))))
 
 (define (scaled-case c factor)
   (lr-case (lr-case-name c)
@@ -81,9 +100,15 @@
          [penalty (in-list '(l2 l1 none))])
     (test-case (format "~a ~a ~a" dt a penalty)
       (define base (scaled-case binary (expt 2 (if (positive? a) 10 -10))))
-      (define C (case penalty [(l2) (expt 4 (- a))] [(l1) (expt 2 (- a))] [else 1]))
+      (define C
+        (case penalty
+          [(l2) (expt 4 (- a))]
+          [(l1) (expt 2 (- a))]
+          [else 1]))
       (define plain (fit-parts (case-fit base dt #:penalty penalty)))
-      (define moved (fit-parts (case-fit (scaled-case base (expt 2 a)) dt #:penalty penalty #:C (exact->inexact C))))
+      (define moved
+        (fit-parts
+         (case-fit (scaled-case base (expt 2 a)) dt #:penalty penalty #:C (exact->inexact C))))
       (check-equal? moved (scaled-parts plain (expt 2.0 (- a)))))))
 
 (test-gpu "balanced class weights equal the explicit mapping W/(k W_c), bitwise (E8)"
@@ -92,7 +117,9 @@
   (define n (length ys))
   (define mapping
     (for/hash ([c (in-list classes)])
-      (values c (exact->inexact (/ n (* (length classes) (for/sum ([y (in-list ys)]) (if (= y c) 1 0))))))))
+      (values c
+              (exact->inexact
+               (/ n (* (length classes) (for/sum ([y (in-list ys)]) (if (= y c) 1 0))))))))
   (define unweighted (lr-case "unweighted" (lr-case-X binary) ys #f))
   (for ([dt (in-list dtypes)])
     (check-equal? (fit-parts (case-fit unweighted dt #:class-weight 'balanced))
@@ -120,7 +147,10 @@
       (check-true (<= (abs (- b e)) (* 4 u (max 1 (abs e))))))))
 
 (test-gpu "the fit leaves X, y and the weights as they were (E17)"
-  (define zeroed (for/list ([w (in-list (lr-case-w binary))] [i (in-naturals)]) (if (zero? (modulo i 4)) 0 w)))
+  (define zeroed
+    (for/list ([w (in-list (lr-case-w binary))]
+               [i (in-naturals)])
+      (if (zero? (modulo i 4)) 0 w)))
   (define staged (scaled-case binary (expt 2 20)))
   (for ([dt (in-list dtypes)])
     (define X (on-matrix (lr-case-X staged) dt))
@@ -128,17 +158,21 @@
     (define w (on-vector zeroed dt))
     (define before (list (device-matrix->list* X) (device-vector->list y) (device-vector->list w)))
     (logistic-regression-fit X y #:sample-weight w)
-    (check-equal? (list (device-matrix->list* X) (device-vector->list y) (device-vector->list w)) before)))
+    (check-equal? (list (device-matrix->list* X) (device-vector->list y) (device-vector->list w))
+                  before)))
 
 (test-gpu "the decision is X coef^T + b to within (p+1)u times the absolute sum (E9)"
   (for* ([c (in-list (list binary three))]
          [dt (in-list dtypes)])
     (test-case (format "~a ~a" (lr-case-name c) dt)
       (define r (case-fit c dt))
-      (define coef (map (lambda (row) (map inexact->exact row)) (device-matrix->list* (logistic-regression-result-coef r))))
+      (define coef
+        (map (lambda (row) (map inexact->exact row))
+             (device-matrix->list* (logistic-regression-result-coef r))))
       (define b (map inexact->exact (device-vector->list (logistic-regression-result-intercept r))))
       (define u (inexact->exact (unit-roundoff dt)))
-      (define z (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
+      (define z
+        (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
       (for* ([(x zi) (in-parallel (in-list (lr-case-X c)) (in-list z))]
              [(w bc zc) (in-parallel (in-list coef) (in-list b) (in-list zi))])
         (define exact (+ bc (for/sum ([xj (in-list x)] [wj (in-list w)]) (* xj wj))))
@@ -157,7 +191,8 @@
   (for ([c (in-list (list unweighted-binary three))]
         [times (in-list (list (hash 0 2 1 3) (hash 0 2 1 2 2 2)))])
     (test-case (lr-case-name c)
-      (define weighted (fit-parts (case-fit c 'float64 #:class-weight times #:tol 1e-10 #:max-iter 100000)))
+      (define weighted
+        (fit-parts (case-fit c 'float64 #:class-weight times #:tol 1e-10 #:max-iter 100000)))
       (define spread (fit-parts (case-fit (repeated c times) 'float64 #:tol 1e-10 #:max-iter 100000)))
       (define gap (relative-gap (flat weighted) (flat spread)))
       (check-true (<= gap 1e-6) (format "gap ~a" gap)))))
@@ -166,14 +201,20 @@
   (if (eq? dt 'float32) 1e-6 1e-10))
 
 (define (scale-bound dt)
-  (if (eq? dt 'float32) (min (* 8 2e-3) 8e-2) (min (* 8 1e-6) 3e-2)))
+  (if (eq? dt 'float32)
+      (min (* 8 2e-3) 8e-2)
+      (min (* 8 1e-6) 3e-2)))
 
 (test-gpu "X times 2^a inside the staging window scales coef by 2^-a to 8 tau_T (S2)"
   (for* ([dt (in-list dtypes)]
          [a (in-list '(3 -3))]
          [penalty (in-list '(l2 l1 none))])
     (test-case (format "~a ~a ~a" dt a penalty)
-      (define C (case penalty [(l2) (expt 4 (- a))] [(l1) (expt 2 (- a))] [else 1]))
+      (define C
+        (case penalty
+          [(l2) (expt 4 (- a))]
+          [(l1) (expt 2 (- a))]
+          [else 1]))
       (define tight (tight-tol dt))
       (define plain (fit-parts (case-fit binary dt #:penalty penalty #:tol tight #:max-iter 100000)))
       (define moved

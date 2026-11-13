@@ -41,15 +41,20 @@
 
 (define (request row)
   (match-define (list dt c (list penalty C ratio)) row)
-  (logistic-twin "sklearn-fit"
-                 c
-                 dt
-                 (hasheq 'penalty (symbol->string penalty) 'C C 'l1_ratio (or ratio 'null) 'tol (tight-tol dt))))
+  (logistic-twin
+   "sklearn-fit"
+   c
+   dt
+   (hasheq 'penalty (symbol->string penalty) 'C C 'l1_ratio (or ratio 'null) 'tol (tight-tol dt))))
 
 (define (gauged coef intercept penalty)
   (if (= 1 (length coef))
       (append (car coef) intercept)
-      (append (apply append (if (memq penalty '(l1 none)) (centred coef) coef)) (centred intercept))))
+      (append (apply append
+                     (if (memq penalty '(l1 none))
+                         (centred coef)
+                         coef))
+              (centred intercept))))
 
 (define (margin z)
   (match (sort z >)
@@ -67,7 +72,13 @@
     (match-define (list dt c (list penalty C ratio)) row)
     (test-case (format "~a ~a ~a" dt (lr-case-name c) penalty)
       (define r
-        (case-fit c dt #:penalty penalty #:C C #:l1-ratio ratio #:tol (tight-tol dt) #:max-iter 100000))
+        (case-fit c
+                  dt
+                  #:penalty penalty
+                  #:C C
+                  #:l1-ratio ratio
+                  #:tol (tight-tol dt)
+                  #:max-iter 100000))
       (match-define (list coef intercept _) (fit-parts r))
       (define gap
         (relative-gap (gauged coef intercept penalty)
@@ -79,7 +90,8 @@
         (relative-gap (gauged default-coef default-intercept penalty)
                       (gauged (hash-ref theirs 'coef) (hash-ref theirs 'intercept) penalty)))
       (check-true (<= default-gap (s4-cap dt)) (format "default-tol gap ~a" default-gap))
-      (define z (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
+      (define z
+        (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
       (for ([zi (in-list z)]
             [label (in-list (hash-ref theirs 'predict))]
             #:unless (< (margin zi) 1e-6))

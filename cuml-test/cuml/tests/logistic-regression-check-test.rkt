@@ -75,7 +75,12 @@
       (check-true (<= K (* 1e-8 (max F 1))) (format "K ~a F ~a" K F)))))
 
 (define hard-cutoff
-  (blob-case "hard cutoff" 2000 10 2 44 #:scales (map (lambda (j) (expt 2 (- (modulo j 7) 3))) (range 10))))
+  (blob-case "hard cutoff"
+             2000
+             10
+             2
+             44
+             #:scales (map (lambda (j) (expt 2 (- (modulo j 7) 3))) (range 10))))
 
 (test-twin "one iteration on mixed scales is refused, and Python cuML's point there is above the bound (H3)"
   (define requests
@@ -103,5 +108,6 @@
       (define r (case-fit c dt #:penalty 'none))
       (match-define (residual K _ bound) (residual-at c (fit-parts r) 'none 1.0 #f 1e-4))
       (check-true (<= K bound) (format "K ~a bound ~a" K bound))
-      (define z (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
+      (define z
+        (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
       (check-equal? (map (lambda (zi) (if (> (car zi) 0) 1 0)) z) (lr-case-y c)))))

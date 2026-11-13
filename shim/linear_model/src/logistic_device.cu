@@ -236,8 +236,8 @@ struct row_residual {
   double* loss;
 
   __device__ double score(int64_t i, int64_t c) const {
-    double z = s.fit_intercept ? static_cast<double>(params[(s.p * s.k) + c])
-                               : 0.0;
+    double z =
+        s.fit_intercept ? static_cast<double>(params[(s.p * s.k) + c]) : 0.0;
     for (int64_t j = 0; j < s.p; ++j) {
       z += static_cast<double>(x[(i * s.p) + j]) *
            static_cast<double>(params[(j * s.k) + c]);
@@ -453,8 +453,7 @@ template <typename T>
 void staged_targets(const raft::handle_t& handle, const int32_t* codes,
                     const double* weights, double scale, row_selection rows,
                     T* y, T* w) {
-  each(handle, rows.count,
-       staged_target<T>{codes, weights, scale, rows, y, w});
+  each(handle, rows.count, staged_target<T>{codes, weights, scale, rows, y, w});
 }
 
 template <typename T>
@@ -464,10 +463,10 @@ void params_to_coef(const raft::handle_t& handle, const T* params,
   each(handle, d * k, unstaged_coef<T>{params, slot, d, k, shift, coef});
   const rmm::cuda_stream_view stream = stream_of(handle);
   if (fit_intercept) {
-    raftrkt::cuda_check(cudaMemcpyAsync(intercept, params + (p * k),
-                                        k * sizeof(T), cudaMemcpyDeviceToDevice,
-                                        stream.value()),
-                        "cudaMemcpyAsync");
+    raftrkt::cuda_check(
+        cudaMemcpyAsync(intercept, params + (p * k), k * sizeof(T),
+                        cudaMemcpyDeviceToDevice, stream.value()),
+        "cudaMemcpyAsync");
   } else {
     raftrkt::cuda_check(
         cudaMemsetAsync(intercept, 0, k * sizeof(T), stream.value()),
@@ -482,9 +481,8 @@ void coef_to_params(const raft::handle_t& handle, const T* coef,
 }
 
 template <typename T>
-residual_sums residuals_of(const raft::handle_t& handle, const T* x,
-                           const T* y, const T* w, const T* params,
-                           qn_shape shape) {
+residual_sums residuals_of(const raft::handle_t& handle, const T* x, const T* y,
+                           const T* w, const T* params, qn_shape shape) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   buffer<double> r = scratch<double>(shape.m * shape.k, stream);
   buffer<double> loss = scratch<double>(shape.m, stream);
@@ -495,10 +493,10 @@ residual_sums residuals_of(const raft::handle_t& handle, const T* x,
       stream, row_selection{nullptr, shape.m}, cells + shape.k + 1,
       residual_entry<T>{x, r.data(), loss.data(), shape},
       thrust::plus<double>{}, 0.0);
-  return {std::vector<double>(sums.begin(), sums.begin() + cells),
-          std::vector<double>(sums.begin() + cells,
-                              sums.begin() + cells + shape.k),
-          sums.back()};
+  return {
+      std::vector<double>(sums.begin(), sums.begin() + cells),
+      std::vector<double>(sums.begin() + cells, sums.begin() + cells + shape.k),
+      sums.back()};
 }
 
 template <typename T>
@@ -514,38 +512,38 @@ void labels_of(const raft::handle_t& handle, const T* scores, int64_t n,
   each(handle, n, argmax_label<T, L>{scores, k, classes, out});
 }
 
-#define CUMLRKT_QN_FLOAT(T)                                                   \
-  template buffer<double> effective_weights<T>(                               \
-      const raft::handle_t&, const T*, const int32_t*, const double*,         \
-      int64_t);                                                               \
-  template column_stats column_stats_of<T>(const matrix<T, int64_t>&,         \
+#define CUMLRKT_QN_FLOAT(T)                                                    \
+  template buffer<double> effective_weights<T>(const raft::handle_t&,          \
+                                               const T*, const int32_t*,       \
+                                               const double*, int64_t);        \
+  template column_stats column_stats_of<T>(const matrix<T, int64_t>&,          \
                                            const double*, row_selection, bool, \
-                                           rmm::cuda_stream_view);            \
-  template void stage_rows<T>(const raft::handle_t&,                          \
-                              const matrix<T, int64_t>&, row_selection,       \
-                              const int64_t*, int64_t, int, T*);              \
-  template void staged_targets<T>(const raft::handle_t&, const int32_t*,      \
-                                  const double*, double, row_selection, T*,   \
-                                  T*);                                        \
-  template void params_to_coef<T>(const raft::handle_t&, const T*,            \
-                                  const int64_t*, int64_t, int64_t, int,      \
-                                  bool, int64_t, T*, T*);                     \
-  template void coef_to_params<T>(const raft::handle_t&, const T*, const T*,  \
-                                  int64_t, int64_t, T*);                      \
-  template residual_sums residuals_of<T>(const raft::handle_t&, const T*,     \
-                                         const T*, const T*, const T*,        \
-                                         qn_shape);                           \
-  template void scores_to<T>(const raft::handle_t&, const T*, int64_t,        \
+                                           rmm::cuda_stream_view);             \
+  template void stage_rows<T>(const raft::handle_t&,                           \
+                              const matrix<T, int64_t>&, row_selection,        \
+                              const int64_t*, int64_t, int, T*);               \
+  template void staged_targets<T>(const raft::handle_t&, const int32_t*,       \
+                                  const double*, double, row_selection, T*,    \
+                                  T*);                                         \
+  template void params_to_coef<T>(const raft::handle_t&, const T*,             \
+                                  const int64_t*, int64_t, int64_t, int, bool, \
+                                  int64_t, T*, T*);                            \
+  template void coef_to_params<T>(const raft::handle_t&, const T*, const T*,   \
+                                  int64_t, int64_t, T*);                       \
+  template residual_sums residuals_of<T>(const raft::handle_t&, const T*,      \
+                                         const T*, const T*, const T*,         \
+                                         qn_shape);                            \
+  template void scores_to<T>(const raft::handle_t&, const T*, int64_t,         \
                              int64_t, int32_t, T*);
 
-#define CUMLRKT_QN_LABEL(L)                                                    \
-  template int64_t first_non_integral<L>(const L*, int64_t,                    \
-                                         rmm::cuda_stream_view);               \
-  template void encode_against<L>(const raft::handle_t&, const L*, int64_t,    \
-                                  const L*, int64_t, int32_t*);                \
-  template void labels_of<float, L>(const raft::handle_t&, const float*,       \
-                                    int64_t, int64_t, const L*, L*);           \
-  template void labels_of<double, L>(const raft::handle_t&, const double*,     \
+#define CUMLRKT_QN_LABEL(L)                                                 \
+  template int64_t first_non_integral<L>(const L*, int64_t,                 \
+                                         rmm::cuda_stream_view);            \
+  template void encode_against<L>(const raft::handle_t&, const L*, int64_t, \
+                                  const L*, int64_t, int32_t*);             \
+  template void labels_of<float, L>(const raft::handle_t&, const float*,    \
+                                    int64_t, int64_t, const L*, L*);        \
+  template void labels_of<double, L>(const raft::handle_t&, const double*,  \
                                      int64_t, int64_t, const L*, L*);
 
 CUMLRKT_QN_FLOAT(float)

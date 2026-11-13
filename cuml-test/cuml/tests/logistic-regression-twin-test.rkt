@@ -24,7 +24,9 @@
          (only-in "private/python-env.rkt" test-twin))
 
 (define cases
-  (list (blob-case "binary" 150 4 2 21) (blob-case "three classes" 150 4 3 22) (blob-case "five classes" 200 4 5 23)))
+  (list (blob-case "binary" 150 4 2 21)
+        (blob-case "three classes" 150 4 3 22)
+        (blob-case "five classes" 200 4 5 23)))
 
 (define settings '((l2 1.0 #f) (l1 1.0 #f) (elasticnet 0.5 0.5) (none 1.0 #f)))
 
@@ -37,25 +39,28 @@
 
 (define (request row #:op [op "cuml-apply"])
   (match-define (list dt c (list penalty C ratio) fi) row)
-  (logistic-twin op
-                 c
-                 dt
-                 (hasheq 'penalty (symbol->string penalty)
-                         'C C
-                         'l1_ratio (or ratio 'null)
-                         'fit_intercept fi)))
+  (logistic-twin
+   op
+   c
+   dt
+   (hasheq 'penalty (symbol->string penalty) 'C C 'l1_ratio (or ratio 'null) 'fit_intercept fi)))
 
 (define summing-to-n
   (let* ([c (blob-case "binary weighted" 150 4 2 24 #:weighted? #t)]
          [w (lr-case-w c)]
          [scale (/ (length w) (apply + w))])
-    (lr-case "binary weights summing to n" (lr-case-X c) (lr-case-y c) (map (lambda (v) (* v scale)) w))))
+    (lr-case "binary weights summing to n"
+             (lr-case-X c)
+             (lr-case-y c)
+             (map (lambda (v) (* v scale)) w))))
 
 (define (tight-tol dt)
   (if (eq? dt 'float32) 1e-6 1e-10))
 
 (define (tau-bound dt)
-  (if (eq? dt 'float32) (min (* 64 2e-3) 8e-2) (min (* 64 1e-6) 3e-2)))
+  (if (eq? dt 'float32)
+      (min (* 64 2e-3) 8e-2)
+      (min (* 64 1e-6) 3e-2)))
 
 (test-twin "with weights summing to n, Python cuML's optimum within 64 tau_T (T2)"
   (define settings* '((l2 1.0 #f) (l1 1.0 #f) (elasticnet 0.5 0.5)))
@@ -66,18 +71,29 @@
       (logistic-twin "cuml-fit"
                      summing-to-n
                      dt
-                     (hasheq 'penalty (symbol->string penalty) 'C C 'l1_ratio (or ratio 'null)
-                             'tol (tight-tol dt) 'max_iter 100000))))
-  (for ([g (in-list (for*/list ([dt (in-list dtypes)] [s (in-list settings*)]) (cons dt s)))]
+                     (hasheq 'penalty (symbol->string penalty)
+                             'C C
+                             'l1_ratio (or ratio 'null)
+                             'tol (tight-tol dt)
+                             'max_iter 100000))))
+  (for ([g (in-list (for*/list ([dt (in-list dtypes)]
+                                [s (in-list settings*)])
+                      (cons dt s)))]
         [theirs (in-list (logistic-twin-results requests))])
     (match-define (list dt penalty C ratio) g)
     (test-case (format "~a ~a" dt penalty)
       (match-define (list coef intercept _)
-        (fit-parts (case-fit summing-to-n dt #:penalty penalty #:C C #:l1-ratio ratio
-                             #:tol (tight-tol dt) #:max-iter 100000)))
+        (fit-parts (case-fit summing-to-n
+                             dt
+                             #:penalty penalty
+                             #:C C
+                             #:l1-ratio ratio
+                             #:tol (tight-tol dt)
+                             #:max-iter 100000)))
       (define gap
         (relative-gap (append (car coef) intercept)
-                      (append (decoded dt (hash-ref theirs 'coef_bits)) (decoded dt (hash-ref theirs 'intercept_bits)))))
+                      (append (decoded dt (hash-ref theirs 'coef_bits))
+                              (decoded dt (hash-ref theirs 'intercept_bits)))))
       (check-true (<= gap (tau-bound dt)) (format "gap ~a" gap)))))
 
 (define (flat m)
@@ -90,10 +106,16 @@
   (for/fold ([worst 0.0])
             ([o (in-list ours)]
              [t (in-list theirs)])
-    (max worst (/ (abs (- o t)) (if (= k 2) 1.0 (* (+ k 3) t (+ 1 (abs (log t)))))))))
+    (max worst
+         (/ (abs (- o t))
+            (if (= k 2)
+                1.0
+                (* (+ k 3) t (+ 1 (abs (log t)))))))))
 
 (define (their-parts theirs dt)
-  (list (decoded dt (hash-ref theirs 'coef_bits)) (decoded dt (hash-ref theirs 'intercept_bits)) (hash-ref theirs 'n_iter)))
+  (list (decoded dt (hash-ref theirs 'coef_bits))
+        (decoded dt (hash-ref theirs 'intercept_bits))
+        (hash-ref theirs 'n_iter)))
 
 (define (flat-parts r)
   (match-define (list coef intercept n-iter) (fit-parts r))
@@ -105,7 +127,12 @@
 
 (define (row-fit row X)
   (match-define (list _ c (list penalty C ratio) fi) row)
-  (logistic-regression-fit X (on-vector (lr-case-y c) 'int32) #:penalty penalty #:C C #:l1-ratio ratio #:fit-intercept fi))
+  (logistic-regression-fit X
+                           (on-vector (lr-case-y c) 'int32)
+                           #:penalty penalty
+                           #:C C
+                           #:l1-ratio ratio
+                           #:fit-intercept fi))
 
 (define (row-name row)
   (match-define (list dt c (list penalty _ _) fi) row)
@@ -129,14 +156,18 @@
       (define k (classes-of c))
       (define proba
         (decoded (string->symbol (hash-ref theirs 'proba_dtype)) (hash-ref theirs 'proba_bits)))
-      (define bound (if (and (= k 2) (eq? dt 'float32)) (expt 2.0 -23) (unit-roundoff dt)))
+      (define bound
+        (if (and (= k 2) (eq? dt 'float32))
+            (expt 2.0 -23)
+            (unit-roundoff dt)))
       (define gap (proba-gap (flat (logistic-regression-predict-proba r X)) proba k))
       (check-true (<= gap bound) (format "proba gap ~a, ~a of the bound" gap (/ gap bound))))))
 
 (test-twin "float32 multiclass OWL-QN fits, which repeat on neither side, within 1e-3 of Python cuML's (T1, F12)"
   (define kept (filter (lambda (row) (not (repeatable? row))) rows))
   (for ([row (in-list kept)]
-        [theirs (in-list (logistic-twin-results (map (lambda (row) (request row #:op "cuml-fit")) kept)))])
+        [theirs (in-list (logistic-twin-results (map (lambda (row) (request row #:op "cuml-fit"))
+                                                     kept)))])
     (match-define (list dt c _ _) row)
     (test-case (row-name row)
       (match-define (list coef intercept _) (flat-parts (row-fit row (on-matrix (lr-case-X c) dt))))
