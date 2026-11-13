@@ -14,13 +14,17 @@
                   bflog1p
                   bfmax
                   bfsqrt)
-         (only-in racket/list range)
+         (only-in racket/list make-list)
          (only-in racket/match match))
 
 (provide (struct-out residual)
          residual-of)
 
 (struct residual (K F bound) #:transparent)
+
+(define oracle-bits 128)
+(define tol-floor 1/10000)
+(define resolved-factor 64)
 
 (define zero (bf 0))
 (define one (bf 1))
@@ -36,6 +40,12 @@
       (bf+ z (bflog1p (bfexp (bf- zero z))))
       (bflog1p (bfexp z))))
 
+(define (score-of z label)
+  (for/first ([s (in-list z)]
+              [c (in-naturals)]
+              #:when (= c label))
+    s))
+
 (define (row-terms z label)
   (match z
     [(list s)
@@ -44,14 +54,14 @@
              (list (if (= label 1)
                        (bf- p one)
                        p)))]
-    [_
+    [(cons first rest)
      (define top
-       (for/fold ([m (car z)]) ([s (in-list (cdr z))])
+       (for/fold ([m first]) ([s (in-list rest)])
          (bfmax m s)))
      (define shifted (map (lambda (s) (bfexp (bf- s top))) z))
      (define total (bfsum shifted))
      (define lse (bf+ top (bflog1p (bf- total one))))
-     (values (bf- lse (list-ref z label))
+     (values (bf- lse (score-of z label))
              (for/list ([e (in-list shifted)]
                         [c (in-naturals)])
                (define p (bf/ e total))
@@ -83,6 +93,36 @@
       (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* wi (expt (- x mean) 2))) total))
     (and (positive? square) (bfsqrt (bf square)))))
 
+(define (loss-terms rows y weights W b)
+  (for/fold ([loss zero]
+             [gradient (make-list (length W) (make-list (length (car rows)) zero))]
+             [slope (make-list (length W) zero)])
+            ([x (in-list rows)]
+             [label (in-list y)]
+             [wi (in-list weights)])
+    (define z
+      (for/list ([wc (in-list W)]
+                 [bc (in-list b)])
+        (bf+ bc (bfsum (map bf* wc x)))))
+    (define-values (l dz) (row-terms z label))
+    (define weight (bf wi))
+    (values (bf+ loss (bf* weight l))
+            (for/list ([g (in-list gradient)]
+                       [d (in-list dz)])
+              (map (lambda (gj xj) (bf+ gj (bf* weight (bf* d xj)))) g x))
+            (map (lambda (s d) (bf+ s (bf* weight d))) slope dz))))
+
+(define (penalty-terms penalty ratio C total)
+  (define-values (rho rest) (penalty-shares penalty ratio))
+  (define scale (bf (/ 1 (* (inexact->exact C) total))))
+  (values (bf* (bf rho) scale) (bf* (bf rest) scale)))
+
+(define (projected-gradient g v l1)
+  (cond
+    [(bf< zero v) (bf+ g l1)]
+    [(bf< v zero) (bf- g l1)]
+    [else (bfmax zero (bf- (bfabs g) l1))]))
+
 (define (residual-of X
                      y
                      w
@@ -93,37 +133,13 @@
                      #:l1-ratio [ratio #f]
                      #:fit-intercept [fi #t]
                      #:tol [tol 1e-4])
-  (parameterize ([bf-precision 128])
-    (define weights (or w (map (lambda (_) 1) y)))
+  (parameterize ([bf-precision oracle-bits])
+    (define weights (or w (make-list (length y) 1)))
     (define total (apply + weights))
-    (define rows (map (lambda (row) (map exact row)) X))
     (define W (map (lambda (row) (map exact row)) coef))
-    (define b (map exact intercept))
-    (define k (length W))
-    (define p (length (car X)))
     (define-values (loss gradient slope)
-      (for/fold ([loss zero]
-                 [gradient (for/list ([_ (in-range k)])
-                             (map (lambda (_) zero) (range p)))]
-                 [slope (map (lambda (_) zero) (range k))])
-                ([x (in-list rows)]
-                 [label (in-list y)]
-                 [wi (in-list weights)])
-        (define z
-          (for/list ([wc (in-list W)]
-                     [bc (in-list b)])
-            (bf+ bc (bfsum (map bf* wc x)))))
-        (define-values (l dz) (row-terms z label))
-        (define weight (bf wi))
-        (values (bf+ loss (bf* weight l))
-                (for/list ([g (in-list gradient)]
-                           [d (in-list dz)])
-                  (map (lambda (gj xj) (bf+ gj (bf* weight (bf* d xj)))) g x))
-                (map (lambda (s d) (bf+ s (bf* weight d))) slope dz))))
-    (define-values (rho rest) (penalty-shares penalty ratio))
-    (define scale (bf (/ 1 (* (inexact->exact C) total))))
-    (define l1 (bf* (bf rho) scale))
-    (define l2 (bf* (bf rest) scale))
+      (loss-terms (map (lambda (row) (map exact row)) X) y weights W (map exact intercept)))
+    (define-values (l1 l2) (penalty-terms penalty ratio C total))
     (define big-total (bf total))
     (define means (column-means X weights fi))
     (define sigma (column-scales X weights means))
@@ -137,15 +153,10 @@
                   [(v g0 s mean)
                    (in-parallel (in-list wc) (in-list gc) (in-list sigma) (in-list means))])
         (define g (bf+ (bf/ (bf- g0 (bf* (bf mean) sc)) big-total) (bf* l2 v)))
-        (define pg
-          (cond
-            [(bf< zero v) (bf+ g l1)]
-            [(bf< v zero) (bf- g l1)]
-            [else (bfmax zero (bf- (bfabs g) l1))]))
         (values (bf+ F (bf+ (bf* l1 (bfabs v)) (bf* (bf/ l2 (bf 2)) (bf* v v))))
                 (if s
-                    (bfmax worst (bf/ (bfabs pg) s))
+                    (bfmax worst (bf/ (bfabs (projected-gradient g v l1)) s))
                     worst))))
-    (define tau (max (inexact->exact tol) 1/10000))
+    (define tau (max (inexact->exact tol) tol-floor))
     (define F* (bigfloat->real F))
-    (residual (bigfloat->real worst) F* (* 64 tau (max F* tau)))))
+    (residual (bigfloat->real worst) F* (* resolved-factor tau (max F* tau)))))

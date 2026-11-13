@@ -2,48 +2,51 @@
 
 (require (only-in cuml/linear-model
                   logistic-regression-decision-function
-                  logistic-regression-fit
                   logistic-regression-predict
                   logistic-regression-predict-proba)
          (only-in racket/list remove-duplicates)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
-         (only-in "private/linear-data.rkt" dtypes on-matrix on-vector unit-roundoff)
-         (only-in "private/linear-twin-data.rkt" decoded logistic-twin logistic-twin-results)
+         (only-in raft device-vector->list)
+         (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix unit-roundoff)
+         (only-in "private/linear-twin-data.rkt" decoded)
          (only-in "private/logistic-data.rkt"
                   blob-case
-                  case-fit
+                  fit-flat
                   fit-parts
+                  flat-matrix
                   lr-case
                   lr-case-name
                   lr-case-w
                   lr-case-X
                   lr-case-y
-                  relative-gap)
+                  lr-fit-n-iter
+                  penalty-settings
+                  relative-gap
+                  setting-fit
+                  setting-penalty
+                  tight-max-iter
+                  tight-tol)
+         (only-in "private/logistic-twin-data.rkt" logistic-twin-results setting-twin their-fit)
          (only-in "private/python-env.rkt" test-twin))
+
+(struct row (dt case setting fit-intercept))
 
 (define cases
   (list (blob-case "binary" 150 4 2 21)
         (blob-case "three classes" 150 4 3 22)
         (blob-case "five classes" 200 4 5 23)))
 
-(define settings '((l2 1.0 #f) (l1 1.0 #f) (elasticnet 0.5 0.5) (none 1.0 #f)))
-
 (define rows
   (for*/list ([dt (in-list dtypes)]
               [c (in-list cases)]
-              [s (in-list settings)]
+              [s (in-list penalty-settings)]
               [fi (in-list '(#t #f))])
-    (list dt c s fi)))
+    (row dt c s fi)))
 
-(define (request row #:op [op "cuml-apply"])
-  (match-define (list dt c (list penalty C ratio) fi) row)
-  (logistic-twin
-   op
-   c
-   dt
-   (hasheq 'penalty (symbol->string penalty) 'C C 'l1_ratio (or ratio 'null) 'fit_intercept fi)))
+(define (request r #:op [op "cuml-apply"])
+  (match-define (row dt c s fi) r)
+  (setting-twin op c dt s #:fit-intercept fi))
 
 (define summing-to-n
   (let* ([c (blob-case "binary weighted" 150 4 2 24 #:weighted? #t)]
@@ -54,50 +57,32 @@
              (lr-case-y c)
              (map (lambda (v) (* v scale)) w))))
 
-(define (tight-tol dt)
-  (if (eq? dt 'float32) 1e-6 1e-10))
+(define (weighted-gap-bound dt)
+  (by-dtype dt 0 (min (* 64 1e-6) 3e-2)))
 
-(define (tau-bound dt)
-  (if (eq? dt 'float32)
-      0
-      (min (* 64 1e-6) 3e-2)))
+(define penalised (filter (lambda (s) (not (eq? (setting-penalty s) 'none))) penalty-settings))
 
-(test-twin "with weights summing to n, Python cuML's fit in float32 and its optimum within 64 tau_T in float64 (T2)"
-  (define settings* '((l2 1.0 #f) (l1 1.0 #f) (elasticnet 0.5 0.5)))
-  (define requests
+(test-twin "weights summing to n fit as Python cuML's in float32 and near its optimum in float64"
+  (define grid
     (for*/list ([dt (in-list dtypes)]
-                [s (in-list settings*)])
-      (match-define (list penalty C ratio) s)
-      (logistic-twin "cuml-fit"
-                     summing-to-n
-                     dt
-                     (hasheq 'penalty (symbol->string penalty)
-                             'C C
-                             'l1_ratio (or ratio 'null)
-                             'tol (tight-tol dt)
-                             'max_iter 100000))))
-  (for ([g (in-list (for*/list ([dt (in-list dtypes)]
-                                [s (in-list settings*)])
-                      (cons dt s)))]
+                [s (in-list penalised)])
+      (cons dt s)))
+  (define requests
+    (for/list ([g (in-list grid)])
+      (setting-twin "cuml-fit"
+                    summing-to-n
+                    (car g)
+                    (cdr g)
+                    #:tol (tight-tol (car g))
+                    #:max-iter tight-max-iter)))
+  (for ([g (in-list grid)]
         [theirs (in-list (logistic-twin-results requests))])
-    (match-define (list dt penalty C ratio) g)
-    (test-case (format "~a ~a" dt penalty)
-      (match-define (list coef intercept _)
-        (fit-parts (case-fit summing-to-n
-                             dt
-                             #:penalty penalty
-                             #:C C
-                             #:l1-ratio ratio
-                             #:tol (tight-tol dt)
-                             #:max-iter 100000)))
-      (define gap
-        (relative-gap (append (car coef) intercept)
-                      (append (decoded dt (hash-ref theirs 'coef_bits))
-                              (decoded dt (hash-ref theirs 'intercept_bits)))))
-      (check-true (<= gap (tau-bound dt)) (format "gap ~a" gap)))))
-
-(define (flat m)
-  (apply append (device-matrix->list* m)))
+    (match-define (cons dt s) g)
+    (test-case (format "~a ~a" dt (setting-penalty s))
+      (define ours
+        (fit-parts (setting-fit summing-to-n dt s #:tol (tight-tol dt) #:max-iter tight-max-iter)))
+      (define gap (relative-gap (fit-flat ours) (fit-flat (their-fit theirs dt))))
+      (check-true (<= gap (weighted-gap-bound dt)) (format "gap ~a" gap)))))
 
 (define (classes-of c)
   (length (remove-duplicates (lr-case-y c))))
@@ -112,45 +97,32 @@
                 1.0
                 (* (+ k 3) t (+ 1 (abs (log t)))))))))
 
-(define (their-parts theirs dt)
-  (list (decoded dt (hash-ref theirs 'coef_bits))
-        (decoded dt (hash-ref theirs 'intercept_bits))
-        (hash-ref theirs 'n_iter)))
+(define (repeatable? r)
+  (match-define (row dt c s _) r)
+  (not (and (eq? dt 'float32) (> (classes-of c) 2) (memq (setting-penalty s) '(l1 elasticnet)))))
 
-(define (flat-parts r)
-  (match-define (list coef intercept n-iter) (fit-parts r))
-  (list (apply append coef) intercept n-iter))
+(define (row-fit r)
+  (match-define (row dt c s fi) r)
+  (setting-fit c dt s #:fit-intercept fi))
 
-(define (repeatable? row)
-  (match-define (list dt c (list penalty _ _) _) row)
-  (not (and (eq? dt 'float32) (> (classes-of c) 2) (memq penalty '(l1 elasticnet)))))
+(define (row-name r)
+  (match-define (row dt c s fi) r)
+  (format "~a ~a ~a ~a" dt (lr-case-name c) (setting-penalty s) fi))
 
-(define (row-fit row X)
-  (match-define (list _ c (list penalty C ratio) fi) row)
-  (logistic-regression-fit X
-                           (on-vector (lr-case-y c) 'int32)
-                           #:penalty penalty
-                           #:C C
-                           #:l1-ratio ratio
-                           #:fit-intercept fi))
-
-(define (row-name row)
-  (match-define (list dt c (list penalty _ _) fi) row)
-  (format "~a ~a ~a ~a" dt (lr-case-name c) penalty fi))
-
-(test-twin "Python cuML's fit, decision and predict, bit for bit, and its probabilities within (k+3)u(1 + |log p|) (T1, T4)"
+(test-twin "the fit, decision and predict are Python cuML's bit for bit, and probabilities near its"
   (define kept (filter repeatable? rows))
-  (for ([row (in-list kept)]
+  (for ([r (in-list kept)]
         [theirs (in-list (logistic-twin-results (map request kept)))])
-    (match-define (list dt c _ _) row)
-    (test-case (row-name row)
+    (match-define (row dt c _ _) r)
+    (test-case (row-name r)
       (define X (on-matrix (lr-case-X c) dt))
-      (define r (row-fit row X))
-      (check-equal? (flat-parts r) (their-parts theirs dt) "fit")
-      (check-equal? (flat (logistic-regression-decision-function r X))
+      (define fitted (row-fit r))
+      (check-equal? (fit-flat (fit-parts fitted)) (fit-flat (their-fit theirs dt)) "fit")
+      (check-equal? (lr-fit-n-iter (fit-parts fitted)) (hash-ref theirs 'n_iter) "n-iter")
+      (check-equal? (flat-matrix (logistic-regression-decision-function fitted X))
                     (decoded dt (hash-ref theirs 'decision_bits))
                     "decision")
-      (check-equal? (device-vector->list (logistic-regression-predict r X))
+      (check-equal? (device-vector->list (logistic-regression-predict fitted X))
                     (hash-ref theirs 'predict)
                     "predict")
       (define k (classes-of c))
@@ -160,17 +132,16 @@
         (if (and (= k 2) (eq? dt 'float32))
             (expt 2.0 -23)
             (unit-roundoff dt)))
-      (define gap (proba-gap (flat (logistic-regression-predict-proba r X)) proba k))
+      (define gap (proba-gap (flat-matrix (logistic-regression-predict-proba fitted X)) proba k))
       (check-true (<= gap bound) (format "proba gap ~a, ~a of the bound" gap (/ gap bound))))))
 
-(test-twin "float32 multiclass OWL-QN fits, which repeat on neither side, within 1e-3 of Python cuML's (T1, F12)"
-  (define kept (filter (lambda (row) (not (repeatable? row))) rows))
-  (for ([row (in-list kept)]
-        [theirs (in-list (logistic-twin-results (map (lambda (entry) (request entry #:op "cuml-fit"))
-                                                     kept)))])
-    (match-define (list dt c _ _) row)
-    (test-case (row-name row)
-      (match-define (list coef intercept _) (flat-parts (row-fit row (on-matrix (lr-case-X c) dt))))
-      (match-define (list their-coef their-intercept _) (their-parts theirs dt))
-      (define gap (relative-gap (append coef intercept) (append their-coef their-intercept)))
-      (check-true (<= gap 1e-3) (format "gap ~a" gap)))))
+(define owl-qn-gap-bound 1e-3)
+
+(test-twin "float32 multiclass OWL-QN fits, which repeat on neither side, are near Python cuML's"
+  (define kept (filter (lambda (r) (not (repeatable? r))) rows))
+  (for ([r (in-list kept)]
+        [theirs (in-list (logistic-twin-results (map (lambda (r) (request r #:op "cuml-fit")) kept)))])
+    (match-define (row dt _ _ _) r)
+    (test-case (row-name r)
+      (define gap (relative-gap (fit-flat (fit-parts (row-fit r))) (fit-flat (their-fit theirs dt))))
+      (check-true (<= gap owl-qn-gap-bound) (format "gap ~a" gap)))))

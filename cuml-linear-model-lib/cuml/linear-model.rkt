@@ -14,7 +14,6 @@
                      linear-regression-fit/who
                      linear-regression-predict/who)
          (except-out (all-from-out "linear-model/private/logistic-regression.rkt")
-                     label-codes/who
                      logistic-regression-decision-function/who
                      logistic-regression-fit/who
                      logistic-regression-predict-log-proba/who

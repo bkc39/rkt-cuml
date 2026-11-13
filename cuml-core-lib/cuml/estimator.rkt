@@ -64,8 +64,7 @@
 (define-generics classifier
                  (predict-proba classifier X)
                  (predict-log-proba classifier X)
-                 (decision-function classifier X)
-                 #:requires (predict-proba predict-log-proba decision-function))
+                 (decision-function classifier X))
 
 (define (keyword->symbol kw)
   (string->symbol (keyword->string kw)))

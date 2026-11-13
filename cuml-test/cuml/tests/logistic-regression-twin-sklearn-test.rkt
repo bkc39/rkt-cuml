@@ -1,98 +1,82 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-decision-function)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match-define struct*)
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
-         (only-in "private/linear-data.rkt" dtypes on-matrix)
-         (only-in "private/linear-twin-data.rkt" logistic-twin logistic-twin-results)
+         (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
-                  argmax-index
                   blob-case
-                  case-fit
-                  centred
+                  decision-label
+                  default-tol-cap
                   fit-parts
+                  gauged
                   lr-case-name
                   lr-case-X
-                  relative-gap)
+                  lr-fit
+                  penalty-settings
+                  relative-gap
+                  setting-fit
+                  setting-penalty
+                  tight-max-iter
+                  tight-tol)
+         (only-in "private/logistic-twin-data.rkt" logistic-twin-results setting-twin)
          (only-in "private/python-env.rkt" test-twin))
+
+(struct row (dt case setting))
 
 (define cases
   (list (blob-case "binary" 100 3 2 31)
         (blob-case "binary weighted" 100 3 2 32 #:weighted? #t)
         (blob-case "three classes" 120 3 3 33)))
 
-(define settings '((l2 1.0 #f) (l1 1.0 #f) (elasticnet 0.5 0.5) (none 1.0 #f)))
+(define (optimum-gap-bound dt)
+  (by-dtype dt 2e-3 1e-6))
 
-(define (tight-tol dt)
-  (if (eq? dt 'float32) 1e-6 1e-10))
-
-(define (coef-bound dt)
-  (if (eq? dt 'float32) 2e-3 1e-6))
-
-(define (s4-cap dt)
-  (if (eq? dt 'float32) 8e-2 3e-2))
+(define boundary-margin 1e-6)
 
 (define rows
   (for*/list ([dt (in-list dtypes)]
               [c (in-list cases)]
-              [s (in-list settings)])
-    (list dt c s)))
+              [s (in-list penalty-settings)])
+    (row dt c s)))
 
-(define (request row)
-  (match-define (list dt c (list penalty C ratio)) row)
-  (logistic-twin
-   "sklearn-fit"
-   c
-   dt
-   (hasheq 'penalty (symbol->string penalty) 'C C 'l1_ratio (or ratio 'null) 'tol (tight-tol dt))))
+(define (request r)
+  (match-define (row dt c s) r)
+  (setting-twin "sklearn-fit" c dt s #:tol (tight-tol dt)))
 
-(define (gauged coef intercept penalty)
-  (if (= 1 (length coef))
-      (append (car coef) intercept)
-      (append (apply append
-                     (if (memq penalty '(l1 none))
-                         (centred coef)
-                         coef))
-              (centred intercept))))
+(define (gauged-fit f penalty)
+  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) f)
+  (gauged coef intercept #:centre-coef? (memq penalty '(l1 none))))
+
+(define (gauged-sklearn theirs penalty)
+  (gauged (hash-ref theirs 'coef)
+          (hash-ref theirs 'intercept)
+          #:centre-coef? (memq penalty '(l1 none))))
 
 (define (margin z)
   (match (sort z >)
     [(list top) (abs top)]
     [(list* top next _) (- top next)]))
 
-(define (label-of z)
-  (if (= 1 (length z))
-      (if (> (car z) 0) 1 0)
-      (argmax-index z)))
-
-(test-twin "sklearn's optimum within 2e-3 (float32) and 1e-6 (float64), its predictions off the boundary, and within 8e-2 and 3e-2 at the default tol (T3, S4)"
-  (for ([row (in-list rows)]
+(test-twin "the fit is near sklearn's optimum and predicts its labels off the decision boundary"
+  (for ([r (in-list rows)]
         [theirs (in-list (logistic-twin-results (map request rows)))])
-    (match-define (list dt c (list penalty C ratio)) row)
+    (match-define (row dt c s) r)
+    (define penalty (setting-penalty s))
     (test-case (format "~a ~a ~a" dt (lr-case-name c) penalty)
-      (define r
-        (case-fit c
-                  dt
-                  #:penalty penalty
-                  #:C C
-                  #:l1-ratio ratio
-                  #:tol (tight-tol dt)
-                  #:max-iter 100000))
-      (match-define (list coef intercept _) (fit-parts r))
+      (define fitted (setting-fit c dt s #:tol (tight-tol dt) #:max-iter tight-max-iter))
       (define gap
-        (relative-gap (gauged coef intercept penalty)
-                      (gauged (hash-ref theirs 'coef) (hash-ref theirs 'intercept) penalty)))
-      (check-true (<= gap (coef-bound dt)) (format "coef gap ~a" gap))
-      (match-define (list default-coef default-intercept _)
-        (fit-parts (case-fit c dt #:penalty penalty #:C C #:l1-ratio ratio)))
+        (relative-gap (gauged-fit (fit-parts fitted) penalty) (gauged-sklearn theirs penalty)))
+      (check-true (<= gap (optimum-gap-bound dt)) (format "coef gap ~a" gap))
       (define default-gap
-        (relative-gap (gauged default-coef default-intercept penalty)
-                      (gauged (hash-ref theirs 'coef) (hash-ref theirs 'intercept) penalty)))
-      (check-true (<= default-gap (s4-cap dt)) (format "default-tol gap ~a" default-gap))
+        (relative-gap (gauged-fit (fit-parts (setting-fit c dt s)) penalty)
+                      (gauged-sklearn theirs penalty)))
+      (check-true (<= default-gap (default-tol-cap dt)) (format "default-tol gap ~a" default-gap))
       (define z
-        (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
+        (device-matrix->list* (logistic-regression-decision-function fitted
+                                                                     (on-matrix (lr-case-X c) dt))))
       (for ([zi (in-list z)]
             [label (in-list (hash-ref theirs 'predict))]
-            #:unless (< (margin zi) 1e-6))
-        (check-true (= (label-of zi) label) "predict")))))
+            #:unless (< (margin zi) boundary-margin))
+        (check-true (= (decision-label zi) label) "predict")))))

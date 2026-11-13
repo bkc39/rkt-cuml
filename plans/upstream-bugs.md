@@ -104,6 +104,7 @@ packet (§4) has the detail.
 | L4 #90 | OWL-QN tests convergence on the gradient of the smooth part, so l1 fits stop almost only on the change or line-search tests | `glm/qn/qn_solvers.cuh` | documented; the check measures the pseudo-gradient |
 | L4 #90 | `atomicAdd` reductions make fits non-repeatable above about 1000 rows (float32 rel 5e-4 at 2000 rows), and float32 softmax fits under l1 or elasticnet already at 150–200 rows (32 runs: 4–30 distinct fits, in Python too) | `glm/qn/glm_base.cuh` `mapThenSumReduce`, the softmax kernel | documented (L4-h); bitwise twins at n ≤ 200 except float32 multiclass OWL-QN, compared within 1e-3 |
 | L4 #90 | `log_sigmoid` uses log(1 + exp) rather than log1p | `glm/qn/glm_logistic.cuh` | documented |
+| L4 #90 | `predict_proba` returns float64 for two classes whatever X's dtype | the Python binary `predict_proba` path | probabilities in X's dtype for every k (L4-i) |
 
 ## cuVS
 

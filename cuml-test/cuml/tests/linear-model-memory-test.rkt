@@ -8,6 +8,7 @@
                   logistic-regression-predict-proba)
          (only-in racket/list make-list)
          (only-in "private/linear-data.rkt" lcase-X lcase-w lcase-y normal-case on-matrix on-vector)
+         (only-in "private/linear-refusal-rows.rkt" with-cell)
          (only-in "private/logistic-data.rkt" blob-case lr-case-w lr-case-X lr-case-y)
          (only-in "private/process-memory.rkt" test-fit-memory))
 
@@ -17,7 +18,7 @@
   (define y (on-vector (lcase-y c) 'float32))
   (define w (on-vector (lcase-w c) 'float32))
   (define X2 (on-matrix '((1 2) (3 4)) 'float32))
-  (define nan-X (on-matrix (cons '(+nan.0 0 0 0 0 0 0) (make-list 1999 '(1 1 1 1 1 1 1))) 'float32))
+  (define nan-X (on-matrix (with-cell (lr-case-X c) 0 0 +nan.0) 'float32))
   (define no-weight (on-vector (make-list 2000 0) 'float32))
   (define fitted (linear-regression-fit X y))
   (values (lambda ()
@@ -37,7 +38,7 @@
   (define X (on-matrix (lr-case-X c) 'float32))
   (define y (on-vector (lr-case-y c) 'int32))
   (define w (on-vector (lr-case-w c) 'float32))
-  (define nan-X (on-matrix (cons '(+nan.0 0 0 0 0 0 0) (make-list 1999 '(1 1 1 1 1 1 1))) 'float32))
+  (define nan-X (on-matrix (with-cell (lr-case-X c) 0 0 +nan.0) 'float32))
   (define X2 (on-matrix '((1 2) (3 4)) 'float32))
   (define fitted (logistic-regression-fit X y))
   (values (lambda ()
@@ -51,8 +52,10 @@
                 (list "logistic-regression-predict: X: expected 7 columns, got 2"
                       (lambda () (logistic-regression-predict fitted X2))))))
 
+(define fit-and-apply-buffers 6)
+
 (test-fit-memory "logistic-regression"
                  #:rounds 50
                  #:sample-every 10
                  #:setup logistic-setup
-                 #:buffers-per-round 6)
+                 #:buffers-per-round fit-and-apply-buffers)

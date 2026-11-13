@@ -74,6 +74,18 @@
     #:with procedure #'(lambda (who-id . rest)
                          body ...)))
 
+(define spec-id-label #px"\\([A-Z][0-9]+[a-z]?(?:, ?[A-Z][0-9]+[a-z]?)*\\)$")
+
+(define (spec-id-title? name)
+  (define title (syntax-e name))
+  (and (string? title) (regexp-match? spec-id-label title)))
+
+(define (check-test-title name)
+  (when (spec-id-title? name)
+    (track-error name
+                 (format "the test title ~s ends in a spec id: say the law, and keep ids in plans"
+                         (syntax-e name)))))
+
 (define-syntax-class test-form-name
   #:datum-literals (test-gpu test-model-probe test-process-memory test-twin test-without-gpu)
   (pattern (~or* test-gpu test-model-probe test-process-memory test-twin test-without-gpu)))
@@ -82,8 +94,7 @@
   #:datum-literals (define-cd-result define-definition-context-refactoring-rule
                      define-estimator
                      define-generics
-                     define-classifier
-                     define-regressor
+                     define-predictor
                      define-refactoring-rule
                      define-hyperparameters
                      define-page-helpers
@@ -118,7 +129,7 @@
     #:attr review (lambda ()
                     (track-binding #'name)
                     (for-each recur (filter values (attribute entry.default)))))
-  (pattern ((~or* define-classifier define-estimator define-regressor) name:id . options)
+  (pattern ((~or* define-estimator define-predictor) name:id . options)
     #:attr review (lambda ()
                     (track-binding #'name)
                     (track-binding #'name "~a?" #:check-usages? #f)
@@ -159,7 +170,14 @@
   (pattern (test-unless-skipped reason name body ...)
     #:attr review (lambda () (review-scoped-body (list #'reason #'name) (attribute body))))
   (pattern (_:test-form-name name body ...)
-    #:attr review (lambda () (review-scoped-body (list #'name) (attribute body)))))
+    #:attr review (lambda ()
+                    (check-test-title #'name)
+                    (review-scoped-body (list #'name) (attribute body))))
+  (pattern ((~datum test-case) name:str body ...)
+    #:when (spec-id-title? #'name)
+    #:attr review (lambda ()
+                    (check-test-title #'name)
+                    (review-scoped-body (list #'name) (attribute body)))))
 
 (define (should-review? stx)
   (syntax-parse stx

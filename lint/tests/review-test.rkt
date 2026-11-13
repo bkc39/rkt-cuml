@@ -204,7 +204,7 @@
       (list who X y))
     (define (gauge-predict/who who model X)
       (list who model X))
-    (define-regressor gauge
+    (define-predictor gauge
       #:hyperparameters gauge-params
       #:fit gauge-fit/who
       #:predict gauge-predict/who)))
@@ -215,6 +215,19 @@
              gauge-predict/who)
     (define-cd-result gauge-result gauge-predict)))
 
+(define titles-with-spec-ids
+  '((require (only-in rackunit check-true test-case)
+             (only-in raft/tests/private/gpu test-gpu)
+             (only-in "python-env.rkt" test-twin))
+    (test-case "a fit repeats (S3)"
+      (check-true #t))
+    (test-gpu "a constant column gets coef 0 (S3, H1)"
+      (check-true #t))
+    (test-twin "the fit is Python's bit for bit (T1, F12)"
+      (check-true #t))
+    (test-case "a title may end in a parenthesis (bitwise)"
+      (check-true #t))))
+
 (define helper-used-in-a-template
   '((require (for-syntax racket/base)) (provide m)
                                        (define (helper x)
@@ -222,6 +235,13 @@
                                        (define-syntax-parse-rule (m x:expr)
                                          #:with y #'x
                                          (helper y))))
+
+(test-case "a test title that ends in a spec id is refused"
+  (check-equal?
+   (sort (problems-in titles-with-spec-ids) string<?)
+   '("the test title \"a constant column gets coef 0 (S3, H1)\" ends in a spec id: say the law, and keep ids in plans"
+     "the test title \"a fit repeats (S3)\" ends in a spec id: say the law, and keep ids in plans"
+     "the test title \"the fit is Python's bit for bit (T1, F12)\" ends in a spec id: say the law, and keep ids in plans")))
 
 (test-case "an exported procedure that takes who first is defined with define/who"
   (check-equal? (problems-in exported-who-procedure)
@@ -247,7 +267,7 @@
 (test-case "define-estimator binds the constructor, the predicate and the model accessor"
   (check-equal? (problems-in estimator-definition) '()))
 
-(test-case "define-regressor binds the constructor, the predicate and the model accessor"
+(test-case "define-predictor binds the constructor, the predicate and the model accessor"
   (check-equal? (problems-in regressor-definition) '()))
 
 (test-case "define-cd-result binds the result struct, the predict and its who form"

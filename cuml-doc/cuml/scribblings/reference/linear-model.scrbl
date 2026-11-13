@@ -7,6 +7,7 @@
                      threading))
 
 @(define ev (make-base-eval #:lang 'racket/base '(require cuml raft threading)))
+@(define int32-count @racket[(integer-in 1 2147483647)])
 
 @title[#:tag "linear-model"]{Linear models}
 
@@ -253,7 +254,7 @@ The result of @racket[lasso-fit], as @racket[elastic-net-result].}
                           [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                           [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
                           [#:fit-intercept fit-intercept boolean? #t]
-                          [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                          [#:max-iter max-iter #,int32-count 1000]
                           [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                           [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                           [#:params params (or/c #f hash?) #f]
@@ -300,7 +301,7 @@ As @racket[linear-regression-predict], for an @racket[elastic-net-result].}
 @defproc[(elastic-net-params [base (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                              [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
                              [#:fit-intercept fit-intercept boolean? #t]
-                             [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                             [#:max-iter max-iter #,int32-count 1000]
                              [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                              [#:selection selection (or/c 'cyclic 'random) 'cyclic])
          (and/c hash? hash-eq? immutable?)]{
@@ -310,7 +311,7 @@ The hyperparameters of @racket[elastic-net-fit] and @racket[elastic-net], as @ra
                     [#:sample-weight sample-weight (or/c #f device-vector?) #f]
                     [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                     [#:fit-intercept fit-intercept boolean? #t]
-                    [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                    [#:max-iter max-iter #,int32-count 1000]
                     [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                     [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                     [#:params params (or/c #f hash?) #f]
@@ -325,7 +326,7 @@ As @racket[linear-regression-predict], for a @racket[lasso-result].}
 
 @defproc[(lasso-params [base (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                        [#:fit-intercept fit-intercept boolean? #t]
-                       [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                       [#:max-iter max-iter #,int32-count 1000]
                        [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                        [#:selection selection (or/c 'cyclic 'random) 'cyclic])
          (and/c hash? hash-eq? immutable?)]{
@@ -338,7 +339,7 @@ The hyperparameters of @racket[lasso-fit] and @racket[lasso], as @racket[kmeans-
 @defproc[(elastic-net [params (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                       [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
                       [#:fit-intercept fit-intercept boolean? #t]
-                      [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                      [#:max-iter max-iter #,int32-count 1000]
                       [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                       [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                       [#:resources resources (or/c #f device-resources?) #f])
@@ -356,7 +357,7 @@ The @racket[elastic-net-result] of the fit that made @racket[estimator], or @rac
 
 @defproc[(lasso [params (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                 [#:fit-intercept fit-intercept boolean? #t]
-                [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                [#:max-iter max-iter #,int32-count 1000]
                 [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                 [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                 [#:resources resources (or/c #f device-resources?) #f])
@@ -399,34 +400,26 @@ The result of @racket[logistic-regression-fit]: one row of @racket[coef] and one
                                   [#:C C (and/c rational? positive?) 1.0]
                                   [#:l1-ratio l1-ratio (or/c #f (real-in 0 1)) #f]
                                   [#:fit-intercept fit-intercept boolean? #t]
-                                  [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                                  [#:max-iter max-iter #,int32-count 1000]
                                   [#:tol tol (and/c rational? (>=/c 0)) 1e-4]
-                                  [#:linesearch-max-iter linesearch-max-iter (integer-in 1 2147483647) 50]
-                                  [#:lbfgs-memory lbfgs-memory (integer-in 1 2147483647) 5]
+                                  [#:linesearch-max-iter linesearch-max-iter #,int32-count 50]
+                                  [#:lbfgs-memory lbfgs-memory #,int32-count 5]
                                   [#:penalty-normalized penalty-normalized boolean? #t]
                                   [#:class-weight class-weight (or/c #f 'balanced hash?) #f]
                                   [#:params params (or/c #f hash?) #f]
                                   [#:resources resources device-resources? (current-device-resources)])
          logistic-regression-result?]{
 Minimises C·Σ@subscript{i} w@subscript{i} l@subscript{i} + ρ‖W‖₁ + (1 − ρ)/2·‖W‖² by
-L-BFGS (OWL-QN with an l1 part), as Python cuML's and scikit-learn's @tt{LogisticRegression}.
-l is the sigmoid loss for two classes and the softmax loss for more; ρ is 1 for @racket['l1], 0
-for @racket['l2] and @racket[l1-ratio] for @racket['elasticnet], and the penalty is 0 for
-@racket['none]; the intercept is not penalised. Without @racket[penalty-normalized] the penalty is
-multiplied by the rows' count, as in Python cuML. @racket[y] holds class labels: integral numbers
-on the device, or a list of reals, strings or symbols; @racket[classes] are the sorted distinct
-labels. @racket[class-weight] multiplies each row's weight by its class's (@racket['balanced]:
-W/(k·W@subscript{c})); a class missing from the hash weighs 1. With 3 or more classes the
-weights must be equal on every row. Defaults are Python cuML's; scikit-learn's
-@racket[max-iter] is 100.
+L-BFGS (OWL-QN with an l1 part), as Python cuML's and scikit-learn's @tt{LogisticRegression}:
+l is the sigmoid loss for two classes and the softmax loss for more, ρ follows @racket[penalty]
+and @racket[l1-ratio], and the intercept is not penalised. @racket[y] holds class labels:
+integral numbers on the device, or a list of reals, strings or symbols; @racket[classes] are the
+sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
 
-The fit is refused when the solver stops at a first-order residual above 64·max(@racket[tol],
-10⁻⁴) relative to the objective, in the columns' scale. This catches iteration cutoffs and
-solver collapse. It bounds only the first-order residual: on nearly collinear columns an accepted
-fit's coefficients can be far from the optimum. It refuses some fits on columns of widely mixed
-scale whatever @racket[max-iter]: standardise them. On separable data without a
-penalty the coefficients grow until the solver stops. Fits of more than a few hundred rows do
-not repeat bitwise (L4-h).
+The fit is refused when the solver has not converged; the check bounds the first-order
+residual, not the distance to the optimum. Columns of widely mixed scale can be refused at any
+@racket[max-iter]: standardise them. On separable data without a penalty the coefficients grow
+until the solver stops. Large fits do not repeat bitwise.
 @examples[#:eval ev #:label #f
 (logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
 (eval:error (logistic-regression-fit Xc yc #:C 0))
@@ -452,7 +445,7 @@ above 0), as @racket[y] was given: a device-vector of its dtype, or a list.}
           [X device-matrix?]
           [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
-The class probabilities, in X's dtype (Python cuML gives float64 for two classes).}
+The class probabilities, in X's dtype.}
 
 @defproc[(logistic-regression-predict-log-proba
           [result logistic-regression-result?]
@@ -467,10 +460,10 @@ underflows).}
                                      [#:C C (and/c rational? positive?) 1.0]
                                      [#:l1-ratio l1-ratio (or/c #f (real-in 0 1)) #f]
                                      [#:fit-intercept fit-intercept boolean? #t]
-                                     [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                                     [#:max-iter max-iter #,int32-count 1000]
                                      [#:tol tol (and/c rational? (>=/c 0)) 1e-4]
-                                     [#:linesearch-max-iter linesearch-max-iter (integer-in 1 2147483647) 50]
-                                     [#:lbfgs-memory lbfgs-memory (integer-in 1 2147483647) 5]
+                                     [#:linesearch-max-iter linesearch-max-iter #,int32-count 50]
+                                     [#:lbfgs-memory lbfgs-memory #,int32-count 5]
                                      [#:penalty-normalized penalty-normalized boolean? #t]
                                      [#:class-weight class-weight (or/c #f 'balanced hash?) #f])
          (and/c hash? hash-eq? immutable?)]{
@@ -486,10 +479,10 @@ The hyperparameters of @racket[logistic-regression-fit] and @racket[logistic-reg
                               [#:C C (and/c rational? positive?) 1.0]
                               [#:l1-ratio l1-ratio (or/c #f (real-in 0 1)) #f]
                               [#:fit-intercept fit-intercept boolean? #t]
-                              [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                              [#:max-iter max-iter #,int32-count 1000]
                               [#:tol tol (and/c rational? (>=/c 0)) 1e-4]
-                              [#:linesearch-max-iter linesearch-max-iter (integer-in 1 2147483647) 50]
-                              [#:lbfgs-memory lbfgs-memory (integer-in 1 2147483647) 5]
+                              [#:linesearch-max-iter linesearch-max-iter #,int32-count 50]
+                              [#:lbfgs-memory lbfgs-memory #,int32-count 5]
                               [#:penalty-normalized penalty-normalized boolean? #t]
                               [#:class-weight class-weight (or/c #f 'balanced hash?) #f]
                               [#:resources resources (or/c #f device-resources?) #f])

@@ -34,7 +34,7 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
-| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, `define-cd-result`, macro templates and constructor-renamed structs, and the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who` |
+| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, `define-cd-result`, macro templates and constructor-renamed structs, the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who`, and the rule that a test title does not end in a spec id |
 | `shim/` | | the C++ shims, one shared library per family, and the test-only `libcumlrkt_probe.so` (`shim/probe`, a `TEST_ONLY` family) |
 | `scripts/` | | the gate scripts, the binding census and its plan, and the repo's Resyntax suite (`resyntax-rules.rkt`, `cuml-recommendations`) |
 
@@ -74,6 +74,9 @@ bite here:
    teach `lint/review.rkt` the form instead. `#|review: ignore|#` stays on
    `info.rkt` files and pure re-export facades; the `no-noqa` gate allowlists
    the rest.
+9. **Test titles say the law.** A `test-case`, `test-gpu` or `test-twin`
+   title ending in a spec id, `(E4)` or `(S3, H1)`, is refused by the
+   `review` lint; ids and bounds' numbers live in `plans/` and the code.
 
 ## Architecture
 
@@ -248,19 +251,17 @@ the families will follow once it lands.
       `python/`), gtests in `shim/<family>/tests`.
 - [ ] All gates green, including `gpu` and `check`.
 
-For a classifier (L4, #90):
+For a classifier:
 
-- *Labels.* y is an integral device vector (int32, int64, float32 or
-  float64) or a host list of reals, strings or symbols; the shim's
-  `dense_codes` gives the sorted classes and int32 codes, the result keeps
-  `classes`, and predict returns y's kind. `define-classifier` scores
-  through `label-encode-job` and `accuracy-score/who`, a label outside
-  `classes` counting as wrong.
-- *QN check.* The standardised first-order residual against
-  64·max(tol, 10⁻⁴)·max(F, τ) (L4-f): a gate against cutoffs and solver
-  collapse, not an accuracy promise.
+- *Labels.* y is an integral device vector or a host list of reals,
+  strings or symbols; the result keeps the sorted `classes`, and predict
+  returns y's kind. `define-predictor`'s accuracy scorer encodes labels
+  through the result's `prop:label-codes`, a label outside `classes`
+  counting as wrong.
+- *QN check.* A gate against iteration cutoffs and solver collapse, not
+  an accuracy promise.
 - *Softmax gauge.* Tests centre k > 2 intercepts, and l1 or `'none`
-  coefficients, before comparing (F5).
+  coefficients, before comparing.
 
 ## Build and test
 
@@ -400,16 +401,17 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `linear-data` | the linear-regression fixtures (`normal-case n d seed #:weighted?`, dyadic normal rows with dyadic weights in [0.5, 2], as an `lcase` of name, X, y and w; `law-cases`, the T-law grid; `rounded-case`, a case narrowed to a dtype and back), `on-matrix`, `on-vector`, `lcase-device`, `fitted-of`, `unit-roundoff`, `within` (got over bound), `check-law name got bound`, `check-law-case name got bound` and `law-case name body ...` (one law in its own test case, named after the enclosing one, so a failing law cannot hide a later one), and the exact oracles `oracle-lstsq` (the min-norm weighted least-squares `solution` in rationals, with κ from `condition`) and `host-cosine` (the residual cosine on the raw data; `#:alpha` for the ridge stationarity), `scaled-case c #:X #:y #:w` (a case with X, y and w times factors), `weighted-spread xs ws` (one column's Σw(x − x̄)²), `floor-log2` |
 | `linear-data` (ridge oracle) | `oracle-ridge` and `ridge-oracles` (the exact rational ridge solution, with κ_α, a certified lower bound on κ₀ over the varying columns, σ²_min, σ²_max and ‖XᵀWy‖ in a `ridge-solution`, over the α grid of `ridge-data`'s `alpha-ratios`), and `ridge-solve` (one from a Gram, the inner `eigen-bracket` pair of its varying columns and its outer pair) |
 | `exact-algebra` | `dot`, `integer-scaled` (a list's common denominator and the list times it), `mat*vec` (in integers, scaled by common denominators, when every entry is exact), `min-norm-solve` (fraction-free Bareiss elimination and back-substitution when the matrix is exact and nonsingular, else the rref min-norm solve), `eigen-bracket` (λ_max and λ_min each bracketed to within 2^−9, relative, by exact fraction-free positive-definiteness tests of G − sI, started from the exact Rayleigh quotients of f64 power- and inverse-iteration vectors: the inner pair is a lower bound on κ, the outer pair an upper bound), `varying-inner` (the inner pair over the columns with a nonzero diagonal), `outer-bracket`, `eigen-range`, `eigen-bottom` (the outer pair's λ_min), `bottom-vector` (the f64 inverse-iteration vector the λ_min bracket starts from), `norm2`, `bracket-condition` (√(top/bottom) of a pair, +inf.0 once bottom ≤ 1e-14·top) and `condition` (the outer pair) |
-| `linear-twin-data` | the linear-regression twin's helpers: `case-request op c dt fi settings` (one case's bits payload, `settings` a hash of the op's own keys), `twin-results script requests` (one Python run), `request` and `results` (both for `python/linear_regression_twin.py`), `theirs` (a twin result as a fit), `bits-of`, `decoded`, `check-cuml-parity`, `check-cuml-failures`, `p1-cases`, `one-column`, `with-constant`; `logistic-twin op c dt settings` (an `lr-case`'s payload for `python/logistic_regression_twin.py`, X in bits and y as codes, `settings` over Python's defaults) and `logistic-twin-results` |
+| `linear-twin-data` | the linear-regression twin's helpers: `case-request op c dt fi settings` (one case's bits payload, `settings` a hash of the op's own keys), `twin-results script requests` (one Python run), `request` and `results` (both for `python/linear_regression_twin.py`), `theirs` (a twin result as a fit), `bits-of`, `decoded`, `check-cuml-parity`, `check-cuml-failures`, `p1-cases`, `one-column`, `with-constant` |
 | `ridge-data` | `alpha-ratios` and `solvers` (the ridge grid), `ridge-case-fit` and `ridge-case-result`, `ridge-result-fit`, `check-ridge-laws` and `check-ridge-fit c fi dt solver fit exact` (R1 to R3 for one fit, each law its own test case; a float32 'auto or 'eig fit where u·κ₀ ≥ 1 is held to R1 at 2^10 rather than 128 and R3 at 2^10 rather than 64, the measured envelopes of L2-k), `lstsq-algorithm` (the L1 algorithm a ridge solver routes to), `widest-spread c fi` (the largest column spread) and `rounding-alpha c dt fi` (u times the smallest: the largest alpha taken as 0) |
 | `ridge-twin-data` | the ridge twin's checks over `python/ridge_twin.py`: `check-raw-parity` (Python cuML), `check-sklearn-parity` and `check-staged-parity` |
 | `elastic-net-oracle` | `problem-of` (a case's exact weighted Gram, XᵀWy, means and Σw as an `en-problem`), `alpha-max`, `oracle-elastic-net` (host f64 CD for the support, then the exact rational solution on it, certified by its signs and the off-support subgradients, with μ and σ; `#:bottom` takes a known lower bound on λ_min of XᵀWX in place of `eigen-range`'s), `host-kkt` (K, B and A of the shim's stop check, exact up to the square roots) and `s2-bound` (the coefficient-distance bound) |
 | `elastic-net-data` | `correlated-case n d corr seed #:weighted?`, the law grid (`l1-ratios`, `alpha-ratios`, `tols`, `selections`, `law-alpha`, `case-alpha`), `dyadic-weight-case` and `mirrored-weight-case` (64 rows of weights 1, 4 and 16, for the weighted twin), `en-case-fit` (a case's fit as an `en-run`, any fit procedure by `#:fit`), `en-fit`, `check-elastic-net-laws`, and for one fit `check-kkt-laws` (`#:relative? #f` drops K ≤ B where float32 rounding can put a relative stop over tol, L3-b) and `check-distance-laws`, `positive-rows-of` (the rows of positive weight), `check-accuracy` (the bound a fit meets, by name), `coef-distance` |
 | `linear-laws` | `staging-of` (the `staging` the fit solves in, on the shim's pre-scaled weights: each column's and y's power of two, the weights' power of four, which columns are kept, and κ and the outer bracket's ends of the kept, staged columns, L1-e), `centring-gamma` (γ_h of the device x̄, and of the unweighted ȳ, which has the same count, for a case's row count and weighting), `y-centring-gamma` (γ_(h_y) of the device ȳ: raft's strided G + 3 + s when weighted, coalesced s + 2 otherwise; refused above 2²⁹ rows), `check-oracle-laws` and `check-lstsq-fit` (T1 to T4 for one fit in the fit's staged coordinates, each law its own test case; T1 and T3 carry cuML's centring error, through κ̃′ and the capped C1 and C3, and T4 counts every rounding of the intercept's closed form, both with the device means' worst case for the row count, L1-e; `#:coef-centring? #f` drops C1 and `#:cap-scale` scales its Sherman–Morrison cap, for the host tests that need them), `check-prediction-law` |
 | `real-linear-data` | the real-data cases (diabetes, mtcars, wine and breast-cancer from `datasets/core` by response, raw and standardised, unweighted and with seeded integer weights 1 to 4, in each dtype; each a `real-case` of the narrowed `lcase`, its exact `en-problem` and its `eigen-bracket`, made once per process; `real-lcase name arm dt` is one narrowed `lcase` alone; `offset-law-arms` is the offset arms by dtype on which the laws discriminate, L1-e), and their checks against the exact solve: `check-real-lstsq` (every algorithm), `check-real-ridge` (both solvers over the ridge path), `check-real-elastic-net` (lasso, l1-ratio 0.5 and 0.1 over α_max·10^(−3k/5), and zeros just above α_max), `check-real-score` (each estimator's score against the exact R² of its own predictions, within `r2-bound`) and `check-real-refusal` (l1-ratio 0 at the ridge path's start); `test-real-set name` takes `#:dtypes`, `#:arms` (pairs of raw, standardised or `(offset . k)` (every column plus 2^k) and unweighted or weighted) and `#:checks` (lstsq, ridge, elastic-net and score by default, and refusal), so a slow set splits across files |
-| `logistic-data` | the logistic-regression fixtures: `blob-case name n p k seed #:sep #:scales #:weighted?` (dyadic Gaussian blobs as an `lr-case` of name, rows, codes and weights 1 to 4), `separable-case`, `with-column`, `case-fit` (`logistic-regression-fit` on a case in a dtype, its weights passed), `case-y`, `fit-parts` (coef rows, intercept, n-iter), `centred` (less the mean over classes, F5), `relative-gap`, `argmax-index` |
-| `logistic-check` | `residual-of X y w coef intercept #:penalty #:C #:l1-ratio #:fit-intercept #:tol`: the check's K, F and bound recomputed at 128 bits (`math/bigfloat`) from a returned point, as a `residual` |
-| `real-logistic-data` | `labelled-set name response excluded #:standardise?` (a `datasets/core` set as a `labelled` of its `lr-case` with codes, the labels and the sorted classes), `check-sklearn-optimum` (R1, R3), `check-raw-refusal` (R2's refusal and its soundness at Python cuML's point), `check-score` (R3) |
+| `logistic-data` | the logistic-regression fixtures: `blob-case` (dyadic Gaussian blobs as an `lr-case`), `separable-case`, `with-column`, `scaled-case`, `case-fit`, `setting-fit`, `case-y`; `fit-parts` as an `lr-fit`, `fit-flat`, `scaled-parts`, `gauged`; the shared `setting`s, `tight-tol`, `default-tol-cap` and `cutoff-message` |
+| `logistic-twin-data` | `logistic-twin op c dt #:penalty #:C ...` (an `lr-case`'s payload for `python/logistic_regression_twin.py`), `setting-twin`, `logistic-twin-results`, `their-fit` |
+| `logistic-oracle` | `residual-of X y w coef intercept #:penalty #:C #:l1-ratio #:fit-intercept #:tol`: the check's residual, objective and bound recomputed in bigfloats from a returned point |
+| `real-logistic-data` | `labelled-set name response excluded #:standardise?` (a `datasets/core` set as a `labelled`), `check-sklearn-optimum`, `check-raw-refusal` (the refusal, and Python cuML's point there off the optimum), `check-score` |
 | `elastic-net-twin-data` | the elastic-net twin's checks over `python/elastic_net_twin.py`: `check-raw-parity` (Python cuML, bit for bit) and `check-sklearn-parity` (scikit-learn, within sklearn-distance) |
 | `linear-refusal-rows` | the refusal rows linear-regression and ridge share: `shared-fit-rows go`, and `grid`, `targets`, `with-cell`, `with-element`, `overflow-X`, `overflow-y` |
 | `tsvd-data` | the truncated SVD fixtures (`normal-fixture`, `offset-fixture`, `duplicate-fixture`, `wide-fixture`, `zeros-fixture`, `twos-fixture`, `tie-fixture`, `law-fixtures`, `normal-rows-of`, and `householder-fixtures` with known spectra, each an `exact`), `tsvd-of` (a result's arrays as host lists in an `svd` struct), `exact-reference` (the float64 SVD's `reference`), `accuracy-problems` (L8's bounds, the failures as strings), `sign-matched` (a reference with each component's sign matched to a fit's, for the tie fixture), and the host oracles `host-transform`, `popvars` and `squared-norm` |

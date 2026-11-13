@@ -98,8 +98,7 @@
     [("define-raft" "define-kc"
                     "define/who"
                     "define-estimator"
-                    "define-regressor"
-                    "define-classifier"
+                    "define-predictor"
                     "define-cd-result")
      (format-define-like)]
     [("define-hyperparameters") (format-uniform-body/helper 1 #:body-formatter format-entry)]

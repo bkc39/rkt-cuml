@@ -25,13 +25,10 @@
                   scaled-columns
                   solution
                   unit-roundoff)
-         (only-in "logistic-data.rkt" lr-case-w lr-case-X lr-case-y)
          (only-in "python-env.rkt" run-twin))
 
 (provide bits-of
          case-request
-         logistic-twin
-         logistic-twin-results
          check-cuml-failures
          check-cuml-parity
          decoded
@@ -44,7 +41,6 @@
          with-constant)
 
 (define-runtime-path twin "../python/linear_regression_twin.py")
-(define-runtime-path logistic-twin-script "../python/logistic_regression_twin.py")
 
 (define (bits-of dt xs)
   (define size (if (eq? dt 'float32) 4 8))
@@ -190,23 +186,3 @@
       (check-law "ours"
                  (staged-relative ours c* factors y-factor)
                  (* 128 (unit-roundoff 'float32) kappa kappa)))))
-
-(define (logistic-twin op c dt settings)
-  (for/fold ([request (hasheq 'op op
-                              'dtype (symbol->string dt)
-                              'X (bits-of dt (~> c lr-case-X (apply append _) (map exact->inexact _)))
-                              'y (lr-case-y c)
-                              'w (if (lr-case-w c)
-                                     (bits-of dt (map exact->inexact (lr-case-w c)))
-                                     'null)
-                              'penalty "l2"
-                              'C 1.0
-                              'l1_ratio 'null
-                              'fit_intercept #t
-                              'tol 1e-4
-                              'max_iter 1000)])
-            ([(key value) (in-hash settings)])
-    (hash-set request key value)))
-
-(define (logistic-twin-results requests)
-  (twin-results logistic-twin-script requests))

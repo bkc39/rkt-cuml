@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in raft list*->device-matrix)
-         (only-in "cuml-error.rkt" check-cuml-error))
+         (only-in "cuml-error.rkt" check-cuml-error prefixed))
 
 (provide (struct-out row)
          check-row
@@ -12,12 +12,11 @@
 
 (define (check-row name r [thunk (row-call r)])
   (define message (row-message r))
-  (check-cuml-error
-   'logic
-   (if (regexp? message)
-       (regexp (string-append "^" (regexp-quote name) ": " (substring (object-name message) 1)))
-       (format "~a: ~a" name message))
-   thunk))
+  (check-cuml-error 'logic
+                    (if (regexp? message)
+                        (prefixed (format "~a: " name) message)
+                        (format "~a: ~a" name message))
+                    thunk))
 
 (define (with-row bad #:then [then '()])
   (list*->device-matrix (append '((1 1) (2 3)) (list bad) '((4 4) (5 6)) (list '(+nan.0 0)) then)

@@ -11,7 +11,6 @@
          bounded-count/who
          glm-predict/who
          intercept-flag/who
-         iteration-count/who
          real-value/who)
 
 (define/who (intercept-flag who fit-intercept)
@@ -33,8 +32,6 @@
   (if (and (exact-integer? n) (<= 1 n int32-max))
       n
       (logic-error "~a: ~a: expected an exact integer from 1 to ~a, got ~e" who key int32-max n)))
-
-(define/who (iteration-count who n) (bounded-count/who who 'max-iter n))
 
 (define (intercept-value who intercept)
   (if (real? intercept)

@@ -36,6 +36,7 @@
                   argmax-index
                   blob-case
                   case-fit
+                  decision-label
                   fit-parts
                   lr-case-name
                   lr-case-X
@@ -45,7 +46,7 @@
 (define three (blob-case "three classes" 120 3 3 2))
 (define five (blob-case "five classes" 150 4 5 3))
 
-(test-gpu "the fit's shapes follow the classes, and no intercept is zeros (E1)"
+(test-gpu "the fit's shapes follow the classes, and no intercept is zeros"
   (for* ([c (in-list (list binary three five))]
          [dt (in-list dtypes)]
          [fi (in-list '(#t #f))])
@@ -60,7 +61,7 @@
         (check-true (andmap zero? (device-vector->list (logistic-regression-result-intercept r)))))
       (check-true (<= 0 (logistic-regression-result-n-iter r) 200)))))
 
-(test-gpu "classes are the sorted labels and predict gives y's kind (E2)"
+(test-gpu "classes are the sorted labels and predict gives y's kind"
   (define X (on-matrix (lr-case-X three)))
   (define strings (map (lambda (v) (list-ref '("c" "a" "b") v)) (lr-case-y three)))
   (define r (logistic-regression-fit X strings))
@@ -74,7 +75,7 @@
   (check-pred device-vector? on-device)
   (check-equal? (dtype on-device) 'int64))
 
-(test-gpu "an increasing relabelling gives the same fit bit for bit (E3)"
+(test-gpu "an increasing relabelling gives the same fit bit for bit"
   (define X (on-matrix (lr-case-X five) 'float32))
   (define y (lr-case-y five))
   (define base (logistic-regression-fit X (list->device-vector y #:dtype 'int32)))
@@ -89,32 +90,25 @@
                 (map (lambda (v) (+ (* 3 v) 7))
                      (device-vector->list (logistic-regression-predict base X)))))
 
-(define (rows m)
-  (device-matrix->list* m))
-
-(test-gpu "predict is the decision's argmax, and predict-proba's, the first on ties (E10, E11)"
+(test-gpu "predict is the decision's argmax, and predict-proba's, the first on ties"
   (for* ([c (in-list (list binary five))]
          [dt (in-list dtypes)])
     (define X (on-matrix (lr-case-X c) dt))
     (define r (case-fit c dt))
     (define predicted (device-vector->list (logistic-regression-predict r X)))
-    (define decision (rows (logistic-regression-decision-function r X)))
-    (define proba (rows (logistic-regression-predict-proba r X)))
-    (define (from-decision z)
-      (if (= 1 (length z))
-          (if (> (car z) 0) 1 0)
-          (argmax-index z)))
-    (check-equal? predicted (map from-decision decision))
+    (define decision (device-matrix->list* (logistic-regression-decision-function r X)))
+    (define proba (device-matrix->list* (logistic-regression-predict-proba r X)))
+    (check-equal? predicted (map decision-label decision))
     (check-equal? predicted (map argmax-index proba))))
 
-(test-gpu "probabilities sum to 1 within (k+1)u, and log-proba is their logarithm to 4(1+|l|)u (E12, E14)"
+(test-gpu "probabilities sum to 1, and log-proba is their logarithm, to rounding"
   (for* ([c (in-list (list binary five))]
          [dt (in-list dtypes)])
     (define X (on-matrix (lr-case-X c) dt))
     (define r (case-fit c dt))
     (define u (unit-roundoff dt))
-    (define proba (rows (logistic-regression-predict-proba r X)))
-    (define logs (rows (logistic-regression-predict-log-proba r X)))
+    (define proba (device-matrix->list* (logistic-regression-predict-proba r X)))
+    (define logs (device-matrix->list* (logistic-regression-predict-log-proba r X)))
     (define k (length (car proba)))
     (for ([p (in-list proba)]
           [l (in-list logs)])
@@ -140,13 +134,13 @@
             [b (in-list (cdr sorted))])
     (<= (cdr a) (cdr b))))
 
-(test-gpu "probabilities rise with the score: binary across rows, multiclass within a row (E13)"
+(test-gpu "probabilities rise with the score: binary across rows, multiclass within a row"
   (for* ([c (in-list (list binary five))]
          [dt (in-list dtypes)])
     (define X (on-matrix (lr-case-X c) dt))
     (define r (case-fit c dt))
-    (define decision (rows (logistic-regression-decision-function r X)))
-    (define proba (rows (logistic-regression-predict-proba r X)))
+    (define decision (device-matrix->list* (logistic-regression-decision-function r X)))
+    (define proba (device-matrix->list* (logistic-regression-predict-proba r X)))
     (if (= 1 (length (car decision)))
         (check-true (non-decreasing-by-score?
                      (map (lambda (z p) (cons (car z) (cadr p))) decision proba)))
@@ -164,7 +158,7 @@
   (check-equal? predicted (logistic-regression-predict r X))
   (define right (for/sum ([p (in-list predicted)] [t (in-list strings)]) (if (equal? p t) 1 0)))
   (check-true (< (abs (- (score e X strings) (/ right (length strings)))) 1e-6))
-  (check-equal? (rows (predict-proba e X)) (rows (logistic-regression-predict-proba r X)))
-  (check-equal? (rows (predict-log-proba e X)) (rows (logistic-regression-predict-log-proba r X)))
-  (check-equal? (rows (decision-function e X)) (rows (logistic-regression-decision-function r X)))
+  (check-equal? (device-matrix->list* (predict-proba e X)) (device-matrix->list* (logistic-regression-predict-proba r X)))
+  (check-equal? (device-matrix->list* (predict-log-proba e X)) (device-matrix->list* (logistic-regression-predict-log-proba r X)))
+  (check-equal? (device-matrix->list* (decision-function e X)) (device-matrix->list* (logistic-regression-decision-function r X)))
   (check-true (< (score e X (map (lambda (_) "w") strings)) 1e-12)))

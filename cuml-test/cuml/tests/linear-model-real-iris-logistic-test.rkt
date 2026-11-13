@@ -4,7 +4,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/linear-data.rkt" on-matrix)
-         (only-in "private/logistic-data.rkt" lr-case-X)
+         (only-in "private/logistic-data.rkt" lr-case-X setting)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/real-logistic-data.rkt"
                   check-score
@@ -15,11 +15,11 @@
 
 (define iris (labelled-set 'iris "species" '()))
 
-(test-twin "iris: stationary at 128 bits, within 1e-5 of sklearn's, predictions as strings, and sklearn's score (R3)"
-  (check-sklearn-optimum iris 'float64 '((l2 1.0 #f)))
+(test-twin "iris: stationary, near sklearn's, predicting strings, and scoring as sklearn"
+  (check-sklearn-optimum iris 'float64 (list (setting 'l2 1.0 #f)))
   (check-score iris))
 
-(test-gpu "wine: balanced class weights over unequal cultivars are refused (R4)"
+(test-gpu "wine: balanced class weights over unequal cultivars are refused"
   (define wine (labelled-set 'wine "cultivar" '()))
   (check-cuml-error
    'logic

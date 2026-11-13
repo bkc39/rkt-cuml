@@ -66,7 +66,7 @@ An estimator that scores samples: the method @racket[score], required.}
 @defthing[gen:classifier any/c]{
 
 An estimator that gives class scores: the methods @racket[predict-proba],
-@racket[predict-log-proba] and @racket[decision-function], all required.}
+@racket[predict-log-proba] and @racket[decision-function], each optional.}
 
 @deftogether[(@defproc[(estimator? [v any/c]) boolean?]
               @defproc[(predictor? [v any/c]) boolean?]

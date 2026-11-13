@@ -1900,6 +1900,15 @@ scratch, the source is `cpp/src/glm/qn/`.
   (−87.2 90.1) at tol 1e-12, gap 0.98; l2 C 100 accepted, gap 0.21; with
   a + 1e-4·e, Python cuML's point (ours, unweighted, s = 0) is accepted at
   gap 1.00 to the f64 oracle, max|Δz| 0.51.
+- **L4-f doc.** The reference says only that the check bounds the first-order
+  residual; the bound itself (64·max(tol, 10⁻⁴) relative to the objective, in
+  the columns' scale) and what it catches (iteration cutoffs, solver collapse)
+  live here. Further fit facts kept out of the reference: without
+  `penalty-normalized` the penalty is multiplied by the row count, as in Python
+  cuML; `'balanced` weighs class c by W/(k·W_c), and a class missing from a
+  class-weight hash weighs 1; with 3 or more classes the weights must be equal
+  on every row (#23); defaults are Python cuML's (scikit-learn's max-iter is 100);
+  "large fits" in the reference means more than a few hundred rows (L4-h).
 - **L4-f′.** No warm restarts in L4.
 - **L4-g.** At max-iter n-iter = max-iter and the check decides.
 - **L4-h.** Bitwise twins only at n ≤ 200; non-repeatability above a few
