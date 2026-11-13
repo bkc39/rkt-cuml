@@ -94,8 +94,9 @@
 (define (argmax-index xs)
   (for/fold ([best 0])
             ([x (in-list xs)]
-             [i (in-naturals)])
-    (if (> x (list-ref xs best)) i best)))
+             [i (in-naturals)]
+             #:when (> x (list-ref xs best)))
+    i))
 
 (define (centred xs)
   (define (centre row mean)
