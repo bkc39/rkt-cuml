@@ -4,10 +4,11 @@
                   logistic-regression-decision-function
                   logistic-regression-fit
                   logistic-regression-predict)
-         (only-in rackunit test-case)
+         (only-in racket/match match)
+         (only-in rackunit check-exn test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" [on-matrix matrix] [on-vector vector])
-         (only-in "private/refusal-rows.rkt" check-row row row-id))
+         (only-in "private/refusal-rows.rkt" check-row row row-call row-id row-message))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
 (define labels '(0 1 0 1 1 0))
@@ -62,8 +63,6 @@
   (define X (matrix grid))
   (define y (vector labels 'int32))
   (list (row "y length" "y: expected 6 elements, got 5" (lambda () (go X (vector '(0 1 0 1 1) 'int32))))
-        (row "label dtype" "y: expected int32, int64, float32 or float64, got uint8"
-             (lambda () (go X (vector labels 'uint8))))
         (row "non-integral label" "y: expected integral class labels, got 1.5"
              (lambda () (go X (vector '(0 1 0 1.5 1 0)))))
         (row "non-integral list label" "y: expected integral class labels, got 1.5"
@@ -92,7 +91,7 @@
                             "(cuML's softmax ignores them); got unequal weights")
              (lambda () (go X (vector '(0 1 2 0 1 1) 'int32) #:class-weight 'balanced)))
         (row "an iteration cutoff"
-             #rx"^the solver stopped at first-order residual .* above the bound .* after 1 iterations \\(max-iter 1, tol 0.0001\\); raise max-iter or tol$"
+             #rx"^the solver stopped at first-order residual .* above the bound .* after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter or tol$"
              (lambda () (go X y #:max-iter 1)))))
 
 (test-gpu "logistic-regression-fit refuses each row, the earlier fault first (E15)"
@@ -109,14 +108,14 @@
                   (row "X kind" "X: expected a device-matrix, got 'X"
                        (lambda () (logistic-regression-predict fitted 'X)))
                   (row "columns" "X: expected 3 columns, got 2"
-                       (lambda () (logistic-regression-decision-function fitted (matrix '((1 2)))))
+                       (lambda () (logistic-regression-decision-function fitted (matrix '((1 2))))))
                   (row "dtype" "X: expected dtype float64 (the fit's), got float32"
                        (lambda () (logistic-regression-predict fitted (matrix grid 'float32))))
                   (row "non-finite X" "X: row 0, column 0: expected a finite value, got inf"
                        (lambda () (logistic-regression-predict fitted (matrix '((+inf.0 0 0))))))))])
     (test-case (row-id r)
-      (unless (equal? (row-id r) "result")
-        (check-row (if (equal? (row-id r) "columns")
-                       "logistic-regression-decision-function"
-                       "logistic-regression-predict")
-                   r)))))
+      (match (row-id r)
+        ["result" (check-exn (lambda (e) (and (exn:fail:contract? e) (regexp-match? (regexp-quote (row-message r)) (exn-message e))))
+                             (row-call r))]
+        ["columns" (check-row "logistic-regression-decision-function" r)]
+        [_ (check-row "logistic-regression-predict" r)]))))

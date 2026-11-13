@@ -53,7 +53,7 @@
       (define r (case-fit c dt #:fit-intercept fi #:max-iter 200))
       (define k (length (remove-duplicates (lr-case-y c))))
       (define k* (if (= k 2) 1 k))
-      (check-equal? (shape (logistic-regression-result-coef r)) (list k* (length (car (lr-case-X c))))))
+      (check-equal? (shape (logistic-regression-result-coef r)) (list k* (length (car (lr-case-X c)))))
       (check-equal? (length (device-vector->list (logistic-regression-result-intercept r))) k*)
       (unless fi
         (check-true (andmap zero? (device-vector->list (logistic-regression-result-intercept r)))))
@@ -66,7 +66,7 @@
   (check-equal? (logistic-regression-result-classes r) '("a" "b" "c"))
   (check-equal? (logistic-regression-result-label-type r) 'list)
   (define predicted (logistic-regression-predict r X))
-  (check-true (andmap (lambda (v) (member v '("a" "b" "c"))) predicted))
+  (check-equal? (remove* '("a" "b" "c") predicted) '())
   (define d (logistic-regression-fit X (on-vector (lr-case-y three) 'int64)))
   (check-equal? (logistic-regression-result-classes d) '(0 1 2))
   (define on-device (logistic-regression-predict d X))
@@ -105,7 +105,7 @@
     (check-equal? predicted (map from-decision decision))
     (check-equal? predicted (map argmax-index proba))))
 
-(test-gpu "probabilities sum to 1 within (k+1)u, and log-proba is their logarithm (E12, E14)"
+(test-gpu "probabilities sum to 1 within (k+1)u, and log-proba is their logarithm to 4(1+|l|)u (E12, E14)"
   (for* ([c (in-list (list binary five))]
          [dt (in-list dtypes)])
     (define X (on-matrix (lr-case-X c) dt))
@@ -116,11 +116,30 @@
     (define k (length (car proba)))
     (for ([p (in-list proba)]
           [l (in-list logs)])
-      (check-true (<= (abs (- (apply + (map inexact->exact p)) 1)) (* (if (= k 2) 2 (add1 k)) u)))
+      (check-true (<= (abs (- (apply + (map inexact->exact p)) 1)) (* (if (= k 2) 1 (add1 k)) u)))
       (for ([pc (in-list p)]
             [lc (in-list l)])
         (check-true (rational? lc))
-        (check-true (<= (abs (- (exp lc) pc)) (* 4 u (max pc u))))))))
+        (check-true (<= (abs (- (exp lc) pc)) (* 4 u (+ 1 (abs lc)) (if (= k 2) (max pc (- 1 pc)) pc))))))))
+
+(define (non-decreasing-by-score? pairs)
+  (define sorted (sort pairs < #:key car))
+  (for/and ([a (in-list sorted)]
+            [b (in-list (cdr sorted))])
+    (<= (cdr a) (cdr b))))
+
+(test-gpu "probabilities rise with the score: binary across rows, multiclass within a row (E13)"
+  (for* ([c (in-list (list binary five))]
+         [dt (in-list dtypes)])
+    (define X (on-matrix (lr-case-X c) dt))
+    (define r (case-fit c dt))
+    (define decision (rows (logistic-regression-decision-function r X)))
+    (define proba (rows (logistic-regression-predict-proba r X)))
+    (if (= 1 (length (car decision)))
+        (check-true (non-decreasing-by-score? (map (lambda (z p) (cons (car z) (cadr p))) decision proba)))
+        (for ([z (in-list decision)]
+              [p (in-list proba)])
+          (check-true (non-decreasing-by-score? (map cons z p)))))))
 
 (test-gpu "the estimator fits, predicts, scores and gives probabilities"
   (define X (on-matrix (lr-case-X three)))

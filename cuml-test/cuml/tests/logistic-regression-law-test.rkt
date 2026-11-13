@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model
+                  logistic-regression-decision-function
                   logistic-regression-fit
                   logistic-regression-result-coef
                   logistic-regression-result-intercept)
@@ -19,10 +20,14 @@
                   lr-case-name
                   lr-case-w
                   lr-case-y
+                  relative-gap
                   with-column))
 
 (define binary (blob-case "binary" 80 3 2 11 #:weighted? #t))
 (define three (blob-case "three classes" 90 3 3 12))
+
+(define (flat parts)
+  (append (apply append (car parts)) (cadr parts)))
 
 (define (scaled-parts parts factor)
   (list (for/list ([row (in-list (car parts))])
@@ -124,3 +129,59 @@
     (define before (list (device-matrix->list* X) (device-vector->list y) (device-vector->list w)))
     (logistic-regression-fit X y #:sample-weight w)
     (check-equal? (list (device-matrix->list* X) (device-vector->list y) (device-vector->list w)) before)))
+
+(test-gpu "the decision is X coef^T + b to within (p+1)u times the absolute sum (E9)"
+  (for* ([c (in-list (list binary three))]
+         [dt (in-list dtypes)])
+    (test-case (format "~a ~a" (lr-case-name c) dt)
+      (define r (case-fit c dt))
+      (define coef (map (lambda (row) (map inexact->exact row)) (device-matrix->list* (logistic-regression-result-coef r))))
+      (define b (map inexact->exact (device-vector->list (logistic-regression-result-intercept r))))
+      (define u (inexact->exact (unit-roundoff dt)))
+      (define z (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
+      (for* ([(x zi) (in-parallel (in-list (lr-case-X c)) (in-list z))]
+             [(w bc zc) (in-parallel (in-list coef) (in-list b) (in-list zi))])
+        (define exact (+ bc (for/sum ([xj (in-list x)] [wj (in-list w)]) (* xj wj))))
+        (define size (+ (abs bc) (for/sum ([xj (in-list x)] [wj (in-list w)]) (abs (* xj wj)))))
+        (check-true (<= (abs (- (inexact->exact zc) exact)) (* (add1 (length x)) u size)))))))
+
+(define (repeated c times)
+  (define (spread xs)
+    (for*/list ([(x y) (in-parallel (in-list xs) (in-list (lr-case-y c)))]
+                [_ (in-range (hash-ref times y))])
+      x))
+  (lr-case (lr-case-name c) (spread (lr-case-X c)) (spread (lr-case-y c)) #f))
+
+(test-gpu "integer class weights fit as repeated rows to 1e-6 at tol 1e-10 (S1)"
+  (define unweighted-binary (lr-case "binary" (lr-case-X binary) (lr-case-y binary) #f))
+  (for ([c (in-list (list unweighted-binary three))]
+        [times (in-list (list (hash 0 2 1 3) (hash 0 2 1 2 2 2)))])
+    (test-case (lr-case-name c)
+      (define weighted (fit-parts (case-fit c 'float64 #:class-weight times #:tol 1e-10 #:max-iter 100000)))
+      (define spread (fit-parts (case-fit (repeated c times) 'float64 #:tol 1e-10 #:max-iter 100000)))
+      (define gap (relative-gap (flat weighted) (flat spread)))
+      (check-true (<= gap 1e-6) (format "gap ~a" gap)))))
+
+(define (tight-tol dt)
+  (if (eq? dt 'float32) 1e-6 1e-10))
+
+(define (scale-bound dt)
+  (if (eq? dt 'float32) (min (* 8 2e-3) 8e-2) (min (* 8 1e-6) 3e-2)))
+
+(test-gpu "X times 2^a inside the staging window scales coef by 2^-a to 8 tau_T (S2)"
+  (for* ([dt (in-list dtypes)]
+         [a (in-list '(3 -3))]
+         [penalty (in-list '(l2 l1 none))])
+    (test-case (format "~a ~a ~a" dt a penalty)
+      (define C (case penalty [(l2) (expt 4 (- a))] [(l1) (expt 2 (- a))] [else 1]))
+      (define tight (tight-tol dt))
+      (define plain (fit-parts (case-fit binary dt #:penalty penalty #:tol tight #:max-iter 100000)))
+      (define moved
+        (fit-parts (case-fit (scaled-case binary (expt 2 a))
+                             dt
+                             #:penalty penalty
+                             #:C (exact->inexact C)
+                             #:tol tight
+                             #:max-iter 100000)))
+      (define gap (relative-gap (flat moved) (flat (scaled-parts plain (expt 2.0 (- a))))))
+      (check-true (<= gap (scale-bound dt)) (format "gap ~a" gap)))))

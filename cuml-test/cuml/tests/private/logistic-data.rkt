@@ -14,7 +14,10 @@
          blob-case
          case-fit
          case-y
+         centred
          fit-parts
+         relative-gap
+         separable-case
          with-column)
 
 (struct lr-case (name X y w) #:transparent)
@@ -45,7 +48,21 @@
            labels
            (and weighted?
                 (for/list ([_ (in-range n)])
-                  (add1 (inexact->exact (floor (* 4 (uniform))))))))))
+                  (add1 (inexact->exact (floor (* 4 (uniform)))))))))
+
+(define (separable-case name n p seed)
+  (define normal (normal-source seed))
+  (define rows
+    (for/list ([_ (in-range n)])
+      (for/list ([_ (in-range p)])
+        (dyadic (normal)))))
+  (define labels (map (lambda (row) (if (positive? (car row)) 1 0)) rows))
+  (lr-case name
+           (for/list ([row (in-list rows)]
+                      [label (in-list labels)])
+             (cons (+ (car row) (if (= label 1) 1/2 -1/2)) (cdr row)))
+           labels
+           #f))
 
 (define (with-column c value)
   (lr-case (format "~a with a constant column" (lr-case-name c))
@@ -80,3 +97,21 @@
             ([x (in-list xs)]
              [i (in-naturals)])
     (if (> x (list-ref xs best)) i best)))
+
+(define (centred xs)
+  (define (centre row mean)
+    (map (lambda (v) (- v mean)) row))
+  (if (real? (car xs))
+      (centre xs (/ (apply + xs) (length xs)))
+      (let ([means (for/list ([column (in-list (apply map list xs))])
+                     (/ (apply + column) (length column)))])
+        (for/list ([row (in-list xs)])
+          (map - row means)))))
+
+(define (relative-gap ours theirs)
+  (define (largest xs)
+    (for/fold ([m 0])
+              ([x (in-list xs)])
+      (max m (abs (inexact->exact x)))))
+  (/ (largest (map (lambda (o t) (- (inexact->exact o) (inexact->exact t))) ours theirs))
+     (max (largest theirs) 1e-300)))
