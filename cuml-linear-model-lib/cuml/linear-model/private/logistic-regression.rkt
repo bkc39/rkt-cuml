@@ -4,7 +4,7 @@
          (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
          (only-in cuml/core/private/logic-error logic-error)
-         (only-in racket/list index-of remove-duplicates)
+         (only-in racket/list remove-duplicates)
          (only-in racket/match match match-define)
          (only-in raft
                   current-device-resources
@@ -68,6 +68,22 @@
 
 (define (label=? kind)
   (if (eq? kind 'real) = equal?))
+
+(define (label-key kind unify? v)
+  (cond
+    [(not (eq? kind 'real)) v]
+    [(not (real? v)) #f]
+    [else
+     (define u
+       (if unify?
+           (real->double-flonum v)
+           v))
+     (and (integer? u) (inexact->exact u))]))
+
+(define (label-table kind classes)
+  (for/hash ([c (in-list classes)]
+             [i (in-naturals)])
+    (values (label-key kind #f c) i)))
 
 (define (y-kind who y)
   (match y
@@ -144,26 +160,19 @@
       w
       (logic-error "~a: sample-weight: expected a device-vector or #f, got ~e" who w)))
 
-(define (host-classes who kind y)
-  (define sorted (sort y (label<? kind)))
-  (for ([v (in-list sorted)]
-        #:unless (or (not (eq? kind 'real)) (integer? v)))
-    (logic-error "~a: y: expected integral class labels, got ~e" who v))
-  (remove-duplicates sorted (label=? kind)))
-
-(define (codes-of kind classes y)
-  (define index
-    (for/hash ([c (in-list classes)]
-               [i (in-naturals)])
-      (values (if (eq? kind 'real)
-                  (exact->inexact c)
-                  c)
-              i)))
-  (for/list ([v (in-list y)])
-    (hash-ref index
-              (if (eq? kind 'real)
-                  (exact->inexact v)
-                  v))))
+(define (host-labels who kind y)
+  (define unify? (and (eq? kind 'real) (ormap inexact? y)))
+  (define keys
+    (for/list ([v (in-list y)])
+      (or (label-key kind unify? v)
+          (logic-error "~a: y: expected integral class labels, got ~e" who v))))
+  (define sorted (sort (remove-duplicates keys) (label<? kind)))
+  (define table (label-table kind sorted))
+  (values (if unify?
+              (map exact->inexact sorted)
+              sorted)
+          (for/list ([key (in-list keys)])
+            (hash-ref table key))))
 
 (define (host-weights who kind classes cw)
   (define (key-of c)
@@ -221,10 +230,13 @@
   (define normalized (flag-value who 'penalty-normalized penalty-normalized))
   (define mode (class-weight-mode who class-weight))
   (define w (weight-view who sample-weight))
-  (define host-classes* (and (not (eq? kind 'device)) (host-classes who kind y)))
+  (define-values (host-classes* host-codes)
+    (if (eq? kind 'device)
+        (values #f #f)
+        (host-labels who kind y)))
   (define y-view
     (if host-classes*
-        (list->device-vector (codes-of kind host-classes* y) #:dtype 'int32 #:resources resources)
+        (list->device-vector host-codes #:dtype 'int32 #:resources resources)
         y))
   (define-values (keys values*) (weight-vectors kind host-classes* class-weight who resources))
   (define out (deposit-for/who who resources))
@@ -318,8 +330,11 @@
 (define/who (label-codes who result y resources)
   (match result
     [(logistic-regression-result _ _ classes 'list _)
+     (define kind (label-kind (car classes)))
+     (define unify? (and (eq? kind 'real) (inexact? (car classes))))
+     (define table (label-table kind classes))
      (define (code v)
-       (or (index-of classes v) -1))
+       (hash-ref table (label-key kind unify? v) -1))
      (list->device-vector (map code y) #:dtype 'int32 #:resources resources)]
     [(logistic-regression-result _ _ classes label-type _)
      (define out (deposit-for/who who resources))
