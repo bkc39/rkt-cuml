@@ -28,7 +28,7 @@ struct non_integral {
 
   __device__ bool operator()(int64_t i) const {
     const double v = static_cast<double>(y[i]);
-    return !(v == floor(v));
+    return !(isfinite(v) && v == floor(v));
   }
 };
 
@@ -146,10 +146,12 @@ struct deviation_entry {
   const T* x;
   const double* w;
   const double* mean;
+  const int* exponent;
   int64_t d;
 
   __device__ double operator()(int64_t i, int64_t j) const {
-    const double c = static_cast<double>(x[(i * d) + j]) - mean[j];
+    const double c = scalbn(static_cast<double>(x[(i * d) + j]), -exponent[j]) -
+                     scalbn(mean[j], -exponent[j]);
     return (w == nullptr ? 1.0 : w[i]) * c * c;
   }
 };
@@ -425,16 +427,30 @@ column_stats column_stats_of(const matrix<T, int64_t>& x, const double* weights,
       return f.weighted / f.weight;
     });
   }
+  std::vector<int> exponent(x.d, 0);
+  std::ranges::transform(first, exponent.begin(), [](const first_sums& f) {
+    return f.largest > 0 && std::isfinite(f.largest) ? std::ilogb(f.largest)
+                                                     : 0;
+  });
   const buffer<double> means = to_device(mean, stream);
+  const buffer<int> exponents = to_device(exponent, stream);
   const std::vector<double> square = column_reduce<column_lanes>(
-      stream, rows, x.d, deviation_entry<T>{x.data, weights, means.data(), x.d},
+      stream, rows, x.d,
+      deviation_entry<T>{x.data, weights, means.data(), exponents.data(), x.d},
       thrust::plus<double>{}, 0.0);
-  column_stats s{std::vector<double>(x.d), {}, 0.0};
+  column_stats s{std::vector<double>(x.d),
+                 std::move(mean),
+                 std::vector<double>(x.d),
+                 {},
+                 0.0};
   for (int64_t j = 0; j < x.d; ++j) {
     const first_sums& f = first[j];
-    s.sigma[j] = std::sqrt(square[j] / f.weight);
+    s.sigma[j] = std::ldexp(std::sqrt(square[j] / f.weight), exponent[j]);
+    s.magnitude[j] = f.largest;
     s.largest = std::max(s.largest, f.largest);
-    if (fit_intercept ? f.varies != 0 : f.largest > 0) {
+    const bool spread =
+        !(s.sigma[j] <= constant_spread * unit_roundoff<T> * f.largest);
+    if ((fit_intercept ? f.varies != 0 : f.largest > 0) && spread) {
       s.kept.push_back(j);
     }
   }

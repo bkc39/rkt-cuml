@@ -148,11 +148,8 @@
   (define gap
     (relative-gap (append coef intercept)
                   (gauged (hash-ref oracle 'coef) (hash-ref oracle 'intercept))))
-  (match-define (residual K _ bound)
-    (residual-of (lr-case-X c) (lr-case-y c) #f (list coef) intercept))
-  (check-true
-   (or (> gap (s4-cap dt)) (> K bound))
-   (format "Python cuML's point: coef gap ~a (cap ~a), K ~a (bound ~a)" gap (s4-cap dt) K bound)))
+  (check-true (> gap (s4-cap dt))
+              (format "Python cuML's point: coef gap ~a (cap ~a)" gap (s4-cap dt))))
 
 (define (check-score set)
   (match-define (labelled c labels _) set)

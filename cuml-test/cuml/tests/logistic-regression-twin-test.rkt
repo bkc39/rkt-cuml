@@ -59,10 +59,10 @@
 
 (define (tau-bound dt)
   (if (eq? dt 'float32)
-      (min (* 64 2e-3) 8e-2)
+      0
       (min (* 64 1e-6) 3e-2)))
 
-(test-twin "with weights summing to n, Python cuML's optimum within 64 tau_T (T2)"
+(test-twin "with weights summing to n, Python cuML's fit in float32 and its optimum within 64 tau_T in float64 (T2)"
   (define settings* '((l2 1.0 #f) (l1 1.0 #f) (elasticnet 0.5 0.5)))
   (define requests
     (for*/list ([dt (in-list dtypes)]

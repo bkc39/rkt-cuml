@@ -10,8 +10,12 @@
 
 namespace cumlrkt::glm::qn {
 
+inline constexpr double constant_spread = 16;
+
 struct column_stats {
   std::vector<double> sigma;
+  std::vector<double> mean;
+  std::vector<double> magnitude;
   std::vector<int64_t> kept;
   double largest;
 };

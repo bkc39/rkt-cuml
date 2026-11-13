@@ -66,13 +66,19 @@
     ['elasticnet (values (inexact->exact ratio) (- 1 (inexact->exact ratio)))]
     ['none (values 0 0)]))
 
-(define (column-scales X w fi)
+(define (column-means X w fi)
   (define total (apply + w))
   (for/list ([column (in-list (apply map list X))])
-    (define mean
-      (if fi
-          (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* wi x)) total)
-          0))
+    (if fi
+        (/ (for/sum ([x (in-list column)] [wi (in-list w)])
+                    (* (inexact->exact wi) (inexact->exact x)))
+           (inexact->exact total))
+        0)))
+
+(define (column-scales X w means)
+  (define total (apply + w))
+  (for/list ([column (in-list (apply map list X))]
+             [mean (in-list means)])
     (define square
       (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* wi (expt (- x mean) 2))) total))
     (and (positive? square) (bfsqrt (bf square)))))
@@ -119,16 +125,18 @@
     (define l1 (bf* (bf rho) scale))
     (define l2 (bf* (bf rest) scale))
     (define big-total (bf total))
-    (define sigma (column-scales X weights fi))
+    (define means (column-means X weights fi))
+    (define sigma (column-scales X weights means))
     (define-values (F worst)
       (for*/fold ([F (bf/ loss big-total)]
                   [worst (if fi
                              (for/fold ([m zero]) ([s (in-list slope)])
                                (bfmax m (bfabs (bf/ s big-total))))
                              zero)])
-                 ([(wc gc) (in-parallel (in-list W) (in-list gradient))]
-                  [(v g0 s) (in-parallel (in-list wc) (in-list gc) (in-list sigma))])
-        (define g (bf+ (bf/ g0 big-total) (bf* l2 v)))
+                 ([(wc gc sc) (in-parallel (in-list W) (in-list gradient) (in-list slope))]
+                  [(v g0 s mean)
+                   (in-parallel (in-list wc) (in-list gc) (in-list sigma) (in-list means))])
+        (define g (bf+ (bf/ (bf- g0 (bf* (bf mean) sc)) big-total) (bf* l2 v)))
         (define pg
           (cond
             [(bf< zero v) (bf+ g l1)]

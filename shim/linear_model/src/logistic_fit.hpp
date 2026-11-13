@@ -35,6 +35,7 @@ struct qn_request {
 struct qn_check {
   qn_shape shape;
   std::vector<double> sigma;
+  std::vector<double> mean;
   double pen_l1;
   double pen_l2;
   int n_iter;

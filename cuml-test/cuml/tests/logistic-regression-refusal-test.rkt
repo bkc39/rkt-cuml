@@ -15,6 +15,19 @@
 (define labels '(0 1 0 1 1 0))
 (define count-message "expected an exact integer from 1 to 2147483647, got ")
 
+(define (scaled rows factor)
+  (for/list ([r (in-list rows)])
+    (map (lambda (v) (* v factor)) r)))
+
+(define (overflowing rows)
+  (define huge (* 3/2 (expt 2 1023)))
+  (for/list ([r (in-list rows)]
+             [i (in-naturals)])
+    (cons (if (even? i)
+              huge
+              (* 3/4 huge))
+          (cdr r))))
+
 (define (racket-rows go)
   (define X (matrix grid))
   (define y (vector labels 'int32))
@@ -84,6 +97,15 @@
    (row "non-integral label"
         "y: expected integral class labels, got 1.5"
         (lambda () (go X (vector '(0 1 0 1.5 1 0)))))
+   (row "an infinite label"
+        "y: expected integral class labels, got inf"
+        (lambda () (go X (vector '(0 1 0 +inf.0 1 0)))))
+   (row "a negative infinite label"
+        "y: expected integral class labels, got -inf"
+        (lambda () (go X (vector '(0 1 0 -inf.0 1 0)))))
+   (row "a nan label"
+        "y: expected integral class labels, got nan"
+        (lambda () (go X (vector '(0 1 0 +nan.0 1 0)))))
    (row "non-integral list label"
         "y: expected integral class labels, got 1.5"
         (lambda () (go X '(0 1 0 1.5 1 0))))
@@ -116,6 +138,30 @@
         (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
                        "(cuML's softmax ignores them); got unequal weights")
         (lambda () (go X (vector '(0 1 2 0 1 1) 'int32) #:class-weight 'balanced)))
+   (row "uniform balanced weights with three unequal classes"
+        (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
+                       "(cuML's softmax ignores them); got unequal weights")
+        (lambda ()
+          (go X
+              (vector '(0 1 2 0 1 1) 'int32)
+              #:sample-weight (vector '(0.1 0.1 0.1 0.1 0.1 0.1))
+              #:class-weight 'balanced)))
+   (row "a column whose spread overflows"
+        (string-append "X: column 0 has values up to 1.348269851146737e+308 in magnitude; "
+                       "its spread is outside the float64 range")
+        (lambda () (go (matrix (overflowing grid)) y)))
+   (row "a staged penalty outside float64"
+        "C: the penalty at X's scale 2^500 is outside the float64 range"
+        (lambda () (go (matrix (scaled grid (expt 2 -500))) y #:C 1e-300)))
+   (row "a staged penalty outside float32"
+        "C: the penalty at X's scale 2^66 is outside the float32 range"
+        (lambda () (go (matrix (scaled grid (expt 2 -66)) 'float32) y)))
+   (row "a coefficient beyond float32 once unstaged"
+        "X: a coefficient exceeds the float32 range"
+        (lambda ()
+          (go (matrix (scaled '((1 0) (0 1) (2 1) (3 0) (5 1) (4 0)) (expt 2 -124)) 'float32)
+              (vector '(0 0 0 1 1 1) 'int32)
+              #:penalty 'none)))
    (row
     "an iteration cutoff"
     #rx"^the solver stopped at first-order residual .* above the bound .* after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter or tol$"

@@ -22,6 +22,7 @@
 #include "cumlrkt/vectors.hpp"
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
+#include "logistic_checks.hpp"
 #include "logistic_device.hpp"
 #include "logistic_fit.hpp"
 #include "raftrkt/deposit.hpp"
@@ -148,13 +149,18 @@ std::optional<std::vector<double>> class_weights(
   if (r.class_mode != CUML_LINEAR_MODEL_CLASS_WEIGHT_BALANCED) {
     return std::nullopt;
   }
+  const auto n = static_cast<int64_t>(labels.codes.size());
   const buffer<double> base =
-      effective_weights<T>(handle, w, labels.codes.data(), nullptr,
-                           static_cast<int64_t>(labels.codes.size()));
+      effective_weights<T>(handle, w, labels.codes.data(), nullptr, n);
+  const std::vector<double> weighted =
+      class_totals(stream, base.data(), labels.codes.data(), n, labels.k);
+  require_weighted_classes(weighted, classes);
+  const bool counted =
+      w != nullptr &&
+      equal_weights(base.data(), row_selection{nullptr, n}, stream);
   const std::vector<double> totals =
-      class_totals(stream, base.data(), labels.codes.data(),
-                   static_cast<int64_t>(labels.codes.size()), labels.k);
-  require_weighted_classes(totals, classes);
+      counted ? class_totals(stream, nullptr, labels.codes.data(), n, labels.k)
+              : weighted;
   double total = 0;
   for (const double t : totals) {
     total += t;
@@ -214,16 +220,30 @@ int staging_exponent(const column_stats& s, int64_t m) {
   return std::min(-std::ilogb(median), cap);
 }
 
+template <typename T>
 penalties staged_penalties(penalties p, int s) {
   const penalties staged{std::ldexp(p.l1, s), std::ldexp(p.l2, 2 * s)};
   const auto lost = [](double before, double after) {
-    return !std::isfinite(after) || (before != 0 && after == 0);
+    const auto stored = static_cast<T>(after);
+    return !std::isfinite(stored) || (before != 0 && stored == 0);
   };
   if (lost(p.l1, staged.l1) || lost(p.l2, staged.l2)) {
-    throw logic_error(std::format(
-        "C: the penalty at X's scale 2^{} is outside the float64 range", s));
+    throw logic_error(
+        std::format("C: the penalty at X's scale 2^{} is outside the {} range",
+                    s, raftrkt::dtype_name(raftrkt::dtype_code<T>)));
   }
   return staged;
+}
+
+void require_spread(const column_stats& s) {
+  for (const int64_t j : s.kept) {
+    if (!std::isfinite(s.sigma[j])) {
+      throw logic_error(std::format(
+          "X: column {} has values up to {} in magnitude; its spread is "
+          "outside the float64 range",
+          j, printed(s.magnitude[j])));
+    }
+  }
 }
 
 template <typename T>
@@ -238,7 +258,10 @@ void require_resolved(const residual_sums& sums, const std::vector<T>& params,
   for (int64_t q = 0; q < c.shape.p * k; ++q) {
     const auto v = static_cast<double>(params[q]);
     f += (l1 * std::abs(v)) + (l2 / 2 * v * v);
-    const double g = (sums.gradient[q] / m) + (l2 * v);
+    const double centred = c.shape.fit_intercept
+                               ? c.mean[q / k] * (sums.intercept[q % k] / m)
+                               : 0.0;
+    const double g = (sums.gradient[q] / m) - centred + (l2 * v);
     const double pg = v != 0
                           ? g + std::copysign(l1, v)
                           : std::copysign(std::max(std::abs(g) - l1, 0.0), g);
@@ -313,10 +336,11 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   if (stats.kept.empty()) {
     return closed_form<T>(handle, wt, codes, k, x.d, fi);
   }
+  require_spread(stats);
   const int s = staging_exponent<T>(stats, wt.rows.count);
   penalties pen = strengths(r);
   pen = {pen.l1 * wt.scale, pen.l2 * wt.scale};
-  pen = staged_penalties(pen, s);
+  pen = staged_penalties<T>(pen, s);
   const int64_t m = wt.rows.count;
   const auto p = static_cast<int64_t>(stats.kept.size());
   const int64_t kk = k == 2 ? 1 : k;
@@ -344,18 +368,20 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                          static_cast<int>(k), params.data(), &objective,
                          &n_iter, ws);
   settle(handle);
-  if (first_non_finite(params.data(), static_cast<int64_t>(params.size()),
-                       stream) >= 0) {
-    throw logic_error("X: the qn solve gave a non-finite coefficient");
-  }
+  require_finite_solution(params.data(), static_cast<int64_t>(params.size()),
+                          stream);
   const qn_shape shape{m, p, kk, k, fi};
   std::vector<double> sigma(p);
+  std::vector<double> mean(p);
   std::ranges::transform(stats.kept, sigma.begin(), [&](int64_t j) {
     return std::ldexp(stats.sigma[j], s);
   });
+  std::ranges::transform(stats.kept, mean.begin(), [&](int64_t j) {
+    return std::ldexp(stats.mean[j], s);
+  });
   require_resolved<T>(
       residuals_of<T>(handle, xs, y.data(), ws, params.data(), shape),
-      to_host(params, stream), r, {shape, sigma, pen.l1, pen.l2, n_iter});
+      to_host(params, stream), r, {shape, sigma, mean, pen.l1, pen.l2, n_iter});
   std::vector<int64_t> slot(x.d, -1);
   for (int64_t q = 0; q < p; ++q) {
     slot[stats.kept[q]] = q;
@@ -365,10 +391,7 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   buffer<T> intercept = scratch<T>(kk, stream);
   params_to_coef<T>(handle, params.data(), slots.data(), x.d, kk, s, fi, p,
                     coef.data(), intercept.data());
-  if (first_non_finite(coef.data(), kk * x.d, stream) >= 0) {
-    throw logic_error(std::format("X: a coefficient exceeds the {} range",
-                                  raftrkt::dtype_name(raftrkt::dtype_code<T>)));
-  }
+  require_coef_in_range(coef.data(), kk * x.d, stream);
   settle(handle);
   return {std::move(coef), std::move(intercept), n_iter};
 }

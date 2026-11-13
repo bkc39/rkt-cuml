@@ -115,6 +115,7 @@ cumlrkt_family(linear_model
         linear_model/tests/cd_staging_test.cpp
         linear_model/src/cd_staging.cpp linear_model/src/cd_device.cu
         linear_model/tests/linear_model_refusal_test.cpp
+        linear_model/tests/logistic_checks_test.cpp
         linear_model/tests/ridge_staging_test.cpp
         linear_model/src/ridge_staging.cpp
         linear_model/src/glm_staging.cpp
