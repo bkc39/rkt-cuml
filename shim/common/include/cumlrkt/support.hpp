@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <format>
@@ -13,8 +14,10 @@
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/device_uvector.hpp>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include "cumlrkt/common.hpp"
 #include "cumlrkt/limits.hpp"
@@ -63,6 +66,20 @@ std::string printed(std::type_identity_t<T> got) {
     return "0";
   }
   return std::format("{}", got);
+}
+
+template <std::integral I>
+std::string printed(I got) {
+  return std::format("{}", got);
+}
+
+inline std::string joined(const std::vector<std::string>& parts,
+                          std::string_view separator) {
+  std::string out;
+  for (const std::string& part : parts) {
+    out += out.empty() ? part : std::string(separator) + part;
+  }
+  return out;
 }
 
 template <typename T = double>

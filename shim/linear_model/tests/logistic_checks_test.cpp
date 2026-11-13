@@ -50,9 +50,10 @@ TEST(LogisticSolution, NonFiniteParametersAreRefused) {
       {{1, -2, -inf}, "X: the qn solve gave a non-finite coefficient"},
   };
   for (const row& r : rows) {
-    EXPECT_EQ(refusal_of<double>(res, r.values,
-                                 cumlrkt::glm::qn::require_finite_solution),
-              r.message);
+    EXPECT_EQ(
+        refusal_of<double>(res, r.values,
+                           cumlrkt::glm::logistic::require_finite_solution),
+        r.message);
   }
 }
 
@@ -62,11 +63,11 @@ TEST(LogisticSolution, CoefficientsOutsideTheDtypeAreRefused) {
   const std::vector<float> finite{1, -2};
   const std::vector<float> overflowed{1,
                                       std::numeric_limits<float>::infinity()};
-  EXPECT_EQ(
-      refusal_of<float>(res, finite, cumlrkt::glm::qn::require_coef_in_range),
-      "accepted");
+  EXPECT_EQ(refusal_of<float>(res, finite,
+                              cumlrkt::glm::logistic::require_coef_in_range),
+            "accepted");
   EXPECT_EQ(refusal_of<float>(res, overflowed,
-                              cumlrkt::glm::qn::require_coef_in_range),
+                              cumlrkt::glm::logistic::require_coef_in_range),
             "X: a coefficient exceeds the float32 range");
 }
 

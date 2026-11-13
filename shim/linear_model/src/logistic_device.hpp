@@ -8,7 +8,7 @@
 #include "cumlrkt/support.hpp"
 #include "glm_staging.hpp"
 
-namespace cumlrkt::glm::qn {
+namespace cumlrkt::glm::logistic {
 
 inline constexpr double constant_spread = 16;
 
@@ -36,10 +36,6 @@ struct qn_shape {
 
 template <typename L>
 int64_t first_non_integral(const L* y, int64_t n, rmm::cuda_stream_view stream);
-
-template <typename L>
-void encode_against(const raft::handle_t& handle, const L* y, int64_t n,
-                    const L* classes, int64_t k, int32_t* codes);
 
 template <typename T>
 buffer<double> effective_weights(const raft::handle_t& handle, const T* w,
@@ -89,10 +85,14 @@ residual_sums residuals_of(const raft::handle_t& handle, const T* x, const T* y,
 
 template <typename T>
 void scores_to(const raft::handle_t& handle, const T* scores, int64_t n,
-               int64_t k, int32_t mode, T* out);
+               int64_t k, bool logarithm, T* out);
+
+template <typename T>
+void codes_of(const raft::handle_t& handle, const T* scores, int64_t n,
+              int64_t k, int32_t* out);
 
 template <typename T, typename L>
 void labels_of(const raft::handle_t& handle, const T* scores, int64_t n,
                int64_t k, const L* classes, L* out);
 
-}  // namespace cumlrkt::glm::qn
+}  // namespace cumlrkt::glm::logistic

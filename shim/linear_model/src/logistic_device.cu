@@ -18,7 +18,7 @@
 #include "glm_device.cuh"
 #include "logistic_device.hpp"
 
-namespace cumlrkt::glm::qn {
+namespace cumlrkt::glm::logistic {
 
 namespace {
 
@@ -29,29 +29,6 @@ struct non_integral {
   __device__ bool operator()(int64_t i) const {
     const double v = static_cast<double>(y[i]);
     return !(isfinite(v) && v == floor(v));
-  }
-};
-
-template <typename L>
-struct encoded {
-  const L* y;
-  const L* classes;
-  int64_t k;
-  int32_t* codes;
-
-  __device__ void operator()(int64_t i) const {
-    const L v = y[i];
-    int64_t lo = 0;
-    int64_t hi = k;
-    while (lo < hi) {
-      const int64_t mid = (lo + hi) / 2;
-      if (classes[mid] < v) {
-        lo = mid + 1;
-      } else {
-        hi = mid;
-      }
-    }
-    codes[i] = lo < k && classes[lo] == v ? static_cast<int32_t>(lo) : -1;
   }
 };
 
@@ -334,6 +311,31 @@ struct probabilities {
   }
 };
 
+template <typename T>
+__device__ int64_t argmax_of(const T* scores, int64_t k, int64_t i) {
+  if (k == 1) {
+    return scores[i] > T{0} ? 1 : 0;
+  }
+  int64_t best = 0;
+  for (int64_t c = 1; c < k; ++c) {
+    if (scores[(i * k) + c] > scores[(i * k) + best]) {
+      best = c;
+    }
+  }
+  return best;
+}
+
+template <typename T>
+struct argmax_code {
+  const T* scores;
+  int64_t k;
+  int32_t* out;
+
+  __device__ void operator()(int64_t i) const {
+    out[i] = static_cast<int32_t>(argmax_of(scores, k, i));
+  }
+};
+
 template <typename T, typename L>
 struct argmax_label {
   const T* scores;
@@ -342,17 +344,7 @@ struct argmax_label {
   L* out;
 
   __device__ void operator()(int64_t i) const {
-    int64_t best = 0;
-    if (k == 1) {
-      best = scores[i] > T{0} ? 1 : 0;
-    } else {
-      for (int64_t c = 1; c < k; ++c) {
-        if (scores[(i * k) + c] > scores[(i * k) + best]) {
-          best = c;
-        }
-      }
-    }
-    out[i] = classes == nullptr ? static_cast<L>(best) : classes[best];
+    out[i] = classes[argmax_of(scores, k, i)];
   }
 };
 
@@ -366,12 +358,6 @@ int64_t first_non_integral(const L* y, int64_t n,
                                      non_integral<L>{y});
   const int64_t i = *found;
   return i < n ? i : -1;
-}
-
-template <typename L>
-void encode_against(const raft::handle_t& handle, const L* y, int64_t n,
-                    const L* classes, int64_t k, int32_t* codes) {
-  each(handle, n, encoded<L>{y, classes, k, codes});
 }
 
 template <typename T>
@@ -517,9 +503,15 @@ residual_sums residuals_of(const raft::handle_t& handle, const T* x, const T* y,
 
 template <typename T>
 void scores_to(const raft::handle_t& handle, const T* scores, int64_t n,
-               int64_t k, int32_t mode, T* out) {
+               int64_t k, bool logarithm, T* out) {
   const int64_t classes = k == 1 ? 2 : k;
-  each(handle, n, probabilities<T>{scores, k, classes, mode == 3, out});
+  each(handle, n, probabilities<T>{scores, k, classes, logarithm, out});
+}
+
+template <typename T>
+void codes_of(const raft::handle_t& handle, const T* scores, int64_t n,
+              int64_t k, int32_t* out) {
+  each(handle, n, argmax_code<T>{scores, k, out});
 }
 
 template <typename T, typename L>
@@ -528,7 +520,7 @@ void labels_of(const raft::handle_t& handle, const T* scores, int64_t n,
   each(handle, n, argmax_label<T, L>{scores, k, classes, out});
 }
 
-#define CUMLRKT_QN_FLOAT(T)                                                    \
+#define CUMLRKT_LOGISTIC_FLOAT(T)                                              \
   template buffer<double> effective_weights<T>(const raft::handle_t&,          \
                                                const T*, const int32_t*,       \
                                                const double*, int64_t);        \
@@ -550,23 +542,23 @@ void labels_of(const raft::handle_t& handle, const T* scores, int64_t n,
                                          const T*, const T*, const T*,         \
                                          qn_shape);                            \
   template void scores_to<T>(const raft::handle_t&, const T*, int64_t,         \
-                             int64_t, int32_t, T*);
+                             int64_t, bool, T*);                               \
+  template void codes_of<T>(const raft::handle_t&, const T*, int64_t, int64_t, \
+                            int32_t*);
 
-#define CUMLRKT_QN_LABEL(L)                                                 \
-  template int64_t first_non_integral<L>(const L*, int64_t,                 \
-                                         rmm::cuda_stream_view);            \
-  template void encode_against<L>(const raft::handle_t&, const L*, int64_t, \
-                                  const L*, int64_t, int32_t*);             \
-  template void labels_of<float, L>(const raft::handle_t&, const float*,    \
-                                    int64_t, int64_t, const L*, L*);        \
-  template void labels_of<double, L>(const raft::handle_t&, const double*,  \
+#define CUMLRKT_LOGISTIC_LABEL(L)                                          \
+  template int64_t first_non_integral<L>(const L*, int64_t,                \
+                                         rmm::cuda_stream_view);           \
+  template void labels_of<float, L>(const raft::handle_t&, const float*,   \
+                                    int64_t, int64_t, const L*, L*);       \
+  template void labels_of<double, L>(const raft::handle_t&, const double*, \
                                      int64_t, int64_t, const L*, L*);
 
-CUMLRKT_QN_FLOAT(float)
-CUMLRKT_QN_FLOAT(double)
-CUMLRKT_QN_LABEL(int32_t)
-CUMLRKT_QN_LABEL(int64_t)
-CUMLRKT_QN_LABEL(float)
-CUMLRKT_QN_LABEL(double)
+CUMLRKT_LOGISTIC_FLOAT(float)
+CUMLRKT_LOGISTIC_FLOAT(double)
+CUMLRKT_LOGISTIC_LABEL(int32_t)
+CUMLRKT_LOGISTIC_LABEL(int64_t)
+CUMLRKT_LOGISTIC_LABEL(float)
+CUMLRKT_LOGISTIC_LABEL(double)
 
-}  // namespace cumlrkt::glm::qn
+}  // namespace cumlrkt::glm::logistic
