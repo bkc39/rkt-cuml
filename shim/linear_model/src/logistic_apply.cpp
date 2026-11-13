@@ -48,17 +48,23 @@ void deposit_one(const raft::handle_t& handle, rr_deposit* out,
   raftrkt::deposit(out, "out", handle, std::move(b), {region});
 }
 
+struct apply_views {
+  const rr_view* x;
+  const rr_view* coef;
+  const rr_view* intercept;
+  const rr_view* classes;
+};
+
 template <typename T>
-void apply_into(const raft::handle_t& handle, const rr_view* xv,
-                const rr_view* coefv, const rr_view* interceptv,
-                const rr_view* classesv, int32_t mode, rr_deposit* out) {
+void apply_into(const raft::handle_t& handle, const apply_views& views,
+                int32_t mode, rr_deposit* out) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const matrix<T, int64_t> coef = rows_of<T, int64_t>(
-      coefv, "coef", raftrkt::any_extent, raftrkt::any_extent);
+      views.coef, "coef", raftrkt::any_extent, raftrkt::any_extent);
   const matrix<T, int64_t> x =
-      rows_of<T, int64_t>(xv, "X", raftrkt::any_extent, coef.d);
+      rows_of<T, int64_t>(views.x, "X", raftrkt::any_extent, coef.d);
   const T* intercept =
-      raftrkt::vector_data<T, int32_t>(interceptv, "intercept", coef.n);
+      raftrkt::vector_data<T, int32_t>(views.intercept, "intercept", coef.n);
   require_finite("X", x, stream);
   buffer<T> scores = decision_of<T>(handle, x, coef, intercept);
   const int64_t kk = coef.n;
@@ -70,7 +76,7 @@ void apply_into(const raft::handle_t& handle, const rr_view* xv,
     deposit_one(handle, out, std::move(owned), region);
     return;
   }
-  if (mode == CUML_LINEAR_MODEL_APPLY_LABELS && classesv == nullptr) {
+  if (mode == CUML_LINEAR_MODEL_APPLY_LABELS && views.classes == nullptr) {
     auto codes =
         std::make_unique<buffer<int32_t>>(scratch<int32_t>(x.n, stream));
     labels_of<T, int32_t>(handle, scores.data(), x.n, kk, nullptr,
@@ -80,10 +86,10 @@ void apply_into(const raft::handle_t& handle, const rr_view* xv,
     return;
   }
   if (mode == CUML_LINEAR_MODEL_APPLY_LABELS) {
-    on_class_labels(classesv, [&](auto tag) {
+    on_class_labels(views.classes, [&](auto tag) {
       using L = decltype(tag);
       const L* values =
-          raftrkt::vector_data<L, int32_t>(classesv, "classes", classes);
+          raftrkt::vector_data<L, int32_t>(views.classes, "classes", classes);
       auto labels = std::make_unique<buffer<L>>(scratch<L>(x.n, stream));
       labels_of<T, L>(handle, scores.data(), x.n, kk, values, labels->data());
       const rr_view region = raftrkt::region(*labels);
@@ -176,8 +182,8 @@ int cuml_linear_model_logistic_regression_apply(void* handle, const rr_view* x,
           throw cumlrkt::logic_error("mode: expected 0 to 3");
         }
         cumlrkt::on_floats(x, "X", [&](auto tag) {
-          cumlrkt::glm::qn::apply_into<decltype(tag)>(h, x, coef, intercept,
-                                                      classes, mode, into);
+          cumlrkt::glm::qn::apply_into<decltype(tag)>(
+              h, {x, coef, intercept, classes}, mode, into);
         });
       });
 }

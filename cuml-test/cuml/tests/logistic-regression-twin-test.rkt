@@ -166,7 +166,7 @@
 (test-twin "float32 multiclass OWL-QN fits, which repeat on neither side, within 1e-3 of Python cuML's (T1, F12)"
   (define kept (filter (lambda (row) (not (repeatable? row))) rows))
   (for ([row (in-list kept)]
-        [theirs (in-list (logistic-twin-results (map (lambda (row) (request row #:op "cuml-fit"))
+        [theirs (in-list (logistic-twin-results (map (lambda (entry) (request entry #:op "cuml-fit"))
                                                      kept)))])
     (match-define (list dt c _ _) row)
     (test-case (row-name row)

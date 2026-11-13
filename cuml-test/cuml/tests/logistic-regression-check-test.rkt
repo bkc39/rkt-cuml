@@ -1,11 +1,11 @@
 #lang racket/base
 
-(require (only-in racket/list range)
+(require (only-in cuml/linear-model logistic-regression-decision-function)
+         (only-in racket/list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in cuml/linear-model logistic-regression-decision-function)
          (only-in "private/linear-data.rkt" dtypes on-matrix)
          (only-in "private/linear-twin-data.rkt" decoded logistic-twin logistic-twin-results)
          (only-in "private/logistic-check.rkt" residual residual-of)

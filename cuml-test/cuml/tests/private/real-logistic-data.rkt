@@ -106,7 +106,8 @@
 
 (define (check-sklearn-optimum set dt penalties)
   (match-define (labelled c labels _) set)
-  (define l2? (lambda (s) (eq? (car s) 'l2)))
+  (define (l2? s)
+    (eq? (car s) 'l2))
   (define requests
     (append (for/list ([s (in-list penalties)])
               (apply sklearn-request set (append s '(1e-4))))

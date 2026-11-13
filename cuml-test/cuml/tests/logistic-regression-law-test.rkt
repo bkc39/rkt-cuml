@@ -135,10 +135,11 @@
       (for/list ([c (in-list (sort (remove-duplicates labels) <))])
         (for/sum ([y (in-list labels)]) (if (= y c) 1 0))))
     (define expected
-      (if (= 2 (length counts))
-          (list (log (/ (cadr counts) (car counts))))
-          (let ([logs (map log counts)])
-            (map (lambda (l) (- l (/ (apply + logs) (length logs)))) logs))))
+      (cond
+        [(= 2 (length counts)) (list (log (/ (cadr counts) (car counts))))]
+        [else
+         (define logs (map log counts))
+         (map (lambda (l) (- l (/ (apply + logs) (length logs)))) logs)]))
     (define u (unit-roundoff dt))
     (check-true (andmap (lambda (row) (andmap zero? row))
                         (device-matrix->list* (logistic-regression-result-coef r))))
