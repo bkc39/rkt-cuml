@@ -45,7 +45,7 @@
   (when fi
     (check-law "R2" (abs (- b b*)) (* 8 u kappa (max-abs (lcase-y c))))))
 
-(test-gpu "as alpha goes to 0 the fit goes to linear-regression-fit's (R5)"
+(test-gpu "as alpha goes to 0 the fit goes to linear-regression-fit's"
   (for* ([c (in-list cases)]
          [fi (in-list '(#t #f))]
          [o (in-list (ridge-oracles (lcase-X c)
@@ -75,7 +75,7 @@
     (test-case (format "~a ~a ~a ~a ~a" (lcase-name c) fi dt s factor)
       (check-ridge-solution c dt s fi (* factor (rounding-alpha c dt fi))))))
 
-(test-gpu "as alpha grows the coefficients shrink to 0 and the intercept to y's mean (R6)"
+(test-gpu "as alpha grows the coefficients shrink to 0 and the intercept to y's mean"
   (for* ([c (in-list cases)]
          [fi (in-list '(#t #f))]
          [o (in-list
@@ -103,7 +103,7 @@
 (define (refused-ratio dt)
   (if (eq? dt 'float32) 113 961))
 
-(test-gpu "an alpha far past the widest spread still solves the ridge problem (R6)"
+(test-gpu "an alpha far past the widest spread still solves the ridge problem"
   (for* ([c (in-list (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t)))]
          [fi (in-list '(#t #f))]
          [dt (in-list dtypes)]
@@ -150,7 +150,7 @@
         (routing (normal-case 5 8 4) '(svd))
         (routing (normal-case 6 8 5 #:weighted? #t) '(svd))))
 
-(test-gpu "routed shapes still solve the ridge problem (R7)"
+(test-gpu "routed shapes still solve the ridge problem"
   (for* ([r (in-list routed)]
          #:do [(match-define (routing c ss) r)]
          [o (in-list (ridge-oracles (lcase-X c) (lcase-y c) (lcase-w c) #t (list (expt 2 -7) 1)))]

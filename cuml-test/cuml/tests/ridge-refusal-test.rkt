@@ -82,7 +82,7 @@
                        #:fit-intercept [fi #t])
   (fit (ridge #:alpha alpha #:solver s #:fit-intercept fi) X y #:sample-weight w))
 
-(test-gpu "ridge-fit refuses each row, the earlier fault first (Q1)"
+(test-gpu "ridge-fit refuses each row, the earlier fault first"
   (for ([r (in-list (fit-rows ridge-fit))])
     (test-case (row-id r)
       (check-row "ridge-fit" r))))
@@ -105,7 +105,7 @@
                     "ridge-params: ridge has no parameter algorithm"
                     (lambda () (ridge-params (hasheq 'algorithm 'eig)))))
 
-(test-gpu "alpha 0, 0.0 and -0.0 are accepted; inf, nan and -1 are not (Q3)"
+(test-gpu "alpha 0, 0.0 and -0.0 are accepted; inf, nan and -1 are not"
   (for ([alpha (in-list '(0 0.0 -0.0))])
     (check-true (list? (ridge-case-fit (normal-case 20 2 0) 'float64 #:alpha alpha))))
   (for ([alpha (in-list '(+inf.0 +nan.0 -1.0))])
@@ -121,7 +121,7 @@
            (lcase-y c)
            #f)))
 
-(test-gpu "on mixed scales float32 eig is refused and svd fits (Q2)"
+(test-gpu "on mixed scales float32 eig is refused and svd fits"
   (check-cuml-error 'logic
                     #rx"^ridge-fit: X: the eig solve is not a ridge solution "
                     (lambda () (ridge-case-fit mixed-scales 'float32 #:alpha 1 #:solver 'eig)))

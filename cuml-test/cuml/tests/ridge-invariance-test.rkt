@@ -26,7 +26,7 @@
       '(-12 -3 5 12)
       '(-30 -3 5 30)))
 
-(test-gpu "X times 2^a with alpha times 4^a gives 2^-a times the coefficients, bitwise (B2)"
+(test-gpu "X times 2^a with alpha times 4^a gives 2^-a times the coefficients, bitwise"
   (for* ([dt (in-list dtypes)]
          [s (in-list solvers)]
          [fi (in-list '(#t #f))]
@@ -40,7 +40,7 @@
                                                #:fit-intercept fi)
                                (list (map (lambda (x) (* x (expt 2 (- a)))) coef) b))))))
 
-(test-gpu "y times 2^c gives 2^c times the fit, bitwise (B3)"
+(test-gpu "y times 2^c gives 2^c times the fit, bitwise"
   (for* ([dt (in-list dtypes)]
          [s (in-list solvers)]
          [fi (in-list '(#t #f))]
@@ -54,7 +54,7 @@
                                                #:fit-intercept fi)
                                (list (map (lambda (x) (* x (expt 2 c))) coef) (* (expt 2 c) b)))))))
 
-(test-gpu "weights times 4^m with alpha times 4^m give the same fit, bitwise (B4)"
+(test-gpu "weights times 4^m with alpha times 4^m give the same fit, bitwise"
   (for* ([dt (in-list dtypes)]
          [s (in-list solvers)]
          [fi (in-list '(#t #f))]
@@ -73,7 +73,7 @@
               '()
               (list (normal-case 5000 7 8 #:weighted? #t)))))
 
-(test-gpu "zero weight on three rows is those rows deleted, bitwise (B5)"
+(test-gpu "zero weight on three rows is those rows deleted, bitwise"
   (for* ([fi (in-list '(#t #f))]
          [c (in-list (deleted-cases fi))]
          [dt (in-list dtypes)]
@@ -95,7 +95,7 @@
                                    #:solver s
                                    #:fit-intercept fi))))))
 
-(test-gpu "a constant or zero column gets 0.0 and moves nothing (B6)"
+(test-gpu "a constant or zero column gets 0.0 and moves nothing"
   (for* ([fi (in-list '(#t #f))]
          [c (in-list (list base (normal-case 2000 7 9)))]
          [dt (in-list dtypes)]
