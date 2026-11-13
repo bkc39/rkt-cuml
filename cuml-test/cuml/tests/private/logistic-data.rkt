@@ -100,12 +100,14 @@
 (define (centred xs)
   (define (centre row mean)
     (map (lambda (v) (- v mean)) row))
-  (if (real? (car xs))
-      (centre xs (/ (apply + xs) (length xs)))
-      (let ([means (for/list ([column (in-list (apply map list xs))])
-                     (/ (apply + column) (length column)))])
-        (for/list ([row (in-list xs)])
-          (map - row means)))))
+  (cond
+    [(real? (car xs)) (centre xs (/ (apply + xs) (length xs)))]
+    [else
+     (define means
+       (for/list ([column (in-list (apply map list xs))])
+         (/ (apply + column) (length column))))
+     (for/list ([row (in-list xs)])
+       (map - row means))]))
 
 (define (relative-gap ours theirs)
   (define (largest xs)
