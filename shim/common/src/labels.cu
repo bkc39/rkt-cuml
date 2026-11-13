@@ -37,6 +37,10 @@ dense_labels<T> dense_codes(const T* labels, int64_t n,
 
 template dense_labels<int32_t> dense_codes<int32_t>(const int32_t*, int64_t,
                                                     rmm::cuda_stream_view);
+template dense_labels<float> dense_codes<float>(const float*, int64_t,
+                                                rmm::cuda_stream_view);
+template dense_labels<double> dense_codes<double>(const double*, int64_t,
+                                                  rmm::cuda_stream_view);
 template dense_labels<int64_t> dense_codes<int64_t>(const int64_t*, int64_t,
                                                     rmm::cuda_stream_view);
 

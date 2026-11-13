@@ -12,7 +12,10 @@
 
 (provide cuml-linear-model-elastic-net-fit-job
          cuml-linear-model-gemm-predict-job
+         cuml-linear-model-label-encode-job
          cuml-linear-model-linear-regression-fit-job
+         cuml-linear-model-logistic-regression-apply-job
+         cuml-linear-model-logistic-regression-fit-job
          cuml-linear-model-ridge-fit-job
          libcuml-version)
 
@@ -55,4 +58,38 @@
             library
             "cuml_linear_model_gemm_predict_job"
             (handle view view _double deposit)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-logistic-regression-fit-job
+            library
+            "cuml_linear_model_logistic_regression_fit_job"
+            (handle view
+                    view
+                    view
+                    view
+                    view
+                    deposit
+                    _int32
+                    _double
+                    _double
+                    _double
+                    _int32
+                    _int32
+                    _int32
+                    _int32
+                    _int32
+                    _int32
+                    (out _int32))
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-logistic-regression-apply-job
+            library
+            "cuml_linear_model_logistic_regression_apply_job"
+            (handle view view view view _int32 deposit)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-label-encode-job
+            library
+            "cuml_linear_model_label_encode_job"
+            (handle view view deposit)
             #:exn exn:fail:cuml)

@@ -82,6 +82,7 @@
   #:datum-literals (define-cd-result define-definition-context-refactoring-rule
                      define-estimator
                      define-generics
+                     define-classifier
                      define-regressor
                      define-refactoring-rule
                      define-hyperparameters
@@ -117,7 +118,7 @@
     #:attr review (lambda ()
                     (track-binding #'name)
                     (for-each recur (filter values (attribute entry.default)))))
-  (pattern ((~or* define-estimator define-regressor) name:id . options)
+  (pattern ((~or* define-classifier define-estimator define-regressor) name:id . options)
     #:attr review (lambda ()
                     (track-binding #'name)
                     (track-binding #'name "~a?" #:check-usages? #f)

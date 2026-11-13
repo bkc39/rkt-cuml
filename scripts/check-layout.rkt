@@ -30,6 +30,9 @@
                              linear-regression
                              linear-regression-model
                              linear-regression?
+                             logistic-regression
+                             logistic-regression-model
+                             logistic-regression?
                              pca
                              ridge
                              ridge-model

@@ -8,6 +8,7 @@
          (only-in "native.rkt" cuml-linear-model-gemm-predict-job))
 
 (provide alpha-value/who
+         bounded-count/who
          glm-predict/who
          intercept-flag/who
          iteration-count/who
@@ -28,10 +29,12 @@
 
 (define int32-max (sub1 (expt 2 31)))
 
-(define/who (iteration-count who n)
+(define/who (bounded-count who key n)
   (if (and (exact-integer? n) (<= 1 n int32-max))
       n
-      (logic-error "~a: max-iter: expected an exact integer from 1 to ~a, got ~e" who int32-max n)))
+      (logic-error "~a: ~a: expected an exact integer from 1 to ~a, got ~e" who key int32-max n)))
+
+(define/who (iteration-count who n) (bounded-count/who who 'max-iter n))
 
 (define (intercept-value who intercept)
   (if (real? intercept)
