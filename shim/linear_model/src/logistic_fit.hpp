@@ -2,24 +2,32 @@
 
 #include <cstdint>
 #include <raft/core/handle.hpp>
-#include <string>
-#include <vector>
+#include <rapids_logger/logger.hpp>
 
-#include "cumlrkt/support.hpp"
-#include "logistic_device.hpp"
 #include "raftrkt/array.h"
 #include "raftrkt/deposit.h"
 
-namespace cumlrkt::glm::qn {
+namespace cumlrkt::glm::logistic {
 
-inline constexpr int quiet_level = 6;
+inline constexpr int quiet_level =
+    static_cast<int>(rapids_logger::level_enum::off);
 
-struct qn_request {
+struct fit_views {
   const rr_view* x;
   const rr_view* y;
-  const rr_view* w;
-  const rr_view* keys;
-  const rr_view* values;
+  const rr_view* sample_weight;
+  const rr_view* class_keys;
+  const rr_view* class_values;
+};
+
+struct fit_codes {
+  int32_t penalty;
+  int32_t fit_intercept;
+  int32_t normalized;
+  int32_t class_mode;
+};
+
+struct fit_options {
   int32_t penalty;
   double C;
   double l1_ratio;
@@ -27,46 +35,14 @@ struct qn_request {
   int32_t max_iter;
   int32_t linesearch_max_iter;
   int32_t lbfgs_memory;
-  int32_t fit_intercept;
-  int32_t normalized;
+  bool fit_intercept;
+  bool normalized;
   int32_t class_mode;
 };
 
-struct qn_check {
-  qn_shape shape;
-  std::vector<double> sigma;
-  std::vector<double> mean;
-  double pen_l1;
-  double pen_l2;
-  int n_iter;
-};
+void require_fit_codes(const fit_codes& codes);
 
-void require_qn_codes(const qn_request& r);
+int32_t fit(const raft::handle_t& handle, const fit_views& views,
+            const fit_options& options, rr_deposit* out);
 
-int32_t logistic_fit(const raft::handle_t& handle, const qn_request& r,
-                     rr_deposit* out);
-
-template <typename Fn>
-void on_class_labels(const rr_view* y, Fn&& fn) {
-  const rr_view& view = *raftrkt::require(y, "y");
-  switch (view.dtype) {
-    case RR_DTYPE_INT32:
-      fn(int32_t{});
-      break;
-    case RR_DTYPE_INT64:
-      fn(int64_t{});
-      break;
-    case RR_DTYPE_FLOAT32:
-      fn(float{});
-      break;
-    case RR_DTYPE_FLOAT64:
-      fn(double{});
-      break;
-    default:
-      throw logic_error(
-          std::string("y: expected int32, int64, float32 or float64, got ") +
-          raftrkt::dtype_name(view.dtype));
-  }
-}
-
-}  // namespace cumlrkt::glm::qn
+}  // namespace cumlrkt::glm::logistic

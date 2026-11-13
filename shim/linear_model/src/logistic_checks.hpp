@@ -8,7 +8,7 @@
 #include "cumlrkt/support.hpp"
 #include "raftrkt/view.hpp"
 
-namespace cumlrkt::glm::qn {
+namespace cumlrkt::glm::logistic {
 
 template <typename T>
 void require_finite_solution(const T* params, int64_t n,
@@ -27,4 +27,4 @@ void require_coef_in_range(const T* coef, int64_t n,
   }
 }
 
-}  // namespace cumlrkt::glm::qn
+}  // namespace cumlrkt::glm::logistic
