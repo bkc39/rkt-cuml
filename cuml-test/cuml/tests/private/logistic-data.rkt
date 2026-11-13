@@ -5,6 +5,7 @@
                   logistic-regression-result-coef
                   logistic-regression-result-intercept
                   logistic-regression-result-n-iter)
+         (only-in racket/list argmax range)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "linear-data.rkt" on-matrix on-vector))
@@ -92,11 +93,7 @@
         (logistic-regression-result-n-iter r)))
 
 (define (argmax-index xs)
-  (for/fold ([best 0])
-            ([x (in-list xs)]
-             [i (in-naturals)]
-             #:when (> x (list-ref xs best)))
-    i))
+  (argmax (lambda (i) (list-ref xs i)) (range (length xs))))
 
 (define (centred xs)
   (define (centre row mean)
