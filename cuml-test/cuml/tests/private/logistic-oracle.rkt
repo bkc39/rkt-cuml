@@ -23,8 +23,8 @@
 (struct residual (K F bound) #:transparent)
 
 (define oracle-bits 128)
-(define tol-floor 1/10000)
-(define resolved-factor 64)
+(define tolerance-floor 1/10000)
+(define residual-factor 64)
 
 (define zero (bf 0))
 (define one (bf 1))
@@ -157,6 +157,6 @@
                 (if s
                     (bfmax worst (bf/ (bfabs (projected-gradient g v l1)) s))
                     worst))))
-    (define tau (max (inexact->exact tol) tol-floor))
+    (define tau (max (inexact->exact tol) tolerance-floor))
     (define F* (bigfloat->real F))
-    (residual (bigfloat->real worst) F* (* resolved-factor tau (max F* tau)))))
+    (residual (bigfloat->real worst) F* (* residual-factor tau (max F* tau)))))
