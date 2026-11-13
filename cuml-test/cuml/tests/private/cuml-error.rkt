@@ -20,7 +20,8 @@
   (match expected
     [(prefixed prefix pattern)
      (check-equal? (substring actual 0 (min (string-length prefix) (string-length actual))) prefix)
-     (check-regexp-match pattern (substring actual (min (string-length prefix) (string-length actual))))]
+     (check-regexp-match pattern
+                         (substring actual (min (string-length prefix) (string-length actual))))]
     [(? regexp?) (check-regexp-match expected actual)]
     [_ (check-equal? actual expected)]))
 

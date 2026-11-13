@@ -6,7 +6,7 @@
                   logistic-regression-result-coef
                   logistic-regression-result-intercept)
          (only-in racket/list remove-duplicates)
-         (only-in racket/match match match-define struct*)
+         (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
@@ -42,10 +42,8 @@
     (test-case (format "~a ~a ~a" (lr-case-name c) dt column)
       (define base (fit-parts (case-fit c dt #:fit-intercept fi)))
       (define wide (fit-parts (case-fit (with-column c value) dt #:fit-intercept fi)))
-      (define-values (firsts rests)
-        (for/lists (firsts rests) ([row (in-list (lr-fit-coef wide))])
-          (match row
-            [(cons first rest) (values first rest)])))
+      (define firsts (map car (lr-fit-coef wide)))
+      (define rests (map cdr (lr-fit-coef wide)))
       (check-true (andmap zero? firsts))
       (check-equal? (struct-copy lr-fit wide [coef rests]) base))))
 

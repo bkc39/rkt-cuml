@@ -40,7 +40,11 @@
         (setting 'elasticnet 0.5 0.5)
         (setting 'none 1.0 #f)))
 
-(struct trial (case dt setting max-iter tol))
+(struct trial
+        (case dt
+          setting
+          max-iter
+          tol))
 
 (define (trial-name t)
   (match-define (trial c dt s max-iter tol) t)

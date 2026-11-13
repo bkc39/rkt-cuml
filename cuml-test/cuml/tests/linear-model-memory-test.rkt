@@ -18,7 +18,7 @@
   (define y (on-vector (lcase-y c) 'float32))
   (define w (on-vector (lcase-w c) 'float32))
   (define X2 (on-matrix '((1 2) (3 4)) 'float32))
-  (define nan-X (on-matrix (with-cell (lr-case-X c) 0 0 +nan.0) 'float32))
+  (define nan-X (on-matrix (with-cell (lcase-X c) 0 0 +nan.0) 'float32))
   (define no-weight (on-vector (make-list 2000 0) 'float32))
   (define fitted (linear-regression-fit X y))
   (values (lambda ()

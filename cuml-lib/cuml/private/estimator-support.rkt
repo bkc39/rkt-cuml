@@ -129,7 +129,8 @@
     (pattern [(~and name (~or* predict-proba predict-log-proba decision-function)) proc:expr]
       #:attr kind #f
       #:with generic #'gen:classifier
-      #:with (method ...) #'((define (name e X)
+      #:with method-name (datum->syntax #'generic (syntax-e #'name))
+      #:with (method ...) #'((define (method-name e X)
                                (on-model proc 'name e X))))
     (pattern [transform proc:expr (~optional (~seq #:fit-transform result->matrix:expr))]
       #:attr kind 'transform
@@ -294,7 +295,7 @@
                             #:hyperparameters table:id
                             #:fit fit/who:id
                             #:predict predict/who:id
-                            (~optional (~seq #:scorer scorer:id) #:defaults ([scorer #'r2-scorer]))
+                            (~optional (~seq #:scorer scorer:id))
                             (~optional (~seq #:predict-proba proba/who:id))
                             (~optional (~seq #:predict-log-proba log-proba/who:id))
                             (~optional (~seq #:decision-function decision/who:id)))
@@ -308,4 +309,4 @@
     (~? [predict-proba proba/who])
     (~? [predict-log-proba log-proba/who])
     (~? [decision-function decision/who])
-    [score (scorer predict/who) #:sample-weight]))
+    [score ((~? scorer r2-scorer) predict/who) #:sample-weight]))

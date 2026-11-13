@@ -78,7 +78,8 @@
 (define (named-labels member? <?)
   (label-kind member? <? equal? (lambda (_unify? v) v) (lambda (_vs) #f)))
 
-(define label-kinds (list real-labels (named-labels string? string<?) (named-labels symbol? symbol<?)))
+(define label-kinds
+  (list real-labels (named-labels string? string<?) (named-labels symbol? symbol<?)))
 
 (define (kind-of v)
   (for/first ([kind (in-list label-kinds)]
@@ -302,8 +303,9 @@
 
 (define (applied who result X mode resources)
   (checked-result who result X)
-  (match-define (struct* logistic-regression-result
-                         ([coef coef] [intercept intercept] [classes classes] [label-type label-type]))
+  (match-define (struct*
+                 logistic-regression-result
+                 ([coef coef] [intercept intercept] [classes classes] [label-type label-type]))
     result)
   (define class-view
     (and (eq? mode 'labels)

@@ -17,7 +17,7 @@
 
 (define one-iteration-cutoff
   (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
-                          "after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter or tol$")))
+                         "after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter or tol$")))
 
 (define (scaled rows factor)
   (for/list ([r (in-list rows)])
@@ -137,7 +137,8 @@
    (row "unequal weights with three classes"
         (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
                        "(cuML's softmax ignores them); got unequal weights")
-        (lambda () (go X (on-vector '(0 1 2 0 1 2) 'int32) #:sample-weight (on-vector '(1 2 1 1 1 1)))))
+        (lambda ()
+          (go X (on-vector '(0 1 2 0 1 2) 'int32) #:sample-weight (on-vector '(1 2 1 1 1 1)))))
    (row "balanced weights with three unequal classes"
         (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
                        "(cuML's softmax ignores them); got unequal weights")
@@ -166,10 +167,7 @@
           (go (on-matrix (scaled '((1 0) (0 1) (2 1) (3 0) (5 1) (4 0)) (expt 2 -124)) 'float32)
               (on-vector '(0 0 0 1 1 1) 'int32)
               #:penalty 'none)))
-   (row
-    "an iteration cutoff"
-    one-iteration-cutoff
-    (lambda () (go X y #:max-iter 1)))))
+   (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))))
 
 (test-gpu "logistic-regression-fit refuses each row, the earlier fault first"
   (for ([r (in-list (append (racket-rows logistic-regression-fit)
@@ -191,28 +189,28 @@
                                      (exn-message e))))
                (lambda () (logistic-regression-predict 'r (on-matrix grid)))))
   (for ([r (in-list
-            (list (predict-row "X kind"
-                               "X: expected a device-matrix, got 'X"
-                               (lambda () (logistic-regression-predict fitted 'X)))
-                  (applied-row "logistic-regression-decision-function"
-                               (row "columns"
-                                    "X: expected 3 columns, got 2"
-                                    (lambda ()
-                                      (logistic-regression-decision-function fitted
-                                                                             (on-matrix '((1 2)))))))
-                  (predict-row "X layout"
-                               "X: expected row-major, got col-major 6x3"
-                               (lambda ()
-                                 (logistic-regression-predict
-                                  fitted
-                                  (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major))))
-                  (predict-row "dtype"
-                               "X: expected dtype float64 (the fit's), got float32"
-                               (lambda () (logistic-regression-predict fitted (on-matrix grid 'float32))))
-                  (predict-row "non-finite X"
-                               "X: row 0, column 0: expected a finite value, got inf"
-                               (lambda ()
-                                 (logistic-regression-predict fitted (on-matrix '((+inf.0 0 0))))))))])
+            (list
+             (predict-row "X kind"
+                          "X: expected a device-matrix, got 'X"
+                          (lambda () (logistic-regression-predict fitted 'X)))
+             (applied-row
+              "logistic-regression-decision-function"
+              (row "columns"
+                   "X: expected 3 columns, got 2"
+                   (lambda () (logistic-regression-decision-function fitted (on-matrix '((1 2)))))))
+             (predict-row "X layout"
+                          "X: expected row-major, got col-major 6x3"
+                          (lambda ()
+                            (logistic-regression-predict
+                             fitted
+                             (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major))))
+             (predict-row "dtype"
+                          "X: expected dtype float64 (the fit's), got float32"
+                          (lambda () (logistic-regression-predict fitted (on-matrix grid 'float32))))
+             (predict-row "non-finite X"
+                          "X: row 0, column 0: expected a finite value, got inf"
+                          (lambda ()
+                            (logistic-regression-predict fitted (on-matrix '((+inf.0 0 0))))))))])
     (match-define (applied-row function checked) r)
     (test-case (row-id checked)
       (check-row function checked))))

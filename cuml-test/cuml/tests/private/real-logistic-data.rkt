@@ -33,7 +33,9 @@
          check-sklearn-optimum
          labelled-set)
 
-(struct labelled (case labels classes))
+(struct labelled
+        (case labels
+          classes))
 
 (define stationary-bound 1e-7)
 (define float32-gap-bound 1e-2)
@@ -102,7 +104,7 @@
   (map (lambda (i) (vector-ref classes i)) (hash-ref theirs 'predict)))
 
 (define (check-optimum set dt s r)
-  (match-define (struct* labelled ([case c])) set)
+  (match-define (struct* labelled ((case c))) set)
   (match-define (struct* lr-fit ([coef coef] [intercept intercept])) (fit-parts r))
   (cond
     [(eq? dt 'float64)
@@ -120,12 +122,11 @@
                  (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
     [else
      (define gap
-       (relative-gap (gauged-fit (fit-parts r))
-                     (gauged-fit (fit-parts (tight-fit set 'float64 s)))))
+       (relative-gap (gauged-fit (fit-parts r)) (gauged-fit (fit-parts (tight-fit set 'float64 s)))))
      (check-true (<= gap float32-gap-bound) (format "gap to the float64 fit ~a" gap))]))
 
 (define (check-sklearn-optimum set dt settings)
-  (match-define (struct* labelled ([case c] [labels labels])) set)
+  (match-define (struct* labelled ((case c) [labels labels])) set)
   (define (l2? s)
     (eq? (setting-penalty s) 'l2))
   (define (tight? s)
@@ -138,9 +139,10 @@
       (cons s tol)))
   (define answers
     (for/hash ([key (in-list asked)]
-               [theirs (in-list (logistic-twin-results
-                                 (for/list ([key (in-list asked)])
-                                   (setting-twin "sklearn-fit" c 'float64 (car key) #:tol (cdr key)))))])
+               [theirs (in-list
+                        (logistic-twin-results
+                         (for/list ([key (in-list asked)])
+                           (setting-twin "sklearn-fit" c 'float64 (car key) #:tol (cdr key)))))])
       (values key theirs)))
   (for ([s (in-list settings)])
     (test-case (format "~a ~a" dt (setting-penalty s))
@@ -152,20 +154,17 @@
                         (gauged-sklearn (hash-ref answers (cons s (tight-tol 'float64))))))
         (check-true (<= gap sklearn-gap-bound) (format "coef gap to sklearn ~a" gap)))
       (define ours (correct (logistic-regression-predict r (on-matrix (lr-case-X c) dt)) labels))
-      (define sklearn
-        (correct (sklearn-labels set (hash-ref answers (cons s default-tol))) labels))
+      (define sklearn (correct (sklearn-labels set (hash-ref answers (cons s default-tol))) labels))
       (check-true (<= (abs (- ours sklearn)) row-slack)
                   (format "correct ~a, sklearn ~a" ours sklearn)))))
 
 (define (check-raw-refusal set dt)
-  (match-define (struct* labelled ([case c] [labels labels])) set)
+  (match-define (struct* labelled ((case c) [labels labels])) set)
   (check-exn cutoff-message (lambda () (logistic-regression-fit (on-matrix (lr-case-X c) dt) labels)))
   (match-define (list python oracle)
-    (logistic-twin-results (list (logistic-twin "cuml-fit" c dt)
-                                 (logistic-twin "sklearn-fit"
-                                                c
-                                                'float64
-                                                #:tol (tight-tol 'float64)))))
+    (logistic-twin-results
+     (list (logistic-twin "cuml-fit" c dt)
+           (logistic-twin "sklearn-fit" c 'float64 #:tol (tight-tol 'float64)))))
   (define gap
     (relative-gap (append (decoded dt (hash-ref python 'coef_bits))
                           (decoded dt (hash-ref python 'intercept_bits)))
@@ -174,13 +173,11 @@
               (format "Python cuML's point: coef gap ~a (cap ~a)" gap (default-tol-cap dt))))
 
 (define (check-score set)
-  (match-define (struct* labelled ([case c] [labels labels])) set)
+  (match-define (struct* labelled ((case c) [labels labels])) set)
   (define X (on-matrix (lr-case-X c) 'float64))
   (match-define (list theirs)
-    (logistic-twin-results (list (logistic-twin "sklearn-fit"
-                                                c
-                                                'float64
-                                                #:tol (tight-tol 'float64)))))
+    (logistic-twin-results
+     (list (logistic-twin "sklearn-fit" c 'float64 #:tol (tight-tol 'float64)))))
   (define e (fit (logistic-regression #:tol (tight-tol 'float64) #:max-iter tight-max-iter) X labels))
   (check-equal? (score e X labels)
                 (exact->inexact (/ (correct (sklearn-labels set theirs) labels) (length labels)))))

@@ -42,7 +42,10 @@
 (struct setting (penalty C l1-ratio) #:transparent)
 
 (define penalty-settings
-  (list (setting 'l2 1.0 #f) (setting 'l1 1.0 #f) (setting 'elasticnet 0.5 0.5) (setting 'none 1.0 #f)))
+  (list (setting 'l2 1.0 #f)
+        (setting 'l1 1.0 #f)
+        (setting 'elasticnet 0.5 0.5)
+        (setting 'none 1.0 #f)))
 
 (define cutoff-message #rx"first-order residual .* above the bound")
 
@@ -61,7 +64,7 @@
   (define normal (normal-source seed))
   (define uniform (uniform-source (+ seed 1000)))
   (define centres
-    (for/vector ([_ (in-range k)])
+    (for/vector #:length k ([_ (in-range k)])
       (for/list ([_ (in-range p)])
         (* sep (normal)))))
   (define labels
@@ -90,10 +93,7 @@
       [(cons first rest)
        (define label (if (positive? first) 1 0))
        (values (cons (+ first (if (= label 1) 1/2 -1/2)) rest) label)]))
-  (define-values (X y)
-    (for/lists (X y) ([row (in-list rows)])
-      (separated row)))
-  (lr-case name X y #f))
+  (for/lists (X y #:result (lr-case name X y #f)) ([row (in-list rows)]) (separated row)))
 
 (define (scaled-case c factor)
   (lr-case (lr-case-name c)

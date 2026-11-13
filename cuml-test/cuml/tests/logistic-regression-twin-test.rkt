@@ -4,7 +4,7 @@
                   logistic-regression-decision-function
                   logistic-regression-predict
                   logistic-regression-predict-proba)
-         (only-in racket/list remove-duplicates)
+         (only-in racket/list filter-not remove-duplicates)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list)
@@ -138,9 +138,10 @@
 (define owl-qn-gap-bound 1e-3)
 
 (test-twin "float32 multiclass OWL-QN fits, which repeat on neither side, are near Python cuML's"
-  (define kept (filter (lambda (r) (not (repeatable? r))) rows))
+  (define kept (filter-not repeatable? rows))
   (for ([r (in-list kept)]
-        [theirs (in-list (logistic-twin-results (map (lambda (r) (request r #:op "cuml-fit")) kept)))])
+        [theirs (in-list (logistic-twin-results (map (lambda (k) (request k #:op "cuml-fit"))
+                                                     kept)))])
     (match-define (row dt _ _ _) r)
     (test-case (row-name r)
       (define gap (relative-gap (fit-flat (fit-parts (row-fit r))) (fit-flat (their-fit theirs dt))))

@@ -28,30 +28,19 @@
                        #:fit-intercept [fi #t]
                        #:tol [tol 1e-4]
                        #:max-iter [max-iter 1000])
-  (hasheq 'op
-          op
-          'dtype
-          (symbol->string dt)
-          'X
-          (bits-of dt (~> c lr-case-X (apply append _) (map exact->inexact _)))
-          'y
-          (lr-case-y c)
-          'w
-          (if (lr-case-w c)
-              (bits-of dt (map exact->inexact (lr-case-w c)))
-              'null)
-          'penalty
-          (symbol->string penalty)
-          'C
-          C
-          'l1_ratio
-          (or ratio 'null)
-          'fit_intercept
-          fi
-          'tol
-          tol
-          'max_iter
-          max-iter))
+  (hasheq 'op op
+          'dtype (symbol->string dt)
+          'X (bits-of dt (~> c lr-case-X (apply append _) (map exact->inexact _)))
+          'y (lr-case-y c)
+          'w (if (lr-case-w c)
+                 (bits-of dt (map exact->inexact (lr-case-w c)))
+                 'null)
+          'penalty (symbol->string penalty)
+          'C C
+          'l1_ratio (or ratio 'null)
+          'fit_intercept fi
+          'tol tol
+          'max_iter max-iter))
 
 (define (setting-twin op c dt s #:fit-intercept [fi #t] #:tol [tol 1e-4] #:max-iter [max-iter 1000])
   (logistic-twin op

@@ -37,8 +37,9 @@
     (test-case (format "~a ~a ~a" a setting fi)
       (define base (scaled-case binary (expt 2 (if (positive? a) 10 -10))))
       (match-define (list penalty C) setting)
-      (define (fitted c C)
-        (fit-parts (case-fit c 'float64 #:penalty penalty #:C (exact->inexact C) #:fit-intercept fi)))
+      (define (fitted c strength)
+        (fit-parts
+         (case-fit c 'float64 #:penalty penalty #:C (exact->inexact strength) #:fit-intercept fi)))
       (define moved
         (fitted (scaled-case base (expt 2 a))
                 (if (eq? penalty 'l2)
