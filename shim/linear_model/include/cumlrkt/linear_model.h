@@ -87,15 +87,15 @@ CUMLRKT_API void cuml_linear_model_gemm_predict_job(void* args, size_t args_len,
                                                     rr_job_outcome* outcome);
 
 /* y holds class labels (int32, int64, or integral float32/float64);
-   sample_weight, class_keys and class_values may be NULL; class_keys and
-   class_values are float64 vectors of equal length (class_weight_mode 2).
+   sample_weight and class_weight may be NULL; class_weight (class_weight_mode
+   2) is a float64 vector of one weight per class, in sorted class order.
    Region 0 of out is coef (k' x d, X's dtype, row-major; k' = 1 for two
    classes), region 1 the k' intercepts, region 2 the k sorted classes in y's
    dtype. */
 CUMLRKT_API int cuml_linear_model_logistic_regression_fit(
     void* handle, const rr_view* x, const rr_view* y,
-    const rr_view* sample_weight, const rr_view* class_keys,
-    const rr_view* class_values, rr_deposit* out, int32_t penalty, double C,
+    const rr_view* sample_weight, const rr_view* class_weight,
+    rr_deposit* out, int32_t penalty, double C,
     double l1_ratio, double tol, int32_t max_iter, int32_t linesearch_max_iter,
     int32_t lbfgs_memory, int32_t fit_intercept, int32_t penalty_normalized,
     int32_t class_weight_mode, int32_t* n_iter);

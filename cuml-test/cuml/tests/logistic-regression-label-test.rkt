@@ -10,8 +10,8 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" on-matrix)
-         (only-in "private/logistic-data.rkt" blob-case lr-case-X lr-case-y))
+         (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/logistic-data.rkt" blob-case fit-parts lr-case-X lr-case-y))
 
 (define binary (blob-case "binary" 80 3 2 11))
 (define three (blob-case "three classes" 90 3 3 12 #:sep 3.0))
@@ -48,3 +48,14 @@
   (for ([c (in-list labels)])
     (test-case (format "~a" c)
       (check-true (positive? (count (lambda (v) (equal? v c)) predicted))))))
+
+(test-gpu "int64 labels 2^53 and 2^53+1 take their own class weights"
+  (define big (expt 2 53))
+  (define X (on-matrix (lr-case-X binary) 'float64))
+  (define y (on-vector (map (lambda (c) (+ big c)) exact-y) 'int64))
+  (check-equal? (fit-parts (logistic-regression-fit X y #:class-weight (hash big 1 (add1 big) 10)))
+                (fit-parts (logistic-regression-fit
+                            X
+                            y
+                            #:sample-weight (on-vector (map (lambda (c) (if (= c 1) 10 1)) exact-y)
+                                                       'float64)))))

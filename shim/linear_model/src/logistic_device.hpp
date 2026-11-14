@@ -44,7 +44,7 @@ buffer<double> effective_weights(const raft::handle_t& handle, const T* w,
 
 std::vector<double> class_totals(rmm::cuda_stream_view stream,
                                  const double* weights, const int32_t* codes,
-                                 int64_t n, int64_t k);
+                                 row_selection rows, int64_t k);
 
 int64_t positive_weights(const double* weights, int64_t n, int64_t* index,
                          rmm::cuda_stream_view stream);

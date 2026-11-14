@@ -11,6 +11,7 @@
 
 #include "cumlrkt/support.hpp"
 #include "linear_model_fixture.hpp"
+#include "logistic_fit.hpp"
 #include "raftrkt/view.hpp"
 
 namespace {
@@ -69,6 +70,66 @@ TEST(LogisticSolution, CoefficientsOutsideTheDtypeAreRefused) {
   EXPECT_EQ(refusal_of<float>(res, overflowed,
                               cumlrkt::glm::logistic::require_coef_in_range),
             "X: a coefficient exceeds the float32 range");
+}
+
+std::string bounds_refusal(const cumlrkt::glm::logistic::fit_options& o) {
+  try {
+    cumlrkt::glm::logistic::require_fit_bounds(o);
+  } catch (const cumlrkt::logic_error& e) {
+    return e.what();
+  }
+  return "accepted";
+}
+
+TEST(LogisticOptions, EachOutOfRangeOptionIsRefused) {
+  using cumlrkt::glm::logistic::fit_options;
+  const fit_options base{.penalty = 2,
+                         .C = 1.0,
+                         .l1_ratio = 0.0,
+                         .tol = 1e-4,
+                         .max_iter = 1000,
+                         .linesearch_max_iter = 50,
+                         .lbfgs_memory = 5,
+                         .fit_intercept = true,
+                         .normalized = true,
+                         .class_mode = 0};
+  struct row {
+    fit_options options;
+    std::string message;
+  };
+  const auto with = [&](auto edit) {
+    fit_options o = base;
+    edit(o);
+    return o;
+  };
+  const std::vector<row> rows{
+      {base, "accepted"},
+      {with([](fit_options& o) { o.lbfgs_memory = 0; }),
+       "lbfgs-memory: expected at least 1, got 0"},
+      {with([](fit_options& o) { o.lbfgs_memory = -1; }),
+       "lbfgs-memory: expected at least 1, got -1"},
+      {with([](fit_options& o) { o.max_iter = 0; }),
+       "max-iter: expected at least 1, got 0"},
+      {with([](fit_options& o) { o.linesearch_max_iter = 0; }),
+       "linesearch-max-iter: expected at least 1, got 0"},
+      {with([](fit_options& o) { o.C = 0; }),
+       "C: expected a positive finite real, got 0"},
+      {with([](fit_options& o) { o.C = nan; }),
+       "C: expected a positive finite real, got nan"},
+      {with([](fit_options& o) { o.C = inf; }),
+       "C: expected a positive finite real, got inf"},
+      {with([](fit_options& o) { o.l1_ratio = nan; }),
+       "l1-ratio: expected a real from 0 to 1, got nan"},
+      {with([](fit_options& o) { o.l1_ratio = 1.5; }),
+       "l1-ratio: expected a real from 0 to 1, got 1.5"},
+      {with([](fit_options& o) { o.tol = nan; }),
+       "tol: expected a finite value of at least 0, got nan"},
+      {with([](fit_options& o) { o.tol = -1; }),
+       "tol: expected a finite value of at least 0, got -1"},
+  };
+  for (const row& r : rows) {
+    EXPECT_EQ(bounds_refusal(r.options), r.message);
+  }
 }
 
 }  // namespace

@@ -278,8 +278,8 @@ buffer<double> effective_weights(const raft::handle_t& handle, const T* w,
 
 std::vector<double> class_totals(rmm::cuda_stream_view stream,
                                  const double* weights, const int32_t* codes,
-                                 int64_t n, int64_t k) {
-  return column_reduce<column_lanes>(stream, row_selection{nullptr, n}, k,
+                                 row_selection rows, int64_t k) {
+  return column_reduce<column_lanes>(stream, rows, k,
                                      class_entry{weights, codes},
                                      thrust::plus<double>{}, 0.0);
 }
@@ -341,9 +341,7 @@ column_stats column_stats_of(const matrix<T, int64_t>& x, const double* weights,
     s.sigma[j] = std::ldexp(std::sqrt(square[j] / f.weight), exponent[j]);
     s.magnitude[j] = f.largest;
     s.largest = std::max(s.largest, f.largest);
-    const bool spread =
-        !(s.sigma[j] <= constant_spread * unit_roundoff<T> * f.largest);
-    if ((fit_intercept ? f.varies != 0 : f.largest > 0) && spread) {
+    if (fit_intercept ? f.varies != 0 : f.largest > 0) {
       s.kept.push_back(j);
     }
   }

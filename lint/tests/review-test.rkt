@@ -226,6 +226,24 @@
     (test-twin "the fit is Python's bit for bit (T1, F12)"
       (check-true #t))
     (test-case "a title may end in a parenthesis (bitwise)"
+      (check-true #t))
+    (test-case "fits at the default tol (L4-f)"
+      (check-true #t))
+    (test-case "refused with its message (#23)"
+      (check-true #t))
+    (test-case "the laws hold (T1–T4)"
+      (check-true #t))
+    (test-case "a fit repeats (S3)."
+      (check-true #t))
+    (test-case "bit for bit (T1 and F12)"
+      (check-true #t))
+    (test-case "R2: raw breast-cancer is refused"
+      (check-true #t))
+    (test-case "l1-ratio 0 is the ridge fit (L2)"
+      (check-true #t))
+    (test-case "the penalty is the l1 norm (L1)"
+      (check-true #t))
+    (test-case "r2: a title may start with a lower-case word and a colon"
       (check-true #t))))
 
 (define helper-used-in-a-template
@@ -236,12 +254,18 @@
                                          #:with y #'x
                                          (helper y))))
 
-(test-case "a test title that ends in a spec id is refused"
+(test-case "a test title that carries a spec id is refused"
   (check-equal?
    (sort (problems-in titles-with-spec-ids) string<?)
-   '("the test title \"a constant column gets coef 0 (S3, H1)\" ends in a spec id: say the law, and keep ids in plans"
-     "the test title \"a fit repeats (S3)\" ends in a spec id: say the law, and keep ids in plans"
-     "the test title \"the fit is Python's bit for bit (T1, F12)\" ends in a spec id: say the law, and keep ids in plans")))
+   '("the test title \"R2: raw breast-cancer is refused\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"a constant column gets coef 0 (S3, H1)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"a fit repeats (S3)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"a fit repeats (S3).\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"bit for bit (T1 and F12)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"fits at the default tol (L4-f)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"refused with its message (#23)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"the fit is Python's bit for bit (T1, F12)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"the laws hold (T1–T4)\" carries a spec id: say the law, and keep ids in plans")))
 
 (test-case "an exported procedure that takes who first is defined with define/who"
   (check-equal? (problems-in exported-who-procedure)

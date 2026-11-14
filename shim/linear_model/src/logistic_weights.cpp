@@ -7,7 +7,6 @@
 #include <optional>
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
-#include <string>
 #include <utility>
 #include <vector>
 
@@ -25,34 +24,11 @@ namespace cumlrkt::glm::logistic {
 
 namespace {
 
-template <typename L>
-std::vector<double> mapped_weights(const fit_views& v,
-                                   const std::vector<L>& classes,
-                                   rmm::cuda_stream_view stream) {
-  const auto* keys = raftrkt::vector_data<double, int32_t>(
-      v.class_keys, "class-weight", raftrkt::any_extent);
-  const int64_t m = raftrkt::require(v.class_keys, "class-weight")->shape[0];
-  const std::vector<double> key = to_host(keys, m, stream);
-  const std::vector<double> value = to_host(
-      raftrkt::vector_data<double, int32_t>(v.class_values, "class-weight", m),
-      m, stream);
-  std::vector<double> cw(classes.size(), 1.0);
-  std::vector<std::string> missing;
-  for (size_t c = 0; c < classes.size(); ++c) {
-    const auto found = std::ranges::find(key, static_cast<double>(classes[c]));
-    if (found == key.end()) {
-      missing.push_back(printed(classes[c]));
-    } else {
-      cw[c] = value[found - key.begin()];
-    }
-  }
-  if (!missing.empty() &&
-      static_cast<int64_t>(classes.size() - missing.size()) != m) {
-    throw logic_error(
-        std::format("class-weight: classes ({}) are not in class-weight",
-                    joined(missing, " ")));
-  }
-  return cw;
+std::vector<double> given_weights(const fit_views& v, int64_t k,
+                                  rmm::cuda_stream_view stream) {
+  return to_host(
+      raftrkt::vector_data<double, int32_t>(v.class_weight, "class-weight", k),
+      k, stream);
 }
 
 template <typename L>
@@ -83,7 +59,7 @@ std::optional<std::vector<double>> class_weights_of(
     const std::vector<L>& classes) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   if (options.class_mode == CUML_LINEAR_MODEL_CLASS_WEIGHT_GIVEN) {
-    return mapped_weights(views, classes, stream);
+    return given_weights(views, labels.k, stream);
   }
   if (options.class_mode != CUML_LINEAR_MODEL_CLASS_WEIGHT_BALANCED) {
     return std::nullopt;
@@ -91,15 +67,17 @@ std::optional<std::vector<double>> class_weights_of(
   const auto n = static_cast<int64_t>(labels.codes.size());
   const buffer<double> base =
       effective_weights<T>(handle, w, labels.codes.data(), nullptr, n);
-  const std::vector<double> weighted =
-      class_totals(stream, base.data(), labels.codes.data(), n, labels.k);
+  buffer<int64_t> index = scratch<int64_t>(n, stream);
+  const int64_t m = positive_weights(base.data(), n, index.data(), stream);
+  const row_selection rows{m < n ? index.data() : nullptr, m};
+  const std::vector<double> weighted = class_totals(
+      stream, base.data(), labels.codes.data(), rows, labels.k);
   require_weighted_classes(weighted, classes);
-  const bool counted =
-      w != nullptr &&
-      equal_weights(base.data(), row_selection{nullptr, n}, stream);
+  const bool counted = w != nullptr && equal_weights(base.data(), rows, stream);
   const std::vector<double> totals =
-      counted ? class_totals(stream, nullptr, labels.codes.data(), n, labels.k)
-              : weighted;
+      counted
+          ? class_totals(stream, nullptr, labels.codes.data(), rows, labels.k)
+          : weighted;
   double total = 0;
   for (const double t : totals) {
     total += t;
@@ -129,7 +107,8 @@ std::optional<weighted_rows> weighted_rows_of(
       effective_weights<T>(handle, w, labels.codes.data(),
                            device_cw ? device_cw->data() : nullptr, n);
   require_weighted_classes(
-      class_totals(stream, eff.data(), labels.codes.data(), n, labels.k),
+      class_totals(stream, eff.data(), labels.codes.data(),
+                   row_selection{nullptr, n}, labels.k),
       classes);
   buffer<int64_t> index = scratch<int64_t>(n, stream);
   const int64_t m = positive_weights(eff.data(), n, index.data(), stream);

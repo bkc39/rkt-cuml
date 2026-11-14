@@ -34,7 +34,7 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
-| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, `define-cd-result`, macro templates and constructor-renamed structs, the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who`, and the rule that a test title does not end in a spec id |
+| `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, `define-cd-result`, macro templates and constructor-renamed structs, the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who`, and the rule that a test title carries no spec id |
 | `shim/` | | the C++ shims, one shared library per family, and the test-only `libcumlrkt_probe.so` (`shim/probe`, a `TEST_ONLY` family) |
 | `scripts/` | | the gate scripts, the binding census and its plan, and the repo's Resyntax suite (`resyntax-rules.rkt`, `cuml-recommendations`) |
 
@@ -75,8 +75,9 @@ bite here:
    `info.rkt` files and pure re-export facades; the `no-noqa` gate allowlists
    the rest.
 9. **Test titles say the law.** A `test-case`, `test-gpu` or `test-twin`
-   title ending in a spec id, `(E4)` or `(S3, H1)`, is refused by the
-   `review` lint; ids and bounds' numbers live in `plans/` and the code.
+   title carrying a spec id, `(E4)`, `(S3, H1)`, `(L4-f)` or a leading
+   `R2:`, is refused by the `review` lint (the penalty names `(L1)` and
+   `(L2)` pass); ids and bounds' numbers live in `plans/` and the code.
 
 ## Architecture
 

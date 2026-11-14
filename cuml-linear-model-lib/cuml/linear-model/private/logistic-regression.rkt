@@ -121,8 +121,9 @@
       (logic-error "~a: penalty: expected 'l1, 'l2, 'elasticnet or 'none, got ~e" who penalty)))
 
 (define (C-value who C)
-  (if (and (real? C) (positive? C) (< C +inf.0))
-      (real->double-flonum C)
+  (define c (and (real? C) (real->double-flonum C)))
+  (if (and c (< 0.0 c +inf.0))
+      c
       (logic-error "~a: C: expected a positive finite real, got ~e" who C)))
 
 (define (ratio-value who penalty ratio)
@@ -191,7 +192,7 @@
                (flag-value who 'penalty-normalized (ref 'penalty-normalized))
                (class-weight-mode who (ref 'class-weight))))
 
-(define (fit-job who resources X y w keys weights out settings)
+(define (fit-job who resources X y w class-weight out settings)
   (match-define (qn-settings penalty C ratio flag iterations searches memory tol normalized mode)
     settings)
   (cuml-linear-model-logistic-regression-fit-job who
@@ -199,8 +200,7 @@
                                                  X
                                                  y
                                                  w
-                                                 keys
-                                                 weights
+                                                 class-weight
                                                  out
                                                  penalty
                                                  C
@@ -241,21 +241,20 @@
         (real->double-flonum (hash-ref cw k))
         1.0)))
 
-(define (weight-vectors kind classes cw who resources)
-  (define (on-device xs)
-    (list->device-vector xs #:dtype 'float64 #:resources resources))
-  (cond
-    [(not (hash? cw)) (values #f #f)]
-    [kind
-     (values (on-device (for/list ([i (in-range (length classes))])
-                          (exact->inexact i)))
-             (on-device (host-weights who kind classes cw)))]
-    [else
-     (values (on-device (for/list ([k (in-hash-keys cw)])
-                          (if (real? k)
-                              (real->double-flonum k)
-                              +nan.0)))
-             (on-device (map real->double-flonum (hash-values cw))))]))
+(define (integral-classes y)
+  (define integral
+    (for/list ([v (in-list (device-vector->list y))]
+               #:when (and (rational? v) (integer? v)))
+      v))
+  (sort (remove-duplicates integral =) <))
+
+(define (class-weight-view who kind classes y cw resources)
+  (and (hash? cw)
+       (list->device-vector (if kind
+                                (host-weights who kind classes cw)
+                                (host-weights who real-labels (integral-classes y) cw))
+                            #:dtype 'float64
+                            #:resources resources)))
 
 (define/who (logistic-regression-fit who
                                      X
@@ -276,9 +275,9 @@
     (if kind
         (list->device-vector codes #:dtype 'int32 #:resources resources)
         y))
-  (define-values (keys weights) (weight-vectors kind classes class-weight who resources))
+  (define weights (class-weight-view who kind classes y class-weight resources))
   (define out (deposit-for/who who resources))
-  (define n-iter (fit-job who resources X y-view w keys weights out settings))
+  (define n-iter (fit-job who resources X y-view w weights out settings))
   (match-define (list coef intercept device-classes) (deposit->list out))
   (logistic-regression-result coef
                               intercept

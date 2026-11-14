@@ -1451,10 +1451,10 @@ Follow-ups are GitHub issues.
   `weightedMean` (L1-h); unweighted fits and fits without an intercept repeat.
   The bitwise laws B5–B8 keep weighted intercepted cases at ≤ 1000 rows, and
   both Scribble entries say so.
-- **L2-h.** `define-regressor` in `cuml/private/estimator-support.rkt` is
+- **L2-h.** `define-predictor` in `cuml/private/estimator-support.rkt` is
   `define-estimator` with `#:needs-y`, the resources setting, predict and the
   weighted `r2-score` scorer from a predict `/who` (`r2-scorer`);
-  `linear-regression` and `ridge` are each one `define-regressor`.
+  `linear-regression` and `ridge` are each one `define-predictor`.
 - **L2-i.** Every fit whose staged α′ ≤ u·σ′²_min runs `linear-regression-fit`'s
   path (L2-c), u = 2^−24 (float32) or 2^−53 (float64) and σ′²_min the smallest
   staged weighted (centred with an intercept) spread² among the kept columns,
@@ -1916,12 +1916,13 @@ scratch, the source is `cpp/src/glm/qn/`.
 - **L4-i.** Probabilities in X's dtype for every k; binary p₁ = σ(z),
   p₀ = 1 − p₁; log-proba as a stable log-sigmoid or log-softmax.
 - **L4-j.** `#:C`. **L4-k.** `'none`; C positive finite; tol ≥ 0;
-  l1-ratio only with `'elasticnet`. **L4-l.** `define-classifier` with the
+  l1-ratio only with `'elasticnet`. **L4-l.** `define-predictor` with the
   accuracy scorer through label codes and the generics `predict-proba`,
   `predict-log-proba` and `decision-function`. **L4-m.** Binary is one
   sigmoid row. **L4-n.** Softmax intercepts as cuML returns them; tests
-  centre. **L4-o.** A constant column gets coefficient 0 exactly, and so
-  does a column whose spread is at rounding level: σ_j ≤ 16·u_T·max|x_j|.
+  centre. **L4-o.** A column exactly constant over the counted rows gets
+  coefficient 0; one that varies with σ_j ≤ 16·u_T·max|x_j| is refused
+  ("centre it"), since its signal may sit in its last bits (r1 H1).
   Measured (r1a): a column's own rounding noise, fl(fl(a + c) − a), gives
   σ/(u·max|x|) ≤ 2.7; one row k ulps off gives 0.08·k. From 2⁵u to 2²⁴u
   (f64) the solver stops short and the check refuses; the 2⁻²⁰ (f64) and

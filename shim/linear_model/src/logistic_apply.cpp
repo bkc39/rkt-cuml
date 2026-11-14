@@ -12,6 +12,7 @@
 #include "cumlrkt/labels.hpp"
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
+#include "logistic_checks.hpp"
 #include "logistic_device.hpp"
 #include "logistic_fit.hpp"
 #include "raftrkt/deposit.hpp"
@@ -73,7 +74,7 @@ void labels_into(const raft::handle_t& handle, const rr_view* classes_view,
     codes_of<T>(handle, scores.data(), n, outputs, codes.data());
     deposit_rows(handle, out, std::move(codes), n, std::nullopt);
   } else {
-    on_class_labels(classes_view, "y", [&](auto tag) {
+    on_class_labels(classes_view, "classes", [&](auto tag) {
       using L = decltype(tag);
       const L* classes = raftrkt::vector_data<L, int32_t>(
           classes_view, "classes", outputs == 1 ? 2 : outputs);
@@ -139,18 +140,17 @@ extern "C" {
 
 int cuml_linear_model_logistic_regression_fit(
     void* handle, const rr_view* x, const rr_view* y,
-    const rr_view* sample_weight, const rr_view* class_keys,
-    const rr_view* class_values, rr_deposit* out, int32_t penalty, double C,
-    double l1_ratio, double tol, int32_t max_iter, int32_t linesearch_max_iter,
-    int32_t lbfgs_memory, int32_t fit_intercept, int32_t penalty_normalized,
+    const rr_view* sample_weight, const rr_view* class_weight,
+    rr_deposit* out, int32_t penalty, double C, double l1_ratio, double tol,
+    int32_t max_iter, int32_t linesearch_max_iter, int32_t lbfgs_memory,
+    int32_t fit_intercept, int32_t penalty_normalized,
     int32_t class_weight_mode, int32_t* n_iter) {
   return cumlrkt::guarded(
       handle,
       {{"X", x},
        {"y", y},
        {"sample-weight", sample_weight},
-       {"class-weight", class_keys},
-       {"class-weight", class_values}},
+       {"class-weight", class_weight}},
       [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
         int32_t* const iterations = raftrkt::require(n_iter, "n_iter");
@@ -159,23 +159,24 @@ int cuml_linear_model_logistic_regression_fit(
                                      .fit_intercept = fit_intercept,
                                      .normalized = penalty_normalized,
                                      .class_mode = class_weight_mode});
+        const logistic::fit_options options{
+            .penalty = penalty,
+            .C = C,
+            .l1_ratio = l1_ratio,
+            .tol = tol,
+            .max_iter = max_iter,
+            .linesearch_max_iter = linesearch_max_iter,
+            .lbfgs_memory = lbfgs_memory,
+            .fit_intercept = fit_intercept != 0,
+            .normalized = penalty_normalized != 0,
+            .class_mode = class_weight_mode};
+        logistic::require_fit_bounds(options);
         *iterations = logistic::fit(h,
                                     {.x = x,
                                      .y = y,
                                      .sample_weight = sample_weight,
-                                     .class_keys = class_keys,
-                                     .class_values = class_values},
-                                    {.penalty = penalty,
-                                     .C = C,
-                                     .l1_ratio = l1_ratio,
-                                     .tol = tol,
-                                     .max_iter = max_iter,
-                                     .linesearch_max_iter = linesearch_max_iter,
-                                     .lbfgs_memory = lbfgs_memory,
-                                     .fit_intercept = fit_intercept != 0,
-                                     .normalized = penalty_normalized != 0,
-                                     .class_mode = class_weight_mode},
-                                    into);
+                                     .class_weight = class_weight},
+                                    options, into);
       });
 }
 

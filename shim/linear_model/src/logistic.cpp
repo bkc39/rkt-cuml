@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <cuml/linear_model/glm.hpp>
 #include <format>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <raft/core/handle.hpp>
@@ -157,6 +158,7 @@ penalties staged_penalties(penalties p, int s) {
   return staged;
 }
 
+template <typename T>
 void require_spread(const column_stats& s) {
   for (const int64_t j : s.kept) {
     if (!std::isfinite(s.sigma[j])) {
@@ -164,6 +166,25 @@ void require_spread(const column_stats& s) {
           "X: column {} has values up to {} in magnitude; its spread is "
           "outside the float64 range",
           j, printed(s.magnitude[j])));
+    }
+    if (s.sigma[j] <= constant_spread * unit_roundoff<T> * s.magnitude[j]) {
+      throw logic_error(std::format(
+          "X: column {} varies only in its last bits (spread {} of {}); "
+          "centre it",
+          j, printed(s.sigma[j]), printed(s.magnitude[j])));
+    }
+  }
+}
+
+template <typename T>
+void require_staged_columns(const column_stats& s, int shift) {
+  const auto widest = std::ranges::max(
+      s.kept, {}, [&](int64_t j) { return s.magnitude[j]; });
+  for (const int64_t j : s.kept) {
+    if (std::ldexp(s.magnitude[j], shift) < std::numeric_limits<T>::min()) {
+      throw logic_error(std::format(
+          "X: columns {} and {} span too wide a range; standardise them", j,
+          widest));
     }
   }
 }
@@ -215,7 +236,7 @@ solved_fit<T> closed_form(const raft::handle_t& handle,
   std::vector<T> b(outputs, T{0});
   if (fit_intercept) {
     const std::vector<double> totals =
-        class_totals(stream, weights_in(wt), codes, x.n, k);
+        class_totals(stream, weights_in(wt), codes, row_selection{nullptr, x.n}, k);
     std::vector<double> logs(k);
     std::ranges::transform(totals, logs.begin(),
                            [](double t) { return std::log(t); });
@@ -254,8 +275,9 @@ staged_fit<T> staged_of(const raft::handle_t& handle,
                         const column_stats& stats) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const row_selection rows = rows_in(wt, x.n);
-  require_spread(stats);
+  require_spread<T>(stats);
   const int s = staging_exponent<T>(stats, rows.count);
+  require_staged_columns<T>(stats, s);
   penalties pen = penalties_of(options);
   if (wt) {
     pen = {pen.l1 * wt->scale, pen.l2 * wt->scale};

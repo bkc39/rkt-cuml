@@ -16,8 +16,7 @@ struct fit_views {
   const rr_view* x;
   const rr_view* y;
   const rr_view* sample_weight;
-  const rr_view* class_keys;
-  const rr_view* class_values;
+  const rr_view* class_weight;
 };
 
 struct fit_codes {

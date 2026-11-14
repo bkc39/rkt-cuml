@@ -67,7 +67,6 @@
                     view
                     view
                     view
-                    view
                     deposit
                     _int32
                     _double

@@ -50,6 +50,12 @@
    (row "C zero" "C: expected a positive finite real, got 0" (lambda () (go X y #:C 0)))
    (row "C infinite" "C: expected a positive finite real, got +inf.0" (lambda () (go X y #:C +inf.0)))
    (row "C nan" "C: expected a positive finite real, got +nan.0" (lambda () (go X y #:C +nan.0)))
+   (row "an exact C that rounds to 0.0"
+        #rx"^C: expected a positive finite real, got 1/10+$"
+        (lambda () (go X y #:C (expt 10 -400))))
+   (row "an exact C that rounds to +inf.0"
+        #rx"^C: expected a positive finite real, got 10+$"
+        (lambda () (go X y #:C (expt 10 400))))
    (row "elastic net without l1-ratio"
         "l1-ratio: expected a real from 0 to 1 with 'elasticnet, got #f"
         (lambda () (go X y #:penalty 'elasticnet)))
@@ -161,6 +167,12 @@
    (row "a staged penalty outside float32"
         "C: the penalty at X's scale 2^66 is outside the float32 range"
         (lambda () (go (on-matrix (scaled grid (expt 2 -66)) 'float32) y)))
+   (row "a staged penalty beyond what float32's solver resolves"
+        #rx"^C: the penalty at X's scale 2\\^4[0-9] is outside the float32 range$"
+        (lambda () (go (on-matrix (scaled grid (expt 2 -40)) 'float32) y)))
+   (row "a staged penalty beyond what float64's solver resolves"
+        #rx"^C: the penalty at X's scale 2\\^6[0-9] is outside the float64 range$"
+        (lambda () (go (on-matrix (scaled grid (expt 2 -60))) y)))
    (row "a coefficient beyond float32 once unstaged"
         "X: a coefficient exceeds the float32 range"
         (lambda ()
