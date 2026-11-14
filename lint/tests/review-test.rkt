@@ -342,10 +342,10 @@
                                     (list who x))
                                   (twice 'twice 1)))
 
-(test-case "L7: a wrapper that passes other arguments than its formals is not a relay"
+(test-case "a wrapper that passes other arguments than its formals is not a relay"
   (check-equal? (problems-in wrapper-that-prepares) '()))
 
-(test-case "L7: all-defined-out and prefix-out export a procedure that takes who"
+(test-case "all-defined-out and prefix-out export a procedure that takes who"
   (check-equal? (problems-in who-procedure-under-all-defined-out)
                 '("twice takes who first and is exported: define it with define/who"))
   (check-equal? (problems-in who-procedure-under-prefix-out)

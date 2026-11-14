@@ -216,10 +216,10 @@
     (match-define (list order w) spec)
     (test-case (format "~a" spec)
       (define c (equal-classes 1000 order))
-      (define (balanced c)
-        (fit-parts (case-fit c
+      (define (balanced weighted)
+        (fit-parts (case-fit weighted
                              'float64
-                             #:sample-weight (on-vector (lr-case-w c) 'float64)
+                             #:sample-weight (on-vector (lr-case-w weighted) 'float64)
                              #:class-weight 'balanced
                              #:tol (tight-tol 'float64)
                              #:max-iter tight-max-iter)))

@@ -51,10 +51,10 @@
    (row "C infinite" "C: expected a positive finite real, got +inf.0" (lambda () (go X y #:C +inf.0)))
    (row "C nan" "C: expected a positive finite real, got +nan.0" (lambda () (go X y #:C +nan.0)))
    (row "an exact C that rounds to 0.0"
-        #rx"^C: expected a positive finite real, got 1/10+$"
+        #rx"^C: expected a positive finite real, got 1/10+[.][.][.]$"
         (lambda () (go X y #:C (expt 10 -400))))
    (row "an exact C that rounds to +inf.0"
-        #rx"^C: expected a positive finite real, got 10+$"
+        #rx"^C: expected a positive finite real, got 10+[.][.][.]$"
         (lambda () (go X y #:C (expt 10 400))))
    (row "elastic net without l1-ratio"
         "l1-ratio: expected a real from 0 to 1 with 'elasticnet, got #f"
