@@ -15,7 +15,6 @@
 
 (define binary (blob-case "binary" 80 3 2 11))
 (define three (blob-case "three classes" 90 3 3 12 #:sep 3.0))
-(define X (on-matrix (lr-case-X binary) 'float64))
 (define exact-y (lr-case-y binary))
 
 (define (mixed ys)
@@ -26,11 +25,13 @@
         (exact->inexact v))))
 
 (test-gpu "host real labels score and predict the same given exact or as flonums"
+  (define X (on-matrix (lr-case-X binary) 'float64))
   (define e (fit (logistic-regression) X exact-y))
   (check-equal? (score e X (map exact->inexact exact-y)) (score e X exact-y))
   (check-equal? (logistic-regression-result-classes (logistic-regression-model e)) '(0 1)))
 
 (test-gpu "a y mixing 0 and 0.0 has two flonum classes and scores as the exact y"
+  (define X (on-matrix (lr-case-X binary) 'float64))
   (define e (fit (logistic-regression) X (mixed exact-y)))
   (check-equal? (logistic-regression-result-classes (logistic-regression-model e)) '(0.0 1.0))
   (check-equal? (score e X (mixed exact-y)) (score (fit (logistic-regression) X exact-y) X exact-y))

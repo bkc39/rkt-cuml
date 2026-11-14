@@ -26,18 +26,15 @@
 (define tolerance-floor 1/10000)
 (define residual-factor 64)
 
-(define zero (bf 0))
-(define one (bf 1))
-
 (define (bfsum xs)
-  (apply bf+ zero xs))
+  (apply bf+ (bf 0) xs))
 
 (define (exact v)
   (bf (inexact->exact v)))
 
 (define (softplus z)
-  (if (bf< zero z)
-      (bf+ z (bflog1p (bfexp (bf- zero z))))
+  (if (bf< (bf 0) z)
+      (bf+ z (bflog1p (bfexp (bf- (bf 0) z))))
       (bflog1p (bfexp z))))
 
 (define (score-of z label)
@@ -49,10 +46,13 @@
 (define (row-terms z label)
   (match z
     [(list s)
-     (define p (bf/ one (bf+ one (bfexp (bf- zero s)))))
-     (values (bf- (softplus s) (if (= label 1) s zero))
+     (define p (bf/ (bf 1) (bf+ (bf 1) (bfexp (bf- (bf 0) s)))))
+     (values (bf- (softplus s)
+                  (if (= label 1)
+                      s
+                      (bf 0)))
              (list (if (= label 1)
-                       (bf- p one)
+                       (bf- p (bf 1))
                        p)))]
     [(cons first rest)
      (define top
@@ -60,13 +60,13 @@
          (bfmax m s)))
      (define shifted (map (lambda (s) (bfexp (bf- s top))) z))
      (define total (bfsum shifted))
-     (define lse (bf+ top (bflog1p (bf- total one))))
+     (define lse (bf+ top (bflog1p (bf- total (bf 1)))))
      (values (bf- lse (score-of z label))
              (for/list ([e (in-list shifted)]
                         [c (in-naturals)])
                (define p (bf/ e total))
                (if (= c label)
-                   (bf- p one)
+                   (bf- p (bf 1))
                    p)))]))
 
 (define (penalty-shares penalty ratio)
@@ -94,9 +94,9 @@
     (and (positive? square) (bfsqrt (bf square)))))
 
 (define (loss-terms rows y weights W b)
-  (for/fold ([loss zero]
-             [gradient (make-list (length W) (make-list (length (car rows)) zero))]
-             [slope (make-list (length W) zero)])
+  (for/fold ([loss (bf 0)]
+             [gradient (make-list (length W) (make-list (length (car rows)) (bf 0)))]
+             [slope (make-list (length W) (bf 0))])
             ([x (in-list rows)]
              [label (in-list y)]
              [wi (in-list weights)])
@@ -119,9 +119,9 @@
 
 (define (projected-gradient g v l1)
   (cond
-    [(bf< zero v) (bf+ g l1)]
-    [(bf< v zero) (bf- g l1)]
-    [else (bfmax zero (bf- (bfabs g) l1))]))
+    [(bf< (bf 0) v) (bf+ g l1)]
+    [(bf< v (bf 0)) (bf- g l1)]
+    [else (bfmax (bf 0) (bf- (bfabs g) l1))]))
 
 (define (residual-of X
                      y
@@ -146,9 +146,9 @@
     (define-values (F worst)
       (for*/fold ([F (bf/ loss big-total)]
                   [worst (if fi
-                             (for/fold ([m zero]) ([s (in-list slope)])
+                             (for/fold ([m (bf 0)]) ([s (in-list slope)])
                                (bfmax m (bfabs (bf/ s big-total))))
-                             zero)])
+                             (bf 0))])
                  ([(wc gc sc) (in-parallel (in-list W) (in-list gradient) (in-list slope))]
                   [(v g0 s mean)
                    (in-parallel (in-list wc) (in-list gc) (in-list sigma) (in-list means))])
