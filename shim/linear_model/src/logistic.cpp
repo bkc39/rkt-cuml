@@ -144,13 +144,22 @@ int staging_exponent(const column_stats& s, int64_t m) {
 }
 
 template <typename T>
-penalties staged_penalties(penalties p, int s) {
+double resolved_l2(bool fit_intercept) {
+  if constexpr (std::is_same_v<T, float>) {
+    return 0x1p28;
+  }
+  return fit_intercept ? 0x1p32 : 0x1p54;
+}
+
+template <typename T>
+penalties staged_penalties(penalties p, int s, bool fit_intercept) {
   const penalties staged{std::ldexp(p.l1, s), std::ldexp(p.l2, 2 * s)};
   const auto lost = [](double before, double after) {
     const auto stored = static_cast<T>(after);
     return !std::isfinite(stored) || (before != 0 && stored == 0);
   };
-  if (lost(p.l1, staged.l1) || lost(p.l2, staged.l2)) {
+  if (lost(p.l1, staged.l1) || lost(p.l2, staged.l2) ||
+      staged.l2 > resolved_l2<T>(fit_intercept)) {
     throw logic_error(
         std::format("C: the penalty at X's scale 2^{} is outside the {} range",
                     s, raftrkt::dtype_name(raftrkt::dtype_code<T>)));
@@ -282,7 +291,7 @@ staged_fit<T> staged_of(const raft::handle_t& handle,
   if (wt) {
     pen = {pen.l1 * wt->scale, pen.l2 * wt->scale};
   }
-  pen = staged_penalties<T>(pen, s);
+  pen = staged_penalties<T>(pen, s, options.fit_intercept);
   const int64_t m = rows.count;
   const auto p = static_cast<int64_t>(stats.kept.size());
   std::optional<buffer<T>> copied;

@@ -1932,7 +1932,12 @@ scratch, the source is `cpp/src/glm/qn/`.
   centred. σ_j is computed as a·√(Σw((x − x̄)/a)²/W), a = 2^⌊log₂ max|x_j|⌋,
   bitwise the old value in range; a kept column whose σ is not finite is
   refused naming its magnitude. The staged penalty is range-checked in X's
-  dtype (#24 names that dtype). `'balanced` with uniform sample weights
+  dtype (#24 names that dtype), and refused with #24's message above the
+  largest staged l2 the solver resolves: 2²⁸ (f32), 2³² (f64 with an
+  intercept), 2⁵⁴ (f64 without). Measured (r2, unit data at C = 2⁻ᵏ,
+  n 200 to 20000, linesearch-max-iter 50 and 200): the first failures are
+  2³⁰, 2³⁴ and 2⁵⁶; above them the fit stopped with "raise max-iter or
+  tol", which neither knob helps. `'balanced` with uniform sample weights
   takes its class weights from the counts, n/(k·n_c).
   **L4-q.** Separation is not refused.
 - **L4-p.** Raw breast-cancer is refused (R2): Python cuML's point there is
