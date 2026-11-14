@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/list argmax make-list range take))
+(require (only-in racket/list argmax make-list range take)
+         (only-in "exact-algebra.rkt" dot))
 
 (provide newton-coef)
 
@@ -13,9 +14,6 @@
     [else
      (define e (exp z))
      (/ e (+ 1.0 e))]))
-
-(define (dot xs ys)
-  (for/sum ([x (in-list xs)] [y (in-list ys)]) (* x y)))
 
 (define (solved A b)
   (define n (length b))

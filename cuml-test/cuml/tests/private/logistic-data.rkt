@@ -102,10 +102,9 @@
       (for/list ([_ (in-range p)])
         (dyadic (normal) grid-bits))))
   (define (separated row)
-    (match row
-      [(cons first rest)
-       (define label (if (positive? first) 1 0))
-       (values (cons (+ first (if (= label 1) 1/2 -1/2)) rest) label)]))
+    (match-define (cons first rest) row)
+    (define label (if (positive? first) 1 0))
+    (values (cons (+ first (if (= label 1) 1/2 -1/2)) rest) label))
   (for/lists (X y #:result (lr-case name X y #f)) ([row (in-list rows)]) (separated row)))
 
 (define (scaled-rows rows factor)
