@@ -18,6 +18,7 @@
          reg-parts
          reg-target
          scaled
+         tiled-rows
          with-ones)
 
 (define penalties '(none l1 l2 elasticnet))
@@ -29,6 +30,11 @@
   (for/list ([_ (in-range n)])
     (for/list ([_ (in-range d)])
       (next))))
+
+(define (tiled-rows n d seed #:distinct [distinct 4096])
+  (define base (list->vector (normal-rows distinct d seed)))
+  (for/list ([i (in-range n)])
+    (vector-ref base (modulo i distinct))))
 
 (define (reg-target rows seed #:offset [offset 3.0] #:noise [noise 0.1])
   (define next (normal-source (+ 7919 seed)))
