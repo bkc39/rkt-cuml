@@ -39,13 +39,13 @@
 
 (test-gpu "exact labels 7, 2^53 and 2^53+1 are three classes, each predicted"
   (define big (expt 2 53))
-  (define labels (list 7 big (add1 big)))
-  (define y (map (lambda (c) (list-ref labels c)) (lr-case-y three)))
+  (define labels (vector 7 big (add1 big)))
+  (define y (map (lambda (c) (vector-ref labels c)) (lr-case-y three)))
   (define r (logistic-regression-fit (on-matrix (lr-case-X three) 'float64) y))
-  (check-equal? (logistic-regression-result-classes r) labels)
+  (check-equal? (logistic-regression-result-classes r) (vector->list labels))
   (check-equal? (length (device-matrix->list* (logistic-regression-result-coef r))) 3)
   (define predicted (logistic-regression-predict r (on-matrix (lr-case-X three) 'float64)))
-  (for ([c (in-list labels)])
+  (for ([c (in-vector labels)])
     (test-case (format "~a" c)
       (check-true (positive? (count (lambda (v) (equal? v c)) predicted))))))
 

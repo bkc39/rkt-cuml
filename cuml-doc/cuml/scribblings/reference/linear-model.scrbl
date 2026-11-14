@@ -388,10 +388,12 @@ The @racket[lasso-result] of the fit that made @racket[estimator], or @racket[#f
             ([coef device-matrix?]
              [intercept device-vector?]
              [classes list?]
-             [label-type (or/c 'int32 'int64 'float32 'float64 'list)]
+             [label-kind any/c]
              [n-iter exact-nonnegative-integer?])]{
 The result of @racket[logistic-regression-fit]: one row of @racket[coef] and one
-@racket[intercept] for two classes (the second's log-odds), else one per class.}
+@racket[intercept] for two classes (the second's log-odds), else one per class.
+@racket[label-kind] is how @racket[y] held its labels, which
+@racket[logistic-regression-predict] answers in.}
 
 @defproc[(logistic-regression-fit [X device-matrix?]
                                   [y (or/c device-vector? list?)]
@@ -448,8 +450,8 @@ The class probabilities, in X's dtype.}
           [result logistic-regression-result?] [X device-matrix?]
           [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
-Their logarithms, computed directly and so finite (Python cuML's are −inf where a probability
-underflows).}
+Their logarithms, computed directly. Unlike Python cuML's, they stay finite where a probability
+underflows.}
 
 @defproc[(logistic-regression-params [base (or/c #f hash?) #f]
                                      [#:penalty penalty (or/c 'l1 'l2 'elasticnet 'none) 'l2]

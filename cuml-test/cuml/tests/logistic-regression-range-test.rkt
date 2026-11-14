@@ -11,6 +11,7 @@
          (only-in "private/logistic-data.rkt"
                   blob-case
                   case-fit
+                  coef-flat
                   default-tol-cap
                   fit-flat
                   fit-parts
@@ -25,20 +26,21 @@
                   relative-gap
                   scaled-case
                   scaled-parts
+                  setting
                   tight-max-iter
                   tight-tol))
 
 (define binary (blob-case "binary" 80 3 2 11 #:weighted? #t))
 
-(test-gpu "float64 X times a power of 2 near the range's ends fits as X, its coef scaled back"
+(test-gpu "float64 X scaled by a power of 2 near the range's ends fits as X"
   (for* ([a (in-list '(590 -590))]
-         [setting (in-list (if (positive? a)
-                               (list (list 'none 1) (list 'l2 (expt 2 200)))
-                               (list (list 'none 1))))]
+         [s (in-list (if (positive? a)
+                         (list (setting 'none 1 #f) (setting 'l2 (expt 2 200) #f))
+                         (list (setting 'none 1 #f))))]
          [fi (in-list '(#t #f))])
-    (test-case (format "~a ~a ~a" a setting fi)
+    (match-define (setting penalty C _) s)
+    (test-case (format "~a ~a ~a ~a" a penalty C fi)
       (define base (scaled-case binary (expt 2 (if (positive? a) 10 -10))))
-      (match-define (list penalty C) setting)
       (define (fitted c strength)
         (fit-parts
          (case-fit c 'float64 #:penalty penalty #:C (exact->inexact strength) #:fit-intercept fi)))
@@ -54,9 +56,7 @@
              (lambda () (case-fit (scaled-case binary (expt 2 -600)) 'float64 #:penalty 'l2))))
 
 (define (next-above dt v)
-  (if (eq? dt 'float32)
-      (flsingle (+ v (expt 2.0 -21)))
-      (flnext v)))
+  ((by-dtype dt (lambda (v) (flsingle (+ v (expt 2.0 -21)))) flnext) v))
 
 (define (with-last-column c column)
   (lr-case (lr-case-name c)
@@ -147,7 +147,7 @@
       (define centred (fitted (map (lambda (z) (rounded dt (* 5 spread z))) noise)))
       (check-true (andmap (lambda (v) (not (zero? v))) (last-coef offset)))
       (define gap
-        (relative-gap (apply append (lr-fit-coef offset)) (apply append (lr-fit-coef centred))))
+        (relative-gap (coef-flat offset) (coef-flat centred)))
       (check-true (<= gap (centred-form-gap-bound dt)) (format "gap ~a" gap)))))
 
 (test-gpu "an offset column is fitted within the default tol's cap of its centred form"
@@ -183,9 +183,7 @@
   (define c (equal-classes 1000))
   (for ([w (in-list '(0.1 0.3))])
     (test-case (format "~a" w)
-      (define weights (on-vector (map (lambda (_) w) (lr-case-y c)) 'float64))
-      (define (flat parts)
-        (apply append (lr-fit-coef parts)))
+      (define weights (on-vector (make-list (length (lr-case-y c)) w) 'float64))
       (define (balanced penalty)
         (fit-parts (case-fit c
                              'float64
@@ -201,9 +199,9 @@
                              #:C C
                              #:tol (tight-tol 'float64)
                              #:max-iter tight-max-iter)))
-      (define none-gap (relative-gap (flat (balanced 'none)) (flat (plain 'none 1.0))))
+      (define none-gap (relative-gap (coef-flat (balanced 'none)) (coef-flat (plain 'none 1.0))))
       (check-true (<= none-gap balanced-gap-bound) (format "none gap ~a" none-gap))
-      (define l2-gap (relative-gap (flat (balanced 'l2)) (flat (plain 'l2 w))))
+      (define l2-gap (relative-gap (coef-flat (balanced 'l2)) (coef-flat (plain 'l2 w))))
       (check-true (<= l2-gap balanced-gap-bound) (format "l2 gap ~a" l2-gap)))))
 
 (define (with-zero-rows c w)

@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-decision-function)
-         (only-in racket/list range)
+         (only-in racket/list range rest)
          (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft device-matrix->list*)
@@ -10,12 +10,16 @@
          (only-in "private/logistic-data.rkt"
                   blob-case
                   cutoff-message
+                  decision-label
+                  default-setting
+                  default-tol
                   fit-parts
                   lr-case-name
                   lr-case-w
                   lr-case-X
                   lr-case-y
                   lr-fit
+                  penalty-settings
                   separable-case
                   setting
                   setting-C
@@ -34,11 +38,7 @@
         (blob-case "three classes" 60 3 3 43)))
 
 (define settings
-  (list (setting 'l2 1.0 #f)
-        (setting 'l2 0.1 #f)
-        (setting 'l1 1.0 #f)
-        (setting 'elasticnet 0.5 0.5)
-        (setting 'none 1.0 #f)))
+  (list* default-setting (setting 'l2 0.1 #f) (rest penalty-settings)))
 
 (struct trial
         (case dt
@@ -74,7 +74,7 @@
                 [dt (in-list dtypes)]
                 [s (in-list settings)]
                 [max-iter (in-list '(1 3 10 1000))]
-                [tol (in-list '(1e-4 1e-6))])
+                [tol (in-list (list default-tol 1e-6))])
       (define t (trial c dt s max-iter tol))
       (cons t (fit-or-refusal t))))
   (define accepted (filter cdr outcomes))
@@ -107,9 +107,7 @@
              44
              #:scales (map (lambda (j) (expt 2 (- (modulo j 7) 3))) (range 10))))
 
-(define default-setting (setting 'l2 1.0 #f))
-
-(test-twin "one iteration on mixed scales is refused, and Python cuML's point there is above the bound"
+(test-twin "one iteration on mixed scales is refused"
   (define requests
     (for/list ([dt (in-list dtypes)])
       (logistic-twin "cuml-fit" hard-cutoff dt #:max-iter 1)))
@@ -118,17 +116,17 @@
     (test-case (symbol->string dt)
       (check-exn cutoff-message (lambda () (setting-fit hard-cutoff dt default-setting #:max-iter 1)))
       (match-define (residual K _ bound)
-        (residual-at hard-cutoff (their-fit theirs dt) default-setting 1e-4))
+        (residual-at hard-cutoff (their-fit theirs dt) default-setting default-tol))
       (check-true (> K bound) (format "K ~a bound ~a" K bound)))))
 
-(test-gpu "separable data without a penalty is accepted, fits every row, and is within the bound"
+(test-gpu "separable data without a penalty is fitted within the bound"
   (define c (separable-case "separable" 200 3 45))
   (define s (setting 'none 1.0 #f))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (define r (setting-fit c dt s))
-      (match-define (residual K _ bound) (residual-at c (fit-parts r) s 1e-4))
+      (match-define (residual K _ bound) (residual-at c (fit-parts r) s default-tol))
       (check-true (<= K bound) (format "K ~a bound ~a" K bound))
       (define z
         (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))
-      (check-equal? (map (lambda (zi) (if (> (car zi) 0) 1 0)) z) (lr-case-y c)))))
+      (check-equal? (map decision-label z) (lr-case-y c)))))

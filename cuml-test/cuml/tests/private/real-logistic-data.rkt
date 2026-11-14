@@ -10,10 +10,13 @@
          (only-in "linear-data.rkt" columns-of on-matrix)
          (only-in "linear-twin-data.rkt" decoded)
          (only-in "logistic-data.rkt"
+                  correct
                   cutoff-message
+                  default-tol
                   default-tol-cap
                   fit-parts
-                  gauged
+                  gauged-fit
+                  gauged-sklearn
                   lr-case
                   lr-case-X
                   lr-case-y
@@ -41,7 +44,6 @@
 (define float32-gap-bound 1e-2)
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
-(define default-tol 1e-4)
 
 (define (flonum-exact v)
   (inexact->exact (real->double-flonum v)))
@@ -89,23 +91,14 @@
                            #:tol (tight-tol dt)
                            #:max-iter tight-max-iter))
 
-(define (gauged-fit f)
-  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) f)
-  (gauged coef intercept))
-
-(define (gauged-sklearn theirs)
-  (gauged (hash-ref theirs 'coef) (hash-ref theirs 'intercept)))
-
-(define (correct predicted truth)
-  (for/sum ([p (in-list predicted)] [t (in-list truth)]) (if (equal? p t) 1 0)))
-
 (define (sklearn-labels set theirs)
   (define classes (list->vector (labelled-classes set)))
   (map (lambda (i) (vector-ref classes i)) (hash-ref theirs 'predict)))
 
 (define (check-optimum set dt s r)
   (match-define (struct* labelled ((case c))) set)
-  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) (fit-parts r))
+  (define parts (fit-parts r))
+  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
   (cond
     [(eq? dt 'float64)
      (match-define (residual K F _)
@@ -122,8 +115,10 @@
                  (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
     [else
      (define gap
-       (relative-gap (gauged-fit (fit-parts r)) (gauged-fit (fit-parts (tight-fit set 'float64 s)))))
+       (relative-gap (gauged-fit parts) (gauged-fit (fit-parts (tight-fit set 'float64 s)))))
      (check-true (<= gap float32-gap-bound) (format "gap to the float64 fit ~a" gap))]))
+
+(struct asked (setting tol) #:transparent)
 
 (define (check-sklearn-optimum set dt settings)
   (match-define (struct* labelled ((case c) [labels labels])) set)
@@ -131,18 +126,18 @@
     (eq? (setting-penalty s) 'l2))
   (define (tight? s)
     (and (eq? dt 'float64) (l2? s)))
-  (define asked
+  (define keys
     (for*/list ([s (in-list settings)]
                 [tol (in-list (if (tight? s)
                                   (list default-tol (tight-tol 'float64))
                                   (list default-tol)))])
-      (cons s tol)))
+      (asked s tol)))
+  (define (request key)
+    (match-define (asked s tol) key)
+    (setting-twin "sklearn-fit" c 'float64 s #:tol tol))
   (define answers
-    (for/hash ([key (in-list asked)]
-               [theirs (in-list
-                        (logistic-twin-results
-                         (for/list ([key (in-list asked)])
-                           (setting-twin "sklearn-fit" c 'float64 (car key) #:tol (cdr key)))))])
+    (for/hash ([key (in-list keys)]
+               [theirs (in-list (logistic-twin-results (map request keys)))])
       (values key theirs)))
   (for ([s (in-list settings)])
     (test-case (format "~a ~a" dt (setting-penalty s))
@@ -151,10 +146,10 @@
       (when (tight? s)
         (define gap
           (relative-gap (gauged-fit (fit-parts r))
-                        (gauged-sklearn (hash-ref answers (cons s (tight-tol 'float64))))))
+                        (gauged-sklearn (hash-ref answers (asked s (tight-tol 'float64))))))
         (check-true (<= gap sklearn-gap-bound) (format "coef gap to sklearn ~a" gap)))
       (define ours (correct (logistic-regression-predict r (on-matrix (lr-case-X c) dt)) labels))
-      (define sklearn (correct (sklearn-labels set (hash-ref answers (cons s default-tol))) labels))
+      (define sklearn (correct (sklearn-labels set (hash-ref answers (asked s default-tol))) labels))
       (check-true (<= (abs (- ours sklearn)) row-slack)
                   (format "correct ~a, sklearn ~a" ours sklearn)))))
 

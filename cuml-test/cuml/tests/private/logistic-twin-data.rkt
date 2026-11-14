@@ -1,9 +1,11 @@
 #lang racket/base
 
 (require racket/runtime-path
+         (only-in racket/list append*)
          (only-in threading ~>)
          (only-in "linear-twin-data.rkt" bits-of decoded twin-results)
          (only-in "logistic-data.rkt"
+                  default-tol
                   lr-case-w
                   lr-case-X
                   lr-case-y
@@ -12,10 +14,13 @@
                   setting-l1-ratio
                   setting-penalty))
 
-(provide logistic-twin
+(provide (struct-out twin-trial)
+         logistic-twin
          logistic-twin-results
          setting-twin
          their-fit)
+
+(struct twin-trial (dt case setting fit-intercept))
 
 (define-runtime-path logistic-twin-script "../python/logistic_regression_twin.py")
 
@@ -26,11 +31,11 @@
                        #:C [C 1.0]
                        #:l1-ratio [ratio #f]
                        #:fit-intercept [fi #t]
-                       #:tol [tol 1e-4]
+                       #:tol [tol default-tol]
                        #:max-iter [max-iter 1000])
   (hasheq 'op op
           'dtype (symbol->string dt)
-          'X (bits-of dt (~> c lr-case-X (apply append _) (map exact->inexact _)))
+          'X (bits-of dt (~> c lr-case-X append* (map exact->inexact _)))
           'y (lr-case-y c)
           'w (if (lr-case-w c)
                  (bits-of dt (map exact->inexact (lr-case-w c)))
@@ -42,7 +47,13 @@
           'tol tol
           'max_iter max-iter))
 
-(define (setting-twin op c dt s #:fit-intercept [fi #t] #:tol [tol 1e-4] #:max-iter [max-iter 1000])
+(define (setting-twin op
+                      c
+                      dt
+                      s
+                      #:fit-intercept [fi #t]
+                      #:tol [tol default-tol]
+                      #:max-iter [max-iter 1000])
   (logistic-twin op
                  c
                  dt

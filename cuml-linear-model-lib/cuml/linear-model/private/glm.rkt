@@ -9,15 +9,18 @@
 
 (provide alpha-value/who
          bounded-count/who
+         flag/who
          glm-predict/who
          intercept-flag/who
          real-value/who)
 
-(define/who (intercept-flag who fit-intercept)
-  (match fit-intercept
+(define/who (flag who key v)
+  (match v
     [#t 1]
     [#f 0]
-    [v (logic-error "~a: fit-intercept: expected #t or #f, got ~e" who v)]))
+    [_ (logic-error "~a: ~a: expected #t or #f, got ~e" who key v)]))
+
+(define/who (intercept-flag who fit-intercept) (flag/who who 'fit-intercept fit-intercept))
 
 (define/who (real-value who key v)
   (if (real? v)

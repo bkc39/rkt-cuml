@@ -9,6 +9,7 @@
          (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/logistic-data.rkt" scaled-rows unequal-weights-message)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
@@ -18,10 +19,6 @@
 (define one-iteration-cutoff
   (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
                          "after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter or tol$")))
-
-(define (scaled rows factor)
-  (for/list ([r (in-list rows)])
-    (map (lambda (v) (* v factor)) r)))
 
 (define (overflowing rows)
   (define huge (* 3/2 (expt 2 1023)))
@@ -82,7 +79,7 @@
         "tol: expected a nonnegative finite real, got +nan.0"
         (lambda () (go X y #:tol +nan.0)))
    (row "penalty-normalized"
-        "penalty-normalized: expected a boolean, got 1"
+        "penalty-normalized: expected #t or #f, got 1"
         (lambda () (go X y #:penalty-normalized 1)))
    (row
     "class-weight kind"
@@ -141,17 +138,14 @@
         "y: class 1 has no weight"
         (lambda () (go X y #:sample-weight (on-vector '(1 0 1 0 0 1)))))
    (row "unequal weights with three classes"
-        (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
-                       "(cuML's softmax ignores them); got unequal weights")
+        unequal-weights-message
         (lambda ()
           (go X (on-vector '(0 1 2 0 1 2) 'int32) #:sample-weight (on-vector '(1 2 1 1 1 1)))))
    (row "balanced weights with three unequal classes"
-        (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
-                       "(cuML's softmax ignores them); got unequal weights")
+        unequal-weights-message
         (lambda () (go X (on-vector '(0 1 2 0 1 1) 'int32) #:class-weight 'balanced)))
    (row "uniform balanced weights with three unequal classes"
-        (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
-                       "(cuML's softmax ignores them); got unequal weights")
+        unequal-weights-message
         (lambda ()
           (go X
               (on-vector '(0 1 2 0 1 1) 'int32)
@@ -163,20 +157,20 @@
         (lambda () (go (on-matrix (overflowing grid)) y)))
    (row "a staged penalty outside float64"
         "C: the penalty at X's scale 2^500 is outside the float64 range"
-        (lambda () (go (on-matrix (scaled grid (expt 2 -500))) y #:C 1e-300)))
+        (lambda () (go (on-matrix (scaled-rows grid (expt 2 -500))) y #:C 1e-300)))
    (row "a staged penalty outside float32"
         "C: the penalty at X's scale 2^66 is outside the float32 range"
-        (lambda () (go (on-matrix (scaled grid (expt 2 -66)) 'float32) y)))
+        (lambda () (go (on-matrix (scaled-rows grid (expt 2 -66)) 'float32) y)))
    (row "a staged penalty beyond what float32's solver resolves"
         #rx"^C: the penalty at X's scale 2\\^4[0-9] is outside the float32 range$"
-        (lambda () (go (on-matrix (scaled grid (expt 2 -40)) 'float32) y)))
+        (lambda () (go (on-matrix (scaled-rows grid (expt 2 -40)) 'float32) y)))
    (row "a staged penalty beyond what float64's solver resolves"
         #rx"^C: the penalty at X's scale 2\\^6[0-9] is outside the float64 range$"
-        (lambda () (go (on-matrix (scaled grid (expt 2 -60))) y)))
+        (lambda () (go (on-matrix (scaled-rows grid (expt 2 -60))) y)))
    (row "a coefficient beyond float32 once unstaged"
         "X: a coefficient exceeds the float32 range"
         (lambda ()
-          (go (on-matrix (scaled '((1 0) (0 1) (2 1) (3 0) (5 1) (4 0)) (expt 2 -124)) 'float32)
+          (go (on-matrix (scaled-rows '((1 0) (0 1) (2 1) (3 0) (5 1) (4 0)) (expt 2 -124)) 'float32)
               (on-vector '(0 0 0 1 1 1) 'int32)
               #:penalty 'none)))
    (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))))

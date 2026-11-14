@@ -5,7 +5,7 @@
          (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
          (only-in cuml/core/private/logic-error logic-error)
-         (only-in racket/list remove-duplicates)
+         (only-in racket/list filter-not remove-duplicates)
          (only-in racket/match match match-define struct*)
          (only-in raft
                   current-device-resources
@@ -16,7 +16,7 @@
                   list->device-vector
                   shape)
          (only-in raft/unsafe deposit->list)
-         (only-in "glm.rkt" bounded-count/who intercept-flag/who)
+         (only-in "glm.rkt" bounded-count/who flag/who intercept-flag/who)
          (only-in "native.rkt"
                   cuml-linear-model-label-encode-job
                   cuml-linear-model-logistic-regression-apply-job
@@ -35,7 +35,7 @@
          logistic-regression-predict-proba/who
          logistic-regression-predict/who)
 
-(struct logistic-regression-result (coef intercept classes label-type n-iter)
+(struct logistic-regression-result (coef intercept classes label-kind n-iter)
   #:property prop:label-codes
   (lambda (who result y resources) (label-codes who result y resources)))
 
@@ -59,7 +59,12 @@
 
 (define label-dtypes '(int32 int64 float32 float64))
 
-(struct label-kind (member? <? =? key unified?))
+(struct label-kind ())
+(struct list-kind label-kind (member? <? =? key unified?))
+(struct device-kind label-kind (dtype))
+
+(define (key-of kind v #:unify? [unify? #f])
+  ((list-kind-key kind) unify? v))
 
 (define (real-key unify? v)
   (define u
@@ -69,39 +74,37 @@
   (and (integer? u) (inexact->exact u)))
 
 (define real-labels
-  (label-kind real?
+  (list-kind real?
               <
               =
               (lambda (unify? v) (and (real? v) (real-key unify? v)))
               (lambda (vs) (ormap inexact? vs))))
 
 (define (named-labels member? <?)
-  (label-kind member? <? equal? (lambda (_unify? v) v) (lambda (_vs) #f)))
+  (list-kind member? <? equal? (lambda (_unify? v) v) (lambda (_vs) #f)))
 
 (define label-kinds
   (list real-labels (named-labels string? string<?) (named-labels symbol? symbol<?)))
 
-(define (kind-of v)
+(define (list-kind-of v)
   (for/first ([kind (in-list label-kinds)]
-              #:when ((label-kind-member? kind) v))
+              #:when ((list-kind-member? kind) v))
     kind))
 
 (define (label-table kind classes)
   (for/hash ([c (in-list classes)]
              [i (in-naturals)])
-    (values ((label-kind-key kind) #f c) i)))
+    (values (key-of kind c) i)))
 
-(define (host-kind who y)
+(define (y-kind who y)
   (match y
     [(? device-vector?)
      (if (memq (dtype y) label-dtypes)
-         #f
+         (device-kind (dtype y))
          (y-refusal who y))]
-    [(cons first _)
-     #:when (kind-of first)
-     (define kind (kind-of first))
+    [(cons (and first (app list-kind-of (? values kind))) _)
      (for ([v (in-list y)]
-           #:unless ((label-kind-member? kind) v))
+           #:unless ((list-kind-member? kind) v))
        (logic-error "~a: y: expected labels of one kind (reals, strings or symbols), got ~e and ~e"
                     who
                     first
@@ -141,12 +144,6 @@
   (if (and (real? tol) (>= tol 0) (< tol +inf.0))
       (real->double-flonum tol)
       (logic-error "~a: tol: expected a nonnegative finite real, got ~e" who tol)))
-
-(define (flag-value who key v)
-  (match v
-    [#t 1]
-    [#f 0]
-    [_ (logic-error "~a: ~a: expected a boolean, got ~e" who key v)]))
 
 (define (class-weight-mode who cw)
   (match cw
@@ -189,54 +186,63 @@
                (bounded-count/who who 'linesearch-max-iter (ref 'linesearch-max-iter))
                (bounded-count/who who 'lbfgs-memory (ref 'lbfgs-memory))
                (tol-value who (ref 'tol))
-               (flag-value who 'penalty-normalized (ref 'penalty-normalized))
+               (flag/who who 'penalty-normalized (ref 'penalty-normalized))
                (class-weight-mode who (ref 'class-weight))))
 
-(define (fit-job who resources X y w class-weight out settings)
-  (match-define (qn-settings penalty C ratio flag iterations searches memory tol normalized mode)
+(define (fit-job who resources X y w weights out settings)
+  (match-define (struct* qn-settings
+                         ([penalty penalty]
+                          [C C]
+                          [l1-ratio l1-ratio]
+                          [fit-intercept fit-intercept]
+                          [max-iter max-iter]
+                          [linesearch-max-iter linesearch-max-iter]
+                          [lbfgs-memory lbfgs-memory]
+                          [tol tol]
+                          [normalized normalized]
+                          [class-weight class-weight]))
     settings)
   (cuml-linear-model-logistic-regression-fit-job who
                                                  resources
                                                  X
                                                  y
                                                  w
-                                                 class-weight
+                                                 weights
                                                  out
                                                  penalty
                                                  C
-                                                 ratio
+                                                 l1-ratio
                                                  tol
-                                                 iterations
-                                                 searches
-                                                 memory
-                                                 flag
+                                                 max-iter
+                                                 linesearch-max-iter
+                                                 lbfgs-memory
+                                                 fit-intercept
                                                  normalized
-                                                 mode))
+                                                 class-weight))
 
 (define (host-labels who kind y)
-  (define unify? ((label-kind-unified? kind) y))
+  (define unify? ((list-kind-unified? kind) y))
   (define keys
     (for/list ([v (in-list y)])
-      (or ((label-kind-key kind) unify? v)
+      (or (key-of kind v #:unify? unify?)
           (logic-error "~a: y: expected integral class labels, got ~e" who v))))
-  (define sorted (sort (remove-duplicates keys) (label-kind-<? kind)))
+  (define sorted (sort (remove-duplicates keys) (list-kind-<? kind)))
   (define table (label-table kind sorted))
   (values (if unify?
               (map exact->inexact sorted)
               sorted)
-          (for/list ([key (in-list keys)])
-            (hash-ref table key))))
+          (map (lambda (key) (hash-ref table key)) keys)))
 
 (define (host-weights who kind classes cw)
-  (define (key-of c)
+  (define (weight-key c)
     (for/first ([k (in-hash-keys cw)]
-                #:when (and ((label-kind-member? kind) k) ((label-kind-=? kind) k c)))
+                #:when (and ((list-kind-member? kind) k) ((list-kind-=? kind) k c)))
       k))
-  (define missing (filter (lambda (c) (not (key-of c))) classes))
+  (define missing (filter-not weight-key classes))
   (when (and (pair? missing) (not (= (- (length classes) (length missing)) (hash-count cw))))
     (logic-error "~a: class-weight: classes ~s are not in class-weight" who missing))
   (for/list ([c (in-list classes)])
-    (define k (key-of c))
+    (define k (weight-key c))
     (if k
         (real->double-flonum (hash-ref cw k))
         1.0)))
@@ -248,13 +254,24 @@
       v))
   (sort (remove-duplicates integral =) <))
 
-(define (class-weight-view who kind classes y cw resources)
+(define (class-weight-view who kind classes cw resources)
   (and (hash? cw)
-       (list->device-vector (if kind
-                                (host-weights who kind classes cw)
-                                (host-weights who real-labels (integral-classes y) cw))
-                            #:dtype 'float64
-                            #:resources resources)))
+       (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources)))
+
+(define (fit-labels who kind y cw resources)
+  (match kind
+    [(? device-kind?)
+     (values y #f (class-weight-view who real-labels (integral-classes y) cw resources))]
+    [_
+     (define-values (classes codes) (host-labels who kind y))
+     (values (list->device-vector codes #:dtype 'int32 #:resources resources)
+             classes
+             (class-weight-view who kind classes cw resources))]))
+
+(define (class-view kind classes resources)
+  (match kind
+    [(device-kind dt) (list->device-vector classes #:dtype dt #:resources resources)]
+    [_ #f]))
 
 (define/who (logistic-regression-fit who
                                      X
@@ -264,27 +281,17 @@
                                      #:resources [resources (current-device-resources)])
   (unless (device-matrix? X)
     (logic-error "~a: X: expected a device-matrix, got ~e" who X))
-  (define kind (host-kind who y))
+  (define kind (y-kind who y))
   (define settings (qn-settings/who who (bound-params logistic-regression-params)))
   (define w (weight-view who sample-weight))
-  (define-values (classes codes)
-    (if kind
-        (host-labels who kind y)
-        (values #f #f)))
-  (define y-view
-    (if kind
-        (list->device-vector codes #:dtype 'int32 #:resources resources)
-        y))
-  (define weights (class-weight-view who kind classes y class-weight resources))
+  (define-values (y-view classes weights) (fit-labels who kind y class-weight resources))
   (define out (deposit-for/who who resources))
   (define n-iter (fit-job who resources X y-view w weights out settings))
   (match-define (list coef intercept device-classes) (deposit->list out))
   (logistic-regression-result coef
                               intercept
                               (or classes (device-vector->list device-classes))
-                              (if kind
-                                  'list
-                                  (dtype y))
+                              kind
                               n-iter))
 
 (define (checked-result who result X)
@@ -304,19 +311,16 @@
   (checked-result who result X)
   (match-define (struct*
                  logistic-regression-result
-                 ([coef coef] [intercept intercept] [classes classes] [label-type label-type]))
+                 ([coef coef] [intercept intercept] [classes classes] [label-kind kind]))
     result)
-  (define class-view
-    (and (eq? mode 'labels)
-         (not (eq? label-type 'list))
-         (list->device-vector classes #:dtype label-type #:resources resources)))
+  (define classes-view (and (eq? mode 'labels) (class-view kind classes resources)))
   (define out (deposit-for/who who resources))
   (cuml-linear-model-logistic-regression-apply-job who
                                                    resources
                                                    X
                                                    coef
                                                    intercept
-                                                   class-view
+                                                   classes-view
                                                    (apply-mode mode)
                                                    out)
   (match-define (list v) (deposit->list out))
@@ -334,10 +338,9 @@
                                          #:resources [resources (current-device-resources)])
   (define labels (applied who result X 'labels resources))
   (match result
-    [(struct* logistic-regression-result ([classes classes] [label-type 'list]))
+    [(struct* logistic-regression-result ([classes classes] [label-kind (? list-kind?)]))
      (define table (list->vector classes))
-     (for/list ([c (in-list (device-vector->list labels))])
-       (vector-ref table c))]
+     (map (lambda (c) (vector-ref table c)) (device-vector->list labels))]
     [_ labels]))
 
 (define/who (logistic-regression-predict-proba who
@@ -353,21 +356,16 @@
   (applied who result X 'log-proba resources))
 
 (define (label-codes who result y resources)
-  (match result
-    [(struct* logistic-regression-result ([classes classes] [label-type 'list]))
-     (define kind (kind-of (car classes)))
-     (define unify? ((label-kind-unified? kind) classes))
+  (match-define (struct* logistic-regression-result ([classes classes] [label-kind kind])) result)
+  (match kind
+    [(? device-kind?)
+     (define out (deposit-for/who who resources))
+     (cuml-linear-model-label-encode-job who resources y (class-view kind classes resources) out)
+     (match-define (list codes) (deposit->list out))
+     codes]
+    [_
+     (define unify? ((list-kind-unified? kind) classes))
      (define table (label-table kind classes))
      (define (code v)
-       (hash-ref table ((label-kind-key kind) unify? v) -1))
-     (list->device-vector (map code y) #:dtype 'int32 #:resources resources)]
-    [(struct* logistic-regression-result ([classes classes] [label-type label-type]))
-     (define out (deposit-for/who who resources))
-     (cuml-linear-model-label-encode-job
-      who
-      resources
-      y
-      (list->device-vector classes #:dtype label-type #:resources resources)
-      out)
-     (match-define (list codes) (deposit->list out))
-     codes]))
+       (hash-ref table (key-of kind v #:unify? unify?) -1))
+     (list->device-vector (map code y) #:dtype 'int32 #:resources resources)]))

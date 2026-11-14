@@ -12,6 +12,7 @@
          (only-in "private/linear-twin-data.rkt" decoded)
          (only-in "private/logistic-data.rkt"
                   blob-case
+                  default-tol
                   fit-flat
                   fit-parts
                   flat-matrix
@@ -27,10 +28,12 @@
                   setting-penalty
                   tight-max-iter
                   tight-tol)
-         (only-in "private/logistic-twin-data.rkt" logistic-twin-results setting-twin their-fit)
+         (only-in "private/logistic-twin-data.rkt"
+                  logistic-twin-results
+                  setting-twin
+                  their-fit
+                  twin-trial)
          (only-in "private/python-env.rkt" test-twin))
-
-(struct row (dt case setting fit-intercept))
 
 (define cases
   (list (blob-case "binary" 150 4 2 21)
@@ -42,11 +45,11 @@
               [c (in-list cases)]
               [s (in-list penalty-settings)]
               [fi (in-list '(#t #f))])
-    (row dt c s fi)))
+    (twin-trial dt c s fi)))
 
-(define (request r #:op [op "cuml-apply"])
-  (match-define (row dt c s fi) r)
-  (setting-twin op c dt s #:fit-intercept fi))
+(define (request r #:op [op "cuml-apply"] #:tol [tol default-tol] #:max-iter [max-iter 1000])
+  (match-define (twin-trial dt c s fi) r)
+  (setting-twin op c dt s #:fit-intercept fi #:tol tol #:max-iter max-iter))
 
 (define summing-to-n
   (let* ([c (blob-case "binary weighted" 150 4 2 24 #:weighted? #t)]
@@ -60,24 +63,19 @@
 (define (weighted-gap-bound dt)
   (by-dtype dt 0 (min (* 64 1e-6) 3e-2)))
 
-(define penalised (filter (lambda (s) (not (eq? (setting-penalty s) 'none))) penalty-settings))
+(define penalised (filter-not (lambda (s) (eq? (setting-penalty s) 'none)) penalty-settings))
 
 (test-twin "weights summing to n fit as Python cuML's in float32 and near its optimum in float64"
   (define grid
     (for*/list ([dt (in-list dtypes)]
                 [s (in-list penalised)])
-      (cons dt s)))
-  (define requests
-    (for/list ([g (in-list grid)])
-      (setting-twin "cuml-fit"
-                    summing-to-n
-                    (car g)
-                    (cdr g)
-                    #:tol (tight-tol (car g))
-                    #:max-iter tight-max-iter)))
+      (twin-trial dt summing-to-n s #t)))
+  (define (tight-request g)
+    (match-define (twin-trial dt _ _ _) g)
+    (request g #:op "cuml-fit" #:tol (tight-tol dt) #:max-iter tight-max-iter))
   (for ([g (in-list grid)]
-        [theirs (in-list (logistic-twin-results requests))])
-    (match-define (cons dt s) g)
+        [theirs (in-list (logistic-twin-results (map tight-request grid)))])
+    (match-define (twin-trial dt _ s _) g)
     (test-case (format "~a ~a" dt (setting-penalty s))
       (define ours
         (fit-parts (setting-fit summing-to-n dt s #:tol (tight-tol dt) #:max-iter tight-max-iter)))
@@ -98,22 +96,22 @@
                 (* (+ k 3) t (+ 1 (abs (log t)))))))))
 
 (define (repeatable? r)
-  (match-define (row dt c s _) r)
+  (match-define (twin-trial dt c s _) r)
   (not (and (eq? dt 'float32) (> (classes-of c) 2) (memq (setting-penalty s) '(l1 elasticnet)))))
 
 (define (row-fit r)
-  (match-define (row dt c s fi) r)
+  (match-define (twin-trial dt c s fi) r)
   (setting-fit c dt s #:fit-intercept fi))
 
 (define (row-name r)
-  (match-define (row dt c s fi) r)
+  (match-define (twin-trial dt c s fi) r)
   (format "~a ~a ~a ~a" dt (lr-case-name c) (setting-penalty s) fi))
 
-(test-twin "the fit, decision and predict are Python cuML's bit for bit, and probabilities near its"
+(test-twin "a repeatable fit is Python cuML's bit for bit"
   (define kept (filter repeatable? rows))
   (for ([r (in-list kept)]
         [theirs (in-list (logistic-twin-results (map request kept)))])
-    (match-define (row dt c _ _) r)
+    (match-define (twin-trial dt c _ _) r)
     (test-case (row-name r)
       (define X (on-matrix (lr-case-X c) dt))
       (define fitted (row-fit r))
@@ -142,7 +140,7 @@
   (for ([r (in-list kept)]
         [theirs (in-list (logistic-twin-results (map (lambda (k) (request k #:op "cuml-fit"))
                                                      kept)))])
-    (match-define (row dt _ _ _) r)
+    (match-define (twin-trial dt _ _ _) r)
     (test-case (row-name r)
       (define gap (relative-gap (fit-flat (fit-parts (row-fit r))) (fit-flat (their-fit theirs dt))))
       (check-true (<= gap owl-qn-gap-bound) (format "gap ~a" gap)))))

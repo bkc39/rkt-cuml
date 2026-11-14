@@ -34,6 +34,20 @@
 (define binary (blob-case "binary" 80 3 2 11 #:weighted? #t))
 (define three (blob-case "three classes" 90 3 3 12))
 
+(define (zeroed-every k)
+  (for/list ([w (in-list (lr-case-w binary))]
+             [i (in-naturals)])
+    (if (zero? (modulo i k)) 0 w)))
+
+(define (penalty-scale a penalty)
+  (case penalty
+    [(l2) (expt 4 (- a))]
+    [(l1) (expt 2 (- a))]
+    [else 1]))
+
+(define (count-of ys c)
+  (for/sum ([y (in-list ys)]) (if (= y c) 1 0)))
+
 (test-gpu "a constant or zero column gets coef 0 and leaves the rest bitwise"
   (for* ([c (in-list (list binary three))]
          [dt (in-list dtypes)]
@@ -42,16 +56,16 @@
     (test-case (format "~a ~a ~a" (lr-case-name c) dt column)
       (define base (fit-parts (case-fit c dt #:fit-intercept fi)))
       (define wide (fit-parts (case-fit (with-column c value) dt #:fit-intercept fi)))
-      (define firsts (map car (lr-fit-coef wide)))
-      (define rests (map cdr (lr-fit-coef wide)))
+      (define-values (firsts rests)
+        (for/lists (firsts rests)
+                   ([row (in-list (lr-fit-coef wide))])
+          (match-define (cons first rest) row)
+          (values first rest)))
       (check-true (andmap zero? firsts))
       (check-equal? (struct-copy lr-fit wide [coef rests]) base))))
 
 (test-gpu "rows of weight 0 fit as deleted rows, bitwise"
-  (define zeroed
-    (for/list ([w (in-list (lr-case-w binary))]
-               [i (in-naturals)])
-      (if (zero? (modulo i 3)) 0 w)))
+  (define zeroed (zeroed-every 3))
   (define kept
     (for/list ([w (in-list zeroed)])
       (positive? w)))
@@ -94,11 +108,7 @@
          [penalty (in-list '(l2 l1 none))])
     (test-case (format "~a ~a ~a" dt a penalty)
       (define base (scaled-case binary (expt 2 (if (positive? a) 10 -10))))
-      (define C
-        (case penalty
-          [(l2) (expt 4 (- a))]
-          [(l1) (expt 2 (- a))]
-          [else 1]))
+      (define C (penalty-scale a penalty))
       (define plain (fit-parts (case-fit base dt #:penalty penalty)))
       (define moved
         (fit-parts
@@ -113,7 +123,7 @@
     (for/hash ([c (in-list classes)])
       (values c
               (exact->inexact
-               (/ n (* (length classes) (for/sum ([y (in-list ys)]) (if (= y c) 1 0))))))))
+               (/ n (* (length classes) (count-of ys c)))))))
   (define unweighted (lr-case "unweighted" (lr-case-X binary) ys #f))
   (for ([dt (in-list dtypes)])
     (check-equal? (fit-parts (case-fit unweighted dt #:class-weight 'balanced))
@@ -129,7 +139,7 @@
     (define r (logistic-regression-fit (on-matrix X dt) (on-vector labels 'int32)))
     (define counts
       (for/list ([c (in-list (sort (remove-duplicates labels) <))])
-        (for/sum ([y (in-list labels)]) (if (= y c) 1 0))))
+        (count-of labels c)))
     (define expected
       (match counts
         [(list negative positive) (list (log (/ positive negative)))]
@@ -144,10 +154,7 @@
       (check-true (<= (abs (- b e)) (* intercept-ulps u (max 1 (abs e))))))))
 
 (test-gpu "the fit leaves X, y and the weights as they were"
-  (define zeroed
-    (for/list ([w (in-list (lr-case-w binary))]
-               [i (in-naturals)])
-      (if (zero? (modulo i 4)) 0 w)))
+  (define zeroed (zeroed-every 4))
   (define staged (scaled-case binary (expt 2 20)))
   (for ([dt (in-list dtypes)])
     (define X (on-matrix (lr-case-X staged) dt))
@@ -206,11 +213,7 @@
          [a (in-list '(3 -3))]
          [penalty (in-list '(l2 l1 none))])
     (test-case (format "~a ~a ~a" dt a penalty)
-      (define C
-        (case penalty
-          [(l2) (expt 4 (- a))]
-          [(l1) (expt 2 (- a))]
-          [else 1]))
+      (define C (penalty-scale a penalty))
       (define tight (tight-tol dt))
       (define plain
         (fit-parts (case-fit binary dt #:penalty penalty #:tol tight #:max-iter tight-max-iter)))
