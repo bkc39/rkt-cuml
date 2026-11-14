@@ -277,6 +277,6 @@
                         (lambda () (relabelled fitted kind))))))
     (test-case "a copied label kind still answers in labels"
       (define copied (relabelled fitted (logistic-regression-result-label-kind fitted)))
-      (define labels (host (logistic-regression-predict copied X)))
-      (check-equal? labels (host (logistic-regression-predict fitted X)))
-      (check-not-false (andmap (lambda (l) (member l (host y))) labels)))))
+      (define predicted (host (logistic-regression-predict copied X)))
+      (check-equal? predicted (host (logistic-regression-predict fitted X)))
+      (check-not-false (andmap (lambda (l) (member l (host y))) predicted)))))

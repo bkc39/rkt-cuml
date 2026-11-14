@@ -79,8 +79,7 @@
 (define (column-centres X w)
   (define total (apply + w))
   (for/list ([column (in-list (columns-of X))])
-    (/ (for/sum ([x (in-list column)] [wi (in-list w)])
-                (* (inexact->exact wi) (inexact->exact x)))
+    (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* (inexact->exact wi) (inexact->exact x)))
        (inexact->exact total))))
 
 (define (column-magnitudes X w)

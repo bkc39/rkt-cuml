@@ -138,7 +138,8 @@
       (if (string? r)
           (check-regexp-match short-cutoff-without-intercept r)
           (check-false
-           (andmap zero? (apply append (device-matrix->list* (logistic-regression-result-coef r)))))))))
+           (andmap zero?
+                   (apply append (device-matrix->list* (logistic-regression-result-coef r)))))))))
 
 (define (scale-data m)
   (define uniform (uniform-source 11))

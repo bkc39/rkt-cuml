@@ -36,12 +36,11 @@
          logistic-regression-predict/who)
 
 (struct logistic-regression-result (coef intercept classes label-kind n-iter)
-  #:guard (lambda (coef intercept classes kind n-iter name)
-            (if (label-kind? kind)
-                (values coef intercept classes kind n-iter)
-                (logic-error "~a: label-kind: expected the label kind of a fitted result, got ~e"
-                             name
-                             kind)))
+  #:guard
+  (lambda (coef intercept classes kind n-iter name)
+    (if (label-kind? kind)
+        (values coef intercept classes kind n-iter)
+        (logic-error "~a: label-kind: expected the label kind of a fitted result, got ~e" name kind)))
   #:property prop:label-codes
   (lambda (who result y resources) (label-codes who result y resources)))
 

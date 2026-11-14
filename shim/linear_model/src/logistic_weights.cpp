@@ -120,8 +120,14 @@ std::optional<weighted_rows> weighted_rows_of(
   }
   const double scale =
       static_cast<double>(m) / weight_sum(eff.data(), rows, stream);
-  return weighted_rows{std::move(eff), std::move(index), rows, uniform, scale,
-                       w != nullptr};
+  return weighted_rows{
+      .weights = std::move(eff),
+      .index = std::move(index),
+      .rows = rows,
+      .uniform = uniform,
+      .scale = scale,
+      .sampled = w != nullptr,
+  };
 }
 
 #define CUMLRKT_LOGISTIC_WEIGHTS(T, L)                                       \

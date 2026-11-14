@@ -151,8 +151,8 @@ double resolved_l2(bool fit_intercept) {
 }
 
 template <typename T>
-penalties staged_penalties(penalties p, int s, const fit_options& o,
-                           int64_t m, bool weighted) {
+penalties staged_penalties(penalties p, int s, const fit_options& o, int64_t m,
+                           bool weighted) {
   const penalties staged{std::ldexp(p.l1, s), std::ldexp(p.l2, 2 * s)};
   const auto lost = [](double before, double after) {
     const auto stored = static_cast<T>(after);
