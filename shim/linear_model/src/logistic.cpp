@@ -222,6 +222,14 @@ void require_staged_columns(const column_stats& s, int shift) {
   }
 }
 
+const char* cutoff_advice(const solve_check& c, const fit_options& o) {
+  if (c.n_iter >= o.max_iter) {
+    return "raise max-iter";
+  }
+  return c.shape.fit_intercept ? "lower tol, or centre X"
+                               : "lower tol, centre X, or fit an intercept";
+}
+
 template <typename T>
 void require_resolved(const residual_sums& sums, const std::vector<T>& params,
                       const fit_options& options, const solve_check& c) {
@@ -251,15 +259,11 @@ void require_resolved(const residual_sums& sums, const std::vector<T>& params,
   const double tau = std::max(options.tol, tolerance_floor);
   const double bound = residual_factor * tau * std::max(f, tau);
   if (!(worst <= bound)) {
-    const char* advice = c.n_iter >= options.max_iter ? "raise max-iter"
-                         : c.shape.fit_intercept
-                             ? "lower tol, or centre X"
-                             : "lower tol, centre X, or fit an intercept";
     throw logic_error(std::format(
         "the solver stopped at first-order residual {} above the bound {} "
         "after {} iterations (max-iter {}, tol {}); {}",
         printed(worst), printed(bound), c.n_iter, options.max_iter,
-        printed(options.tol), advice));
+        printed(options.tol), cutoff_advice(c, options)));
   }
 }
 
