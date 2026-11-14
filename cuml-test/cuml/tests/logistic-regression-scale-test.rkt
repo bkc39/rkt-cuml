@@ -1,11 +1,14 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model logistic-regression-fit logistic-regression-result-coef)
+(require (only-in cuml/linear-model
+                  logistic-regression-fit
+                  logistic-regression-result-coef
+                  logistic-regression-result-intercept)
          (only-in racket/list make-list)
-         (only-in racket/match match-lambda)
+         (only-in racket/match match-define match-lambda)
          (only-in racket/math pi)
-         (only-in rackunit check-false check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in rackunit check-false check-regexp-match check-true test-case)
+         (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
          (only-in "private/linear-data.rkt" dtypes on-matrix on-vector)
@@ -17,6 +20,7 @@
                   lr-case-X
                   relative-gap)
          (only-in "private/logistic-newton.rkt" newton-coef)
+         (only-in "private/logistic-oracle.rkt" residual residual-of)
          (only-in "private/real-logistic-data.rkt" labelled-case labelled-labels labelled-set))
 
 (define (offset-data n seed)
@@ -93,6 +97,36 @@
       (unless (string? r)
         (check-near r)))))
 
+(define short-cutoff-without-intercept
+  (regexp (string-append "^logistic-regression-fit: the solver stopped at first-order residual .* "
+                         "above the bound .* after [0-9]+ iterations \\(max-iter 1000, tol 1e-04\\); "
+                         "lower tol, centre X, or fit an intercept$")))
+
+(test-gpu "a cutoff short of max-iter without an intercept advises a lower tol, not a higher max-iter"
+  (for ([dt (in-list dtypes)])
+    (test-case (format "~a" dt)
+      (define-values (r _check-near) (offset-fit 1000.0 dt 'l2))
+      (check-true (and (string? r) (regexp-match? short-cutoff-without-intercept r)) r))))
+
+(test-case "without an intercept the oracle divides by the centred spread, as the shim's check"
+  (match-define (residual K _ _)
+    (residual-of '((1001.0) (999.0)) '(1 0) #f '((0.0)) '(0.0) #:penalty 'none #:fit-intercept #f))
+  (check-true (= K 1/2) (format "K ~a" K)))
+
+(test-gpu "without an intercept the oracle accepts what the shim's check accepts on an offset"
+  (define-values (X0 y) (offset-data offset-rows 9))
+  (define X (shifted X0 1000.0))
+  (define r (fit-or-message X y 'float64 #:fit-intercept #f #:tol 1e-6))
+  (match-define (residual K _ bound)
+    (residual-of X
+                 y
+                 #f
+                 (device-matrix->list* (logistic-regression-result-coef r))
+                 (device-vector->list (logistic-regression-result-intercept r))
+                 #:fit-intercept #f
+                 #:tol 1e-6))
+  (check-true (<= K bound) (format "K ~a bound ~a" K bound)))
+
 (test-gpu "iris on an offset of 1e4 without an intercept is never fitted as all zeros"
   (define iris (labelled-set 'iris "species" '()))
   (define X (shifted (map (lambda (r) (map exact->inexact r)) (lr-case-X (labelled-case iris))) 1e4))
@@ -101,9 +135,10 @@
       (define r
         (with-handlers ([exn:fail? exn-message])
           (logistic-regression-fit (on-matrix X dt) (labelled-labels iris) #:fit-intercept #f)))
-      (unless (string? r)
-        (check-false
-         (andmap zero? (apply append (device-matrix->list* (logistic-regression-result-coef r)))))))))
+      (if (string? r)
+          (check-regexp-match short-cutoff-without-intercept r)
+          (check-false
+           (andmap zero? (apply append (device-matrix->list* (logistic-regression-result-coef r)))))))))
 
 (define (scale-data m)
   (define uniform (uniform-source 11))

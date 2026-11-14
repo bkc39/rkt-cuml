@@ -9,12 +9,14 @@
                   bf-
                   bf/
                   bf<
+                  bf>
                   bigfloat->real
                   bf-precision
                   bfabs
                   bfexp
                   bflog1p
                   bfmax
+                  bfmin
                   bfsqrt)
          (only-in racket/list make-list)
          (only-in racket/match match)
@@ -28,6 +30,7 @@
 (define oracle-bits 128)
 (define tolerance-floor 1/10000)
 (define residual-factor 64)
+(define constant-spread 16)
 
 (define (bfsum xs)
   (apply bf+ 0.bf xs))
@@ -73,14 +76,20 @@
     ['elasticnet (values (inexact->exact ratio) (- 1 (inexact->exact ratio)))]
     ['none (values 0 0)]))
 
-(define (column-means X w fi)
+(define (column-centres X w)
   (define total (apply + w))
   (for/list ([column (in-list (columns-of X))])
-    (if fi
-        (/ (for/sum ([x (in-list column)] [wi (in-list w)])
-                    (* (inexact->exact wi) (inexact->exact x)))
-           (inexact->exact total))
-        0)))
+    (/ (for/sum ([x (in-list column)] [wi (in-list w)])
+                (* (inexact->exact wi) (inexact->exact x)))
+       (inexact->exact total))))
+
+(define (column-magnitudes X w)
+  (for/list ([column (in-list (columns-of X))])
+    (for/fold ([most 0])
+              ([x (in-list column)]
+               [wi (in-list w)]
+               #:when (positive? wi))
+      (max most (abs (inexact->exact x))))))
 
 (define (column-scales X w means)
   (define total (apply + w))
@@ -89,6 +98,22 @@
     (define square
       (/ (for/sum ([x (in-list column)] [wi (in-list w)]) (* wi (expt (- x mean) 2))) total))
     (and (positive? square) (bfsqrt (bf square)))))
+
+(define (unit-roundoff dt)
+  (match dt
+    ['float32 (expt 2 -24)]
+    ['float64 (expt 2 -53)]))
+
+(define (residual-spreads X w centres fi dt)
+  (define centred (column-scales X w centres))
+  (if fi
+      centred
+      (for/list ([c (in-list centred)]
+                 [rms (in-list (column-scales X w (make-list (length centres) 0)))]
+                 [most (in-list (column-magnitudes X w))])
+        (if (and c (bf> c (bf (* constant-spread (unit-roundoff dt) most))))
+            (bfmin c rms)
+            rms))))
 
 (define (loss-terms rows y weights W b)
   (for/fold ([loss 0.bf]
@@ -140,7 +165,8 @@
                      #:C [C 1.0]
                      #:l1-ratio [ratio #f]
                      #:fit-intercept [fi #t]
-                     #:tol [tol 1e-4])
+                     #:tol [tol 1e-4]
+                     #:dtype [dt 'float64])
   (parameterize ([bf-precision oracle-bits])
     (define weights (or w (make-list (length y) 1)))
     (define total (apply + weights))
@@ -149,8 +175,12 @@
       (loss-terms (exact-rows X) y weights W (map exact intercept)))
     (define-values (l1 l2) (penalty-terms penalty ratio C total))
     (define big-total (bf total))
-    (define means (column-means X weights fi))
-    (define sigma (column-scales X weights means))
+    (define centres (column-centres X weights))
+    (define means
+      (if fi
+          centres
+          (make-list (length centres) 0)))
+    (define sigma (residual-spreads X weights centres fi dt))
     (define-values (F worst)
       (for*/fold ([F (bf/ loss big-total)]
                   [worst (intercept-worst slope big-total fi)])
