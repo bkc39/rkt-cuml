@@ -66,6 +66,9 @@
            (lr-case-y c)
            (lr-case-w c)))
 
+(define (last-coef parts)
+  (map last (lr-fit-coef parts)))
+
 (define last-bits-message #rx"^logistic-regression-fit: X: column 3 varies only in its last bits \\(spread .* of 5[.0-9]*\\); centre it$")
 
 (test-gpu "a column that varies only in its last bits is refused, naming it"
@@ -121,9 +124,6 @@
 
 (define (rounded dt v)
   (by-dtype dt (flsingle (real->double-flonum v)) (real->double-flonum v)))
-
-(define (last-coef parts)
-  (map last (lr-fit-coef parts)))
 
 (define (narrow-spread dt)
   (by-dtype dt (expt 2 -10) (expt 2 -20)))
