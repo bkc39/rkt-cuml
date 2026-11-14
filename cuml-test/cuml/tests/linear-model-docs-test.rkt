@@ -112,4 +112,7 @@
                text
                "the check bounds the first-order residual, not the distance to the optimum"))
   (check-false (string-contains? text "10⁻²"))
-  (check-true (string-contains? text "one that varies only in its last bits is refused: centre it")))
+  (check-true
+   (string-contains?
+    text
+    "with @racket[fit-intercept], one that varies only in its last bits is refused: centre it")))
