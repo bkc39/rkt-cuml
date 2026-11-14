@@ -97,10 +97,6 @@ struct qn_solution {
   int n_iter;
 };
 
-int64_t outputs_of(int64_t k) {
-  return k == 2 ? 1 : k;
-}
-
 penalties penalties_of(const fit_options& o) {
   const double strength = 1.0 / o.C;
   switch (o.penalty) {
@@ -444,20 +440,6 @@ int32_t fit_into(const raft::handle_t& handle, const fit_views& views,
 }
 
 }  // namespace
-
-void require_fit_codes(const fit_codes& codes) {
-  if (codes.penalty < CUML_LINEAR_MODEL_PENALTY_NONE ||
-      codes.penalty > CUML_LINEAR_MODEL_PENALTY_ELASTICNET) {
-    throw logic_error("penalty: expected 'l1, 'l2, 'elasticnet or 'none");
-  }
-  if ((codes.fit_intercept & ~1) != 0 || (codes.normalized & ~1) != 0) {
-    throw logic_error("fit-intercept: expected #t or #f");
-  }
-  if (codes.class_mode < CUML_LINEAR_MODEL_CLASS_WEIGHT_NONE ||
-      codes.class_mode > CUML_LINEAR_MODEL_CLASS_WEIGHT_GIVEN) {
-    throw logic_error("class-weight: expected #f, 'balanced or a hash");
-  }
-}
 
 int32_t fit(const raft::handle_t& handle, const fit_views& views,
             const fit_options& options, rr_deposit* out) {

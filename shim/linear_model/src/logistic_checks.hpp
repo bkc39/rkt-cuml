@@ -5,6 +5,7 @@
 #include <format>
 #include <rmm/cuda_stream_view.hpp>
 
+#include "cumlrkt/linear_model.h"
 #include "cumlrkt/rows.hpp"
 #include "cumlrkt/support.hpp"
 #include "logistic_fit.hpp"
@@ -42,6 +43,23 @@ inline void require_fit_bounds(const fit_options& o) {
   require_at_least("max-iter", o.max_iter, 1);
   require_at_least("linesearch-max-iter", o.linesearch_max_iter, 1);
   require_at_least("lbfgs-memory", o.lbfgs_memory, 1);
+}
+
+inline void require_fit_codes(const fit_codes& codes) {
+  if (codes.penalty < CUML_LINEAR_MODEL_PENALTY_NONE ||
+      codes.penalty > CUML_LINEAR_MODEL_PENALTY_ELASTICNET) {
+    throw logic_error("penalty: expected 'l1, 'l2, 'elasticnet or 'none");
+  }
+  if ((codes.fit_intercept & ~1) != 0) {
+    throw logic_error("fit-intercept: expected #t or #f");
+  }
+  if ((codes.normalized & ~1) != 0) {
+    throw logic_error("penalty-normalized: expected #t or #f");
+  }
+  if (codes.class_mode < CUML_LINEAR_MODEL_CLASS_WEIGHT_NONE ||
+      codes.class_mode > CUML_LINEAR_MODEL_CLASS_WEIGHT_GIVEN) {
+    throw logic_error("class-weight: expected #f, 'balanced or a hash");
+  }
 }
 
 }  // namespace cumlrkt::glm::logistic

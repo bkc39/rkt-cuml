@@ -136,6 +136,28 @@ TEST(LogisticOptions, EachOutOfRangeOptionIsRefused) {
   }
 }
 
+std::string codes_refusal(const cumlrkt::glm::logistic::fit_codes& codes) {
+  try {
+    cumlrkt::glm::logistic::require_fit_codes(codes);
+  } catch (const cumlrkt::logic_error& e) {
+    return e.what();
+  }
+  return "accepted";
+}
+
+TEST(LogisticOptions, EachFlagIsNamedInItsRefusal) {
+  using cumlrkt::glm::logistic::fit_codes;
+  const fit_codes base{
+      .penalty = 2, .fit_intercept = 1, .normalized = 1, .class_mode = 0};
+  EXPECT_EQ(codes_refusal(base), "accepted");
+  fit_codes intercept = base;
+  intercept.fit_intercept = 2;
+  EXPECT_EQ(codes_refusal(intercept), "fit-intercept: expected #t or #f");
+  fit_codes normalized = base;
+  normalized.normalized = 2;
+  EXPECT_EQ(codes_refusal(normalized), "penalty-normalized: expected #t or #f");
+}
+
 TEST(LogisticOptions, TheFitEntryRefusesThemBeforeTheSolver) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;

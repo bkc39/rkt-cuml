@@ -28,7 +28,7 @@ buffer<T> decision_of(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                       const matrix<T, int64_t>& coef, const T* intercept) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const int64_t outputs = coef.n;
-  const int64_t classes = outputs == 1 ? 2 : outputs;
+  const int64_t classes = classes_of(outputs);
   buffer<T> params = scratch<T>((x.d + 1) * outputs, stream);
   coef_to_params<T>(handle, coef.data, intercept, x.d, outputs, params.data());
   buffer<T> scores = scratch<T>(x.n * outputs, stream);
@@ -65,25 +65,25 @@ struct apply_views {
 };
 
 template <typename T>
+void codes_into(const raft::handle_t& handle, const buffer<T>& scores,
+                int64_t n, int64_t outputs, rr_deposit* out) {
+  buffer<int32_t> codes = scratch<int32_t>(n, stream_of(handle));
+  codes_of<T>(handle, scores.data(), n, outputs, codes.data());
+  deposit_rows(handle, out, std::move(codes), n, std::nullopt);
+}
+
+template <typename T>
 void labels_into(const raft::handle_t& handle, const rr_view* classes_view,
                  const buffer<T>& scores, int64_t n, int64_t outputs,
                  rr_deposit* out) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  if (classes_view == nullptr) {
-    buffer<int32_t> codes = scratch<int32_t>(n, stream);
-    codes_of<T>(handle, scores.data(), n, outputs, codes.data());
-    deposit_rows(handle, out, std::move(codes), n, std::nullopt);
-  } else {
-    on_class_labels(classes_view, "classes", [&](auto tag) {
-      using L = decltype(tag);
-      const L* classes = raftrkt::vector_data<L, int32_t>(
-          classes_view, "classes", outputs == 1 ? 2 : outputs);
-      buffer<L> labels = scratch<L>(n, stream);
-      labels_of<T, L>(handle, scores.data(), n, outputs, classes,
-                      labels.data());
-      deposit_rows(handle, out, std::move(labels), n, std::nullopt);
-    });
-  }
+  on_class_labels(classes_view, "classes", [&](auto tag) {
+    using L = decltype(tag);
+    const L* classes = raftrkt::vector_data<L, int32_t>(classes_view, "classes",
+                                                        classes_of(outputs));
+    buffer<L> labels = scratch<L>(n, stream_of(handle));
+    labels_of<T, L>(handle, scores.data(), n, outputs, classes, labels.data());
+    deposit_rows(handle, out, std::move(labels), n, std::nullopt);
+  });
 }
 
 template <typename T>
@@ -99,13 +99,17 @@ void apply_into(const raft::handle_t& handle, const apply_views& views,
   require_finite("X", x, stream);
   buffer<T> scores = decision_of<T>(handle, x, coef, intercept);
   const int64_t outputs = coef.n;
-  const int64_t classes = outputs == 1 ? 2 : outputs;
+  const int64_t classes = classes_of(outputs);
   switch (mode) {
     case CUML_LINEAR_MODEL_APPLY_DECISION:
       deposit_rows(handle, out, std::move(scores), x.n, outputs);
       break;
     case CUML_LINEAR_MODEL_APPLY_LABELS:
-      labels_into<T>(handle, views.classes, scores, x.n, outputs, out);
+      if (views.classes == nullptr) {
+        codes_into<T>(handle, scores, x.n, outputs, out);
+      } else {
+        labels_into<T>(handle, views.classes, scores, x.n, outputs, out);
+      }
       break;
     case CUML_LINEAR_MODEL_APPLY_PROBA:
     case CUML_LINEAR_MODEL_APPLY_LOG_PROBA:

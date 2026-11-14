@@ -12,6 +12,14 @@ namespace cumlrkt::glm::logistic {
 inline constexpr int quiet_level =
     static_cast<int>(rapids_logger::level_enum::off);
 
+inline int64_t outputs_of(int64_t classes) {
+  return classes == 2 ? 1 : classes;
+}
+
+inline int64_t classes_of(int64_t outputs) {
+  return outputs == 1 ? 2 : outputs;
+}
+
 struct fit_views {
   const rr_view* x;
   const rr_view* y;
@@ -38,8 +46,6 @@ struct fit_options {
   bool normalized;
   int32_t class_mode;
 };
-
-void require_fit_codes(const fit_codes& codes);
 
 int32_t fit(const raft::handle_t& handle, const fit_views& views,
             const fit_options& options, rr_deposit* out);
