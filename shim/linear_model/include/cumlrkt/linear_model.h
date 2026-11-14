@@ -35,6 +35,14 @@
 #define CUML_LINEAR_MODEL_APPLY_PROBA 2
 #define CUML_LINEAR_MODEL_APPLY_LOG_PROBA 3
 
+#define CUML_LINEAR_MODEL_SGD_SQUARED 0
+#define CUML_LINEAR_MODEL_SGD_LOG 1
+#define CUML_LINEAR_MODEL_SGD_HINGE 2
+
+#define CUML_LINEAR_MODEL_SGD_CONSTANT 1
+#define CUML_LINEAR_MODEL_SGD_INVSCALING 2
+#define CUML_LINEAR_MODEL_SGD_ADAPTIVE 3
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -117,6 +125,38 @@ CUMLRKT_API int cuml_linear_model_label_encode(void* handle, const rr_view* y,
                                                rr_deposit* out);
 CUMLRKT_API void cuml_linear_model_label_encode_job(void* args, size_t args_len,
                                                     rr_job_outcome* outcome);
+
+/* Region 0: coef (p, X's dtype); 1: intercept (1). */
+CUMLRKT_API int cuml_linear_model_mbsgd_regressor_fit(
+    void* handle, const rr_view* x, const rr_view* y, rr_deposit* out,
+    int32_t penalty, double alpha, double l1_ratio, int32_t fit_intercept,
+    int32_t epochs, double tol, int32_t shuffle, int32_t learning_rate,
+    double eta0, double power_t, int32_t batch_size, int32_t n_iter_no_change,
+    int32_t seeded, uint32_t seed);
+CUMLRKT_API void cuml_linear_model_mbsgd_regressor_fit_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
+/* Region 0: coef (p); 1: intercept (1); 2: the 2 classes in y's dtype, when
+   y is labels; absent when y is int32 codes from a host list. */
+CUMLRKT_API int cuml_linear_model_mbsgd_classifier_fit(
+    void* handle, const rr_view* x, const rr_view* y, int32_t y_is_codes,
+    rr_deposit* out, int32_t loss, int32_t penalty, double alpha,
+    double l1_ratio, int32_t fit_intercept, int32_t epochs, double tol,
+    int32_t shuffle, int32_t learning_rate, double eta0, double power_t,
+    int32_t batch_size, int32_t n_iter_no_change, int32_t seeded,
+    uint32_t seed);
+CUMLRKT_API void cuml_linear_model_mbsgd_classifier_fit_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
+
+/* Region 0: n labels, classes[1] where decision > threshold else classes[0]
+   (NaN gives classes[0]); classes' dtype, or int32 0/1 when classes is NULL. */
+CUMLRKT_API int cuml_linear_model_threshold_labels(void* handle,
+                                                   const rr_view* decision,
+                                                   double threshold,
+                                                   const rr_view* classes,
+                                                   rr_deposit* out);
+CUMLRKT_API void cuml_linear_model_threshold_labels_job(
+    void* args, size_t args_len, rr_job_outcome* outcome);
 
 #ifdef __cplusplus
 }

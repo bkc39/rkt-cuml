@@ -23,6 +23,7 @@
 #include "cumlrkt/vectors.hpp"
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
+#include "label_checks.hpp"
 #include "logistic_checks.hpp"
 #include "logistic_device.hpp"
 #include "logistic_fit.hpp"
@@ -108,17 +109,6 @@ penalties penalties_of(const fit_options& o) {
       return {o.l1_ratio * strength, (1.0 - o.l1_ratio) * strength};
     default:
       return {0.0, 0.0};
-  }
-}
-
-template <typename L>
-void require_integral(const L* y, int64_t n, rmm::cuda_stream_view stream) {
-  if constexpr (!std::is_integral_v<L>) {
-    const int64_t i = first_non_integral(y, n, stream);
-    if (i >= 0) {
-      throw logic_error(std::format("y: expected integral class labels, got {}",
-                                    printed(to_host(y + i, 1, stream)[0])));
-    }
   }
 }
 

@@ -1,7 +1,7 @@
 # Upstream bugs
 
 Found by the cluster arc (#5), the metrics leg (A2, #34), the PCA leg (A4, #47), the truncated SVD leg
-(A5, #48), the UMAP leg (B1, #50) and the linear-model legs (L1–L4) against libcuml 26.08.00, cuVS 26.08.01 and raft
+(A5, #48), the UMAP leg (B1, #50) and the linear-model legs (L1–L5) against libcuml 26.08.00, cuVS 26.08.01 and raft
 26.08. None is filed upstream (owner, 2026-10-20: log locally). Each is refused,
 worked around or documented by the shim, and a test pins it; the leg's PR
 packet (§4) has the detail.
@@ -189,3 +189,17 @@ packet (§4) has the detail.
 | L4 #90 | a negative class weight gives an intercept of 6.9e307 | `common/classification.py` | refused (#14) |
 | L4 #90 | `l1_ratio` is silently ignored with `penalty='l2'` | `logistic_regression.py` | refused (#7) |
 | L4 #90 | binary `predict_log_proba` is log(predict_proba), −inf where a probability underflows | `logistic_regression.py` | stable log-sigmoid and log-softmax, finite (L4-i) |
+| L5 #91 | `sgdFit` with `fit_intercept` centres the 0/1 labels of the log and hinge losses before the loss: silently wrong on imbalanced classes (hinge accuracy .67 at a 5% minority, sklearn 1.0) | `sgdFit` | ones column, intercept a penalised coefficient (L5-a, L5-c) |
+| L5 #91 | the hinge gradient assumes −1/+1 labels; `MBSGDClassifier` passes 0/1, so 0-rows have zero gradient (accuracy .50 on a separable set) | `sgdFit`, `MBSGDClassifier` | −1/+1 targets in the shim |
+| L5 #91 | `MBSGDClassifier.predict` thresholds the raw log-loss score at 0.5, not the sigmoid (breast cancer standardised .919 vs .958) | `MBSGDClassifier` | decision thresholded at 0 |
+| L5 #91 | hinge's stopping test compares the summed loss, n times the others: the early stop's scale depends on n | `sgdFit` | tol passed through, documented (L5-r) |
+| L5 #91 | the float64 log loss evaluates log(1 − p) with `logf`, and log(p) unclamped (inf at saturation) | `sgdFit` log loss | the gate's objective is computed stably in double |
+| L5 #91 | `initShuffle` reseeds `std::mt19937` with 0: `srand` and any seed have no effect | `sgdFit` `initShuffle` | `#:random-state` permutes the copy in the shim (L5-e) |
+| L5 #91 | adaptive's learning-rate floor 1e-6 is absolute, which breaks scale invariance | `sgdFit` | documented; the scale law covers constant and invscaling only |
+| L5 #91 | the batch counter t is stored in the float type: in float32 it stalls at 2^24 batches (invscaling freezes) | `sgdFit` | documented |
+| L5 #91 | Python mutates the caller's F-order X and y during fit (centres, restores; max diff 5.6e-17) | `MBSGDRegressor` | the shim fits a copy; X and y bitwise unchanged |
+| L5 #91 | divergence is returned silently: float64 huge finite (1e37), float32 NaN | `sgdFit` | refused by the post-solve gate (L5-d) |
+| L5 #91 | batch_size < 0 aborts (RMM overflow), a huge one OOMs, 0 returns zeros; epochs ≤ 0 return zeros | `sgdFit` | refused; batch size clamped to n |
+| L5 #91 | eta0 ≤ 0, alpha ≤ 0 and l1_ratio outside [0, 1] are accepted by the C++; Python accepts NaN alpha, eta0 and power_t | `sgdFit`, `MBSGD*` | refused (L5-g, L5-i) |
+| L5 #91 | `sgdPredict` and `sgdPredictBinaryClass` assert n_rows > 1 | `sgdPredict`, `sgdPredictBinaryClass` | gemmPredict and a threshold job (L5-j) |
+| L5 #91 | `MBSGDClassifier` accepts a single class silently (coef 0) and ignores l1_ratio unless the penalty is elasticnet | `MBSGDClassifier` | one class refused (L5-k); l1-ratio range-checked always (L5-o) |
