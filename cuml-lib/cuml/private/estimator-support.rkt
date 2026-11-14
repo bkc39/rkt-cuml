@@ -295,10 +295,14 @@
                             #:hyperparameters table:id
                             #:fit fit/who:id
                             #:predict predict/who:id
-                            (~optional (~seq #:scorer scorer:id))
-                            (~optional (~seq #:predict-proba proba/who:id))
-                            (~optional (~seq #:predict-log-proba log-proba/who:id))
-                            (~optional (~seq #:decision-function decision/who:id)))
+                            (~alt (~optional (~seq #:scorer scorer:id) #:name "#:scorer")
+                                  (~optional (~seq #:predict-proba proba/who:id)
+                                             #:name "#:predict-proba")
+                                  (~optional (~seq #:predict-log-proba log-proba/who:id)
+                                             #:name "#:predict-log-proba")
+                                  (~optional (~seq #:decision-function decision/who:id)
+                                             #:name "#:decision-function"))
+                            ...)
   (define-estimator name
     #:hyperparameters table
     #:fit fit/who

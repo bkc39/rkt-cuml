@@ -196,7 +196,7 @@
       #:labels values
       #:settings ())))
 
-(define regressor-definition
+(define predictor-definition
   '((provide gauge
              gauge?
              gauge-model)
@@ -292,7 +292,7 @@
   (check-equal? (problems-in estimator-definition) '()))
 
 (test-case "define-predictor binds the constructor, the predicate and the model accessor"
-  (check-equal? (problems-in regressor-definition) '()))
+  (check-equal? (problems-in predictor-definition) '()))
 
 (test-case "define-cd-result binds the result struct, the predict and its who form"
   (check-equal? (problems-in cd-result-definition) '()))

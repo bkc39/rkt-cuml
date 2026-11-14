@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require racket/runtime-path
-         (only-in racket/list append*)
+(require (only-in racket/list append*)
+         racket/runtime-path
          (only-in threading ~>)
          (only-in "linear-twin-data.rkt" bits-of decoded twin-results)
          (only-in "logistic-data.rkt"

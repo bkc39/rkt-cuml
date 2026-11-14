@@ -13,7 +13,7 @@
                   score
                   transform
                   transformer?)
-         (only-in cuml/private/estimator-support define-estimator)
+         (only-in cuml/private/estimator-support define-estimator define-predictor)
          (only-in racket/list combinations)
          (only-in racket/match match-define)
          (only-in rackunit
@@ -21,6 +21,7 @@
                   check-false
                   check-match
                   check-not-equal?
+                  check-not-exn
                   check-pred
                   check-regexp-match
                   check-true
@@ -427,3 +428,19 @@
                            #:apply values
                            [predict values])
                         #rx"define-estimator: #:needs-y and #:supervised are exclusive")))
+
+(define (predictor-with . options)
+  `(define-predictor swapped
+     #:hyperparameters gadget-params
+     #:fit regressor-fit/who
+     #:predict regressor-fit/who
+     ,@options))
+
+(test-case "define-predictor takes its optional methods in any order, each once"
+  (check-not-exn (lambda ()
+                   (expanded (predictor-with '#:decision-function
+                                             'regressor-fit/who
+                                             '#:predict-proba
+                                             'regressor-fit/who))))
+  (check-syntax-error (predictor-with '#:scorer 'regressor-fit/who '#:scorer 'regressor-fit/who)
+                      #rx"too many occurrences of #:scorer"))

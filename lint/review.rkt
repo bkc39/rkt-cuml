@@ -81,15 +81,15 @@
 
 (define penalty-name #px"\\(L[12]\\)$")
 
-(define (spec-id-title? name)
-  (define title (syntax-e name))
+(define (spec-id-title? title)
   (and (string? title) (regexp-match? spec-id-label title) (not (regexp-match? penalty-name title))))
 
 (define (check-test-title name)
-  (when (spec-id-title? name)
+  (define title (syntax-e name))
+  (when (spec-id-title? title)
     (track-error name
                  (format "the test title ~s carries a spec id: say the law, and keep ids in plans"
-                         (syntax-e name)))))
+                         title))))
 
 (define-syntax-class test-form-name
   #:datum-literals (test-gpu test-model-probe test-process-memory test-twin test-without-gpu)
@@ -174,12 +174,7 @@
                                body ...))))
   (pattern (test-unless-skipped reason name body ...)
     #:attr review (lambda () (review-scoped-body (list #'reason #'name) (attribute body))))
-  (pattern (_:test-form-name name body ...)
-    #:attr review (lambda ()
-                    (check-test-title #'name)
-                    (review-scoped-body (list #'name) (attribute body))))
-  (pattern ((~datum test-case) name:str body ...)
-    #:when (spec-id-title? #'name)
+  (pattern ((~or* _:test-form-name (~datum test-case)) name body ...)
     #:attr review (lambda ()
                     (check-test-title #'name)
                     (review-scoped-body (list #'name) (attribute body)))))

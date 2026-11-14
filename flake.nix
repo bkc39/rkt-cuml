@@ -562,7 +562,6 @@
       # The host's ~/.bashrc puts CUDA 11.7 on LD_LIBRARY_PATH, where it would
       # shadow the CUDA 13 libraries. The host has no /run/opengl-driver, so
       # the driver's own libraries are linked into .cuda-driver/ instead.
-      # math/bigfloat (the logistic check oracle) dlopens gmp and mpfr.
       gpuHook = ''
         _filtered=""
         IFS=: read -ra _entries <<< "''${LD_LIBRARY_PATH:-}"
@@ -584,6 +583,7 @@
           fi
         done
         export LD_LIBRARY_PATH="$_drv_farm:${
+          # math/bigfloat (the logistic check oracle) dlopens gmp and mpfr.
           lib.makeLibraryPath [
             pkgs.gmp
             pkgs.mpfr

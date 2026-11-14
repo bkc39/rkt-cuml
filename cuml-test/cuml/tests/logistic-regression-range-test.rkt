@@ -56,7 +56,7 @@
              (lambda () (case-fit (scaled-case binary (expt 2 -600)) 'float64 #:penalty 'l2))))
 
 (define (next-above dt v)
-  ((by-dtype dt (lambda (v) (flsingle (+ v (expt 2.0 -21)))) flnext) v))
+  ((by-dtype dt (lambda (x) (flsingle (+ x (expt 2.0 -21)))) flnext) v))
 
 (define (with-last-column c column)
   (lr-case (lr-case-name c)
