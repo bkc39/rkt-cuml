@@ -108,6 +108,8 @@
 (test-case "the logistic-regression entry bounds the residual and states the column rules"
   (define text
     (flattened-text (collection-file-path "linear-model.scrbl" "cuml" "scribblings" "reference")))
-  (check-true (string-contains? text "the check bounds the first-order residual, not the distance to the optimum"))
+  (check-true (string-contains?
+               text
+               "the check bounds the first-order residual, not the distance to the optimum"))
   (check-false (string-contains? text "10⁻²"))
   (check-true (string-contains? text "one that varies only in its last bits is refused: centre it")))

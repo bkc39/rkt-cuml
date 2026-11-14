@@ -70,8 +70,8 @@ std::optional<std::vector<double>> class_weights_of(
   buffer<int64_t> index = scratch<int64_t>(n, stream);
   const int64_t m = positive_weights(base.data(), n, index.data(), stream);
   const row_selection rows{m < n ? index.data() : nullptr, m};
-  const std::vector<double> weighted = class_totals(
-      stream, base.data(), labels.codes.data(), rows, labels.k);
+  const std::vector<double> weighted =
+      class_totals(stream, base.data(), labels.codes.data(), rows, labels.k);
   require_weighted_classes(weighted, classes);
   const bool counted = w != nullptr && equal_weights(base.data(), rows, stream);
   const std::vector<double> totals =
@@ -106,10 +106,9 @@ std::optional<weighted_rows> weighted_rows_of(
   buffer<double> eff =
       effective_weights<T>(handle, w, labels.codes.data(),
                            device_cw ? device_cw->data() : nullptr, n);
-  require_weighted_classes(
-      class_totals(stream, eff.data(), labels.codes.data(),
-                   row_selection{nullptr, n}, labels.k),
-      classes);
+  require_weighted_classes(class_totals(stream, eff.data(), labels.codes.data(),
+                                        row_selection{nullptr, n}, labels.k),
+                           classes);
   buffer<int64_t> index = scratch<int64_t>(n, stream);
   const int64_t m = positive_weights(eff.data(), n, index.data(), stream);
   const row_selection rows{m < n ? index.data() : nullptr, m};

@@ -69,7 +69,8 @@
 (define (last-coef parts)
   (map last (lr-fit-coef parts)))
 
-(define last-bits-message #rx"^logistic-regression-fit: X: column 3 varies only in its last bits \\(spread .* of 5[.0-9]*\\); centre it$")
+(define last-bits-message
+  #rx"^logistic-regression-fit: X: column 3 varies only in its last bits \\(spread .* of 5[.0-9]*\\); centre it$")
 
 (test-gpu "a column that varies only in its last bits is refused, naming it"
   (for ([dt (in-list dtypes)])

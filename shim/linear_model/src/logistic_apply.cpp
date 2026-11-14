@@ -140,11 +140,10 @@ extern "C" {
 
 int cuml_linear_model_logistic_regression_fit(
     void* handle, const rr_view* x, const rr_view* y,
-    const rr_view* sample_weight, const rr_view* class_weight,
-    rr_deposit* out, int32_t penalty, double C, double l1_ratio, double tol,
-    int32_t max_iter, int32_t linesearch_max_iter, int32_t lbfgs_memory,
-    int32_t fit_intercept, int32_t penalty_normalized,
-    int32_t class_weight_mode, int32_t* n_iter) {
+    const rr_view* sample_weight, const rr_view* class_weight, rr_deposit* out,
+    int32_t penalty, double C, double l1_ratio, double tol, int32_t max_iter,
+    int32_t linesearch_max_iter, int32_t lbfgs_memory, int32_t fit_intercept,
+    int32_t penalty_normalized, int32_t class_weight_mode, int32_t* n_iter) {
   return cumlrkt::guarded(
       handle,
       {{"X", x},

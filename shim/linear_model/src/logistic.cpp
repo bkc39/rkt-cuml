@@ -187,8 +187,8 @@ void require_spread(const column_stats& s) {
 
 template <typename T>
 void require_staged_columns(const column_stats& s, int shift) {
-  const auto widest = std::ranges::max(
-      s.kept, {}, [&](int64_t j) { return s.magnitude[j]; });
+  const auto widest =
+      std::ranges::max(s.kept, {}, [&](int64_t j) { return s.magnitude[j]; });
   for (const int64_t j : s.kept) {
     if (std::ldexp(s.magnitude[j], shift) < std::numeric_limits<T>::min()) {
       throw logic_error(std::format(
@@ -244,8 +244,8 @@ solved_fit<T> closed_form(const raft::handle_t& handle,
   const int64_t outputs = outputs_of(k);
   std::vector<T> b(outputs, T{0});
   if (fit_intercept) {
-    const std::vector<double> totals =
-        class_totals(stream, weights_in(wt), codes, row_selection{nullptr, x.n}, k);
+    const std::vector<double> totals = class_totals(
+        stream, weights_in(wt), codes, row_selection{nullptr, x.n}, k);
     std::vector<double> logs(k);
     std::ranges::transform(totals, logs.begin(),
                            [](double t) { return std::log(t); });

@@ -77,21 +77,13 @@
 (define spec-id "(?:#[0-9]+|[A-Z][0-9]+[a-z]?(?:[-–][A-Za-z0-9]+)?)")
 
 (define spec-id-label
-  (pregexp (string-append "^"
-                          spec-id
-                          ":|\\("
-                          spec-id
-                          "(?:(?:, ?| and )"
-                          spec-id
-                          ")*\\)\\.?$")))
+  (pregexp (string-append "^" spec-id ":|\\(" spec-id "(?:(?:, ?| and )" spec-id ")*\\)\\.?$")))
 
 (define penalty-name #px"\\(L[12]\\)$")
 
 (define (spec-id-title? name)
   (define title (syntax-e name))
-  (and (string? title)
-       (regexp-match? spec-id-label title)
-       (not (regexp-match? penalty-name title))))
+  (and (string? title) (regexp-match? spec-id-label title) (not (regexp-match? penalty-name title))))
 
 (define (check-test-title name)
   (when (spec-id-title? name)
