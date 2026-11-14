@@ -1992,13 +1992,16 @@ scratch, the source is `cpp/src/glm/qn/`.
   `glmnet-oracle-test`, which needs no GPU and runs in the `racket`
   check, pins both against the host optima: the gaussian fits within
   1e-10 of `oracle-elastic-net` and `oracle-ridge` (unweighted and
-  ×64-weighted 20×2), l2 binomial within 1e-11 of `logistic-newton`
-  (measured 1.6e-12), and a weighted multinomial fit is its fit on the
-  replicated rows.
+  ×64-weighted 20×2), l2 binomial within 1e-7 of `logistic-newton`
+  (measured 1.6e-12 unweighted, 1.8e-8 weighted at C 10 with an
+  intercept), and a weighted multinomial fit is its fit on the
+  replicated rows. λ×2 fails all three, sd(y) uncentred both gaussian
+  cases, and dropping the multinomial replication the last.
 - **glmnet, the bound rule.** glmnet is run tight enough that the gap is
   cuML's own stop, not glmnet's: thresh 1e-26 gaussian (at 1e-14 it
   stops up to 1.35e-7 from the exact optimum on 20×7; at 1e-26 within
-  1e-12 on every unweighted `law-cases` draw), 1e-20 logistic. Then each float64
+  1e-12 on every unweighted `law-cases` draw), 1e-20 logistic, 1e-18
+  multinomial (iris l1 at C 1 with an intercept converges no tighter). Then each float64
   bound sits above the worst measured gap of its trial and below the gap
   a 2% error in λ makes in every setting of it; each float32 fit is held
   to the float64 fit of the same setting (as L4's twin), not to glmnet.

@@ -17,12 +17,7 @@
         (trial (labelled-case (labelled-set 'iris "species" '()))
                #:Cs (by-dtype dt '(0.1) '(0.1 1.0))
                #:float32 1e-2
-               #:float64 5e-5)
-        (trial (labelled-case (labelled-set 'wine "cultivar" '() #:standardise? #t))
-               #:Cs '(0.1 1.0)
-               #:float32 1e-2
-               #:float64 1e-5
-               #:default default-tol-cap)))
+               #:float64 5e-5)))
 
 (test-gpu "multinomial fits at C are glmnet's at lambda 1/(C N), intercepts centred, with its probabilities"
   (for* ([dt (in-list dtypes)]

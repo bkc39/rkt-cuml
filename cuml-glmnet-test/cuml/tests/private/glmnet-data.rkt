@@ -44,11 +44,12 @@
   (by-dtype dt (trial-float32 t) (trial-float64 t)))
 
 (define (default-bound t dt)
-  (match (trial-default t)
-    [#f #f]
-    [cap (cap dt)]))
+  (define cap (trial-default t))
+  (and cap (cap dt)))
 
 (define logistic-thresh 1e-20)
+;; glmnet's multinomial l1 on iris at C 1 with an intercept never converges below 1e-18
+(define multinomial-thresh 1e-18)
 (define gaussian-thresh 1e-26)
 (define glmnet-max-iters 10000000)
 (define weight-scale 64)
@@ -95,7 +96,7 @@
                   #:intercept? fi
                   #:thresh logistic-thresh
                   #:max-iters glmnet-max-iters))
-  (lr-fit (list (vector->list (logistic-result-coefficients r)))
+  (lr-fit (~> r logistic-result-coefficients vector->list list)
           (list (logistic-result-intercept r))
           #f))
 
@@ -110,7 +111,7 @@
                      #:alpha (setting-alpha s)
                      #:standardize? #f
                      #:intercept? fi
-                     #:thresh logistic-thresh
+                     #:thresh multinomial-thresh
                      #:max-iters glmnet-max-iters))
   (values (lr-fit (~> r multinomial-result-coefficients vector->list (map vector->list _))
                   (vector->list (multinomial-result-intercepts r))
@@ -139,4 +140,4 @@
                #:intercept? fi
                #:thresh gaussian-thresh
                #:max-iters glmnet-max-iters))
-  (lr-fit (list (vector->list (elnet-result-coefficients r))) (list (elnet-result-intercept r)) #f))
+  (lr-fit (~> r elnet-result-coefficients vector->list list) (list (elnet-result-intercept r)) #f))

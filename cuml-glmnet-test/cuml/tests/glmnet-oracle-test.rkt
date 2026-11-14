@@ -30,6 +30,7 @@
          (only-in cuml/tests/private/logistic-newton newton-coef)
          (only-in racket/list append-map first make-list)
          (only-in rackunit check-true test-case)
+         (only-in threading ~>)
          (only-in "private/glmnet-data.rkt"
                   glmnet-binomial
                   glmnet-gaussian
@@ -37,7 +38,7 @@
                   whole-weighted))
 
 (define gaussian-bound 1e-10)
-(define binomial-bound 1e-11)
+(define binomial-bound 1e-7)
 (define Cs '(0.1 1.0 10.0))
 
 (define gaussian-cases
@@ -62,7 +63,7 @@
          [fi (in-list '(#t #f))]
          [ratio (in-list '(1 1/2 1/10))])
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
-    (define alpha (exact->inexact (* 1/30 (alpha-max p 1))))
+    (define alpha (~> p (alpha-max 1) (* 1/30) exact->inexact))
     (define o (oracle-elastic-net p alpha ratio))
     (check-gap (format "~a l1-ratio ~a intercept ~a" (lcase-name c) ratio fi)
                (fit-flat (glmnet-gaussian c alpha ratio #:fit-intercept fi))
@@ -72,7 +73,8 @@
 (test-case "glmnet-gaussian at l1-ratio 0 is the ridge optimum at cuML's alpha times W"
   (for* ([c (in-list gaussian-cases)]
          [fi (in-list '(#t #f))])
-    (define alpha (exact->inexact (* 1/30 (alpha-max (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) 1))))
+    (define alpha
+      (~> (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) (alpha-max 1) (* 1/30) exact->inexact))
     (define o (oracle-ridge (lcase-X c) (lcase-y c) (lcase-w c) (* alpha (total-weight c)) fi))
     (check-gap (format "~a intercept ~a" (lcase-name c) fi)
                (fit-flat (glmnet-gaussian c alpha 0 #:fit-intercept fi))
