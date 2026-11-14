@@ -39,6 +39,9 @@ constexpr double unstaged_spread_least = 0x1p-8;
 constexpr double unstaged_spread_most = 0x1p8;
 constexpr double tolerance_floor = 1e-4;
 constexpr double residual_factor = 64;
+constexpr double float32_l2_most = 0x1p28;
+constexpr double float64_l2_most = 0x1p32;
+constexpr double float64_l2_most_without_intercept = 0x1p54;
 
 struct penalties {
   double l1;
@@ -146,9 +149,9 @@ int staging_exponent(const column_stats& s, int64_t m) {
 template <typename T>
 double resolved_l2(bool fit_intercept) {
   if constexpr (std::is_same_v<T, float>) {
-    return 0x1p28;
+    return float32_l2_most;
   }
-  return fit_intercept ? 0x1p32 : 0x1p54;
+  return fit_intercept ? float64_l2_most : float64_l2_most_without_intercept;
 }
 
 template <typename T>

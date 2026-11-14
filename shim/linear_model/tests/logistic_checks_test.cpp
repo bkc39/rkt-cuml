@@ -9,9 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
 #include "linear_model_fixture.hpp"
 #include "logistic_fit.hpp"
+#include "raftrkt/c_api.h"
 #include "raftrkt/view.hpp"
 
 namespace {
@@ -21,6 +23,8 @@ using cumlrkt::test::resources;
 
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
+constexpr double above_one = 1.5;
+constexpr double default_tol = 1e-4;
 
 template <typename T>
 std::string refusal_of(const resources& res, const std::vector<T>& values,
@@ -86,7 +90,7 @@ TEST(LogisticOptions, EachOutOfRangeOptionIsRefused) {
   const fit_options base{.penalty = 2,
                          .C = 1.0,
                          .l1_ratio = 0.0,
-                         .tol = 1e-4,
+                         .tol = default_tol,
                          .max_iter = 1000,
                          .linesearch_max_iter = 50,
                          .lbfgs_memory = 5,
@@ -120,7 +124,7 @@ TEST(LogisticOptions, EachOutOfRangeOptionIsRefused) {
        "C: expected a positive finite real, got inf"},
       {with([](fit_options& o) { o.l1_ratio = nan; }),
        "l1-ratio: expected a real from 0 to 1, got nan"},
-      {with([](fit_options& o) { o.l1_ratio = 1.5; }),
+      {with([](fit_options& o) { o.l1_ratio = above_one; }),
        "l1-ratio: expected a real from 0 to 1, got 1.5"},
       {with([](fit_options& o) { o.tol = nan; }),
        "tol: expected a finite value of at least 0, got nan"},
@@ -129,6 +133,37 @@ TEST(LogisticOptions, EachOutOfRangeOptionIsRefused) {
   };
   for (const row& r : rows) {
     EXPECT_EQ(bounds_refusal(r.options), r.message);
+  }
+}
+
+TEST(LogisticOptions, TheFitEntryRefusesThemBeforeTheSolver) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<double> x(res, {0, 1, 1, 0, 2, 1, 3, 0, 4, 1, 5, 0}, {6, 2});
+  const filled<int32_t> y(res, {0, 1, 0, 1, 0, 1}, {6});
+  struct row {
+    int32_t max_iter;
+    int32_t linesearch_max_iter;
+    int32_t lbfgs_memory;
+    std::string message;
+  };
+  const std::vector<row> rows{
+      {1000, 50, 0, "lbfgs-memory: expected at least 1, got 0"},
+      {1000, 50, -3, "lbfgs-memory: expected at least 1, got -3"},
+      {0, 50, 5, "max-iter: expected at least 1, got 0"},
+      {1000, 0, 5, "linesearch-max-iter: expected at least 1, got 0"},
+  };
+  for (const row& r : rows) {
+    cumlrkt::test::fitted f(res);
+    int32_t n_iter = -1;
+    EXPECT_EQ(cumlrkt::test::outcome(cuml_linear_model_logistic_regression_fit(
+                  res.handle, x.view(), y.view(), nullptr, nullptr, &f.out.r,
+                  CUML_LINEAR_MODEL_PENALTY_L2, 1.0, 0.0, default_tol,
+                  r.max_iter, r.linesearch_max_iter, r.lbfgs_memory, 1, 1,
+                  CUML_LINEAR_MODEL_CLASS_WEIGHT_NONE, &n_iter)),
+              r.message);
+    EXPECT_EQ(cuml_linear_model_last_error_kind(), RR_ERROR_LOGIC) << r.message;
+    cumlrkt::test::expect_untouched(f.out);
   }
 }
 
