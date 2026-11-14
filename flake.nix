@@ -15,7 +15,7 @@
       url = "github:bkc39/datasets/7c95ced319b8d76a0f437e070c3e8ffad6d30e56";
       flake = false;
     };
-    # A test-only oracle: cuml-test's parity tests against glmnet's
+    # A test-only oracle: cuml-glmnet-test's parity tests against glmnet's
     # coordinate descent. Its Racket dependencies are rkt-raft's pins.
     glmnet.url = "github:bkc39/glmnet/779a706b021e1cea74e7c127e555eb92a3fdeb52";
     glmnet.inputs.nixpkgs.follows = "nixpkgs";
@@ -57,6 +57,7 @@
         "cuml-lib"
         "cuml-doc"
         "cuml-test"
+        "cuml-glmnet-test"
         "cuml"
       ];
       cumlPackageNames = lib.concatStringsSep " " cumlPackages;
@@ -201,7 +202,7 @@
           --name datasets ${raftInputs.datasets-src}/datasets
       '';
 
-      # glmnet, cuml-test's oracle, from a writable copy: its pre-installer
+      # glmnet, cuml-glmnet-test's oracle, from a writable copy: its pre-installer
       # stages libglmnetcompat from GLMNET_NATIVE_LIB_PATH into native-libs.
       installGlmnet = skip: ''
         export GLMNET_NATIVE_LIB_PATH=${glmnetNative}
@@ -265,7 +266,7 @@
         doCheck = true;
         checkPhase = ''
           runHook preCheck
-          raco test --process --timeout 45 cuml-test
+          raco test --process --timeout 45 cuml-test cuml-glmnet-test
           raco make -v cuml-doc/cuml/scribblings/cuml.scrbl
           racket scripts/check-layout.rkt
           raco test scripts/check-bindings.rkt

@@ -56,7 +56,9 @@
 
 (provide offset-law-arms
          real-lcase
-         test-real-set)
+         test-real-set
+         tight-max-iter
+         tight-tol)
 
 (struct real-case (lcase dtype problem inner outer) #:transparent)
 (struct real-set (response excluded))
