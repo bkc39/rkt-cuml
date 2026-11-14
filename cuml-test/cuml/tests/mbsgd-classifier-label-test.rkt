@@ -61,7 +61,7 @@
       (define r (clf-parts (mbsgd-classifier-fit X (relabel #(a b)) #:fit-intercept intercept?)))
       (define swapped
         (clf-parts (mbsgd-classifier-fit X (relabel #(b a)) #:fit-intercept intercept?)))
-      (check-equal? swapped (list (map - (car r)) (- (cadr r)))))))
+      (check-equal? swapped (list (map - (car r)) (- 0.0 (cadr r)))))))
 
 (define (threshold loss)
   (if (eq? loss 'squared-loss) 0.5 0.0))

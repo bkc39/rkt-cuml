@@ -20,17 +20,32 @@
 (define-values (blobs labels) (blob-rows 300 4 22))
 (define-values (overlapping overlapping-labels) (blob-rows 300 4 23 #:sep 0.5))
 
-(define (reg dt X-rows y-rows . options)
-  (reg-parts (apply mbsgd-regressor-fit
-                    (on-matrix X-rows dt)
-                    (on-vector y-rows dt)
-                    #:batch-size 16
-                    #:eta0 0.01
-                    #:epochs 50
-                    options)))
+(define (keyword-apply/defaults f defaults kws vals . args)
+  (define options
+    (for/fold ([options defaults]) ([k (in-list kws)] [v (in-list vals)])
+      (hash-set options k v)))
+  (define keys (sort (hash-keys options) keyword<?))
+  (keyword-apply f keys (map (λ (k) (hash-ref options k)) keys) args))
 
-(define (clf dt X-rows ys . options)
-  (clf-parts (apply mbsgd-classifier-fit (on-matrix X-rows dt) (on-vector ys 'int32) options)))
+(define reg
+  (make-keyword-procedure
+   (λ (kws vals dt X-rows y-rows)
+     (reg-parts (keyword-apply/defaults mbsgd-regressor-fit
+                                        (hash '#:batch-size 16 '#:eta0 0.01 '#:epochs 50)
+                                        kws
+                                        vals
+                                        (on-matrix X-rows dt)
+                                        (on-vector y-rows dt))))))
+
+(define clf
+  (make-keyword-procedure
+   (λ (kws vals dt X-rows ys)
+     (clf-parts (keyword-apply/defaults mbsgd-classifier-fit
+                                        (hash)
+                                        kws
+                                        vals
+                                        (on-matrix X-rows dt)
+                                        (on-vector ys 'int32))))))
 
 (test-gpu "without shuffle the random state changes nothing"
   (for ([dt (in-list dtypes)])
@@ -83,6 +98,9 @@
       (law-case (format "~a ~a classifier without intercept, k ~a" dt loss k)
         (check-equal? (at k) (list (map (lambda (c) (* c (expt 2 (- k)))) (car base)) 0.0))))))
 
+(define (map-parts f parts)
+  (list (map f (car parts)) (f (cadr parts))))
+
 (test-gpu "y times 2^c with tol times 4^c gives coef and intercept times 2^c"
   (for* ([dt (in-list dtypes)]
          [penalty (in-list '(l2 none))])
@@ -96,9 +114,6 @@
     (for ([c (in-list '(-3 5))])
       (law-case (format "~a ~a, c ~a" dt penalty c)
         (check-equal? (at c) (map-parts (lambda (v) (* v (expt 2 c))) base))))))
-
-(define (map-parts f parts)
-  (list (map f (car parts)) (f (cadr parts))))
 
 (test-gpu "a batch size of n, n + 1 or the int32 maximum is one full batch"
   (for ([dt (in-list dtypes)])

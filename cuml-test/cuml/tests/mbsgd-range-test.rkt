@@ -26,12 +26,10 @@
 (define targets (reg-target rows 51))
 
 (define (quick key value)
-  (if (and (memq key '(epochs)) (= value 2147483647))
-      (list (string->keyword (symbol->string key)) value '#:tol 1e-3)
-      (list (string->keyword (symbol->string key))
-            value
-            '#:epochs
-            (if (eq? key 'n-iter-no-change) 20 5))))
+  (define k (string->keyword (symbol->string key)))
+  (cond
+    [(eq? key 'epochs) (list k value '#:tol 1e-3)]
+    [else (list k value '#:epochs (if (eq? key 'n-iter-no-change) 20 5))]))
 
 (define (keyword-apply* f positional options)
   (let loop ([options options]
