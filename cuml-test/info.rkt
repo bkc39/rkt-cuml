@@ -18,6 +18,7 @@
                  "data-lib"
                  ("datasets-core" #:version "0.2")
                  "datasets"
+                 "glmnet"
                  "math-lib"
                  "pict-lib"
                  ("raft" #:version "0.2")
