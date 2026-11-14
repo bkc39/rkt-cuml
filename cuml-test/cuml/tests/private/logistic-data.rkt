@@ -64,7 +64,8 @@
   (define normal (normal-source seed))
   (define uniform (uniform-source (+ seed 1000)))
   (define centres
-    (for/vector #:length k ([_ (in-range k)])
+    (for/vector #:length k
+                ([_ (in-range k)])
       (for/list ([_ (in-range p)])
         (* sep (normal)))))
   (define labels
