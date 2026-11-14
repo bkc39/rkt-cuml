@@ -36,6 +36,12 @@
          logistic-regression-predict/who)
 
 (struct logistic-regression-result (coef intercept classes label-kind n-iter)
+  #:guard (lambda (coef intercept classes kind n-iter name)
+            (if (label-kind? kind)
+                (values coef intercept classes kind n-iter)
+                (logic-error "~a: label-kind: expected the label kind of a fitted result, got ~e"
+                             name
+                             kind)))
   #:property prop:label-codes
   (lambda (who result y resources) (label-codes who result y resources)))
 
@@ -274,7 +280,7 @@
 (define (class-view kind classes resources)
   (match kind
     [(device-kind dt) (list->device-vector classes #:dtype dt #:resources resources)]
-    [_ #f]))
+    [(? list-kind?) #f]))
 
 (define/who (logistic-regression-fit who
                                      X
@@ -343,7 +349,7 @@
     [(struct* logistic-regression-result ([classes classes] [label-kind (? list-kind?)]))
      (define table (list->vector classes))
      (map (lambda (c) (vector-ref table c)) (device-vector->list labels))]
-    [_ labels]))
+    [(struct* logistic-regression-result ([label-kind (? device-kind?)])) labels]))
 
 (define/who (logistic-regression-predict-proba who
                                                result
@@ -365,7 +371,7 @@
      (cuml-linear-model-label-encode-job who resources y (class-view kind classes resources) out)
      (match-define (list codes) (deposit->list out))
      codes]
-    [_
+    [(? list-kind?)
      (define unify? ((list-kind-unified? kind) classes))
      (define table (label-table kind classes))
      (define (code v)

@@ -3,10 +3,12 @@
 (require (only-in cuml/linear-model
                   logistic-regression-decision-function
                   logistic-regression-fit
-                  logistic-regression-predict)
-         (only-in racket/match match-define match-lambda)
-         (only-in rackunit check-exn test-case)
-         (only-in raft list*->device-matrix)
+                  logistic-regression-predict
+                  logistic-regression-result
+                  logistic-regression-result-label-kind)
+         (only-in racket/match match-define match-lambda struct*)
+         (only-in rackunit check-equal? check-exn check-not-false test-case)
+         (only-in raft device-vector->list device-vector? list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" on-matrix on-vector)
          (only-in "private/logistic-data.rkt" scaled-rows unequal-weights-message)
@@ -239,3 +241,30 @@
     (match-define (applied-row function checked) r)
     (test-case (row-id checked)
       (check-row function checked))))
+
+(define (relabelled fitted kind)
+  (match-define (struct* logistic-regression-result
+                         ([coef coef] [intercept intercept] [classes classes] [n-iter n-iter]))
+    fitted)
+  (logistic-regression-result coef intercept classes kind n-iter))
+
+(define (host v)
+  (if (device-vector? v)
+      (device-vector->list v)
+      v))
+
+(test-gpu "a result built by hand takes only a fitted result's label kind"
+  (define X (on-matrix grid))
+  (for ([y (list (on-vector '(-3 2 7 -3 2 7) 'int32) '("x" "y" "z" "x" "y" "z"))])
+    (define fitted (logistic-regression-fit X y))
+    (for ([kind (list 'int32 'list #f)])
+      (test-case (format "label-kind ~e" kind)
+        (check-row "logistic-regression-result"
+                   (row (format "~e" kind)
+                        (format "label-kind: expected the label kind of a fitted result, got ~e" kind)
+                        (lambda () (relabelled fitted kind))))))
+    (test-case "a copied label kind still answers in labels"
+      (define copied (relabelled fitted (logistic-regression-result-label-kind fitted)))
+      (define labels (host (logistic-regression-predict copied X)))
+      (check-equal? labels (host (logistic-regression-predict fitted X)))
+      (check-not-false (andmap (lambda (l) (member l (host y))) labels)))))
