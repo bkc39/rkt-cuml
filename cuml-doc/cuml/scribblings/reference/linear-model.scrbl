@@ -427,29 +427,25 @@ until the solver stops. Large fits do not repeat bitwise.
 ]}
 
 @defproc[(logistic-regression-decision-function
-          [result logistic-regression-result?]
-          [X device-matrix?]
+          [result logistic-regression-result?] [X device-matrix?]
           [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
 X·coefᵀ + intercept, one column per row of @racket[coef].}
 
-@defproc[(logistic-regression-predict [result logistic-regression-result?]
-                                      [X device-matrix?]
+@defproc[(logistic-regression-predict [result logistic-regression-result?] [X device-matrix?]
                                       [#:resources resources device-resources? (current-device-resources)])
          (or/c device-vector? list?)]{
 The class of largest score, the first on ties (for two classes, the second when its score is
 above 0), as @racket[y] was given: a device-vector of its dtype, or a list.}
 
 @defproc[(logistic-regression-predict-proba
-          [result logistic-regression-result?]
-          [X device-matrix?]
+          [result logistic-regression-result?] [X device-matrix?]
           [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
 The class probabilities, in X's dtype.}
 
 @defproc[(logistic-regression-predict-log-proba
-          [result logistic-regression-result?]
-          [X device-matrix?]
+          [result logistic-regression-result?] [X device-matrix?]
           [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
 Their logarithms, computed directly and so finite (Python cuML's are −inf where a probability
@@ -495,11 +491,9 @@ is the weighted @racket[accuracy-score], labels outside @racket[classes] countin
 (score (fit (logistic-regression) Xc yc) Xc yc)
 ]}
 
-@defproc[(logistic-regression? [v any/c]) boolean?]{
-Whether @racket[v] is a logistic regression estimator.}
+@defproc[(logistic-regression? [v any/c]) boolean?]{Whether @racket[v] is a logistic regression estimator.}
 
-@defproc[(logistic-regression-model [estimator logistic-regression?])
-         (or/c #f logistic-regression-result?)]{
+@defproc[(logistic-regression-model [estimator logistic-regression?]) (or/c #f logistic-regression-result?)]{
 The @racket[logistic-regression-result] of the fit that made @racket[estimator], or @racket[#f].}
 
 @(close-eval ev)
