@@ -5,7 +5,7 @@
                   cuml-family-libcuml-version
                   cuml-family-library
                   load-family)
-         (only-in ffi/unsafe _double _int32)
+         (only-in ffi/unsafe _double _int32 _uint32)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in raft/unsafe define-job))
@@ -16,7 +16,10 @@
          cuml-linear-model-linear-regression-fit-job
          cuml-linear-model-logistic-regression-apply-job
          cuml-linear-model-logistic-regression-fit-job
+         cuml-linear-model-mbsgd-classifier-fit-job
+         cuml-linear-model-mbsgd-regressor-fit-job
          cuml-linear-model-ridge-fit-job
+         cuml-linear-model-threshold-labels-job
          libcuml-version)
 
 (define-runtime-path native-libs-dir "../native-libs")
@@ -91,4 +94,56 @@
             library
             "cuml_linear_model_label_encode_job"
             (handle view view deposit)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-mbsgd-regressor-fit-job
+            library
+            "cuml_linear_model_mbsgd_regressor_fit_job"
+            (handle view
+                    view
+                    deposit
+                    _int32
+                    _double
+                    _double
+                    _int32
+                    _int32
+                    _double
+                    _int32
+                    _int32
+                    _double
+                    _double
+                    _int32
+                    _int32
+                    _int32
+                    _uint32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-mbsgd-classifier-fit-job
+            library
+            "cuml_linear_model_mbsgd_classifier_fit_job"
+            (handle view
+                    view
+                    _int32
+                    deposit
+                    _int32
+                    _int32
+                    _double
+                    _double
+                    _int32
+                    _int32
+                    _double
+                    _int32
+                    _int32
+                    _double
+                    _double
+                    _int32
+                    _int32
+                    _int32
+                    _uint32)
+            #:exn exn:fail:cuml)
+
+(define-job cuml-linear-model-threshold-labels-job
+            library
+            "cuml_linear_model_threshold_labels_job"
+            (handle view _double view deposit)
             #:exn exn:fail:cuml)
