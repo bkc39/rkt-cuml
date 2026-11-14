@@ -181,7 +181,7 @@
         (cons 'fit-transform
               (lambda (X y options) (fit-transform (apply-options umap options) X y)))))
 
-(test-gpu "L14: the fits refuse each bad hyperparameter with its message, R before f"
+(test-gpu "the fits refuse each bad hyperparameter with its message, R before f"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (parameter-rows))])
     (match-define (cons who call) entry)
@@ -199,7 +199,7 @@
                             (lambda () (umap-fit (tiny-X) #:random-state -1))))])
     (check-exn exn:fail:contract? bad)))
 
-(test-gpu "L14: the fits refuse each bad X and y with its message, the first refusal winning"
+(test-gpu "the fits refuse each bad X and y with its message, the first refusal winning"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (X-rows))])
     (match-define (cons who call) entry)
@@ -207,7 +207,7 @@
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call X y options))))))
 
-(test-gpu "L14: f25: a diverged embedding is refused and freed"
+(test-gpu "f25: a diverged embedding is refused and freed"
   (check-cuml-error
    'logic
    #rx"^umap-fit: embedding: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
@@ -278,7 +278,7 @@
              "X: expected 3 columns, got 2"
              (cons (fitted) (rows->matrix '((+nan.0 1)) 'float32)))))
 
-(test-gpu "L14: transform refuses each bad argument with its message"
+(test-gpu "transform refuses each bad argument with its message"
   (for ([r (in-list (transform-rows))])
     (match-define (cons result X) (row-call r))
     (test-case (format "umap-transform ~a" (row-id r))
@@ -288,7 +288,7 @@
    #rx"^umap-transform: output: row [0-9]+, column [0-9]+: the optimisation diverged to (nan|inf|-inf); lower learning-rate$"
    (lambda () (umap-transform (hand-built #:params (umap-params #:learning-rate 3e38)) (tiny-X)))))
 
-(test-gpu "L14: f28: a non-array X is refused by the view check, under any seed"
+(test-gpu "f28: a non-array X is refused by the view check, under any seed"
   (define unseeded (umap-fit (tiny-X) #:init 'random #:random-state #f))
   (for ([call (in-list
                (list (list 'umap-fit 0 (lambda () (umap-fit listed-X #:random-state 0)))
@@ -303,7 +303,7 @@
           (format "~a: expected a device array or #f for a view, given ~e" who listed-X))]
         [other (fail (format "expected an exn:fail:raft, got ~e" other))]))))
 
-(test-gpu "L14: the generics refuse with their own names"
+(test-gpu "the generics refuse with their own names"
   (define model (fit (umap #:init 'random) (tiny-X)))
   (check-cuml-error 'logic
                     "transform: X: expected 3 columns, got 2"
@@ -317,14 +317,14 @@
                     "fit-transform: umap takes no sample-weight"
                     (lambda () (fit-transform (umap) (tiny-X) #:sample-weight w))))
 
-(test-gpu "L14: after a refused NaN, large or cosine zero row, a valid call succeeds"
+(test-gpu "after a refused NaN, large or cosine zero row, a valid call succeeds"
   (for ([r (in-list (X-rows))]
         #:when (member (row-id r) '("f21" "f22" "f23")))
     (match-define (list X y options) (row-call r))
     (check-row 'umap-fit r (lambda () (apply-options umap-fit (hash-set options 'y y) X)))
     (check-true (and (umap-fit (tiny-X) #:init 'random) #t) (row-id r))))
 
-(test-pools "L14: a refusal leaves the RMM pool where it was"
+(test-pools "a refusal leaves the RMM pool where it was"
   (define device 0)
   (define (unchanged id thunk)
     (drain-finalizers!)

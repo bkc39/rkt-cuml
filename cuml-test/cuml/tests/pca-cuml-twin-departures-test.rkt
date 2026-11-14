@@ -20,7 +20,7 @@
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff))
 
-(test-twin "L15: the departures from cuML-Python are pinned"
+(test-twin "the departures from cuML-Python are pinned"
   (define wide (named "wide"))
   (define correlated (named "correlated"))
   (define scales (named "scales"))

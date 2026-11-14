@@ -30,14 +30,14 @@
 
 (define changed (hasheq 'n-components 2 'solver 'jacobi 'tol 1e-6 'iterations 30))
 
-(test-case "L20: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal? (tsvd-params) (hasheq 'n-components 1 'solver 'full 'tol 0.0 'iterations 15))
   (check-equal? (estimator-params (truncated-svd)) (tsvd-params))
   (check-equal? (round-trips truncated-svd changed) changed)
   (check-equal? (estimator-params (truncated-svd (tsvd-params #:solver 'jacobi) #:n-components 3))
                 (tsvd-params #:solver 'jacobi #:n-components 3)))
 
-(test-case "L20: printing, equality and set-params"
+(test-case "printing, equality and set-params"
   (check-equal? (printed (truncated-svd)) (make-list 3 "#<truncated-svd>"))
   (check-equal? (format "~v" (truncated-svd #:n-components 2)) "#<truncated-svd #:n-components 2>")
   (check-equal? (truncated-svd #:solver 'jacobi) (truncated-svd #:solver 'jacobi))
@@ -52,10 +52,10 @@
   (check-false (truncated-svd? 'truncated-svd))
   (check-false (truncated-svd-model (truncated-svd))))
 
-(test-case "L20: truncated-svd is an estimator and a transformer, not a clusterer or a predictor"
+(test-case "truncated-svd is an estimator and a transformer, not a clusterer or a predictor"
   (check-equal? (capabilities (truncated-svd) truncated-svd?) '(#t #f #f #t #f #t)))
 
-(test-gpu "L13: fit-transform is fit then transform, bitwise, as procedures and as generics"
+(test-gpu "fit-transform is fit then transform, bitwise, as procedures and as generics"
   (for* ([f (in-list (list normal-fixture offset-fixture))]
          [dt (in-list '(float32 float64))]
          [solver (in-list '(full jacobi))])
@@ -78,7 +78,7 @@
                                (listed (tsvd-inverse-transform result (tsvd-transform result X))))
                   "inverse-transform"))))
 
-(test-gpu "L20: a fitted truncated-svd prints its parameters after fitted"
+(test-gpu "a fitted truncated-svd prints its parameters after fitted"
   (define X (fixture-matrix normal-fixture 'float32))
   (check-equal? (format "~v" (fit (truncated-svd) X)) "#<truncated-svd fitted>")
   (check-equal? (format "~v" (fit (truncated-svd #:n-components 2) X))

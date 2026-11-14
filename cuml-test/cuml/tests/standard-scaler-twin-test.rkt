@@ -81,7 +81,7 @@
             [tol (in-list tolerance)])
     (<= (abs (- o t)) tol)))
 
-(test-twin "L14: the statistics are within 1e-12 of sklearn's, and the masked columns are exactly 1"
+(test-twin "the statistics are within 1e-12 of sklearn's, and the masked columns are exactly 1"
   (define cases
     (for*/list ([dt (in-list '(float32 float64))]
                 [data (in-list (datasets dt))]
@@ -169,6 +169,6 @@
          (check-true (within? t (hash-ref result 'transform) transform-tolerance) "transform")
          (check-true (within? back x-sk inverse-tolerance) "inverse")]))))
 
-(test-twin "L17: the hyperparameters are sklearn's but copy"
+(test-twin "the hyperparameters are sklearn's but copy"
   (match-define (list theirs) (twin-results (list (hasheq 'op "params"))))
   (check-equal? (standard-scaler-params) (twin-params theirs '(copy))))

@@ -71,7 +71,7 @@
                     '()
                     "L6"))))
 
-(test-gpu "L7: at k = d the round trip returns X within 8 d u (32 d u under Jacobi) of its largest row"
+(test-gpu "at k = d the round trip returns X within 8 d u (32 d u under Jacobi) of its largest row"
   (for ([c (in-list (filter tall-case? (cases)))])
     (match-define (list dt solver f) c)
     (define rows (fixture-rows f dt))

@@ -109,7 +109,7 @@
     (test-case (format "~a (~a)" (row-id r) connectivity)
       (check-row 'single-linkage-fit r))))
 
-(test-gpu "R3: the pairwise row limit and the knn graph size are refused before the row scan"
+(test-gpu "the pairwise row limit and the knn graph size are refused before the row scan"
   (check-cuml-error 'logic
                     (format "single-linkage-fit: ~a" pairwise-message)
                     (lambda ()
@@ -128,7 +128,7 @@
                   " entries, more than 2147483647")
    (lambda () (single-linkage-fit (blank-matrix 28000000 1 'float32)))))
 
-(test-gpu "R2: rows at the squared-norm boundary, and subnormal rows, fit"
+(test-gpu "rows at the squared-norm boundary, and subnormal rows, fit"
   (define boundary
     (list*->device-matrix (list '(0 0)
                                 (list (expt 2 62) (expt 2 62))
@@ -143,14 +143,14 @@
          (check-equal? (length labels) 5)
          (check-equal? (length children) 4)]))))
 
-(test-gpu "R4: values that do not fit the native types raise exn:fail:contract"
+(test-gpu "values that do not fit the native types raise exn:fail:contract"
   (define X (grid 'float32))
   (check-exn exn:fail:contract? (lambda () (single-linkage-fit X #:c (expt 2 31))))
   (check-exn exn:fail:contract? (lambda () (single-linkage-fit X #:c (- -1 (expt 2 31)))))
   (check-exn exn:fail:contract? (lambda () (single-linkage-fit X #:n-clusters 2.5)))
   (check-exn exn:fail:contract? (lambda () (single-linkage-fit X #:n-clusters (expt 2 63)))))
 
-(test-gpu "R4: released resources are refused under the procedure's own name"
+(test-gpu "released resources are refused under the procedure's own name"
   (define released (with-device-resources ([r (device-resources)]) r))
   (match (raised (lambda () (single-linkage-fit (grid 'float32) #:resources released)))
     [(? exn:fail:raft? e)

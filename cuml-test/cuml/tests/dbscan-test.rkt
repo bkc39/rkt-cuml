@@ -30,7 +30,7 @@
   (check-equal? (apply structure-problems lists) '())
   lists)
 
-(test-gpu "L1: the hand grid's labels and core samples, at both dtypes and both out-dtypes"
+(test-gpu "the hand grid's labels and core samples, at both dtypes and both out-dtypes"
   (for* ([dt (in-list dtypes)]
          [out (in-list out-dtypes)])
     (test-case (format "~a ~a" dt out)
@@ -58,7 +58,7 @@
               (for/list ([_ (in-range d)])
                 (+ 0.1 (/ (random 1000) 7.0)))))))
 
-(test-gpu "L9: a fit leaves X bit-identical under every metric"
+(test-gpu "a fit leaves X bit-identical under every metric"
   (define rows (unround-cloud 300 3 5))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
@@ -74,7 +74,7 @@
       (dbscan-fit D #:eps 2.5 #:min-samples 3 #:metric 'precomputed)
       (check-equal? (device-matrix->list* D) before "precomputed"))))
 
-(test-gpu "L10: int64 labels hold int32's values"
+(test-gpu "int64 labels hold int32's values"
   (define rows (integer-grid 500 2 25 9))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
@@ -85,12 +85,12 @@
       (check-equal? (result->lists (dbscan-result labels core))
                     (fit-lists X #:eps 1.5 #:min-samples 4)))))
 
-(test-gpu "L11: a distance equal to eps is a neighbour"
+(test-gpu "a distance equal to eps is a neighbour"
   (for ([dt (in-list dtypes)])
     (check-equal? (fit-lists (mat '((0) (1) (2) (3) (4)) dt) #:eps 1 #:min-samples 3)
                   '((0 0 0 0 0) (1 2 3)))))
 
-(test-gpu "L12: min-samples 1 makes every row core, and one row is its own cluster or noise"
+(test-gpu "min-samples 1 makes every row core, and one row is its own cluster or noise"
   (for* ([dt (in-list dtypes)]
          [out (in-list out-dtypes)])
     (test-case (format "~a ~a" dt out)
@@ -130,7 +130,7 @@
   (check-equal? (pick labels (list k)) '(-1))
   (check-equal? (without labels core k) clean))
 
-(test-gpu "L13: a NaN or infinite row is noise and leaves the other labels alone"
+(test-gpu "a NaN or infinite row is noise and leaves the other labels alone"
   (define rows (map (lambda (r) (map add1 r)) (integer-grid 80 2 8 4)))
   (define k 7)
   (for* ([dt (in-list dtypes)]
@@ -155,7 +155,7 @@
                      #:metric 'precomputed)
        k))))
 
-(test-gpu "L14: core indices ascend, labels run from -1 to k - 1, numbered by smallest core index"
+(test-gpu "core indices ascend, labels run from -1 to k - 1, numbered by smallest core index"
   (for ([seed (in-range 1 6)])
     (define X (mat (integer-grid 400 2 30 seed) 'float32))
     (for ([eps (in-list '(1 1.5 2.5))]

@@ -43,7 +43,7 @@
   (check-equal? (valid-dendrogram-problems '((0 1) (0 5) (3 6) (4 7)) 5)
                 '("every id 0..2n-3 exactly once")))
 
-(test-gpu "S1: the hand grid's children and labels at every k, as given and permuted"
+(test-gpu "the hand grid's children and labels at every k, as given and permuted"
   (for ([connectivity (in-list connectivities)])
     (test-case (symbol->string connectivity)
       (for ([k (in-range 1 6)]
@@ -64,14 +64,14 @@
             (mat (integer-grid 300 2 25 seed) 'float32))
           (list (blob-data 500 3 4 7 'float32) (blob-data 400 5 6 8 'float32 #:std 0.3))))
 
-(test-gpu "S2: the children form a dendrogram, each row ascending"
+(test-gpu "the children form a dendrogram, each row ascending"
   (for* ([connectivity (in-list connectivities)]
          [(X i) (in-parallel (in-list (structure-data)) (in-naturals))])
     (test-case (format "~a ~a" connectivity i)
       (match-define (list _ children) (linked-lists X #:connectivity connectivity))
       (check-equal? (valid-dendrogram-problems children (length (device-matrix->list* X))) '()))))
 
-(test-gpu "S5: one cluster, one cluster per sample, one sample and two samples"
+(test-gpu "one cluster, one cluster per sample, one sample and two samples"
   (define X (mat (integer-grid 50 2 10 4) 'float32))
   (for ([connectivity (in-list connectivities)])
     (test-case (symbol->string connectivity)
@@ -88,13 +88,13 @@
       (check-equal? (linked-lists two #:n-clusters 1 #:connectivity connectivity) '((0 0) ((0 1))))
       (check-equal? (linked-lists two #:n-clusters 2 #:connectivity connectivity) '((1 0) ((0 1)))))))
 
-(test-gpu "P1: ties come in cuML's order, the same under both connectivities"
+(test-gpu "ties come in cuML's order, the same under both connectivities"
   (for ([connectivity (in-list connectivities)])
     (test-case (symbol->string connectivity)
       (check-equal? (linked-lists (mat tie-rows 'float32) #:n-clusters 3 #:connectivity connectivity)
                     (list tie-labels tie-children)))))
 
-(test-gpu "P2: knn cannot join 1024 separated groups at c 15, and joins them at c 20"
+(test-gpu "knn cannot join 1024 separated groups at c 15, and joins them at c 20"
   (define rows (group-rows 1024 32))
   (define X (mat rows 'float32))
   (check-cuml-error 'logic

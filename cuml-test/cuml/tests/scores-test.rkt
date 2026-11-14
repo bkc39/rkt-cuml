@@ -25,14 +25,14 @@
 (define (accuracy-cases)
   (label-cases #:seed 860 #:count 200 #:most 5000))
 
-(test-gpu "A1: unweighted accuracy is the exact count over n, correctly rounded"
+(test-gpu "unweighted accuracy is the exact count over n, correctly rounded"
   (for ([c (in-list (accuracy-cases))])
     (match-define (list i at bt truth found) c)
     (test-case (format "case ~a ~a x ~a" i at bt)
       (check-equal? (accuracy truth found #:true at #:pred bt)
                     (exact->inexact (exact-accuracy truth found))))))
 
-(test-gpu "A2: accuracy is symmetric bit for bit, with and without weights"
+(test-gpu "accuracy is symmetric bit for bit, with and without weights"
   (for ([c (in-list (accuracy-cases))]
         [_ (in-range 40)])
     (match-define (list i at bt truth found) c)
@@ -43,7 +43,7 @@
     (check-equal? (accuracy truth found u #:true at #:pred bt)
                   (accuracy found truth u #:true bt #:pred at))))
 
-(test-gpu "A3: identical labels score 1.0; labels that differ everywhere score 0.0, weighted too"
+(test-gpu "identical labels score 1.0; labels that differ everywhere score 0.0, weighted too"
   (define ys '(3 -1 7 7 2147483647))
   (check-equal? (accuracy ys ys) 1.0)
   (check-equal? (accuracy ys ys '(0.0 1.0 2.0 0.5 3.0)) 1.0)
@@ -55,7 +55,7 @@
                       [c (in-list counts)])
              (make-list (inexact->exact c) x))))
 
-(test-gpu "A4: integer weights equal the unweighted score on repeated samples, bit for bit"
+(test-gpu "integer weights equal the unweighted score on repeated samples, bit for bit"
   (for ([c (in-list (accuracy-cases))]
         [_ (in-range 60)])
     (match-define (list i at bt truth found) c)
@@ -64,7 +64,7 @@
       (check-equal? (accuracy truth found w #:true at #:pred bt)
                     (accuracy (repeated truth w) (repeated found w) #:true at #:pred bt)))))
 
-(test-gpu "R1: r2 of a non-constant y against itself is 1.0"
+(test-gpu "r2 of a non-constant y against itself is 1.0"
   (for* ([dt (in-list '(float32 float64))]
          [w (in-list (list #f '(1.0 0.0 2.5 0.125)))])
     (define y '(3.0 -0.5 2.0 7.0))
@@ -90,7 +90,7 @@
                                 (make-list 7 (/ 1.0 3.0))))])
     (list dt y (append (drop-right y 1) (list (+ (last y) 1e-3))))))
 
-(test-gpu "R3: on a constant y-true r2 is 1.0 for a perfect prediction and 0.0 otherwise"
+(test-gpu "on a constant y-true r2 is 1.0 for a perfect prediction and 0.0 otherwise"
   (for ([c (in-list (constant-cases))])
     (match-define (list dt y off) c)
     (test-case (format "~a ~a x ~a" dt (car y) (length y))
@@ -101,7 +101,7 @@
   (check-equal? (r2 '(5.0 1.0 5.0) '(5.0 9.0 5.0) '(1.0 0.0 2.0)) 1.0)
   (check-equal? (r2 '(5.0 1.0 5.0) '(5.0 1.0 6.0) '(1.0 0.0 2.0)) 0.0))
 
-(test-gpu "M1: the error of y against itself is 0.0, and the error is symmetric bit for bit"
+(test-gpu "the error of y against itself is 0.0, and the error is symmetric bit for bit"
   (for ([c (in-list (regression-cases))]
         [_ (in-range 30)])
     (match-define (list _ dt y p w) c)
@@ -113,7 +113,7 @@
   (for/list ([_ (in-range count)])
     (- (exact-floor (* (next) 2049)) 1024)))
 
-(test-gpu "M2: on integer values the error is the exact sum over n·d, correctly rounded"
+(test-gpu "on integer values the error is the exact sum over n·d, correctly rounded"
   (for* ([dt (in-list '(float32 float64))]
          [shape (in-list '((1 1) (7 1) (4096 1) (5 3) (1024 4) (64 64)))]
          [weighted? (in-list '(#f #t))])
@@ -139,7 +139,7 @@
 (define (columns xss)
   (apply map list xss))
 
-(test-gpu "M3: a matrix's error is within 1e-14 of the mean of its columns' errors"
+(test-gpu "a matrix's error is within 1e-14 of the mean of its columns' errors"
   (for* ([dt (in-list '(float32 float64))]
          [weighted? (in-list '(#f #t))]
          [d (in-list '(2 3 5))])
@@ -153,13 +153,13 @@
               (mse a b w #:dtype dt))))
     (check-= whole by-column (* 1e-14 by-column) (format "~a against ~a" whole by-column))))
 
-(test-gpu "M4: the error is finite when only the float32 square overflows, inf past the flonum range"
+(test-gpu "the error is finite when only the float32 square overflows, inf past the flonum range"
   (define big (flsingle 1e19))
   (check-equal? (mse (list big 0.0) (list (- big) 0.0) #:dtype 'float32)
                 (exact->inexact (/ (sqr (* 2 (inexact->exact big))) 2)))
   (check-equal? (mse (list (expt 2.0 600) 0.0) '(0.0 0.0)) +inf.0))
 
-(test-gpu "M5: the error is within 1e-14 of the exact rational value"
+(test-gpu "the error is within 1e-14 of the exact rational value"
   (define worst
     (for/fold ([worst 0]) ([c (in-list (regression-cases))])
       (match-define (list i dt y p w) c)
@@ -174,7 +174,7 @@
             [(list i _ _ _ _) (zero? (modulo i 10))])
           (regression-cases)))
 
-(test-gpu "X3: scaling both arguments by 2^k keeps r2 and scales the error by 2^2k, exactly"
+(test-gpu "scaling both arguments by 2^k keeps r2 and scales the error by 2^2k, exactly"
   (for ([c (in-list (sample-cases))])
     (match-define (list i dt y p w) c)
     (define base-r2 (r2 y p w #:dtype dt))
@@ -193,7 +193,7 @@
 (define labels '(0 1 2 2 3 1 0 4))
 (define guesses '(0 1 1 2 3 0 0 4))
 
-(test-gpu "X4: scaling the weights by 2^k leaves all three scores unchanged, bit for bit"
+(test-gpu "scaling the weights by 2^k leaves all three scores unchanged, bit for bit"
   (for ([c (in-list (sample-cases))])
     (match-define (list i dt y p _) c)
     (define w (integer-weights (length y) i))
@@ -210,7 +210,7 @@
         (check-equal? (accuracy labels guesses (pow2-scaled v k) #:weight wt)
                       (accuracy labels guesses v #:weight wt))))))
 
-(test-gpu "X5: all-ones weights give the same bits as no weights"
+(test-gpu "all-ones weights give the same bits as no weights"
   (for ([c (in-list (sample-cases))])
     (match-define (list _ dt y p _) c)
     (define ones (make-list (length y) 1.0))
@@ -224,7 +224,7 @@
              #:unless (zero? c))
     x))
 
-(test-gpu "X6: integer weights match repeated rows, zero weights dropped rows, within 1e-14"
+(test-gpu "integer weights match repeated rows, zero weights dropped rows, within 1e-14"
   (for ([c (in-list (sample-cases))])
     (match-define (list i dt y p _) c)
     (define w (integer-weights (length y) (+ 200 i)))
@@ -243,7 +243,7 @@
                                       (mse (kept y zero-one) (kept p zero-one) #:dtype dt))
                         1e-14))))))
 
-(test-gpu "X7: mixed float32 and float64 arguments give the bits of the widened call"
+(test-gpu "mixed float32 and float64 arguments give the bits of the widened call"
   (for ([c (in-list (filter (match-lambda
                               [(list _ dt _ _ _) (eq? dt 'float32)])
                             (sample-cases)))])

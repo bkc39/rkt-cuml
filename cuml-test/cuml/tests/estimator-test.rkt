@@ -89,12 +89,12 @@
   #:methods gen:clusterer
   [])
 
-(test-case "E1: requiring cuml/estimator loads neither raft nor the FFI"
+(test-case "requiring cuml/estimator loads neither raft nor the FFI"
   (parameterize ([current-namespace (make-base-namespace)])
     (namespace-require 'cuml/estimator)
     (check-equal? (list (module-declared? 'raft #f) (module-declared? 'ffi/unsafe #f)) '(#f #f))))
 
-(test-case "E2: the capability predicates"
+(test-case "the capability predicates"
   (check-equal? (capabilities (threshold 0 #f)) '(#t #t #t #t #t))
   (check-equal? (capabilities (labeller)) '(#t #f #t #f #f))
   (for ([v (in-list (list 3 'x (hash)))])
@@ -113,7 +113,7 @@
   (define result (thunk))
   (values result (reverse (unbox fit-calls))))
 
-(test-case "E3: fit-predict and fit-transform are predict and transform after fit"
+(test-case "fit-predict and fit-transform are predict and transform after fit"
   (random-seed 7)
   (for ([_ (in-range 200)])
     (define X (random-list))
@@ -132,17 +132,17 @@
     (define-values (_ plain-calls) (calls-of (lambda () (fit-predict e X))))
     (check-equal? plain-calls (list (list X #f #f)))))
 
-(test-case "E4: a clusterer's own fit-predict is used"
+(test-case "a clusterer's own fit-predict is used"
   (check-equal? (fit-predict (labeller) '(1 2 3)) 'labeller-marker))
 
-(test-case "E5: fit-predict without predict is not supported, and fits nothing"
+(test-case "fit-predict without predict is not supported, and fits nothing"
   (set-box! bare-fits 0)
   (define e (raised (lambda () (fit-predict (bare-clusterer) '(1 2 3)))))
   (check-true (exn:fail:support? e))
   (check-equal? (exn-message e) "fit-predict: not implemented for #<bare-clusterer>")
   (check-equal? (unbox bare-fits) 0))
 
-(test-case "E6: a value without the capability is a contract violation naming the generic"
+(test-case "a value without the capability is a contract violation naming the generic"
   (define X '(1 2 3))
   (for ([thunk
          (list (lambda () (predict 3 X)) (lambda () (fit 3 X)) (lambda () (transform (labeller) X)))]
@@ -158,7 +158,7 @@
     (eval form)
     (eval '(require 'toy))))
 
-(test-case "E7: a struct missing a required method is refused"
+(test-case "a struct missing a required method is refused"
   (for ([form (list '(module toy racket/base
                        (require cuml/estimator)
                        (struct no-fit ()
@@ -181,7 +181,7 @@
     (check-true (exn:fail? e))
     (check-regexp-match prefix (exn-message e))))
 
-(test-case "E8: an implementer's example: fit is functional"
+(test-case "an implementer's example: fit is functional"
   (define e (threshold 1 #f))
   (define f (fit e '(1 2 3)))
   (check-equal? e (threshold 1 #f))
@@ -191,7 +191,7 @@
   (fit f '(10 20))
   (check-equal? f before))
 
-(test-case "E9: an implementer's example: setting parameters gives an unfitted estimator"
+(test-case "an implementer's example: setting parameters gives an unfitted estimator"
   (define e (threshold 2 #f))
   (define f (fit e '(1 2 3)))
   (define cloned (estimator-set-params f (hasheq)))
@@ -224,7 +224,7 @@
    (define (inverse-transform e X)
      (map (lambda (x) (- x (shifter-by e))) X))])
 
-(test-case "E10: inverse-transform is optional, and its fallback is not supported"
+(test-case "inverse-transform is optional, and its fallback is not supported"
   (define e (raised (lambda () (inverse-transform (threshold 0 1) '(1 2 3)))))
   (check-true (exn:fail:support? e))
   (check-equal? (exn-message e) "inverse-transform: not implemented for (threshold 0 1)")
@@ -232,7 +232,7 @@
   (check-regexp-match #rx"^inverse-transform: contract violation:\n  expected: transformer\\?"
                       (exn-message (raised (lambda () (inverse-transform (labeller) '(1)))))))
 
-(test-case "G1: estimator-set-params takes keywords as a host implementation's hash"
+(test-case "estimator-set-params takes keywords as a host implementation's hash"
   (define e (fit (mean-split 1 #f) '(1 2 9 10)))
   (check-equal? (estimator-set-params e #:shift 5) (estimator-set-params e (hasheq 'shift 5)))
   (check-equal? (estimator-set-params e #:shift 5) (mean-split 5 #f))
@@ -243,7 +243,7 @@
   (check-regexp-match #rx"^estimator-set-params: contract violation"
                       (exn-message (raised (lambda () (estimator-set-params 3 #:shift 1))))))
 
-(test-case "M3: estimator-set-params names itself for changes that are not a hash"
+(test-case "estimator-set-params names itself for changes that are not a hash"
   (define e (mean-split 1 #f))
   (for ([call (in-list (list (lambda () (estimator-set-params e 5))
                              (lambda () (estimator-set-params e 5 #:shift 1))))])

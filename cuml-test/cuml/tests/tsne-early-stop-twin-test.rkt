@@ -14,7 +14,7 @@
 
 (define trust-floor 0.93)
 
-(test-twin "L8: FFT runs every iteration on wide blobs where Python's default stops and collapses"
+(test-twin "FFT runs every iteration on wide blobs where Python's default stops and collapses"
   (define X (fixture-X wide-blobs))
   (define result (tsne-fit X))
   (check-equal? (tsne-result-n-iter result) 1000)

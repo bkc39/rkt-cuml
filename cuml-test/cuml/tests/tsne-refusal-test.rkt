@@ -266,7 +266,7 @@
         (cons 'fit (lambda (X options) (fit (apply-options tsne options) X)))
         (cons 'fit-transform (lambda (X options) (fit-transform (apply-options tsne options) X)))))
 
-(test-gpu "L11: the fits refuse each bad hyperparameter with its message"
+(test-gpu "the fits refuse each bad hyperparameter with its message"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (parameter-rows))])
     (match-define (cons who call) entry)
@@ -280,7 +280,7 @@
                             (lambda () (tsne-fit (tiny-X) #:perplexity 'high))))])
     (check-exn exn:fail:contract? bad)))
 
-(test-gpu "L11: the fits refuse each bad X with its message, the first refusal winning"
+(test-gpu "the fits refuse each bad X with its message, the first refusal winning"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (X-rows))])
     (match-define (cons who call) entry)
@@ -292,7 +292,7 @@
   (match-define (cons X options) (row-call r))
   (check-row 'tsne-fit r (lambda () (apply-options tsne-fit options X))))
 
-(test-gpu "L11: rows just inside the sqeuclidean, manhattan and pca init bounds fit"
+(test-gpu "rows just inside the sqeuclidean, manhattan and pca init bounds fit"
   (for* ([entry (in-list (list (list "f20b"
                                      (tiny-with (antipodal 1278245504.0 819714240.0))
                                      (hasheq 'perplexity 5.0 'metric 'sqeuclidean))
@@ -308,7 +308,7 @@
     (define fitted (apply-options tsne-fit (hash-set options 'method method) X))
     (check-true (finite-rows? (embedded fitted)) (format "~a ~a" id method))))
 
-(test-gpu "L11: f23's remedies fit: centred offset rows, more neighbours, a line just above 2^-64"
+(test-gpu "f23's remedies fit: centred offset rows, more neighbours, a line just above 2^-64"
   (for* ([entry (in-list
                  (list (list "centred" (rows->matrix (centred (offset-rows 1.7e9)) 'float32) small)
                        (list "n-neighbors" (duplicates 40) (hash-set small 'n-neighbors 60))
@@ -320,7 +320,7 @@
     (define fitted (apply-options tsne-fit (hash-set options 'method method) X))
     (check-true (finite-rows? (embedded fitted)) (format "~a ~a" id method))))
 
-(test-pools "L11: f23: a diverged embedding is refused and freed, under every fit"
+(test-pools "f23: a diverged embedding is refused and freed, under every fit"
   (define X (tiny-X))
   (for ([entry (in-list (fit-calls))])
     (match-define (cons who call) entry)
@@ -338,7 +338,7 @@
                                 #:perplexity 2.0
                                 #:method 'exact))))
 
-(test-gpu "L11: f24: a non-array X is refused by the view check, under any seed"
+(test-gpu "f24: a non-array X is refused by the view check, under any seed"
   (for ([seed (in-list '(0 #f))])
     (test-case (format "random-state ~a" seed)
       (match (raised (lambda () (tsne-fit listed-X #:random-state seed)))
@@ -348,7 +348,7 @@
                                listed-X))]
         [other (fail (format "expected an exn:fail:raft, got ~e" other))]))))
 
-(test-gpu "L11: the generics refuse with their own names"
+(test-gpu "the generics refuse with their own names"
   (define w (list->device-vector '(1 1 1 1 1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic
                     "transform: tsne has no transform; use fit-transform"
@@ -360,13 +360,13 @@
                     "fit-transform: tsne takes no sample-weight"
                     (lambda () (fit-transform (tsne) (tiny-X) #:sample-weight w))))
 
-(test-gpu "L11: after a refused NaN, large, spread, constant or cosine zero row, a valid call succeeds"
+(test-gpu "after a refused NaN, large, spread, constant or cosine zero row, a valid call succeeds"
   (for ([r (in-list (X-rows))]
         #:when (member (row-id r) '("f19" "f20" "f20b" "f20c" "f20d" "f21" "f22")))
     (fit-row r)
     (check-pred tsne-result? (tsne-fit (tiny-X) #:perplexity 5.0) (row-id r))))
 
-(test-pools "L11: a refusal leaves the RMM pool where it was"
+(test-pools "a refusal leaves the RMM pool where it was"
   (for ([r (in-list (X-rows))])
     (drain-finalizers!)
     (define before (probe-pool-used pool-device))

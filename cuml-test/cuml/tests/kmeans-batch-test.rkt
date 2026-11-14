@@ -128,7 +128,7 @@
   (define-values (_more? next) (sequence-generate (in-cycle outcomes)))
   next)
 
-(test-case "H13: the escalation fails a batch that departs and passes a nondeterministic fit"
+(test-case "the escalation fails a batch that departs and passes a nondeterministic fit"
   (define (verdict first rerun refit)
     (with-handlers ([exn:test:check? (lambda (_) 'failed)])
       (check-batch-fit! "stub" values first rerun refit)))
@@ -150,7 +150,7 @@
   (define calls (burst escalation))
   (check-equal? (batch-verdict values #f calls calls) 'unstable))
 
-(test-gpu "H13: the batch size changes no label and no n-iter"
+(test-gpu "the batch size changes no label and no n-iter"
   (define fits
     (for*/list ([dt (in-list dtypes)]
                 [X (in-value (blob-data rows 4 16 11 dt))]
@@ -199,7 +199,7 @@
   (printf "H13: fits that also change between runs at the default batch: ~a\n" (named 'unstable))
   (check-equal? (named 'departed) '()))
 
-(test-gpu "H13: a parameterize, the keyword and the estimator's setting choose the same batch"
+(test-gpu "a parameterize, the keyword and the estimator's setting choose the same batch"
   (for ([dt (in-list dtypes)])
     (define X (mat grid64 dt))
     (define by-parameter
@@ -222,7 +222,7 @@
       (- (current-inexact-milliseconds) start)))
   (second (sort times <)))
 
-(test-gpu "H14: the batch size is read when the procedure or the estimator is called"
+(test-gpu "the batch size is read when the procedure or the estimator is called"
   (define X (blob-data 65536 8 64 7 'float32))
   (define C (first-rows X 64 'float32))
   (define (transformed)
@@ -249,7 +249,7 @@
   (check-true (< (* 20 outside-call) setting-call)
               (format "default ~a ms, the setting at batch 1 ~a ms" outside-call setting-call)))
 
-(test-case "H15: current-batch-samples takes a 32-bit sample count"
+(test-case "current-batch-samples takes a 32-bit sample count"
   (check-equal? (current-batch-samples) 32768)
   (for ([v (in-list (list -1 2.5 (expt 2 31) 'x))])
     (define e (raised (lambda () (current-batch-samples v))))

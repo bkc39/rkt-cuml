@@ -15,7 +15,7 @@
 
 (define n (expt 10 6))
 
-(test-gpu "A5: accuracy over 2^24 + 3 samples with one wrong is the exact count over n"
+(test-gpu "accuracy over 2^24 + 3 samples with one wrong is the exact count over n"
   (define size (+ (expt 2 24) 3))
   (define truth (list->device-vector (make-list size 0) #:dtype 'int32))
   (define found (list->device-vector (cons 1 (make-list (sub1 size) 0)) #:dtype 'int32))
@@ -34,7 +34,7 @@
   (define residual (flsum (map (lambda (a b) (sqr (- a b))) ys ps)))
   (values (- 1.0 (/ residual spread)) (/ residual count)))
 
-(test-gpu "X1: float32 r2 and error are within 1e-12 of a float64 two-pass sum over the device's values"
+(test-gpu "float32 r2 and error are within 1e-12 of a float64 two-pass sum over the device's values"
   (define y (flvector->device-vector (normals 1 1e4) #:dtype 'float32))
   (define offsets (normals 2 0.0))
   (define p
@@ -56,7 +56,7 @@
   (check-= ours-r2 host-r2 (* 1e-12 r2-scale) (format "r2 ~a against ~a" ours-r2 host-r2))
   (check-= ours-mse host-mse (* 1e-12 host-mse) (format "error ~a against ~a" ours-mse host-mse)))
 
-(test-gpu "X2: five repeated weighted calls of each score give the same bits"
+(test-gpu "five repeated weighted calls of each score give the same bits"
   (define y (flvector->device-vector (normals 3 1e4) #:dtype 'float32))
   (define p (flvector->device-vector (normals 4 1e4) #:dtype 'float32))
   (define next (uniform-source 5))

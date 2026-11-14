@@ -26,7 +26,7 @@
                   tsvd-of
                   worst-difference))
 
-(test-gpu "L8: the fit is within c u F^2 of the Householder fixtures' exact SVD"
+(test-gpu "the fit is within c u F^2 of the Householder fixtures' exact SVD"
   (for* ([e (in-list householder-fixtures)]
          [dt (in-list '(float32 float64))]
          [solver (in-list '(full jacobi))]
@@ -53,7 +53,7 @@
   (for/list ([row (in-list rows)])
     (map narrow (centred row means))))
 
-(test-gpu "L14: on centred X, the fit is pca-fit's, its variances scaled by (n - 1)/n"
+(test-gpu "on centred X, the fit is pca-fit's, its variances scaled by (n - 1)/n"
   (for* ([shape (in-list '((500 12 5) (300 6 6)))]
          [dt (in-list '(float32 float64))])
     (match-define (list n d k) shape)

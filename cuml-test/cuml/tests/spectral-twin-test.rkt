@@ -156,7 +156,7 @@
           (length gs)
           (count cadr graph-outcomes)))
 
-(test-twin "T3: cuml's SpectralClustering default parameters are spectral-clustering-params'"
+(test-twin "cuml's SpectralClustering default parameters are spectral-clustering-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
   (define mapped (hash-update (twin-params theirs '()) 'random-state (lambda (seed) (or seed 0))))

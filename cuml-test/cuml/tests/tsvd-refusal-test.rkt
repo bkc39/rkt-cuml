@@ -115,14 +115,14 @@
         (cons 'fit-transform
               (lambda (X options) (fit-transform (apply-options truncated-svd options) X)))))
 
-(test-gpu "L17: the fits refuse each bad X with its message, the first refusal winning"
+(test-gpu "the fits refuse each bad X with its message, the first refusal winning"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (fit-X-rows))])
     (match-define (cons who call) entry)
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call (row-call r) (hasheq)))))))
 
-(test-gpu "L17: the fits refuse each bad hyperparameter with its message"
+(test-gpu "the fits refuse each bad hyperparameter with its message"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (parameter-rows))])
     (match-define (cons who call) entry)
@@ -233,7 +233,7 @@
       (test-case (format "~a ~a" who (row-id r))
         (check-row who r (lambda () (call result X)))))))
 
-(test-gpu "L17: the generics refuse a bad X with their own names"
+(test-gpu "the generics refuse a bad X with their own names"
   (define fitted-estimator (fit (truncated-svd #:n-components 2) (grid-with '())))
   (for* ([entry (in-list (list (cons 'transform transform)
                                (cons 'inverse-transform inverse-transform)))]
@@ -247,7 +247,7 @@
                     "inverse-transform: X: expected 2 columns, got 3"
                     (lambda () (inverse-transform fitted-estimator (grid-with '())))))
 
-(test-gpu "L17: the estimator refuses an unfitted use and a sample weight"
+(test-gpu "the estimator refuses an unfitted use and a sample weight"
   (define X (grid-with '()))
   (define w (list->device-vector '(1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic
@@ -263,7 +263,7 @@
                     "fit-transform: truncated-svd takes no sample-weight"
                     (lambda () (fit-transform (truncated-svd) X #:sample-weight w))))
 
-(test-pools "L17: a refusal leaves the RMM pool where it was"
+(test-pools "a refusal leaves the RMM pool where it was"
   (define device 0)
   (define (unchanged id thunk)
     (drain-finalizers!)

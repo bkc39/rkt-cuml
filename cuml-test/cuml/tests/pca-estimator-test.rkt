@@ -30,7 +30,7 @@
 
 (define changed (hasheq 'n-components 2 'whiten #t 'solver 'jacobi 'tol 1e-6 'iterations 30))
 
-(test-case "L18: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal? (pca-params)
                 (hasheq 'n-components #f 'whiten #f 'solver 'full 'tol 0.0 'iterations 15))
   (check-equal? (estimator-params (pca)) (pca-params))
@@ -38,7 +38,7 @@
   (check-equal? (estimator-params (pca (pca-params #:whiten #t) #:n-components 3))
                 (pca-params #:whiten #t #:n-components 3)))
 
-(test-case "L18: printing, equality and set-params"
+(test-case "printing, equality and set-params"
   (check-equal? (printed (pca)) (make-list 3 "#<pca>"))
   (check-equal? (format "~v" (pca #:n-components 2)) "#<pca #:n-components 2>")
   (check-equal? (pca #:solver 'jacobi) (pca #:solver 'jacobi))
@@ -51,7 +51,7 @@
   (check-false (pca? 'pca))
   (check-false (pca-model (pca))))
 
-(test-case "L18: pca is an estimator and a transformer, not a clusterer or a predictor"
+(test-case "pca is an estimator and a transformer, not a clusterer or a predictor"
   (check-equal? (capabilities (pca) pca?) '(#t #f #f #t #f #t)))
 
 (test-gpu "L13, L18: the estimator is the procedures, bitwise, on the same fit"
@@ -84,12 +84,12 @@
     (check-true (bits-equal? (listed T2) T))
     (check-true (bits-equal? (listed (fit-transform (pca #:n-components 5) X)) T))))
 
-(test-gpu "L18: a fitted pca prints its parameters after fitted"
+(test-gpu "a fitted pca prints its parameters after fitted"
   (define X (fixture-matrix normal-fixture 'float32 50))
   (check-equal? (format "~v" (fit (pca) X)) "#<pca fitted>")
   (check-equal? (format "~v" (fit (pca #:n-components 2) X)) "#<pca fitted #:n-components 2>"))
 
-(test-gpu "L16: fit-transform names the generic for a fit refusal"
+(test-gpu "fit-transform names the generic for a fit refusal"
   (check-cuml-error 'logic
                     "fit-transform: X: expected at least 2 rows, got 1"
                     (lambda () (fit-transform (pca) (rows->matrix '((1 2 3)) 'float32)))))

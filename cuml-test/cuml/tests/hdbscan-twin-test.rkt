@@ -155,7 +155,7 @@
           (length sklearn-cases)
           (count values sklearn-same)))
 
-(test-twin "T3: cuml's HDBSCAN default parameters are hdbscan-params'"
+(test-twin "cuml's HDBSCAN default parameters are hdbscan-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
   (define mapped (twin-params theirs '(p gen-min-span-tree prediction-data build-kwds device-ids)))

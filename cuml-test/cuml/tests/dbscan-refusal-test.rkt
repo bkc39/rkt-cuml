@@ -137,7 +137,7 @@
      ['float64
       (list (list '(5e-324 0) paired) (list '(1e-160 1e-160) joined) (list '(1e200 0) paired))])))
 
-(test-gpu "D14: a cosine row past float range, or with a NaN or an infinity, is not refused"
+(test-gpu "a cosine row past float range, or with a NaN or an infinity, is not refused"
   (for* ([dt (in-list dtypes)]
          [c (in-list (extreme-rows dt))])
     (match-define (list edge labels) c)

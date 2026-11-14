@@ -21,7 +21,7 @@
          (only-in "private/pca-data.rkt" fixture-name fixture-rows fixtures)
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix vector-shape))
 
-(test-gpu "L1: the result's fields have their shapes and X's dtype, and the outputs keep it"
+(test-gpu "the result's fields have their shapes and X's dtype, and the outputs keep it"
   (for* ([dt (in-list '(float32 float64))]
          [f (in-list fixtures)]
          [k (in-list '(#f 1 3))]
@@ -56,7 +56,7 @@
       (for ([out (list T I T2)])
         (check-false (eq? out X))))))
 
-(test-gpu "L1: fit, transform and inverse leave the caller's X bitwise unchanged"
+(test-gpu "fit, transform and inverse leave the caller's X bitwise unchanged"
   (for* ([dt (in-list '(float32 float64))]
          [f (in-list fixtures)]
          [solver (in-list '(full jacobi))])

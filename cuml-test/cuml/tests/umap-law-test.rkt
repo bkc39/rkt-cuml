@@ -27,7 +27,7 @@
 (define (ari truth E)
   (~> E (hdbscan-fit #:min-cluster-size 20) hdbscan-result-labels (adjusted-rand-score truth _)))
 
-(test-gpu "L3: every embedding and transform is finite"
+(test-gpu "every embedding and transform is finite"
   (for* ([metric (in-list '(euclidean sqeuclidean manhattan chebyshev cosine))]
          [init (in-list '(spectral random))])
     (test-case (format "~a ~a" metric init)
@@ -37,7 +37,7 @@
                                                                       (fixture-X held-out-new))))
                   "transform"))))
 
-(test-gpu "L9: supervision does not lower the label agreement on overlap"
+(test-gpu "supervision does not lower the label agreement on overlap"
   (define X (fixture-X overlap))
   (define truth (fixture-y overlap))
   (define supervised (ari truth (umap-result-embedding (umap-fit X #:y truth))))
@@ -47,7 +47,7 @@
 (define (constant-labels f v)
   (list->device-vector (map (lambda (_) v) (fixture-labels f)) #:dtype 'int32))
 
-(test-gpu "L9: relabelled y gives the same embedding, and an all -1 y is accepted"
+(test-gpu "relabelled y gives the same embedding, and an all -1 y is accepted"
   (define X (fixture-X overlap))
   (define labels (fixture-labels overlap))
   (check-true (bits-equal?
@@ -58,7 +58,7 @@
   (check-false (bits-equal? unlabelled (embedded (umap-fit X #:y (constant-labels overlap 0))))
                "an all -1 y is not one class"))
 
-(test-gpu "L12: transforming the training matrix equals transforming a copy of it"
+(test-gpu "transforming the training matrix equals transforming a copy of it"
   (define X (fixture-X held-out-fit))
   (define result (umap-fit X))
   (check-true (bits-equal? (device-matrix->list* (umap-transform result X))
@@ -67,7 +67,7 @@
                                (umap-transform result _)
                                device-matrix->list*))))
 
-(test-gpu "L13: seeds 0 and 1 differ, and #f draws from the reseeded PRNG below 300 rows"
+(test-gpu "seeds 0 and 1 differ, and #f draws from the reseeded PRNG below 300 rows"
   (define X (fixture-X far-blobs))
   (for ([init (in-list '(spectral random))])
     (check-false (bits-equal? (embedded (umap-fit X #:init init #:random-state 0))

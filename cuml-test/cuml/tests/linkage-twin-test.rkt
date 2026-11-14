@@ -127,7 +127,7 @@
           (count outcome-cut? outcomes)
           (count outcome-agree? outcomes)))
 
-(test-twin "T4: cuml.AgglomerativeClustering's default parameters are single-linkage-params'"
+(test-twin "cuml.AgglomerativeClustering's default parameters are single-linkage-params'"
   (match-define (hash-table ('results (list theirs)))
     (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
   (define mapped (twin-params theirs '(handle)))

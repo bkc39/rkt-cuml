@@ -40,11 +40,11 @@
       (check-true (<= (relative a (hash-ref theirs 'tight_a)) tight-bound) "tight a")
       (check-true (<= (relative b (hash-ref theirs 'tight_b)) tight-bound) "tight b"))))
 
-(test-case "L4c: at most 50 iterations over min-dist/spread in [0, 1]"
+(test-case "at most 50 iterations over min-dist/spread in [0, 1]"
   (check-true (for/and ([i (in-range 1001)])
                 (<= (curve-iterations (/ i 1000.0) 1.0) 50))))
 
-(test-case "L4d: the fit is in normalised coordinates"
+(test-case "the fit is in normalised coordinates"
   (for* ([s (in-list '(1e-6 1e-3 1e3 1e6))]
          [m (in-list (list 0.0 (* 0.1 s) (* 0.5 s)))])
     (define-values (a b) (curve-parameters m s))
@@ -53,12 +53,12 @@
       (check-equal? b b1)
       (check-equal? a (fl* a1 (flexpt s (* -2.0 b1)))))))
 
-(test-case "L4e: a tiny spread fits as spread 1 does, where scipy's b is -70.5"
+(test-case "a tiny spread fits as spread 1 does, where scipy's b is -70.5"
   (define-values (_a b) (curve-parameters 1e-4 1e-3))
   (define-values (_a1 b1) (curve-parameters 0.1 1.0))
   (check-equal? b b1)
   (check-true (< (abs (- b 0.89506)) 1e-5)))
 
-(test-twin "L4e: scipy's departure at spread 1e-3, min-dist 1e-4 is pinned"
+(test-twin "scipy's departure at spread 1e-3, min-dist 1e-4 is pinned"
   (match-define (list theirs) (run-cases twin (list (hasheq 'op "ab" 'spread 1e-3 'min_dist 1e-4))))
   (check-true (< (abs (+ (hash-ref theirs 'b) 70.497)) 1e-3)))

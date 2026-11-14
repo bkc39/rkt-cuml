@@ -48,7 +48,7 @@
     (for/list ([column-axis (in-list permutation)])
       (if (= column-axis axis) 1.0 0.0))))
 
-(test-gpu "L2: the axis fixture's fit, transform and inverse are exact"
+(test-gpu "the axis fixture's fit, transform and inverse are exact"
   (for* ([dt (in-list dtypes)]
          [solver (in-list solvers)]
          [permutation (in-list '((0 1 2) (2 0 1) (1 2 0)))])
@@ -106,7 +106,7 @@
                   (format "L4: |CC^T - I| = ~a, ~a d u" off (/ off (* d u))))
       (check-equal? (spectrum-problems lists n (length variance) m u) '() "L5"))))
 
-(test-gpu "L3: the tie fixture's components take the first entry of largest magnitude positive"
+(test-gpu "the tie fixture's components take the first entry of largest magnitude positive"
   (for* ([dt (in-list dtypes)]
          [solver (in-list solvers)])
     (define result (pca-fit (rows->matrix tie-rows dt) #:solver solver))
@@ -114,7 +114,7 @@
     (check-true (andmap positive? (first-max-entries components))
                 (format "~a ~a ~a" dt solver components))))
 
-(test-gpu "L11: n-components at 1 and at min(n, d), with n < d, and the k-fit is the m-fit's head"
+(test-gpu "n-components at 1 and at min(n, d), with n < d, and the k-fit is the m-fit's head"
   (for* ([dt (in-list dtypes)]
          [solver (in-list solvers)]
          [f (in-list (list wide-fixture normal-fixture))])
@@ -233,7 +233,7 @@
                   y
                   (+ (* size components-error) bound (* 4 d u (+ size (abs m))) (floor-at 1)))))))
 
-(test-gpu "L14: tiny data, whose squares underflow, fits as the unit data scaled"
+(test-gpu "tiny data, whose squares underflow, fits as the unit data scaled"
   (for* ([dt (in-list dtypes)]
          [solver (in-list solvers)]
          [by (in-list (if (eq? dt 'float32)

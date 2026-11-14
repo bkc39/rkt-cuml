@@ -9,7 +9,7 @@
          (only-in threading ~>)
          (only-in "private/umap-data.rkt" far-blobs fixture-X fixture-y))
 
-(test-gpu "L8: HDBSCAN on the far-blobs embedding recovers the groups for seeds 0-9"
+(test-gpu "HDBSCAN on the far-blobs embedding recovers the groups for seeds 0-9"
   (define X (fixture-X far-blobs))
   (define truth (fixture-y far-blobs))
   (for* ([options (in-list '((spectral brute-force) (random brute-force) (spectral nn-descent)))]

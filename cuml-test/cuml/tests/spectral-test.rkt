@@ -129,14 +129,14 @@
   (spectral-clustering-fit-graph rows cols vals (graph-n g) #:n-clusters 3)
   (check-equal? (map device-vector->list vectors) graph-before))
 
-(test-gpu "P1: an upper-triangle graph, or one with its upper triangle down-scaled, does not converge"
+(test-gpu "an upper-triangle graph, or one with its upper triangle down-scaled, does not converge"
   (define-values (g _truth) (three-blocks))
   (check-cuml-error 'generic eigensolver (lambda () (graph-labels (graph-upper g) #:n-clusters 3)))
   (check-cuml-error 'generic
                     eigensolver
                     (lambda () (graph-labels (graph-scale-upper g 0.2) #:n-clusters 3))))
 
-(test-gpu "P2: cliques of 5, 17 and 30 do not converge at seed 0; three of 10 are recovered"
+(test-gpu "cliques of 5, 17 and 30 do not converge at seed 0; three of 10 are recovered"
   (define-values (uneven _uneven-truth) (cliques '(5 17 30)))
   (check-cuml-error 'generic
                     eigensolver
@@ -144,7 +144,7 @@
   (define-values (three three-truth) (cliques '(10 10 10)))
   (check-true (planted? (graph-labels three #:n-clusters 3) three-truth)))
 
-(test-gpu "P3: rows repeated 30 times do not converge at seed 0; repeated twice they are recovered"
+(test-gpu "rows repeated 30 times do not converge at seed 0; repeated twice they are recovered"
   (define-values (rows truth) (blobs 40 3 2 50.0 0))
   (check-cuml-error 'generic
                     eigensolver
@@ -153,7 +153,7 @@
   (check-true (planted? (labels (mat (repeat-each rows 2) 'float32) #:n-clusters 3)
                         (repeat-each truth 2))))
 
-(test-gpu "P4: one edge among 1000 samples, the rest isolated, does not converge"
+(test-gpu "one edge among 1000 samples, the rest isolated, does not converge"
   (define one-edge (graph '(0 1) '(1 0) '(1.0 1.0) 1000))
   (for ([k (in-list '(1 2 3))])
     (check-cuml-error 'generic eigensolver (lambda () (graph-labels one-edge #:n-clusters k)))))

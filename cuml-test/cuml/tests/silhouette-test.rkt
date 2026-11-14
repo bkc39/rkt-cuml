@@ -73,7 +73,7 @@
                   (<= (abs x) (+ 1 slack)))
                 (format "~a: largest |sample| ~a" dt (apply max (map abs s))))))
 
-(test-gpu "S13: under cosine, wide rows just past d times the least normal squared norm are accepted"
+(test-gpu "under cosine, wide rows just past d times the least normal squared norm are accepted"
   (define d 1000)
   (define rows (wide-rows d))
   (for ([dt (in-list float-dtypes)]

@@ -8,10 +8,10 @@
               [k (in-list '(2 3 16))])
     (hasheq 'init init 'n-components k)))
 
-(test-twin "L6: fit equals Python cuML's bitwise on digits"
+(test-twin "fit equals Python cuML's bitwise on digits"
   (define-values (head tail) (tail-split (digits)))
   (check-parity head tail configs #:transform? #f))
 
-(test-twin "L6: fit and transform equal Python cuML's bitwise on digits without ties"
+(test-twin "fit and transform equal Python cuML's bitwise on digits without ties"
   (define-values (head tail) (tail-split (jittered (digits) 64)))
   (check-parity head tail configs))

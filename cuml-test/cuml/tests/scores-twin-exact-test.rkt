@@ -20,7 +20,7 @@
              (* 3.0 (next)))))
     (list i at bt truth found w)))
 
-(test-twin "T3: accuracy equals sklearn and Python cuML unweighted, within 1e-15 weighted"
+(test-twin "accuracy equals sklearn and Python cuML unweighted, within 1e-15 weighted"
   (define cases (weighted-label-cases))
   (define results
     (checked-twin-results (for/list ([c (in-list cases)])
@@ -40,7 +40,7 @@
          (check-equal? ours sk)
          (check-equal? ours cu)]))))
 
-(test-twin "T4: a constant y-true scores as both references where they agree, as Python cuML at n = 1"
+(test-twin "a constant y-true scores as both references where they agree, as Python cuML at n = 1"
   (define cases
     (list (list '(2.0 2.0 2.0) '(2.0 2.0 2.0) 1.0)
           (list '(2.0 2.0 2.0) '(2.0 2.0 3.0) 0.0)

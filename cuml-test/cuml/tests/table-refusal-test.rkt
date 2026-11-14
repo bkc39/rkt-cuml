@@ -88,11 +88,11 @@
             mixed
             #:columns '("b" "a"))))
 
-(test-gpu "L8: table->device-matrix refuses each bad argument with its message"
+(test-gpu "table->device-matrix refuses each bad argument with its message"
   (for ([r (in-list (rows))])
     (check-row "table->device-matrix" r)))
 
-(test-pools "L9: a refusal allocates no device memory"
+(test-pools "a refusal allocates no device memory"
   (define device 0)
   (for ([r (in-list (rows))])
     (drain-finalizers!)

@@ -22,7 +22,7 @@
         (svd-singular fitted)
         (device-matrix->list* T)))
 
-(test-gpu "L12: five fits of one X give the same bits, in both dtypes and under both solvers"
+(test-gpu "five fits of one X give the same bits, in both dtypes and under both solvers"
   (for* ([n (in-list '(4096 20000))]
          [rows (in-value (normal-rows-of (+ n 1) n 64))]
          [dt (in-list '(float32 float64))]

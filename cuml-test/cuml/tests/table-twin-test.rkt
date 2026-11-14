@@ -49,7 +49,7 @@
           'columns (apply map list (host-rows t columns))
           'dtype (symbol->string element-type)))
 
-(test-twin "L12: every numeric selection and the JSON-safe edge values match pandas through cupy"
+(test-twin "every numeric selection and the JSON-safe edge values match pandas through cupy"
   (define all (cases))
   (define theirs (hash-ref (run-twin twin (hasheq 'cases (map twin-case->jsexpr all))) 'cases))
   (check-equal? (map (lambda (their) (hash-ref their 'name)) theirs) (map twin-case-name all))

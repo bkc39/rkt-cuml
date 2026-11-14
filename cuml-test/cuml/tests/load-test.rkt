@@ -37,7 +37,7 @@
 (test-case "cuml re-exports cuml/preprocessing's standard scaling"
   (check-equal? (dynamic-require 'cuml 'standard-scaler-fit) standard-scaler-fit))
 
-(test-case "L20: cuml/preprocessing maps its own shim, and neither the cluster shim nor libcuml"
+(test-case "cuml/preprocessing maps its own shim, and neither the cluster shim nor libcuml"
   (check-equal? (run-program `(module m racket/base
                                 (require cuml/preprocessing
                                          (only-in racket/file file->string))
@@ -51,10 +51,10 @@
 (test-case "cuml re-exports cuml/decomposition's principal component analysis"
   (check-equal? (dynamic-require 'cuml 'pca-fit) pca-fit))
 
-(test-case "L22: cuml re-exports cuml/decomposition's truncated SVD"
+(test-case "cuml re-exports cuml/decomposition's truncated SVD"
   (check-equal? (dynamic-require 'cuml 'tsvd-fit) tsvd-fit))
 
-(test-case "L20: cuml/decomposition maps its own shim, and not the cluster, metrics or preprocessing shims"
+(test-case "cuml/decomposition maps its own shim, and not the cluster, metrics or preprocessing shims"
   (check-equal?
    (run-program `(module m racket/base
                    (require cuml/decomposition
@@ -73,7 +73,7 @@
   (check-equal? (dynamic-require 'cuml 'spectral-embedding-fit) spectral-embedding-fit)
   (check-equal? (dynamic-require 'cuml 'spectral-embedding-fit-graph) spectral-embedding-fit-graph))
 
-(test-case "L17: cuml/manifold maps its own shim, and no other family's"
+(test-case "cuml/manifold maps its own shim, and no other family's"
   (check-equal?
    (run-program `(module m racket/base
                    (require cuml/manifold

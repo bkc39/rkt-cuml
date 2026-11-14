@@ -104,14 +104,14 @@
         (cons 'fit (lambda (X options) (fit (apply-options pca options) X)))
         (cons 'fit-transform (lambda (X options) (fit-transform (apply-options pca options) X)))))
 
-(test-gpu "L16: the fits refuse each bad X with its message, the first refusal winning"
+(test-gpu "the fits refuse each bad X with its message, the first refusal winning"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (fit-X-rows))])
     (match-define (cons who call) entry)
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call (row-call r) (hasheq)))))))
 
-(test-gpu "L16: the fits refuse each bad hyperparameter with its message"
+(test-gpu "the fits refuse each bad hyperparameter with its message"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (parameter-rows))])
     (match-define (cons who call) entry)
@@ -263,7 +263,7 @@
   (list (list 'pca-transform pca-transform transform-rows)
         (list 'pca-inverse-transform pca-inverse-transform inverse-rows)))
 
-(test-gpu "L16: transform and inverse-transform refuse each bad argument with its message"
+(test-gpu "transform and inverse-transform refuse each bad argument with its message"
   (for ([entry (in-list (applied-calls))])
     (match-define (list who call rows) entry)
     (for ([r (in-list (rows))])
@@ -271,7 +271,7 @@
       (test-case (format "~a ~a" who (row-id r))
         (check-row who r (lambda () (call result X)))))))
 
-(test-gpu "L16: the generics refuse a bad X with their own names"
+(test-gpu "the generics refuse a bad X with their own names"
   (define fitted-estimator (fit (pca #:n-components 2) (grid-with '())))
   (for* ([entry (in-list (list (cons 'transform transform)
                                (cons 'inverse-transform inverse-transform)))]
@@ -285,7 +285,7 @@
                     "inverse-transform: X: expected 2 columns, got 3"
                     (lambda () (inverse-transform fitted-estimator (grid-with '())))))
 
-(test-gpu "L16: the estimator refuses an unfitted use and a sample weight"
+(test-gpu "the estimator refuses an unfitted use and a sample weight"
   (define X (grid-with '()))
   (define w (list->device-vector '(1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic "transform: pca is not fitted" (lambda () (transform (pca) X)))
@@ -307,7 +307,7 @@
                         (exact->inexact (- (modulo (* i (add1 j)) 7) 3)))))
                 dt))
 
-(test-gpu "L17: an element whose covariance could overflow is refused, and one under the bound fits"
+(test-gpu "an element whose covariance could overflow is refused, and one under the bound fits"
   (for ([c (in-list '((float32 1e19 "652190871829835648" "1e+19")
                       (float32 3e38 "652190871829835648" "3e+38")
                       (float64 1e160 "4.740375954054588e+152" "1e+160")))])
@@ -325,7 +325,7 @@
   (check-true (andmap (lambda (row) (andmap rational? row))
                       (device-matrix->list* (pca-result-components result)))))
 
-(test-pools "L16: a refusal leaves the RMM pool where it was"
+(test-pools "a refusal leaves the RMM pool where it was"
   (define device 0)
   (define (unchanged id thunk)
     (drain-finalizers!)

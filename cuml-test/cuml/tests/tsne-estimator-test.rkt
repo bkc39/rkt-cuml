@@ -37,7 +37,7 @@
           'init 'pca
           'random-state 7))
 
-(test-case "L12: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal? (tsne-params)
                 (hasheq 'n-components 2
                         'perplexity 30.0
@@ -52,7 +52,7 @@
   (check-equal? (estimator-params (tsne)) (tsne-params))
   (check-equal? (round-trips tsne changed) changed))
 
-(test-case "L12: printing, equality and set-params"
+(test-case "printing, equality and set-params"
   (check-equal? (printed (tsne)) (make-list 3 "#<tsne>"))
   (check-equal? (format "~v" (tsne #:perplexity 5.0)) "#<tsne #:perplexity 5.0>")
   (check-equal? (tsne #:init 'pca) (tsne #:init 'pca))
@@ -65,15 +65,15 @@
   (check-false (tsne? 'tsne))
   (check-false (tsne-model (tsne))))
 
-(test-case "L12: tsne is an estimator and a transformer, not a clusterer or a predictor"
+(test-case "tsne is an estimator and a transformer, not a clusterer or a predictor"
   (check-equal? (capabilities (tsne) tsne?) '(#t #f #f #t #f #t)))
 
-(test-case "L10: transform is refused, fitted or not"
+(test-case "transform is refused, fitted or not"
   (check-cuml-error 'logic
                     "transform: tsne has no transform; use fit-transform"
                     (lambda () (transform (tsne) 'X))))
 
-(test-gpu "L10: fit-transform's matrix is the fit's embedding, and the estimator is the procedures"
+(test-gpu "fit-transform's matrix is the fit's embedding, and the estimator is the procedures"
   (define X (fixture-X far-blobs))
   (define-values (result E) (tsne-fit-transform X #:random-state 3))
   (check-true (eq? E (tsne-result-embedding result)))
