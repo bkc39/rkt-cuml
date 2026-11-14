@@ -110,6 +110,8 @@ cumlrkt_family(linear_model
           linear_model/src/elastic_net.cpp linear_model/src/cd_staging.cpp
           linear_model/src/cd_device.cu linear_model/src/logistic.cpp
           linear_model/src/logistic_apply.cpp linear_model/src/logistic_device.cu
+          linear_model/src/logistic_apply_device.cu
+          linear_model/src/logistic_weights.cpp
           common/src/labels.cu
   TESTS linear_model/tests/glm_staging_test.cpp
         linear_model/tests/cd_staging_test.cpp
