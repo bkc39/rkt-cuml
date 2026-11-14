@@ -1977,3 +1977,20 @@ scratch, the source is `cpp/src/glm/qn/`.
   residual, K ≤ 1e-7·max(F, 1) (measured ≤ 3.9e-8), l2 is held within
   1e-5 of sklearn's, a float32 fit within 1e-2 of the float64 one
   (measured 5.4e-3, l1), and accuracy to a row of sklearn's.
+- **Oracle: glmnet (#131).** bkc39/glmnet's coordinate descent, a
+  test-only flake input of `cuml-test`, at `#:standardize? #f`, thresh
+  1e-14. Binomial and multinomial: λ = 1/(C·W), α the l1 share; a factor
+  of 2 either way moves the coefficients 2e-3 to 1.2 (relative). glmnet
+  takes no weights, so integer weights are replicated rows. Tight-tol
+  gaps (relative, coefficients and intercepts; multinomial centred, and
+  probabilities absolute): blobs 3.5e-6 (f64), 5.5e-3 (f32, weighted l1
+  C 10); breast-cancer 1.4e-5 (f64, C ≤ 1), 5.4e-3 (f32); iris 1.3e-5,
+  1.8e-2; wine 3.3e-6, 8.7e-4. At the default tol the blob and wine fits
+  are within the default-tol cap; breast-cancer l1 (4.4e-2 at C 1, 8.1e-2
+  at C 10, f64) and iris l1 (5.1e-2) are not, and iris at C 10 is refused
+  at max-iter 1000. Gaussian: glmnet divides its whole penalty by sd(y)
+  (`standard` in the vendored Fortran), so λ = alpha·r + s·alpha·(1 − r),
+  α = alpha·r/λ, and ridge is λ = s·alpha/W against cuML's alpha;
+  synthetic gaps 6.6e-10 (f64), 4.7e-7 (f32), s off by 1e-4 gives 2e-5;
+  diabetes 3.4e-5, where glmnet's own stop is the larger error (ridge, a
+  direct solve on our side, 1.3e-6).
