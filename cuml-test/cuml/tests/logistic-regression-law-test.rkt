@@ -118,9 +118,7 @@
   (define n (length ys))
   (define mapping
     (for/hash ([c (in-list classes)])
-      (values c
-              (exact->inexact
-               (/ n (* (length classes) (count-of ys c)))))))
+      (values c (exact->inexact (/ n (* (length classes) (count-of ys c)))))))
   (define unweighted (lr-case "unweighted" (lr-case-X binary) ys #f))
   (for ([dt (in-list dtypes)])
     (check-equal? (fit-parts (case-fit unweighted dt #:class-weight 'balanced))

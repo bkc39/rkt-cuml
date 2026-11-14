@@ -37,8 +37,7 @@
         (blob-case "binary weighted" 48 2 2 42 #:weighted? #t)
         (blob-case "three classes" 60 3 3 43)))
 
-(define settings
-  (list* default-setting (setting 'l2 0.1 #f) (rest penalty-settings)))
+(define settings (list* default-setting (setting 'l2 0.1 #f) (rest penalty-settings)))
 
 (struct trial
         (case dt

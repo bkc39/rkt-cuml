@@ -47,10 +47,7 @@
   (match z
     [(list s)
      (define p (bf/ 1.bf (bf+ 1.bf (bfexp (bf- 0.bf s)))))
-     (values (bf- (softplus s)
-                  (if (= label 1)
-                      s
-                      0.bf))
+     (values (bf- (softplus s) (if (= label 1) s 0.bf))
              (list (if (= label 1)
                        (bf- p 1.bf)
                        p)))]
@@ -161,7 +158,10 @@
                   [(v g0 s mean)
                    (in-parallel (in-list wc) (in-list gc) (in-list sigma) (in-list means))])
         (define-values (term scaled) (coefficient-terms v g0 sc s mean l1 l2 big-total))
-        (values (bf+ F term) (if scaled (bfmax worst scaled) worst))))
+        (values (bf+ F term)
+                (if scaled
+                    (bfmax worst scaled)
+                    worst))))
     (define tau (max (inexact->exact tol) tolerance-floor))
     (define F* (bigfloat->real F))
     (residual (bigfloat->real worst) F* (* residual-factor tau (max F* tau)))))

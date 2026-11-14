@@ -148,8 +148,10 @@
     (define decision (device-matrix->list* (logistic-regression-decision-function r X)))
     (define proba (device-matrix->list* (logistic-regression-predict-proba r X)))
     (if (= 1 (length (car decision)))
-        (check-true (non-decreasing-by-score?
-                     (map (match-lambda** [((list z) (list _ p)) (cons z p)]) decision proba)))
+        (check-true (non-decreasing-by-score? (map (match-lambda**
+                                                     [((list z) (list _ p)) (cons z p)])
+                                                   decision
+                                                   proba)))
         (for ([z (in-list decision)]
               [p (in-list proba)])
           (check-true (non-decreasing-by-score? (map cons z p)))))))

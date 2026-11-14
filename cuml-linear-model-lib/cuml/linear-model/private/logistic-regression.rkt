@@ -75,10 +75,10 @@
 
 (define real-labels
   (list-kind real?
-              <
-              =
-              (lambda (unify? v) (and (real? v) (real-key unify? v)))
-              (lambda (vs) (ormap inexact? vs))))
+             <
+             =
+             (lambda (unify? v) (and (real? v) (real-key unify? v)))
+             (lambda (vs) (ormap inexact? vs))))
 
 (define (named-labels member? <?)
   (list-kind member? <? equal? (lambda (_unify? v) v) (lambda (_vs) #f)))
@@ -191,16 +191,15 @@
 
 (define (fit-job who resources X y w weights out settings)
   (match-define (struct* qn-settings
-                         ([penalty penalty]
-                          [C C]
-                          [l1-ratio l1-ratio]
-                          [fit-intercept fit-intercept]
-                          [max-iter max-iter]
-                          [linesearch-max-iter linesearch-max-iter]
-                          [lbfgs-memory lbfgs-memory]
-                          [tol tol]
-                          [normalized normalized]
-                          [class-weight class-weight]))
+                         ([penalty penalty] [C C]
+                                            [l1-ratio l1-ratio]
+                                            [fit-intercept fit-intercept]
+                                            [max-iter max-iter]
+                                            [linesearch-max-iter linesearch-max-iter]
+                                            [lbfgs-memory lbfgs-memory]
+                                            [tol tol]
+                                            [normalized normalized]
+                                            [class-weight class-weight]))
     settings)
   (cuml-linear-model-logistic-regression-fit-job who
                                                  resources
@@ -255,8 +254,9 @@
   (sort (remove-duplicates integral =) <))
 
 (define (class-weight-view who kind classes cw resources)
-  (and (hash? cw)
-       (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources)))
+  (and
+   (hash? cw)
+   (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources)))
 
 (define (fit-labels who kind y cw resources)
   (match kind
@@ -309,9 +309,8 @@
 
 (define (applied who result X mode resources)
   (checked-result who result X)
-  (match-define (struct*
-                 logistic-regression-result
-                 ([coef coef] [intercept intercept] [classes classes] [label-kind kind]))
+  (match-define (struct* logistic-regression-result
+                         ([coef coef] [intercept intercept] [classes classes] [label-kind kind]))
     result)
   (define classes-view (and (eq? mode 'labels) (class-view kind classes resources)))
   (define out (deposit-for/who who resources))

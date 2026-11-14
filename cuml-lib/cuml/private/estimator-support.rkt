@@ -301,8 +301,7 @@
                                   (~optional (~seq #:predict-log-proba log-proba/who:id)
                                              #:name "#:predict-log-proba")
                                   (~optional (~seq #:decision-function decision/who:id)
-                                             #:name "#:decision-function"))
-                            ...)
+                                             #:name "#:decision-function")) ...)
   (define-estimator name
     #:hyperparameters table
     #:fit fit/who

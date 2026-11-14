@@ -146,8 +146,7 @@
       (define offset (fitted (map (lambda (z) (rounded dt (* 5 (+ 1 (* spread z))))) noise)))
       (define centred (fitted (map (lambda (z) (rounded dt (* 5 spread z))) noise)))
       (check-true (andmap (lambda (v) (not (zero? v))) (last-coef offset)))
-      (define gap
-        (relative-gap (coef-flat offset) (coef-flat centred)))
+      (define gap (relative-gap (coef-flat offset) (coef-flat centred)))
       (check-true (<= gap (centred-form-gap-bound dt)) (format "gap ~a" gap)))))
 
 (test-gpu "an offset column is fitted within the default tol's cap of its centred form"

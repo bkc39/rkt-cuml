@@ -23,10 +23,9 @@
 
 (test-gpu "wine: balanced class weights over unequal cultivars are refused"
   (define wine (labelled-set 'wine "cultivar" '()))
-  (check-cuml-error
-   'logic
-   (string-append "logistic-regression-fit: " unequal-weights-message)
-   (lambda ()
-     (logistic-regression-fit (on-matrix (lr-case-X (labelled-case wine)))
-                              (labelled-labels wine)
-                              #:class-weight 'balanced))))
+  (check-cuml-error 'logic
+                    (string-append "logistic-regression-fit: " unequal-weights-message)
+                    (lambda ()
+                      (logistic-regression-fit (on-matrix (lr-case-X (labelled-case wine)))
+                                               (labelled-labels wine)
+                                               #:class-weight 'balanced))))

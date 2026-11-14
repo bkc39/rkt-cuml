@@ -51,10 +51,7 @@
 (define default-setting (setting 'l2 1.0 #f))
 
 (define penalty-settings
-  (list default-setting
-        (setting 'l1 1.0 #f)
-        (setting 'elasticnet 0.5 0.5)
-        (setting 'none 1.0 #f)))
+  (list default-setting (setting 'l1 1.0 #f) (setting 'elasticnet 0.5 0.5) (setting 'none 1.0 #f)))
 
 (define cutoff-message #rx"first-order residual .* above the bound")
 
@@ -151,7 +148,12 @@
                            #:tol tol
                            #:class-weight class-weight))
 
-(define (setting-fit c dt s #:fit-intercept [fi #t] #:tol [tol default-tol] #:max-iter [max-iter 1000])
+(define (setting-fit c
+                     dt
+                     s
+                     #:fit-intercept [fi #t]
+                     #:tol [tol default-tol]
+                     #:max-iter [max-iter 1000])
   (case-fit c
             dt
             #:penalty (setting-penalty s)

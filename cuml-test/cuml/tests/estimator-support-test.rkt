@@ -437,10 +437,9 @@
      ,@options))
 
 (test-case "define-predictor takes its optional methods in any order, each once"
-  (check-not-exn (lambda ()
-                   (expanded (predictor-with '#:decision-function
-                                             'regressor-fit/who
-                                             '#:predict-proba
-                                             'regressor-fit/who))))
+  (check-not-exn
+   (lambda ()
+     (expanded
+      (predictor-with '#:decision-function 'regressor-fit/who '#:predict-proba 'regressor-fit/who))))
   (check-syntax-error (predictor-with '#:scorer 'regressor-fit/who '#:scorer 'regressor-fit/who)
                       #rx"too many occurrences of #:scorer"))
