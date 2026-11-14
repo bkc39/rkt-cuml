@@ -1,9 +1,9 @@
 #lang racket/base
 
-(require (only-in racket/match match-lambda)
-         (only-in racket/math pi)
-         (only-in cuml/linear-model logistic-regression-fit logistic-regression-result-coef)
+(require (only-in cuml/linear-model logistic-regression-fit logistic-regression-result-coef)
          (only-in racket/list make-list)
+         (only-in racket/match match-lambda)
+         (only-in racket/math pi)
          (only-in rackunit check-false check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
@@ -21,10 +21,14 @@
 
 (define (offset-data n seed)
   (define normal (normal-source seed))
-  (for/lists (X y) ([_ (in-range n)])
-    (define a (normal))
-    (define b (normal))
-    (values (list a b) (if (> (+ (* 2 a) (- b) (* 0.5 (normal))) 0) 1 0))))
+  (define X
+    (for/list ([_ (in-range n)])
+      (define a (normal))
+      (list a (normal))))
+  (values X
+          (map (match-lambda
+                 [(list a b) (if (> (+ (* 2 a) (- b) (* 0.5 (normal))) 0) 1 0)])
+               X)))
 
 (define (fit-or-message X
                         y
@@ -64,7 +68,9 @@
                                y
                                dt
                                #:fit-intercept #f
-                               #:lam (if (eq? penalty 'l2) (/ 1.0 offset-rows) 0.0)))))
+                               #:lam (if (eq? penalty 'l2)
+                                         (/ 1.0 offset-rows)
+                                         0.0)))))
 
 (test-gpu "without an intercept, columns on a common offset fit near the oracle or are refused"
   (for* ([offset (in-list '(0.0 100.0 1000.0 10000.0))]
@@ -96,7 +102,8 @@
         (with-handlers ([exn:fail? exn-message])
           (logistic-regression-fit (on-matrix X dt) (labelled-labels iris) #:fit-intercept #f)))
       (unless (string? r)
-        (check-false (andmap zero? (apply append (device-matrix->list* (logistic-regression-result-coef r)))))))))
+        (check-false
+         (andmap zero? (apply append (device-matrix->list* (logistic-regression-result-coef r)))))))))
 
 (define (scale-data m)
   (define uniform (uniform-source 11))

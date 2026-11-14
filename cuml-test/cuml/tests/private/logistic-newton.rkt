@@ -8,9 +8,11 @@
 (define newton-step-floor 1e-15)
 
 (define (sigmoid z)
-  (if (>= z 0)
-      (/ 1.0 (+ 1.0 (exp (- z))))
-      (let ([e (exp z)]) (/ e (+ 1.0 e)))))
+  (cond
+    [(>= z 0) (/ 1.0 (+ 1.0 (exp (- z))))]
+    [else
+     (define e (exp z))
+     (/ e (+ 1.0 e))]))
 
 (define (dot xs ys)
   (for/sum ([x (in-list xs)] [y (in-list ys)]) (* x y)))
@@ -18,7 +20,8 @@
 (define (solved A b)
   (define n (length b))
   (define rows
-    (for/vector ([row (in-list A)] [v (in-list b)])
+    (for/vector ([row (in-list A)]
+                 [v (in-list b)])
       (list->vector (append row (list v)))))
   (define (at r c)
     (vector-ref (vector-ref rows r) c))
@@ -46,30 +49,34 @@
   (define rows
     (for/list ([r (in-list X)])
       (define xs (map exact->inexact r))
-      (if fi (append xs '(1.0)) xs)))
+      (if fi
+          (append xs '(1.0))
+          xs)))
   (define q (length (car rows)))
   (define m (length rows))
   (define (ridge j)
     (if (< j p) lam 0.0))
-  (let loop ([theta (make-list q 0.0)] [iteration 0])
+  (let loop ([theta (make-list q 0.0)]
+             [iteration 0])
     (define mu (map (lambda (r) (sigmoid (dot r theta))) rows))
     (define gradient
       (for/list ([j (in-range q)])
         (+ (/ (for/sum ([r (in-list rows)] [u (in-list mu)] [l (in-list y)])
-                (* (- u l) (list-ref r j)))
+                       (* (- u l) (list-ref r j)))
               m)
            (* (ridge j) (list-ref theta j)))))
     (define hessian
       (for/list ([j (in-range q)])
         (for/list ([k (in-range q)])
           (+ (/ (for/sum ([r (in-list rows)] [u (in-list mu)])
-                  (* u (- 1 u) (list-ref r j) (list-ref r k)))
+                         (* u (- 1 u) (list-ref r j) (list-ref r k)))
                 m)
-             (if (= j k) (ridge j) 0.0)))))
+             (if (= j k)
+                 (ridge j)
+                 0.0)))))
     (define step (solved hessian gradient))
     (define next (map - theta step))
     (if (or (>= iteration newton-iterations)
-            (< (apply max (map abs step))
-               (* newton-step-floor (apply max 1e-300 (map abs next)))))
+            (< (apply max (map abs step)) (* newton-step-floor (apply max 1e-300 (map abs next)))))
         (take next p)
         (loop next (add1 iteration)))))

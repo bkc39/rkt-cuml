@@ -180,11 +180,11 @@
         (lambda () (go (on-matrix (scaled grid (expt 2 -66)) 'float32) y)))
    (row "a staged penalty beyond what float32's solver resolves"
         (regexp (string-append "^C: the penalty is too strong for the float32 solver to resolve at "
-                       "X's scale 2\\^4[0-9]; raise C or standardise X$"))
+                               "X's scale 2\\^4[0-9]; raise C or standardise X$"))
         (lambda () (go (on-matrix (scaled grid (expt 2 -40)) 'float32) y)))
    (row "a staged penalty beyond what float64's solver resolves"
         (regexp (string-append "^C: the penalty is too strong for the float64 solver to resolve at "
-                       "X's scale 2\\^6[0-9]; raise C or standardise X$"))
+                               "X's scale 2\\^6[0-9]; raise C or standardise X$"))
         (lambda () (go (on-matrix (scaled grid (expt 2 -60))) y)))
    (row "a subnormal float32 column with nothing staged"
         #rx"^X: column 2 has values only up to [^ ]+ in magnitude, subnormal in float32; scale it$"
