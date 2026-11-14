@@ -234,9 +234,12 @@
 
 (define (host-weights who kind classes cw)
   (define (weight-key c)
-    (for/first ([k (in-hash-keys cw)]
-                #:when (and ((list-kind-member? kind) k) ((list-kind-=? kind) k c)))
-      k))
+    (match (for/list ([k (in-hash-keys cw)]
+                      #:when (and ((list-kind-member? kind) k) ((list-kind-=? kind) k c)))
+             k)
+      [(list) #f]
+      [(list k) k]
+      [(list* a b _) (logic-error "~a: class-weight: keys ~e and ~e both name class ~e" who a b c)]))
   (define missing (filter-not weight-key classes))
   (when (and (pair? missing) (not (= (- (length classes) (length missing)) (hash-count cw))))
     (logic-error "~a: class-weight: classes ~s are not in class-weight" who missing))
