@@ -39,14 +39,12 @@ dtype and @racket[0.0] without @racket[fit-intercept].}
                                 [#:params params (or/c #f hash?) #f]
                                 [#:resources resources device-resources? (current-device-resources)])
          linear-regression-result?]{
-Fits ordinary least squares to @racket[y] on the columns of @racket[X], a
-row-major @racket['float32] or @racket['float64] matrix of finite values with
-at least two rows. @racket[y] and @racket[sample-weight] are vectors of
-@racket[X]'s dtype with one finite element per row; weights are at least 0
-with a positive sum. A zero weight deletes its row, and so does a weight of
-at most 2@superscript{−150}·4@superscript{k} (float32) or
-2@superscript{−1075}·4@superscript{k} (float64), 4@superscript{k} being the
-largest weight's power of two rounded up to a power of 4.
+Fits ordinary least squares to @racket[y] on the columns of @racket[X], a row-major
+@racket['float32] or @racket['float64] matrix of finite values with at least two rows. @racket[y]
+and @racket[sample-weight] are vectors of @racket[X]'s dtype with one finite element per row;
+weights are at least 0 with a positive sum. A zero weight deletes its row, and so does a weight of
+at most 2@superscript{−150}·4@superscript{k} (float32) or 2@superscript{−1075}·4@superscript{k}
+(float64), 4@superscript{k} being the largest weight's power of two rounded up to a power of 4.
 
 @racket['auto] and @racket['eig] solve the normal equations, @racket['svd]
 and @racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation
@@ -415,12 +413,14 @@ L-BFGS, OWL-QN with an l1 part; the intercept is not penalised. @racket[y] holds
 integral numbers on the device, or a list of reals, strings or symbols; @racket[classes] are the
 sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
 
-The fit is refused when the solver has not converged; the check bounds the first-order
-residual, not the distance to the optimum. A column constant over the rows of positive weight
-(zero, without @racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that
-varies only in its last bits is refused: centre it. Columns of widely mixed scale can be refused at
-any @racket[max-iter]: standardise them. On separable data without a penalty the coefficients
-grow until the solver stops. Large fits do not repeat bitwise.
+The fit is refused when the solver has not converged; the check bounds the first-order residual, not
+the distance to the optimum. A column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
+last bits is refused: centre it. Columns of widely mixed scale can be refused at any
+@racket[max-iter]: standardise them. Without @racket[fit-intercept], columns far from zero can be
+refused short of @racket[max-iter]: lower @racket[tol] or centre them
+(@hyperlink["https://github.com/bkc39/rkt-cuml/issues/126"]{#126}). On separable data without a
+penalty the coefficients grow until the solver stops. Large fits do not repeat bitwise.
 @examples[#:eval ev #:label #f
 (logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
 (eval:error (logistic-regression-fit Xc yc #:C 0))

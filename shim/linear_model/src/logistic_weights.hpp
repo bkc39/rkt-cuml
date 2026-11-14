@@ -18,6 +18,7 @@ struct weighted_rows {
   row_selection rows;
   bool uniform;
   double scale;
+  bool sampled;
 };
 
 const double* weights_in(const std::optional<weighted_rows>& wt);

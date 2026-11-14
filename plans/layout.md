@@ -1942,7 +1942,7 @@ scratch, the source is `cpp/src/glm/qn/`.
   without it, the penalty is refused as too strong to resolve at X's
   scale: 2²¹ (f32, and f64 with an intercept), 2⁴⁶ (f64 without).
   Measured (r3, N(0,1)·2⁻ᵉ data, m 200, 2000 and 20000, C 0.01, 1 and
-  100, the bound lifted): every fit stops with "raise max-iter or tol"
+  100, the bound lifted): every fit stops at the cutoff
   from l2/m 2^21.7 (f32 with an intercept), 2²³ (f32 without), 2^26.4
   (f64 with) and 2^49.7 (f64 without). Below that, failures are sporadic
   and keep the cutoff's message: f32 from 2^15.7, f64 with an intercept

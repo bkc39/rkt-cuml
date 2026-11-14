@@ -152,7 +152,7 @@ double resolved_l2(bool fit_intercept) {
 
 template <typename T>
 penalties staged_penalties(penalties p, int s, const fit_options& o,
-                           int64_t m) {
+                           int64_t m, bool weighted) {
   const penalties staged{std::ldexp(p.l1, s), std::ldexp(p.l2, 2 * s)};
   const auto lost = [](double before, double after) {
     const auto stored = static_cast<T>(after);
@@ -161,15 +161,18 @@ penalties staged_penalties(penalties p, int s, const fit_options& o,
   const auto dtype = raftrkt::dtype_name(raftrkt::dtype_code<T>);
   if (lost(p.l1, staged.l1) || lost(p.l2, staged.l2)) {
     throw logic_error(std::format(
-        "C: the penalty at X's scale 2^{} is outside the {} range", s, dtype));
+        "C: the penalty at X's scale 2^{} is outside the {} range", -s, dtype));
   }
   const double solved_l2 =
       o.normalized ? staged.l2 / static_cast<double>(m) : staged.l2;
   if (solved_l2 > resolved_l2<T>(o.fit_intercept)) {
     throw logic_error(std::format(
         "C: the penalty is too strong for the {} solver to resolve at X's "
-        "scale 2^{}; raise C or standardise X",
-        dtype, s));
+        "scale 2^{}{}",
+        dtype, -s,
+        weighted ? " or the sample weights; raise C or the sample weights, or "
+                   "standardise X"
+                 : "; raise C or standardise X"));
   }
   return staged;
 }
@@ -248,11 +251,15 @@ void require_resolved(const residual_sums& sums, const std::vector<T>& params,
   const double tau = std::max(options.tol, tolerance_floor);
   const double bound = residual_factor * tau * std::max(f, tau);
   if (!(worst <= bound)) {
+    const char* advice = c.n_iter >= options.max_iter ? "raise max-iter"
+                         : c.shape.fit_intercept
+                             ? "lower tol, or centre X"
+                             : "lower tol, centre X, or fit an intercept";
     throw logic_error(std::format(
         "the solver stopped at first-order residual {} above the bound {} "
-        "after {} iterations (max-iter {}, tol {}); raise max-iter or tol",
+        "after {} iterations (max-iter {}, tol {}); {}",
         printed(worst), printed(bound), c.n_iter, options.max_iter,
-        printed(options.tol)));
+        printed(options.tol), advice));
   }
 }
 
@@ -313,7 +320,8 @@ staged_fit<T> staged_of(const raft::handle_t& handle,
     pen = {pen.l1 * wt->scale, pen.l2 * wt->scale};
   }
   const int64_t m = rows.count;
-  pen = staged_penalties<T>(pen, s, options, m);
+  pen = staged_penalties<T>(pen, s, options, m,
+                            wt && wt->sampled && wt->scale != 1.0);
   const auto p = static_cast<int64_t>(stats.kept.size());
   std::optional<buffer<T>> copied;
   if (s != 0 || m < x.n || p < x.d) {

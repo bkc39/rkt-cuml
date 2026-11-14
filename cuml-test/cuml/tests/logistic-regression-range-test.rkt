@@ -52,7 +52,7 @@
       (check-equal? moved (scaled-parts (fitted base C) (expt 2.0 (- a)))))))
 
 (test-gpu "an l2 penalty that X times 2^-600 puts outside float64 is refused naming C"
-  (check-exn #rx"C: the penalty at X's scale 2\\^[0-9]+ is outside the float64 range"
+  (check-exn #rx"C: the penalty at X's scale 2\\^-[0-9]+ is outside the float64 range"
              (lambda () (case-fit (scaled-case binary (expt 2 -600)) 'float64 #:penalty 'l2))))
 
 (define (next-above dt v)
