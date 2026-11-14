@@ -1,6 +1,8 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model logistic-regression-fit logistic-regression-result-coef)
+(require (only-in racket/match match-lambda)
+         (only-in racket/math pi)
+         (only-in cuml/linear-model logistic-regression-fit logistic-regression-result-coef)
          (only-in racket/list make-list)
          (only-in rackunit check-false check-true test-case)
          (only-in raft device-matrix->list*)
@@ -97,12 +99,18 @@
         (check-false (andmap zero? (apply append (device-matrix->list* (logistic-regression-result-coef r)))))))))
 
 (define (scale-data m)
-  (define normal (normal-source 11))
-  (define uniform (uniform-source 12))
-  (for/lists (X y) ([_ (in-range m)])
-    (define a (normal))
-    (define b (normal))
-    (values (list a b) (if (> (+ a (* 0.5 b) (- (uniform) 0.5)) 0) 1 0))))
+  (define uniform (uniform-source 11))
+  (define (normal)
+    (define u (- 1.0 (uniform)))
+    (* (sqrt (* -2.0 (log u))) (cos (* 2.0 pi (uniform)))))
+  (define X
+    (for/list ([_ (in-range m)])
+      (define a (normal))
+      (list a (normal))))
+  (values X
+          (map (match-lambda
+                 [(list a b) (if (> (+ a (* 0.5 b) (- (uniform) 0.5)) 0) 1 0)])
+               X)))
 
 (define (check-scaled-fit m dt e C #:refusal [refusal #f])
   (define-values (X0 y) (scale-data m))
