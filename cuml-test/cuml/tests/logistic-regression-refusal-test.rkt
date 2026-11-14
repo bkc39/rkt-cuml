@@ -4,7 +4,7 @@
                   logistic-regression-decision-function
                   logistic-regression-fit
                   logistic-regression-predict)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define match-lambda)
          (only-in rackunit check-exn test-case)
          (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
@@ -22,6 +22,11 @@
 (define (scaled rows factor)
   (for/list ([r (in-list rows)])
     (map (lambda (v) (* v factor)) r)))
+
+(define (tiny-last rows factor)
+  (map (match-lambda
+         [(list a b c) (list a b (* factor c))])
+       rows))
 
 (define (overflowing rows)
   (define huge (* 3/2 (expt 2 1023)))
@@ -134,6 +139,12 @@
    (row "a list key that is not a class with a class missing"
         "class-weight: classes (\"a\") are not in class-weight"
         (lambda () (go X '("a" "b" "a" "b" "b" "a") #:class-weight (hash "b" 2.0 "c" 3.0))))
+   (row "two class-weight keys naming one class of a list"
+        #rx"^class-weight: keys (1|1\\.0) and (1\\.0|1) both name class 1$"
+        (lambda () (go X labels #:class-weight (hash 0 1 1 2 1.0 5))))
+   (row "two class-weight keys naming one class of a device vector"
+        #rx"^class-weight: keys (1|1\\.0) and (1\\.0|1) both name class 1$"
+        (lambda () (go X y #:class-weight (hash 0 1 1 2 1.0 5))))
    (row "one class"
         "y: expected at least 2 classes, got 1"
         (lambda () (go X (on-vector '(4 4 4 4 4 4) 'int32))))
@@ -168,11 +179,19 @@
         "C: the penalty at X's scale 2^66 is outside the float32 range"
         (lambda () (go (on-matrix (scaled grid (expt 2 -66)) 'float32) y)))
    (row "a staged penalty beyond what float32's solver resolves"
-        #rx"^C: the penalty at X's scale 2\\^4[0-9] is outside the float32 range$"
+        (regexp (string-append "^C: the penalty is too strong for the float32 solver to resolve at "
+                       "X's scale 2\\^4[0-9]; raise C or standardise X$"))
         (lambda () (go (on-matrix (scaled grid (expt 2 -40)) 'float32) y)))
    (row "a staged penalty beyond what float64's solver resolves"
-        #rx"^C: the penalty at X's scale 2\\^6[0-9] is outside the float64 range$"
+        (regexp (string-append "^C: the penalty is too strong for the float64 solver to resolve at "
+                       "X's scale 2\\^6[0-9]; raise C or standardise X$"))
         (lambda () (go (on-matrix (scaled grid (expt 2 -60))) y)))
+   (row "a subnormal float32 column with nothing staged"
+        #rx"^X: column 2 has values only up to [^ ]+ in magnitude, subnormal in float32; scale it$"
+        (lambda () (go (on-matrix (tiny-last grid 1e-40) 'float32) y)))
+   (row "a subnormal float64 column with nothing staged"
+        #rx"^X: column 2 has values only up to [^ ]+ in magnitude, subnormal in float64; scale it$"
+        (lambda () (go (on-matrix (tiny-last grid 1e-310)) y)))
    (row "a coefficient beyond float32 once unstaged"
         "X: a coefficient exceeds the float32 range"
         (lambda ()

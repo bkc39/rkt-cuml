@@ -1929,16 +1929,27 @@ scratch, the source is `cpp/src/glm/qn/`.
   2⁻¹⁰ (f32) relative spreads fit at tight tol. K centres the column
   gradient with an intercept (g_j − x̄_j·∂F/∂b): an offset column z + 2⁸
   was accepted with coef −0.0042 against −0.367 uncentred, and is refused
-  centred. σ_j is computed as a·√(Σw((x − x̄)/a)²/W), a = 2^⌊log₂ max|x_j|⌋,
+  centred. Without an intercept K divides by the centred spread too (the
+  RMS for a column constant to X's dtype, which stands in for the
+  intercept): columns on a common offset of 10⁴ were accepted at
+  coef ≈ 2·10⁻⁶ (chance accuracy) and are refused at the cutoff. f64
+  offsets from 300 to 10⁴ then need tol 10⁻⁶; in f32, 300 without a
+  penalty and 10³ up are refused at any tol (measured r3, n 400). σ_j is computed as a·√(Σw((x − x̄)/a)²/W), a = 2^⌊log₂ max|x_j|⌋,
   bitwise the old value in range; a kept column whose σ is not finite is
   refused naming its magnitude. The staged penalty is range-checked in X's
-  dtype (#24 names that dtype), and refused with #24's message above the
-  largest staged l2 the solver resolves: 2²⁸ (f32), 2³² (f64 with an
-  intercept), 2⁵⁴ (f64 without). Measured (r2, unit data at C = 2⁻ᵏ,
-  n 200 to 20000, linesearch-max-iter 50 and 200): the first failures are
-  2³⁰, 2³⁴ and 2⁵⁶; above them the fit stopped with "raise max-iter or
-  tol", which neither knob helps. `'balanced` with uniform sample weights
-  takes its class weights from the counts, n/(k·n_c).
+  dtype (#24 names that dtype). Above the largest staged l2 the solver
+  resolves, counted per row (l2/m) under `penalty-normalized` and raw
+  without it, the penalty is refused as too strong to resolve at X's
+  scale: 2²¹ (f32, and f64 with an intercept), 2⁴⁶ (f64 without).
+  Measured (r3, N(0,1)·2⁻ᵉ data, m 200, 2000 and 20000, C 0.01, 1 and
+  100, the bound lifted): every fit stops with "raise max-iter or tol"
+  from l2/m 2^21.7 (f32 with an intercept), 2²³ (f32 without), 2^26.4
+  (f64 with) and 2^49.7 (f64 without). Below that, failures are sporadic
+  and keep the cutoff's message: f32 from 2^15.7, f64 with an intercept
+  from 2^21.7, f64 without from 2⁴⁷. The f64 bound sits at its first
+  failure, so it refuses some fits that converged, up to 2^26.4. No fit
+  outside the default tol's cap was accepted. `'balanced` with uniform
+  sample weights takes its class weights from the counts, n/(k·n_c).
   **L4-q.** Separation is not refused.
 - **L4-p.** Raw breast-cancer is refused (R2): Python cuML's point there is
   off the float64 oracle by more than S4's cap (measured 0.98 f64, 0.99

@@ -39,9 +39,9 @@ constexpr double unstaged_spread_least = 0x1p-8;
 constexpr double unstaged_spread_most = 0x1p8;
 constexpr double tolerance_floor = 1e-4;
 constexpr double residual_factor = 64;
-constexpr double float32_l2_most = 0x1p28;
-constexpr double float64_l2_most = 0x1p32;
-constexpr double float64_l2_most_without_intercept = 0x1p54;
+constexpr double float32_l2_most = 0x1p21;
+constexpr double float64_l2_most = 0x1p21;
+constexpr double float64_l2_most_without_intercept = 0x1p46;
 
 struct penalties {
   double l1;
@@ -155,17 +155,25 @@ double resolved_l2(bool fit_intercept) {
 }
 
 template <typename T>
-penalties staged_penalties(penalties p, int s, bool fit_intercept) {
+penalties staged_penalties(penalties p, int s, const fit_options& o,
+                           int64_t m) {
   const penalties staged{std::ldexp(p.l1, s), std::ldexp(p.l2, 2 * s)};
   const auto lost = [](double before, double after) {
     const auto stored = static_cast<T>(after);
     return !std::isfinite(stored) || (before != 0 && stored == 0);
   };
-  if (lost(p.l1, staged.l1) || lost(p.l2, staged.l2) ||
-      staged.l2 > resolved_l2<T>(fit_intercept)) {
-    throw logic_error(
-        std::format("C: the penalty at X's scale 2^{} is outside the {} range",
-                    s, raftrkt::dtype_name(raftrkt::dtype_code<T>)));
+  const auto dtype = raftrkt::dtype_name(raftrkt::dtype_code<T>);
+  if (lost(p.l1, staged.l1) || lost(p.l2, staged.l2)) {
+    throw logic_error(std::format(
+        "C: the penalty at X's scale 2^{} is outside the {} range", s, dtype));
+  }
+  const double solved_l2 =
+      o.normalized ? staged.l2 / static_cast<double>(m) : staged.l2;
+  if (solved_l2 > resolved_l2<T>(o.fit_intercept)) {
+    throw logic_error(std::format(
+        "C: the penalty is too strong for the {} solver to resolve at X's "
+        "scale 2^{}; raise C or standardise X",
+        dtype, s));
   }
   return staged;
 }
@@ -189,10 +197,24 @@ void require_spread(const column_stats& s) {
 }
 
 template <typename T>
+double residual_spread(const column_stats& s, int64_t j) {
+  const bool resolved =
+      s.centred[j] > constant_spread * unit_roundoff<T> * s.magnitude[j];
+  return resolved ? std::min(s.centred[j], s.sigma[j]) : s.sigma[j];
+}
+
+template <typename T>
 void require_staged_columns(const column_stats& s, int shift) {
   const auto widest =
       std::ranges::max(s.kept, {}, [&](int64_t j) { return s.magnitude[j]; });
   for (const int64_t j : s.kept) {
+    if (shift == 0 && s.magnitude[j] < std::numeric_limits<T>::min()) {
+      throw logic_error(std::format(
+          "X: column {} has values only up to {} in magnitude, subnormal in "
+          "{}; scale it",
+          j, printed(s.magnitude[j]),
+          raftrkt::dtype_name(raftrkt::dtype_code<T>)));
+    }
     if (std::ldexp(s.magnitude[j], shift) < std::numeric_limits<T>::min()) {
       throw logic_error(std::format(
           "X: columns {} and {} span too wide a range; standardise them", j,
@@ -294,8 +316,8 @@ staged_fit<T> staged_of(const raft::handle_t& handle,
   if (wt) {
     pen = {pen.l1 * wt->scale, pen.l2 * wt->scale};
   }
-  pen = staged_penalties<T>(pen, s, options.fit_intercept);
   const int64_t m = rows.count;
+  pen = staged_penalties<T>(pen, s, options, m);
   const auto p = static_cast<int64_t>(stats.kept.size());
   std::optional<buffer<T>> copied;
   if (s != 0 || m < x.n || p < x.d) {
@@ -313,7 +335,7 @@ staged_fit<T> staged_of(const raft::handle_t& handle,
   std::vector<double> sigma(p);
   std::vector<double> mean(p);
   std::ranges::transform(stats.kept, sigma.begin(), [&](int64_t j) {
-    return std::ldexp(stats.sigma[j], s);
+    return std::ldexp(residual_spread<T>(stats, j), s);
   });
   std::ranges::transform(stats.kept, mean.begin(), [&](int64_t j) {
     return std::ldexp(stats.mean[j], s);

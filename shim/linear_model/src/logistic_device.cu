@@ -314,24 +314,31 @@ column_stats column_stats_of(const matrix<T, int64_t>& x, const double* weights,
   const std::vector<first_sums> first = column_reduce<column_lanes>(
       stream, rows, x.d, first_entry<T>{x.data, weights, x.d, reference},
       add_first{}, first_sums{0.0, 0.0, 0.0, 0});
-  std::vector<double> mean(x.d, 0.0);
-  if (fit_intercept) {
-    std::ranges::transform(first, mean.begin(), [](const first_sums& f) {
-      return f.weighted / f.weight;
-    });
-  }
+  std::vector<double> centre(x.d);
+  std::ranges::transform(first, centre.begin(), [](const first_sums& f) {
+    return f.weighted / f.weight;
+  });
+  std::vector<double> mean =
+      fit_intercept ? centre : std::vector<double>(x.d, 0.0);
   std::vector<int> exponent(x.d, 0);
   std::ranges::transform(first, exponent.begin(), [](const first_sums& f) {
     return f.largest > 0 && std::isfinite(f.largest) ? std::ilogb(f.largest)
                                                      : 0;
   });
-  const buffer<double> means = to_device(mean, stream);
   const buffer<int> exponents = to_device(exponent, stream);
-  const std::vector<double> square = column_reduce<column_lanes>(
-      stream, rows, x.d,
-      deviation_entry<T>{x.data, weights, means.data(), exponents.data(), x.d},
-      thrust::plus<double>{}, 0.0);
+  const auto squares = [&](const std::vector<double>& about) {
+    const buffer<double> means = to_device(about, stream);
+    return column_reduce<column_lanes>(
+        stream, rows, x.d,
+        deviation_entry<T>{x.data, weights, means.data(), exponents.data(),
+                           x.d},
+        thrust::plus<double>{}, 0.0);
+  };
+  const std::vector<double> square = squares(mean);
+  const std::vector<double> centred_square =
+      fit_intercept ? square : squares(centre);
   column_stats s{std::vector<double>(x.d),
+                 std::vector<double>(x.d),
                  std::move(mean),
                  std::vector<double>(x.d),
                  {},
@@ -339,6 +346,8 @@ column_stats column_stats_of(const matrix<T, int64_t>& x, const double* weights,
   for (int64_t j = 0; j < x.d; ++j) {
     const first_sums& f = first[j];
     s.sigma[j] = std::ldexp(std::sqrt(square[j] / f.weight), exponent[j]);
+    s.centred[j] =
+        std::ldexp(std::sqrt(centred_square[j] / f.weight), exponent[j]);
     s.magnitude[j] = f.largest;
     s.largest = std::max(s.largest, f.largest);
     if (fit_intercept ? f.varies != 0 : f.largest > 0) {
