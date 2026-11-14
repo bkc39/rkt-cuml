@@ -108,7 +108,7 @@
       (define-values (r _check-near) (offset-fit 1000.0 dt 'l2))
       (check-true (and (string? r) (regexp-match? short-cutoff-without-intercept r)) r))))
 
-(test-case "without an intercept the oracle divides by the centred spread, as the shim's check"
+(test-gpu "without an intercept the oracle divides by the centred spread, as the shim's check"
   (match-define (residual K _ _)
     (residual-of '((1001.0) (999.0)) '(1 0) #f '((0.0)) '(0.0) #:penalty 'none #:fit-intercept #f))
   (check-true (= K 1/2) (format "K ~a" K)))
