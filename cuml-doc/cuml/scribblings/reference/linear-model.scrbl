@@ -390,10 +390,9 @@ The @racket[lasso-result] of the fit that made @racket[estimator], or @racket[#f
              [classes list?]
              [label-kind any/c]
              [n-iter exact-nonnegative-integer?])]{
-The result of @racket[logistic-regression-fit]: one row of @racket[coef] and one
-@racket[intercept] for two classes (the second's log-odds), else one per class.
-@racket[label-kind] is how @racket[y] held its labels, which
-@racket[logistic-regression-predict] answers in.}
+The result of @racket[logistic-regression-fit]: one row of @racket[coef] and one @racket[intercept]
+for two classes (the second's log-odds), else one per class. @racket[label-kind] is how @racket[y]
+held its labels, which @racket[logistic-regression-predict] answers in.}
 
 @defproc[(logistic-regression-fit [X device-matrix?]
                                   [y (or/c device-vector? list?)]
