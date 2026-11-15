@@ -1,0 +1,34 @@
+#lang racket/base
+
+(require (only-in cuml/linear-model
+                  mbsgd-classifier-fit
+                  mbsgd-classifier-predict
+                  mbsgd-regressor-fit
+                  mbsgd-regressor-predict)
+         (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target)
+         (only-in "private/process-memory.rkt" test-fit-memory))
+
+(define (setup)
+  (define rows (normal-rows 2000 7 61))
+  (define-values (blobs labels) (blob-rows 2000 7 62))
+  (define X (on-matrix rows 'float32))
+  (define y (on-vector (reg-target rows 61) 'float32))
+  (define B (on-matrix blobs 'float32))
+  (define codes (on-vector labels 'int32))
+  (define small (normal-rows 100 3 41))
+  (define diverging-X (on-matrix small 'float32))
+  (define diverging-y (on-vector (reg-target small 41) 'float32))
+  (values (lambda ()
+            (mbsgd-regressor-predict (mbsgd-regressor-fit X y #:epochs 20) X)
+            (mbsgd-classifier-predict (mbsgd-classifier-fit B codes #:epochs 20) B))
+          (list (list "mbsgd-regressor-fit: the solution is not finite; lower #:eta0 (now 10)"
+                      (lambda () (mbsgd-regressor-fit diverging-X diverging-y #:eta0 10))))))
+
+(define fit-and-predict-buffers 9)
+
+(test-fit-memory "mbsgd"
+                 #:rounds 50
+                 #:sample-every 10
+                 #:setup setup
+                 #:buffers-per-round fit-and-predict-buffers)
