@@ -165,38 +165,66 @@ TEST(MbsgdGate, ARiseWithinTheSlackOrTheFloorIsAccepted) {
             "the objective rose from 0 to 1e-20; lower #:eta0 (now 0.01)");
 }
 
-sgd_options with_penalty(int32_t penalty, double alpha, double l1_ratio,
-                         int32_t fit_intercept, double eta0) {
+struct penalty_case {
+  int32_t penalty;
+  double alpha;
+  double l1_ratio;
+  int32_t fit_intercept;
+  double eta0;
+};
+
+sgd_options with_penalty(const penalty_case& c) {
   sgd_options o = cuml_defaults;
-  o.penalty = penalty;
-  o.alpha = alpha;
-  o.l1_ratio = l1_ratio;
-  o.fit_intercept = fit_intercept;
-  o.eta0 = eta0;
+  o.penalty = c.penalty;
+  o.alpha = c.alpha;
+  o.l1_ratio = c.l1_ratio;
+  o.fit_intercept = c.fit_intercept;
+  o.eta0 = c.eta0;
   return o;
 }
 
 TEST(MbsgdGate, TheL1AllowanceIsCKEta0AlphaRSquared) {
   using cumlrkt::glm::mbsgd::l1_allowance;
   EXPECT_DOUBLE_EQ(
-      l1_allowance(
-          with_penalty(CUML_LINEAR_MODEL_PENALTY_L1, 10, 0.15, 1, 1e-3), 3),
+      l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
+                                 .alpha = 10,
+                                 .l1_ratio = 0.15,
+                                 .fit_intercept = 1,
+                                 .eta0 = 1e-3}),
+                   3),
       3.5 * 4 * 1e-3 * 100);
   EXPECT_DOUBLE_EQ(
-      l1_allowance(
-          with_penalty(CUML_LINEAR_MODEL_PENALTY_L1, 10, 0.15, 0, 1e-3), 3),
+      l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
+                                 .alpha = 10,
+                                 .l1_ratio = 0.15,
+                                 .fit_intercept = 0,
+                                 .eta0 = 1e-3}),
+                   3),
       3.5 * 3 * 1e-3 * 100);
   EXPECT_DOUBLE_EQ(
       l1_allowance(
-          with_penalty(CUML_LINEAR_MODEL_PENALTY_ELASTICNET, 2, 0.25, 1, 0.5),
+          with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_ELASTICNET,
+                        .alpha = 2,
+                        .l1_ratio = 0.25,
+                        .fit_intercept = 1,
+                        .eta0 = 0.5}),
           30),
       3.5 * 31 * 0.5 * 0.25);
-  EXPECT_EQ(
-      l1_allowance(with_penalty(CUML_LINEAR_MODEL_PENALTY_L2, 10, 1, 1, 1), 3),
-      0);
-  EXPECT_EQ(l1_allowance(
-                with_penalty(CUML_LINEAR_MODEL_PENALTY_NONE, 10, 1, 1, 1), 3),
+  EXPECT_EQ(l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L2,
+                                       .alpha = 10,
+                                       .l1_ratio = 1,
+                                       .fit_intercept = 1,
+                                       .eta0 = 1}),
+                         3),
             0);
+  EXPECT_EQ(
+      l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_NONE,
+                                 .alpha = 10,
+                                 .l1_ratio = 1,
+                                 .fit_intercept = 1,
+                                 .eta0 = 1}),
+                   3),
+      0);
 }
 
 TEST(MbsgdGate, TheRegressorFloorIsRoundOffOfY) {
