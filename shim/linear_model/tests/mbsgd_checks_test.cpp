@@ -185,13 +185,14 @@ sgd_options with_penalty(const penalty_case& c) {
 
 TEST(MbsgdGate, TheL1AllowanceIsCKEta0AlphaRSquared) {
   using cumlrkt::glm::mbsgd::l1_allowance;
+  const double uncapped = 1e6;
   EXPECT_DOUBLE_EQ(
       l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
                                  .alpha = 10,
                                  .l1_ratio = 0.15,
                                  .fit_intercept = 1,
                                  .eta0 = 1e-3}),
-                   3),
+                   3, uncapped),
       3.5 * 4 * 1e-3 * 100);
   EXPECT_DOUBLE_EQ(
       l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
@@ -199,7 +200,7 @@ TEST(MbsgdGate, TheL1AllowanceIsCKEta0AlphaRSquared) {
                                  .l1_ratio = 0.15,
                                  .fit_intercept = 0,
                                  .eta0 = 1e-3}),
-                   3),
+                   3, uncapped),
       3.5 * 3 * 1e-3 * 100);
   EXPECT_DOUBLE_EQ(
       l1_allowance(
@@ -208,14 +209,14 @@ TEST(MbsgdGate, TheL1AllowanceIsCKEta0AlphaRSquared) {
                         .l1_ratio = 0.25,
                         .fit_intercept = 1,
                         .eta0 = 0.5}),
-          30),
+          30, uncapped),
       3.5 * 31 * 0.5 * 0.25);
   EXPECT_EQ(l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L2,
                                        .alpha = 10,
                                        .l1_ratio = 1,
                                        .fit_intercept = 1,
                                        .eta0 = 1}),
-                         3),
+                         3, uncapped),
             0);
   EXPECT_EQ(
       l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_NONE,
@@ -223,8 +224,30 @@ TEST(MbsgdGate, TheL1AllowanceIsCKEta0AlphaRSquared) {
                                  .l1_ratio = 1,
                                  .fit_intercept = 1,
                                  .eta0 = 1}),
-                   3),
+                   3, uncapped),
       0);
+}
+
+TEST(MbsgdGate, TheL1AllowanceIsCappedAtFourStarts) {
+  using cumlrkt::glm::mbsgd::gate_refusal;
+  using cumlrkt::glm::mbsgd::l1_allowance;
+  const sgd_options o = with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
+                                      .alpha = 10,
+                                      .l1_ratio = 0.15,
+                                      .fit_intercept = 1,
+                                      .eta0 = 1e-3});
+  const double a = 3.5 * 4 * 1e-3 * 100;
+  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, (a / 4) + 1e-4), a);
+  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, (a / 4) - 1e-4), a - 4e-4);
+  const double start = 0.25;
+  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, start), 1.0);
+  EXPECT_FALSE(
+      gate_refusal(true, start, 1.25624, l1_allowance(o, 3, start), 1e-3)
+          .has_value());
+  EXPECT_EQ(
+      gate_refusal(true, start, 1.25626, l1_allowance(o, 3, start), 1e-3)
+          .value_or(""),
+      "the objective rose from 0.25 to 1.25626; lower #:eta0 (now 0.001)");
 }
 
 TEST(MbsgdGate, TheRegressorFloorIsRoundOffOfY) {

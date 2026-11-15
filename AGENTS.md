@@ -279,7 +279,8 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   ends above F_start·(1 + 0.025) + A + floor, F_start the zero model's, is
   refused with "lower #:eta0". A = 3.5·k·eta0·(α·r)², k the fitted
   coefficients (d, +1 with fit-intercept), r the l1 share (1, l1-ratio, 0),
-  admits an l1 or elastic-net fit oscillating about a zero optimum. The
+  admits an l1 or elastic-net fit oscillating about a zero optimum; A is
+  capped at 4·F_start, so a large eta0 cannot hide divergence. The
   floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
   a constant y. It sees only the objective: blow-ups and fits ending above
   the zero model, not slow convergence or a bad fit below it (L5-d, F10-C).

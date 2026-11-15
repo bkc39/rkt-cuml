@@ -51,8 +51,8 @@ Minimises the mean squared error plus @racket[alpha] times the squared l2 norm, 
 @racket[X] as given; the intercept, from centring, is not penalised. @racket[tol] 0 runs every
 epoch. The result is the last iterate, not an optimum: steps depend on the scale of @racket[X], so
 standardise it. Raises when the iterate is not finite or its objective F ends above
-F₀·1.025 + 3.5·k·@racket[eta0]·(@racket[alpha]·r)² plus round-off, F₀ the zero model's, k the
-fitted coefficients and r the l1 share (1, @racket[l1-ratio] or 0), round-off being
+F₀·1.025 + min(3.5·k·@racket[eta0]·(@racket[alpha]·r)², 4·F₀) plus round-off, F₀ the zero
+model's, k the fitted coefficients and r the l1 share (1, @racket[l1-ratio] or 0), round-off being
 10·ε²·mean(y²) for the regressor in its dtype's machine epsilon ε; lower @racket[eta0] then. The
 gate sees only the objective, so it passes a fit that ends at or below the zero model's yet
 predicts badly. With @racket[random-state] an integer and @racket[shuffle], rows are

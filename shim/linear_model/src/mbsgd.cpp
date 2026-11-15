@@ -105,7 +105,7 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
             ? regressor_floor<T>(start, mean_loss<T>(handle, x.data, y,
                                                      zero.data(), 0.0, shape))
             : classifier_floor(start);
-    allowance = l1_allowance(o, x.d) + floor;
+    allowance = l1_allowance(o, x.d, start) + floor;
     std::vector<double> wd(w.begin(), w.end());
     end = mean_loss<T>(handle, x.data, y, coef, static_cast<double>(intercept),
                        shape) +

@@ -2081,7 +2081,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   no more (|∂loss_i(0)| ≤ α·r there), so the rise is about 2·k·eta0·(α·r)².
   Measured on F10-C's zero-optimum l1 problems the rise is at most
   1.644·k·eta0·(α·r)² (overlap hinge α 1, bs 1, every eta0 to .05): bs-1
-  gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. The
+  gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. A is
+  capped at 4·F_start (fix r1e): uncapped, a large eta0 makes A large
+  enough to hide divergence (ratios to 3,721 at eta0 1, F10-C). The
+  largest rise a good fit needs at the default eta0 is breast cancer log
+  l1 α 10, ratio 3.21, inside the capped limit of 5.025·F_start; lowering
+  eta0 shrinks A and the oscillation alike, so "lower #:eta0" still clears
+  every refusal the cap adds. The
   floor is 1e-12·F_start + 10·ε_T²·mean(y²) for the regressor, ε_T the
   dtype's machine epsilon (round-off of y's magnitude: a constant y, or a
   float32 y far from 0, whose residuals are quantised at ε·|y|), and
@@ -2146,11 +2152,16 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   eta0 .05). No s separates these from the good fits: at eta0 .01, bs 1,
   overlap's good fits reach 1.104 (log l1 α .1) and 1.068 (log l2 α 1),
   so s .025 refuses 10 good fits at eta0 ≤ 1e-2 and none at the default
-  1e-3. A admits the zero-optimum oscillation at any eta0: of 1,940 fits
-  with gap > 1, r1c refused all, s .025 with A accepts 1,402, every one
-  l1: 1,396 log α 1 or 10 at a zero optimum (ratios 1.17–4.5 at eta0
-  1e-3, up to 3,721 at eta0 1), hinge α 1 at eta0 .05 (2) and α .1 at
-  eta0 1 (4).
+  1e-3. Uncapped, A admits the zero-optimum oscillation at any eta0: of
+  1,940 fits with gap > 1, r1c refused all, s .025 with A accepts 1,402,
+  every one l1 (log 690, hinge 712; α 1 or 10 but 4 hinge α .1 at eta0
+  1), at ratios up to 4.5 at eta0 1e-3 and 3,721 at eta0 1. The cap at
+  4·F_start refuses 1,016 of them, all at eta0 ≥ .01 (.01: 78, .05: 162,
+  .1: 174, .3: 250, 1: 352); the 386 left end below 5.02·F_start, 28 at
+  eta0 1e-3 (breast cancer α 10, ratio ≤ 4.51). It refuses no fit with
+  gap ≤ 1 that the uncapped rule accepts, so the good fits refused stay
+  the 10 at eta0 .01 and none at 1e-3; every must-refuse row stays
+  refused. F10 (p7, 960 fits) is l2 only, so A = 0 and the cap is moot.
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
   as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
   .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:

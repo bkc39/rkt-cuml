@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <format>
@@ -106,6 +107,7 @@ inline void require_two_classes(int64_t k) {
 
 inline constexpr double gate_slack = 0.025;
 inline constexpr double gate_l1_factor = 3.5;
+inline constexpr double gate_l1_cap = 4;
 inline constexpr double gate_floor_share = 1e-12;
 inline constexpr double gate_round_off_factor = 10;
 
@@ -123,11 +125,11 @@ inline double l1_share(const sgd_options& o) {
 // At a zero optimum l1 SGD oscillates, each coordinate moving about
 // eta0·alpha·r: the penalty rises by alpha·r·|w|_1 and the loss can fall by
 // no more, a rise of about 2·k·eta0·(alpha·r)^2. eta0 bounds the step under
-// every schedule.
-inline double l1_allowance(const sgd_options& o, int64_t d) {
+// every schedule. Capped at 4·start so a large eta0 cannot hide divergence.
+inline double l1_allowance(const sgd_options& o, int64_t d, double start) {
   const auto k = static_cast<double>(d + (o.fit_intercept != 0 ? 1 : 0));
   const double a = o.alpha * l1_share(o);
-  return gate_l1_factor * k * o.eta0 * a * a;
+  return std::min(gate_l1_factor * k * o.eta0 * a * a, gate_l1_cap * start);
 }
 
 inline double classifier_floor(double start) {

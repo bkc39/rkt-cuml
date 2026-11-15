@@ -162,6 +162,23 @@
       (check-row "mbsgd-classifier-fit" (row name (rose (number->string eta0)) (go eta0)))
       (check-not-exn (go (/ eta0 10))))))
 
+(test-gpu "an l1 rise above five times the zero model is refused however large eta0 makes the allowance"
+  (for ([dt (in-list dtypes)])
+    (law-case (format "~a log l1 alpha 10 on blobs, eta0 0.3" dt)
+      (check-row "mbsgd-classifier-fit"
+                 (row "log l1 alpha 10 on blobs, eta0 0.3"
+                      (rose "0.3")
+                      (lambda ()
+                        (mbsgd-classifier-fit (on-matrix blobs dt)
+                                              labels
+                                              #:loss 'log
+                                              #:penalty 'l1
+                                              #:alpha 10
+                                              #:eta0 0.3
+                                              #:learning-rate 'constant
+                                              #:batch-size 1
+                                              #:epochs 1)))))))
+
 (define constant-rows (normal-rows 300 4 3))
 
 (test-gpu "a constant target passes: its zero-model objective is round-off"
