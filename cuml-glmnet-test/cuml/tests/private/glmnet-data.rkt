@@ -35,7 +35,13 @@
          trial-Cs
          whole-weighted)
 
-(struct trial (case Cs float32 float64 default) #:name trial-row #:constructor-name trial-row)
+(struct trial
+        (case Cs
+          float32
+          float64
+          default)
+  #:name trial-row
+  #:constructor-name trial-row)
 
 (define (trial c #:Cs [Cs '()] #:float32 float32 #:float64 float64 #:default [default #f])
   (trial-row c Cs float32 float64 default))

@@ -18,7 +18,13 @@
          (only-in racket/match match-define)
          (only-in rackunit check-true test-case)
          (only-in threading ~>)
-         (only-in "glmnet-data.rkt" bound-of default-bound glmnet-gaussian trial trial-case whole-weighted))
+         (only-in "glmnet-data.rkt"
+                  bound-of
+                  default-bound
+                  glmnet-gaussian
+                  trial
+                  trial-case
+                  whole-weighted))
 
 (provide check-gaussian
          law-trials)
@@ -28,7 +34,7 @@
 (define replicated-rows-cap 1000)
 
 (define (alpha-at c fi share)
-  (~> (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) (alpha-max 1) (* share) exact->inexact))
+  (~> (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) (alpha-max 1) (* share _) exact->inexact))
 
 (define (en-fit c dt alpha ratio fi #:tol tol #:max-iter max-iter)
   (match-define (en-run coef intercept _)
@@ -53,7 +59,8 @@
 (define (check-elastic-net t dt c alpha ratio fi)
   (test-case (format "~a ~a l1-ratio ~a alpha ~a intercept ~a" dt (lcase-name c) ratio alpha fi)
     (define theirs (glmnet-gaussian c alpha ratio #:fit-intercept fi))
-    (define gap (gap-of (en-fit c dt alpha ratio fi #:tol (tight-tol dt) #:max-iter tight-max-iter) theirs))
+    (define gap
+      (gap-of (en-fit c dt alpha ratio fi #:tol (tight-tol dt) #:max-iter tight-max-iter) theirs))
     (check-true (<= gap (bound-of t dt)) (format "gap ~a" gap))
     (define cap (default-bound t dt))
     (when cap

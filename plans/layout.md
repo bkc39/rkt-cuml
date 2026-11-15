@@ -2022,6 +2022,14 @@ scratch, the source is `cpp/src/glm/qn/`.
     6.7e-4 (2e-3), wine 8.7e-4 (1e-2), iris at C 0.1 1.8e-3 (1e-2).
     Iris runs C 0.1 and 1 in float64 and C 0.1 only in float32: float32
     OWL-QN stops 1.8e-2 from the float64 fit at l1 C 1.
+  - what the bounds catch: glmnet's λ×1.02 fails all 84 float64
+    logistic settings; glmnet at thresh 1e-14 fails 106 of the 20-row
+    gaussian settings at 1e-9; a per-feature shift of the multinomial
+    coefficients fails every multinomial setting (the old centred compare
+    passed all 43). A float32-only C×1.02 is caught in 15 of 18 unweighted
+    blobs settings, 3 of 12 breast-cancer and none of the 18 weighted:
+    there float32 OWL-QN's own stop (up to 5.5e-3) is as large as the
+    error.
   At the default tol the blob and wine fits are within the default-tol
   cap; breast-cancer l1 (4.4e-2 at C 1, 8.1e-2 at C 10, f64) and iris l1
   (5.1e-2) are not, and iris at C 10 is refused at max-iter 1000.

@@ -63,7 +63,7 @@
          [fi (in-list '(#t #f))]
          [ratio (in-list '(1 1/2 1/10))])
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
-    (define alpha (~> p (alpha-max 1) (* 1/30) exact->inexact))
+    (define alpha (~> p (alpha-max 1) (* 1/30 _) exact->inexact))
     (define o (oracle-elastic-net p alpha ratio))
     (check-gap (format "~a l1-ratio ~a intercept ~a" (lcase-name c) ratio fi)
                (fit-flat (glmnet-gaussian c alpha ratio #:fit-intercept fi))
@@ -74,7 +74,10 @@
   (for* ([c (in-list gaussian-cases)]
          [fi (in-list '(#t #f))])
     (define alpha
-      (~> (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi) (alpha-max 1) (* 1/30) exact->inexact))
+      (~> (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi)
+          (alpha-max 1)
+          (* 1/30 _)
+          exact->inexact))
     (define o (oracle-ridge (lcase-X c) (lcase-y c) (lcase-w c) (* alpha (total-weight c)) fi))
     (check-gap (format "~a intercept ~a" (lcase-name c) fi)
                (fit-flat (glmnet-gaussian c alpha 0 #:fit-intercept fi))

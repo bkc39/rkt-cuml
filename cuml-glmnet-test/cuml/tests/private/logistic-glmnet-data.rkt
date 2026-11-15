@@ -76,19 +76,19 @@
                     (check-gaps t dt c s fi (tight-fit c dt s fi) fit-flat reference))))
 
 (define (check-multinomial t dt)
-  (check-settings
-   t
-   dt
-   (lambda (c s fi)
-     (define-values (reference probabilities)
-       (match dt
-         ['float64
-          (define-values (theirs theirs-probabilities) (glmnet-multinomial c s #:fit-intercept fi))
-          (values (uncentred theirs) theirs-probabilities)]
-         ['float32
-          (define r (tight-fit c 'float64 s fi))
-          (values (uncentred (fit-parts r)) (probabilities-of r c 'float64))]))
-     (define tight (tight-fit c dt s fi))
-     (check-gaps t dt c s fi tight uncentred reference)
-     (define spread (max-abs (map gap (probabilities-of tight c dt) probabilities)))
-     (check-true (<= spread (bound-of t dt)) (format "probabilities ~a" spread)))))
+  (check-settings t
+                  dt
+                  (lambda (c s fi)
+                    (define-values (reference probabilities)
+                      (match dt
+                        ['float64
+                         (define-values (theirs theirs-probabilities)
+                           (glmnet-multinomial c s #:fit-intercept fi))
+                         (values (uncentred theirs) theirs-probabilities)]
+                        ['float32
+                         (define r (tight-fit c 'float64 s fi))
+                         (values (uncentred (fit-parts r)) (probabilities-of r c 'float64))]))
+                    (define tight (tight-fit c dt s fi))
+                    (check-gaps t dt c s fi tight uncentred reference)
+                    (define spread (max-abs (map gap (probabilities-of tight c dt) probabilities)))
+                    (check-true (<= spread (bound-of t dt)) (format "probabilities ~a" spread)))))
