@@ -6,17 +6,19 @@
          (only-in cuml/core/private/label-codes prop:label-codes)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/match match match-define struct*)
-         (only-in raft
-                  current-device-resources
-                  device-matrix?
-                  device-vector->list
-                  device-vector?
-                  dtype
-                  shape)
+         (only-in raft current-device-resources device-matrix? device-vector->list device-vector?)
          (only-in raft/unsafe deposit->list)
-         (only-in "glm.rkt" bounded-count/who flag/who intercept-flag/who)
+         (only-in "glm.rkt"
+                  bounded-count/who
+                  checked-coef/who
+                  flag/who
+                  intercept-flag/who
+                  nonnegative-value/who
+                  penalty-code
+                  positive-value/who)
          (only-in "labels.rkt"
                   class-view
+                  decode-labels
                   device-kind?
                   fit-labels/who
                   label-codes/who
@@ -63,8 +65,6 @@
   [penalty-normalized #t]
   [class-weight #f])
 
-(define-codes penalty-code [none 0] [l1 1] [l2 2] [elasticnet 3])
-
 (define-codes class-weight-code [none 0] [balanced 1] [given 2])
 
 (define-codes apply-mode [decision 0] [labels 1] [proba 2] [log-proba 3])
@@ -73,12 +73,6 @@
   (if (memq penalty '(l1 l2 elasticnet none))
       (penalty-code penalty)
       (logic-error "~a: penalty: expected 'l1, 'l2, 'elasticnet or 'none, got ~e" who penalty)))
-
-(define (C-value who C)
-  (define c (and (real? C) (real->double-flonum C)))
-  (if (and c (< 0.0 c +inf.0))
-      c
-      (logic-error "~a: C: expected a positive finite real, got ~e" who C)))
 
 (define (ratio-value who penalty ratio)
   (cond
@@ -90,11 +84,6 @@
                       ratio))]
     [ratio (logic-error "~a: l1-ratio: given with penalty ~e; expected #f" who penalty)]
     [else 0.0]))
-
-(define (tol-value who tol)
-  (if (and (real? tol) (>= tol 0) (< tol +inf.0))
-      (real->double-flonum tol)
-      (logic-error "~a: tol: expected a nonnegative finite real, got ~e" who tol)))
 
 (define (class-weight-mode who cw)
   (match cw
@@ -130,13 +119,13 @@
   (define (ref key)
     (hash-ref params key))
   (qn-settings (penalty-value who (ref 'penalty))
-               (C-value who (ref 'C))
+               (positive-value/who who 'C (ref 'C))
                (ratio-value who (ref 'penalty) (ref 'l1-ratio))
                (intercept-flag/who who (ref 'fit-intercept))
                (bounded-count/who who 'max-iter (ref 'max-iter))
                (bounded-count/who who 'linesearch-max-iter (ref 'linesearch-max-iter))
                (bounded-count/who who 'lbfgs-memory (ref 'lbfgs-memory))
-               (tol-value who (ref 'tol))
+               (nonnegative-value/who who 'tol (ref 'tol))
                (flag/who who 'penalty-normalized (ref 'penalty-normalized))
                (class-weight-mode who (ref 'class-weight))))
 
@@ -191,21 +180,8 @@
                               kind
                               n-iter))
 
-(define (checked-result who result X)
-  (unless (logistic-regression-result? result)
-    (raise-argument-error who "logistic-regression-result?" result))
-  (unless (device-matrix? X)
-    (logic-error "~a: X: expected a device-matrix, got ~e" who X))
-  (match-define (list _ p) (shape (logistic-regression-result-coef result)))
-  (match-define (list _ d) (shape X))
-  (unless (= p d)
-    (logic-error "~a: X: expected ~a columns, got ~a" who p d))
-  (define fitted (dtype (logistic-regression-result-coef result)))
-  (unless (eq? fitted (dtype X))
-    (logic-error "~a: X: expected dtype ~a (the fit's), got ~a" who fitted (dtype X))))
-
 (define (applied who result X mode resources)
-  (checked-result who result X)
+  (checked-coef/who who result X logistic-regression-result? logistic-regression-result-coef)
   (match-define (struct* logistic-regression-result
                          ([coef coef] [intercept intercept] [classes classes] [label-kind kind]))
     result)
@@ -235,8 +211,7 @@
   (define labels (applied who result X 'labels resources))
   (match result
     [(struct* logistic-regression-result ([classes classes] [label-kind (? list-kind?)]))
-     (define table (list->vector classes))
-     (map (lambda (c) (vector-ref table c)) (device-vector->list labels))]
+     (decode-labels classes labels)]
     [(struct* logistic-regression-result ([label-kind (? device-kind?)])) labels]))
 
 (define/who (logistic-regression-predict-proba who

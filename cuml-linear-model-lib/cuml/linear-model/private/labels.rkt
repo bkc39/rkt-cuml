@@ -10,6 +10,7 @@
          (only-in "native.rkt" cuml-linear-model-label-encode-job))
 
 (provide class-view
+         decode-labels
          device-kind
          device-kind?
          fit-labels/who
@@ -150,3 +151,7 @@
      (define (code v)
        (hash-ref table (key-of kind v #:unify? unify?) -1))
      (list->device-vector (map code y) #:dtype 'int32 #:resources resources)]))
+
+(define (decode-labels classes codes)
+  (define table (list->vector classes))
+  (map (lambda (c) (vector-ref table c)) (device-vector->list codes)))

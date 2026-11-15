@@ -141,19 +141,13 @@ sgd_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   settle(handle);
   require_improved<T>(handle, x, targets, coef.data(), intercept, o, ones,
                       regressor);
-  buffer<T> b = scratch<T>(1, stream);
+  buffer<T> b =
+      to_device(std::vector<T>{upstream_intercept ? intercept : T{0}}, stream);
   if (ones) {
     raftrkt::cuda_check(
         cudaMemcpyAsync(b.data(), coef.data() + x.d, sizeof(T),
                         cudaMemcpyDeviceToDevice, stream.value()),
         "cudaMemcpyAsync");
-  } else {
-    const T host = upstream_intercept ? intercept : T{0};
-    raftrkt::cuda_check(cudaMemcpyAsync(b.data(), &host, sizeof(T),
-                                        cudaMemcpyHostToDevice, stream.value()),
-                        "cudaMemcpyAsync");
-    raftrkt::cuda_check(cudaStreamSynchronize(stream.value()),
-                        "cudaStreamSynchronize");
   }
   settle(handle);
   return {std::move(coef), std::move(b), x.d};
@@ -234,13 +228,37 @@ void threshold_into(const raft::handle_t& handle, const rr_view* dv,
     raftrkt::deposit(out, "out", handle, std::move(labels), {region});
   };
   if (cv == nullptr) {
-    deposit_labels(int32_t{}, static_cast<const int32_t*>(nullptr));
+    constexpr const int32_t* codes_only = nullptr;
+    deposit_labels(int32_t{}, codes_only);
     return;
   }
   on_class_labels(cv, "classes", [&](auto tag) {
     using L = decltype(tag);
     deposit_labels(tag, raftrkt::vector_data<L, int32_t>(cv, "classes", 2));
   });
+}
+
+sgd_options options_of(int32_t loss, int32_t penalty, double alpha,
+                       double l1_ratio, int32_t fit_intercept, int32_t epochs,
+                       double tol, int32_t shuffle, int32_t learning_rate,
+                       double eta0, double power_t, int32_t batch_size,
+                       int32_t n_iter_no_change, int32_t seeded,
+                       uint32_t seed) {
+  return {.loss = loss,
+          .penalty = penalty,
+          .alpha = alpha,
+          .l1_ratio = l1_ratio,
+          .fit_intercept = fit_intercept,
+          .epochs = epochs,
+          .tol = tol,
+          .shuffle = shuffle,
+          .learning_rate = learning_rate,
+          .eta0 = eta0,
+          .power_t = power_t,
+          .batch_size = batch_size,
+          .n_iter_no_change = n_iter_no_change,
+          .seeded = seeded,
+          .seed = seed};
 }
 
 }  // namespace
@@ -259,21 +277,10 @@ int cuml_linear_model_mbsgd_regressor_fit(
       handle, {{"X", x}, {"y", y}}, [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
         namespace mbsgd = cumlrkt::glm::mbsgd;
-        const mbsgd::sgd_options o{.loss = CUML_LINEAR_MODEL_SGD_SQUARED,
-                                   .penalty = penalty,
-                                   .alpha = alpha,
-                                   .l1_ratio = l1_ratio,
-                                   .fit_intercept = fit_intercept,
-                                   .epochs = epochs,
-                                   .tol = tol,
-                                   .shuffle = shuffle,
-                                   .learning_rate = learning_rate,
-                                   .eta0 = eta0,
-                                   .power_t = power_t,
-                                   .batch_size = batch_size,
-                                   .n_iter_no_change = n_iter_no_change,
-                                   .seeded = seeded,
-                                   .seed = seed};
+        const mbsgd::sgd_options o = mbsgd::options_of(
+            CUML_LINEAR_MODEL_SGD_SQUARED, penalty, alpha, l1_ratio,
+            fit_intercept, epochs, tol, shuffle, learning_rate, eta0, power_t,
+            batch_size, n_iter_no_change, seeded, seed);
         cumlrkt::on_floats(x, "X", [&](auto tag) {
           mbsgd::regress_into<decltype(tag)>(h, x, y, o, into);
         });
@@ -294,21 +301,10 @@ int cuml_linear_model_mbsgd_classifier_fit(
         rr_deposit* const into = raftrkt::require(out, "out");
         namespace mbsgd = cumlrkt::glm::mbsgd;
         mbsgd::require_flag("y-is-codes", y_is_codes);
-        const mbsgd::sgd_options o{.loss = loss,
-                                   .penalty = penalty,
-                                   .alpha = alpha,
-                                   .l1_ratio = l1_ratio,
-                                   .fit_intercept = fit_intercept,
-                                   .epochs = epochs,
-                                   .tol = tol,
-                                   .shuffle = shuffle,
-                                   .learning_rate = learning_rate,
-                                   .eta0 = eta0,
-                                   .power_t = power_t,
-                                   .batch_size = batch_size,
-                                   .n_iter_no_change = n_iter_no_change,
-                                   .seeded = seeded,
-                                   .seed = seed};
+        const mbsgd::sgd_options o = mbsgd::options_of(
+            loss, penalty, alpha, l1_ratio, fit_intercept, epochs, tol, shuffle,
+            learning_rate, eta0, power_t, batch_size, n_iter_no_change, seeded,
+            seed);
         cumlrkt::on_floats(x, "X", [&](auto t) {
           cumlrkt::on_class_labels(y, "y", [&](auto l) {
             mbsgd::classify_into<decltype(t), decltype(l)>(
