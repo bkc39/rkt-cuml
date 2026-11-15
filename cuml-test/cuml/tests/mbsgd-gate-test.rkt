@@ -148,14 +148,14 @@
   (for* ([dt (in-list dtypes)]
          [c (in-list chance-fits)])
     (match-define (list name X y loss penalty eta0) c)
-    (define (go eta0)
+    (define (go step)
       (lambda ()
         (mbsgd-classifier-fit (on-matrix X dt)
                               y
                               #:loss loss
                               #:penalty penalty
                               #:alpha 0.1
-                              #:eta0 eta0
+                              #:eta0 step
                               #:batch-size 1
                               #:epochs 1)))
     (law-case (format "~a ~a" dt name)
