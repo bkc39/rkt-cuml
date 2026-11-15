@@ -19,11 +19,17 @@
   (define small (normal-rows 100 3 41))
   (define diverging-X (on-matrix small 'float32))
   (define diverging-y (on-vector (reg-target small 41) 'float32))
+  (define three-classes
+    (on-vector (for/list ([i (in-range 100)])
+                 (modulo i 3))
+               'int32))
   (values (lambda ()
             (mbsgd-regressor-predict (mbsgd-regressor-fit X y #:epochs 20) X)
             (mbsgd-classifier-predict (mbsgd-classifier-fit B codes #:epochs 20) B))
           (list (list "mbsgd-regressor-fit: the solution is not finite; lower #:eta0 (now 10)"
-                      (lambda () (mbsgd-regressor-fit diverging-X diverging-y #:eta0 10))))))
+                      (lambda () (mbsgd-regressor-fit diverging-X diverging-y #:eta0 10)))
+                (list "mbsgd-classifier-fit: y: expected exactly 2 classes, got 3"
+                      (lambda () (mbsgd-classifier-fit diverging-X three-classes))))))
 
 (define fit-and-predict-buffers 9)
 

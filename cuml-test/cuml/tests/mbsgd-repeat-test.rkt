@@ -1,10 +1,12 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model mbsgd-regressor-fit)
-         (only-in rackunit check-equal?)
+(require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+         (only-in rackunit check-equal? check-not-equal?)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
          (only-in "private/mbsgd-data.rkt"
+                  blob-rows
+                  clf-parts
                   learning-rates
                   normal-rows
                   penalties
@@ -50,3 +52,27 @@
         (twice (lambda ()
                  (reg-parts
                   (mbsgd-regressor-fit X y #:batch-size batch #:epochs 5 #:random-state seed))))))))
+
+(define-values (blobs labels) (blob-rows 300 5 23 #:sep 0.5))
+
+(test-gpu "with shuffle, random-state 7 leaves #f's order and repeats bit for bit"
+  (for ([dt (in-list dtypes)])
+    (define (regressor seed)
+      (reg-parts (mbsgd-regressor-fit (on-matrix rows dt)
+                                      (on-vector targets dt)
+                                      #:shuffle #t
+                                      #:batch-size 16
+                                      #:epochs 20
+                                      #:random-state seed)))
+    (define (classifier seed)
+      (clf-parts (mbsgd-classifier-fit (on-matrix blobs dt)
+                                       labels
+                                       #:shuffle #t
+                                       #:batch-size 16
+                                       #:epochs 20
+                                       #:random-state seed)))
+    (for ([estimator (in-list (list (cons "regressor" regressor) (cons "classifier" classifier)))])
+      (law-case (format "~a ~a" dt (car estimator))
+        (define fit (cdr estimator))
+        (check-not-equal? (fit 7) (fit #f))
+        (check-equal? (fit 7) (fit 7))))))
