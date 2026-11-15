@@ -24,11 +24,10 @@
                   lr-case-w
                   lr-case-X
                   lr-case-y
-                  lr-fit-coef
                   relative-gap
                   setting)
-         (only-in cuml/tests/private/logistic-newton newton-coef)
-         (only-in racket/list append-map first make-list)
+         (only-in cuml/tests/private/logistic-newton newton-flat)
+         (only-in racket/list append-map make-list)
          (only-in rackunit check-true test-case)
          (only-in threading ~>)
          (only-in "private/glmnet-data.rkt"
@@ -84,7 +83,7 @@
                (append (ridge-solution-coef o) (list (ridge-solution-intercept o)))
                gaussian-bound)))
 
-(test-case "l2 glmnet-binomial at C is the optimum of the mean log-loss plus 1/(2 C W) |coef|^2"
+(test-case "l2 glmnet-binomial at C is the optimum of the mean log-loss plus 1/(2 C W) |coef|^2, intercept included"
   (for* ([c (in-list (list (blob-case "binary" 200 4 2 41)
                            (blob-case "binary weighted" 200 4 2 42 #:weighted? #t)))]
          [C (in-list Cs)]
@@ -92,8 +91,8 @@
     (define rows (replicated c))
     (define lam (/ 1 (* C (length (lr-case-y rows)))))
     (check-gap (format "~a C ~a intercept ~a" (lr-case-name c) C fi)
-               (first (lr-fit-coef (glmnet-binomial c (setting 'l2 C #f) #:fit-intercept fi)))
-               (newton-coef (lr-case-X rows) (lr-case-y rows) #:lam lam #:fit-intercept fi)
+               (fit-flat (glmnet-binomial c (setting 'l2 C #f) #:fit-intercept fi))
+               (newton-flat (lr-case-X rows) (lr-case-y rows) #:lam lam #:fit-intercept fi)
                binomial-bound)))
 
 (test-case "glmnet-multinomial with integer weights is its fit on the replicated rows"

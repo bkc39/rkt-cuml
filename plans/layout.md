@@ -1992,11 +1992,13 @@ scratch, the source is `cpp/src/glm/qn/`.
   `glmnet-oracle-test`, which needs no GPU and runs in the `racket`
   check, pins both against the host optima: the gaussian fits within
   1e-10 of `oracle-elastic-net` and `oracle-ridge` (unweighted and
-  ×64-weighted 20×2), l2 binomial within 1e-7 of `logistic-newton`
-  (measured 1.6e-12 unweighted, 1.8e-8 weighted at C 10 with an
+  ×64-weighted 20×2), l2 binomial, intercept included, within 1e-7 of `logistic-newton`
+  (measured 8.9e-12 unweighted, 2.2e-8 weighted at C 10 with an
   intercept), and a weighted multinomial fit is its fit on the
-  replicated rows. λ×2 fails all three, sd(y) uncentred both gaussian
-  cases, and dropping the multinomial replication the last.
+  replicated rows. λ×2 fails the gaussian, ridge and binomial cases; the
+  multinomial case compares glmnet with itself on the replicated rows, so
+  only dropping the replication fails it. sd(y) uncentred fails both
+  gaussian cases. The multinomial λ is pinned only by the GPU suite.
 - **glmnet, the bound rule.** glmnet is run tight enough that the gap is
   cuML's own stop, not glmnet's: thresh 1e-26 gaussian (at 1e-14 it
   stops up to 1.35e-7 from the exact optimum on 20×7; at 1e-26 within
