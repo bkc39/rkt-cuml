@@ -51,11 +51,14 @@ Minimises the mean squared error plus @racket[alpha] times the squared l2 norm, 
 @racket[X] as given; the intercept, from centring, is not penalised. @racket[tol] 0 runs every
 epoch. The result is the last iterate, not an optimum: steps depend on the scale of @racket[X], so
 standardise it. Raises when the iterate is not finite or its objective F ends above
-F₀·1.025 + min(3.5·k·@racket[eta0]·(@racket[alpha]·r)², 4·F₀) plus round-off, F₀ the zero
-model's, k the fitted coefficients and r the l1 share (1, @racket[l1-ratio] or 0), round-off being
-10·ε²·mean(y²) for the regressor in its dtype's machine epsilon ε; lower @racket[eta0] then. The
-gate sees only the objective, so it passes a fit that ends at or below the zero model's yet
-predicts badly. With @racket[random-state] an integer and @racket[shuffle], rows are
+F₀·1.025 + A + 1e-12·F₀ plus round-off, F₀ the zero model's; lower @racket[eta0] then.
+A = 3.5·k·@racket[eta0]·(@racket[alpha]·r)², k the number of columns plus 1 with
+@racket[fit-intercept] and r the l1 share (1, @racket[l1-ratio] or 0), is capped at 4·F₀ for the
+classifier only; the regressor's is uncapped (#134). Round-off is 10·ε²·mean(y²) for the
+regressor in its dtype's machine epsilon ε. The gate sees only the objective, so it passes a fit
+that ends at or below that bound yet predicts badly. A @racket[y] whose F₀ or round-off is not
+finite is refused (rescale it), as is an @racket[alpha], @racket[eta0], @racket[tol] or
+@racket[power-t] outside @racket[X]'s dtype, or an exact value that underflows a flonum. With @racket[random-state] an integer and @racket[shuffle], rows are
 first permuted by that seed; @racket[#f] is cuML's fixed order. @racket[X] and @racket[y] are not
 modified.
 @examples[#:eval ev #:label #f

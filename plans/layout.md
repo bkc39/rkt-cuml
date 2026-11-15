@@ -2081,9 +2081,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   no more (|∂loss_i(0)| ≤ α·r there), so the rise is about 2·k·eta0·(α·r)².
   Measured on F10-C's zero-optimum l1 problems the rise is at most
   1.644·k·eta0·(α·r)² (overlap hinge α 1, bs 1, every eta0 to .05): bs-1
-  gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. A is
-  capped at 4·F_start (fix r1e): uncapped, a large eta0 makes A large
-  enough to hide divergence (ratios to 3,721 at eta0 1, F10-C). The
+  gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. The
+  classifier's A is capped at 4·F_start (fix r1e): uncapped, a large eta0
+  makes A large enough to hide divergence (ratios to 3,721 at eta0 1,
+  F10-C). The regressor's A is uncapped (fix r1f): its F_start is var(y),
+  not scale-free, so a cap refuses small-variance y at the defaults (2 or
+  3 rows of 3 columns, l1 α 10: F_start to 7.2e-5, ratio to 3,328), some
+  beyond what eta0/10 clears; no regressor l1 study exists (#134). The
   largest rise a good fit needs at the default eta0 is breast cancer log
   l1 α 10, ratio 3.21, inside the capped limit of 5.025·F_start; lowering
   eta0 shrinks A and the oscillation alike, so "lower #:eta0" still clears
@@ -2095,13 +2099,17 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   setting the review found at chance above the zero model except one that
   A admits at eta0 1, and refuses no good fit at the default eta0; it
   refuses 10 good fits at eta0 .01, which no constant s can avoid (F10-C).
-  The gate sees only the objective: it catches blow-ups and fits ending
-  above the zero model, not slow convergence, and it passes a fit at or
-  below the zero model's objective that predicts badly (F10-C: e.g. bc
-  hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097; blobs hinge l2 α 10,
-  eta0 .1, bs n, 200 epochs, accuracy .12).
-  Both refusals advise lowering eta0, and print both values to 6
-  significant figures.
+  The gate catches blow-ups and fits ending above F_start·1.025 + A, A at
+  most 4·F_start for the classifier under l1 and uncapped for the
+  regressor; it passes a fit at or below that which predicts badly
+  (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
+  blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
+  refusals advise lowering eta0, and print both values to 6 significant
+  figures. A y whose F_start or floor is not finite (float64 |y| above
+  about 1.3e154) is refused first, "y is too large to check the fit;
+  rescale y", and alpha, tol, eta0 or power-t outside X's dtype before
+  any allocation, "alpha: 1e+150 is not representable in float32"
+  (fix r1f).
 - **Seeds (L5-e).** `#f` is cuML's fixed order (`initShuffle` reseeds
   mt19937 with 0); an integer s permutes the copy's rows by Fisher–Yates
   over std::mt19937(s), i from n − 1 down to 1, j = g() mod (i + 1), only
@@ -2136,7 +2144,7 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   ratio in (1, 1.311) and the 0.1 slack (fix r1c) refuses the same 352.
   Near-zero optima (bs 1, α 10, l2, eta0 .05, the gate test's data) rise
   to ratios 3.02 (regressor), 1.028 (log) and 1.072 (hinge, accuracy .791
-  against .945 at eta0 .01); the r1d gate (A = 0 under l2, s .025) refuses
+  against .941 at eta0 .01); the r1d gate (A = 0 under l2, s .025) refuses
   all three, and eta0/10 clears every one. These are F10's regressor
   numbers: the classifier gate is set by F10-C.
 - **F10-C classifier gate study** (r1 review; 23,174 fits, log 11,576,
@@ -2147,9 +2155,10 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   (gap < .1) reach ratio 1.136 (log) and 1.098 (hinge). Eleven settings end
   above the zero model at or near chance (ratios 1.038–1.096, gap ≥ .2):
   the r1c slack .1 accepted all of them; s .025 with A refuses every one
-  but imbalanced log l1 α .1 eta0 1 (ratio 1.038, A/F_start .35), the
-  closest at 1.0392 against an allowance of 1.0372 (blobs hinge l1 α .1,
-  eta0 .05). No s separates these from the good fits: at eta0 .01, bs 1,
+  but imbalanced log l1 α .1 eta0 1 (ratio 1.038, A/F_start .35); the
+  closest must-refuse row is blobs log l1 α .1 eta0 .1 (1.06206 against
+  1.06035), and the gate test's three chance-fit rows clear their limits
+  by .17%, .19% and .3%. No s separates these from the good fits: at eta0 .01, bs 1,
   overlap's good fits reach 1.104 (log l1 α .1) and 1.068 (log l2 α 1),
   so s .025 refuses 10 good fits at eta0 ≤ 1e-2 and none at the default
   1e-3. Uncapped, A admits the zero-optimum oscillation at any eta0: of
