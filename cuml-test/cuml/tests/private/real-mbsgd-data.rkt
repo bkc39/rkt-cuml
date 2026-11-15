@@ -61,11 +61,12 @@
                   #t))
   (objective X y (map exact->inexact coef) (exact->inexact intercept)))
 
-(define (check-diabetes-gap X y dt settings low high)
+(define (check-diabetes-gap X y dt settings low high #:random-state [seed #f])
   (define best (optimum X y))
-  (match-define (list w b) (reg-fit dt X y settings))
+  (match-define (list w b) (reg-fit dt X y settings #:random-state seed))
   (define gap (/ (- (objective X y w b) best) best))
-  (check-true (<= low gap high) (format "gap (F - F*)/F* ~a, expected in [~a, ~a]" gap low high)))
+  (check-true (<= low gap high)
+              (format "random-state ~a: gap (F - F*)/F* ~a, expected in [~a, ~a]" seed gap low high)))
 
 (define (check-diabetes-twin X y dt)
   (match-define (list theirs) (mbsgd-twin-results (list (twin-request "cuml-reg" dt X (hash) #:y y))))

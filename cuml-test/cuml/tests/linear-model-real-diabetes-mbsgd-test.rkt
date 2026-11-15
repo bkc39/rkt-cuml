@@ -13,14 +13,16 @@
       (check-diabetes-twin X y dt)
       (check-diabetes-gap X y dt (hash) 0.6 0.8))))
 
-(test-gpu "diabetes standardised: the fit is near the ridge optimum"
+(test-gpu "diabetes standardised: the fit is near the ridge optimum, in any row order"
   (define-values (X y) (diabetes #:standardise? #t))
   (for* ([dt (in-list dtypes)]
-         [arm (in-list (list (list "eta0 .01" (hash '#:eta0 0.01) 5e-4)
-                             (list "defaults" (hash) 1.5e-2)
+         [arm (in-list (list (list "eta0 .01" (hash '#:eta0 0.01) 2e-3 '(#f 1 2 3))
+                             (list "defaults" (hash) 1.5e-2 '(#f))
                              (list "adaptive eta0 .01"
                                    (hash '#:learning-rate 'adaptive '#:eta0 0.01)
-                                   5e-4)))])
-    (match-define (list name settings bound) arm)
+                                   6e-4
+                                   '(#f 1 2 3))))])
+    (match-define (list name settings bound seeds) arm)
     (law-case (format "~a ~a" dt name)
-      (check-diabetes-gap X y dt settings 0.0 bound))))
+      (for ([seed (in-list seeds)])
+        (check-diabetes-gap X y dt settings 0.0 bound #:random-state seed)))))
