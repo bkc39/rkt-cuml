@@ -83,7 +83,7 @@ double penalty_of(const std::vector<double>& w, const sgd_options& o) {
 template <typename T>
 void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                       const T* y, const T* coef, T intercept,
-                      const sgd_options& o, bool ones) {
+                      const sgd_options& o, bool ones, bool regressor) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const int64_t cols = x.d + (ones ? 1 : 0);
   const std::vector<T> w = to_host(coef, cols, stream);
@@ -93,25 +93,31 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   const objective_shape shape{x.n, x.d, ones, o.loss};
   double start = 0;
   double end = 0;
+  double floor = 0;
   if (finite) {
     const bool centred =
         o.fit_intercept != 0 && o.loss == CUML_LINEAR_MODEL_SGD_SQUARED;
     const double b0 = centred ? mean_of<T>(handle, y, x.n) : 0.0;
     const buffer<T> zero = zeroed<T>(cols, stream);
     start = mean_loss<T>(handle, x.data, y, zero.data(), b0, shape);
+    const double scale =
+        regressor ? mean_loss<T>(handle, x.data, y, zero.data(), 0.0, shape)
+                  : start;
+    floor = gate_floor_share * scale;
     std::vector<double> wd(w.begin(), w.end());
     end = mean_loss<T>(handle, x.data, y, coef, static_cast<double>(intercept),
                        shape) +
           penalty_of(wd, o);
   }
-  if (const auto refusal = gate_refusal(finite, start, end, o.eta0)) {
+  if (const auto refusal = gate_refusal(finite, start, end, floor, o.eta0)) {
     throw logic_error(*refusal);
   }
 }
 
 template <typename T>
 sgd_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
-                  const T* targets, const sgd_options& o, bool ones) {
+                  const T* targets, const sgd_options& o, bool ones,
+                  bool regressor) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const int64_t n = x.n;
   const int64_t cols = x.d + (ones ? 1 : 0);
@@ -133,7 +139,8 @@ sgd_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                      static_cast<T>(o.alpha), static_cast<T>(o.l1_ratio),
                      o.shuffle != 0, static_cast<T>(o.tol), o.n_iter_no_change);
   settle(handle);
-  require_improved<T>(handle, x, targets, coef.data(), intercept, o, ones);
+  require_improved<T>(handle, x, targets, coef.data(), intercept, o, ones,
+                      regressor);
   buffer<T> b = scratch<T>(1, stream);
   if (ones) {
     raftrkt::cuda_check(
@@ -172,7 +179,7 @@ void regress_into(const raft::handle_t& handle, const rr_view* xv,
   const matrix<T, int64_t> x = checked_x<T>(xv, yv, o, false, stream);
   const T* y = raftrkt::vector_data<T, int32_t>(yv, "y", x.n);
   require_finite_elements("y", y, x.n, stream);
-  auto owned = std::make_unique<sgd_fit<T>>(solved<T>(handle, x, y, o, false));
+  auto owned = std::make_unique<sgd_fit<T>>(solved<T>(handle, x, y, o, false, true));
   const rr_view coef = raftrkt::region(owned->coef.data(), owned->d);
   const rr_view intercept = raftrkt::region(owned->intercept);
   settle(handle);
@@ -194,7 +201,7 @@ void classify_into(const raft::handle_t& handle, const rr_view* xv,
   buffer<T> targets = scratch<T>(x.n, stream);
   code_targets<T>(handle, labels.codes.data(), x.n,
                   o.loss == CUML_LINEAR_MODEL_SGD_HINGE, targets.data());
-  sgd_fit<T> fit = solved<T>(handle, x, targets.data(), o, ones);
+  sgd_fit<T> fit = solved<T>(handle, x, targets.data(), o, ones, false);
   auto owned = std::make_unique<classifier_outputs<T, L>>(
       classifier_outputs<T, L>{std::move(fit.coef), std::move(fit.intercept),
                                std::move(labels.values)});

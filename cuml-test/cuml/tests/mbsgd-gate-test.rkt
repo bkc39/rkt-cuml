@@ -1,11 +1,14 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+(require (only-in racket/list make-list)
+         (only-in racket/match match-define)
+         (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in rackunit check-not-exn check-pred)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
          (only-in "private/mbsgd-data.rkt"
                   blob-rows
+                  clf-parts
                   learning-rates
                   normal-rows
                   penalties
@@ -80,3 +83,43 @@
                                                   #:batch-size 16
                                                   #:eta0 0.01
                                                   #:epochs 50))))))
+
+(define sparse-rows (normal-rows 500 5 3))
+(define sparse-targets
+  (for/list ([r (in-list sparse-rows)]
+             [e (in-list (normal-rows 500 1 4))])
+    (+ 1.0 (* 0.3 (car r)) (car e))))
+(define-values (overlap overlap-labels) (blob-rows 300 4 5 #:sep 0.3))
+
+(test-gpu "an l1 or elastic-net fit whose optimum is zero passes at a lowered eta0"
+  (for* ([dt (in-list dtypes)]
+         [penalty (in-list '(l1 elasticnet))])
+    (law-case (format "~a ~a regressor" dt penalty)
+      (for ([alpha (in-list '(1.0 5.0))])
+        (check-pred list?
+                    (reg-parts (mbsgd-regressor-fit (on-matrix sparse-rows dt)
+                                                    (on-vector sparse-targets dt)
+                                                    #:penalty penalty
+                                                    #:alpha alpha
+                                                    #:l1-ratio 0.9
+                                                    #:eta0 1e-5)))))
+    (for ([loss (in-list '(hinge log))])
+      (law-case (format "~a ~a ~a classifier" dt penalty loss)
+        (check-pred list?
+                    (clf-parts (mbsgd-classifier-fit (on-matrix overlap dt)
+                                                     overlap-labels
+                                                     #:loss loss
+                                                     #:penalty penalty
+                                                     #:alpha 2.0
+                                                     #:l1-ratio 0.9
+                                                     #:eta0 1e-5)))))))
+
+(define constant-rows (normal-rows 300 4 3))
+
+(test-gpu "a constant target passes: its zero-model objective is round-off"
+  (for ([c (in-list '((float64 0.3) (float64 1e6) (float32 1.7)))])
+    (match-define (list dt value) c)
+    (law-case (format "~a y = ~a" dt value)
+      (check-pred list?
+                  (reg-parts (mbsgd-regressor-fit (on-matrix constant-rows dt)
+                                                  (on-vector (make-list 300 value) dt)))))))

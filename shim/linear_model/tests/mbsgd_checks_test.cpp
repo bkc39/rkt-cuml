@@ -107,9 +107,7 @@ TEST(MbsgdShape, RowsColumnsAndYLengthAreRefusedInOrder) {
       {1, 0, 3, "X: expected at least 2 rows, got 1"},
       {5, 0, 3, "X: expected at least 1 column, got 0"},
       {5, 3, 4, "y: expected 5 values (X's rows), got 4"},
-      {2, 2147483646, 2, "accepted"},
-      {2, 2147483647, 2,
-       "X: expected at most 2147483646 columns, got 2147483647"},
+      {2, 2147483647, 2, "accepted"},
   };
   for (const row& r : rows) {
     EXPECT_EQ(refusal_of([&] {
@@ -136,14 +134,29 @@ TEST(MbsgdShape, RowsColumnsAndYLengthAreRefusedInOrder) {
 
 TEST(MbsgdGate, NonFiniteAndRisingFitsAreRefusedWithTheAdvice) {
   using cumlrkt::glm::mbsgd::gate_refusal;
-  EXPECT_FALSE(gate_refusal(true, 1.0, 1.0, 0.01).has_value());
-  EXPECT_FALSE(gate_refusal(true, 1.0, 0.25, 0.01).has_value());
-  EXPECT_EQ(gate_refusal(false, 1.0, 0.25, 10).value_or(""),
+  EXPECT_FALSE(gate_refusal(true, 1.0, 1.0, 0, 0.01).has_value());
+  EXPECT_FALSE(gate_refusal(true, 1.0, 0.25, 0, 0.01).has_value());
+  EXPECT_EQ(gate_refusal(false, 1.0, 0.25, 0, 10).value_or(""),
             "the solution is not finite; lower #:eta0 (now 10)");
-  EXPECT_EQ(gate_refusal(true, 0.6931471805599453, 3.0201, 0.05).value_or(""),
-            "the objective rose from 0.6931 to 3.02; lower #:eta0 (now 0.05)");
-  EXPECT_EQ(gate_refusal(true, 1.0, nan, 0.05).value_or(""),
+  EXPECT_EQ(
+      gate_refusal(true, 0.6931471805599453, 3.0201, 0, 0.05).value_or(""),
+      "the objective rose from 0.693147 to 3.0201; lower #:eta0 (now 0.05)");
+  EXPECT_EQ(gate_refusal(true, 1.0, nan, 0, 0.05).value_or(""),
             "the objective rose from 1 to nan; lower #:eta0 (now 0.05)");
+  EXPECT_EQ(gate_refusal(true, 1.0, nan, 1, 0.05).value_or(""),
+            "the objective rose from 1 to nan; lower #:eta0 (now 0.05)");
+}
+
+TEST(MbsgdGate, ARiseWithinTheSlackOrTheFloorIsAccepted) {
+  using cumlrkt::glm::mbsgd::gate_refusal;
+  EXPECT_FALSE(gate_refusal(true, 1.0, 1.0009, 0, 0.01).has_value());
+  EXPECT_EQ(gate_refusal(true, 1.0, 1.0011, 0, 0.01).value_or(""),
+            "the objective rose from 1 to 1.0011; lower #:eta0 (now 0.01)");
+  EXPECT_FALSE(gate_refusal(true, 0, 1e-20, 1e-12, 0.01).has_value());
+  EXPECT_EQ(gate_refusal(true, 0, 2e-12, 1e-12, 0.01).value_or(""),
+            "the objective rose from 0 to 2e-12; lower #:eta0 (now 0.01)");
+  EXPECT_EQ(gate_refusal(true, 0, 1e-20, 0, 0.01).value_or(""),
+            "the objective rose from 0 to 1e-20; lower #:eta0 (now 0.01)");
 }
 
 }  // namespace

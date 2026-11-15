@@ -2069,9 +2069,15 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   previous epoch's loss, not the best (sklearn's). No n-iter (L5-f).
 - **Gate (L5-d).** In the shim, in double, on the caller's uncentred X at
   (w, b): refused when any coefficient or the intercept is not finite, or
-  F_end > F_start, F the objective above in its mean form (hinge too) and
-  F_start its value at w = 0 with b = ȳ (squared with an intercept) or 0:
-  var(y) or mean(y²), log 2, 1. Both refusals advise lowering eta0. A
+  F_end > F_start·(1 + 1e-3) + floor, F the objective above in its mean
+  form (hinge too) and F_start its value at w = 0 with b = ȳ (squared with
+  an intercept) or 0: var(y) or mean(y²), log 2, 1. The floor is
+  1e-12·mean(y²) for the regressor and 1e-12·F_start for the classifier.
+  The slack admits an l1 or elastic-net fit whose optimum is w = 0 (α above
+  α_max), where the subgradient step leaves w a step from 0 and F_end
+  just above F_start at any eta0; the floor admits a constant y, where
+  F_start is 0 or round-off and F_end round-off. Both refusals advise
+  lowering eta0, and print both values to 6 significant figures. A
   garbage gate, not a convergence check.
 - **Seeds (L5-e).** `#f` is cuML's fixed order (`initShuffle` reseeds
   mt19937 with 0); an integer s permutes the copy's rows by Fisher–Yates
@@ -2089,14 +2095,19 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   constant eta0 .01 5.25e-4, 1e-3 1.09e-5; invscaling .05/.5 4.5e-6. Those
   floors are one draw's: over this repo's `normal-rows` 256×4 seeds 1–8
   (f64) they range constant 1e-3 6.3e-6–4.96e-5, invscaling 3.1e-6–2.41e-5,
-  constant .01 3.1e-4–1.15e-3. O6 runs on seed 2.
+  constant .01 3.1e-4–1.15e-3. O6 runs on the spec's seed 5 (F3's) and holds
+  each bound above that range: constant 1e-3 within 1e-4, invscaling
+  5e-5, constant .01 3e-3.
 - **F10 gate study** (1824 fits: normal 512×6, mixed column scales,
   diabetes as shipped and standardised × dtype × learning rate × eta0
   1e-4..10 × batch 1/32/n × l2/none × epochs 1/10/200): 118 non-finite (87
   f32). F_end > F_start refuses 352 finite fits, none within .1 relative
   coefficient error of the optimum (largest F_end/F_start among error < .1
   is .498, among error < .01 .021); 280 of 280 fits with error > 10 are
-  refused. Near-zero optima (bs 1, α 10, eta0 .05) are refused at ratios
+  refused. Re-run under F_end > F_start·(1 + 1e-3) + floor (fix r1a): the
+  same 352 refused, none within .1 (smallest refused error .977), 280 of
+  280 with error > 10 refused; no fit has a ratio in (1, 1.001], and the
+  floor is below 1e-11·F_start on every set. Near-zero optima (bs 1, α 10, eta0 .05) are refused at ratios
   3.02 (regressor), 1.06 (corrected log), 1.18 (hinge); eta0/10 clears
   every one.
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
@@ -2109,7 +2120,11 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   2^29 + 1. X of more than 2^31 − 1 elements, counting the ones column, is
   refused before S5 ("X: expected at most 2147483647 elements, got ~a");
   its range row is a gtest only (a Racket row needs 8.6 GB). Upstream row
-  in `plans/upstream-bugs.md`.
+  in `plans/upstream-bugs.md`. Only 2^30 + 2 elements (right) and
+  2^31 + 2 (wrong) are probed; where between them the int indexing first
+  goes wrong is unprobed, and the 2^31 − 1 cap is read from the int
+  arithmetic. The element cap subsumes any column cap (n ≥ 2), so there is
+  none.
 - **E3 large cases** keep the spec's sizes and batches (2e5×20 at 256,
   1e6×20 at 4096) but are lighter: 4096 distinct rows cycled to the row
   count, and 5 epochs (raft has no bulk flvector->matrix; the law is about

@@ -48,8 +48,8 @@ Minimises the mean squared error plus @racket[alpha] times the squared l2 norm, 
 @racket[l1-ratio] of the l1 norm and the rest of the squared l2 norm, by mini-batch SGD on
 @racket[X] as given; the intercept, from centring, is not penalised. @racket[tol] 0 runs every
 epoch. The result is the last iterate, not an optimum: steps depend on the scale of @racket[X], so
-standardise it. Raises when the iterate is not finite or ends above the zero model's objective;
-lower @racket[eta0] then. With @racket[random-state] an integer and @racket[shuffle], rows are
+standardise it. Raises when the iterate is not finite or its objective ends more than 0.1% above
+the zero model's, beyond round-off; lower @racket[eta0] then. With @racket[random-state] an integer and @racket[shuffle], rows are
 first permuted by that seed; @racket[#f] is cuML's fixed order. @racket[X] and @racket[y] are not
 modified.
 @examples[#:eval ev #:label #f

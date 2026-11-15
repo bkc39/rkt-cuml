@@ -12,7 +12,6 @@
 
 namespace cumlrkt::glm::mbsgd {
 
-inline constexpr int64_t most_columns = std::numeric_limits<int32_t>::max() - 1;
 inline constexpr int64_t most_elements = std::numeric_limits<int32_t>::max();
 
 struct sgd_options {
@@ -90,10 +89,6 @@ inline void require_sgd_shape(int64_t n, int64_t d, int64_t y_len) {
     throw logic_error(
         std::format("y: expected {} values (X's rows), got {}", n, y_len));
   }
-  if (d > most_columns) {
-    throw logic_error(
-        std::format("X: expected at most {} columns, got {}", most_columns, d));
-  }
 }
 
 inline void require_elements(int64_t n, int64_t cols) {
@@ -109,20 +104,20 @@ inline void require_two_classes(int64_t k) {
   }
 }
 
-inline std::string sig4(double v) {
-  return std::format("{:.4g}", v);
-}
+inline constexpr double gate_slack = 1e-3;
+inline constexpr double gate_floor_share = 1e-12;
 
 inline std::optional<std::string> gate_refusal(bool finite, double start,
-                                               double end, double eta0) {
+                                               double end, double floor,
+                                               double eta0) {
   if (!finite) {
     return std::format("the solution is not finite; lower #:eta0 (now {})",
                        printed(eta0));
   }
-  if (!(end <= start)) {
+  if (!(end <= (start * (1 + gate_slack)) + floor)) {
     return std::format(
-        "the objective rose from {} to {}; lower #:eta0 (now {})", sig4(start),
-        sig4(end), printed(eta0));
+        "the objective rose from {:.6g} to {:.6g}; lower #:eta0 (now {})",
+        start, end, printed(eta0));
   }
   return std::nullopt;
 }
