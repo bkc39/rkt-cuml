@@ -2052,10 +2052,10 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   refused before S5 ("X: expected at most 2147483647 elements, got ~a");
   its range row is a gtest only (a Racket row needs 8.6 GB). Upstream row
   in `plans/upstream-bugs.md`.
-- **E3 large cases** are lighter than the spec's 2e5×20 and 1e6×20 at the
-  defaults: 4096 distinct rows cycled to the row count, 5 epochs (raft has
-  no bulk flvector->matrix, and the law is about repeatability, not the
-  data).
+- **E3 large cases** keep the spec's sizes and batches (2e5×20 at 256,
+  1e6×20 at 4096) but are lighter: 4096 distinct rows cycled to the row
+  count, and 5 epochs (raft has no bulk flvector->matrix; the law is about
+  repeatability, not the data).
 
 ### Decisions
 
