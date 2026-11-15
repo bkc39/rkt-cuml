@@ -203,3 +203,4 @@ packet (§4) has the detail.
 | L5 #91 | eta0 ≤ 0, alpha ≤ 0 and l1_ratio outside [0, 1] are accepted by the C++; Python accepts NaN alpha, eta0 and power_t | `sgdFit`, `MBSGD*` | refused (L5-g, L5-i) |
 | L5 #91 | `sgdPredict` and `sgdPredictBinaryClass` assert n_rows > 1 | `sgdPredict`, `sgdPredictBinaryClass` | gemmPredict and a threshold job (L5-j) |
 | L5 #91 | `MBSGDClassifier` accepts a single class silently (coef 0) and ignores l1_ratio unless the penalty is elasticnet | `MBSGDClassifier` | one class refused (L5-k); l1-ratio range-checked always (L5-o) |
+| L5 #91 | `sgdFit` counts X's elements in a 32-bit int: a float32 X of (2^30 + 1) × 2 fits coef[1] = 2.35e-41 (control at 2^29 + 1 correct) | `sgdFit` | X of more than 2^31 − 1 elements (ones column counted) refused before any allocation (L5-q) |

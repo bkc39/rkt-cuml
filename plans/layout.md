@@ -1977,3 +1977,93 @@ scratch, the source is `cpp/src/glm/qn/`.
   residual, K ≤ 1e-7·max(F, 1) (measured ≤ 3.9e-8), l2 is held within
   1e-5 of sklearn's, a float32 fit within 1e-2 of the float64 one
   (measured 5.4e-3, l1), and accuracy to a row of sklearn's.
+
+## Decisions recorded in leg L5 (#91): minibatch SGD
+
+Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
+1.8.0); the probes p0–p11 are in the leg's scratch, the source is
+`cpp/src/solver/sgd.cuh`. The reference is its own section file,
+`reference/mbsgd.scrbl` (L5-m), since `linear-model.scrbl` is at the
+500-line limit.
+
+### Semantics
+
+- **Objective.** With an intercept, upstream centres X and y and sets
+  b = ȳ − x̄·w after; the intercept is never penalised. Over w:
+  squared mean((y − Xw)²) + P(w); log mean(−y log σ(z) − (1 − y) log(1 − σ(z)))
+  + P(w); hinge mean(max(0, 1 − yz)) + P(w), y ∈ {−1, +1}. P: `'none` 0,
+  `'l2` α‖w‖², `'l1` α‖w‖₁, `'elasticnet` α(1 − r)‖w‖² + αr‖w‖₁ (r read only
+  under `'elasticnet`). No sample weights.
+- **sklearn mappings** (exact minimisers): `'l2` is Ridge(nα); `'l1` is
+  Lasso(α/2); `'elasticnet` is ElasticNet(A, L) with A = αr/2 + α(1 − r),
+  L = (αr/2)/A; `'none` is LinearRegression; `'log` with `'l2` is
+  LogisticRegression(C = 1/(2αn)).
+- **Schedule.** Minibatches of batch-size rows in the current order, the
+  last one partial; t counts batches from 1 across epochs, stored in the
+  float type. Each batch: w −= lr·(∇loss_batch + ∇P), ∇P: l2 2αw, l1
+  α·sign(w), elastic net the sum. lr: `'constant` eta0; `'invscaling`
+  eta0/⌊t⌋^power-t; `'adaptive` starts at eta0 and is divided by 5 when the
+  stop counter fires while lr > 1e-6 (absolute floor; the counter resets).
+- **Stop rule.** Only with tol > 0: after epoch e the full centred loss
+  plus P is L_e (hinge: the sum over rows); for e > 0, L_e > L_(e−1) − tol
+  counts, an improvement resets; n-iter-no-change + 1 consecutive
+  non-improving epochs stop `'constant` and `'invscaling`. Against the
+  previous epoch's loss, not the best (sklearn's). No n-iter (L5-f).
+- **Gate (L5-d).** In the shim, in double, on the caller's uncentred X at
+  (w, b): refused when any coefficient or the intercept is not finite, or
+  F_end > F_start, F the objective above in its mean form (hinge too) and
+  F_start its value at w = 0 with b = ȳ (squared with an intercept) or 0:
+  var(y) or mean(y²), log 2, 1. Both refusals advise lowering eta0. A
+  garbage gate, not a convergence check.
+- **Seeds (L5-e).** `#f` is cuML's fixed order (`initShuffle` reseeds
+  mt19937 with 0); an integer s permutes the copy's rows by Fisher–Yates
+  over std::mt19937(s), i from n − 1 down to 1, j = g() mod (i + 1), only
+  with shuffle. numpy's `RandomState(s)` raw output is the same stream, so
+  the twin's `permute` op replays it (T4).
+
+### Findings
+
+- **F3 objective** (bs = n, shuffle off, tol 0, eta0 .05, 256×4, coef
+  relative error to the f64 optimum): l2 α .1 at 10/100/1000 epochs
+  3.6e-1/1.0e-4/7.4e-16 (f64), f32 3.5e-7 at 1000; l1 α .05 6.8e-16/3.45e-7
+  (f64/f32); elastic net 6.1e-16/3.3e-7; none 1.3e-15/5.95e-7; log without
+  intercept, eta0 .5, α 1e-2, 4.5e-9/7.1e-7. Minibatch 32, 1000 epochs:
+  constant eta0 .01 5.25e-4, 1e-3 1.09e-5; invscaling .05/.5 4.5e-6. Those
+  floors are one draw's: over this repo's `normal-rows` 256×4 seeds 1–8
+  (f64) they range constant 1e-3 6.3e-6–4.96e-5, invscaling 3.1e-6–2.41e-5,
+  constant .01 3.1e-4–1.15e-3. O6 runs on seed 2.
+- **F10 gate study** (1824 fits: normal 512×6, mixed column scales,
+  diabetes as shipped and standardised × dtype × learning rate × eta0
+  1e-4..10 × batch 1/32/n × l2/none × epochs 1/10/200): 118 non-finite (87
+  f32). F_end > F_start refuses 352 finite fits, none within .1 relative
+  coefficient error of the optimum (largest F_end/F_start among error < .1
+  is .498, among error < .01 .021); 280 of 280 fits with error > 10 are
+  refused. Near-zero optima (bs 1, α 10, eta0 .05) are refused at ratios
+  3.02 (regressor), 1.06 (corrected log), 1.18 (hinge); eta0/10 clears
+  every one.
+- **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
+  as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
+  .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:
+  defaults 4.8e-3; eta0 .01 1.63e-4; invscaling .01/.25 4.3e-3; adaptive
+  .01 1.63e-4; f32 = f64 to printed precision. D1–D2 pin these.
+- **L5-q (probed in part 1).** `sgdFit` indexes n × p in int: a float32 X
+  of (2^30 + 1) × 2 fits coef[1] = 2.35e-41 (expected ~1e-3), correct at
+  2^29 + 1. X of more than 2^31 − 1 elements, counting the ones column, is
+  refused before S5 ("X: expected at most 2147483647 elements, got ~a");
+  its range row is a gtest only (a Racket row needs 8.6 GB). Upstream row
+  in `plans/upstream-bugs.md`.
+- **E3 large cases** are lighter than the spec's 2e5×20 and 1e6×20 at the
+  defaults: 4096 distinct rows cycled to the row count, 5 epochs (raft has
+  no bulk flvector->matrix, and the law is about repeatability, not the
+  data).
+
+### Decisions
+
+L5-a to L5-r as the spec recommended (the owner's table in the leg's
+decisions comment): the classifier corrected in the shim; no staging; a
+penalised ones-column intercept for `'log` and `'hinge` (deviation from
+sklearn); the post-solve gate; `#:random-state`; no n-iter; α positive
+finite; no predict-proba; power-t nonnegative finite; gemmPredict plus a
+threshold-labels job; one class refused; two result structs; cuML's loss
+names; l1-ratio range-checked always; L4's label code moved to
+`private/labels.rkt`; hinge's tol passed through unchanged (U4).
