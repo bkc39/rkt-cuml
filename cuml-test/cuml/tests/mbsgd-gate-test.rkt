@@ -1,8 +1,8 @@
 #lang racket/base
 
-(require (only-in racket/list make-list)
+(require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+         (only-in racket/list make-list)
          (only-in racket/match match-define)
-         (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in rackunit check-not-exn check-pred)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)

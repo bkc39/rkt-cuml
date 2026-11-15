@@ -18,23 +18,23 @@ using cumlrkt::glm::mbsgd::sgd_options;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
 
-sgd_options defaults() {
-  return {.loss = CUML_LINEAR_MODEL_SGD_HINGE,
-          .penalty = CUML_LINEAR_MODEL_PENALTY_L2,
-          .alpha = 1e-4,
-          .l1_ratio = 0.15,
-          .fit_intercept = 1,
-          .epochs = 1000,
-          .tol = 1e-3,
-          .shuffle = 1,
-          .learning_rate = CUML_LINEAR_MODEL_SGD_CONSTANT,
-          .eta0 = 1e-3,
-          .power_t = 0.5,
-          .batch_size = 32,
-          .n_iter_no_change = 5,
-          .seeded = 0,
-          .seed = 0};
-}
+constexpr sgd_options cuml_defaults{
+    .loss = CUML_LINEAR_MODEL_SGD_HINGE,
+    .penalty = CUML_LINEAR_MODEL_PENALTY_L2,
+    .alpha = 1e-4,
+    .l1_ratio = 0.15,
+    .fit_intercept = 1,
+    .epochs = 1000,
+    .tol = 1e-3,
+    .shuffle = 1,
+    .learning_rate = CUML_LINEAR_MODEL_SGD_CONSTANT,
+    .eta0 = 1e-3,
+    .power_t = 0.5,
+    .batch_size = 32,
+    .n_iter_no_change = 5,
+    .seeded = 0,
+    .seed = 0};
+constexpr double negative_eta0 = -0.01;
 
 std::string refusal_of(const std::function<void()>& check) {
   try {
@@ -77,7 +77,7 @@ TEST(MbsgdOptions, EachCodeAndBoundIsRefusedBeforeTheSolver) {
       {[](sgd_options& o) { o.shuffle = -1; }, "shuffle: expected #t or #f"},
       {[](sgd_options& o) { o.learning_rate = 0; },
        "learning-rate: expected one of 'constant 'invscaling 'adaptive"},
-      {[](sgd_options& o) { o.eta0 = -0.01; },
+      {[](sgd_options& o) { o.eta0 = negative_eta0; },
        "eta0: expected a positive finite real, got -0.01"},
       {[](sgd_options& o) { o.power_t = -1; },
        "power-t: expected a nonnegative finite real, got -1"},
@@ -88,7 +88,7 @@ TEST(MbsgdOptions, EachCodeAndBoundIsRefusedBeforeTheSolver) {
       {[](sgd_options& o) { o.seeded = 3; }, "seeded: expected #t or #f"},
   };
   for (const row& r : rows) {
-    sgd_options o = defaults();
+    sgd_options o = cuml_defaults;
     r.change(o);
     EXPECT_EQ(refusal_of([&] { cumlrkt::glm::mbsgd::require_sgd_options(o); }),
               r.message);
@@ -115,6 +115,9 @@ TEST(MbsgdShape, RowsColumnsAndYLengthAreRefusedInOrder) {
               }),
               r.message);
   }
+}
+
+TEST(MbsgdShape, ElementsAndClassesAreRefused) {
   EXPECT_EQ(
       refusal_of([] { cumlrkt::glm::mbsgd::require_elements(1073741823, 2); }),
       "accepted");
