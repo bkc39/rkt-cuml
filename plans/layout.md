@@ -2069,22 +2069,33 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   previous epoch's loss, not the best (sklearn's). No n-iter (L5-f).
 - **Gate (L5-d).** In the shim, in double, on the caller's uncentred X at
   (w, b): refused when any coefficient or the intercept is not finite, or
-  F_end > F_start·(1 + 0.1) + floor, F the objective above in its mean
+  F_end > F_start·(1 + s) + A + floor, F the objective above in its mean
   form (hinge too) and F_start its value at w = 0 with b = ȳ (squared with
-  an intercept) or 0: var(y) or mean(y²), log 2, 1. The floor is
-  1e-12·mean(y²) for the regressor and 1e-12·F_start for the classifier.
-  The slack admits an l1 or elastic-net fit whose optimum is w = 0 (α above
-  α_max), where the subgradient step leaves w a step from 0 and F_end
-  just above F_start by about eta0·α. At the default eta0 1e-3 (fix r1b,
-  `zero-optimum.rkt`): regressor α 1 rises .18–.27%, hinge α 2 .72–.84%,
-  log α 2 1.7–1.9%, regressor α 5 3.9–5.4%. A 1e-2 slack refused the last
-  two (ratios 1.017–1.054); 0.1 accepts all of them at the default eta0
-  (fix r1c, gate test). 0.1 is safe because the smallest ratio F10 refuses
-  is 1.311 and no F10 fit lies in (1, 1.311): the same 352 fits are refused
-  at 1e-3, 1e-2 and 0.1. The floor admits a constant y, where
-  F_start is 0 or round-off and F_end round-off. Both refusals advise
-  lowering eta0, and print both values to 6 significant figures. A
-  garbage gate, not a convergence check.
+  an intercept) or 0: var(y) or mean(y²), log 2, 1. s = .025 and
+  A = c·k·eta0·(α·r)² with c = 3.5, k the fitted coefficients (d, plus 1
+  under fit-intercept: the ones column, or for squared loss an upper
+  bound) and r the l1 share (1 for l1, l1-ratio for elastic net, 0 for l2
+  and none); eta0 bounds the step under every schedule. A covers an l1 or
+  elastic-net fit whose optimum is w = 0: each coordinate oscillates by
+  about eta0·α·r, the penalty rises by α·r·|w|₁ and the loss can fall by
+  no more (|∂loss_i(0)| ≤ α·r there), so the rise is about 2·k·eta0·(α·r)².
+  Measured on F10-C's zero-optimum l1 problems the rise is at most
+  1.644·k·eta0·(α·r)² (overlap hinge α 1, bs 1, every eta0 to .05): bs-1
+  gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. The
+  floor is 1e-12·F_start + 10·ε_T²·mean(y²) for the regressor, ε_T the
+  dtype's machine epsilon (round-off of y's magnitude: a constant y, or a
+  float32 y far from 0, whose residuals are quantised at ε·|y|), and
+  1e-12·F_start for the classifier. s is set by F10-C: .025 refuses every
+  setting the review found at chance above the zero model except one that
+  A admits at eta0 1, and refuses no good fit at the default eta0; it
+  refuses 10 good fits at eta0 .01, which no constant s can avoid (F10-C).
+  The gate sees only the objective: it catches blow-ups and fits ending
+  above the zero model, not slow convergence, and it passes a fit at or
+  below the zero model's objective that predicts badly (F10-C: e.g. bc
+  hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097; blobs hinge l2 α 10,
+  eta0 .1, bs n, 200 epochs, accuracy .12).
+  Both refusals advise lowering eta0, and print both values to 6
+  significant figures.
 - **Seeds (L5-e).** `#f` is cuML's fixed order (`initShuffle` reseeds
   mt19937 with 0); an integer s permutes the copy's rows by Fisher–Yates
   over std::mt19937(s), i from n − 1 down to 1, j = g() mod (i + 1), only
@@ -2117,10 +2128,29 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   slack (fix r1b): the same 352 refused, none within .1, 280 of 280 with
   error > 10 refused; the smallest refused ratio is 1.311, so no fit has a
   ratio in (1, 1.311) and the 0.1 slack (fix r1c) refuses the same 352.
-  Near-zero optima (bs 1, α 10, eta0 .05) rose at ratios 3.02 (regressor),
-  1.06 (corrected log), 1.18 (hinge); under the 0.1 slack the classifiers
-  pass at eta0 .05 and are refused at .1 (F_end 2.3e10 log, 1.1e6 hinge,
-  fix r1c `g2.rkt`); eta0/10 clears every one.
+  Near-zero optima (bs 1, α 10, l2, eta0 .05, the gate test's data) rise
+  to ratios 3.02 (regressor), 1.028 (log) and 1.072 (hinge, accuracy .791
+  against .945 at eta0 .01); the r1d gate (A = 0 under l2, s .025) refuses
+  all three, and eta0/10 clears every one. These are F10's regressor
+  numbers: the classifier gate is set by F10-C.
+- **F10-C classifier gate study** (r1 review; 23,174 fits, log 11,576,
+  hinge 11,598: l2, l1 and none at α 1e-4..10 on blobs 512×6 seed 43,
+  overlap 512×6 sep .3 seed 45, imbalanced 512×6 10% minority, standardised
+  breast cancer 569×30; eta0 1e-4..1, bs 1/32/n, constant/invscaling,
+  epochs 1/10/200, f32 and f64; gap = F_end − best known F). Good fits
+  (gap < .1) reach ratio 1.136 (log) and 1.098 (hinge). Eleven settings end
+  above the zero model at or near chance (ratios 1.038–1.096, gap ≥ .2):
+  the r1c slack .1 accepted all of them; s .025 with A refuses every one
+  but imbalanced log l1 α .1 eta0 1 (ratio 1.038, A/F_start .35), the
+  closest at 1.0392 against an allowance of 1.0372 (blobs hinge l1 α .1,
+  eta0 .05). No s separates these from the good fits: at eta0 .01, bs 1,
+  overlap's good fits reach 1.104 (log l1 α .1) and 1.068 (log l2 α 1),
+  so s .025 refuses 10 good fits at eta0 ≤ 1e-2 and none at the default
+  1e-3. A admits the zero-optimum oscillation at any eta0: of 1,940 fits
+  with gap > 1, r1c refused all, s .025 with A accepts 1,402, every one
+  l1: 1,396 log α 1 or 10 at a zero optimum (ratios 1.17–4.5 at eta0
+  1e-3, up to 3,721 at eta0 1), hinge α 1 at eta0 .05 (2) and α .1 at
+  eta0 1 (4).
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
   as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
   .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:

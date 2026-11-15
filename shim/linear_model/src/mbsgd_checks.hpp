@@ -104,17 +104,51 @@ inline void require_two_classes(int64_t k) {
   }
 }
 
-inline constexpr double gate_slack = 0.1;
+inline constexpr double gate_slack = 0.025;
+inline constexpr double gate_l1_factor = 3.5;
 inline constexpr double gate_floor_share = 1e-12;
+inline constexpr double gate_round_off_factor = 10;
+
+inline double l1_share(const sgd_options& o) {
+  switch (o.penalty) {
+    case CUML_LINEAR_MODEL_PENALTY_L1:
+      return 1;
+    case CUML_LINEAR_MODEL_PENALTY_ELASTICNET:
+      return o.l1_ratio;
+    default:
+      return 0;
+  }
+}
+
+// At a zero optimum l1 SGD oscillates, each coordinate moving about
+// eta0·alpha·r: the penalty rises by alpha·r·|w|_1 and the loss can fall by
+// no more, a rise of about 2·k·eta0·(alpha·r)^2. eta0 bounds the step under
+// every schedule.
+inline double l1_allowance(const sgd_options& o, int64_t d) {
+  const auto k = static_cast<double>(d + (o.fit_intercept != 0 ? 1 : 0));
+  const double a = o.alpha * l1_share(o);
+  return gate_l1_factor * k * o.eta0 * a * a;
+}
+
+inline double classifier_floor(double start) {
+  return gate_floor_share * start;
+}
+
+template <typename T>
+double regressor_floor(double start, double mean_square) {
+  constexpr double eps = std::numeric_limits<T>::epsilon();
+  return (gate_floor_share * start) +
+         (gate_round_off_factor * eps * eps * mean_square);
+}
 
 inline std::optional<std::string> gate_refusal(bool finite, double start,
-                                               double end, double floor,
+                                               double end, double allowance,
                                                double eta0) {
   if (!finite) {
     return std::format("the solution is not finite; lower #:eta0 (now {})",
                        printed(eta0));
   }
-  if (!(end <= (start * (1 + gate_slack)) + floor)) {
+  if (!(end <= (start * (1 + gate_slack)) + allowance)) {
     return std::format(
         "the objective rose from {:.6g} to {:.6g}; lower #:eta0 (now {})",
         start, end, printed(eta0));

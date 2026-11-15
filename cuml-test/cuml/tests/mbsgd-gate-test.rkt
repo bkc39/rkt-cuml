@@ -6,7 +6,9 @@
          (only-in rackunit check-not-exn)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/logistic-data.rkt" lr-case-X)
          (only-in "private/mbsgd-data.rkt" blob-rows learning-rates normal-rows penalties reg-target)
+         (only-in "private/real-logistic-data.rkt" labelled labelled-set)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define not-finite #rx"^the solution is not finite; lower #:eta0 \\(now 10\\)$")
@@ -50,10 +52,10 @@
       (define Xc (on-matrix blobs))
       (check-row
        "mbsgd-classifier-fit"
-       (row "eta0 0.1"
-            (rose "0.1")
+       (row "eta0 0.05"
+            (rose "0.05")
             (lambda ()
-              (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.1))))
+              (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.05))))
       (check-not-exn
        (lambda ()
          (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.01))))))
@@ -105,12 +107,89 @@
                                                #:alpha 2.0
                                                #:l1-ratio 0.9)))))))
 
+(test-gpu "an l1 alpha 10 fit on 2 to 10 rows of 3 columns passes at the defaults"
+  (for* ([dt (in-list dtypes)]
+         [n (in-list '(2 3 4 6 10))])
+    (define-values (X y) (blob-rows n 3 (+ 100 n)))
+    (for ([loss (in-list '(log hinge squared-loss))])
+      (law-case (format "~a ~a classifier on ~a rows" dt loss n)
+        (check-not-exn
+         (lambda () (mbsgd-classifier-fit (on-matrix X dt) y #:loss loss #:penalty 'l1 #:alpha 10)))))
+    (define R (normal-rows n 3 (+ 200 n)))
+    (law-case (format "~a regressor on ~a rows" dt n)
+      (check-not-exn (lambda ()
+                       (mbsgd-regressor-fit (on-matrix R dt)
+                                            (on-vector (reg-target R (+ 200 n)) dt)
+                                            #:penalty 'l1
+                                            #:alpha 10))))))
+
+(test-gpu "standardised breast cancer, 30 columns, passes an l1 alpha 5 or 10 fit at the defaults"
+  (match-define (labelled bc bc-labels _)
+    (labelled-set 'breast-cancer "diagnosis" '("id") #:standardise? #t))
+  (for* ([dt (in-list dtypes)]
+         [loss (in-list '(log hinge))]
+         [alpha (in-list '(5 10))])
+    (law-case (format "~a ~a alpha ~a" dt loss alpha)
+      (check-not-exn (lambda ()
+                       (mbsgd-classifier-fit (on-matrix (lr-case-X bc) dt)
+                                             bc-labels
+                                             #:loss loss
+                                             #:penalty 'l1
+                                             #:alpha alpha))))))
+
+(define-values (overlap-512 overlap-512-labels) (blob-rows 512 6 45 #:sep 0.3))
+
+(define chance-fits
+  `(("hinge l2 alpha 0.1 on overlapping blobs" ,overlap-512 ,overlap-512-labels hinge l2 0.01)
+    ("log l1 alpha 0.1 on blobs" ,blobs ,labels log l1 0.1)
+    ("hinge l1 alpha 0.1 on blobs" ,blobs ,labels hinge l1 0.05)))
+
+(test-gpu "a one-epoch fit that ends above the zero model, at chance, is refused; eta0/10 passes"
+  (for* ([dt (in-list dtypes)]
+         [c (in-list chance-fits)])
+    (match-define (list name X y loss penalty eta0) c)
+    (define (go eta0)
+      (lambda ()
+        (mbsgd-classifier-fit (on-matrix X dt)
+                              y
+                              #:loss loss
+                              #:penalty penalty
+                              #:alpha 0.1
+                              #:eta0 eta0
+                              #:batch-size 1
+                              #:epochs 1)))
+    (law-case (format "~a ~a" dt name)
+      (check-row "mbsgd-classifier-fit" (row name (rose (number->string eta0)) (go eta0)))
+      (check-not-exn (go (/ eta0 10))))))
+
 (define constant-rows (normal-rows 300 4 3))
 
 (test-gpu "a constant target passes: its zero-model objective is round-off"
-  (for ([c (in-list '((float64 0.3) (float64 1e6) (float32 1.7)))])
-    (match-define (list dt value) c)
+  (for* ([dt (in-list dtypes)]
+         [value (in-list '(0.3 1.7 1e6 -1e6 3e7 1e9))])
     (law-case (format "~a y = ~a" dt value)
       (check-not-exn (lambda ()
                        (mbsgd-regressor-fit (on-matrix constant-rows dt)
                                             (on-vector (make-list 300 value) dt)))))))
+
+(define offset-targets
+  (for/list ([r (in-list constant-rows)]
+             [e (in-list (normal-rows 300 1 9))])
+    (+ 1e6 (* 0.05 (car r)) (* 0.05 (car e)))))
+
+(define (offset-fit dt eta0)
+  (lambda ()
+    (mbsgd-regressor-fit (on-matrix constant-rows dt)
+                         (on-vector offset-targets dt)
+                         #:batch-size 1
+                         #:eta0 eta0)))
+
+(test-gpu "a rise above y's round-off is refused however large y's offset"
+  (for ([eta0 (in-list '(0.1 0.2))])
+    (law-case (format "float64 eta0 ~a" eta0)
+      (check-row
+       "mbsgd-regressor-fit"
+       (row "y = 1e6 + .05·x + .05·e" (rose (number->string eta0)) (offset-fit 'float64 eta0)))
+      (check-not-exn (offset-fit 'float64 (/ eta0 10)))))
+  (law-case "float32 eta0 0.2, whose residuals are float32 round-off of 1e6"
+    (check-not-exn (offset-fit 'float32 0.2))))

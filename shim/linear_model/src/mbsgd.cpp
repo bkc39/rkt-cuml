@@ -93,23 +93,26 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   const objective_shape shape{x.n, x.d, ones, o.loss};
   double start = 0;
   double end = 0;
-  double floor = 0;
+  double allowance = 0;
   if (finite) {
     const bool centred =
         o.fit_intercept != 0 && o.loss == CUML_LINEAR_MODEL_SGD_SQUARED;
     const double b0 = centred ? mean_of<T>(handle, y, x.n) : 0.0;
     const buffer<T> zero = zeroed<T>(cols, stream);
     start = mean_loss<T>(handle, x.data, y, zero.data(), b0, shape);
-    const double scale =
-        regressor ? mean_loss<T>(handle, x.data, y, zero.data(), 0.0, shape)
-                  : start;
-    floor = gate_floor_share * scale;
+    const double floor =
+        regressor
+            ? regressor_floor<T>(start, mean_loss<T>(handle, x.data, y,
+                                                     zero.data(), 0.0, shape))
+            : classifier_floor(start);
+    allowance = l1_allowance(o, x.d) + floor;
     std::vector<double> wd(w.begin(), w.end());
     end = mean_loss<T>(handle, x.data, y, coef, static_cast<double>(intercept),
                        shape) +
           penalty_of(wd, o);
   }
-  if (const auto refusal = gate_refusal(finite, start, end, floor, o.eta0)) {
+  if (const auto refusal =
+          gate_refusal(finite, start, end, allowance, o.eta0)) {
     throw logic_error(*refusal);
   }
 }

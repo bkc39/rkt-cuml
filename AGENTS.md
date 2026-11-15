@@ -276,12 +276,13 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   it; the scale law (X·2^k, alpha·4^k or 2^k, eta0·4^-k gives coef·2^-k)
   is exact for `'constant` and `'invscaling` only.
 - *mbsgd-gate.* After the solve, a non-finite iterate or an objective that
-  ends above F_start·(1 + 0.1) + floor, F_start the zero model's, is
-  refused with "lower #:eta0". The slack admits an l1 or elastic-net fit at
-  a zero optimum, which rises about eta0·α (to 5.4% at the default eta0);
-  no F10 fit refused at 1.311 or above comes near it. The floor
-  (1e-12·mean(y²), classifier 1e-12·F_start) admits a constant y. It
-  catches blow-ups, not slow convergence.
+  ends above F_start·(1 + 0.025) + A + floor, F_start the zero model's, is
+  refused with "lower #:eta0". A = 3.5·k·eta0·(α·r)², k the fitted
+  coefficients (d, +1 with fit-intercept), r the l1 share (1, l1-ratio, 0),
+  admits an l1 or elastic-net fit oscillating about a zero optimum. The
+  floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
+  a constant y. It sees only the objective: blow-ups and fits ending above
+  the zero model, not slow convergence or a bad fit below it (L5-d, F10-C).
 - *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains
   on -1/+1; the `'log` and `'hinge` intercepts are a penalised ones column
   in the copy; predict thresholds the decision at 0 (`'log`, `'hinge`) or

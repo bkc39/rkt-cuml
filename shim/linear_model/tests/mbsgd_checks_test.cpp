@@ -152,14 +152,64 @@ TEST(MbsgdGate, NonFiniteAndRisingFitsAreRefusedWithTheAdvice) {
 
 TEST(MbsgdGate, ARiseWithinTheSlackOrTheFloorIsAccepted) {
   using cumlrkt::glm::mbsgd::gate_refusal;
-  EXPECT_FALSE(gate_refusal(true, 1.0, 1.099, 0, 0.01).has_value());
-  EXPECT_EQ(gate_refusal(true, 1.0, 1.101, 0, 0.01).value_or(""),
-            "the objective rose from 1 to 1.101; lower #:eta0 (now 0.01)");
+  EXPECT_FALSE(gate_refusal(true, 1.0, 1.0249, 0, 0.01).has_value());
+  EXPECT_EQ(gate_refusal(true, 1.0, 1.0251, 0, 0.01).value_or(""),
+            "the objective rose from 1 to 1.0251; lower #:eta0 (now 0.01)");
+  EXPECT_FALSE(gate_refusal(true, 1.0, 1.5249, 0.5, 0.01).has_value());
+  EXPECT_EQ(gate_refusal(true, 1.0, 1.5251, 0.5, 0.01).value_or(""),
+            "the objective rose from 1 to 1.5251; lower #:eta0 (now 0.01)");
   EXPECT_FALSE(gate_refusal(true, 0, 1e-20, 1e-12, 0.01).has_value());
   EXPECT_EQ(gate_refusal(true, 0, 2e-12, 1e-12, 0.01).value_or(""),
             "the objective rose from 0 to 2e-12; lower #:eta0 (now 0.01)");
   EXPECT_EQ(gate_refusal(true, 0, 1e-20, 0, 0.01).value_or(""),
             "the objective rose from 0 to 1e-20; lower #:eta0 (now 0.01)");
+}
+
+sgd_options with_penalty(int32_t penalty, double alpha, double l1_ratio,
+                         int32_t fit_intercept, double eta0) {
+  sgd_options o = cuml_defaults;
+  o.penalty = penalty;
+  o.alpha = alpha;
+  o.l1_ratio = l1_ratio;
+  o.fit_intercept = fit_intercept;
+  o.eta0 = eta0;
+  return o;
+}
+
+TEST(MbsgdGate, TheL1AllowanceIsCKEta0AlphaRSquared) {
+  using cumlrkt::glm::mbsgd::l1_allowance;
+  EXPECT_DOUBLE_EQ(
+      l1_allowance(
+          with_penalty(CUML_LINEAR_MODEL_PENALTY_L1, 10, 0.15, 1, 1e-3), 3),
+      3.5 * 4 * 1e-3 * 100);
+  EXPECT_DOUBLE_EQ(
+      l1_allowance(
+          with_penalty(CUML_LINEAR_MODEL_PENALTY_L1, 10, 0.15, 0, 1e-3), 3),
+      3.5 * 3 * 1e-3 * 100);
+  EXPECT_DOUBLE_EQ(
+      l1_allowance(
+          with_penalty(CUML_LINEAR_MODEL_PENALTY_ELASTICNET, 2, 0.25, 1, 0.5),
+          30),
+      3.5 * 31 * 0.5 * 0.25);
+  EXPECT_EQ(
+      l1_allowance(with_penalty(CUML_LINEAR_MODEL_PENALTY_L2, 10, 1, 1, 1), 3),
+      0);
+  EXPECT_EQ(l1_allowance(
+                with_penalty(CUML_LINEAR_MODEL_PENALTY_NONE, 10, 1, 1, 1), 3),
+            0);
+}
+
+TEST(MbsgdGate, TheRegressorFloorIsRoundOffOfY) {
+  using cumlrkt::glm::mbsgd::classifier_floor;
+  using cumlrkt::glm::mbsgd::regressor_floor;
+  constexpr double e64 = std::numeric_limits<double>::epsilon();
+  constexpr double e32 = std::numeric_limits<float>::epsilon();
+  EXPECT_DOUBLE_EQ(regressor_floor<double>(2.0, 1e12),
+                   (1e-12 * 2.0) + (10 * e64 * e64 * 1e12));
+  EXPECT_DOUBLE_EQ(regressor_floor<float>(2.0, 1e12),
+                   (1e-12 * 2.0) + (10 * e32 * e32 * 1e12));
+  EXPECT_DOUBLE_EQ(regressor_floor<double>(0.0, 0.0), 0.0);
+  EXPECT_DOUBLE_EQ(classifier_floor(0.5), 0.5e-12);
 }
 
 }  // namespace
