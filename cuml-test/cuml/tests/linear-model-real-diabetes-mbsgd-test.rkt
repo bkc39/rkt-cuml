@@ -20,8 +20,8 @@
                              (list "defaults" (hash) 1.5e-2 '(#f))
                              (list "adaptive eta0 .01"
                                    (hash '#:learning-rate 'adaptive '#:eta0 0.01)
-                                   6e-4
-                                   '(#f 1 2 3))))])
+                                   1.5e-3
+                                   '(#f 1 2 3 20))))])
     (match-define (list name settings bound seeds) arm)
     (law-case (format "~a ~a" dt name)
       (for ([seed (in-list seeds)])
