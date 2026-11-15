@@ -179,7 +179,8 @@ void regress_into(const raft::handle_t& handle, const rr_view* xv,
   const matrix<T, int64_t> x = checked_x<T>(xv, yv, o, false, stream);
   const T* y = raftrkt::vector_data<T, int32_t>(yv, "y", x.n);
   require_finite_elements("y", y, x.n, stream);
-  auto owned = std::make_unique<sgd_fit<T>>(solved<T>(handle, x, y, o, false, true));
+  auto owned =
+      std::make_unique<sgd_fit<T>>(solved<T>(handle, x, y, o, false, true));
   const rr_view coef = raftrkt::region(owned->coef.data(), owned->d);
   const rr_view intercept = raftrkt::region(owned->intercept);
   settle(handle);
