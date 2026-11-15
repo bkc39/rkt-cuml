@@ -43,7 +43,10 @@
   (case loss
     [(squared-loss) (* 2 (- z y))]
     [(log) (- (sigmoid z) y)]
-    [else (if (< (* y z) 1) (- y) 0.0)]))
+    [else
+     (if (< (* y z) 1)
+         (- y)
+         0.0)]))
 
 (define (batch-gradient loss rows ys w)
   (define m (length ys))
@@ -70,7 +73,8 @@
       (mean losses)))
 
 (define (batches xs size)
-  (let loop ([xs xs] [acc '()])
+  (let loop ([xs xs]
+             [acc '()])
     (cond
       [(null? xs) (reverse acc)]
       [(<= (length xs) size) (reverse (cons xs acc))]
@@ -92,21 +96,30 @@
                     #:power-t [power-t 0.5]
                     #:batch-size [size 32]
                     #:n-iter-no-change [patience 5])
-  (define rows (for/list ([r (in-list X)]) (map exact->inexact r)))
+  (define rows
+    (for/list ([r (in-list X)])
+      (map exact->inexact r)))
   (define ys (map exact->inexact y))
   (define mx
     (if fi
         (map mean (apply map list rows))
         (map (lambda (_) 0.0) (car rows))))
-  (define my (if fi (mean ys) 0.0))
-  (define xc (for/list ([r (in-list rows)]) (map - r mx)))
+  (define my
+    (if fi
+        (mean ys)
+        0.0))
+  (define xc
+    (for/list ([r (in-list rows)])
+      (map - r mx)))
   (define yc (map (lambda (v) (- v my)) ys))
   (define row-batches (batches xc size))
   (define y-batches (batches yc size))
   (define (objective w)
     (+ (full-loss loss xc yc w) (penalty-value penalty alpha ratio w)))
   (define (step w t lr)
-    (for/fold ([w w] [t t] [lr lr])
+    (for/fold ([w w]
+               [t t]
+               [lr lr])
               ([xb (in-list row-batches)]
                [yb (in-list y-batches)])
       (define rate
@@ -116,9 +129,15 @@
           [else lr]))
       (define g (map + (batch-gradient loss xb yb w) (penalty-gradient penalty alpha ratio w)))
       (values (axpy (- rate) g w) (add1 t) rate)))
-  (let loop ([e 0] [w (map (lambda (_) 0.0) mx)] [t 1.0] [lr eta0] [prev 0.0] [count 0] [margin +inf.0])
-    (define (done w ran margin)
-      (replay w (- my (dot mx w)) ran margin))
+  (define (done w ran margin)
+    (replay w (- my (dot mx w)) ran margin))
+  (let loop ([e 0]
+             [w (map (lambda (_) 0.0) mx)]
+             [t 1.0]
+             [lr eta0]
+             [prev 0.0]
+             [count 0]
+             [margin +inf.0])
     (cond
       [(= e epochs) (done w e margin)]
       [else
@@ -129,9 +148,15 @@
          [else
           (define cur (objective w*))
           (define slack (/ (abs (- cur (- prev tol))) (max (abs cur) 1e-300)))
-          (define margin* (if (> e 0) (min margin slack) margin))
+          (define margin*
+            (if (> e 0)
+                (min margin slack)
+                margin))
           (define worse? (and (> e 0) (> cur (- prev tol))))
-          (define count* (if worse? (add1 count) 0))
+          (define count*
+            (if worse?
+                (add1 count)
+                0))
           (cond
             [(<= count* patience) (loop (add1 e) w* t* lr* cur count* margin*)]
             [(and (eq? schedule 'adaptive) (> lr adaptive-floor))

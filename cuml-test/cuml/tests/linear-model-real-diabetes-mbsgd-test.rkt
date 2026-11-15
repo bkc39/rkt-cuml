@@ -18,7 +18,9 @@
   (for* ([dt (in-list dtypes)]
          [arm (in-list (list (list "eta0 .01" (hash '#:eta0 0.01) 5e-4)
                              (list "defaults" (hash) 1.5e-2)
-                             (list "adaptive eta0 .01" (hash '#:learning-rate 'adaptive '#:eta0 0.01) 5e-4)))])
+                             (list "adaptive eta0 .01"
+                                   (hash '#:learning-rate 'adaptive '#:eta0 0.01)
+                                   5e-4)))])
     (match-define (list name settings bound) arm)
     (law-case (format "~a ~a" dt name)
       (check-diabetes-gap X y dt settings 0.0 bound))))

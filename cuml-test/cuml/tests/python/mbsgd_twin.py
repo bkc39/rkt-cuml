@@ -76,7 +76,11 @@ def fit_sgd_op(case):
     kw = params(case)
     kw["fit_intercept"] = False
     coef, intercept = fit_sgd(
-        MBSGDRegressor(output_type="numpy"), copied(X), copied(s), loss=case["loss"], **kw
+        MBSGDRegressor(output_type="numpy"),
+        copied(X),
+        copied(s),
+        loss=case["loss"],
+        **kw,
     )
     return fitted(coef, intercept, X.dtype)
 
@@ -127,7 +131,9 @@ def sklearn_model(case, n):
         return sk.Lasso(alpha=a / 2, fit_intercept=fi, **tight)
     if case["penalty"] == "elasticnet":
         big = a * r / 2 + a * (1 - r)
-        return sk.ElasticNet(alpha=big, l1_ratio=(a * r / 2) / big, fit_intercept=fi, **tight)
+        return sk.ElasticNet(
+            alpha=big, l1_ratio=(a * r / 2) / big, fit_intercept=fi, **tight
+        )
     return sk.LinearRegression(fit_intercept=fi)
 
 
@@ -137,8 +143,16 @@ def sklearn_opt(case):
     y = codes(case, np.float64) if y is None else y.astype(np.float64)
     m = sklearn_model(case, len(y)).fit(X, y)
     w = np.asarray(m.coef_, dtype=np.float64).ravel()
-    b = float(np.asarray(m.intercept_, dtype=np.float64).ravel()[0]) if case["fit_intercept"] else 0.0
-    return {"coef": w.tolist(), "intercept": b, "objective": objective(X, y, w, b, case)}
+    b = (
+        float(np.asarray(m.intercept_, dtype=np.float64).ravel()[0])
+        if case["fit_intercept"]
+        else 0.0
+    )
+    return {
+        "coef": w.tolist(),
+        "intercept": b,
+        "objective": objective(X, y, w, b, case),
+    }
 
 
 if __name__ == "__main__":

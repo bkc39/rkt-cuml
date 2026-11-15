@@ -22,7 +22,9 @@
 
 (define (keyword-apply/defaults f defaults kws vals . args)
   (define options
-    (for/fold ([options defaults]) ([k (in-list kws)] [v (in-list vals)])
+    (for/fold ([options defaults])
+              ([k (in-list kws)]
+               [v (in-list vals)])
       (hash-set options k v)))
   (define keys (sort (hash-keys options) keyword<?))
   (keyword-apply f keys (map (λ (k) (hash-ref options k)) keys) args))
@@ -38,14 +40,13 @@
                                         (on-vector y-rows dt))))))
 
 (define clf
-  (make-keyword-procedure
-   (λ (kws vals dt X-rows ys)
-     (clf-parts (keyword-apply/defaults mbsgd-classifier-fit
-                                        (hash)
-                                        kws
-                                        vals
-                                        (on-matrix X-rows dt)
-                                        (on-vector ys 'int32))))))
+  (make-keyword-procedure (λ (kws vals dt X-rows ys)
+                            (clf-parts (keyword-apply/defaults mbsgd-classifier-fit
+                                                               (hash)
+                                                               kws
+                                                               vals
+                                                               (on-matrix X-rows dt)
+                                                               (on-vector ys 'int32))))))
 
 (test-gpu "without shuffle the random state changes nothing"
   (for ([dt (in-list dtypes)])
@@ -79,8 +80,7 @@
     (define base (at 0))
     (for ([k (in-list '(-20 -3 5 30))])
       (law-case (format "~a ~a ~a fit-intercept ~a, k ~a" dt lr penalty intercept? k)
-        (check-equal? (at k)
-                      (list (map (lambda (c) (* c (expt 2 (- k)))) (car base)) (cadr base))))))
+        (check-equal? (at k) (list (map (lambda (c) (* c (expt 2 (- k)))) (car base)) (cadr base))))))
   (for* ([dt (in-list dtypes)]
          [loss (in-list '(log hinge))])
     (define (at k)

@@ -6,10 +6,23 @@
          (only-in cuml/core/private/label-codes prop:label-codes)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/match match match-define struct*)
-         (only-in raft current-device-resources device-matrix? device-vector->list device-vector? dtype shape)
+         (only-in raft
+                  current-device-resources
+                  device-matrix?
+                  device-vector->list
+                  device-vector?
+                  dtype
+                  shape)
          (only-in raft/unsafe deposit->list)
          (only-in "glm.rkt" bounded-count/who flag/who glm-predict/who intercept-flag/who)
-         (only-in "labels.rkt" class-view device-kind? fit-labels label-codes label-kind? list-kind? y-kind)
+         (only-in "labels.rkt"
+                  class-view
+                  device-kind?
+                  fit-labels/who
+                  label-codes/who
+                  label-kind?
+                  list-kind?
+                  y-kind/who)
          (only-in "native.rkt"
                   cuml-linear-model-mbsgd-classifier-fit-job
                   cuml-linear-model-mbsgd-regressor-fit-job
@@ -30,28 +43,27 @@
          mbsgd-regressor-predict
          mbsgd-regressor-predict/who)
 
-(define losses '(squared-loss log hinge))
-
 (struct mbsgd-regressor-result (coef intercept) #:transparent)
 
 (struct mbsgd-classifier-result (coef intercept classes label-kind loss)
   #:guard
   (lambda (coef intercept classes kind loss name)
     (cond
-      [(not (device-vector? coef)) (logic-error "~a: coef: expected a device-vector, got ~e" name coef)]
+      [(not (device-vector? coef))
+       (logic-error "~a: coef: expected a device-vector, got ~e" name coef)]
       [(not (flonum? intercept))
        (logic-error "~a: intercept: expected a flonum, got ~e" name intercept)]
       [(not (and (list? classes) (= (length classes) 2)))
        (logic-error "~a: classes: expected a list of 2 labels, got ~e" name classes)]
       [(not (label-kind? kind))
        (logic-error "~a: label-kind: expected the label kind of a fitted result, got ~e" name kind)]
-      [(not (memq loss losses))
+      [(not (memq loss '(squared-loss log hinge)))
        (logic-error "~a: loss: expected one of 'hinge 'log 'squared-loss, got ~e" name loss)]
       [else (values coef intercept classes kind loss)]))
   #:property prop:label-codes
   (lambda (who result y resources)
     (match-define (struct* mbsgd-classifier-result ([classes classes] [label-kind kind])) result)
-    (label-codes who classes kind y resources)))
+    (label-codes/who who classes kind y resources)))
 
 (define-hyperparameters mbsgd-regressor-params
   [loss 'squared-loss]
@@ -127,8 +139,7 @@
 (define (sgd-settings/who who params)
   (define (ref key)
     (hash-ref params key))
-  (define penalty
-    (coded who 'penalty penalty-code (ref 'penalty) "one of 'none 'l1 'l2 'elasticnet"))
+  (define penalty (coded who 'penalty penalty-code (ref 'penalty) "one of 'none 'l1 'l2 'elasticnet"))
   (define alpha (positive-value who 'alpha (ref 'alpha)))
   (define l1-ratio (ratio-value who (ref 'l1-ratio)))
   (define fit-intercept (intercept-flag/who who (ref 'fit-intercept)))
@@ -188,7 +199,7 @@
   (match kind
     [(? device-kind?) (values y #f)]
     [_
-     (define-values (codes classes _weights) (fit-labels who kind y #f resources))
+     (define-values (codes classes _weights) (fit-labels/who who kind y #f resources))
      (unless (= (length classes) 2)
        (logic-error "~a: y: expected exactly 2 classes, got ~a" who (length classes)))
      (values codes classes)]))
@@ -199,7 +210,7 @@
                                   #:hyperparameters mbsgd-classifier-params
                                   #:resources [resources (current-device-resources)])
   (require-X who X)
-  (define kind (y-kind who y))
+  (define kind (y-kind/who who y))
   (define code (coded who 'loss loss-code loss "one of 'hinge 'log 'squared-loss"))
   (define settings (sgd-settings/who who (bound-params mbsgd-classifier-params)))
   (define-values (y-view classes) (host-codes who kind y resources))
@@ -216,7 +227,11 @@
   (match (deposit->list out)
     [(list coef intercept) (mbsgd-classifier-result coef (scalar intercept) classes kind loss)]
     [(list coef intercept device-classes)
-     (mbsgd-classifier-result coef (scalar intercept) (device-vector->list device-classes) kind loss)]))
+     (mbsgd-classifier-result coef
+                              (scalar intercept)
+                              (device-vector->list device-classes)
+                              kind
+                              loss)]))
 
 (define (checked-coef who result X result? name coef-of)
   (unless (result? result)
@@ -233,7 +248,12 @@
 
 (define/who (mbsgd-regressor-predict who result X #:resources [resources (current-device-resources)])
   (define coef
-    (checked-coef who result X mbsgd-regressor-result? "mbsgd-regressor-result?" mbsgd-regressor-result-coef))
+    (checked-coef who
+                  result
+                  X
+                  mbsgd-regressor-result?
+                  "mbsgd-regressor-result?"
+                  mbsgd-regressor-result-coef))
   (glm-predict/who who coef (mbsgd-regressor-result-intercept result) X resources))
 
 (define (decision who result X resources)
@@ -255,10 +275,7 @@
 (define (threshold loss)
   (if (eq? loss 'squared-loss) 0.5 0.0))
 
-(define/who (mbsgd-classifier-predict who
-                                      result
-                                      X
-                                      #:resources [resources (current-device-resources)])
+(define/who (mbsgd-classifier-predict who result X #:resources [resources (current-device-resources)])
   (define z (decision who result X resources))
   (match-define (struct* mbsgd-classifier-result ([classes classes] [label-kind kind] [loss loss]))
     result)

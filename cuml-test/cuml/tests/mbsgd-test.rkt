@@ -52,11 +52,12 @@
         (check-true (and (device-vector? predicted) (eq? (dtype predicted) 'int32)))
         (check-equal? (shape (mbsgd-classifier-predict c (on-matrix '((9 9 9)) dt))) '(1))
         (define listed
-          (mbsgd-classifier-predict (mbsgd-classifier-fit (on-matrix blobs dt)
-                                                          (map add1 labels)
-                                                          #:loss loss)
-                                    X))
-        (check-true (and (list? listed) (= (length listed) 40) (andmap (lambda (l) (and (memv l '(1 2)) #t)) listed)))))))
+          (mbsgd-classifier-predict
+           (mbsgd-classifier-fit (on-matrix blobs dt) (map add1 labels) #:loss loss)
+           X))
+        (check-true (and (list? listed)
+                         (= (length listed) 40)
+                         (andmap (lambda (l) (and (memv l '(1 2)) #t)) listed)))))))
 
 (test-gpu "a fit leaves the caller's X and y bit for bit as they were"
   (for* ([dt (in-list dtypes)]
@@ -85,8 +86,8 @@
   (define fitted-c (mbsgd-classifier-fit Xc '(a a a b b b) #:eta0 0.05 #:batch-size 6))
   (check-equal? (mbsgd-classifier-result-classes fitted-c) '(a b))
   (check-equal? (mbsgd-classifier-predict fitted-c (on-matrix '((0 0) (4 4)))) '(a b))
-  (check-equal? (real->decimal-string
-                 (score (fit (mbsgd-regressor #:eta0 0.05 #:batch-size 5) X y) X y) 3)
-                "0.997")
+  (check-equal?
+   (real->decimal-string (score (fit (mbsgd-regressor #:eta0 0.05 #:batch-size 5) X y) X y) 3)
+   "0.997")
   (check-equal? (predict (fit (mbsgd-classifier #:eta0 0.05 #:batch-size 6) Xc '(a a a b b b)) Xc)
                 '(a a a b b b)))

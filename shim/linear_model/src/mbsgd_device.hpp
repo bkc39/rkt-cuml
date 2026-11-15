@@ -21,8 +21,8 @@ void reordered(const raft::handle_t& handle, const T* y, int64_t n,
                const int64_t* order, T* out);
 
 template <typename T>
-void code_targets(const raft::handle_t& handle, const int32_t* codes,
-                  int64_t n, bool signs, T* out);
+void code_targets(const raft::handle_t& handle, const int32_t* codes, int64_t n,
+                  bool signs, T* out);
 
 template <typename T>
 double mean_of(const raft::handle_t& handle, const T* y, int64_t n);

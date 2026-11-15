@@ -35,8 +35,8 @@ void reordered(const raft::handle_t& handle, const T* y, int64_t n,
 }
 
 template <typename T>
-void code_targets(const raft::handle_t& handle, const int32_t* codes,
-                  int64_t n, bool signs, T* out) {
+void code_targets(const raft::handle_t& handle, const int32_t* codes, int64_t n,
+                  bool signs, T* out) {
   each(handle, n, [=] __device__(int64_t i) {
     const T c = codes[i] == 1 ? T{1} : T{0};
     out[i] = signs ? (2 * c) - 1 : c;
@@ -48,8 +48,8 @@ double mean_of(const raft::handle_t& handle, const T* y, int64_t n) {
   const auto begin = thrust::counting_iterator<int64_t>(0);
   const double sum = thrust::transform_reduce(
       rmm::exec_policy(stream_of(handle)), begin, begin + n,
-      [=] __device__(int64_t i) -> double { return static_cast<double>(y[i]); }, 0.0,
-      thrust::plus<double>());
+      [=] __device__(int64_t i) -> double { return static_cast<double>(y[i]); },
+      0.0, thrust::plus<double>());
   return sum / static_cast<double>(n);
 }
 
@@ -116,9 +116,8 @@ void threshold_labels(const raft::handle_t& handle, const T* decision,
   template void threshold_labels<T, int64_t>(const raft::handle_t&, const T*,  \
                                              int64_t, double, const int64_t*,  \
                                              int64_t*);                        \
-  template void threshold_labels<T, float>(const raft::handle_t&, const T*,    \
-                                           int64_t, double, const float*,      \
-                                           float*);                            \
+  template void threshold_labels<T, float>(                                    \
+      const raft::handle_t&, const T*, int64_t, double, const float*, float*); \
   template void threshold_labels<T, double>(const raft::handle_t&, const T*,   \
                                             int64_t, double, const double*,    \
                                             double*);

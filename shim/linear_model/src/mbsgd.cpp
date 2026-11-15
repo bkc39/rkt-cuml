@@ -1,12 +1,11 @@
-#include <cuml/solvers/solver.hpp>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cuml/solvers/solver.hpp>
 #include <memory>
 #include <optional>
-#include <random>
 #include <raft/core/handle.hpp>
+#include <random>
 #include <rmm/cuda_stream_view.hpp>
 #include <string>
 #include <utility>
@@ -82,9 +81,9 @@ double penalty_of(const std::vector<double>& w, const sgd_options& o) {
 }
 
 template <typename T>
-void require_improved(const raft::handle_t& handle,
-                      const matrix<T, int64_t>& x, const T* y, const T* coef,
-                      T intercept, const sgd_options& o, bool ones) {
+void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                      const T* y, const T* coef, T intercept,
+                      const sgd_options& o, bool ones) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const int64_t cols = x.d + (ones ? 1 : 0);
   const std::vector<T> w = to_host(coef, cols, stream);
@@ -125,22 +124,22 @@ sgd_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   buffer<T> coef = zeroed<T>(cols, stream);
   T intercept{0};
   const bool upstream_intercept = o.fit_intercept != 0 && !ones;
-  ML::Solver::sgdFit(
-      const_cast<raft::handle_t&>(handle), xc.data(), static_cast<int>(n),
-      static_cast<int>(cols), yc.data(), coef.data(), &intercept,
-      upstream_intercept,
-      static_cast<int>(std::min<int64_t>(o.batch_size, n)), o.epochs,
-      o.learning_rate, static_cast<T>(o.eta0), static_cast<T>(o.power_t),
-      o.loss, o.penalty, static_cast<T>(o.alpha), static_cast<T>(o.l1_ratio),
-      o.shuffle != 0, static_cast<T>(o.tol), o.n_iter_no_change);
+  ML::Solver::sgdFit(const_cast<raft::handle_t&>(handle), xc.data(),
+                     static_cast<int>(n), static_cast<int>(cols), yc.data(),
+                     coef.data(), &intercept, upstream_intercept,
+                     static_cast<int>(std::min<int64_t>(o.batch_size, n)),
+                     o.epochs, o.learning_rate, static_cast<T>(o.eta0),
+                     static_cast<T>(o.power_t), o.loss, o.penalty,
+                     static_cast<T>(o.alpha), static_cast<T>(o.l1_ratio),
+                     o.shuffle != 0, static_cast<T>(o.tol), o.n_iter_no_change);
   settle(handle);
   require_improved<T>(handle, x, targets, coef.data(), intercept, o, ones);
   buffer<T> b = scratch<T>(1, stream);
   if (ones) {
-    raftrkt::cuda_check(cudaMemcpyAsync(b.data(), coef.data() + x.d, sizeof(T),
-                                        cudaMemcpyDeviceToDevice,
-                                        stream.value()),
-                        "cudaMemcpyAsync");
+    raftrkt::cuda_check(
+        cudaMemcpyAsync(b.data(), coef.data() + x.d, sizeof(T),
+                        cudaMemcpyDeviceToDevice, stream.value()),
+        "cudaMemcpyAsync");
   } else {
     const T host = upstream_intercept ? intercept : T{0};
     raftrkt::cuda_check(cudaMemcpyAsync(b.data(), &host, sizeof(T),
@@ -157,8 +156,8 @@ template <typename T>
 matrix<T, int64_t> checked_x(const rr_view* xv, const rr_view* yv,
                              const sgd_options& o, bool ones,
                              rmm::cuda_stream_view stream) {
-  const matrix<T, int64_t> x = rows_of<T, int64_t>(
-      xv, "X", raftrkt::any_extent, raftrkt::any_extent);
+  const matrix<T, int64_t> x =
+      rows_of<T, int64_t>(xv, "X", raftrkt::any_extent, raftrkt::any_extent);
   require_sgd_options(o);
   require_sgd_shape(x.n, x.d, raftrkt::require(yv, "y")->shape[0]);
   require_elements(x.n, x.d + (ones ? 1 : 0));

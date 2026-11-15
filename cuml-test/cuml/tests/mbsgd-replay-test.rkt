@@ -20,8 +20,13 @@
 
 (define (relative-gap ours coef intercept)
   (match-define (list c b) ours)
-  (define scale (for/fold ([m 0.0]) ([w (in-list coef)]) (max m (abs w))))
-  (max (/ (for/fold ([m 0.0]) ([u (in-list c)] [w (in-list coef)]) (max m (abs (- u w))))
+  (define scale
+    (for/fold ([m 0.0]) ([w (in-list coef)])
+      (max m (abs w))))
+  (max (/ (for/fold ([m 0.0])
+                    ([u (in-list c)]
+                     [w (in-list coef)])
+            (max m (abs (- u w))))
           (max scale 1e-300))
        (/ (abs (- b intercept)) (max (abs intercept) 1.0))))
 
@@ -55,7 +60,12 @@
 (test-gpu "log and -1/+1 hinge without an intercept follow the host replay"
   (for ([loss (in-list '(log hinge))])
     (define s
-      (hash '#:alpha 0.01 '#:fit-intercept #f '#:eta0 0.1 '#:batch-size 16 '#:epochs 100 '#:tol 0.0
+      (hash '#:alpha 0.01
+            '#:fit-intercept #f
+            '#:eta0 0.1
+            '#:batch-size 16
+            '#:epochs 100
+            '#:tol 0.0
             '#:shuffle #f))
     (define target
       (if (eq? loss 'hinge)
@@ -70,8 +80,7 @@
   (for* ([lr (in-list learning-rates)]
          [size (in-list '(96 20))])
     (define s (h1-settings lr 'l2 size 1e-3))
-    (match-define (struct* replay ([epochs m] [margin margin]))
-      (replayed s rows targets))
+    (match-define (struct* replay ([epochs m] [margin margin])) (replayed s rows targets))
     (for ([dt (in-list dtypes)])
       (law-case (format "~a ~a bs ~a stops after ~a epochs" dt lr size m)
         (check-true (> margin stop-margin) (format "stop-test margin ~a" margin))

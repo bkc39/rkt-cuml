@@ -54,13 +54,13 @@ inline void require_nonnegative_finite(const char* what, double got) {
 }
 
 inline void require_sgd_options(const sgd_options& o) {
-  if (o.loss < CUML_LINEAR_MODEL_SGD_SQUARED || o.loss > CUML_LINEAR_MODEL_SGD_HINGE) {
+  if (o.loss < CUML_LINEAR_MODEL_SGD_SQUARED ||
+      o.loss > CUML_LINEAR_MODEL_SGD_HINGE) {
     throw logic_error("loss: expected one of 'hinge 'log 'squared-loss");
   }
   if (o.penalty < CUML_LINEAR_MODEL_PENALTY_NONE ||
       o.penalty > CUML_LINEAR_MODEL_PENALTY_ELASTICNET) {
-    throw logic_error(
-        "penalty: expected one of 'none 'l1 'l2 'elasticnet");
+    throw logic_error("penalty: expected one of 'none 'l1 'l2 'elasticnet");
   }
   require_positive_finite("alpha", o.alpha);
   if (!(o.l1_ratio >= 0 && o.l1_ratio <= 1)) {
@@ -87,12 +87,12 @@ inline void require_sgd_shape(int64_t n, int64_t d, int64_t y_len) {
   require_some("X", "row", n, 2);
   require_some("X", "column", d);
   if (y_len != n) {
-    throw logic_error(std::format("y: expected {} values (X's rows), got {}",
-                                  n, y_len));
+    throw logic_error(
+        std::format("y: expected {} values (X's rows), got {}", n, y_len));
   }
   if (d > most_columns) {
-    throw logic_error(std::format("X: expected at most {} columns, got {}",
-                                  most_columns, d));
+    throw logic_error(
+        std::format("X: expected at most {} columns, got {}", most_columns, d));
   }
 }
 

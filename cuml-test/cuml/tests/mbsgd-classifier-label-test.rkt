@@ -110,27 +110,31 @@
     (test-case (row-id r)
       (check-row "mbsgd-classifier-result" r)))
   (test-case "a logistic regression's label kind is a fitted label kind"
-    (check-equal? (mbsgd-classifier-predict (mbsgd-classifier-result coef 0.0 '(0 1) logistic-kind 'hinge)
-                                            (on-matrix '((0 0 0))))
-                  '(0))))
+    (check-equal?
+     (mbsgd-classifier-predict (mbsgd-classifier-result coef 0.0 '(0 1) logistic-kind 'hinge)
+                               (on-matrix '((0 0 0))))
+     '(0))))
 
 (define big (expt 2 53))
 
 (test-gpu "host labels that unify or collide refuse and class as logistic regression's"
-  (define X (on-matrix (for/list ([i (in-range 6)]) (list i (- 6 i) (* i i)))))
-  (for ([r (list (row "mixed kinds"
-                      "y: expected labels of one kind (reals, strings or symbols), got 0 and \"a\""
-                      (lambda () (mbsgd-classifier-fit X '(0 1 0 "a" 1 0))))
-                 (row "a non-integral label"
-                      "y: expected integral class labels, got 1.5"
-                      (lambda () (mbsgd-classifier-fit X '(0 1 0 1.5 1 0))))
-                 (row "an infinite label"
-                      "y: expected integral class labels, got +inf.0"
-                      (lambda () (mbsgd-classifier-fit X '(0 1 0 +inf.0 1 0))))
-                 (row "2^53 and 2^53 + 1 given with a flonum collide"
-                      "y: expected exactly 2 classes, got 1"
-                      (lambda ()
-                        (mbsgd-classifier-fit X (list big (add1 big) big 9007199254740992.0 big big)))))])
+  (define X
+    (on-matrix (for/list ([i (in-range 6)])
+                 (list i (- 6 i) (* i i)))))
+  (for ([r (list
+            (row "mixed kinds"
+                 "y: expected labels of one kind (reals, strings or symbols), got 0 and \"a\""
+                 (lambda () (mbsgd-classifier-fit X '(0 1 0 "a" 1 0))))
+            (row "a non-integral label"
+                 "y: expected integral class labels, got 1.5"
+                 (lambda () (mbsgd-classifier-fit X '(0 1 0 1.5 1 0))))
+            (row "an infinite label"
+                 "y: expected integral class labels, got +inf.0"
+                 (lambda () (mbsgd-classifier-fit X '(0 1 0 +inf.0 1 0))))
+            (row "2^53 and 2^53 + 1 given with a flonum collide"
+                 "y: expected exactly 2 classes, got 1"
+                 (lambda ()
+                   (mbsgd-classifier-fit X (list big (add1 big) big 9007199254740992.0 big big)))))])
     (test-case (row-id r)
       (check-row "mbsgd-classifier-fit" r)))
   (test-case "1 and 1.0 unify to flonum classes"

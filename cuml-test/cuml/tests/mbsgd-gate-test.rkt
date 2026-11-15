@@ -24,7 +24,8 @@
 (define targets (reg-target rows 41))
 
 (define (diverging dt lr)
-  (lambda () (mbsgd-regressor-fit (on-matrix rows dt) (on-vector targets dt) #:eta0 10 #:learning-rate lr)))
+  (lambda ()
+    (mbsgd-regressor-fit (on-matrix rows dt) (on-vector targets dt) #:eta0 10 #:learning-rate lr)))
 
 (test-gpu "a diverging fit is refused: a float32 NaN as not finite, a huge float64 as a rise"
   (for ([r (list (row "float32 constant" not-finite (diverging 'float32 'constant))
@@ -44,18 +45,22 @@
   (define y (on-vector near-zero-targets))
   (law-case "regressor"
     (check-row "mbsgd-regressor-fit"
-               (row "eta0 0.05" (rose "0.05")
+               (row "eta0 0.05"
+                    (rose "0.05")
                     (lambda () (mbsgd-regressor-fit X y #:batch-size 1 #:alpha 10 #:eta0 0.05))))
     (check-not-exn (lambda () (mbsgd-regressor-fit X y #:batch-size 1 #:alpha 10 #:eta0 0.005))))
   (for ([loss (in-list '(log hinge))])
     (law-case (format "~a classifier" loss)
       (define Xc (on-matrix blobs))
-      (check-row "mbsgd-classifier-fit"
-                 (row "eta0 0.05" (rose "0.05")
-                      (lambda ()
-                        (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.05))))
+      (check-row
+       "mbsgd-classifier-fit"
+       (row "eta0 0.05"
+            (rose "0.05")
+            (lambda ()
+              (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.05))))
       (check-not-exn
-       (lambda () (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.005))))))
+       (lambda ()
+         (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.005))))))
 
 (define grid-rows (normal-rows 300 5 21))
 (define grid-targets (reg-target grid-rows 21))

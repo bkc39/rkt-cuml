@@ -43,11 +43,7 @@
     (for/list ([_ (in-list (car rows))])
       (next)))
   (for/list ([r (in-list rows)])
-    (+ offset
-       (for/sum ([x (in-list r)]
-                 [b (in-list beta)])
-         (* x b))
-       (* noise (next)))))
+    (+ offset (for/sum ([x (in-list r)] [b (in-list beta)]) (* x b)) (* noise (next)))))
 
 (define (blob-rows n d seed #:sep [sep 2.0] #:minority [minority 0.5])
   (define next (normal-source seed))
@@ -77,11 +73,14 @@
   (list (device-vector->list (mbsgd-regressor-result-coef r)) (mbsgd-regressor-result-intercept r)))
 
 (define (clf-parts r)
-  (list (device-vector->list (mbsgd-classifier-result-coef r))
-        (mbsgd-classifier-result-intercept r)))
+  (list (device-vector->list (mbsgd-classifier-result-coef r)) (mbsgd-classifier-result-intercept r)))
 
 (define (coef-gap got optimum)
-  (define scale (for/fold ([m 0.0]) ([w (in-list optimum)]) (max m (abs (exact->inexact w)))))
-  (/ (for/fold ([m 0.0]) ([c (in-list got)] [w (in-list optimum)])
+  (define scale
+    (for/fold ([m 0.0]) ([w (in-list optimum)])
+      (max m (abs (exact->inexact w)))))
+  (/ (for/fold ([m 0.0])
+               ([c (in-list got)]
+                [w (in-list optimum)])
        (max m (abs (- c (exact->inexact w)))))
      (max scale 1e-300)))

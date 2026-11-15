@@ -90,8 +90,7 @@ TEST(MbsgdOptions, EachCodeAndBoundIsRefusedBeforeTheSolver) {
   for (const row& r : rows) {
     sgd_options o = defaults();
     r.change(o);
-    EXPECT_EQ(refusal_of(
-                  [&] { cumlrkt::glm::mbsgd::require_sgd_options(o); }),
+    EXPECT_EQ(refusal_of([&] { cumlrkt::glm::mbsgd::require_sgd_options(o); }),
               r.message);
   }
 }
@@ -109,7 +108,8 @@ TEST(MbsgdShape, RowsColumnsAndYLengthAreRefusedInOrder) {
       {5, 0, 3, "X: expected at least 1 column, got 0"},
       {5, 3, 4, "y: expected 5 values (X's rows), got 4"},
       {2, 2147483646, 2, "accepted"},
-      {2, 2147483647, 2, "X: expected at most 2147483646 columns, got 2147483647"},
+      {2, 2147483647, 2,
+       "X: expected at most 2147483646 columns, got 2147483647"},
   };
   for (const row& r : rows) {
     EXPECT_EQ(refusal_of([&] {

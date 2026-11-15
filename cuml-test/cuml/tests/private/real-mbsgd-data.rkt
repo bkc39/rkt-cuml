@@ -37,18 +37,24 @@
                [column (in-vector (dataset-table-columns table))])
       (values n (map real->double-flonum (vector->list column)))))
   (define predictors (remove "response" (dataset-table-names table)))
-  (define X (columns-of (for/list ([p (in-list predictors)]) (hash-ref named p))))
-  (values (if standardise? (standardised X) X) (hash-ref named "response")))
+  (define X
+    (columns-of (for/list ([p (in-list predictors)])
+                  (hash-ref named p))))
+  (values (if standardise?
+              (standardised X)
+              X)
+          (hash-ref named "response")))
 
 (define (objective X y w b)
   (+ (/ (for/sum ([x (in-list X)] [v (in-list y)])
-          (sqr (- v b (for/sum ([xi (in-list x)] [wi (in-list w)]) (* xi wi)))))
+                 (sqr (- v b (for/sum ([xi (in-list x)] [wi (in-list w)]) (* xi wi)))))
         (length y))
      (* ridge-alpha (for/sum ([wi (in-list w)]) (sqr wi)))))
 
 (define (optimum X y)
   (match-define (struct* ridge-solution ([coef coef] [intercept intercept]))
-    (oracle-ridge (for/list ([r (in-list X)]) (map inexact->exact r))
+    (oracle-ridge (for/list ([r (in-list X)])
+                    (map inexact->exact r))
                   (map inexact->exact y)
                   #f
                   (* (length y) (inexact->exact ridge-alpha))
@@ -66,11 +72,10 @@
   (check-equal? (reg-fit dt X y (hash)) (their-parts theirs dt)))
 
 (define (accuracy predicted labels)
-  (/ (for/sum ([p (in-list predicted)] [l (in-list labels)]) (if (equal? p l) 1 0))
-     (length labels)))
+  (/ (for/sum ([p (in-list predicted)] [l (in-list labels)]) (if (equal? p l) 1 0)) (length labels)))
 
 (define (check-breast-cancer dt)
-  (match-define (struct* labelled ([case c] [labels labels] [classes classes]))
+  (match-define (struct* labelled ((case c) [labels labels] [classes classes]))
     (labelled-set 'breast-cancer "diagnosis" '("id") #:standardise? #t))
   (define X (on-matrix (lr-case-X c) dt))
   (for ([arm (in-list (list (list "hinge defaults" (hash '#:loss 'hinge) 0.975)
@@ -83,4 +88,5 @@
       (define fitted (apply-keywords mbsgd-classifier-fit settings (list X labels)))
       (check-equal? (mbsgd-classifier-result-classes fitted) classes "classes")
       (define correct (accuracy (mbsgd-classifier-predict fitted X) labels))
-      (check-true (>= correct bound) (format "train accuracy ~a, bound ~a" (exact->inexact correct) bound)))))
+      (check-true (>= correct bound)
+                  (format "train accuracy ~a, bound ~a" (exact->inexact correct) bound)))))

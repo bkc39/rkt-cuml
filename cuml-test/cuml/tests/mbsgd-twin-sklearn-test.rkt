@@ -5,15 +5,19 @@
          (only-in rackunit check-true test-case)
          (only-in "private/linear-data.rkt" by-dtype dtypes)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target)
-         (only-in "private/mbsgd-twin-data.rkt" clf-fit mbsgd-twin-results reg-fit twin-request)
+         (only-in "private/mbsgd-twin-data.rkt"
+                  clf-fit
+                  mbsgd-twin-results
+                  overridden
+                  reg-fit
+                  twin-request)
          (only-in "private/python-env.rkt" test-twin))
 
 (define rows (normal-rows 256 4 2))
 (define targets (reg-target rows 2 #:noise 0.5))
 (define-values (blobs labels) (blob-rows 256 3 4 #:sep 1.0))
 
-(define full-batch
-  (hash '#:batch-size 256 '#:shuffle #f '#:tol 0.0 '#:eta0 0.05 '#:epochs 1000))
+(define full-batch (hash '#:batch-size 256 '#:shuffle #f '#:tol 0.0 '#:eta0 0.05 '#:epochs 1000))
 
 (define arms
   (list (list 'squared-loss (hash '#:penalty 'l2 '#:alpha 0.1))
@@ -23,8 +27,7 @@
         (list 'log (hash '#:alpha 1e-2 '#:eta0 0.5 '#:fit-intercept #f))))
 
 (define (settled more)
-  (for/fold ([all full-batch]) ([(k v) (in-hash more)])
-    (hash-set all k v)))
+  (overridden full-batch more))
 
 (define (penalty-value settings w)
   (define alpha (hash-ref settings '#:alpha 1e-4))
@@ -44,7 +47,7 @@
 
 (define (objective loss settings X y w b)
   (+ (/ (for/sum ([x (in-list X)] [v (in-list y)])
-          (row-loss loss (+ b (for/sum ([xi (in-list x)] [wi (in-list w)]) (* xi wi))) v))
+                 (row-loss loss (+ b (for/sum ([xi (in-list x)] [wi (in-list w)]) (* xi wi))) v))
         (length y))
      (penalty-value settings w)))
 

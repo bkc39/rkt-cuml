@@ -18,11 +18,11 @@
          (only-in "labels.rkt"
                   class-view
                   device-kind?
-                  fit-labels
-                  label-codes
+                  fit-labels/who
+                  label-codes/who
                   label-kind?
                   list-kind?
-                  y-kind)
+                  y-kind/who)
          (only-in "native.rkt"
                   cuml-linear-model-logistic-regression-apply-job
                   cuml-linear-model-logistic-regression-fit-job))
@@ -49,7 +49,7 @@
   #:property prop:label-codes
   (lambda (who result y resources)
     (match-define (struct* logistic-regression-result ([classes classes] [label-kind kind])) result)
-    (label-codes who classes kind y resources)))
+    (label-codes/who who classes kind y resources)))
 
 (define-hyperparameters logistic-regression-params
   [penalty 'l2]
@@ -178,10 +178,10 @@
                                      #:resources [resources (current-device-resources)])
   (unless (device-matrix? X)
     (logic-error "~a: X: expected a device-matrix, got ~e" who X))
-  (define kind (y-kind who y))
+  (define kind (y-kind/who who y))
   (define settings (qn-settings/who who (bound-params logistic-regression-params)))
   (define w (weight-view who sample-weight))
-  (define-values (y-view classes weights) (fit-labels who kind y class-weight resources))
+  (define-values (y-view classes weights) (fit-labels/who who kind y class-weight resources))
   (define out (deposit-for/who who resources))
   (define n-iter (fit-job who resources X y-view w weights out settings))
   (match-define (list coef intercept device-classes) (deposit->list out))

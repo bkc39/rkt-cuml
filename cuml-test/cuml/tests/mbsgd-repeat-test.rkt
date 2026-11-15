@@ -48,4 +48,5 @@
     (for ([seed (in-list '(#f 7))])
       (law-case (format "~ax~a batch ~a ~a random-state ~a" n d batch dt seed)
         (twice (lambda ()
-                 (reg-parts (mbsgd-regressor-fit X y #:batch-size batch #:epochs 5 #:random-state seed))))))))
+                 (reg-parts
+                  (mbsgd-regressor-fit X y #:batch-size batch #:epochs 5 #:random-state seed))))))))

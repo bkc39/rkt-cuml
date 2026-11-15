@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/core/private/deposit deposit-for/who)
+(require (only-in cuml/core/private/define-who define/who)
+         (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/list filter-not remove-duplicates)
          (only-in racket/match match match-define)
@@ -11,12 +12,12 @@
 (provide class-view
          device-kind
          device-kind?
-         fit-labels
-         label-codes
+         fit-labels/who
+         label-codes/who
          label-dtypes
          label-kind?
          list-kind?
-         y-kind)
+         y-kind/who)
 
 (define label-dtypes '(int32 int64 float32 float64))
 
@@ -57,7 +58,7 @@
              [i (in-naturals)])
     (values (key-of kind c) i)))
 
-(define (y-kind who y)
+(define/who (y-kind who y)
   (match y
     [(? device-vector?)
      (if (memq (dtype y) label-dtypes)
@@ -121,7 +122,7 @@
    (hash? cw)
    (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources)))
 
-(define (fit-labels who kind y cw resources)
+(define/who (fit-labels who kind y cw resources)
   (match kind
     [(? device-kind?)
      (values y #f (class-weight-view who real-labels (integral-classes y) cw resources))]
@@ -136,7 +137,7 @@
     [(device-kind dt) (list->device-vector classes #:dtype dt #:resources resources)]
     [(? list-kind?) #f]))
 
-(define (label-codes who classes kind y resources)
+(define/who (label-codes who classes kind y resources)
   (match kind
     [(? device-kind?)
      (define out (deposit-for/who who resources))
