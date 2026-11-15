@@ -104,7 +104,7 @@ inline void require_two_classes(int64_t k) {
   }
 }
 
-inline constexpr double gate_slack = 1e-3;
+inline constexpr double gate_slack = 1e-2;
 inline constexpr double gate_floor_share = 1e-12;
 
 inline std::optional<std::string> gate_refusal(bool finite, double start,

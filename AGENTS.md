@@ -276,9 +276,9 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   it; the scale law (X·2^k, alpha·4^k or 2^k, eta0·4^-k gives coef·2^-k)
   is exact for `'constant` and `'invscaling` only.
 - *mbsgd-gate.* After the solve, a non-finite iterate or an objective that
-  ends above F_start·(1 + 1e-3) + floor, F_start the zero model's, is
+  ends above F_start·(1 + 1e-2) + floor, F_start the zero model's, is
   refused with "lower #:eta0". The slack admits an l1 or elastic-net fit at
-  a zero optimum, the floor (1e-12·mean(y²), classifier 1e-12·F_start) a
+  a zero optimum whose rise (about eta0·α) is under 1%, the floor (1e-12·mean(y²), classifier 1e-12·F_start) a
   constant y. It catches blow-ups, not slow convergence.
 - *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains
   on -1/+1; the `'log` and `'hinge` intercepts are a penalised ones column

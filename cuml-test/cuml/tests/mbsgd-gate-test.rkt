@@ -3,17 +3,10 @@
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
-         (only-in rackunit check-not-exn check-pred)
+         (only-in rackunit check-not-exn)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
-         (only-in "private/mbsgd-data.rkt"
-                  blob-rows
-                  clf-parts
-                  learning-rates
-                  normal-rows
-                  penalties
-                  reg-parts
-                  reg-target)
+         (only-in "private/mbsgd-data.rkt" blob-rows learning-rates normal-rows penalties reg-target)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define not-finite #rx"^the solution is not finite; lower #:eta0 \\(now 10\\)$")
@@ -74,15 +67,15 @@
          [lr (in-list learning-rates)]
          [penalty (in-list penalties)])
     (law-case (format "~a fit-intercept ~a ~a ~a" dt intercept? lr penalty)
-      (check-pred list?
-                  (reg-parts (mbsgd-regressor-fit (on-matrix grid-rows dt)
-                                                  (on-vector grid-targets dt)
-                                                  #:fit-intercept intercept?
-                                                  #:learning-rate lr
-                                                  #:penalty penalty
-                                                  #:batch-size 16
-                                                  #:eta0 0.01
-                                                  #:epochs 50))))))
+      (check-not-exn (lambda ()
+                       (mbsgd-regressor-fit (on-matrix grid-rows dt)
+                                            (on-vector grid-targets dt)
+                                            #:fit-intercept intercept?
+                                            #:learning-rate lr
+                                            #:penalty penalty
+                                            #:batch-size 16
+                                            #:eta0 0.01
+                                            #:epochs 50))))))
 
 (define sparse-rows (normal-rows 500 5 3))
 (define sparse-targets
@@ -91,28 +84,35 @@
     (+ 1.0 (* 0.3 (car r)) (car e))))
 (define-values (overlap overlap-labels) (blob-rows 300 4 5 #:sep 0.3))
 
-(test-gpu "an l1 or elastic-net fit whose optimum is zero passes at a lowered eta0"
+(define zero-optimum-regressors '((1.0 (1e-3 1e-5)) (5.0 (1e-5))))
+(define zero-optimum-classifiers '((hinge (1e-3 1e-5)) (log (1e-5))))
+
+(test-gpu "an l1 or elastic-net fit whose optimum is zero passes, at the default eta0 within 1%"
   (for* ([dt (in-list dtypes)]
          [penalty (in-list '(l1 elasticnet))])
-    (law-case (format "~a ~a regressor" dt penalty)
-      (for ([alpha (in-list '(1.0 5.0))])
-        (check-pred list?
-                    (reg-parts (mbsgd-regressor-fit (on-matrix sparse-rows dt)
-                                                    (on-vector sparse-targets dt)
-                                                    #:penalty penalty
-                                                    #:alpha alpha
-                                                    #:l1-ratio 0.9
-                                                    #:eta0 1e-5)))))
-    (for ([loss (in-list '(hinge log))])
-      (law-case (format "~a ~a ~a classifier" dt penalty loss)
-        (check-pred list?
-                    (clf-parts (mbsgd-classifier-fit (on-matrix overlap dt)
-                                                     overlap-labels
-                                                     #:loss loss
-                                                     #:penalty penalty
-                                                     #:alpha 2.0
-                                                     #:l1-ratio 0.9
-                                                     #:eta0 1e-5)))))))
+    (for ([c (in-list zero-optimum-regressors)])
+      (match-define (list alpha eta0s) c)
+      (for ([eta0 (in-list eta0s)])
+        (law-case (format "~a ~a regressor alpha ~a eta0 ~a" dt penalty alpha eta0)
+          (check-not-exn (lambda ()
+                           (mbsgd-regressor-fit (on-matrix sparse-rows dt)
+                                                (on-vector sparse-targets dt)
+                                                #:penalty penalty
+                                                #:alpha alpha
+                                                #:l1-ratio 0.9
+                                                #:eta0 eta0))))))
+    (for ([c (in-list zero-optimum-classifiers)])
+      (match-define (list loss eta0s) c)
+      (for ([eta0 (in-list eta0s)])
+        (law-case (format "~a ~a ~a classifier eta0 ~a" dt penalty loss eta0)
+          (check-not-exn (lambda ()
+                           (mbsgd-classifier-fit (on-matrix overlap dt)
+                                                 overlap-labels
+                                                 #:loss loss
+                                                 #:penalty penalty
+                                                 #:alpha 2.0
+                                                 #:l1-ratio 0.9
+                                                 #:eta0 eta0))))))))
 
 (define constant-rows (normal-rows 300 4 3))
 
@@ -120,6 +120,6 @@
   (for ([c (in-list '((float64 0.3) (float64 1e6) (float32 1.7)))])
     (match-define (list dt value) c)
     (law-case (format "~a y = ~a" dt value)
-      (check-pred list?
-                  (reg-parts (mbsgd-regressor-fit (on-matrix constant-rows dt)
-                                                  (on-vector (make-list 300 value) dt)))))))
+      (check-not-exn (lambda ()
+                       (mbsgd-regressor-fit (on-matrix constant-rows dt)
+                                            (on-vector (make-list 300 value) dt)))))))

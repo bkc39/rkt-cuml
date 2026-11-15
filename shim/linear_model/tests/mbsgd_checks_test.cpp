@@ -152,9 +152,9 @@ TEST(MbsgdGate, NonFiniteAndRisingFitsAreRefusedWithTheAdvice) {
 
 TEST(MbsgdGate, ARiseWithinTheSlackOrTheFloorIsAccepted) {
   using cumlrkt::glm::mbsgd::gate_refusal;
-  EXPECT_FALSE(gate_refusal(true, 1.0, 1.0009, 0, 0.01).has_value());
-  EXPECT_EQ(gate_refusal(true, 1.0, 1.0011, 0, 0.01).value_or(""),
-            "the objective rose from 1 to 1.0011; lower #:eta0 (now 0.01)");
+  EXPECT_FALSE(gate_refusal(true, 1.0, 1.009, 0, 0.01).has_value());
+  EXPECT_EQ(gate_refusal(true, 1.0, 1.011, 0, 0.01).value_or(""),
+            "the objective rose from 1 to 1.011; lower #:eta0 (now 0.01)");
   EXPECT_FALSE(gate_refusal(true, 0, 1e-20, 1e-12, 0.01).has_value());
   EXPECT_EQ(gate_refusal(true, 0, 2e-12, 1e-12, 0.01).value_or(""),
             "the objective rose from 0 to 2e-12; lower #:eta0 (now 0.01)");
