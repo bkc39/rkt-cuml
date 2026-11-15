@@ -107,7 +107,7 @@
                                                #:alpha 2.0
                                                #:l1-ratio 0.9)))))))
 
-(test-gpu "an l1 alpha 10 fit on 2 to 10 rows of 3 columns passes at the defaults"
+(test-gpu "an l1 alpha 10 fit on 2 to 10 rows of 3 columns, 20 seeds at 2 and 3, passes at the defaults"
   (for* ([dt (in-list dtypes)]
          [n (in-list '(2 3 4 6 10))])
     (define-values (X y) (blob-rows n 3 (+ 100 n)))
@@ -115,13 +115,33 @@
       (law-case (format "~a ~a classifier on ~a rows" dt loss n)
         (check-not-exn
          (lambda () (mbsgd-classifier-fit (on-matrix X dt) y #:loss loss #:penalty 'l1 #:alpha 10)))))
-    (define R (normal-rows n 3 (+ 200 n)))
-    (law-case (format "~a regressor on ~a rows" dt n)
+    (define seeds
+      (if (<= n 3)
+          (for/list ([s (in-range 20)])
+            (+ 1000 (* 37 s) n))
+          (list (+ 200 n))))
+    (for ([seed (in-list seeds)])
+      (define R (normal-rows n 3 seed))
+      (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
+        (check-not-exn (lambda ()
+                         (mbsgd-regressor-fit (on-matrix R dt)
+                                              (on-vector (reg-target R seed) dt)
+                                              #:penalty 'l1
+                                              #:alpha 10)))))))
+
+(define small-targets
+  (for/list ([t (in-list (reg-target grid-rows 21 #:offset 0.0))])
+    (* 0.01 t)))
+
+(test-gpu "a regressor l1 alpha 1 fit on y scaled by 0.01 passes at eta0 1e-3"
+  (for ([dt (in-list dtypes)])
+    (law-case (symbol->string dt)
       (check-not-exn (lambda ()
-                       (mbsgd-regressor-fit (on-matrix R dt)
-                                            (on-vector (reg-target R (+ 200 n)) dt)
+                       (mbsgd-regressor-fit (on-matrix grid-rows dt)
+                                            (on-vector small-targets dt)
                                             #:penalty 'l1
-                                            #:alpha 10))))))
+                                            #:alpha 1
+                                            #:eta0 1e-3))))))
 
 (test-gpu "standardised breast cancer, 30 columns, passes an l1 alpha 5 or 10 fit at the defaults"
   (match-define (labelled bc bc-labels _)
@@ -144,7 +164,7 @@
     ("log l1 alpha 0.1 on blobs" ,blobs ,labels log l1 0.1)
     ("hinge l1 alpha 0.1 on blobs" ,blobs ,labels hinge l1 0.05)))
 
-(test-gpu "a one-epoch fit that ends above the zero model, at chance, is refused; eta0/10 passes"
+(test-gpu "a one-epoch fit worse than the zero model is refused; eta0/10 passes"
   (for* ([dt (in-list dtypes)]
          [c (in-list chance-fits)])
     (match-define (list name X y loss penalty eta0) c)

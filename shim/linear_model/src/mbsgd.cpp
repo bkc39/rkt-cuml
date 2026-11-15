@@ -91,21 +91,23 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
       std::ranges::all_of(w, [](T v) { return std::isfinite(v); }) &&
       std::isfinite(intercept);
   const objective_shape shape{x.n, x.d, ones, o.loss};
-  double start = 0;
+  const bool centred =
+      o.fit_intercept != 0 && o.loss == CUML_LINEAR_MODEL_SGD_SQUARED;
+  const double b0 = centred ? mean_of<T>(handle, y, x.n) : 0.0;
+  const buffer<T> zero = zeroed<T>(cols, stream);
+  const double start = mean_loss<T>(handle, x.data, y, zero.data(), b0, shape);
+  const double floor =
+      regressor ? regressor_floor<T>(start, mean_loss<T>(handle, x.data, y,
+                                                         zero.data(), 0.0,
+                                                         shape))
+                : classifier_floor(start);
+  if (const auto refusal = scale_refusal(start, floor)) {
+    throw logic_error(*refusal);
+  }
   double end = 0;
   double allowance = 0;
   if (finite) {
-    const bool centred =
-        o.fit_intercept != 0 && o.loss == CUML_LINEAR_MODEL_SGD_SQUARED;
-    const double b0 = centred ? mean_of<T>(handle, y, x.n) : 0.0;
-    const buffer<T> zero = zeroed<T>(cols, stream);
-    start = mean_loss<T>(handle, x.data, y, zero.data(), b0, shape);
-    const double floor =
-        regressor
-            ? regressor_floor<T>(start, mean_loss<T>(handle, x.data, y,
-                                                     zero.data(), 0.0, shape))
-            : classifier_floor(start);
-    allowance = l1_allowance(o, x.d, start) + floor;
+    allowance = l1_allowance(o, x.d, start, regressor) + floor;
     std::vector<double> wd(w.begin(), w.end());
     end = mean_loss<T>(handle, x.data, y, coef, static_cast<double>(intercept),
                        shape) +
@@ -163,6 +165,7 @@ matrix<T, int64_t> checked_x(const rr_view* xv, const rr_view* yv,
   const matrix<T, int64_t> x =
       rows_of<T, int64_t>(xv, "X", raftrkt::any_extent, raftrkt::any_extent);
   require_sgd_options(o);
+  require_sgd_values<T>(o);
   require_sgd_shape(x.n, x.d, raftrkt::require(yv, "y")->shape[0]);
   require_elements(x.n, x.d + (ones ? 1 : 0));
   require_finite("X", x, stream);

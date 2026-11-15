@@ -105,7 +105,23 @@
             (shared-shim-rows mbsgd-regressor-fit on-vector)
             (list (row "a non-finite y"
                        "y: element 4: expected a finite value, got inf"
-                       (lambda () (mbsgd-regressor-fit X (on-vector '(1 2 3 4 +inf.0 6))))))))
+                       (lambda () (mbsgd-regressor-fit X (on-vector '(1 2 3 4 +inf.0 6)))))
+                  (row "an alpha beyond float32"
+                       "alpha: 1e+150 is not representable in float32"
+                       (lambda ()
+                         (mbsgd-regressor-fit (on-matrix grid 'float32)
+                                              (on-vector targets 'float32)
+                                              #:alpha 1e150)))
+                  (row "an eta0 below float32"
+                       "eta0: 1e-50 is not representable in float32"
+                       (lambda ()
+                         (mbsgd-regressor-fit (on-matrix grid 'float32)
+                                              (on-vector targets 'float32)
+                                              #:eta0 1e-50)))
+                  (row "a float64 y whose square overflows"
+                       "y is too large to check the fit; rescale y"
+                       (lambda ()
+                         (mbsgd-regressor-fit X (on-vector (map (lambda (t) (* 1e155 t)) targets))))))))
   (for ([r (in-list rows)])
     (test-case (row-id r)
       (check-row "mbsgd-regressor-fit" r))))

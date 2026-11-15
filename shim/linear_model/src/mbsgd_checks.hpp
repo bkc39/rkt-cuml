@@ -83,6 +83,24 @@ inline void require_sgd_options(const sgd_options& o) {
   require_flag("seeded", o.seeded);
 }
 
+template <typename T>
+void require_representable(const char* what, double got) {
+  if (got > std::numeric_limits<T>::max() ||
+      (got > 0 && got < std::numeric_limits<T>::min())) {
+    throw logic_error(std::format("{}: {} is not representable in {}", what,
+                                  printed(got),
+                                  raftrkt::dtype_name(raftrkt::dtype_code<T>)));
+  }
+}
+
+template <typename T>
+void require_sgd_values(const sgd_options& o) {
+  require_representable<T>("alpha", o.alpha);
+  require_representable<T>("tol", o.tol);
+  require_representable<T>("eta0", o.eta0);
+  require_representable<T>("power-t", o.power_t);
+}
+
 inline void require_sgd_shape(int64_t n, int64_t d, int64_t y_len) {
   require_some("X", "row", n, 2);
   require_some("X", "column", d);
@@ -125,11 +143,15 @@ inline double l1_share(const sgd_options& o) {
 // At a zero optimum l1 SGD oscillates, each coordinate moving about
 // eta0·alpha·r: the penalty rises by alpha·r·|w|_1 and the loss can fall by
 // no more, a rise of about 2·k·eta0·(alpha·r)^2. eta0 bounds the step under
-// every schedule. Capped at 4·start so a large eta0 cannot hide divergence.
-inline double l1_allowance(const sgd_options& o, int64_t d, double start) {
+// every schedule. The classifier's is capped at 4·start so a large eta0
+// cannot hide divergence; the regressor's start is var(y), not scale-free, so
+// its allowance is uncapped (#134).
+inline double l1_allowance(const sgd_options& o, int64_t d, double start,
+                           bool regressor) {
   const auto k = static_cast<double>(d + (o.fit_intercept != 0 ? 1 : 0));
   const double a = o.alpha * l1_share(o);
-  return std::min(gate_l1_factor * k * o.eta0 * a * a, gate_l1_cap * start);
+  const double allowance = gate_l1_factor * k * o.eta0 * a * a;
+  return regressor ? allowance : std::min(allowance, gate_l1_cap * start);
 }
 
 inline double classifier_floor(double start) {
@@ -141,6 +163,13 @@ double regressor_floor(double start, double mean_square) {
   constexpr double eps = std::numeric_limits<T>::epsilon();
   return (gate_floor_share * start) +
          (gate_round_off_factor * eps * eps * mean_square);
+}
+
+inline std::optional<std::string> scale_refusal(double start, double floor) {
+  if (!std::isfinite(start) || !std::isfinite(floor)) {
+    return "y is too large to check the fit; rescale y";
+  }
+  return std::nullopt;
 }
 
 inline std::optional<std::string> gate_refusal(bool finite, double start,
