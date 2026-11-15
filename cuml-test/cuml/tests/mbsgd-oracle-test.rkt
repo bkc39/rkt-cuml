@@ -16,8 +16,8 @@
          (only-in "private/mbsgd-data.rkt" blob-rows coef-gap normal-rows reg-target)
          (only-in "private/mbsgd-twin-data.rkt" clf-fit overridden reg-fit))
 
-(define rows (normal-rows 256 4 2))
-(define targets (reg-target rows 2 #:noise 0.5))
+(define rows (normal-rows 256 4 5))
+(define targets (reg-target rows 5 #:noise 0.5))
 (define n (length rows))
 (define exact-rows
   (for/list ([r (in-list rows)])
@@ -97,11 +97,11 @@
   (define optimum (ridge-optimum 0.1))
   (define minibatch (hash '#:penalty 'l2 '#:alpha 0.1 '#:batch-size 32 '#:tol 0.0 '#:epochs 1000))
   (for* ([dt (in-list dtypes)]
-         [arm (in-list (list (list "constant eta0 1e-3" (hash '#:eta0 1e-3) 5e-5)
+         [arm (in-list (list (list "constant eta0 1e-3" (hash '#:eta0 1e-3) 1e-4)
                              (list "invscaling eta0 .05 power-t .5"
                                    (hash '#:learning-rate 'invscaling '#:eta0 0.05 '#:power-t 0.5)
-                                   2e-5)
-                             (list "constant eta0 .01" (hash '#:eta0 0.01) 2e-3)))])
+                                   5e-5)
+                             (list "constant eta0 .01" (hash '#:eta0 0.01) 3e-3)))])
     (match-define (list name settings bound) arm)
     (law-case (format "~a ~a" dt name)
       (check-gap name

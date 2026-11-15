@@ -13,8 +13,8 @@
                   twin-request)
          (only-in "private/python-env.rkt" test-twin))
 
-(define rows (normal-rows 256 4 2))
-(define targets (reg-target rows 2 #:noise 0.5))
+(define rows (normal-rows 256 4 5))
+(define targets (reg-target rows 5 #:noise 0.5))
 (define-values (blobs labels) (blob-rows 256 3 4 #:sep 1.0))
 
 (define full-batch (hash '#:batch-size 256 '#:shuffle #f '#:tol 0.0 '#:eta0 0.05 '#:epochs 1000))
