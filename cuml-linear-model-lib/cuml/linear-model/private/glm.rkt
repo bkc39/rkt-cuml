@@ -43,13 +43,19 @@
 
 (define/who (positive-value who key v)
   (define f (flonum-of v))
-  (if (and f (< 0.0 f +inf.0))
-      f
-      (logic-error "~a: ~a: expected a positive finite real, got ~e" who key v)))
+  (cond
+    [(not (and f (positive? v) (< f +inf.0)))
+     (logic-error "~a: ~a: expected a positive finite real, got ~e" who key v)]
+    [(zero? f)
+     (logic-error "~a: ~a: expected a positive real representable as a nonzero flonum, got ~e"
+                  who
+                  key
+                  v)]
+    [else f]))
 
 (define/who (nonnegative-value who key v)
   (define f (flonum-of v))
-  (if (and f (<= 0.0 f) (< f +inf.0))
+  (if (and f (>= v 0) (< f +inf.0))
       f
       (logic-error "~a: ~a: expected a nonnegative finite real, got ~e" who key v)))
 

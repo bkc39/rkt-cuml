@@ -58,7 +58,7 @@
    (row "C infinite" "C: expected a positive finite real, got +inf.0" (lambda () (go X y #:C +inf.0)))
    (row "C nan" "C: expected a positive finite real, got +nan.0" (lambda () (go X y #:C +nan.0)))
    (row "an exact C that rounds to 0.0"
-        #rx"^C: expected a positive finite real, got 1/10+[.][.][.]$"
+        #rx"^C: expected a positive real representable as a nonzero flonum, got 1/10+[.][.][.]$"
         (lambda () (go X y #:C (expt 10 -400))))
    (row "an exact C that rounds to +inf.0"
         #rx"^C: expected a positive finite real, got 10+[.][.][.]$"
@@ -88,6 +88,12 @@
    (row "nan tol"
         "tol: expected a nonnegative finite real, got +nan.0"
         (lambda () (go X y #:tol +nan.0)))
+   (row "a negative exact tol that rounds to -0.0"
+        #rx"^tol: expected a nonnegative finite real, got -1/10+[.][.][.]$"
+        (lambda () (go X y #:tol (- (expt 10 -400)))))
+   (row "an exact tol that rounds to +inf.0"
+        #rx"^tol: expected a nonnegative finite real, got 10+[.][.][.]$"
+        (lambda () (go X y #:tol (expt 10 400))))
    (row "penalty-normalized"
         "penalty-normalized: expected #t or #f, got 1"
         (lambda () (go X y #:penalty-normalized 1)))

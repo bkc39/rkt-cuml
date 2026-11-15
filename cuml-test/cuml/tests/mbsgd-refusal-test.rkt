@@ -51,6 +51,21 @@
         [#f (values (symbol->string key) (hash (keyword-of key) bad))]))
     (row id (format "~a: ~a" key message) (lambda () (apply-keywords go given (list X y))))))
 
+(define (exact-value-rows go X y)
+  (list
+   (row "an exact alpha that rounds to 0.0"
+        #rx"^alpha: expected a positive real representable as a nonzero flonum, got 1/10+[.][.][.]$"
+        (lambda () (go X y #:alpha (expt 10 -400))))
+   (row "an exact eta0 that rounds to 0.0"
+        #rx"^eta0: expected a positive real representable as a nonzero flonum, got 1/10+[.][.][.]$"
+        (lambda () (go X y #:eta0 (expt 10 -400))))
+   (row "a negative exact tol that rounds to -0.0"
+        #rx"^tol: expected a nonnegative finite real, got -1/10+[.][.][.]$"
+        (lambda () (go X y #:tol (- (expt 10 -400)))))
+   (row "an exact tol that rounds to +inf.0"
+        #rx"^tol: expected a nonnegative finite real, got 10+[.][.][.]$"
+        (lambda () (go X y #:tol (expt 10 400))))))
+
 (define (shared-shim-rows go y-of)
   (list (row "X layout before y's length"
              "X: expected row-major, got col-major 6x3"
@@ -86,6 +101,7 @@
                        "loss: expected 'squared-loss, got 'hinge"
                        (lambda () (mbsgd-regressor-fit X y #:loss 'hinge #:penalty 'l3))))
             (settings-rows mbsgd-regressor-fit X y)
+            (exact-value-rows mbsgd-regressor-fit X y)
             (shared-shim-rows mbsgd-regressor-fit on-vector)
             (list (row "a non-finite y"
                        "y: element 4: expected a finite value, got inf"
@@ -119,6 +135,7 @@
                 "y: expected exactly 2 classes, got 3"
                 (lambda () (mbsgd-classifier-fit X '(a b c a b c)))))
      (settings-rows mbsgd-classifier-fit X y)
+     (exact-value-rows mbsgd-classifier-fit X y)
      (shared-shim-rows mbsgd-classifier-fit (lambda (ls) (on-vector ls 'int32)))
      (list (row "a non-integral device label"
                 "y: expected integral class labels, got 1.5"
