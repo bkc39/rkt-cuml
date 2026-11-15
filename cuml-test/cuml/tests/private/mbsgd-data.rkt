@@ -11,6 +11,7 @@
 
 (provide blob-rows
          clf-parts
+         coef-gap
          dtype-penalties
          learning-rates
          normal-rows
@@ -78,3 +79,9 @@
 (define (clf-parts r)
   (list (device-vector->list (mbsgd-classifier-result-coef r))
         (mbsgd-classifier-result-intercept r)))
+
+(define (coef-gap got optimum)
+  (define scale (for/fold ([m 0.0]) ([w (in-list optimum)]) (max m (abs (exact->inexact w)))))
+  (/ (for/fold ([m 0.0]) ([c (in-list got)] [w (in-list optimum)])
+       (max m (abs (- c (exact->inexact w)))))
+     (max scale 1e-300)))
