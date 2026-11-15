@@ -13,6 +13,8 @@ nix flake check --max-jobs 1 --cores 4       # the CI-equivalent
 
 - `cuml-*-lib/`, `cuml-doc/`, `cuml-test/`, `cuml/`: the Racket packages
   (one `cuml/` collection); `shim/`: one native library per algorithm family.
+- `cuml-glmnet-test/`: the glmnet parity tests, GPL-2.0-or-later because they
+  depend on glmnet; the one non-Apache package, never catalogued.
 - cuML sources for reference: `~/dev/rkt/cuml-upstream` (tag `v26.08.00`,
   the RAPIDS release rkt-raft pins).
 - `plans/layout.md`: the owner's layout decisions; `plans/starting-notes.md`:

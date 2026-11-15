@@ -11,6 +11,7 @@
    | `cuml-lib` | `cuml/main.rkt`, re-exporting `cuml/core` and every family | the -lib packages |
    | `cuml-doc` | the one manual, `cuml/scribblings/cuml.scrbl` | cuml-lib + doc build deps |
    | `cuml-test` | every test, `cuml/tests/...` | everything |
+   | `cuml-glmnet-test` | the glmnet parity tests (#131), GPL-2.0-or-later as glmnet is, in no catalog | cuml-test, glmnet |
    | `cuml` | meta package | cuml-lib, cuml-doc |
 
    A family package never depends on `cuml-lib` or on another family, so
@@ -1977,6 +1978,63 @@ scratch, the source is `cpp/src/glm/qn/`.
   residual, K ≤ 1e-7·max(F, 1) (measured ≤ 3.9e-8), l2 is held within
   1e-5 of sklearn's, a float32 fit within 1e-2 of the float64 one
   (measured 5.4e-3, l1), and accuracy to a row of sklearn's.
+- **Oracle: glmnet (#131).** bkc39/glmnet's coordinate descent, a
+  test-only flake input, at `#:standardize? #f`. glmnet is
+  GPL-2.0-or-later, so its tests are a package of their own,
+  `cuml-glmnet-test` (that licence, in no catalog), and cuml-test stays
+  Apache-2.0 without it. glmnet takes no weights, so integer weights are
+  replicated rows.
+- **glmnet, the mapping.** Binomial and multinomial: λ = 1/(C·W), α the
+  l1 share; a factor of 2 either way moves the coefficients 2e-3 to 1.2
+  (relative). Gaussian: glmnet divides its whole penalty by sd(y)
+  (`standard` in the vendored Fortran), so λ = alpha·r + s·alpha·(1 − r),
+  α = alpha·r/λ, and ridge is λ = s·alpha/W against cuML's alpha.
+  `glmnet-oracle-test`, which needs no GPU and runs in the `racket`
+  check, pins both against the host optima: the gaussian fits within
+  1e-10 of `oracle-elastic-net` and `oracle-ridge` (unweighted and
+  ×64-weighted 20×2), l2 binomial, intercept included, within 1e-7 of `logistic-newton`
+  (measured 8.9e-12 unweighted, 2.2e-8 weighted at C 10 with an
+  intercept), and a weighted multinomial fit is its fit on the
+  replicated rows. λ×2 fails the gaussian, ridge and binomial cases; the
+  multinomial case compares glmnet with itself on the replicated rows, so
+  only dropping the replication fails it. sd(y) uncentred fails both
+  gaussian cases. The multinomial λ is pinned only by the GPU suite.
+- **glmnet, the bound rule.** glmnet is run tight enough that the gap is
+  cuML's own stop, not glmnet's: thresh 1e-26 gaussian (at 1e-14 it
+  stops up to 1.35e-7 from the exact optimum on 20×7; at 1e-26 within
+  1e-12 on every unweighted `law-cases` draw), 1e-20 logistic, 1e-18
+  multinomial (iris l1 at C 1 with an intercept converges no tighter). Then each float64
+  bound sits above the worst measured gap of its trial and below the gap
+  a 2% error in λ makes in every setting of it; each float32 fit is held
+  to the float64 fit of the same setting (as L4's twin), not to glmnet.
+  Measured tight-tol gaps, float64 against glmnet:
+  - gaussian, every unweighted `law-cases` draw and the weighted ones
+    with their dyadic weights times 64 (the 5000-row weighted draw is
+    skipped: about 400k replicated rows): 1.2e-10, ridge 1.4e-13, bound
+    10·tol = 1e-9; diabetes 5.7e-9, bound 5e-8. float32 against glmnet,
+    roundoff-bound: 1.1e-6 (bound 2e-6), diabetes 9.9e-6 (1e-4). At the
+    default tol, 1.2e-3 (20×7), bound 10·tol = 1e-2.
+  - logistic: blobs 1.2e-9 (bound 1e-8), weighted 1.7e-6 (1e-5),
+    breast-cancer 3.2e-5 (1e-4), three blobs 2.8e-7 (1e-6), iris 1.2e-5
+    (5e-5), wine 1.5e-6 (1e-5). Multinomial coefficients are compared
+    uncentred (only the intercepts are centred), so a per-feature shift
+    that leaves the probabilities alone is caught.
+  - float32 against the float64 fit: blobs 2.2e-5 (bound 1e-4), weighted
+    5.5e-3 (1e-2, l1 C 10), breast-cancer 6.6e-3 (1e-2), three blobs
+    6.7e-4 (2e-3), wine 8.7e-4 (1e-2), iris at C 0.1 1.8e-3 (1e-2).
+    Iris runs C 0.1 and 1 in float64 and C 0.1 only in float32: float32
+    OWL-QN stops 1.8e-2 from the float64 fit at l1 C 1.
+  - what the bounds catch: glmnet's λ×1.02 fails all 84 float64
+    logistic settings; glmnet at thresh 1e-14 fails 106 of the 20-row
+    gaussian settings at 1e-9; a per-feature shift of the multinomial
+    coefficients fails every multinomial setting (the old centred compare
+    passed all 43). A float32-only C×1.02 is caught in 15 of 18 unweighted
+    blobs settings, 3 of 12 breast-cancer and none of the 18 weighted:
+    there float32 OWL-QN's own stop (up to 5.5e-3) is as large as the
+    error.
+  At the default tol the blob and wine fits are within the default-tol
+  cap; breast-cancer l1 (4.4e-2 at C 1, 8.1e-2 at C 10, f64) and iris l1
+  (5.1e-2) are not, and iris at C 10 is refused at max-iter 1000.
 
 ## Decisions recorded in leg L5 (#91): minibatch SGD
 
