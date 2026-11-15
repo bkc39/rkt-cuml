@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+         (only-in racket/match match-define)
          (only-in rackunit check-not-exn test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/elastic-net-data.rkt" apply-keywords)
@@ -28,9 +29,9 @@
 
 (define (quick key value)
   (define k (string->keyword (symbol->string key)))
-  (cond
-    [(eq? key 'epochs) (list k value '#:tol 1e-3)]
-    [else (list k value '#:epochs (if (eq? key 'n-iter-no-change) 20 5))]))
+  (if (eq? key 'epochs)
+      (list k value '#:tol 1e-3)
+      (list k value '#:epochs (if (eq? key 'n-iter-no-change) 20 5))))
 
 (define (quick-fit f key v X y)
   (apply-keywords f (apply hash (quick key v)) (list X y)))
@@ -38,18 +39,17 @@
 (test-gpu "each setting refuses its range edges and accepts the values just inside"
   (define X (on-matrix rows))
   (define y (on-vector targets))
-  (define-values (Xc yc) (values X (map (lambda (t) (if (> t 3) 'up 'down)) targets)))
+  (define yc (map (lambda (t) (if (> t 3) 'up 'down)) targets))
   (for ([edge (in-list edges)])
-    (define key (car edge))
-    (define message (cadr edge))
-    (for ([v (in-list (caddr edge))])
+    (match-define (list key message refused accepted) edge)
+    (for ([v (in-list refused)])
       (test-case (format "~a ~a" key v)
         (define text (format "~a: ~a" key (format message (format "~e" v))))
         (check-row "mbsgd-regressor-fit"
                    (row "refused" text (lambda () (quick-fit mbsgd-regressor-fit key v X y))))
         (check-row "mbsgd-classifier-fit"
-                   (row "refused" text (lambda () (quick-fit mbsgd-classifier-fit key v Xc yc))))))
-    (for ([v (in-list (cadddr edge))])
+                   (row "refused" text (lambda () (quick-fit mbsgd-classifier-fit key v X yc))))))
+    (for ([v (in-list accepted)])
       (test-case (format "~a ~a accepted" key v)
         (check-not-exn (lambda () (quick-fit mbsgd-regressor-fit key v X y)))
-        (check-not-exn (lambda () (quick-fit mbsgd-classifier-fit key v Xc yc)))))))
+        (check-not-exn (lambda () (quick-fit mbsgd-classifier-fit key v X yc)))))))

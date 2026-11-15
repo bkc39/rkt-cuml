@@ -7,9 +7,11 @@
                   mbsgd-classifier-predict
                   mbsgd-regressor-fit
                   mbsgd-regressor-predict)
+         (only-in racket/match match match-define)
          (only-in rackunit check-exn test-case)
          (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/elastic-net-data.rkt" apply-keywords)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt" on-matrix on-vector)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
@@ -19,46 +21,35 @@
 (define labels '(0 1 0 1 1 0))
 (define count-message "expected an exact integer from 1 to 2147483647, got ")
 
+(define settings-faults
+  `((penalty l3 "expected one of 'none 'l1 'l2 'elasticnet, got 'l3")
+    (alpha 0 "expected a positive finite real, got 0")
+    (l1-ratio 2 "expected a real in [0, 1], got 2")
+    (fit-intercept yes "expected #t or #f, got 'yes")
+    (epochs 0 ,(string-append count-message "0"))
+    (tol -1 "expected a nonnegative finite real, got -1")
+    (shuffle 1 "expected #t or #f, got 1")
+    (learning-rate optimal "expected one of 'constant 'invscaling 'adaptive, got 'optimal")
+    (eta0 0 "expected a positive finite real, got 0")
+    (power-t -1 "expected a nonnegative finite real, got -1")
+    (batch-size 0 ,(string-append count-message "0"))
+    (n-iter-no-change 0 ,(string-append count-message "0"))
+    (random-state -1 "expected #f or an integer in [0, 4294967295], got -1")))
+
+(define (keyword-of key)
+  (string->keyword (symbol->string key)))
+
 (define (settings-rows go X y)
-  (list (row "penalty before alpha"
-             "penalty: expected one of 'none 'l1 'l2 'elasticnet, got 'l3"
-             (lambda () (go X y #:penalty 'l3 #:alpha 0)))
-        (row "alpha before l1-ratio"
-             "alpha: expected a positive finite real, got 0"
-             (lambda () (go X y #:alpha 0 #:l1-ratio 2)))
-        (row "l1-ratio before fit-intercept"
-             "l1-ratio: expected a real in [0, 1], got 2"
-             (lambda () (go X y #:l1-ratio 2 #:fit-intercept 'yes)))
-        (row "fit-intercept before epochs"
-             "fit-intercept: expected #t or #f, got 'yes"
-             (lambda () (go X y #:fit-intercept 'yes #:epochs 0)))
-        (row "epochs before tol"
-             (string-append "epochs: " count-message "0")
-             (lambda () (go X y #:epochs 0 #:tol -1)))
-        (row "tol before shuffle"
-             "tol: expected a nonnegative finite real, got -1"
-             (lambda () (go X y #:tol -1 #:shuffle 1)))
-        (row "shuffle before learning-rate"
-             "shuffle: expected #t or #f, got 1"
-             (lambda () (go X y #:shuffle 1 #:learning-rate 'optimal)))
-        (row "learning-rate before eta0"
-             "learning-rate: expected one of 'constant 'invscaling 'adaptive, got 'optimal"
-             (lambda () (go X y #:learning-rate 'optimal #:eta0 0)))
-        (row "eta0 before power-t"
-             "eta0: expected a positive finite real, got 0"
-             (lambda () (go X y #:eta0 0 #:power-t -1)))
-        (row "power-t before batch-size"
-             "power-t: expected a nonnegative finite real, got -1"
-             (lambda () (go X y #:power-t -1 #:batch-size 0)))
-        (row "batch-size before n-iter-no-change"
-             (string-append "batch-size: " count-message "0")
-             (lambda () (go X y #:batch-size 0 #:n-iter-no-change 0)))
-        (row "n-iter-no-change before random-state"
-             (string-append "n-iter-no-change: " count-message "0")
-             (lambda () (go X y #:n-iter-no-change 0 #:random-state -1)))
-        (row "random-state"
-             "random-state: expected #f or an integer in [0, 4294967295], got -1"
-             (lambda () (go X y #:random-state -1)))))
+  (for/list ([fault (in-list settings-faults)]
+             [next (in-sequences (in-list (cdr settings-faults)) (in-value #f))])
+    (match-define (list key bad message) fault)
+    (define-values (id given)
+      (match next
+        [(list next-key next-bad _)
+         (values (format "~a before ~a" key next-key)
+                 (hash (keyword-of key) bad (keyword-of next-key) next-bad))]
+        [#f (values (symbol->string key) (hash (keyword-of key) bad))]))
+    (row id (format "~a: ~a" key message) (lambda () (apply-keywords go given (list X y))))))
 
 (define (shared-shim-rows go y-of)
   (list (row "X layout before y's length"
@@ -146,28 +137,31 @@
   (define X (on-matrix grid))
   (define fitted (mbsgd-regressor-fit X (on-vector targets)))
   (define fitted-c (mbsgd-classifier-fit X labels))
-  (for ([apply
-         (list mbsgd-regressor-predict mbsgd-classifier-predict mbsgd-classifier-decision-function)]
-        [name (in-list '("mbsgd-regressor-predict" "mbsgd-classifier-predict"
-                                                   "mbsgd-classifier-decision-function"))]
-        [result (list fitted fitted-c fitted-c)]
-        [predicate (in-list '("mbsgd-regressor-result?" "mbsgd-classifier-result?"
-                                                        "mbsgd-classifier-result?"))])
+  (for ([applier (in-list `((,mbsgd-regressor-predict "mbsgd-regressor-predict"
+                                                      ,fitted
+                                                      "mbsgd-regressor-result?")
+                            (,mbsgd-classifier-predict "mbsgd-classifier-predict"
+                                                       ,fitted-c
+                                                       "mbsgd-classifier-result?")
+                            (,mbsgd-classifier-decision-function "mbsgd-classifier-decision-function"
+                                                                 ,fitted-c
+                                                                 "mbsgd-classifier-result?")))])
+    (match-define (list go name result predicate) applier)
     (test-case (format "~a result" name)
       (check-exn (lambda (e)
                    (and (exn:fail:contract? e)
                         (regexp-match? (regexp-quote (format "expected: ~a" predicate))
                                        (exn-message e))))
-                 (lambda () (apply 'r X))))
+                 (lambda () (go 'r X))))
     (for ([r (list (row "X kind before columns"
                         "X: expected a device-matrix, got 'X"
-                        (lambda () (apply result 'X)))
+                        (lambda () (go result 'X)))
                    (row "columns before dtype"
                         "X: expected 3 columns, got 2"
-                        (lambda () (apply result (on-matrix '((1 2)) 'float32))))
+                        (lambda () (go result (on-matrix '((1 2)) 'float32))))
                    (row "dtype"
                         "X: expected dtype float64 (the fit's), got float32"
-                        (lambda () (apply result (on-matrix grid 'float32)))))])
+                        (lambda () (go result (on-matrix grid 'float32)))))])
       (test-case (format "~a ~a" name (row-id r))
         (check-row name r)))))
 

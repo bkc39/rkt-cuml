@@ -11,6 +11,7 @@
                   mbsgd-classifier-result-coef
                   mbsgd-classifier-result-label-kind)
          (only-in racket/list make-list)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list device-vector? dtype list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
@@ -43,25 +44,27 @@
     (define X (on-matrix blobs dt))
     (define reference (clf-parts (mbsgd-classifier-fit X (on-vector codes 'int32) #:loss loss)))
     (for ([k (in-list (kinds))])
-      (law-case (format "~a ~a ~a" dt loss (car k))
-        (define r (mbsgd-classifier-fit X (cadr k) #:loss loss))
+      (match-define (list name y classes kind) k)
+      (law-case (format "~a ~a ~a" dt loss name)
+        (define r (mbsgd-classifier-fit X y #:loss loss))
         (check-equal? (clf-parts r) reference)
-        (check-equal? (mbsgd-classifier-result-classes r) (caddr k))
+        (check-equal? (mbsgd-classifier-result-classes r) classes)
         (define predicted (mbsgd-classifier-predict r X))
-        (if (eq? (cadddr k) 'list)
+        (if (eq? kind 'list)
             (check-true (list? predicted))
-            (check-equal? (dtype predicted) (cadddr k)))
-        (check-true (andmap (lambda (l) (and (member l (caddr k)) #t)) (host predicted)))))))
+            (check-equal? (dtype predicted) kind))
+        (check-true (andmap (lambda (l) (and (member l classes) #t)) (host predicted)))))))
 
 (test-gpu "swapping which class sorts first negates the hinge fit"
   (for* ([dt (in-list dtypes)]
          [intercept? (in-list '(#t #f))])
     (law-case (format "~a fit-intercept ~a" dt intercept?)
       (define X (on-matrix blobs dt))
-      (define r (clf-parts (mbsgd-classifier-fit X (relabel #(a b)) #:fit-intercept intercept?)))
+      (match-define (list coef intercept)
+        (clf-parts (mbsgd-classifier-fit X (relabel #(a b)) #:fit-intercept intercept?)))
       (define swapped
         (clf-parts (mbsgd-classifier-fit X (relabel #(b a)) #:fit-intercept intercept?)))
-      (check-equal? swapped (list (map - (car r)) (- 0.0 (cadr r)))))))
+      (check-equal? swapped (list (map - coef) (- 0.0 intercept))))))
 
 (define (threshold loss)
   (if (eq? loss 'squared-loss) 0.5 0.0))

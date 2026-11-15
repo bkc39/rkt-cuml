@@ -1,61 +1,37 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
-         (only-in racket/list split-at)
+(require (only-in racket/match match-define)
          (only-in rackunit check-equal? check-not-equal?)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/linear-data.rkt" dtypes law-case)
          (only-in "private/mbsgd-data.rkt"
                   blob-rows
-                  clf-parts
                   dtype-penalties
                   normal-rows
-                  reg-parts
                   reg-target
                   scaled
-                  with-ones))
+                  with-ones)
+         (only-in "private/mbsgd-twin-data.rkt" clf-fit overridden reg-fit))
 
 (define rows (normal-rows 300 5 21))
 (define targets (reg-target rows 21))
 (define-values (blobs labels) (blob-rows 300 4 22))
 (define-values (overlapping overlapping-labels) (blob-rows 300 4 23 #:sep 0.5))
 
-(define (keyword-apply/defaults f defaults kws vals . args)
-  (define options
-    (for/fold ([options defaults])
-              ([k (in-list kws)]
-               [v (in-list vals)])
-      (hash-set options k v)))
-  (define keys (sort (hash-keys options) keyword<?))
-  (keyword-apply f keys (map (λ (k) (hash-ref options k)) keys) args))
+(define law-settings (hash '#:batch-size 16 '#:eta0 0.01 '#:epochs 50))
 
-(define reg
-  (make-keyword-procedure
-   (λ (kws vals dt X-rows y-rows)
-     (reg-parts (keyword-apply/defaults mbsgd-regressor-fit
-                                        (hash '#:batch-size 16 '#:eta0 0.01 '#:epochs 50)
-                                        kws
-                                        vals
-                                        (on-matrix X-rows dt)
-                                        (on-vector y-rows dt))))))
-
-(define clf
-  (make-keyword-procedure (λ (kws vals dt X-rows ys)
-                            (clf-parts (keyword-apply/defaults mbsgd-classifier-fit
-                                                               (hash)
-                                                               kws
-                                                               vals
-                                                               (on-matrix X-rows dt)
-                                                               (on-vector ys 'int32))))))
+(define (reg dt X y [more (hash)] #:random-state [seed #f])
+  (reg-fit dt X y (overridden law-settings more) #:random-state seed))
 
 (test-gpu "without shuffle the random state changes nothing"
   (for ([dt (in-list dtypes)])
     (law-case (format "~a" dt)
       (define fits
         (for/list ([seed (in-list (list #f 0 7 4294967295))])
-          (reg dt rows targets #:shuffle #f #:random-state seed)))
-      (for ([f (in-list (cdr fits))])
-        (check-equal? f (car fits))))))
+          (reg dt rows targets (hash '#:shuffle #f) #:random-state seed)))
+      (match-define (cons first others) fits)
+      (for ([f (in-list others)])
+        (check-equal? f first)))))
 
 (define (scale-alpha penalty k)
   (case penalty
@@ -72,34 +48,30 @@
       (reg dt
            (scaled rows (expt 2 k))
            targets
-           #:penalty penalty
-           #:alpha (* 0.01 (scale-alpha penalty k))
-           #:eta0 (* 0.01 (expt 4 (- k)))
-           #:learning-rate lr
-           #:fit-intercept intercept?))
-    (define base (at 0))
+           (hash '#:penalty penalty
+                 '#:alpha (* 0.01 (scale-alpha penalty k))
+                 '#:eta0 (* 0.01 (expt 4 (- k)))
+                 '#:learning-rate lr
+                 '#:fit-intercept intercept?)))
+    (match-define (list coef intercept) (at 0))
     (for ([k (in-list '(-20 -3 5 30))])
       (law-case (format "~a ~a ~a fit-intercept ~a, k ~a" dt lr penalty intercept? k)
-        (check-equal? (at k) (list (map (lambda (c) (* c (expt 2 (- k)))) (car base)) (cadr base))))))
+        (check-equal? (at k) (list (map (lambda (c) (* c (expt 2 (- k)))) coef) intercept)))))
   (for* ([dt (in-list dtypes)]
          [loss (in-list '(log hinge))])
     (define (at k)
-      (clf dt
-           (scaled blobs (expt 2 k))
-           labels
-           #:loss loss
-           #:fit-intercept #f
-           #:alpha (* 0.01 (expt 4 k))
-           #:eta0 (* 0.01 (expt 4 (- k)))
-           #:batch-size 16
-           #:epochs 50))
-    (define base (at 0))
+      (clf-fit dt
+               (scaled blobs (expt 2 k))
+               labels
+               loss
+               (overridden law-settings
+                           (hash '#:fit-intercept #f
+                                 '#:alpha (* 0.01 (expt 4 k))
+                                 '#:eta0 (* 0.01 (expt 4 (- k)))))))
+    (match-define (list coef _) (at 0))
     (for ([k (in-list '(-3 5))])
       (law-case (format "~a ~a classifier without intercept, k ~a" dt loss k)
-        (check-equal? (at k) (list (map (lambda (c) (* c (expt 2 (- k)))) (car base)) 0.0))))))
-
-(define (map-parts f parts)
-  (list (map f (car parts)) (f (cadr parts))))
+        (check-equal? (at k) (list (map (lambda (c) (* c (expt 2 (- k)))) coef) 0.0))))))
 
 (test-gpu "y times 2^c with tol times 4^c gives coef and intercept times 2^c"
   (for* ([dt (in-list dtypes)]
@@ -108,40 +80,42 @@
       (reg dt
            rows
            (map (lambda (t) (* t (expt 2 c))) targets)
-           #:penalty penalty
-           #:tol (* 1e-3 (expt 4 c))))
-    (define base (at 0))
+           (hash '#:penalty penalty '#:tol (* 1e-3 (expt 4 c)))))
+    (match-define (list coef intercept) (at 0))
     (for ([c (in-list '(-3 5))])
+      (define (scaled-by v)
+        (* v (expt 2 c)))
       (law-case (format "~a ~a, c ~a" dt penalty c)
-        (check-equal? (at c) (map-parts (lambda (v) (* v (expt 2 c))) base))))))
+        (check-equal? (at c) (list (map scaled-by coef) (scaled-by intercept)))))))
 
 (test-gpu "a batch size of n, n + 1 or the int32 maximum is one full batch"
   (for ([dt (in-list dtypes)])
     (law-case (format "~a" dt)
-      (define fits
+      (match-define (list n n+1 most)
         (for/list ([b (in-list '(300 301 2147483647))])
-          (reg dt rows targets #:batch-size b)))
-      (check-equal? (cadr fits) (car fits))
-      (check-equal? (caddr fits) (car fits)))))
+          (reg dt rows targets (hash '#:batch-size b))))
+      (check-equal? n+1 n)
+      (check-equal? most n))))
 
 (test-gpu "an early stop is reached before 200 epochs for the squared and log losses"
   (for ([dt (in-list dtypes)])
     (law-case (format "~a squared loss" dt)
-      (check-equal? (reg dt rows targets #:epochs 200 #:tol 1e-3)
-                    (reg dt rows targets #:epochs 400 #:tol 1e-3)))
-    (for ([set (list (cons blobs labels) (cons overlapping overlapping-labels))]
-          [name (in-list '("separable" "overlapping"))])
+      (check-equal? (reg dt rows targets (hash '#:epochs 200 '#:tol 1e-3))
+                    (reg dt rows targets (hash '#:epochs 400 '#:tol 1e-3))))
+    (for ([set (list (list "separable" blobs labels)
+                     (list "overlapping" overlapping overlapping-labels))])
+      (match-define (list name X y) set)
+      (define (log-fit epochs)
+        (clf-fit dt X y 'log (hash '#:epochs epochs '#:eta0 0.01)))
       (law-case (format "~a log ~a" dt name)
-        (check-equal? (clf dt (car set) (cdr set) #:loss 'log #:epochs 200 #:eta0 0.01)
-                      (clf dt (car set) (cdr set) #:loss 'log #:epochs 400 #:eta0 0.01))))))
+        (check-equal? (log-fit 200) (log-fit 400))))))
 
 (test-gpu "the hinge and log intercepts are the coefficient of a column of ones"
   (for* ([dt (in-list dtypes)]
          [loss (in-list '(hinge log))])
     (law-case (format "~a ~a" dt loss)
-      (define with (clf dt blobs labels #:loss loss #:eta0 0.01))
-      (define-values (coef last)
-        (split-at (car (clf dt (with-ones blobs) labels #:loss loss #:eta0 0.01 #:fit-intercept #f))
-                  4))
-      (check-equal? with (list coef (car last)))
-      (check-not-equal? (cadr with) 0.0))))
+      (match-define (list coef intercept) (clf-fit dt blobs labels loss (hash '#:eta0 0.01)))
+      (match-define (list ones-coef _)
+        (clf-fit dt (with-ones blobs) labels loss (hash '#:eta0 0.01 '#:fit-intercept #f)))
+      (check-equal? (append coef (list intercept)) ones-coef)
+      (check-not-equal? intercept 0.0))))

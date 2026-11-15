@@ -5,7 +5,13 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/elastic-net-data.rkt" apply-keywords)
          (only-in "private/linear-data.rkt" by-dtype dtypes law-case)
-         (only-in "private/mbsgd-data.rkt" blob-rows learning-rates normal-rows penalties reg-target)
+         (only-in "private/mbsgd-data.rkt"
+                  blob-rows
+                  coef-gap
+                  learning-rates
+                  normal-rows
+                  penalties
+                  reg-target)
          (only-in "private/mbsgd-twin-data.rkt" clf-fit reg-fit)
          (only-in "private/sgd-replay.rkt" replay sgd-replay))
 
@@ -18,22 +24,14 @@
 (define (replayed settings X y)
   (apply-keywords sgd-replay (hash-remove settings '#:shuffle) (list X y)))
 
-(define (relative-gap ours coef intercept)
+(define (replay-gap ours coef intercept)
   (match-define (list c b) ours)
-  (define scale
-    (for/fold ([m 0.0]) ([w (in-list coef)])
-      (max m (abs w))))
-  (max (/ (for/fold ([m 0.0])
-                    ([u (in-list c)]
-                     [w (in-list coef)])
-            (max m (abs (- u w))))
-          (max scale 1e-300))
-       (/ (abs (- b intercept)) (max (abs intercept) 1.0))))
+  (max (coef-gap c coef) (/ (abs (- b intercept)) (max (abs intercept) 1.0))))
 
 (define (check-replay dt ours r)
   (match-define (struct* replay ([coef coef] [intercept intercept] [margin margin])) r)
   (check-true (> margin stop-margin) (format "stop-test margin ~a" margin))
-  (define gap (relative-gap ours coef intercept))
+  (define gap (replay-gap ours coef intercept))
   (check-true (<= gap (by-dtype dt 5e-6 1e-13)) (format "gap ~a" gap)))
 
 (define (h1-settings lr penalty size tol)

@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+         (only-in racket/hash hash-union)
          (only-in racket/list append*)
          racket/runtime-path
          (only-in racket/string string-replace)
@@ -35,8 +36,7 @@
         '#:n-iter-no-change 5))
 
 (define (overridden base more)
-  (for/fold ([all base]) ([(k v) (in-hash more)])
-    (hash-set all k v)))
+  (hash-union base more #:combine (lambda (_ v) v)))
 
 (define (settled settings)
   (overridden python-defaults settings))
@@ -71,18 +71,18 @@
                       #:codes [codes #f]
                       #:loss [loss 'squared-loss]
                       #:seed [seed #f])
-  (for/fold ([request (hasheq 'op op
-                              'dtype (symbol->string dt)
-                              'n (length X)
-                              'X (bits-of dt (~> X append* (map exact->inexact _)))
-                              'y (if y
-                                     (bits-of dt (map exact->inexact y))
-                                     'null)
-                              'codes (or codes 'null)
-                              'loss (python-value loss)
-                              'seed (or seed 'null))])
-            ([(k v) (in-hash (settled settings))])
-    (hash-set request (python-name k) (python-value v))))
+  (overridden (hasheq 'op op
+                      'dtype (symbol->string dt)
+                      'n (length X)
+                      'X (bits-of dt (~> X append* (map exact->inexact _)))
+                      'y (if y
+                             (bits-of dt (map exact->inexact y))
+                             'null)
+                      'codes (or codes 'null)
+                      'loss (python-value loss)
+                      'seed (or seed 'null))
+              (for/hasheq ([(k v) (in-hash (settled settings))])
+                (values (python-name k) (python-value v)))))
 
 (define (mbsgd-twin-results requests)
   (twin-results mbsgd-twin-script requests))

@@ -5,7 +5,6 @@
                   mbsgd-classifier-result-intercept
                   mbsgd-regressor-result-coef
                   mbsgd-regressor-result-intercept)
-         (only-in racket/list make-list)
          (only-in raft device-vector->list)
          (only-in "blob-data.rkt" normal-source))
 
@@ -67,7 +66,7 @@
 
 (define (with-ones rows)
   (for/list ([r (in-list rows)])
-    (append r (make-list 1 1.0))))
+    (append r '(1.0))))
 
 (define (reg-parts r)
   (list (device-vector->list (mbsgd-regressor-result-coef r)) (mbsgd-regressor-result-intercept r)))

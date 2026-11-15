@@ -4,16 +4,15 @@
                   mbsgd-classifier-fit
                   mbsgd-classifier-predict
                   mbsgd-classifier-result-classes)
-         (only-in datasets/core dataset-table-columns dataset-table-names load-dataset-table)
          (only-in racket/match match-define struct*)
-         (only-in racket/math sqr)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in threading ~>)
          (only-in "elastic-net-data.rkt" apply-keywords)
-         (only-in "linear-data.rkt" columns-of on-matrix oracle-ridge ridge-solution)
-         (only-in "logistic-data.rkt" lr-case-X)
+         (only-in "linear-data.rkt" on-matrix oracle-ridge ridge-solution)
+         (only-in "logistic-data.rkt" correct lr-case-X)
          (only-in "mbsgd-twin-data.rkt" mbsgd-twin-results reg-fit their-parts twin-request)
-         (only-in "real-logistic-data.rkt" labelled labelled-set))
+         (only-in "real-linear-data.rkt" set-data)
+         (only-in "real-logistic-data.rkt" labelled labelled-set standardised)
+         (only-in "sgd-replay.rkt" sgd-objective))
 
 (provide check-breast-cancer
          check-diabetes-gap
@@ -22,34 +21,16 @@
 
 (define ridge-alpha 1e-4)
 
-(define (standardised X)
-  (define (scaled xs)
-    (define n (length xs))
-    (define m (/ (apply + xs) n))
-    (define s (sqrt (/ (for/sum ([x (in-list xs)]) (sqr (- x m))) n)))
-    (map (lambda (x) (/ (- x m) s)) xs))
-  (~> X columns-of (map scaled _) columns-of))
-
 (define (diabetes #:standardise? [standardise? #f])
-  (define table (load-dataset-table 'diabetes))
-  (define named
-    (for/hash ([n (in-list (dataset-table-names table))]
-               [column (in-vector (dataset-table-columns table))])
-      (values n (map real->double-flonum (vector->list column)))))
-  (define predictors (remove "response" (dataset-table-names table)))
-  (define X
-    (columns-of (for/list ([p (in-list predictors)])
-                  (hash-ref named p))))
-  (values (if standardise?
-              (standardised X)
-              X)
-          (hash-ref named "response")))
+  (match-define (cons X y) (set-data 'diabetes))
+  (values (for/list ([r (in-list (if standardise?
+                                     (standardised X)
+                                     X))])
+            (map exact->inexact r))
+          (map exact->inexact y)))
 
 (define (objective X y w b)
-  (+ (/ (for/sum ([x (in-list X)] [v (in-list y)])
-                 (sqr (- v b (for/sum ([xi (in-list x)] [wi (in-list w)]) (* xi wi)))))
-        (length y))
-     (* ridge-alpha (for/sum ([wi (in-list w)]) (sqr wi)))))
+  (sgd-objective 'squared-loss 'l2 ridge-alpha 0 X y w b))
 
 (define (optimum X y)
   (match-define (struct* ridge-solution ([coef coef] [intercept intercept]))
@@ -73,7 +54,7 @@
   (check-equal? (reg-fit dt X y (hash)) (their-parts theirs dt)))
 
 (define (accuracy predicted labels)
-  (/ (for/sum ([p (in-list predicted)] [l (in-list labels)]) (if (equal? p l) 1 0)) (length labels)))
+  (/ (correct predicted labels) (length labels)))
 
 (define (check-breast-cancer dt)
   (match-define (struct* labelled ((case c) [labels labels] [classes classes]))

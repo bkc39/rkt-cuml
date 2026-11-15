@@ -4,6 +4,7 @@
          (only-in racket/math sgn sqr))
 
 (provide (struct-out replay)
+         sgd-objective
          sgd-replay)
 
 (struct replay (coef intercept epochs margin) #:transparent)
@@ -62,6 +63,12 @@
      (define p (sigmoid z))
      (- (+ (* y (log p)) (* (- 1 y) (log (- 1 p)))))]
     [else (max 0.0 (- 1 (* y z)))]))
+
+(define (sgd-objective loss penalty alpha ratio X y w b)
+  (+ (mean (for/list ([x (in-list X)]
+                      [v (in-list y)])
+             (row-loss loss (+ b (dot x w)) v)))
+     (penalty-value penalty alpha ratio w)))
 
 (define (full-loss loss rows ys w)
   (define losses
