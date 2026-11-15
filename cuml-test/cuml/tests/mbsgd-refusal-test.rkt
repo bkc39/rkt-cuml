@@ -156,6 +156,9 @@
      (list (row "a non-integral device label"
                 "y: expected integral class labels, got 1.5"
                 (lambda () (mbsgd-classifier-fit X (on-vector '(0 1 0 1.5 1 0)))))
+           (row "a power-t beyond float32"
+                "power-t: 1e+40 is not representable in float32"
+                (lambda () (mbsgd-classifier-fit (on-matrix grid 'float32) y #:power-t 1e40)))
            (row "one device class"
                 "y: expected exactly 2 classes, got 1"
                 (lambda () (mbsgd-classifier-fit X (on-vector '(4 4 4 4 4 4) 'int64))))
