@@ -2069,16 +2069,19 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   previous epoch's loss, not the best (sklearn's). No n-iter (L5-f).
 - **Gate (L5-d).** In the shim, in double, on the caller's uncentred X at
   (w, b): refused when any coefficient or the intercept is not finite, or
-  F_end > F_start·(1 + 1e-2) + floor, F the objective above in its mean
+  F_end > F_start·(1 + 0.1) + floor, F the objective above in its mean
   form (hinge too) and F_start its value at w = 0 with b = ȳ (squared with
   an intercept) or 0: var(y) or mean(y²), log 2, 1. The floor is
   1e-12·mean(y²) for the regressor and 1e-12·F_start for the classifier.
   The slack admits an l1 or elastic-net fit whose optimum is w = 0 (α above
   α_max), where the subgradient step leaves w a step from 0 and F_end
   just above F_start by about eta0·α. At the default eta0 1e-3 (fix r1b,
-  gate test): regressor α 1 rises .18–.27% and hinge α 2 .72–.84%, accepted;
-  regressor α 5 (3.9–5.4%) and log α 2 (1.7–1.9%) are still refused and pass
-  at eta0 1e-4. The floor admits a constant y, where
+  `zero-optimum.rkt`): regressor α 1 rises .18–.27%, hinge α 2 .72–.84%,
+  log α 2 1.7–1.9%, regressor α 5 3.9–5.4%. A 1e-2 slack refused the last
+  two (ratios 1.017–1.054); 0.1 accepts all of them at the default eta0
+  (fix r1c, gate test). 0.1 is safe because the smallest ratio F10 refuses
+  is 1.311 and no F10 fit lies in (1, 1.311): the same 352 fits are refused
+  at 1e-3, 1e-2 and 0.1. The floor admits a constant y, where
   F_start is 0 or round-off and F_end round-off. Both refusals advise
   lowering eta0, and print both values to 6 significant figures. A
   garbage gate, not a convergence check.
@@ -2112,10 +2115,12 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   280 with error > 10 refused; no fit has a ratio in (1, 1.001], and the
   floor is below 1e-11·F_start on every set. Re-counted under the 1e-2
   slack (fix r1b): the same 352 refused, none within .1, 280 of 280 with
-  error > 10 refused; no fit has a ratio in (1, 1.01], the smallest refused
-  ratio is 1.311. Near-zero optima (bs 1, α 10, eta0 .05) are refused at ratios
-  3.02 (regressor), 1.06 (corrected log), 1.18 (hinge); eta0/10 clears
-  every one.
+  error > 10 refused; the smallest refused ratio is 1.311, so no fit has a
+  ratio in (1, 1.311) and the 0.1 slack (fix r1c) refuses the same 352.
+  Near-zero optima (bs 1, α 10, eta0 .05) rose at ratios 3.02 (regressor),
+  1.06 (corrected log), 1.18 (hinge); under the 0.1 slack the classifiers
+  pass at eta0 .05 and are refused at .1 (F_end 2.3e10 log, 1.1e6 hinge,
+  fix r1c `g2.rkt`); eta0/10 clears every one.
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
   as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
   .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:

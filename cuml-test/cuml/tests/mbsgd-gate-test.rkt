@@ -50,13 +50,13 @@
       (define Xc (on-matrix blobs))
       (check-row
        "mbsgd-classifier-fit"
-       (row "eta0 0.05"
-            (rose "0.05")
+       (row "eta0 0.1"
+            (rose "0.1")
             (lambda ()
-              (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.05))))
+              (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.1))))
       (check-not-exn
        (lambda ()
-         (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.005))))))
+         (mbsgd-classifier-fit Xc labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 0.01))))))
 
 (define grid-rows (normal-rows 300 5 21))
 (define grid-targets (reg-target grid-rows 21))
@@ -84,35 +84,26 @@
     (+ 1.0 (* 0.3 (car r)) (car e))))
 (define-values (overlap overlap-labels) (blob-rows 300 4 5 #:sep 0.3))
 
-(define zero-optimum-regressors '((1.0 (1e-3 1e-5)) (5.0 (1e-5))))
-(define zero-optimum-classifiers '((hinge (1e-3 1e-5)) (log (1e-5))))
-
-(test-gpu "an l1 or elastic-net fit whose optimum is zero passes, at the default eta0 within 1%"
+(test-gpu "an l1 or elastic-net fit whose optimum is zero passes at the default eta0"
   (for* ([dt (in-list dtypes)]
          [penalty (in-list '(l1 elasticnet))])
-    (for ([c (in-list zero-optimum-regressors)])
-      (match-define (list alpha eta0s) c)
-      (for ([eta0 (in-list eta0s)])
-        (law-case (format "~a ~a regressor alpha ~a eta0 ~a" dt penalty alpha eta0)
-          (check-not-exn (lambda ()
-                           (mbsgd-regressor-fit (on-matrix sparse-rows dt)
-                                                (on-vector sparse-targets dt)
-                                                #:penalty penalty
-                                                #:alpha alpha
-                                                #:l1-ratio 0.9
-                                                #:eta0 eta0))))))
-    (for ([c (in-list zero-optimum-classifiers)])
-      (match-define (list loss eta0s) c)
-      (for ([eta0 (in-list eta0s)])
-        (law-case (format "~a ~a ~a classifier eta0 ~a" dt penalty loss eta0)
-          (check-not-exn (lambda ()
-                           (mbsgd-classifier-fit (on-matrix overlap dt)
-                                                 overlap-labels
-                                                 #:loss loss
-                                                 #:penalty penalty
-                                                 #:alpha 2.0
-                                                 #:l1-ratio 0.9
-                                                 #:eta0 eta0))))))))
+    (for ([alpha (in-list '(1.0 5.0))])
+      (law-case (format "~a ~a regressor alpha ~a" dt penalty alpha)
+        (check-not-exn (lambda ()
+                         (mbsgd-regressor-fit (on-matrix sparse-rows dt)
+                                              (on-vector sparse-targets dt)
+                                              #:penalty penalty
+                                              #:alpha alpha
+                                              #:l1-ratio 0.9)))))
+    (for ([loss (in-list '(hinge log))])
+      (law-case (format "~a ~a ~a classifier" dt penalty loss)
+        (check-not-exn (lambda ()
+                         (mbsgd-classifier-fit (on-matrix overlap dt)
+                                               overlap-labels
+                                               #:loss loss
+                                               #:penalty penalty
+                                               #:alpha 2.0
+                                               #:l1-ratio 0.9)))))))
 
 (define constant-rows (normal-rows 300 4 3))
 
