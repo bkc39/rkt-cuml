@@ -97,10 +97,10 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   const buffer<T> zero = zeroed<T>(cols, stream);
   const double start = mean_loss<T>(handle, x.data, y, zero.data(), b0, shape);
   const double floor =
-      regressor ? regressor_floor<T>(start, mean_loss<T>(handle, x.data, y,
-                                                         zero.data(), 0.0,
-                                                         shape))
-                : classifier_floor(start);
+      regressor
+          ? regressor_floor<T>(
+                start, mean_loss<T>(handle, x.data, y, zero.data(), 0.0, shape))
+          : classifier_floor(start);
   if (const auto refusal = scale_refusal(start, floor)) {
     throw logic_error(*refusal);
   }

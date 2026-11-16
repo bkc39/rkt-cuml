@@ -97,18 +97,21 @@ TEST(MbsgdOptions, EachCodeAndBoundIsRefusedBeforeTheSolver) {
 
 TEST(MbsgdOptions, ValuesOutsideTheXDtypeAreRefused) {
   using cumlrkt::glm::mbsgd::require_sgd_values;
+  constexpr double above_float = 1e150;
+  constexpr double below_float = 1e-50;
+  constexpr double past_float = 1e40;
   sgd_options o = cuml_defaults;
   EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }), "accepted");
-  o.alpha = 1e150;
+  o.alpha = above_float;
   EXPECT_EQ(refusal_of([&] { require_sgd_values<double>(o); }), "accepted");
   EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }),
             "alpha: 1e+150 is not representable in float32");
   o = cuml_defaults;
-  o.eta0 = 1e-50;
+  o.eta0 = below_float;
   EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }),
             "eta0: 1e-50 is not representable in float32");
   o = cuml_defaults;
-  o.power_t = 1e40;
+  o.power_t = past_float;
   EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }),
             "power-t: 1e+40 is not representable in float32");
   o = cuml_defaults;
