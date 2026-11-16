@@ -39,21 +39,40 @@ inline void require_flag(const char* what, int32_t flag) {
   }
 }
 
-inline void require_positive_finite(const char* what, double got) {
+template <typename T>
+void require_in_dtype(const char* what, double got, bool positive) {
+  const T t = static_cast<T>(got);
+  const std::string dtype = raftrkt::dtype_name(raftrkt::dtype_code<T>);
+  if (!std::isfinite(t)) {
+    throw logic_error(
+        std::format("{}: {} overflows {}", what, printed(got), dtype));
+  }
+  if (positive && t == 0) {
+    throw logic_error(
+        std::format("{}: {} rounds to 0 in {}", what, printed(got), dtype));
+  }
+}
+
+template <typename T>
+void require_positive_finite(const char* what, double got) {
   if (!(got > 0) || !std::isfinite(got)) {
     throw logic_error(std::format("{}: expected a positive finite real, got {}",
                                   what, printed(got)));
   }
+  require_in_dtype<T>(what, got, true);
 }
 
-inline void require_nonnegative_finite(const char* what, double got) {
+template <typename T>
+void require_nonnegative_finite(const char* what, double got) {
   if (!(got >= 0) || !std::isfinite(got)) {
     throw logic_error(std::format(
         "{}: expected a nonnegative finite real, got {}", what, printed(got)));
   }
+  require_in_dtype<T>(what, got, false);
 }
 
-inline void require_sgd_options(const sgd_options& o) {
+template <typename T>
+void require_sgd_options(const sgd_options& o) {
   if (o.loss < CUML_LINEAR_MODEL_SGD_SQUARED ||
       o.loss > CUML_LINEAR_MODEL_SGD_HINGE) {
     throw logic_error("loss: expected one of 'hinge 'log 'squared-loss");
@@ -62,43 +81,25 @@ inline void require_sgd_options(const sgd_options& o) {
       o.penalty > CUML_LINEAR_MODEL_PENALTY_ELASTICNET) {
     throw logic_error("penalty: expected one of 'none 'l1 'l2 'elasticnet");
   }
-  require_positive_finite("alpha", o.alpha);
+  require_positive_finite<T>("alpha", o.alpha);
   if (!(o.l1_ratio >= 0 && o.l1_ratio <= 1)) {
     throw logic_error(std::format("l1-ratio: expected a real in [0, 1], got {}",
                                   printed(o.l1_ratio)));
   }
   require_flag("fit-intercept", o.fit_intercept);
   require_at_least("epochs", o.epochs, 1);
-  require_nonnegative_finite("tol", o.tol);
+  require_nonnegative_finite<T>("tol", o.tol);
   require_flag("shuffle", o.shuffle);
   if (o.learning_rate < CUML_LINEAR_MODEL_SGD_CONSTANT ||
       o.learning_rate > CUML_LINEAR_MODEL_SGD_ADAPTIVE) {
     throw logic_error(
         "learning-rate: expected one of 'constant 'invscaling 'adaptive");
   }
-  require_positive_finite("eta0", o.eta0);
-  require_nonnegative_finite("power-t", o.power_t);
+  require_positive_finite<T>("eta0", o.eta0);
+  require_nonnegative_finite<T>("power-t", o.power_t);
   require_at_least("batch-size", o.batch_size, 1);
   require_at_least("n-iter-no-change", o.n_iter_no_change, 1);
   require_flag("seeded", o.seeded);
-}
-
-template <typename T>
-void require_representable(const char* what, double got) {
-  if (got > std::numeric_limits<T>::max() ||
-      (got > 0 && got < std::numeric_limits<T>::min())) {
-    throw logic_error(std::format("{}: {} is not representable in {}", what,
-                                  printed(got),
-                                  raftrkt::dtype_name(raftrkt::dtype_code<T>)));
-  }
-}
-
-template <typename T>
-void require_sgd_values(const sgd_options& o) {
-  require_representable<T>("alpha", o.alpha);
-  require_representable<T>("tol", o.tol);
-  require_representable<T>("eta0", o.eta0);
-  require_representable<T>("power-t", o.power_t);
 }
 
 inline void require_sgd_shape(int64_t n, int64_t d, int64_t y_len) {

@@ -90,34 +90,63 @@ TEST(MbsgdOptions, EachCodeAndBoundIsRefusedBeforeTheSolver) {
   for (const row& r : rows) {
     sgd_options o = cuml_defaults;
     r.change(o);
-    EXPECT_EQ(refusal_of([&] { cumlrkt::glm::mbsgd::require_sgd_options(o); }),
+    EXPECT_EQ(refusal_of([&] { cumlrkt::glm::mbsgd::require_sgd_options<double>(o); }),
               r.message);
   }
 }
 
-TEST(MbsgdOptions, ValuesOutsideTheXDtypeAreRefused) {
-  using cumlrkt::glm::mbsgd::require_sgd_values;
-  constexpr double above_float = 1e150;
-  constexpr double below_float = 1e-50;
-  constexpr double past_float = 1e40;
+constexpr double past_float = 1e150;
+constexpr double above_float = 1e40;
+constexpr double rounds_to_float_max = 3.40282356e38;
+constexpr double float_subnormal = 1e-40;
+constexpr double under_float = 1e-50;
+constexpr double double_subnormal = 1e-310;
+
+TEST(MbsgdOptions, ValuesTheXDtypeCannotHoldAreRefused) {
+  using cumlrkt::glm::mbsgd::require_sgd_options;
+  struct row {
+    std::function<void(sgd_options&)> change;
+    std::string as_float;
+    std::string as_double;
+  };
+  const std::vector<row> rows = {
+      {[](sgd_options&) {}, "accepted", "accepted"},
+      {[](sgd_options& o) { o.alpha = past_float; },
+       "alpha: 1e+150 overflows float32", "accepted"},
+      {[](sgd_options& o) { o.alpha = rounds_to_float_max; }, "accepted",
+       "accepted"},
+      {[](sgd_options& o) { o.alpha = under_float; },
+       "alpha: 1e-50 rounds to 0 in float32", "accepted"},
+      {[](sgd_options& o) { o.tol = above_float; }, "tol: 1e+40 overflows float32",
+       "accepted"},
+      {[](sgd_options& o) { o.tol = float_subnormal; }, "accepted", "accepted"},
+      {[](sgd_options& o) { o.tol = under_float; }, "accepted", "accepted"},
+      {[](sgd_options& o) { o.tol = double_subnormal; }, "accepted", "accepted"},
+      {[](sgd_options& o) { o.tol = 0; }, "accepted", "accepted"},
+      {[](sgd_options& o) { o.eta0 = under_float; },
+       "eta0: 1e-50 rounds to 0 in float32", "accepted"},
+      {[](sgd_options& o) { o.eta0 = double_subnormal; },
+       "eta0: 1e-310 rounds to 0 in float32", "accepted"},
+      {[](sgd_options& o) { o.power_t = above_float; },
+       "power-t: 1e+40 overflows float32", "accepted"},
+      {[](sgd_options& o) { o.power_t = 0; }, "accepted", "accepted"},
+  };
+  for (const row& r : rows) {
+    sgd_options o = cuml_defaults;
+    r.change(o);
+    EXPECT_EQ(refusal_of([&] { require_sgd_options<float>(o); }), r.as_float);
+    EXPECT_EQ(refusal_of([&] { require_sgd_options<double>(o); }),
+              r.as_double);
+  }
+}
+
+TEST(MbsgdOptions, AnEarlierValueOutsideTheDtypeIsRefusedFirst) {
   sgd_options o = cuml_defaults;
-  EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }), "accepted");
-  o.alpha = above_float;
-  EXPECT_EQ(refusal_of([&] { require_sgd_values<double>(o); }), "accepted");
-  EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }),
-            "alpha: 1e+150 is not representable in float32");
-  o = cuml_defaults;
-  o.eta0 = below_float;
-  EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }),
-            "eta0: 1e-50 is not representable in float32");
-  o = cuml_defaults;
-  o.power_t = past_float;
-  EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }),
-            "power-t: 1e+40 is not representable in float32");
-  o = cuml_defaults;
-  o.tol = 0;
-  o.power_t = 0;
-  EXPECT_EQ(refusal_of([&] { require_sgd_values<float>(o); }), "accepted");
+  o.alpha = past_float;
+  o.eta0 = 0;
+  EXPECT_EQ(refusal_of(
+                [&] { cumlrkt::glm::mbsgd::require_sgd_options<float>(o); }),
+            "alpha: 1e+150 overflows float32");
 }
 
 TEST(MbsgdShape, RowsColumnsAndYLengthAreRefusedInOrder) {

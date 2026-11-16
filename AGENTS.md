@@ -282,8 +282,8 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   admits an l1 or elastic-net fit oscillating about a zero optimum. The
   floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
   a constant y. The gate catches blow-ups and fits ending above
-  F_start·1.025 + A, A at most 4·F_start for the classifier under l1 and
-  uncapped for the regressor (#134; L5-d, F10-C).
+  F_start·1.025 + A, A at most 4·F_start for the classifier under l1 or
+  elastic-net and uncapped for the regressor (#134; L5-d, F10-C).
 - *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains
   on -1/+1; the `'log` and `'hinge` intercepts are a penalised ones column
   in the copy; predict thresholds the decision at 0 (`'log`, `'hinge`) or

@@ -8,7 +8,7 @@
                   mbsgd-regressor-fit
                   mbsgd-regressor-predict)
          (only-in racket/match match match-define)
-         (only-in rackunit check-exn test-case)
+         (only-in rackunit check-exn check-not-exn test-case)
          (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/elastic-net-data.rkt" apply-keywords)
@@ -20,6 +20,10 @@
 (define targets '(1 2 3 4 5 6))
 (define labels '(0 1 0 1 1 0))
 (define count-message "expected an exact integer from 1 to 2147483647, got ")
+(define int32-max 2147483647)
+
+(define (on-float32 go given)
+  (apply-keywords go given (list (on-matrix grid 'float32) (on-vector targets 'float32))))
 
 (define settings-faults
   `((penalty l3 "expected one of 'none 'l1 'l2 'elasticnet, got 'l3")
@@ -108,19 +112,29 @@
       (row "a non-finite y"
            "y: element 4: expected a finite value, got inf"
            (lambda () (mbsgd-regressor-fit X (on-vector '(1 2 3 4 +inf.0 6)))))
-      (row
-       "an alpha beyond float32"
-       "alpha: 1e+150 is not representable in float32"
-       (lambda ()
-         (mbsgd-regressor-fit (on-matrix grid 'float32) (on-vector targets 'float32) #:alpha 1e150)))
-      (row
-       "an eta0 below float32"
-       "eta0: 1e-50 is not representable in float32"
-       (lambda ()
-         (mbsgd-regressor-fit (on-matrix grid 'float32) (on-vector targets 'float32) #:eta0 1e-50)))
-      (row "a float64 y whose square overflows"
+      (row "an alpha beyond float32"
+           "alpha: 1e+150 overflows float32"
+           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:alpha 1e150))))
+      (row "alpha's dtype before eta0"
+           "alpha: 1e+150 overflows float32"
+           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:alpha 1e150 '#:eta0 0))))
+      (row "a tol beyond float32"
+           "tol: 1e+40 overflows float32"
+           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e40))))
+      (row "an eta0 that rounds to 0 in float32"
+           "eta0: 1e-50 rounds to 0 in float32"
+           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:eta0 1e-50))))
+      (row "a float64 y whose mean square overflows"
            "y is too large to check the fit; rescale y"
-           (lambda () (mbsgd-regressor-fit X (on-vector (map (lambda (t) (* 1e155 t)) targets))))))))
+           (lambda () (mbsgd-regressor-fit X (on-vector (map (lambda (t) (* 1e155 t)) targets)))))
+      (row "a y too large to check, before a solve that would not end"
+           "y is too large to check the fit; rescale y"
+           (lambda ()
+             (mbsgd-regressor-fit X
+                                  (on-vector (map (lambda (t) (* 1e155 t)) targets))
+                                  #:eta0 1
+                                  #:epochs int32-max
+                                  #:n-iter-no-change int32-max))))))
   (for ([r (in-list rows)])
     (test-case (row-id r)
       (check-row "mbsgd-regressor-fit" r))))
@@ -156,7 +170,7 @@
                 "y: expected integral class labels, got 1.5"
                 (lambda () (mbsgd-classifier-fit X (on-vector '(0 1 0 1.5 1 0)))))
            (row "a power-t beyond float32"
-                "power-t: 1e+40 is not representable in float32"
+                "power-t: 1e+40 overflows float32"
                 (lambda () (mbsgd-classifier-fit (on-matrix grid 'float32) y #:power-t 1e40)))
            (row "one device class"
                 "y: expected exactly 2 classes, got 1"
@@ -212,3 +226,28 @@
                  (lambda () (fit (mbsgd-classifier) X labels #:sample-weight (on-vector targets)))))])
     (test-case (row-id r)
       (check-row "fit" r))))
+
+(test-gpu "values the X dtype holds are accepted"
+  (define n 40000)
+  (define column (for/list ([i (in-range n)]) (- (* 2.0 (/ (modulo (* i 7919) 1000) 1000.0)) 1.0)))
+  (for ([accepted
+         (list (list "a float32 tol that is subnormal there"
+                     (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e-40))))
+               (list "a float32 tol that rounds to 0"
+                     (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e-50))))
+               (list "a float32 alpha that rounds to its largest value"
+                     (lambda ()
+                       (on-float32 mbsgd-regressor-fit (hash '#:alpha 3.40282356e38 '#:penalty 'none))))
+               (list "a float64 subnormal tol"
+                     (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:tol 1e-310)))
+               (list "a float64 subnormal eta0"
+                     (lambda ()
+                       (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:eta0 1e-310)))
+               (list "a float64 y whose sum of squares, not mean, overflows"
+                     (lambda ()
+                       (mbsgd-regressor-fit (on-matrix (map list column))
+                                            (on-vector (for/list ([x (in-list column)])
+                                                         (* 1e152 (+ 1.0 (* 0.5 x)))))))))])
+    (match-define (list id go) accepted)
+    (test-case id
+      (check-not-exn go))))

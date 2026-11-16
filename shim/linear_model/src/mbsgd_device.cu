@@ -46,11 +46,13 @@ void code_targets(const raft::handle_t& handle, const int32_t* codes, int64_t n,
 template <typename T>
 double mean_of(const raft::handle_t& handle, const T* y, int64_t n) {
   const auto begin = thrust::counting_iterator<int64_t>(0);
-  const double sum = thrust::transform_reduce(
+  const auto count = static_cast<double>(n);
+  return thrust::transform_reduce(
       rmm::exec_policy(stream_of(handle)), begin, begin + n,
-      [=] __device__(int64_t i) -> double { return static_cast<double>(y[i]); },
+      [=] __device__(int64_t i) -> double {
+        return static_cast<double>(y[i]) / count;
+      },
       0.0, thrust::plus<double>());
-  return sum / static_cast<double>(n);
 }
 
 inline __device__ double row_loss(int32_t loss, double y, double z) {
@@ -73,7 +75,8 @@ double mean_loss(const raft::handle_t& handle, const T* x, const T* y,
   const int64_t d = s.d;
   const bool ones = s.ones;
   const int32_t loss = s.loss;
-  const double sum = thrust::transform_reduce(
+  const auto count = static_cast<double>(s.n);
+  return thrust::transform_reduce(
       rmm::exec_policy(stream_of(handle)), begin, begin + s.n,
       [=] __device__(int64_t i) -> double {
         double z = ones ? static_cast<double>(coef[d]) : intercept;
@@ -81,10 +84,9 @@ double mean_loss(const raft::handle_t& handle, const T* x, const T* y,
           z += static_cast<double>(x[(i * d) + j]) *
                static_cast<double>(coef[j]);
         }
-        return row_loss(loss, static_cast<double>(y[i]), z);
+        return row_loss(loss, static_cast<double>(y[i]), z) / count;
       },
       0.0, thrust::plus<double>());
-  return sum / static_cast<double>(s.n);
 }
 
 template <typename T, typename L>

@@ -7,6 +7,7 @@
          (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
          (only-in cuml/core/private/logic-error logic-error)
+         (only-in racket/flonum flsingle)
          (only-in racket/match match match-define struct*)
          (only-in raft
                   current-device-resources
@@ -117,6 +118,13 @@
       s
       (logic-error "~a: random-state: expected #f or an integer in [0, ~a], got ~e" who seed-most s)))
 
+(define (in-dtype who key f dt #:positive [positive #f])
+  (define held (if (eq? dt 'float32) (flsingle f) f))
+  (cond
+    [(= held +inf.0) (logic-error "~a: ~a: ~a overflows ~a" who key f dt)]
+    [(and positive (zero? held)) (logic-error "~a: ~a: ~a rounds to 0 in ~a" who key f dt)]
+    [else f]))
+
 (struct sgd-settings
         (penalty alpha
                  l1-ratio
@@ -131,23 +139,27 @@
                  n-iter-no-change
                  random-state))
 
-(define (sgd-settings/who who params)
+(define (sgd-settings/who who params dt)
   (define (ref key)
     (hash-ref params key))
+  (define (positive key)
+    (in-dtype who key (positive-value/who who key (ref key)) dt #:positive #t))
+  (define (nonnegative key)
+    (in-dtype who key (nonnegative-value/who who key (ref key)) dt))
   (sgd-settings (coded who 'penalty penalty-code (ref 'penalty) "one of 'none 'l1 'l2 'elasticnet")
-                (positive-value/who who 'alpha (ref 'alpha))
+                (positive 'alpha)
                 (ratio-value who (ref 'l1-ratio))
                 (intercept-flag/who who (ref 'fit-intercept))
                 (bounded-count/who who 'epochs (ref 'epochs))
-                (nonnegative-value/who who 'tol (ref 'tol))
+                (nonnegative 'tol)
                 (flag/who who 'shuffle (ref 'shuffle))
                 (coded who
                        'learning-rate
                        learning-rate-code
                        (ref 'learning-rate)
                        "one of 'constant 'invscaling 'adaptive")
-                (positive-value/who who 'eta0 (ref 'eta0))
-                (nonnegative-value/who who 'power-t (ref 'power-t))
+                (positive 'eta0)
+                (nonnegative 'power-t)
                 (bounded-count/who who 'batch-size (ref 'batch-size))
                 (bounded-count/who who 'n-iter-no-change (ref 'n-iter-no-change))
                 (seed-value who (ref 'random-state))))
@@ -233,7 +245,7 @@
     (logic-error "~a: y: expected dtype ~a (X's), got ~a" who (dtype X) (dtype y)))
   (unless (eq? loss 'squared-loss)
     (logic-error "~a: loss: expected 'squared-loss, got ~e" who loss))
-  (define settings (sgd-settings/who who (bound-params mbsgd-regressor-params)))
+  (define settings (sgd-settings/who who (bound-params mbsgd-regressor-params) (dtype X)))
   (define out (deposit-for/who who resources))
   (fit-job who resources X y out settings)
   (match-define (list coef intercept) (deposit->list out))
@@ -256,7 +268,7 @@
   (require-X who X)
   (define kind (y-kind/who who y))
   (define code (coded who 'loss loss-code loss "one of 'hinge 'log 'squared-loss"))
-  (define settings (sgd-settings/who who (bound-params mbsgd-classifier-params)))
+  (define settings (sgd-settings/who who (bound-params mbsgd-classifier-params) (dtype X)))
   (define-values (y-view classes) (host-codes who kind y resources))
   (define out (deposit-for/who who resources))
   (fit-job who resources X y-view out settings #:classifier (list (if classes 1 0) code))

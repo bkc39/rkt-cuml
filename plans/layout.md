@@ -2106,10 +2106,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
   refusals advise lowering eta0, and print both values to 6 significant
   figures. A y whose F_start or floor is not finite (float64 |y| above
-  about 1.3e154) is refused first, "y is too large to check the fit;
-  rescale y", and alpha, tol, eta0 or power-t outside X's dtype before
-  any allocation, "alpha: 1e+150 is not representable in float32"
-  (fix r1f).
+  about 1.3e154; each term of a mean is divided by n before the sum) is
+  refused before the solve, "y is too large to check the fit; rescale
+  y" (fix r1f, r1g). Each of alpha, tol, eta0 and power-t is checked
+  against X's dtype right after its own range, in settings order: one
+  that overflows it, "alpha: 1e+150 overflows float32", or an alpha or
+  eta0 that rounds to 0 in it, "eta0: 1e-50 rounds to 0 in float32"
+  (fix r1g).
 - **Seeds (L5-e).** `#f` is cuML's fixed order (`initShuffle` reseeds
   mt19937 with 0); an integer s permutes the copy's rows by Fisher–Yates
   over std::mt19937(s), i from n − 1 down to 1, j = g() mod (i + 1), only
