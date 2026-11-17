@@ -92,49 +92,48 @@
   (define X (on-matrix grid))
   (define y (on-vector targets))
   (define rows
-    (append
-     (list (row "X kind before y"
-                "X: expected a device-matrix, got '((1 2))"
-                (lambda () (mbsgd-regressor-fit '((1 2)) 'y)))
-           (row "y kind before the settings"
-                "y: expected a device-vector, got '(1 2 3 4 5 6)"
-                (lambda () (mbsgd-regressor-fit X targets #:loss 'hinge)))
-           (row "y dtype before the settings"
-                "y: expected dtype float64 (X's), got float32"
-                (lambda () (mbsgd-regressor-fit X (on-vector targets 'float32) #:loss 'hinge)))
-           (row "loss before penalty"
-                "loss: expected 'squared-loss, got 'hinge"
-                (lambda () (mbsgd-regressor-fit X y #:loss 'hinge #:penalty 'l3))))
-     (settings-rows mbsgd-regressor-fit X y)
-     (exact-value-rows mbsgd-regressor-fit X y)
-     (shared-shim-rows mbsgd-regressor-fit on-vector)
-     (list
-      (row "a non-finite y"
-           "y: element 4: expected a finite value, got inf"
-           (lambda () (mbsgd-regressor-fit X (on-vector '(1 2 3 4 +inf.0 6)))))
-      (row "an alpha beyond float32"
-           "alpha: 1e+150 overflows float32"
-           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:alpha 1e150))))
-      (row "alpha's dtype before eta0"
-           "alpha: 1e+150 overflows float32"
-           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:alpha 1e150 '#:eta0 0))))
-      (row "a tol beyond float32"
-           "tol: 1e+40 overflows float32"
-           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e40))))
-      (row "an eta0 that rounds to 0 in float32"
-           "eta0: 1e-50 rounds to 0 in float32"
-           (lambda () (on-float32 mbsgd-regressor-fit (hash '#:eta0 1e-50))))
-      (row "a float64 y whose mean square overflows"
-           "y is too large to check the fit; rescale y"
-           (lambda () (mbsgd-regressor-fit X (on-vector (map (lambda (t) (* 1e155 t)) targets)))))
-      (row "a y too large to check, before a solve that would not end"
-           "y is too large to check the fit; rescale y"
-           (lambda ()
-             (mbsgd-regressor-fit X
-                                  (on-vector (map (lambda (t) (* 1e155 t)) targets))
-                                  #:eta0 1
-                                  #:epochs int32-max
-                                  #:n-iter-no-change int32-max))))))
+    (append (list (row "X kind before y"
+                       "X: expected a device-matrix, got '((1 2))"
+                       (lambda () (mbsgd-regressor-fit '((1 2)) 'y)))
+                  (row "y kind before the settings"
+                       "y: expected a device-vector, got '(1 2 3 4 5 6)"
+                       (lambda () (mbsgd-regressor-fit X targets #:loss 'hinge)))
+                  (row "y dtype before the settings"
+                       "y: expected dtype float64 (X's), got float32"
+                       (lambda () (mbsgd-regressor-fit X (on-vector targets 'float32) #:loss 'hinge)))
+                  (row "loss before penalty"
+                       "loss: expected 'squared-loss, got 'hinge"
+                       (lambda () (mbsgd-regressor-fit X y #:loss 'hinge #:penalty 'l3))))
+            (settings-rows mbsgd-regressor-fit X y)
+            (exact-value-rows mbsgd-regressor-fit X y)
+            (shared-shim-rows mbsgd-regressor-fit on-vector)
+            (list (row "a non-finite y"
+                       "y: element 4: expected a finite value, got inf"
+                       (lambda () (mbsgd-regressor-fit X (on-vector '(1 2 3 4 +inf.0 6)))))
+                  (row "an alpha beyond float32"
+                       "alpha: 1e+150 overflows float32"
+                       (lambda () (on-float32 mbsgd-regressor-fit (hash '#:alpha 1e150))))
+                  (row "alpha's dtype before eta0"
+                       "alpha: 1e+150 overflows float32"
+                       (lambda () (on-float32 mbsgd-regressor-fit (hash '#:alpha 1e150 '#:eta0 0))))
+                  (row "a tol beyond float32"
+                       "tol: 1e+40 overflows float32"
+                       (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e40))))
+                  (row "an eta0 that rounds to 0 in float32"
+                       "eta0: 1e-50 rounds to 0 in float32"
+                       (lambda () (on-float32 mbsgd-regressor-fit (hash '#:eta0 1e-50))))
+                  (row "a float64 y whose mean square overflows"
+                       "y is too large to check the fit; rescale y"
+                       (lambda ()
+                         (mbsgd-regressor-fit X (on-vector (map (lambda (t) (* 1e155 t)) targets)))))
+                  (row "a y too large to check, before a solve that would not end"
+                       "y is too large to check the fit; rescale y"
+                       (lambda ()
+                         (mbsgd-regressor-fit X
+                                              (on-vector (map (lambda (t) (* 1e155 t)) targets))
+                                              #:eta0 1
+                                              #:epochs int32-max
+                                              #:n-iter-no-change int32-max))))))
   (for ([r (in-list rows)])
     (test-case (row-id r)
       (check-row "mbsgd-regressor-fit" r))))
@@ -229,25 +228,27 @@
 
 (test-gpu "values the X dtype holds are accepted"
   (define n 40000)
-  (define column (for/list ([i (in-range n)]) (- (* 2.0 (/ (modulo (* i 7919) 1000) 1000.0)) 1.0)))
+  (define column
+    (for/list ([i (in-range n)])
+      (- (* 2.0 (/ (modulo (* i 7919) 1000) 1000.0)) 1.0)))
   (for ([accepted
-         (list (list "a float32 tol that is subnormal there"
-                     (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e-40))))
-               (list "a float32 tol that rounds to 0"
-                     (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e-50))))
-               (list "a float32 alpha that rounds to its largest value"
-                     (lambda ()
-                       (on-float32 mbsgd-regressor-fit (hash '#:alpha 3.40282356e38 '#:penalty 'none))))
-               (list "a float64 subnormal tol"
-                     (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:tol 1e-310)))
-               (list "a float64 subnormal eta0"
-                     (lambda ()
-                       (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:eta0 1e-310)))
-               (list "a float64 y whose sum of squares, not mean, overflows"
-                     (lambda ()
-                       (mbsgd-regressor-fit (on-matrix (map list column))
-                                            (on-vector (for/list ([x (in-list column)])
-                                                         (* 1e152 (+ 1.0 (* 0.5 x)))))))))])
+         (list
+          (list "a float32 tol that is subnormal there"
+                (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e-40))))
+          (list "a float32 tol that rounds to 0"
+                (lambda () (on-float32 mbsgd-regressor-fit (hash '#:tol 1e-50))))
+          (list "a float32 alpha that rounds to its largest value"
+                (lambda ()
+                  (on-float32 mbsgd-regressor-fit (hash '#:alpha 3.40282356e38 '#:penalty 'none))))
+          (list "a float64 subnormal tol"
+                (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:tol 1e-310)))
+          (list "a float64 subnormal eta0"
+                (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:eta0 1e-310)))
+          (list "a float64 y whose sum of squares, not mean, overflows"
+                (lambda ()
+                  (mbsgd-regressor-fit (on-matrix (map list column))
+                                       (on-vector (for/list ([x (in-list column)])
+                                                    (* 1e152 (+ 1.0 (* 0.5 x)))))))))])
     (match-define (list id go) accepted)
     (test-case id
       (check-not-exn go))))

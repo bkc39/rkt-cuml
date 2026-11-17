@@ -90,7 +90,8 @@ TEST(MbsgdOptions, EachCodeAndBoundIsRefusedBeforeTheSolver) {
   for (const row& r : rows) {
     sgd_options o = cuml_defaults;
     r.change(o);
-    EXPECT_EQ(refusal_of([&] { cumlrkt::glm::mbsgd::require_sgd_options<double>(o); }),
+    EXPECT_EQ(refusal_of(
+                  [&] { cumlrkt::glm::mbsgd::require_sgd_options<double>(o); }),
               r.message);
   }
 }
@@ -117,11 +118,12 @@ TEST(MbsgdOptions, ValuesTheXDtypeCannotHoldAreRefused) {
        "accepted"},
       {[](sgd_options& o) { o.alpha = under_float; },
        "alpha: 1e-50 rounds to 0 in float32", "accepted"},
-      {[](sgd_options& o) { o.tol = above_float; }, "tol: 1e+40 overflows float32",
-       "accepted"},
+      {[](sgd_options& o) { o.tol = above_float; },
+       "tol: 1e+40 overflows float32", "accepted"},
       {[](sgd_options& o) { o.tol = float_subnormal; }, "accepted", "accepted"},
       {[](sgd_options& o) { o.tol = under_float; }, "accepted", "accepted"},
-      {[](sgd_options& o) { o.tol = double_subnormal; }, "accepted", "accepted"},
+      {[](sgd_options& o) { o.tol = double_subnormal; }, "accepted",
+       "accepted"},
       {[](sgd_options& o) { o.tol = 0; }, "accepted", "accepted"},
       {[](sgd_options& o) { o.eta0 = under_float; },
        "eta0: 1e-50 rounds to 0 in float32", "accepted"},
@@ -135,8 +137,7 @@ TEST(MbsgdOptions, ValuesTheXDtypeCannotHoldAreRefused) {
     sgd_options o = cuml_defaults;
     r.change(o);
     EXPECT_EQ(refusal_of([&] { require_sgd_options<float>(o); }), r.as_float);
-    EXPECT_EQ(refusal_of([&] { require_sgd_options<double>(o); }),
-              r.as_double);
+    EXPECT_EQ(refusal_of([&] { require_sgd_options<double>(o); }), r.as_double);
   }
 }
 
@@ -144,9 +145,9 @@ TEST(MbsgdOptions, AnEarlierValueOutsideTheDtypeIsRefusedFirst) {
   sgd_options o = cuml_defaults;
   o.alpha = past_float;
   o.eta0 = 0;
-  EXPECT_EQ(refusal_of(
-                [&] { cumlrkt::glm::mbsgd::require_sgd_options<float>(o); }),
-            "alpha: 1e+150 overflows float32");
+  EXPECT_EQ(
+      refusal_of([&] { cumlrkt::glm::mbsgd::require_sgd_options<float>(o); }),
+      "alpha: 1e+150 overflows float32");
 }
 
 TEST(MbsgdShape, RowsColumnsAndYLengthAreRefusedInOrder) {

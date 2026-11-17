@@ -119,7 +119,10 @@
       (logic-error "~a: random-state: expected #f or an integer in [0, ~a], got ~e" who seed-most s)))
 
 (define (in-dtype who key f dt #:positive [positive #f])
-  (define held (if (eq? dt 'float32) (flsingle f) f))
+  (define held
+    (if (eq? dt 'float32)
+        (flsingle f)
+        f))
   (cond
     [(= held +inf.0) (logic-error "~a: ~a: ~a overflows ~a" who key f dt)]
     [(and positive (zero? held)) (logic-error "~a: ~a: ~a rounds to 0 in ~a" who key f dt)]
