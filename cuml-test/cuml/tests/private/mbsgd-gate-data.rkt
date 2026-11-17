@@ -23,7 +23,12 @@
 
 (define (classifier-fit loss eta0)
   (lambda ()
-    (mbsgd-classifier-fit (on-matrix blobs) labels #:loss loss #:batch-size 1 #:alpha 10 #:eta0 eta0)))
+    (mbsgd-classifier-fit (on-matrix blobs)
+                          labels
+                          #:loss loss
+                          #:batch-size 1
+                          #:alpha 10
+                          #:eta0 eta0)))
 
 (define (check-classifier-rise loss)
   (law-case (format "~a classifier refused at eta0 0.05" loss)
