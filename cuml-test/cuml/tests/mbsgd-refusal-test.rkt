@@ -28,6 +28,9 @@
   (cons 7e153
         (for/list ([_ (in-range 99)])
           -7e153)))
+(define offset-y
+  (for/list ([t (in-list targets)])
+    (+ 1.4e154 (* t 1e150))))
 
 (define (on-float32 go given)
   (apply-keywords go given (list (on-matrix grid 'float32) (on-vector targets 'float32))))
@@ -144,7 +147,10 @@
                   (row "a float64 y whose centred values, not values, overflow under fit-intercept"
                        "y is too large to check the fit; rescale y"
                        (lambda ()
-                         (mbsgd-regressor-fit (on-matrix lopsided-X) (on-vector lopsided-y)))))))
+                         (mbsgd-regressor-fit (on-matrix lopsided-X) (on-vector lopsided-y))))
+                  (row "a float64 y whose values, not centred values, overflow under fit-intercept"
+                       "y is too large to check the fit; rescale y"
+                       (lambda () (mbsgd-regressor-fit X (on-vector offset-y)))))))
   (for ([r (in-list rows)])
     (test-case (row-id r)
       (check-row "mbsgd-regressor-fit" r))))

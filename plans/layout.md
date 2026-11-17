@@ -2105,8 +2105,8 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
   blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
   refusals advise lowering eta0, and print both values to 6 significant
-  figures. A y whose F_start or floor is not finite (float64 |y − ȳ|,
-  |y| without fit-intercept, above about 1.3e154; each term of a mean is
+  figures. A y whose F_start or floor is not finite (float64 |y| above
+  about 1.3e154, or with fit-intercept |y − ȳ| above it; each term of a mean is
   divided by n before the sum) is
   refused before the solve, "y is too large to check the fit; rescale
   y" (fix r1f, r1g). Each of alpha, tol, eta0 and power-t is checked
