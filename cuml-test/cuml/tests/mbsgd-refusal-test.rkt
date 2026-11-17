@@ -8,7 +8,7 @@
                   mbsgd-regressor-fit
                   mbsgd-regressor-predict)
          (only-in racket/match match match-define)
-         (only-in rackunit check-exn check-not-exn test-case)
+         (only-in rackunit check-equal? check-exn check-not-exn check-pred test-case)
          (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/elastic-net-data.rkt" apply-keywords)
@@ -21,6 +21,13 @@
 (define labels '(0 1 0 1 1 0))
 (define count-message "expected an exact integer from 1 to 2147483647, got ")
 (define int32-max 2147483647)
+(define lopsided-X
+  (for/list ([i (in-range 100)])
+    (list-ref grid (modulo i 6))))
+(define lopsided-y
+  (cons 7e153
+        (for/list ([_ (in-range 99)])
+          -7e153)))
 
 (define (on-float32 go given)
   (apply-keywords go given (list (on-matrix grid 'float32) (on-vector targets 'float32))))
@@ -132,8 +139,12 @@
                          (mbsgd-regressor-fit X
                                               (on-vector (map (lambda (t) (* 1e155 t)) targets))
                                               #:eta0 1
-                                              #:epochs int32-max
-                                              #:n-iter-no-change int32-max))))))
+                                              #:epochs 1000
+                                              #:n-iter-no-change int32-max)))
+                  (row "a float64 y whose centred values, not values, overflow under fit-intercept"
+                       "y is too large to check the fit; rescale y"
+                       (lambda ()
+                         (mbsgd-regressor-fit (on-matrix lopsided-X) (on-vector lopsided-y)))))))
   (for ([r (in-list rows)])
     (test-case (row-id r)
       (check-row "mbsgd-regressor-fit" r))))
@@ -226,11 +237,20 @@
     (test-case (row-id r)
       (check-row "fit" r))))
 
+(define overflowing-sum-y
+  (for/list ([t (in-range 1 7)])
+    (* 1e154 (+ 1.15 (* 0.01 t)))))
+
+(test-case "the overflowing-sum row's y overflows its sum of squares, not its mean"
+  (define n (length overflowing-sum-y))
+  (check-equal? (for/fold ([s 0.0]) ([y (in-list overflowing-sum-y)])
+                  (+ s (* y y)))
+                +inf.0)
+  (check-pred rational?
+              (for/fold ([s 0.0]) ([y (in-list overflowing-sum-y)])
+                (+ s (/ (* y y) n)))))
+
 (test-gpu "values the X dtype holds are accepted"
-  (define n 40000)
-  (define column
-    (for/list ([i (in-range n)])
-      (- (* 2.0 (/ (modulo (* i 7919) 1000) 1000.0)) 1.0)))
   (for ([accepted
          (list
           (list "a float32 tol that is subnormal there"
@@ -245,10 +265,12 @@
           (list "a float64 subnormal eta0"
                 (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:eta0 1e-310)))
           (list "a float64 y whose sum of squares, not mean, overflows"
+                (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector overflowing-sum-y))))
+          (list "a float64 y whose centred values overflow, without fit-intercept"
                 (lambda ()
-                  (mbsgd-regressor-fit (on-matrix (map list column))
-                                       (on-vector (for/list ([x (in-list column)])
-                                                    (* 1e152 (+ 1.0 (* 0.5 x)))))))))])
+                  (mbsgd-regressor-fit (on-matrix lopsided-X)
+                                       (on-vector lopsided-y)
+                                       #:fit-intercept #f))))])
     (match-define (list id go) accepted)
     (test-case id
       (check-not-exn go))))

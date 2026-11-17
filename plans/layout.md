@@ -2100,13 +2100,14 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   A admits at eta0 1, and refuses no good fit at the default eta0; it
   refuses 10 good fits at eta0 .01, which no constant s can avoid (F10-C).
   The gate catches blow-ups and fits ending above F_start·1.025 + A, A at
-  most 4·F_start for the classifier under l1 and uncapped for the
+  most 4·F_start for the classifier under l1 or elastic-net and uncapped for the
   regressor; it passes a fit at or below that which predicts badly
   (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
   blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
   refusals advise lowering eta0, and print both values to 6 significant
-  figures. A y whose F_start or floor is not finite (float64 |y| above
-  about 1.3e154; each term of a mean is divided by n before the sum) is
+  figures. A y whose F_start or floor is not finite (float64 |y − ȳ|,
+  |y| without fit-intercept, above about 1.3e154; each term of a mean is
+  divided by n before the sum) is
   refused before the solve, "y is too large to check the fit; rescale
   y" (fix r1f, r1g). Each of alpha, tol, eta0 and power-t is checked
   against X's dtype right after its own range, in settings order: one
