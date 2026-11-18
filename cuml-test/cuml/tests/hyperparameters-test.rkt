@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/core/private/define-who define/who)
-         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters boolean->int define-codes define-hyperparameters)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-pred check-regexp-match check-true test-case)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
@@ -256,3 +256,6 @@
 
 (test-case "define-codes maps each name to its code and anything else to -1"
   (check-equal? (map shade-code '(plain bold italic "plain" 0)) '(0 1 -1 -1 -1)))
+
+(test-case "boolean->int is a native flag: 0 for #f, 1 for any other value"
+  (check-equal? (map boolean->int '(#f #t 0 7 none)) '(0 1 1 1 1)))

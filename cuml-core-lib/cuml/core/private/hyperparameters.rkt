@@ -14,15 +14,15 @@
                      proc-name
                      table-id)
          absent
+         boolean->int
          bound-params
          define-codes
          define-hyperparameters
-         flag
          given-hash)
 
 (define absent (string->uninterned-symbol "absent"))
 
-(define (flag v)
+(define (boolean->int v)
   (if v 1 0))
 
 (define (given-hash keys arguments)

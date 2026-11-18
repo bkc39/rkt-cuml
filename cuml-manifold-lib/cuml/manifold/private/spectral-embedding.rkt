@@ -2,7 +2,7 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters bound-params define-hyperparameters flag)
+         (only-in cuml/core/private/hyperparameters boolean->int bound-params define-hyperparameters)
          (only-in racket/match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
@@ -48,7 +48,7 @@
    resources
    (append
     inputs
-    (list out n-components (flag norm-laplacian) (flag drop-first) (or random-state (drawn-seed)))))
+    (list out n-components (boolean->int norm-laplacian) (boolean->int drop-first) (or random-state (drawn-seed)))))
   (match-define (list embedding) (deposit->list out))
   (spectral-embedding-result embedding n-neighbors params))
 
