@@ -79,10 +79,12 @@ std::optional<ridge_scale<T>> ridge_scale_of(const staging& s, int64_t n,
                                std::max(alpha_exponent<T>(alpha, weight_power),
                                         spread + ridge_floor<T>)});
   const T staged = staged_alpha<T>(alpha, (2 * shared) + weight_power);
-  if (std::ranges::all_of(s.kept, negligible_against<T>(s, shared, penalty))) {
+  const auto negligible = negligible_against<T>(s, shared, penalty);
+  if (std::ranges::all_of(s.kept, negligible)) {
     return std::nullopt;
   }
-  return ridge_scale<T>{shared, staged};
+  return ridge_scale<T>{shared, staged,
+                        std::ranges::any_of(s.kept, negligible)};
 }
 
 int ridge_algorithm(int solver, int64_t rows, int64_t kept) {

@@ -103,6 +103,7 @@ cumlrkt_family(linear_model
   SOURCES linear_model/src/linear_model.cpp
           linear_model/src/glm_fit.cpp linear_model/src/linear_regression.cpp
           linear_model/src/ridge.cpp linear_model/src/ridge_staging.cpp
+          linear_model/src/gram_condition.cu
           linear_model/src/fit_checks.cpp linear_model/src/predict.cpp
           linear_model/src/glm_staging.cpp
           linear_model/src/glm_staging_device.cu
@@ -127,7 +128,7 @@ cumlrkt_family(linear_model
         linear_model/src/residual_check.cu
         linear_model/src/fit_checks.cpp common/src/rows.cu
 )
-target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver)
+target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver CUDA::cublas)
 if(TARGET cumlrkt_linear_model_tests)
   target_link_libraries(cumlrkt_linear_model_tests PRIVATE CUDA::cusolver)
 endif()

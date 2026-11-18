@@ -14,6 +14,7 @@
 #include "fit_checks.hpp"
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
+#include "gram_condition.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/view.hpp"
 
@@ -72,6 +73,12 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   const auto n = static_cast<size_t>(rows.count);
   const auto d = static_cast<size_t>(kept);
   T* const staged_w = w == nullptr ? nullptr : p.w.data();
+  if (checks_conditioning<T>(plan.solver, plan.alpha_window)) {
+    require_conditioned<T>(
+        equilibrated_condition(handle, p.x.data(), staged_w, rows.count, kept,
+                               alpha, plan.fit_intercept),
+        plan.solver);
+  }
   if (plan.solver.family == glm_family::ridge) {
     ML::GLM::ridgeFit(handle, p.x.data(), n, d, p.y.data(), &alpha, 1,
                       cs.data(), &intercept, plan.fit_intercept,

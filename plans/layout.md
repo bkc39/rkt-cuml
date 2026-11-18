@@ -1552,7 +1552,8 @@ Follow-ups are GitHub issues.
   u·κ_α ≥ 1. There the wrong answer is stationary to rounding, so L2-e's
   check is a best-effort detector, not a bound. A sound refusal needs a
   solve equilibrated per column, which `ridgeFit`'s scalar α cannot give
-  (#104); no further detector is added in L2. The Scribble says the
+  (#104); no further detector is added in L2. #104 closes the L2-i window
+  for 'svd only (L2-l). The Scribble says the
   coefficients are accurate to about u·κ_α, and that past u·κ_α ≥ 1 a fit may
   be refused or returned wrong under either solver.
   Measured cases (review r3 probes r1, r4, r5, r6; `.scratch` runs at r4):
@@ -1587,6 +1588,27 @@ Follow-ups are GitHub issues.
   0.129 to 4.1e-7, and every α′ = 0 cosine (17892) is unchanged bitwise.
   Q2 is unchanged: float32 'eig refused at 0.385 and 0.203, 'svd accepted at
   4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
+- **L2-l, the window refusal (#104) and float32 'svd-qr (#102).** One device
+  routine (`linear_model/src/gram_condition.cu`) accumulates the staged,
+  centred, √w-scaled X's Gram matrix in double (cublasDsyrk over 2^15-row
+  chunks), adds α′ to the diagonal, scales it to a unit diagonal
+  (D² = σ′_j² + α′) and takes κ′ from a device `syevd`. It runs before the
+  solve, for ridge 'svd only when some kept column is negligible against α′
+  and some is not (the L2-i window), and for every float32 `'svd-qr` fit with
+  α′ = 0. Ridge refuses at u·κ′ ≥ 2^−tolerance_bits ("X is ill-conditioned
+  for this alpha"), 'svd-qr at u·√κ′ ≥ 2^−8 ("X may have collinear
+  columns"). Measured in floating point (p104, n = 60): window cases with
+  exactly collinear wide columns give u·κ′ ≥ 7.99 (float32) and ≥ 0.35
+  (float64, where κ′ saturates at double rounding; exact ≥ 8), Q2 float32
+  8.3e-8 to 8.7e-8, nearly collinear float64 columns ≤ 7.4e-8: ≥ 10^6 apart
+  either way. Float64 fits whose u·κ′ lies in [2^−18, 0.35) are now refused
+  though 'svd was accurate there. For 'svd-qr the free detector
+  |X̃b|/|Db| from the residual check does not separate (exactly collinear
+  float32 X reaches u/q 3.7e-5, x₃ = x₁ + x₂ + 2^−10·z reaches 1.3e-5); the
+  double Gram sees float32 exact collinearity at double rounding. float32
+  'qr accepts the same exactly collinear X with huge coefficients on some
+  draws and is not covered. Cost at 1e6×100 (RTX 3090 Ti, shared): 630–880 ms
+  in float32 and 330–875 ms in float64, against a 1.0–1.3 s ridge fit.
 - **L2-k, float32 'eig on a Gram singular to the dtype (L3r, #111).**
   Breast-cancer (569×29, texture-mean on raw X, column sds 0.0026 to 569,
   intercept): XᵀWX has λ_max 2.5e8 and λ_min 4.0e-4, u·κ₀ = 3.8e4, and 19 of

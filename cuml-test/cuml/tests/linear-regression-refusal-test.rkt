@@ -4,7 +4,8 @@
          (only-in cuml/linear-model
                   linear-regression-fit
                   linear-regression-predict
-                  linear-regression-result)
+                  linear-regression-result
+                  linear-regression-result-coef)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* device-vector->list)
@@ -16,6 +17,9 @@
                   algorithms
                   dtypes
                   dyadic
+                  lcase-X
+                  lcase-y
+                  normal-case
                   [on-matrix matrix]
                   [on-vector vector])
          (only-in "private/linear-refusal-rows.rkt"
@@ -191,6 +195,39 @@
                                                  (vector (noisy-targets rows) dt)
                                                  #:sample-weight (and w (vector w dt))
                                                  #:algorithm algorithm))))))
+
+(define (summed-column n seed [eps 0])
+  (define c (normal-case n 2 seed))
+  (define next (uniform-source (+ 31 seed)))
+  (values (for/list ([row (in-list (lcase-X c))])
+            (append row (list (+ (apply + row) (* eps (dyadic (- (next) 1/2)))))))
+          (lcase-y c)))
+
+(define (svd-qr-fit rows y)
+  (linear-regression-fit (matrix rows 'float32) (vector y 'float32) #:algorithm 'svd-qr))
+
+(test-gpu "float32 svd-qr refuses exactly collinear X as the other algorithms do"
+  (for* ([n (in-list '(60 1000))]
+         [seed (in-range 10)])
+    (define-values (rows y) (summed-column n seed))
+    (test-case (format "~a rows seed ~a" n seed)
+      (check-cuml-error
+       'logic
+       #rx"^linear-regression-fit: X: the svd-qr solve.*; X may have collinear columns$"
+       (lambda () (svd-qr-fit rows y)))))
+  (define-values (rows y) (summed-column 60 9))
+  (check-cuml-error
+   'logic
+   #rx"^linear-regression-fit: X: the svd-qr solve's Gram matrix has u[*]kappa (inf|[0-9.e+-]+) >= 2\\^-8; X may have collinear columns$"
+   (lambda () (svd-qr-fit rows y))))
+
+(test-gpu "float32 svd-qr fits nearly collinear X"
+  (for* ([n (in-list '(60 1000))]
+         [seed (in-range 10)])
+    (define-values (rows y) (summed-column n seed 1/128))
+    (test-case (format "~a rows seed ~a" n seed)
+      (check-equal? (length (device-vector->list (linear-regression-result-coef (svd-qr-fit rows y))))
+                    3))))
 
 (test-gpu "X, y and w are unchanged after every fit"
   (for* ([dt (in-list dtypes)]
