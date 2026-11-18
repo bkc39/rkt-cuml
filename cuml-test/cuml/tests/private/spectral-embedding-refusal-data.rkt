@@ -14,6 +14,7 @@
                   graph-edit
                   graph-map-vals
                   graph-upper
+                  past-sum
                   set-entry
                   unit-path
                   unit-rings
@@ -65,8 +66,6 @@
 (define solver-text (string-append zero-text solver-advice))
 
 (define heavy-text (string-append solver-text spread-advice))
-
-(define past-sum (const (exact->inexact (expt 2 125))))
 
 (define (inaccurate column [what ""] [advice solver-advice])
   (format "embedding: column ~a~a: the eigensolver's eigenvectors are inaccurate on this graph~a"

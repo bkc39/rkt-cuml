@@ -34,6 +34,7 @@
                   graph-labels
                   graph-map-vals
                   labels
+                  past-sum
                   set-entry))
 
 (define tol-most "eigen-tol: expected at most 3.4028234663852886e+38, got ")
@@ -122,8 +123,6 @@
 
 (define (four-entries n)
   (graph '(0 1 2 3) '(1 0 3 2) '(1.0 1.0 1.0 1.0) n))
-
-(define past-sum (const (exact->inexact (expt 2 125))))
 
 (define (graph-rows-of)
   (define (fault g)

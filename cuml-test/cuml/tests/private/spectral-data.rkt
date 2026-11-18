@@ -5,6 +5,7 @@
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
          (only-in racket/flonum flsingle)
+         (only-in racket/function const)
          (only-in racket/list append* append-map list-set make-list range take)
          (only-in racket/match match-define match-lambda)
          (only-in racket/math pi)
@@ -33,6 +34,7 @@
          knn-graph
          labels
          moons
+         past-sum
          permute-graph
          permute-rows
          planted
@@ -51,6 +53,8 @@
 (struct graph (rows cols vals n) #:transparent)
 
 (struct fit-case (name data truth k options compare))
+
+(define past-sum (const (exact->inexact (expt 2 125))))
 
 (define (unit-edges edges n)
   (graph (append-map (match-lambda

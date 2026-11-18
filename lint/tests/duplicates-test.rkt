@@ -1,25 +1,16 @@
 #lang racket/base
 
-(require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
-         (only-in racket/match match-define)
+(require (only-in racket/match match-define)
          (only-in rackunit check-equal? check-regexp-match test-case)
-         (only-in "../duplicates.rkt" copied-definitions-in describe-copies))
+         (only-in "../duplicates.rkt" copied-definitions-in describe-copies)
+         (only-in "../private/modules.rkt" with-temporary-directory write-module))
 
 (define (call-with-modules modules proc)
-  (define root (make-temporary-directory "duplicates-~a"))
-  (dynamic-wind void
-                (lambda ()
-                  (for ([module (in-list modules)])
-                    (match-define (list name forms) module)
-                    (define file (build-path root name))
-                    (make-directory* (let-values ([(directory _name _dir?) (split-path file)])
-                                       directory))
-                    (with-output-to-file file
-                                         (lambda ()
-                                           (displayln "#lang racket/base")
-                                           (for-each writeln forms))))
-                  (proc root))
-                (lambda () (delete-directory/files root))))
+  (with-temporary-directory (root "duplicates-~a")
+                            (for ([module (in-list modules)])
+                              (match-define (list name forms) module)
+                              (write-module (build-path root name) "#lang racket/base" forms))
+                            (proc root)))
 
 (define (copies modules)
   (call-with-modules modules
@@ -94,3 +85,79 @@
                           ("b.rkt" ((define/who (b-fit who X #:hyperparameters b-params)
                                       (fitted who X (bound-params b-params)))))))
                 '()))
+
+(test-case "every procedure-valued definition form is compared"
+  (for ([form (in-list '((define ((near x) y)
+                           (< (abs (- x y)) 1e-6))
+                         (define pick
+                           (case-lambda
+                             [(x) x]
+                             [(x y) (+ x y)]))
+                         (define past-sum (const (exact->inexact (expt 2 125))))
+                         (define add-one (curry + 1))
+                         (define/contract (double x)
+                           (-> real? real?)
+                           (* 2 x))))])
+    (check-equal? (length (copies `(("a.rkt" ((require racket/contract
+                                                       racket/function)
+                                              ,form))
+                                    ("b.rkt" ((require racket/contract
+                                                       racket/function)
+                                              ,form)))))
+                  1
+                  (format "~s" form))))
+
+(test-case "a definition inside module+ or module* is compared"
+  (check-equal? (copies `(("a.rkt" ((module+ test
+                                      ,helper)))
+                          ("b.rkt" ((module* main #f
+                                      ,helper)))))
+                '(("a.rkt:2: mean" "b.rkt:2: mean"))))
+
+(test-case "a constant is per-file data, not a copy"
+  (check-equal? (copies '(("a.rkt" ((define tolerance (* 64 (expt 2.0 -53)))))
+                          ("b.rkt" ((define tolerance (* 64 (expt 2.0 -53)))))))
+                '()))
+
+(test-case "free names compare by the binding they import, not by their spelling"
+  (define first-of
+    '(define (head xs)
+       (first xs)))
+  (define elsewhere
+    '("c.rkt" ((provide first) (define (first xs)
+                                 (cadr xs)))))
+  (check-equal? (copies `(("a.rkt" ((require (only-in racket/list first)) ,first-of))
+                          ("b.rkt" ((require (only-in "c.rkt" first)) ,first-of))
+                          ,elsewhere))
+                '())
+  (check-equal? (copies `(("a.rkt" ((require (only-in "c.rkt" first)) ,first-of))
+                          ("b.rkt" ((require (only-in "c.rkt" first)) ,first-of))
+                          ,elsewhere))
+                '(("a.rkt:3: head" "b.rkt:3: head")))
+  (check-equal? (copies `(("a.rkt" ((require (only-in racket/list first)) ,first-of))
+                          ("b.rkt" ((require (prefix-in list: racket/list)) (define (head xs)
+                                                                              (list:first xs))))))
+                '(("a.rkt:3: head" "b.rkt:3: head"))))
+
+(test-case "a name a nested binding shadows is renamed only inside it"
+  (check-equal? (copies '(("a.rkt" ((require (only-in "c.rkt" x z)) (define (f y)
+                                                                      (+ (let ([x 1]) x) x))))
+                          ("b.rkt" ((require (only-in "c.rkt" x z)) (define (f y)
+                                                                      (+ (let ([z 1]) z) z))))
+                          ("c.rkt" ((provide x
+                                             z)
+                                    (define x 10)
+                                    (define z 20)))))
+                '()))
+
+(test-case "quoted data is compared as written, never renamed"
+  (check-equal? (copies '(("a.rkt" ((define (tag x)
+                                      (list 'x x))))
+                          ("b.rkt" ((define (tag y)
+                                      (list 'y y))))))
+                '())
+  (check-equal? (copies '(("a.rkt" ((define (tag x)
+                                      `(x ,x))))
+                          ("b.rkt" ((define (tag y)
+                                      `(x ,y))))))
+                '(("a.rkt:2: tag" "b.rkt:2: tag"))))
