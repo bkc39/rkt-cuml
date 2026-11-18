@@ -6,13 +6,14 @@
          (only-in racket/match match)
          (only-in rackunit check-equal? check-exn fail test-case)
          (only-in raft
+                  device-matrix
                   device-resources
+                  device-vector
                   exn:fail:raft-kind
                   exn:fail:raft?
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/linkage-data.rkt" connectivities linked-lists)
          (only-in "private/refusal-rows.rkt" check-row grid norm-message row row-id with-row))
@@ -24,18 +25,26 @@
   (define fit (curry single-linkage-fit #:connectivity connectivity))
   (list
    (row "L0 float64" "X: expected float32, got float64" (lambda () (fit (grid 'float64))))
-   (row "L0 int32" "X: expected float32, got int32" (lambda () (fit (blank-matrix 10 2 'int32))))
+   (row "L0 int32"
+        "X: expected float32, got int32"
+        (lambda () (fit (device-matrix 10 2 #:dtype 'int32))))
    (row "L1"
         "connectivity: expected knn or pairwise"
         (lambda () (single-linkage-fit X #:connectivity 'mutual)))
    (row "L2" "metric: expected euclidean" (lambda () (fit X #:metric 'cosine)))
    (row "L2 l1" "metric: expected euclidean" (lambda () (fit X #:metric 'l1)))
-   (row "L3 rank" "X: expected rank 2, got rank 1" (lambda () (fit (blank-vector 10 'float32))))
+   (row "L3 rank"
+        "X: expected rank 2, got rank 1"
+        (lambda () (fit (device-vector 10 #:dtype 'float32))))
    (row "L3 layout"
         "X: expected row-major, got col-major 10x2"
-        (lambda () (fit (blank-matrix 10 2 'float32 #:layout 'col-major))))
-   (row "L4" "X: expected at least 1 row, got 0" (lambda () (fit (blank-matrix 0 2 'float32))))
-   (row "L5" "X: expected at least 1 column, got 0" (lambda () (fit (blank-matrix 10 0 'float32))))
+        (lambda () (fit (device-matrix 10 2 #:dtype 'float32 #:layout 'col-major))))
+   (row "L4"
+        "X: expected at least 1 row, got 0"
+        (lambda () (fit (device-matrix 0 2 #:dtype 'float32))))
+   (row "L5"
+        "X: expected at least 1 column, got 0"
+        (lambda () (fit (device-matrix 10 0 #:dtype 'float32))))
    (row "L7a" "n-clusters: expected at least 1, got 0" (lambda () (fit X #:n-clusters 0)))
    (row "L7a negative" "n-clusters: expected at least 1, got -2" (lambda () (fit X #:n-clusters -2)))
    (row "L7b" "X: 10 samples are fewer than the 11 clusters" (lambda () (fit X #:n-clusters 11)))
@@ -55,14 +64,16 @@
         (lambda () (single-linkage-fit X #:connectivity 'mutual #:metric 'cosine)))
    (row "L2 before L3"
         "metric: expected euclidean"
-        (lambda () (fit (blank-vector 10 'float32) #:metric 'cosine)))
-   (row "L3 before L4" "X: expected rank 2, got rank 1" (lambda () (fit (blank-vector 0 'float32))))
+        (lambda () (fit (device-vector 10 #:dtype 'float32) #:metric 'cosine)))
+   (row "L3 before L4"
+        "X: expected rank 2, got rank 1"
+        (lambda () (fit (device-vector 0 #:dtype 'float32))))
    (row "L4 before L5"
         "X: expected at least 1 row, got 0"
-        (lambda () (fit (blank-matrix 0 0 'float32))))
+        (lambda () (fit (device-matrix 0 0 #:dtype 'float32))))
    (row "L5 before L7"
         "X: expected at least 1 column, got 0"
-        (lambda () (fit (blank-matrix 10 0 'float32) #:n-clusters 0)))
+        (lambda () (fit (device-matrix 10 0 #:dtype 'float32) #:n-clusters 0)))
    (row "L7a before L8"
         "n-clusters: expected at least 1, got 0"
         (lambda () (fit X #:n-clusters 0 #:c 2147483618)))
@@ -105,10 +116,10 @@
       (check-row 'single-linkage-fit r))))
 
 (test-gpu "the pairwise row limit and the knn graph size are refused before the row scan"
-  (check-cuml-error 'logic
-                    (format "single-linkage-fit: ~a" pairwise-message)
-                    (lambda ()
-                      (single-linkage-fit (blank-matrix 46341 1 'float32) #:connectivity 'pairwise)))
+  (check-cuml-error
+   'logic
+   (format "single-linkage-fit: ~a" pairwise-message)
+   (lambda () (single-linkage-fit (device-matrix 46341 1 #:dtype 'float32) #:connectivity 'pairwise)))
   (define nan-column
     (list*->device-matrix (list* '(0) '(1) '(+nan.0) (make-list 46338 '(3))) #:dtype 'float32))
   (check-cuml-error 'logic
@@ -121,7 +132,7 @@
    'logic
    (string-append "single-linkage-fit: X: 28000000 rows with 39 neighbours need 2184000000 knn graph"
                   " entries, more than 2147483647")
-   (lambda () (single-linkage-fit (blank-matrix 28000000 1 'float32)))))
+   (lambda () (single-linkage-fit (device-matrix 28000000 1 #:dtype 'float32)))))
 
 (test-gpu "rows at the squared-norm boundary, and subnormal rows, fit"
   (define boundary

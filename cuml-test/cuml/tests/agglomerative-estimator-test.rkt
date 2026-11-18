@@ -17,10 +17,9 @@
          (only-in racket/list combinations make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-vector->list list*->device-matrix)
+         (only-in raft device-vector device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" integer-grid)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips)
@@ -165,10 +164,10 @@
   (check-cuml-error 'logic
                     "fit-predict: linkage: expected single, got complete"
                     (lambda () (fit-predict (agglomerative-clustering #:linkage 'complete) X)))
-  (check-cuml-error 'logic
-                    "fit: agglomerative-clustering takes no sample-weight"
-                    (lambda ()
-                      (fit (agglomerative-clustering) X #:sample-weight (blank-vector 5 'float32))))
+  (check-cuml-error
+   'logic
+   "fit: agglomerative-clustering takes no sample-weight"
+   (lambda () (fit (agglomerative-clustering) X #:sample-weight (device-vector 5 #:dtype 'float32))))
   (check-cuml-error 'logic
                     "fit: agglomerative-clustering takes no sample-weight"
                     (lambda ()
@@ -178,4 +177,4 @@
                     (lambda ()
                       (fit-predict (agglomerative-clustering #:n-clusters 0)
                                    X
-                                   #:sample-weight (blank-vector 5 'float32)))))
+                                   #:sample-weight (device-vector 5 #:dtype 'float32)))))

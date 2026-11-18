@@ -9,9 +9,8 @@
                   mbsgd-regressor-predict)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-not-exn check-pred test-case)
-         (only-in raft list*->device-matrix)
+         (only-in raft device-matrix list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/elastic-net-data.rkt" apply-keywords)
          (only-in "private/estimator-data.rkt" keyword-of)
          (only-in "private/linear-data.rkt" on-matrix on-vector)
@@ -85,10 +84,10 @@
                (go (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major) (y-of '(1 0)))))
         (row "one row before no column"
              "X: expected at least 2 rows, got 1"
-             (lambda () (go (blank-matrix 1 0 'float64) (y-of '(1)))))
+             (lambda () (go (device-matrix 1 0 #:dtype 'float64) (y-of '(1)))))
         (row "no column before y's length"
              "X: expected at least 1 column, got 0"
-             (lambda () (go (blank-matrix 6 0 'float64) (y-of '(1 0)))))
+             (lambda () (go (device-matrix 6 0 #:dtype 'float64) (y-of '(1 0)))))
         (row "y's length before a non-finite X"
              "y: expected 6 values (X's rows), got 5"
              (lambda () (go (on-matrix (cons '(+nan.0 0 0) (cdr grid))) (y-of '(0 1 0 1 1)))))

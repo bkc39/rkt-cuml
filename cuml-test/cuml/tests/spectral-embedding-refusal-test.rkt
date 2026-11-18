@@ -11,10 +11,14 @@
          (only-in racket/match match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
-         (only-in raft exn:fail:raft? list*->device-matrix list->device-vector)
+         (only-in raft
+                  device-matrix
+                  device-vector
+                  exn:fail:raft?
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe test-pools)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/manifold-refusal-data.rkt"
@@ -65,10 +69,10 @@
    (X-row "s1" "n-components: expected at least 1, got 0" (tiny-X) (hasheq 'n-components 0))
    (X-row "s2" "n-neighbors: expected at least 2, got 1" (tiny-X) (hasheq 'n-neighbors 1))
    (X-row "s3" "X: expected float32, got float64" (tiny-with '() 'float64))
-   (X-row "s4 rank" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
+   (X-row "s4 rank" "X: expected rank 2, got rank 1" (device-vector 8 #:dtype 'float32))
    (X-row "s4 layout"
           "X: expected row-major, got col-major 8x3"
-          (blank-matrix 8 3 'float32 #:layout 'col-major))
+          (device-matrix 8 3 #:dtype 'float32 #:layout 'col-major))
    (X-row "s5" "X: expected at least 2 columns, got 1" one-column)
    (X-row "s7" two-message (line-X 7) (hasheq 'n-neighbors 2) #:retry? #t)
    (X-row "s7 drop-first #f"
@@ -104,7 +108,7 @@
           "n-neighbors: expected at least 2, got 1"
           (tiny-with '() 'float64)
           (hasheq 'n-neighbors 1))
-   (X-row "s5 before s7" "X: expected at least 2 columns, got 1" (blank-matrix 3 1 'float32))
+   (X-row "s5 before s7" "X: expected at least 2 columns, got 1" (device-matrix 3 1 #:dtype 'float32))
    (X-row "s7 before s9" two-message (line-X 7) (hasheq 'n-neighbors 9))
    (X-row "s10 before s11" nan-message (tiny-with (append nan-row large-row)))
    (X-row "s11 before s12"

@@ -1,11 +1,9 @@
 #lang racket/base
 
 (require (only-in racket/math pi sqr)
-         (only-in raft device-matrix device-vector device-vector->list device-vector?))
+         (only-in raft device-vector->list device-vector?))
 
 (provide bits-of
-         blank-matrix
-         blank-vector
          columns-of
          block-starts
          flonum-exact
@@ -28,12 +26,6 @@
   (define size (if (eq? dt 'float32) 4 8))
   (for/list ([x (in-list xs)])
     (integer-bytes->integer (real->floating-point-bytes x size) #f)))
-
-(define (blank-matrix rows cols dt #:layout [order 'row-major])
-  (device-matrix rows cols #:dtype dt #:layout order))
-
-(define (blank-vector n dt)
-  (device-vector n #:dtype dt))
 
 (define (columns-of rows)
   (apply map list rows))

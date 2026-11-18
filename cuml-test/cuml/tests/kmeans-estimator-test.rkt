@@ -49,16 +49,16 @@
                   fail
                   test-case)
          (only-in raft
+                  device-matrix
                   device-resources
                   exn:fail:raft-kind
                   exn:fail:raft?
-                  list->device-vector
                   list*->device-matrix
+                  list->device-vector
                   shape
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" keywords-of printed)
          (only-in "private/kmeans-data.rkt"
@@ -276,7 +276,7 @@
 (test-gpu "errors name the generic that was called"
   (define X (list*->device-matrix grid8 #:dtype 'float64))
   (define f (grid8-fit))
-  (define int32 (blank-matrix 4 2 'int32))
+  (define int32 (device-matrix 4 2 #:dtype 'int32))
   (for ([message (in-list '("fit: X: 8 samples are fewer than the 9 clusters"
                             "fit: n-clusters: expected at least 1, got 0"
                             "fit: tol: expected greater than 0, got 0"

@@ -12,13 +12,14 @@
          (only-in racket/match match)
          (only-in rackunit check-equal? check-exn fail test-case)
          (only-in raft
+                  device-matrix
                   device-resources
+                  device-vector
                   exn:fail:raft-kind
                   exn:fail:raft?
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/hdbscan-data.rkt" dataset)
          (only-in "private/program.rkt" run-program)
@@ -40,14 +41,14 @@
        (row id message (lambda () (keyword-apply hdbscan-fit kws kw-values (list x)))))))
   (list
    (fit-row "H0 float64" "X: expected float32, got float64" (grid 'float64))
-   (fit-row "H0 int32" "X: expected float32, got int32" (blank-matrix 10 2 'int32))
-   (fit-row "H1 rank" "X: expected rank 2, got rank 1" (blank-vector 10 'float32))
+   (fit-row "H0 int32" "X: expected float32, got int32" (device-matrix 10 2 #:dtype 'int32))
+   (fit-row "H1 rank" "X: expected rank 2, got rank 1" (device-vector 10 #:dtype 'float32))
    (fit-row "H1 layout"
             "X: expected row-major, got col-major 10x2"
-            (blank-matrix 10 2 'float32 #:layout 'col-major))
+            (device-matrix 10 2 #:dtype 'float32 #:layout 'col-major))
    (fit-row "H2" "X: expected at least 2 rows, got 1" (grid 'float32 1))
-   (fit-row "H2 empty" "X: expected at least 2 rows, got 0" (blank-matrix 0 2 'float32))
-   (fit-row "H3" "X: expected at least 1 column, got 0" (blank-matrix 10 0 'float32))
+   (fit-row "H2 empty" "X: expected at least 2 rows, got 0" (device-matrix 0 2 #:dtype 'float32))
+   (fit-row "H3" "X: expected at least 1 column, got 0" (device-matrix 10 0 #:dtype 'float32))
    (fit-row "H7 zero" "min-samples: expected at least 1, got 0" #:min-samples 0)
    (fit-row "H7 most" "min-samples: expected at most 1023, got 1024" #:min-samples 1024)
    (fit-row "H8" "X: 4 samples are fewer than min-samples 5" (grid 'float32 4))
@@ -95,14 +96,14 @@
     (list (row (format "~a hdbscan-approximate-predict" id) message (lambda () (predict points)))
           (row (format "~a hdbscan-membership-vector" id) message (lambda () (membership points)))))
   (append (both "A1" "points: expected float32, got float64" (grid 'float64 4))
-          (both "A2 rank" "points: expected rank 2, got rank 1" (blank-vector 4 'float32))
+          (both "A2 rank" "points: expected rank 2, got rank 1" (device-vector 4 #:dtype 'float32))
           (both "A2 layout"
                 "points: expected row-major, got col-major 4x2"
-                (blank-matrix 4 2 'float32 #:layout 'col-major))
-          (both "A3" "points: expected at least 1 row, got 0" (blank-matrix 0 2 'float32))
+                (device-matrix 4 2 #:dtype 'float32 #:layout 'col-major))
+          (both "A3" "points: expected at least 1 row, got 0" (device-matrix 0 2 #:dtype 'float32))
           (both "A4"
                 "points: expected 2 columns, as the model was fit on, got 3"
-                (blank-matrix 4 3 'float32))
+                (device-matrix 4 3 #:dtype 'float32))
           (both "A4 before A8"
                 "points: expected 2 columns, as the model was fit on, got 3"
                 (list*->device-matrix '((1 2 3) (+nan.0 0 0)) #:dtype 'float32))

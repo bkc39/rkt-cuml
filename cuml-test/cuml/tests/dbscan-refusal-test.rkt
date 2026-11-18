@@ -7,13 +7,14 @@
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn fail test-case)
          (only-in raft
+                  device-matrix
                   device-resources
+                  device-vector
                   exn:fail:raft-kind
                   exn:fail:raft?
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/dbscan-data.rkt" fitted-lists)
          (only-in "private/kmeans-data.rkt" dtypes)
@@ -36,27 +37,29 @@
       ['float32 (list "3.4028234663852886e+38" 1e300 "1e+300")]
       ['float64 (list "1.7976931348623157e+308" +inf.0 "inf")]))
   (list
-   (row "D0" "X: expected float32 or float64, got int32" (lambda () (fit (blank-matrix 10 2 'int32))))
+   (row "D0"
+        "X: expected float32 or float64, got int32"
+        (lambda () (fit (device-matrix 10 2 #:dtype 'int32))))
    (row "D1" "out-dtype: expected int32 or int64" (lambda () (dbscan-fit X #:out-dtype 'float32)))
    (row "D2" "metric: expected euclidean, cosine or precomputed" (lambda () (fit X #:metric 'l2)))
-   (row "D3 rank" "X: expected rank 2, got rank 1" (lambda () (fit (blank-vector 10 dt))))
+   (row "D3 rank" "X: expected rank 2, got rank 1" (lambda () (fit (device-vector 10 #:dtype dt))))
    (row "D3 layout"
         "X: expected row-major, got col-major 10x2"
-        (lambda () (fit (blank-matrix 10 2 dt #:layout 'col-major))))
-   (row "D4" "X: expected at least 1 row, got 0" (lambda () (fit (blank-matrix 0 2 dt))))
-   (row "D5" "X: expected at least 1 column, got 0" (lambda () (fit (blank-matrix 10 0 dt))))
+        (lambda () (fit (device-matrix 10 2 #:dtype dt #:layout 'col-major))))
+   (row "D4" "X: expected at least 1 row, got 0" (lambda () (fit (device-matrix 0 2 #:dtype dt))))
+   (row "D5" "X: expected at least 1 column, got 0" (lambda () (fit (device-matrix 10 0 #:dtype dt))))
    (row "D6"
         "X: expected a square distance matrix, got 10x2"
         (lambda () (fit X #:metric 'precomputed)))
    (row "D8 dtype"
         (format "sample-weight: expected ~a, got ~a" dt u)
-        (lambda () (fit X #:sample-weight (blank-vector 10 u))))
+        (lambda () (fit X #:sample-weight (device-vector 10 #:dtype u))))
    (row "D8 length"
         "sample-weight: expected 10 elements, got 9"
-        (lambda () (fit X #:sample-weight (blank-vector 9 dt))))
+        (lambda () (fit X #:sample-weight (device-vector 9 #:dtype dt))))
    (row "D8 rank"
         "sample-weight: expected rank 1, got rank 2"
-        (lambda () (fit X #:sample-weight (blank-matrix 10 1 dt))))
+        (lambda () (fit X #:sample-weight (device-matrix 10 1 #:dtype dt))))
    (row "D9" "eps: expected greater than 0, got 0" (lambda () (fit X #:eps 0)))
    (row "D9 negative" "eps: expected greater than 0, got -1" (lambda () (fit X #:eps -1)))
    (row "D9 -0" "eps: expected greater than 0, got 0" (lambda () (fit X #:eps -0.0)))
@@ -82,16 +85,16 @@
    (row "D14 -0" zero-row-message (lambda () (fit (with-zero-row '(-0.0 -0.0) dt) #:metric 'cosine)))
    (row "D0 before D1"
         "X: expected float32 or float64, got int32"
-        (lambda () (dbscan-fit (blank-matrix 10 2 'int32) #:out-dtype 'float32)))
+        (lambda () (dbscan-fit (device-matrix 10 2 #:dtype 'int32) #:out-dtype 'float32)))
    (row "D1 before D2"
         "out-dtype: expected int32 or int64"
         (lambda () (dbscan-fit X #:out-dtype 'float32 #:metric 'l2)))
    (row "D2 before D3"
         "metric: expected euclidean, cosine or precomputed"
-        (lambda () (fit (blank-vector 10 dt) #:metric 'l2)))
+        (lambda () (fit (device-vector 10 #:dtype dt) #:metric 'l2)))
    (row "D8 before D9"
         "sample-weight: expected 10 elements, got 9"
-        (lambda () (fit X #:eps 0 #:sample-weight (blank-vector 9 dt))))
+        (lambda () (fit X #:eps 0 #:sample-weight (device-vector 9 #:dtype dt))))
    (row "D9 before D10"
         "eps: expected greater than 0, got 0"
         (lambda () (fit X #:eps 0 #:min-samples 0)))

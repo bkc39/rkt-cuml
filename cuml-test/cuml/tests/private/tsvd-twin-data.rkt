@@ -7,7 +7,6 @@
          racket/runtime-path
          (only-in rackunit check-equal?)
          (only-in raft device-matrix->list* list*->device-matrix)
-         (only-in "common-data.rkt" bits-of)
          (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps product)
          (only-in "pca-twin-data.rkt" twin-key)
          (only-in "python-env.rkt" run-twin)

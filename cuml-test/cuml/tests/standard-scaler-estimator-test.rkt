@@ -25,10 +25,9 @@
          (only-in racket/generic exn:fail:support?)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-exn check-false check-not-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
+         (only-in raft device-matrix device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" printed round-trips)
          (only-in "private/scaler-data.rkt" bits-equal? normal-rows statistics))
@@ -102,4 +101,5 @@
 (test-gpu "fit-transform names the generic for a fit refusal"
   (check-cuml-error 'logic
                     "fit-transform: X: expected at least 1 row, got 0"
-                    (lambda () (fit-transform (standard-scaler) (blank-matrix 0 3 'float32)))))
+                    (lambda ()
+                      (fit-transform (standard-scaler) (device-matrix 0 3 #:dtype 'float32)))))

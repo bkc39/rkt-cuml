@@ -8,11 +8,10 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
-         (only-in raft list*->device-matrix)
+         (only-in raft device-matrix device-vector list*->device-matrix)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/process-memory.rkt"
                   baseline-sample
@@ -63,11 +62,11 @@
   (fit-predict e X))
 
 (define (refusals X g)
-  (define wide (blank-matrix 300 2 'float64))
-  (define three (blank-matrix 3 2 'float32))
+  (define wide (device-matrix 300 2 #:dtype 'float64))
+  (define three (device-matrix 3 2 #:dtype 'float32))
   (define nan-row (list*->device-matrix '((1 1) (2 2) (+nan.0 0) (4 4) (5 5)) #:dtype 'float32))
   (match-define (list rows _ vals) (graph->vectors g))
-  (define short-cols (blank-vector (sub1 (length (graph-rows g))) 'int32))
+  (define short-cols (device-vector (sub1 (length (graph-rows g))) #:dtype 'int32))
   (define out-of-range (edited-vectors g #:rows (set-entry 7 120)))
   (define self-loop (edited-vectors g #:rows (set-entry 7 5) #:cols (set-entry 7 5)))
   (define negative (edited-vectors g #:vals (set-entry 3 -1.0)))

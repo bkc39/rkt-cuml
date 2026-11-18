@@ -10,11 +10,10 @@
          (only-in cuml/preprocessing/private/standard-scaler current-scratch-elements)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn test-case)
-         (only-in raft list*->device-matrix list->device-vector)
+         (only-in raft device-matrix device-vector list*->device-matrix list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id row-message)
          (only-in "private/scaler-data.rkt" strided-vector))
@@ -30,32 +29,34 @@
                         #:dtype dt))
 
 (define (bad-X-rows)
-  (list (row "f1" "X: expected float32 or float64, got int32" (blank-matrix 4 3 'int32))
-        (row "f2" "X: expected rank 2, got rank 1" (blank-vector 4 'float32))
-        (row "f3"
-             "X: expected row-major, got col-major 4x3"
-             (blank-matrix 4 3 'float32 #:layout 'col-major))
-        (row "f4" "X: expected at least 1 row, got 0" (blank-matrix 0 3 'float32))
-        (row "f1 before f2" "X: expected float32 or float64, got int32" (blank-vector 4 'int32))
-        (row "f2 before f4" "X: expected rank 2, got rank 1" (blank-vector 0 'float64))
-        (row "f8 inf" "X: row 2, column 1: expected a finite value, got inf" (grid-with 2 1 +inf.0))
-        (row "f8 nan"
-             "X: row 0, column 2: expected a finite value, got nan"
-             (grid-with 0 2 +nan.0 'float64))
-        (row "f8 -inf"
-             "X: row 3, column 0: expected a finite value, got -inf"
-             (grid-with 3 0 -inf.0 'float64))
-        (row "f8 first in row-major order"
-             "X: row 1, column 2: expected a finite value, got nan"
-             (list*->device-matrix '((1 2 3) (4 5 +nan.0) (+inf.0 8 9)) #:dtype 'float32))))
+  (list
+   (row "f1" "X: expected float32 or float64, got int32" (device-matrix 4 3 #:dtype 'int32))
+   (row "f2" "X: expected rank 2, got rank 1" (device-vector 4 #:dtype 'float32))
+   (row "f3"
+        "X: expected row-major, got col-major 4x3"
+        (device-matrix 4 3 #:dtype 'float32 #:layout 'col-major))
+   (row "f4" "X: expected at least 1 row, got 0" (device-matrix 0 3 #:dtype 'float32))
+   (row "f1 before f2" "X: expected float32 or float64, got int32" (device-vector 4 #:dtype 'int32))
+   (row "f2 before f4" "X: expected rank 2, got rank 1" (device-vector 0 #:dtype 'float64))
+   (row "f8 inf" "X: row 2, column 1: expected a finite value, got inf" (grid-with 2 1 +inf.0))
+   (row "f8 nan"
+        "X: row 0, column 2: expected a finite value, got nan"
+        (grid-with 0 2 +nan.0 'float64))
+   (row "f8 -inf"
+        "X: row 3, column 0: expected a finite value, got -inf"
+        (grid-with 3 0 -inf.0 'float64))
+   (row "f8 first in row-major order"
+        "X: row 1, column 2: expected a finite value, got nan"
+        (list*->device-matrix '((1 2 3) (4 5 +nan.0) (+inf.0 8 9)) #:dtype 'float32))))
 
 (define (fit-rows)
-  (append (bad-X-rows)
-          (list (row "f5" "X: expected at least 1 column, got 0" (blank-matrix 4 0 'float32))
-                (row "f4 before f5" "X: expected at least 1 row, got 0" (blank-matrix 0 0 'float64))
-                (row "f3 before f8"
-                     "X: expected row-major, got col-major 4x3"
-                     (blank-matrix 4 3 'float32 #:layout 'col-major)))))
+  (append
+   (bad-X-rows)
+   (list (row "f5" "X: expected at least 1 column, got 0" (device-matrix 4 0 #:dtype 'float32))
+         (row "f4 before f5" "X: expected at least 1 row, got 0" (device-matrix 0 0 #:dtype 'float64))
+         (row "f3 before f8"
+              "X: expected row-major, got col-major 4x3"
+              (device-matrix 4 3 #:dtype 'float32 #:layout 'col-major)))))
 
 (define (fitted)
   (standard-scaler-fit (list*->device-matrix grid #:dtype 'float64)))
@@ -72,13 +73,13 @@
    (for/list ([r (in-list (bad-X-rows))])
      (row (row-id r) (row-message r) (cons (fitted) (row-call r))))
    (list
-    (row "t5" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
+    (row "t5" "X: expected 3 columns, got 2" (cons (fitted) (device-matrix 4 2 #:dtype 'float32)))
     (row "t5 with both flags off"
          "X: expected 3 columns, got 2"
          (cons (standard-scaler-fit (list*->device-matrix grid #:dtype 'float32)
                                     #:with-mean #f
                                     #:with-std #f)
-               (blank-matrix 4 2 'float64)))
+               (device-matrix 4 2 #:dtype 'float64)))
     (row "t6"
          "mean: expected float64, got float32"
          (cons (hand-built (list->device-vector '(1 2 3) #:dtype 'float32) good)
@@ -104,13 +105,13 @@
          (cons (fitted) (grid-with 0 2 +nan.0)))
     (row "t3 before t5"
          "X: expected row-major, got col-major 4x2"
-         (cons (fitted) (blank-matrix 4 2 'float32 #:layout 'col-major)))
+         (cons (fitted) (device-matrix 4 2 #:dtype 'float32 #:layout 'col-major)))
     (row "t4 before t5"
          "X: expected at least 1 row, got 0"
-         (cons (fitted) (blank-matrix 0 2 'float32)))
+         (cons (fitted) (device-matrix 0 2 #:dtype 'float32)))
     (row "t5 before t6"
          "X: expected 3 columns, got 2"
-         (cons (hand-built (float64s '(1 2)) good) (blank-matrix 4 2 'float32)))
+         (cons (hand-built (float64s '(1 2)) good) (device-matrix 4 2 #:dtype 'float32)))
     (row "t8 before t9"
          "mean: expected contiguous elements, got stride 2"
          (cons (hand-built (strided-vector 3) (float64s '(1 2)))
@@ -151,9 +152,10 @@
 
 (test-gpu "the generics refuse a bad X with their own names"
   (for* ([entry (in-list (generic-calls))]
-         [r (in-list
-             (append (bad-X-rows)
-                     (list (row "t5" "X: expected 3 columns, got 2" (blank-matrix 4 2 'float32)))))])
+         [r (in-list (append (bad-X-rows)
+                             (list (row "t5"
+                                        "X: expected 3 columns, got 2"
+                                        (device-matrix 4 2 #:dtype 'float32)))))])
     (match-define (cons who call) entry)
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call (row-call r)))))))

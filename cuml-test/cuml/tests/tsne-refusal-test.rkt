@@ -8,11 +8,15 @@
          (only-in racket/match match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
-         (only-in raft exn:fail:raft? list*->device-matrix list->device-vector)
+         (only-in raft
+                  device-matrix
+                  device-vector
+                  exn:fail:raft?
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/manifold-refusal-data.rkt"
@@ -174,10 +178,10 @@
   (define normless-pca (list*->device-matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) #:dtype 'float32))
   (list
    (X-row "f11" "X: expected float32, got float64" (tiny-with '() 'float64))
-   (X-row "f12" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
+   (X-row "f12" "X: expected rank 2, got rank 1" (device-vector 8 #:dtype 'float32))
    (X-row "f12 layout"
           "X: expected row-major, got col-major 8x3"
-          (blank-matrix 8 3 'float32 #:layout 'col-major))
+          (device-matrix 8 3 #:dtype 'float32 #:layout 'col-major))
    (X-row "f13" "X: expected at least 2 rows, got 1" one-row)
    (X-row "f14"
           "X: expected at least 2 columns, got 1"

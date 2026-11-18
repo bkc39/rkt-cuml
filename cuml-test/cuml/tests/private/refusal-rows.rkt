@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in raft list*->device-matrix)
-         (only-in "common-data.rkt" blank-matrix blank-vector)
+(require (only-in raft device-matrix device-vector list*->device-matrix)
          (only-in "cuml-error.rkt" check-cuml-error prefixed))
 
 (provide (struct-out row)
@@ -47,12 +46,13 @@
   (format "~a: expected at most 3.4028234663852886e+38, got ~a" name got))
 
 (define (bad-X-rows)
-  (list (row "f1" "X: expected float32 or float64, got int32" (blank-matrix 4 3 'int32))
-        (row "f2" "X: expected rank 2, got rank 1" (blank-vector 4 'float32))
-        (row "f3"
-             "X: expected row-major, got col-major 4x3"
-             (blank-matrix 4 3 'float32 #:layout 'col-major))
-        (row "f1 before f2" "X: expected float32 or float64, got int32" (blank-vector 4 'int32))))
+  (list
+   (row "f1" "X: expected float32 or float64, got int32" (device-matrix 4 3 #:dtype 'int32))
+   (row "f2" "X: expected rank 2, got rank 1" (device-vector 4 #:dtype 'float32))
+   (row "f3"
+        "X: expected row-major, got col-major 4x3"
+        (device-matrix 4 3 #:dtype 'float32 #:layout 'col-major))
+   (row "f1 before f2" "X: expected float32 or float64, got int32" (device-vector 4 #:dtype 'int32))))
 
 (define (index-message name entry got)
   (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))

@@ -16,14 +16,15 @@
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft
+                  device-matrix
                   device-matrix->list*
+                  device-vector
                   device-vector->list
                   list*->device-matrix
                   list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/refusal-rows.rkt" bad-X-rows check-row row row-call row-id row-message)
@@ -49,7 +50,7 @@
    (bad-X-rows)
    (list
     (row "f4" "X: expected at least 2 rows, got 1" (list*->device-matrix '((1 2 3)) #:dtype 'float32))
-    (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
+    (row "f4 none" "X: expected at least 2 rows, got 0" (device-matrix 0 3 #:dtype 'float64))
     (row "f5"
          "X: expected at least 2 columns, got 1"
          (list*->device-matrix '((1) (2) (3)) #:dtype 'float64))
@@ -174,75 +175,78 @@
   (append
    (for/list ([r (in-list (bad-X-rows))])
      (row (row-id r) (row-message r) (cons (fitted) (row-call r))))
-   (list
-    (row "t4" "X: expected at least 1 row, got 0" (cons (fitted) (blank-matrix 0 width 'float32)))
-    (row "t6"
-         "components: expected float32 or float64, got int32"
-         (cons (hand-built #:components (blank-matrix 2 3 'int32)) (narrowed width)))
-    (row "t6 rank"
-         "components: expected rank 2, got rank 1"
-         (cons (hand-built #:components (blank-vector 3 'float32)) (narrowed width)))
-    (row "t6 layout"
-         "components: expected row-major, got col-major 2x3"
-         (cons (hand-built #:components (blank-matrix 2 3 'float32 #:layout 'col-major))
-               (narrowed width)))
-    (row "t7"
-         "components: expected at least 1 row, got 0"
-         (cons (hand-built #:components (blank-matrix 0 3 'float32)) (narrowed width)))
-    (row "t7 columns"
-         "components: expected at least 2 columns, got 1"
-         (cons (hand-built #:components (blank-matrix 2 1 'float32)) (narrowed width)))
-    (row "t8" "X: expected float32, got float64" (cons (fitted) (narrowed width '() 'float64)))
-    (row "t10"
-         "mean: expected float32, got float64"
-         (cons (hand-built #:mean (floats '(1 2 3) 'float64)) (narrowed width)))
-    (row "t10 length"
-         "mean: expected 3 elements, got 2"
-         (cons (hand-built #:mean (floats '(1 2))) (narrowed width)))
-    (row "t10 stride"
-         "mean: expected contiguous elements, got stride 2"
-         (cons (hand-built #:mean (strided-vector 3) #:dtype 'float64) (narrowed width '() 'float64)))
-    (row "t11"
-         "explained-variance: expected a vector, got none"
-         (cons (hand-built #:variance #f #:whiten #t) (narrowed width)))
-    (row "t11 dtype"
-         "explained-variance: expected float32, got float64"
-         (cons (hand-built #:variance (floats '(1 2) 'float64) #:whiten #t) (narrowed width)))
-    (row "t11 length"
-         "explained-variance: expected 2 elements, got 3"
-         (cons (hand-built #:variance (floats '(1 2 3)) #:whiten #t) (narrowed width)))
-    (row "t11 stride"
-         "explained-variance: expected contiguous elements, got stride 2"
-         (cons (hand-built #:variance (strided-vector 2) #:whiten #t #:dtype 'float64)
-               (narrowed width '() 'float64)))
-    (row "t12" inf-message (cons (fitted) (narrowed width `([(0 ,last-column) +inf.0]))))
-    (row "t11 is read only when whitening"
-         inf-message
-         (cons (hand-built #:variance #f) (narrowed width `([(0 ,last-column) +inf.0])))))))
+   (list (row "t4"
+              "X: expected at least 1 row, got 0"
+              (cons (fitted) (device-matrix 0 width #:dtype 'float32)))
+         (row "t6"
+              "components: expected float32 or float64, got int32"
+              (cons (hand-built #:components (device-matrix 2 3 #:dtype 'int32)) (narrowed width)))
+         (row "t6 rank"
+              "components: expected rank 2, got rank 1"
+              (cons (hand-built #:components (device-vector 3 #:dtype 'float32)) (narrowed width)))
+         (row "t6 layout"
+              "components: expected row-major, got col-major 2x3"
+              (cons (hand-built #:components (device-matrix 2 3 #:dtype 'float32 #:layout 'col-major))
+                    (narrowed width)))
+         (row "t7"
+              "components: expected at least 1 row, got 0"
+              (cons (hand-built #:components (device-matrix 0 3 #:dtype 'float32)) (narrowed width)))
+         (row "t7 columns"
+              "components: expected at least 2 columns, got 1"
+              (cons (hand-built #:components (device-matrix 2 1 #:dtype 'float32)) (narrowed width)))
+         (row "t8" "X: expected float32, got float64" (cons (fitted) (narrowed width '() 'float64)))
+         (row "t10"
+              "mean: expected float32, got float64"
+              (cons (hand-built #:mean (floats '(1 2 3) 'float64)) (narrowed width)))
+         (row "t10 length"
+              "mean: expected 3 elements, got 2"
+              (cons (hand-built #:mean (floats '(1 2))) (narrowed width)))
+         (row "t10 stride"
+              "mean: expected contiguous elements, got stride 2"
+              (cons (hand-built #:mean (strided-vector 3) #:dtype 'float64)
+                    (narrowed width '() 'float64)))
+         (row "t11"
+              "explained-variance: expected a vector, got none"
+              (cons (hand-built #:variance #f #:whiten #t) (narrowed width)))
+         (row "t11 dtype"
+              "explained-variance: expected float32, got float64"
+              (cons (hand-built #:variance (floats '(1 2) 'float64) #:whiten #t) (narrowed width)))
+         (row "t11 length"
+              "explained-variance: expected 2 elements, got 3"
+              (cons (hand-built #:variance (floats '(1 2 3)) #:whiten #t) (narrowed width)))
+         (row "t11 stride"
+              "explained-variance: expected contiguous elements, got stride 2"
+              (cons (hand-built #:variance (strided-vector 2) #:whiten #t #:dtype 'float64)
+                    (narrowed width '() 'float64)))
+         (row "t12" inf-message (cons (fitted) (narrowed width `([(0 ,last-column) +inf.0]))))
+         (row "t11 is read only when whitening"
+              inf-message
+              (cons (hand-built #:variance #f) (narrowed width `([(0 ,last-column) +inf.0])))))))
 
 (define (transform-rows)
   (append
    (shared-rows 3)
-   (list (row "t9" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
-         (row "t13" t13-message (cons (fitted) (grid-with '([(0 2) 1e38]))))
-         (whitened-row
-          "t13 whitened"
-          "X: row 0, column 1: expected a magnitude of at most 4.989600773836799e+291, got 1e+300"
-          '((0 3) (1 3) (2 3) (-1 3))
-          '((0 1e300))
-          'float64)
-         (whitened-row
-          "t13 whitened float32"
-          "X: row 0, column 0: expected a magnitude of at most 1.736496146773559e+34, got 1e+36"
-          '((0.001 0) (-0.001 0) (0 0.0005) (0 -0.0005))
-          '((1e36 0))
-          'float32)
-         (row "t8 before t9"
-              "X: expected float32, got float64"
-              (cons (fitted) (blank-matrix 4 2 'float64)))
-         (row "t12 before t13"
-              "X: row 1, column 0: expected a finite value, got nan"
-              (cons (fitted) (grid-with '([(0 2) 1e38] [(1 0) +nan.0])))))))
+   (list
+    (row "t9" "X: expected 3 columns, got 2" (cons (fitted) (device-matrix 4 2 #:dtype 'float32)))
+    (row "t13" t13-message (cons (fitted) (grid-with '([(0 2) 1e38]))))
+    (whitened-row
+     "t13 whitened"
+     "X: row 0, column 1: expected a magnitude of at most 4.989600773836799e+291, got 1e+300"
+     '((0 3) (1 3) (2 3) (-1 3))
+     '((0 1e300))
+     'float64)
+    (whitened-row
+     "t13 whitened float32"
+     "X: row 0, column 0: expected a magnitude of at most 1.736496146773559e+34, got 1e+36"
+     '((0.001 0) (-0.001 0) (0 0.0005) (0 -0.0005))
+     '((1e36 0))
+     'float32)
+    (row "t8 before t9"
+         "X: expected float32, got float64"
+         (cons (fitted) (device-matrix 4 2 #:dtype 'float64)))
+    (row "t12 before t13"
+         "X: row 1, column 0: expected a finite value, got nan"
+         (cons (fitted) (grid-with '([(0 2) 1e38] [(1 0) +nan.0])))))))
 
 (define (inverse-rows)
   (append
@@ -282,7 +286,7 @@
     (check-row who r (lambda () (call fitted-estimator (row-call r)))))
   (check-cuml-error 'logic
                     "transform: X: expected 3 columns, got 2"
-                    (lambda () (transform fitted-estimator (blank-matrix 4 2 'float32))))
+                    (lambda () (transform fitted-estimator (device-matrix 4 2 #:dtype 'float32))))
   (check-cuml-error 'logic
                     "inverse-transform: X: expected 2 columns, got 3"
                     (lambda () (inverse-transform fitted-estimator (grid-with '())))))

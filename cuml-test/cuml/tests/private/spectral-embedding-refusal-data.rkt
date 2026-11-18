@@ -4,9 +4,9 @@
          (only-in racket/function const)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred)
+         (only-in raft device-matrix device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/probe probe-pool-used)
-         (only-in "common-data.rkt" blank-matrix blank-vector)
          (only-in "refusal-rows.rkt" check-row index-message row row-call row-id)
          (only-in "spectral-data.rkt"
                   clique-graph
@@ -104,16 +104,20 @@
    (row "s1" "n-components: expected at least 1, got 0" (fault ring (hasheq 'n-components 0)))
    (row "g1 rows float32"
         "rows: expected int32, got float32"
-        (with-vectors (lambda (_ cols vals) (fit-vectors (blank-vector 20 'float32) cols vals))))
+        (with-vectors (lambda (_ cols vals)
+                        (fit-vectors (device-vector 20 #:dtype 'float32) cols vals))))
    (row "g1 vals float64"
         "vals: expected float32, got float64"
-        (with-vectors (lambda (rows cols _) (fit-vectors rows cols (blank-vector 20 'float64)))))
+        (with-vectors (lambda (rows cols _)
+                        (fit-vectors rows cols (device-vector 20 #:dtype 'float64)))))
    (row "g1 rank"
         "rows: expected rank 1, got rank 2"
-        (with-vectors (lambda (_ cols vals) (fit-vectors (blank-matrix 20 1 'int32) cols vals))))
+        (with-vectors (lambda (_ cols vals)
+                        (fit-vectors (device-matrix 20 1 #:dtype 'int32) cols vals))))
    (row "g1 cols"
         "cols: expected 20 entries, as rows has, got 19"
-        (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals))))
+        (with-vectors (lambda (rows _ vals)
+                        (fit-vectors rows (device-vector 19 #:dtype 'int32) vals))))
    (row "g2"
         "n-components: 2 components with drop-first need at least 8 samples, got 7"
         (with-vectors (lambda (rows cols vals) (fit-vectors rows cols vals 7))))
@@ -150,7 +154,8 @@
         (fault (graph-map-vals ring (const 0.0))))
    (row "g1 before g2"
         "cols: expected 20 entries, as rows has, got 19"
-        (with-vectors (lambda (rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals 7))))
+        (with-vectors (lambda (rows _ vals)
+                        (fit-vectors rows (device-vector 19 #:dtype 'int32) vals 7))))
    (row "g2 before g5"
         "n-components: 2 components with drop-first need at least 8 samples, got 7"
         (lambda ()

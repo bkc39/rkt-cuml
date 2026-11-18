@@ -13,11 +13,10 @@
                   tsvd-transform)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn test-case)
-         (only-in raft list*->device-matrix list->device-vector)
+         (only-in raft device-matrix device-vector list*->device-matrix list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/refusal-rows.rkt" bad-X-rows check-row row row-call row-id row-message))
@@ -41,41 +40,41 @@
   (format "X: expected a squared Frobenius norm of at most ~a, got ~a" most got))
 
 (define (fit-X-rows)
-  (append (bad-X-rows)
-          (list (row "f4"
-                     "X: expected at least 2 rows, got 1"
-                     (list*->device-matrix '((1 2 3)) #:dtype 'float32))
-                (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
-                (row "f5"
-                     "X: expected at least 2 columns, got 1"
-                     (list*->device-matrix '((1) (2) (3)) #:dtype 'float64))
-                (row "f4 before f5"
-                     "X: expected at least 2 rows, got 1"
-                     (list*->device-matrix '((1)) #:dtype 'float32))
-                (row "f6"
-                     "X: 46341 columns: a 46341x46341 Gram matrix does not fit the index type"
-                     (blank-matrix 2 46341 'float32))
-                (row "f14 nan"
-                     "X: row 3, column 1: expected a finite value, got nan"
-                     (grid-with '([(3 1) +nan.0])))
-                (row "f14 inf"
-                     "X: row 0, column 2: expected a finite value, got inf"
-                     (grid-with '([(0 2) +inf.0]) 'float64))
-                (row "f14 -inf"
-                     "X: row 2, column 0: expected a finite value, got -inf"
-                     (grid-with '([(2 0) -inf.0])))
-                (row "f14 first in row-major order"
-                     "X: row 1, column 2: expected a finite value, got nan"
-                     (grid-with `([(1 2) +nan.0] [(2 0) +inf.0])))
-                (row "f15"
-                     (f15-message 4.253529586511731e+37 3.402823669209385e+38)
-                     (grid-with `([(3 1) ,past-float32])))
-                (row "f15 float64"
-                     (f15-message 2.247116418577895e+307 4.49423283715579e+307)
-                     (grid-with `([(0 0) ,past-float64]) 'float64))
-                (row "f14 before f15"
-                     "X: row 3, column 1: expected a finite value, got nan"
-                     (grid-with `([(0 0) ,past-float32] [(3 1) +nan.0]))))))
+  (append
+   (bad-X-rows)
+   (list
+    (row "f4" "X: expected at least 2 rows, got 1" (list*->device-matrix '((1 2 3)) #:dtype 'float32))
+    (row "f4 none" "X: expected at least 2 rows, got 0" (device-matrix 0 3 #:dtype 'float64))
+    (row "f5"
+         "X: expected at least 2 columns, got 1"
+         (list*->device-matrix '((1) (2) (3)) #:dtype 'float64))
+    (row "f4 before f5"
+         "X: expected at least 2 rows, got 1"
+         (list*->device-matrix '((1)) #:dtype 'float32))
+    (row "f6"
+         "X: 46341 columns: a 46341x46341 Gram matrix does not fit the index type"
+         (device-matrix 2 46341 #:dtype 'float32))
+    (row "f14 nan"
+         "X: row 3, column 1: expected a finite value, got nan"
+         (grid-with '([(3 1) +nan.0])))
+    (row "f14 inf"
+         "X: row 0, column 2: expected a finite value, got inf"
+         (grid-with '([(0 2) +inf.0]) 'float64))
+    (row "f14 -inf"
+         "X: row 2, column 0: expected a finite value, got -inf"
+         (grid-with '([(2 0) -inf.0])))
+    (row "f14 first in row-major order"
+         "X: row 1, column 2: expected a finite value, got nan"
+         (grid-with `([(1 2) +nan.0] [(2 0) +inf.0])))
+    (row "f15"
+         (f15-message 4.253529586511731e+37 3.402823669209385e+38)
+         (grid-with `([(3 1) ,past-float32])))
+    (row "f15 float64"
+         (f15-message 2.247116418577895e+307 4.49423283715579e+307)
+         (grid-with `([(0 0) ,past-float64]) 'float64))
+    (row "f14 before f15"
+         "X: row 3, column 1: expected a finite value, got nan"
+         (grid-with `([(0 0) ,past-float32] [(3 1) +nan.0]))))))
 
 (define (parameter-rows)
   (list
@@ -160,36 +159,40 @@
 
 (define (shared-rows width)
   (define last-column (sub1 width))
-  (append
-   (for/list ([r (in-list (bad-X-rows))])
-     (row (row-id r) (row-message r) (cons (fitted) (row-call r))))
-   (list
-    (row "t4" "X: expected at least 1 row, got 0" (cons (fitted) (blank-matrix 0 width 'float32)))
-    (row "t5"
-         "components: expected float32 or float64, got int32"
-         (cons (hand-built (blank-matrix 2 3 'int32)) (narrowed width)))
-    (row "t5 rank"
-         "components: expected rank 2, got rank 1"
-         (cons (hand-built (blank-vector 3 'float32)) (narrowed width)))
-    (row "t5 layout"
-         "components: expected row-major, got col-major 2x3"
-         (cons (hand-built (blank-matrix 2 3 'float32 #:layout 'col-major)) (narrowed width)))
-    (row "t6"
-         "components: expected at least 1 row, got 0"
-         (cons (hand-built (blank-matrix 0 3 'float32)) (narrowed width)))
-    (row "t7"
-         "components: expected at least 2 columns, got 1"
-         (cons (hand-built (blank-matrix 2 1 'float32)) (narrowed width)))
-    (row "L19 float64 X"
-         "X: expected float32, got float64"
-         (cons (fitted) (narrowed width '() 'float64)))
-    (row "L19 float32 X" "X: expected float64, got float32" (cons (fitted 'float64) (narrowed width)))
-    (row "t9"
-         (format "X: row 0, column ~a: expected a finite value, got nan" last-column)
-         (cons (fitted) (narrowed width `([(0 ,last-column) +nan.0]))))
-    (row "t4 before t5"
-         "X: expected at least 1 row, got 0"
-         (cons (hand-built (blank-matrix 2 3 'int32)) (blank-matrix 0 width 'float32))))))
+  (append (for/list ([r (in-list (bad-X-rows))])
+            (row (row-id r) (row-message r) (cons (fitted) (row-call r))))
+          (list (row "t4"
+                     "X: expected at least 1 row, got 0"
+                     (cons (fitted) (device-matrix 0 width #:dtype 'float32)))
+                (row "t5"
+                     "components: expected float32 or float64, got int32"
+                     (cons (hand-built (device-matrix 2 3 #:dtype 'int32)) (narrowed width)))
+                (row "t5 rank"
+                     "components: expected rank 2, got rank 1"
+                     (cons (hand-built (device-vector 3 #:dtype 'float32)) (narrowed width)))
+                (row "t5 layout"
+                     "components: expected row-major, got col-major 2x3"
+                     (cons (hand-built (device-matrix 2 3 #:dtype 'float32 #:layout 'col-major))
+                           (narrowed width)))
+                (row "t6"
+                     "components: expected at least 1 row, got 0"
+                     (cons (hand-built (device-matrix 0 3 #:dtype 'float32)) (narrowed width)))
+                (row "t7"
+                     "components: expected at least 2 columns, got 1"
+                     (cons (hand-built (device-matrix 2 1 #:dtype 'float32)) (narrowed width)))
+                (row "L19 float64 X"
+                     "X: expected float32, got float64"
+                     (cons (fitted) (narrowed width '() 'float64)))
+                (row "L19 float32 X"
+                     "X: expected float64, got float32"
+                     (cons (fitted 'float64) (narrowed width)))
+                (row "t9"
+                     (format "X: row 0, column ~a: expected a finite value, got nan" last-column)
+                     (cons (fitted) (narrowed width `([(0 ,last-column) +nan.0]))))
+                (row "t4 before t5"
+                     "X: expected at least 1 row, got 0"
+                     (cons (hand-built (device-matrix 2 3 #:dtype 'int32))
+                           (device-matrix 0 width #:dtype 'float32))))))
 
 (define (t10-rows width float32-most float64-most)
   (list (row "t10"
@@ -206,10 +209,12 @@
 (define (transform-rows)
   (append (shared-rows 3)
           (t10-rows 3 "2.8356862219877405e+37" "1.4980776123852632e+307")
-          (list (row "t8" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
+          (list (row "t8"
+                     "X: expected 3 columns, got 2"
+                     (cons (fitted) (device-matrix 4 2 #:dtype 'float32)))
                 (row "L19 before t8"
                      "X: expected float32, got float64"
-                     (cons (fitted) (blank-matrix 4 2 'float64)))
+                     (cons (fitted) (device-matrix 4 2 #:dtype 'float64)))
                 (row "t8 before t9"
                      "X: expected 3 columns, got 2"
                      (cons (fitted) (narrowed 2 '([(0 0) +nan.0])))))))
@@ -240,7 +245,7 @@
     (check-row who r (lambda () (call fitted-estimator (row-call r)))))
   (check-cuml-error 'logic
                     "transform: X: expected 3 columns, got 2"
-                    (lambda () (transform fitted-estimator (blank-matrix 4 2 'float32))))
+                    (lambda () (transform fitted-estimator (device-matrix 4 2 #:dtype 'float32))))
   (check-cuml-error 'logic
                     "inverse-transform: X: expected 2 columns, got 3"
                     (lambda () (inverse-transform fitted-estimator (grid-with '())))))

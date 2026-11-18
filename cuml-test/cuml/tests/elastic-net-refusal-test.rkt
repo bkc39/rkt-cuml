@@ -12,9 +12,10 @@
          (only-in racket/list filter-not)
          (only-in racket/match match-define match-lambda match-lambda** struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
+         (only-in raft device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source)
-         (only-in "private/common-data.rkt" blank-matrix unit-roundoff)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/elastic-net-data.rkt"
                   apply-keywords
@@ -71,7 +72,7 @@
 (define (fit-rows go #:l1-ratio? [l1-ratio? #t])
   (define X (matrix grid))
   (define y (vector targets))
-  (define bad-X (blank-matrix 5 3 'int32))
+  (define bad-X (device-matrix 5 3 #:dtype 'int32))
   (append (list (row "non-boolean fit-intercept before every other fault"
                      "fit-intercept: expected #t or #f, got 'yes"
                      (lambda () (go bad-X y #:fit-intercept 'yes #:alpha 'x #:tol 'x)))
