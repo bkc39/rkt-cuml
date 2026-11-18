@@ -93,9 +93,9 @@
               [datum (in-value (syntax->datum form))]
               [name (in-value (procedure-name datum))]
               #:when name)
-    (define (free symbol)
+    (define (free-key symbol)
       (or (and (not (memq symbol locals)) (resolve symbol)) (format "~a@~a" symbol file)))
-    (cons (alpha-normal datum name free) (site file (syntax-line form) name))))
+    (cons (alpha-normal datum name free-key) (site file (syntax-line form) name))))
 
 (define (lazy-resolver file one)
   (define resolve #f)

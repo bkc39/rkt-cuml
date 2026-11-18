@@ -105,7 +105,7 @@
        [_ '()]))
    forms))
 
-(define (alpha-normal definition name free)
+(define (alpha-normal definition name free-key)
   (define count 0)
   (define (fresh!)
     (begin0 (string->symbol (format "_~a" count))
@@ -114,7 +114,7 @@
     (for/fold ([env env]) ([one (in-list names)])
       (hash-set env one (fresh!))))
   (define (ref env one)
-    (hash-ref env one (lambda () (free one))))
+    (hash-ref env one (lambda () (free-key one))))
   (define (each env items)
     (match items
       [(cons a d) (cons (expr env a) (each env d))]
