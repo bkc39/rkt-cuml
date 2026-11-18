@@ -1974,7 +1974,10 @@ scratch, the source is `cpp/src/glm/qn/`.
     intercept fits only from the warm start (K/F 4.7e-9 at max-iter
     1000, refused from zero at 4000); float64 without one fits only from
     zero (the warm start is refused at 1500), so the cold start runs
-    first and a fit it rescues is unchanged.
+    first and a fit it rescues is unchanged. The warm start also fits
+    raw breast-cancer's default float64 fit (l2, C 1; K 5.6e-4 against
+    the check's 6.1e-4, coefficients within S4's 3e-2 of sklearn's), so
+    L4-p's R2 refusal now holds for float32 only.
   - The float32 standardised breast-cancer l1 fit does not repeat: 40
     runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
     between 5.0e-3 and 1.31e-2 on both, so `float32-gap-bound` is 2.7e-2,

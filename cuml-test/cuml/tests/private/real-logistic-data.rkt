@@ -31,6 +31,7 @@
          (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
 
 (provide (struct-out labelled)
+         check-raw-fit
          check-raw-refusal
          check-score
          check-sklearn-optimum
@@ -154,19 +155,33 @@
       (check-true (<= (abs (- ours sklearn)) row-slack)
                   (format "correct ~a, sklearn ~a" ours sklearn)))))
 
-(define (check-raw-refusal set dt)
-  (match-define (struct* labelled ((case c) [labels labels])) set)
-  (check-exn cutoff-message (lambda () (logistic-regression-fit (on-matrix (lr-case-X c) dt) labels)))
-  (match-define (list python oracle)
-    (logistic-twin-results
-     (list (logistic-twin "cuml-fit" c dt)
-           (logistic-twin "sklearn-fit" c 'float64 #:tol (tight-tol 'float64)))))
+(define (python-and-oracle c dt)
+  (logistic-twin-results
+   (list (logistic-twin "cuml-fit" c dt)
+         (logistic-twin "sklearn-fit" c 'float64 #:tol (tight-tol 'float64)))))
+
+(define (check-python-off-optimum python oracle dt)
   (define gap
     (relative-gap (append (decoded dt (hash-ref python 'coef_bits))
                           (decoded dt (hash-ref python 'intercept_bits)))
                   (gauged-sklearn oracle)))
   (check-true (> gap (default-tol-cap dt))
               (format "Python cuML's point: coef gap ~a (cap ~a)" gap (default-tol-cap dt))))
+
+(define (check-raw-refusal set dt)
+  (match-define (struct* labelled ((case c) [labels labels])) set)
+  (check-exn cutoff-message (lambda () (logistic-regression-fit (on-matrix (lr-case-X c) dt) labels)))
+  (match-define (list python oracle) (python-and-oracle c dt))
+  (check-python-off-optimum python oracle dt))
+
+(define (check-raw-fit set dt)
+  (match-define (struct* labelled ((case c) [labels labels])) set)
+  (define r (logistic-regression-fit (on-matrix (lr-case-X c) dt) labels))
+  (match-define (list python oracle) (python-and-oracle c dt))
+  (define gap (relative-gap (gauged-fit (fit-parts r)) (gauged-sklearn oracle)))
+  (check-true (<= gap (default-tol-cap dt))
+              (format "coef gap to sklearn ~a (cap ~a)" gap (default-tol-cap dt)))
+  (check-python-off-optimum python oracle dt))
 
 (define (check-score set)
   (match-define (struct* labelled ((case c) [labels labels])) set)
