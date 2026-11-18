@@ -19,12 +19,13 @@
 (define (stamps span seed)
   (define normal (normal-source seed))
   (define uniform (uniform-source (add1 seed)))
-  (for/lists (X y)
-             ([_ (in-range 400)])
-             (define a (normal))
-             (define t (* span (uniform)))
-             (values (list a (+ 1.7e9 t))
-                     (if (positive? (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2))) 1 0))))
+  (define rows
+    (for/list ([_ (in-range 400)])
+      (define a (normal))
+      (define t (* span (uniform)))
+      (cons (list a (+ 1.7e9 t))
+            (if (positive? (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2))) 1 0))))
+  (values (map car rows) (map cdr rows)))
 
 (define (residual-at r X y penalty tol #:fit-intercept [fi #t])
   (residual-of X
