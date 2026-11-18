@@ -102,8 +102,8 @@
         (row "V5 matrix"
              "y-pred: expected rank 2, got rank 1"
              (lambda () (mean-squared-error Y (blank-vector 4 'float64))))
-        (row "V6 mat"
-             "y-pred: expected 4 mat, got 3"
+        (row "V6 rows"
+             "y-pred: expected 4 rows, got 3"
              (lambda () (mean-squared-error Y (blank-matrix 3 2 'float64))))
         (row "V6 columns"
              "y-pred: expected 2 columns, got 3"
@@ -111,7 +111,7 @@
         (row "V7 matrix"
              "y-pred: expected row-major, got col-major 4x2"
              (lambda () (mean-squared-error Y (blank-matrix 4 2 'float32 #:layout 'col-major))))
-        (row "V8 mat"
+        (row "V8 rows"
              "y-true: expected at least 1 row, got 0"
              (lambda () (mean-squared-error (blank-matrix 0 2 'float64) (blank-matrix 0 2 'float64))))
         (row "V8 columns"

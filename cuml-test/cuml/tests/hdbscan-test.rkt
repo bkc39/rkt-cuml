@@ -90,7 +90,7 @@
   (define single (fitted-of rows #:options (hasheq 'allow-single-cluster #t)))
   (check-equal? (fitted-labels single) (make-list 100 0))
   (check-equal? (fitted-probabilities single) (make-list 100 1.0))
-  (test-case "repeat-each x10 lambdas are finite"
+  (test-case "dup x10 lambdas are finite"
     (check-true (andmap (lambda (l) (<= l flt-max))
                         (fitted-lambdas (fitted-of (repeat-each (dataset 'b50) 10)))))))
 

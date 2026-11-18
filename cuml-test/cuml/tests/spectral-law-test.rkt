@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in cuml/tests/private/common-data mat)
-         (only-in racket/function curry curryr)
+(require (only-in racket/function curry curryr)
          (only-in racket/list count range shuffle take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true fail test-case)
@@ -167,6 +166,7 @@
                        spectral-clustering-fit
                        spectral-clustering-fit-graph
                        spectral-clustering-result-labels)
+              (only-in cuml/tests/private/common-data mat)
               (only-in cuml/tests/private/spectral-data
                        graph->vectors
                        graph-n
