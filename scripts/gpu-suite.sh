@@ -76,7 +76,7 @@ done
 
 echo "== Racket tests"
 raco make -v cuml-lib/cuml/main.rkt scripts/check-layout.rkt
-raco test --process --timeout 45 cuml-test >"$racket_log" 2>&1 || {
+raco test --process --timeout 45 cuml-test cuml-glmnet-test >"$racket_log" 2>&1 || {
   cat "$racket_log"
   exit 1
 }

@@ -15,6 +15,14 @@
       url = "github:bkc39/datasets/7c95ced319b8d76a0f437e070c3e8ffad6d30e56";
       flake = false;
     };
+    # A test-only oracle: cuml-glmnet-test's parity tests against glmnet's
+    # coordinate descent. Its Racket dependencies are rkt-raft's pins.
+    glmnet.url = "github:bkc39/glmnet/779a706b021e1cea74e7c127e555eb92a3fdeb52";
+    glmnet.inputs.nixpkgs.follows = "nixpkgs";
+    glmnet.inputs.rkt-polars.follows = "rkt-raft/rkt-polars";
+    glmnet.inputs.datasets-src.follows = "rkt-raft/datasets-src";
+    glmnet.inputs.data-frame-src.follows = "rkt-raft/data-frame-src";
+    glmnet.inputs.al2-test-runner-src.follows = "rkt-raft/al2-test-runner-src";
   };
 
   outputs =
@@ -23,6 +31,7 @@
       nixpkgs,
       treefmt-nix,
       rkt-raft,
+      glmnet,
     }:
     let
       system = "x86_64-linux";
@@ -48,6 +57,7 @@
         "cuml-lib"
         "cuml-doc"
         "cuml-test"
+        "cuml-glmnet-test"
         "cuml"
       ];
       cumlPackageNames = lib.concatStringsSep " " cumlPackages;
@@ -63,6 +73,7 @@
       racket = pkgs.racket;
 
       raft = rkt-raft.packages.${system};
+      glmnetNative = glmnet.packages.${system}.native;
       raftInputs = rkt-raft.inputs;
       inherit (raft) rapids;
       pythonEnv = raft.python-twins;
@@ -191,6 +202,17 @@
           --name datasets ${raftInputs.datasets-src}/datasets
       '';
 
+      # glmnet, cuml-glmnet-test's oracle, from a writable copy: its pre-installer
+      # stages libglmnetcompat from GLMNET_NATIVE_LIB_PATH into native-libs.
+      installGlmnet = skip: ''
+        export GLMNET_NATIVE_LIB_PATH=${glmnetNative}
+        _glmnet_src="$(mktemp -d)/glmnet"
+        cp -r ${glmnet}/glmnet "$_glmnet_src"
+        chmod -R u+w "$_glmnet_src"
+        raco pkg install --batch --deps fail --no-setup --copy --scope user ${skip} \
+          --name glmnet "$_glmnet_src"
+      '';
+
       # raft is linked from a writable copy of the whole rkt-raft tree: its
       # manual excerpts files outside raft/ (rkt-raft #23), and its
       # pre-installer stages libraftrkt into raft/native-libs. Its
@@ -234,16 +256,17 @@
           [ "$_stage_failed" = 0 ] || exit 1
           ${installThreading ""}
           ${installDocsDeps "--skip-installed"}
+          ${installGlmnet ""}
           ${installRaft "$TMPDIR/rkt-raft" ""}
           ${installCuml ""}
-          raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft datasets-core datasets-uci
+          raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft datasets-core datasets-uci glmnet
           bash scripts/pkg-deps.sh ${cumlPackageNames}
           runHook postBuild
         '';
         doCheck = true;
         checkPhase = ''
           runHook preCheck
-          raco test --process --timeout 45 cuml-test
+          raco test --process --timeout 45 cuml-test cuml-glmnet-test
           raco make -v cuml-doc/cuml/scribblings/cuml.scrbl
           racket scripts/check-layout.rkt
           raco test scripts/check-bindings.rkt
@@ -375,10 +398,10 @@
       # their path in .checkout. A shell nested in one with another pin keeps
       # its parent's home, and ids that are not 12 hex digits (a failed hash)
       # delete nothing.
-      racketHomeFor = raftSource: datasetsSource: toolsSource: ''
+      racketHomeFor = raftSource: datasetsSource: toolsSource: glmnetSource: ''
         _cache_root="''${XDG_CACHE_HOME:-$HOME/.cache}/rkt-cuml-devshell"
         _checkout_id=$(printf '%s' "$PWD" | sha256sum | cut -c1-12)
-        _pins_id=$(printf '%s\n%s\n%s' "${raftSource}" "${datasetsSource}" "${toolsSource}" | sha256sum | cut -c1-12)
+        _pins_id=$(printf '%s\n%s\n%s\n%s' "${raftSource}" "${datasetsSource}" "${toolsSource}" "${glmnetSource}" | sha256sum | cut -c1-12)
         _checkout_homes="$_cache_root/$_checkout_id"
         _parent_home="''${PLTUSERHOME:-}"
         export PLTUSERHOME="$_checkout_homes/$_pins_id"
@@ -405,12 +428,13 @@
         fi
         mkdir -p "$PLTUSERHOME"
       '';
-      racketHome = racketHomeFor rkt-raft raftInputs.datasets-src racketTools.sources;
+      racketHome = racketHomeFor rkt-raft raftInputs.datasets-src racketTools.sources glmnet;
       testHomeKey =
-        raft: datasets: tools:
+        raft: datasets: tools: glmnet:
         lib.escapeShellArg (
           racketHomeFor "/nix/store/${raft}-rkt-raft" "/nix/store/${datasets}-datasets"
             "/nix/store/${tools}-tools"
+            "/nix/store/${glmnet}-glmnet"
         );
 
       racketHomeKeys = pkgs.runCommand "rkt-cuml-racket-home-keys" { } ''
@@ -424,10 +448,11 @@
           printf '%s' "$PLTUSERHOME"
         )
         fail() { echo "$1" >&2; exit 1; }
-        key_a=${testHomeKey "a" "a" "a"}
-        key_raft=${testHomeKey "b" "a" "a"}
-        key_datasets=${testHomeKey "a" "b" "a"}
-        key_tools=${testHomeKey "a" "a" "b"}
+        key_a=${testHomeKey "a" "a" "a" "a"}
+        key_raft=${testHomeKey "b" "a" "a" "a"}
+        key_datasets=${testHomeKey "a" "b" "a" "a"}
+        key_tools=${testHomeKey "a" "a" "b" "a"}
+        key_glmnet=${testHomeKey "a" "a" "b" "b"}
 
         pin_a=$(home_in checkout-a "$key_a")
         touch "$pin_a/stamp"
@@ -450,6 +475,11 @@
         [ "$datasets_b" != "$tools_b" ] && [ "$raft_b" != "$tools_b" ] && [ "$pin_a" != "$tools_b" ] \
           || fail "a tool pin bump keeps PLTUSERHOME $tools_b"
         [ ! -e "$datasets_b" ] || fail "a tool pin bump leaves the old home $datasets_b"
+        glmnet_b=$(home_in checkout-a "$key_glmnet")
+        [ "$tools_b" != "$glmnet_b" ] || fail "a glmnet pin bump keeps PLTUSERHOME $glmnet_b"
+        [ ! -e "$tools_b" ] || fail "a glmnet pin bump leaves the old home $tools_b"
+        tools_b=$(home_in checkout-a "$key_tools")
+        [ ! -e "$glmnet_b" ] || fail "a glmnet pin change back leaves the old home $glmnet_b"
 
         [ "$(dirname "$pin_a")" = "$root/$(basename "$(dirname "$pin_a")")" ] \
           || fail "homes are not <checkout>/<pins> under $root: $pin_a"
@@ -508,10 +538,12 @@
             set -e
             ${installThreading "--skip-installed"}
             ${installDocsDeps "--skip-installed"}
+            ${installGlmnet "--skip-installed"}
             ${installRaft "$PLTUSERHOME/${baseNameOf (toString rkt-raft)}" "--skip-installed"}
             ${installCuml "--skip-installed"}
             RAFT_KMEANS_CANARY=${raft.kmeans-canary}/lib/libkmeans_canary.so \
               raco setup -j 4 --pkgs raft-x86_64-linux raft datasets-core datasets-uci threading-doc
+            raco setup -j 4 --no-docs --pkgs glmnet
             raco setup -j 4 --no-docs --pkgs ${cumlPackageNames}
           )
           _setup_rc=$?
@@ -522,6 +554,7 @@
           fi
         fi
         export RAFT_NATIVE_LIB_PATH=${raft.shim}
+        export GLMNET_NATIVE_LIB_PATH=${glmnetNative}
       '';
 
       provisionTools = ''

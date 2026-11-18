@@ -33,6 +33,7 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` and `define-predictor` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, `spectral-embedding`, `linear-regression`, `ridge`, `lasso`, `elastic-net`, `logistic-regression`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
+| `cuml-glmnet-test/` | cuml-glmnet-test | the glmnet parity tests, `cuml/tests/*glmnet*` and `cuml/tests/private/*glmnet-data.rkt`; a package of its own, licensed GPL-2.0-or-later and in no catalog, because glmnet is GPL and cuml-test stays Apache-2.0 |
 | `cuml/` | cuml | the meta package: cuml-lib and cuml-doc |
 | `lint/` | cuml-lint | the `raco review` plugin for the test forms, `define-generics`, `define-hyperparameters`, `define/who`, `define-estimator`, `define-predictor`, `define-cd-result`, macro templates and constructor-renamed structs, the rule that an exported procedure taking `who` first, or one that only relays to its `/who` form, is a `define/who`, and the rule that a test title carries no spec id |
 | `shim/` | | the C++ shims, one shared library per family, and the test-only `libcumlrkt_probe.so` (`shim/probe`, a `TEST_ONLY` family) |
@@ -272,7 +273,7 @@ nix flake check --max-jobs 1 --cores 4   # the CI-equivalent; GPU cases print SK
 scripts/gpu-suite.sh               # on the GPU host: gtests (+ ASAN/UBSAN, memcheck),
                                    #   LD_BIND_NOW load, raco tests with the twin, the
                                    #   census; red on a SKIP not in allowed-skips.txt
-raco test --process --timeout 45 cuml-test
+raco test --process --timeout 45 cuml-test cuml-glmnet-test
 scripts/render-docs.sh <dir>       # the manual, red on any warning, broken or missing link
 scripts/pkg-deps.sh <pkg> ...      # raco setup's dependency check, red on an unused one too
 nix run --max-jobs 1 --cores 4 .#copy-native-libs   # restage the shims after a C++ change
@@ -282,13 +283,14 @@ cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loo
 `nix develop` exports `CUML_SHIM_TESTS`, `CUML_SHIM_SANITIZED_TESTS` (the
 gtests built with `-DCUMLRKT_SANITIZE=ON`), `CUML_ASAN_OPTIONS`,
 `CUML_UBSAN_OPTIONS`, `CUML_CUDA_DRIVER_PATH`,
-`CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH` and
+`CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH`,
+`GLMNET_NATIVE_LIB_PATH` (the glmnet oracle's Fortran library) and
 `RAFT_SHIM_PROBE` (rkt-raft's probe library, which the memory test reads the
 pool through) and `CUML_SHIM_PROBE` (the test-only `libcumlrkt_probe.so`,
 installed in the shim's `tests` output, which the model tests load; unset on
 a GPU host, they fail rather than skip). `PLTUSERHOME` is
 `~/.cache/rkt-cuml-devshell/<hash of the checkout path>/<hash of the rkt-raft,
-datasets and nix/racket-tools.nix store paths>`. Every install skips what is
+datasets, nix/racket-tools.nix and glmnet store paths>`. Every install skips what is
 already installed, so a bump of any of these pins enters a fresh, empty home. Every shell
 entry deletes everything else under this checkout's directory (old pins'
 homes), and nothing outside it, so entering a shell with a new pin deletes
@@ -375,7 +377,7 @@ replace each when raft offers a public form:
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `linear-model-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-embeddings-test`, `guide-embeddings-figures-test`, `guide-embeddings-seeds-test`, `guide-embeddings-twin-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `scores-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*`, `tsne-*`, `linear-regression-*`, `ridge-*`, `elastic-net-*` and `logistic-regression-*` tests, `preprocessing-docs-test`, `linear-model-docs-test`, `linear-model-memory-test`, the `linear-model-real-*` tests, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-embeddings-test`, `guide-embeddings-figures-test`, `guide-embeddings-seeds-test`, `guide-embeddings-twin-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `scores-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*`, `tsne-*`, `linear-regression-*`, `ridge-*`, `elastic-net-*` and `logistic-regression-*` tests, `preprocessing-docs-test`, `linear-model-docs-test`, `linear-model-memory-test`, the `linear-model-glmnet*` and `logistic-regression-glmnet-*` tests, the `linear-model-real-*` tests, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -430,6 +432,15 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `blob-data` | `uniform-source seed` (a seeded uniform [0, 1) thunk on its own generator), `normal-source seed` (a seeded Box–Muller standard-normal thunk over it) and `centred-blobs centres per-group seed` (float32 Gaussian rows around each centre, and their group labels) |
 | `guide-data` | `evaluated-chapter name` (a guide example chapter's `examples` forms evaluated in order in a `make-cuml-eval` sandbox that shares `cuml`, `pict` and `raft` with the test; returns the evaluator and each block's values; `#:through name` stops after the block that defines `name`), `chapter-file path ...` (a file under the guide's collection directory), `embeddings-pin key` (the Embeddings chapter's pinned values, one table that its printed blocks and its prose are checked against), `example-blocks` (the forms of each `examples` block of a read document), `read-document` (a `.scrbl` file read as a datum), `flattened-text` (a file's text with each whitespace run one space), `check-scored ids labels columns text` (a clustering's sorted table, its ARI against `table-ari`, both rounded to `text`), `misplaced-by-class` (per class, the labels that differ from the renumbered classes) and `mismatches` (their sum), `drawable-label?` (a label id the figures' palette draws, or noise), the figure pixels (`pixels`, optionally a top-left region; `blended`, a palette colour at the plots' alpha; `close-to?`, `painted`, `drawn?`; `noise-shade?`, a pixel of the noise grey over white at half coverage or more, which the noise checks count against the same plot without noise), `scaled-matrix` (a dataset's columns standardized on the device), `table-ari` (the exact rational adjusted Rand index of a host table), `cluster-columns` (a contingency table's columns, sorted, so a renumbering moves no pin), `host` (a device vector's first n values), `boundary-margin` (a number's distance to the nearest rounding boundary at some places); the guide's own `class-ids`, `counts-of` and `rounded` come from `guide/helpers.rkt` |
 | `python-env` | `run-twin script input` (in.json to out.json), `run-cases script cases` (`run-twin` of `(hasheq 'cases cases)`, its `results`), `test-twin` (probes `import cuml` on first use, not at load), `twin-params theirs unbound` (a twin's parameters under Racket names, without `verbose`, `output-type` and `unbound`) |
+
+cuml-glmnet-test's, in `cuml-glmnet-test/cuml/tests/private/` (its tests
+require cuml-test's modules by collection path):
+
+| Module | Bindings |
+|---|---|
+| `glmnet-data` | glmnet (bkc39/glmnet, coordinate descent on R glmnet's Fortran, a test-only flake input) as an oracle at `#:standardize? #f`: `glmnet-binomial` and `glmnet-multinomial` (an `lr-case` and a `setting` at λ = 1/(C·W), α the l1 share: 0 for l2, 1 for l1; thresh 1e-20, 1e-18 for the multinomial, which on iris l1 at C 1 converges no tighter), `glmnet-gaussian c alpha l1-ratio` (λ = alpha·r + s·alpha·(1 − r), α = alpha·r/λ, s the weighted population sd of y, centred with an intercept: glmnet divides the whole penalty by s, so its ridge part is off by s otherwise; cuML's ridge alpha is this alpha times W; thresh 1e-26, within 1e-12 of the exact optimum on the `law-cases`); glmnet takes no weights, so integer weights are replicated rows, and `whole-weighted` scales a case's dyadic weights by 64 to integers; `narrowed-lr-case` rounds an `lr-case`'s rows to a dtype (`rounded-case` does an `lcase`); `trial c #:Cs #:float32 #:float64 #:default` (a case, its C grid, the tight-tol gap bound per dtype, `bound-of`, and `#f` or a procedure from a dtype to the default-tol fit's bound, `default-bound`), `trial-case`, `trial-Cs` |
+| `gaussian-glmnet-data` | `check-gaussian` (per setting, lasso, elastic-net and ridge: float64 against `glmnet-gaussian`, float32 against `glmnet-gaussian` on the float32-rounded rows, each within its trial's bound, and the default-tol fit within `default-bound`), `law-trials shapes` (the `law-cases` draws of those shapes and the weighted draws with their weights scaled by `whole-weighted`, weighted only up to 1000 rows) |
+| `logistic-glmnet-data` | `check-binomial` and `check-multinomial`: per setting, the float64 fit against glmnet's and the float32 fit against the float64 one, each within its trial's bound; multinomial coefficients uncentred and intercepts centred, and the probabilities |
 
 `hyperparameters-test` and `estimator-support-test` define their own tables
 (`widget-params`, `gadget-params`) and estimators to test the macros apart

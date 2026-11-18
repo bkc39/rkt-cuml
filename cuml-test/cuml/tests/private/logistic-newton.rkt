@@ -3,7 +3,8 @@
 (require (only-in racket/list argmax make-list range take)
          (only-in "exact-algebra.rkt" dot))
 
-(provide newton-coef)
+(provide newton-coef
+         newton-flat)
 
 (define newton-iterations 100)
 (define newton-step-floor 1e-15)
@@ -41,8 +42,8 @@
   (vector->list x))
 
 ;; The float64 optimum of (1/m) sum_i l_i + lam/2 |coef|^2 for binary labels y in {0, 1},
-;; the intercept unpenalised; the coefficients only.
-(define (newton-coef X y #:lam lam #:fit-intercept fi)
+;; the intercept unpenalised: the coefficients, then the intercept when fi.
+(define (newton-theta X y #:lam lam #:fit-intercept fi)
   (define p (length (car X)))
   (define rows
     (for/list ([r (in-list X)])
@@ -76,5 +77,15 @@
     (define next (map - theta step))
     (if (or (>= iteration newton-iterations)
             (< (apply max (map abs step)) (* newton-step-floor (apply max 1e-300 (map abs next)))))
-        (take next p)
+        next
         (loop next (add1 iteration)))))
+
+(define (newton-coef X y #:lam lam #:fit-intercept fi)
+  (take (newton-theta X y #:lam lam #:fit-intercept fi) (length (car X))))
+
+;; The coefficients then the intercept, 0.0 without one.
+(define (newton-flat X y #:lam lam #:fit-intercept fi)
+  (define theta (newton-theta X y #:lam lam #:fit-intercept fi))
+  (if fi
+      theta
+      (append theta '(0.0))))
