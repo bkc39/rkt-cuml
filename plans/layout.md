@@ -1975,6 +1975,11 @@ scratch, the source is `cpp/src/glm/qn/`.
     1000, refused from zero at 4000); float64 without one fits only from
     zero (the warm start is refused at 1500), so the cold start runs
     first and a fit it rescues is unchanged.
+  - The float32 standardised breast-cancer l1 fit does not repeat: 40
+    runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
+    between 5.0e-3 and 1.31e-2 on both, so `float32-gap-bound` is 2.7e-2,
+    twice the worst. The logistic twin file and the float32 breast-cancer
+    file are split so each runs in about 25 s at `--timeout 45`.
   - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
     median coefficient error of the 541 restarted fits only 1.49×
     (1.65× over change and line-search stops), short of the 2× bar, at

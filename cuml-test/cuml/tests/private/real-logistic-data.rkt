@@ -42,7 +42,7 @@
           classes))
 
 (define stationary-bound 1e-7)
-(define float32-gap-bound 1e-2)
+(define float32-gap-bound 2.7e-2)
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
 
