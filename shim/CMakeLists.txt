@@ -112,6 +112,7 @@ cumlrkt_family(linear_model
           linear_model/src/logistic_apply.cpp linear_model/src/logistic_device.cu
           linear_model/src/logistic_apply_device.cu
           linear_model/src/logistic_resolve.cpp
+          linear_model/src/logistic_solve.cpp
           linear_model/src/logistic_weights.cpp
           linear_model/src/mbsgd.cpp linear_model/src/mbsgd_device.cu
           common/src/labels.cu

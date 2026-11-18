@@ -67,6 +67,12 @@ void stage_rows(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                 T* out);
 
 template <typename T>
+void stage_centred_rows(const raft::handle_t& handle,
+                        const matrix<T, int64_t>& x, row_selection rows,
+                        const int64_t* kept, int64_t p, const int* shift,
+                        const double* mean, T* out);
+
+template <typename T>
 void staged_targets(const raft::handle_t& handle, const int32_t* codes,
                     const double* weights, double scale, row_selection rows,
                     T* y, T* w);

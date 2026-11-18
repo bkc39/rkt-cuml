@@ -1955,6 +1955,28 @@ scratch, the source is `cpp/src/glm/qn/`.
 - **L4-p.** Raw breast-cancer is refused (R2): Python cuML's point there is
   off the float64 oracle by more than S4's cap (measured 0.98 f64, 0.99
   f32, against 3e-2 and 8e-2).
+- **Close-out B1 (#127, #126, #125, 2026-11-18).**
+  - #127: `label_classes` returns a device y's sorted classes, so a
+    class-weight hash on device labels moves O(k) to the host, not y.
+  - #126: a cutoff whose kept spreads differ by more than 2^8 advises
+    "standardise the columns". A fit the check refuses is solved once more
+    (`logistic_solve.cpp`, `rescued`): kept columns centred with
+    fit-intercept (means folded into the intercept), each staged by its own
+    power of two under `'none` (the loss depends only on Xw), the shared
+    exponent otherwise; without fit-intercept only the per-column staging,
+    only under `'none`. The answer is mapped back to the first solve's
+    coordinates and passes the same check there, or the first refusal
+    stands. n-iter counts both solves. Fits the first solve accepts run
+    the same code as before, bitwise. Epoch-second timestamps over a
+    minute (offset 1.7e9) now fit. Raw breast-cancer is separable: under
+    `'none` float32 with an intercept and float64 without one fit to
+    K ≤ 1e-7·max(F, 1); float64 with an intercept is still refused at
+    max-iter 4000 (the rescue's F falls slowly toward 0).
+  - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
+    median coefficient error of the 541 restarted fits only 1.49×
+    (1.65× over change and line-search stops), short of the 2× bar, at
+    0.16× the fit's iterations; each restart stops on the change test
+    again (issuecomment-6985014426).
 - **Deviations accepted.** Missing classes weigh 1 (L4-r); house wording
   for the y length, negative weights, zero weight sum and #24; a
   column-reach cap in place of `shared_cap`; Racket refusals raise

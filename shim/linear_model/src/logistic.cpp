@@ -28,6 +28,7 @@
 #include "logistic_device.hpp"
 #include "logistic_fit.hpp"
 #include "logistic_resolve.hpp"
+#include "logistic_solve.hpp"
 #include "logistic_weights.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/view.hpp"
@@ -36,7 +37,6 @@ namespace cumlrkt::glm::logistic {
 
 namespace {
 
-constexpr double change_tol_per_tol = 0.01;
 constexpr double unstaged_spread_least = 0x1p-8;
 constexpr double unstaged_spread_most = 0x1p8;
 constexpr double float32_l2_most = 0x1p21;
@@ -55,33 +55,6 @@ struct solved_fit {
   buffer<T> coef;
   buffer<T> intercept;
   int32_t n_iter;
-};
-
-template <typename T>
-struct staged_fit {
-  std::optional<buffer<T>> copied;
-  T* source;
-  buffer<T> y;
-  std::optional<buffer<T>> w;
-  std::vector<int64_t> kept;
-  int shift;
-  penalties pen;
-  qn_shape shape;
-  std::vector<double> sigma;
-  std::vector<double> mean;
-
-  T* x() {
-    return copied ? copied->data() : source;
-  }
-  T* weights() {
-    return w ? w->data() : nullptr;
-  }
-};
-
-template <typename T>
-struct qn_solution {
-  buffer<T> params;
-  int n_iter;
 };
 
 penalties penalties_of(const fit_options& o) {
@@ -223,22 +196,6 @@ solved_fit<T> closed_form(const raft::handle_t& handle,
   return {zeroed<T>(outputs * x.d, stream), to_device(b, stream), 0};
 }
 
-ML::GLM::qn_params qn_params_of(const fit_options& o, int64_t k, penalties p) {
-  ML::GLM::qn_params q;
-  q.loss = k == 2 ? ML::GLM::QN_LOSS_LOGISTIC : ML::GLM::QN_LOSS_SOFTMAX;
-  q.penalty_l1 = p.l1;
-  q.penalty_l2 = p.l2;
-  q.grad_tol = o.tol;
-  q.change_tol = o.tol * change_tol_per_tol;
-  q.max_iter = o.max_iter;
-  q.linesearch_max_iter = o.linesearch_max_iter;
-  q.lbfgs_memory = o.lbfgs_memory;
-  q.verbose = quiet_level;
-  q.fit_intercept = o.fit_intercept;
-  q.penalty_normalized = o.normalized;
-  return q;
-}
-
 template <typename T>
 staged_fit<T> staged_of(const raft::handle_t& handle,
                         const matrix<T, int64_t>& x, const fit_options& options,
@@ -292,32 +249,21 @@ staged_fit<T> staged_of(const raft::handle_t& handle,
 }
 
 template <typename T>
-qn_solution<T> solve(const raft::handle_t& handle, staged_fit<T>& st,
-                     const fit_options& options) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const qn_shape& shape = st.shape;
-  buffer<T> params =
-      zeroed<T>((shape.p + (shape.fit_intercept ? 1 : 0)) * shape.k, stream);
-  T objective{0};
-  int n_iter = 0;
-  ML::GLM::qnFit<T, int>(handle, qn_params_of(options, shape.classes, st.pen),
-                         st.x(), false, st.y.data(), static_cast<int>(shape.m),
-                         static_cast<int>(shape.p),
-                         static_cast<int>(shape.classes), params.data(),
-                         &objective, &n_iter, st.weights());
-  settle(handle);
-  require_finite_solution(params.data(), static_cast<int64_t>(params.size()),
-                          stream);
-  const std::vector<T> host = to_host(params, stream);
-  const solve_check check{shape, st.sigma, st.mean, st.pen, n_iter};
-  const resolution r = resolution_of(
-      residuals_of<T>(handle, st.x(), st.y.data(), st.weights(), params.data(),
-                      shape),
-      std::vector<double>(host.begin(), host.end()), options, check);
-  if (!r.resolved()) {
-    refuse_cutoff(r, options, check);
+qn_solution<T> solve(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                     row_selection rows, const column_stats& stats,
+                     staged_fit<T>& st, const fit_options& options) {
+  attempt<T> plain = attempted<T>(handle, st.x(), st.y.data(), st.weights(),
+                                  {st.shape, st.sigma, st.mean, st.pen, 0},
+                                  options);
+  if (plain.r.resolved()) {
+    return std::move(plain.solution);
   }
-  return {std::move(params), n_iter};
+  std::optional<qn_solution<T>> rescue =
+      rescued<T>(handle, x, rows, stats, st, plain, options);
+  if (!rescue) {
+    refuse_cutoff(plain.r, options, plain.check);
+  }
+  return std::move(*rescue);
 }
 
 template <typename T>
@@ -352,7 +298,8 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     return closed_form<T>(handle, wt, codes, k, x, options.fit_intercept);
   }
   staged_fit<T> st = staged_of<T>(handle, x, options, wt, codes, k, stats);
-  const qn_solution<T> solution = solve<T>(handle, st, options);
+  const qn_solution<T> solution =
+      solve<T>(handle, x, rows_in(wt, x.n), stats, st, options);
   return unstaged<T>(handle, st, solution, x.d);
 }
 
