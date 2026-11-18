@@ -1,6 +1,8 @@
 #lang racket/base
 
-(require (only-in cuml/cluster/private/blobs blobs)
+(require (only-in cuml/cluster kmeans-result)
+         (only-in cuml/cluster/private/blobs blobs)
+         (only-in racket/match match-define)
          (only-in racket/list take)
          (only-in raft
                   device-matrix
@@ -8,7 +10,8 @@
                   device-vector
                   device-vector->list
                   list*->device-matrix
-                  list->device-vector))
+                  list->device-vector)
+         (only-in "exact-algebra.rkt" [inexact-rows floats]))
 
 (provide argmin-row
          blank-matrix
@@ -17,20 +20,21 @@
          cell-means
          close?
          cyclic-weights
+         deviation
          dtypes
          far-start
          first-rows
-         floats
+         grid-weights
          grid64
          grid64-means
          grid64-start
          grid8
          grid8-labels
-         grid-weights
          host
          host-vector
          mat
          norm2
+         outcome
          scaled-close?
          shift
          squared-distance
@@ -70,10 +74,6 @@
 
 (define grid64-start (shift offsets '(1 1)))
 (define grid64-means (shift offsets '(3 3)))
-
-(define (floats rows)
-  (for/list ([r (in-list rows)])
-    (map exact->inexact r)))
 
 (define (mat rows dt)
   (list*->device-matrix rows #:dtype dt))
@@ -128,3 +128,10 @@
 
 (define (scaled-close? actual expected scale tol)
   (<= (abs (- actual expected)) (* tol (max 1.0 scale))))
+
+(define (deviation a b)
+  (/ (abs (- a b)) (max 1.0 (abs b))))
+
+(define (outcome r)
+  (match-define (kmeans-result C labels inertia n-iter) r)
+  (list (host C) (host-vector labels) inertia n-iter))

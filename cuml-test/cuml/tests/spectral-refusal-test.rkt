@@ -17,7 +17,14 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/refusal-rows.rkt" check-row norm-message row row-id with-row)
+         (only-in "private/refusal-rows.rkt"
+                  check-row
+                  grid
+                  norm-message
+                  row
+                  row-id
+                  with-bad-row
+                  with-row)
          (only-in "private/spectral-data.rkt"
                   edited-vectors
                   graph
@@ -26,15 +33,8 @@
                   graph-labels
                   graph-map-vals
                   labels
-                  set-entry))
-
-(define (grid dt [n 10])
-  (list*->device-matrix (for/list ([i (in-range n)])
-                          (list (add1 i) (* 2 i)))
-                        #:dtype dt))
-
-(define (with-bad-row bad)
-  (with-row bad #:then '((7 7) (8 9) (9 1) (3 3))))
+                  set-entry)
+         (only-in "private/spectral-embedding-refusal-data.rkt" index-message))
 
 (define tol-most "eigen-tol: expected at most 3.4028234663852886e+38, got ")
 
@@ -105,9 +105,6 @@
 
 (define (fit-vectors rows cols vals [n ring-n])
   (spectral-clustering-fit-graph rows cols vals n))
-
-(define (index-message name entry got)
-  (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))
 
 (define (weight-message entry got)
   (format "vals: entry ~a: expected a finite weight of at least 0, got ~a" entry got))

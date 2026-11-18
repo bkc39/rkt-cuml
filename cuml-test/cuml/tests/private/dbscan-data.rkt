@@ -4,7 +4,8 @@
          (only-in racket/list remove-duplicates)
          (only-in racket/match match)
          (only-in racket/math sqr)
-         (only-in raft device-vector->list list*->device-matrix list->device-vector))
+         (only-in raft device-vector->list list*->device-matrix list->device-vector)
+         (only-in "kmeans-data.rkt" mat vec))
 
 (provide (struct-out expected)
          canonical
@@ -16,20 +17,20 @@
          euclidean-within
          first-copies
          fitted-lists
-         grid-labels
          grid-core
+         grid-labels
          grid-rows
-         grid-weights
          grid-weighted-core
+         grid-weights
          integer-grid
-         mat
+         noise
          pick
          repeat-rows
          result->lists
          same-partition?
          seeded
-         structure-problems
-         vec)
+         squared-distance
+         structure-problems)
 
 (struct expected (labels core options))
 
@@ -38,12 +39,6 @@
 (define grid-core '(2 4))
 (define grid-weights '(4 1 1 1 1 1 1 1))
 (define grid-weighted-core '(0 1 2 4))
-
-(define (mat rows dt)
-  (list*->device-matrix rows #:dtype dt))
-
-(define (vec xs dt)
-  (list->device-vector xs #:dtype dt))
 
 (define (result->lists r)
   (list (device-vector->list (dbscan-result-labels r))
@@ -212,3 +207,9 @@
                             (> (abs (- (cosine-distance row other) eps)) margin)))
                      (grow (cons row rows) (add1 count))
                      (grow rows count))])))))
+
+(define (noise labels)
+  (for/list ([l (in-list labels)]
+             [i (in-naturals)]
+             #:when (= l -1))
+    i))

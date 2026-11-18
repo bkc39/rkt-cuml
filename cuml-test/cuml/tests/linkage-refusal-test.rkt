@@ -15,12 +15,7 @@
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/linkage-data.rkt" connectivities linked-lists)
-         (only-in "private/refusal-rows.rkt" check-row norm-message row row-id with-row))
-
-(define (grid dt)
-  (list*->device-matrix (for/list ([i (in-range 10)])
-                          (list (add1 i) (* 2 i)))
-                        #:dtype dt))
+         (only-in "private/refusal-rows.rkt" check-row grid norm-message row row-id with-row))
 
 (define pairwise-message "X: pairwise connectivity holds at most 46340 rows, got 46341; use knn")
 

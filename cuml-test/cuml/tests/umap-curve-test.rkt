@@ -5,7 +5,8 @@
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in "private/python-env.rkt" run-cases test-twin))
+         (only-in "private/python-env.rkt" run-cases test-twin)
+         (only-in "private/metrics-data.rkt" relative))
 
 (define-runtime-path twin "python/umap_twin.py")
 
@@ -14,9 +15,6 @@
               [m (in-list '(0.0 0.001 0.01 0.05 0.1 0.25 0.5 0.99))]
               #:when (<= m s))
     (cons s m)))
-
-(define (relative ours theirs)
-  (/ (abs (- ours theirs)) (abs theirs)))
 
 (define curve-fit-bound (sqrt 1.49012e-8))
 (define tight-bound 1e-7)

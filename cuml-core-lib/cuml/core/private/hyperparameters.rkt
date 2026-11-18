@@ -17,9 +17,13 @@
          bound-params
          define-codes
          define-hyperparameters
+         flag
          given-hash)
 
 (define absent (string->uninterned-symbol "absent"))
+
+(define (flag v)
+  (if v 1 0))
 
 (define (given-hash keys arguments)
   (for/hasheq ([key (in-list keys)]

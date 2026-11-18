@@ -32,7 +32,8 @@
                   numeric-selections
                   selection
                   selection-name
-                  synthetic-table))
+                  synthetic-table)
+         (only-in "private/exact-algebra.rkt" float32-of))
 
 (define dtypes '(float32 float64))
 
@@ -51,9 +52,6 @@
                                  tooth-growth
                                  us-arrests
                                  wine)))
-
-(define (float32-of v)
-  (flsingle (real->double-flonum v)))
 
 (define (converted-rows t columns element-type)
   (host-rows t

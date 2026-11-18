@@ -19,22 +19,18 @@
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/hdbscan-data.rkt" dataset)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
+         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/program.rkt" run-program)
-         (only-in "private/refusal-rows.rkt" check-row norm-message row row-id with-row))
-
-(define (grid dt [n 10])
-  (list*->device-matrix (for/list ([i (in-range n)])
-                          (list (add1 i) (* 2 i)))
-                        #:dtype dt))
-
-(define (with-bad-row bad)
-  (with-row bad #:then '((7 7) (8 9) (9 1) (3 3))))
-
-(define (float-most name got)
-  (format "~a: expected at most 3.4028234663852886e+38, got ~a" name got))
+         (only-in "private/refusal-rows.rkt"
+                  check-row
+                  float-most
+                  grid
+                  norm-message
+                  row
+                  row-id
+                  with-bad-row
+                  with-row))
 
 (define (fit-rows)
   (define X (grid 'float32))

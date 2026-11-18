@@ -17,7 +17,8 @@
                   r2-gap
                   regression-cases)
          (only-in "private/scaler-data.rkt" rows-of)
-         (only-in "private/scores-data.rkt" accuracy integer-weights label-cases mse r2))
+         (only-in "private/scores-data.rkt" accuracy integer-weights label-cases mse r2)
+         (only-in "private/linear-data.rkt" columns-of))
 
 (define (relative-gap ours exact)
   (/ (abs (- (inexact->exact ours) exact)) exact))
@@ -136,9 +137,6 @@
     (for/list ([j (in-range d)])
       (+ (* 10.0 j) (next)))))
 
-(define (columns xss)
-  (apply map list xss))
-
 (test-gpu "a matrix's error is within 1e-14 of the mean of its columns' errors"
   (for* ([dt (in-list '(float32 float64))]
          [weighted? (in-list '(#f #t))]
@@ -148,8 +146,8 @@
     (define w (and weighted? (integer-weights 300 d)))
     (define whole (mse y p w #:dtype dt))
     (define by-column
-      (mean (for/list ([a (in-list (columns y))]
-                       [b (in-list (columns p))])
+      (mean (for/list ([a (in-list (columns-of y))]
+                       [b (in-list (columns-of p))])
               (mse a b w #:dtype dt))))
     (check-= whole by-column (* 1e-14 by-column) (format "~a against ~a" whole by-column))))
 

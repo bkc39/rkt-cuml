@@ -37,12 +37,12 @@
          (only-in "linear-data.rkt"
                   case-fit
                   columns-of
+                  law-case
                   lcase
+                  lcase-X
                   lcase-name
                   lcase-w
-                  lcase-X
                   lcase-y
-                  law-case
                   max-abs
                   on-matrix
                   on-vector
@@ -54,7 +54,8 @@
          (only-in "metrics-data.rkt" exact-r2 r2-bound r2-gap)
          (only-in "ridge-data.rkt" check-ridge-fit ridge-case-fit solvers))
 
-(provide offset-law-arms
+(provide flonum-exact
+         offset-law-arms
          real-lcase
          set-data
          test-real-set

@@ -23,6 +23,7 @@
                   round-to
                   rows->matrix
                   standardisation-errors
+                  statistics
                   transpose
                   ulp
                   unit-roundoff))
@@ -32,12 +33,6 @@
 (define (fit-with X flags)
   (match-define (list with-mean with-std) flags)
   (standard-scaler-fit X #:with-mean with-mean #:with-std with-std))
-
-(define (statistics result)
-  (for/list ([v (list (standard-scaler-result-mean result)
-                      (standard-scaler-result-var result)
-                      (standard-scaler-result-scale result))])
-    (and v (device-vector->list v))))
 
 (test-gpu "L2, L3: transform and inverse equal the host oracles bitwise, every dtype, flag pair and size"
   (for* ([dt (in-list '(float32 float64))]

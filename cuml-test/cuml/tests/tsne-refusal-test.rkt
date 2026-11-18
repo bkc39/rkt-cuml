@@ -19,13 +19,15 @@
                   cosine-message
                   large-message
                   large-row
+                  least-rate-message
                   listed-X
                   nan-message
                   nan-row
                   normless-message
+                  tiny-X
                   tiny-with
                   zero-row)
-         (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
+         (only-in "private/refusal-rows.rkt" check-row float-most row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
          (only-in "private/tsne-data.rkt" diverged-rx embedded)
          (only-in "private/umap-data.rkt" finite-rows? fixture-X fixture-rows tiny))
@@ -33,15 +35,6 @@
 (define small (hasheq 'perplexity 5.0))
 
 (define pool-device 0)
-
-(define (tiny-X)
-  (fixture-X tiny))
-
-(define (beyond-float name v)
-  (format "~a: expected at most 3.4028234663852886e+38, got ~a" name v))
-
-(define (least-rate-message v)
-  (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))
 
 (define (parameter-rows)
   (list
@@ -64,14 +57,14 @@
    (row "f7 float"
         "perplexity: expected a finite value above 1 in float32, got 1.000000001"
         (hasheq 'perplexity (+ 1.0 1e-9)))
-   (row "f7 most" (beyond-float 'perplexity "1e+39") (hasheq 'perplexity 1e39))
+   (row "f7 most" (float-most 'perplexity "1e+39") (hasheq 'perplexity 1e39))
    (row "f8"
         "early-exaggeration: expected a finite value of at least 1, got 0.5"
         (hasheq 'early-exaggeration 0.5))
    (row "f8 nan"
         "early-exaggeration: expected a finite value of at least 1, got nan"
         (hasheq 'early-exaggeration +nan.0))
-   (row "f8 most" (beyond-float 'early-exaggeration "1e+39") (hasheq 'early-exaggeration 1e39))
+   (row "f8 most" (float-most 'early-exaggeration "1e+39") (hasheq 'early-exaggeration 1e39))
    (row "f9" "learning-rate: expected a finite value above 0, got 0" (hasheq 'learning-rate 0.0))
    (row "f9 nan"
         "learning-rate: expected a finite value above 0, got nan"

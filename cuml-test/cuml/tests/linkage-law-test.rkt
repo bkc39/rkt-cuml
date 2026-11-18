@@ -5,8 +5,8 @@
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/dbscan-data.rkt" integer-grid mat pick same-partition? seeded)
-         (only-in "private/kmeans-data.rkt" blob-data)
+         (only-in "private/dbscan-data.rkt" integer-grid pick same-partition? seeded)
+         (only-in "private/kmeans-data.rkt" blob-data mat)
          (only-in "private/linkage-data.rkt"
                   children->labels
                   children-cophenetic

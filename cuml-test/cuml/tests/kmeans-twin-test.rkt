@@ -19,6 +19,7 @@
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   close?
+                  deviation
                   dtypes
                   host
                   host-vector
@@ -28,7 +29,7 @@
                   string-inits
                   tolerance
                   vec)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
+         (only-in "private/python-env.rkt" or-null run-twin test-twin twin-params))
 
 (define-runtime-path twin "python/kmeans_twin.py")
 
@@ -97,9 +98,6 @@
     ['overlapping (blob-data (spec-n s) (spec-d s) (spec-k s) 42 (spec-dt s) #:std 4.0)]
     [_ (blob-data (spec-n s) (spec-d s) (spec-k s) (+ (spec-seed s) 100) (spec-dt s))]))
 
-(define (or-null v)
-  (or v (json-null)))
-
 (struct run (spec X init-rows w result))
 
 (define (racket-fit s)
@@ -162,14 +160,11 @@
           'centroids (host (applied-C a))
           'sample_weight (applied-w a)))
 
-(define (relative-deviation actual expected)
-  (/ (abs (- actual expected)) (max 1.0 (abs expected))))
-
 (define (max-deviation actual-rows expected-rows)
   (for*/fold ([m 0.0])
              ([(a-row e-row) (in-parallel (in-list actual-rows) (in-list expected-rows))]
               [(a e) (in-parallel (in-list a-row) (in-list e-row))])
-    (max m (relative-deviation a e))))
+    (max m (deviation a e))))
 
 (struct fitted (labels centroids inertia n-iter))
 
@@ -203,7 +198,7 @@
   (define their-centroids (hash-ref theirs 'centroids))
   (define iter-gap (abs (- n-iter (hash-ref theirs 'n_iter))))
   (define ari (hash-ref theirs 'ari))
-  (define inertia-deviation (relative-deviation inertia (hash-ref theirs 'inertia)))
+  (define inertia-deviation (deviation inertia (hash-ref theirs 'inertia)))
   (define matched-deviation
     (paired-deviation centroids labels (hash-ref theirs 'labels) their-centroids))
   (define exact-iter? (and (eq? (spec-init s) 'array) (memv (option s 'max-iter 300) '(0 1))))

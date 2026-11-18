@@ -14,11 +14,21 @@
 
 (define lambda-heads '(lambda λ))
 
-(define let-heads '(let let* letrec letrec* let-values let*-values letrec-values))
+(define let-heads
+  '(let let*
+     letrec
+     letrec*
+     let-values
+     let*-values
+     letrec-values))
 
 (define match-heads '(match match*))
 
-(define match-clause-heads '(match-lambda match-lambda* match-let match-let*))
+(define match-clause-heads
+  '(match-lambda
+     match-lambda*
+     match-let
+     match-let*))
 
 (define pattern-heads '(list list* cons vector struct* and or hash-table))
 
@@ -65,7 +75,9 @@
                 [(cons (? symbol? name) _) (list name)]
                 [(cons (? list? names) _) (filter symbol? names)]
                 [_ '()])
-              (if (list? clauses) clauses '())))
+              (if (list? clauses)
+                  clauses
+                  '())))
 
 (define (pattern-names pattern)
   (match pattern
@@ -73,7 +85,8 @@
     [(? symbol? name) (list name)]
     [(cons (or 'quote 'regexp 'pregexp) _) '()]
     [(list* (or '? 'app) _ patterns) (append-map pattern-names (proper patterns))]
-    [(cons (? (lambda (head) (memq head pattern-heads))) patterns) (append-map pattern-names (proper patterns))]
+    [(cons (? (lambda (head) (memq head pattern-heads))) patterns)
+     (append-map pattern-names (proper patterns))]
     [(cons (? symbol?) fields) (append-map field-pattern-names (proper fields))]
     [(? pair?) (append-map pattern-names (proper pattern))]
     [_ '()]))
@@ -87,7 +100,9 @@
   (append-map (match-lambda
                 [(cons pattern _) (pattern-names pattern)]
                 [_ '()])
-              (if (list? clauses) clauses '())))
+              (if (list? clauses)
+                  clauses
+                  '())))
 
 (define (head-binders datum)
   (match datum
@@ -95,8 +110,10 @@
     [(list* 'define (? symbol? name) _) (list name)]
     [(list* 'define-values (? list? names) _) (filter symbol? names)]
     [(list* (? (lambda (head) (memq head lambda-heads))) formals _) (formal-names formals)]
-    [(cons 'case-lambda clauses) (append-map (lambda (clause) (formal-names (car clause))) (filter pair? clauses))]
-    [(list* (? (lambda (head) (memq head let-heads))) (? symbol? name) clauses _) (cons name (clause-names clauses))]
+    [(cons 'case-lambda clauses)
+     (append-map (lambda (clause) (formal-names (car clause))) (filter pair? clauses))]
+    [(list* (? (lambda (head) (memq head let-heads))) (? symbol? name) clauses _)
+     (cons name (clause-names clauses))]
     [(list* (? (lambda (head) (memq head let-heads))) clauses _) (clause-names clauses)]
     [(list* (or 'for/fold 'for*/fold 'for/foldr) accumulators clauses _)
      (append (clause-names accumulators) (clause-names clauses))]
@@ -117,15 +134,21 @@
   (append (list name (symbol-append name '?) (symbol-append 'make- name))
           (for/list ([field (in-list fields)]
                      #:when (or (symbol? field) (and (pair? field) (symbol? (car field)))))
-            (symbol-append name '- (if (pair? field) (car field) field)))))
+            (symbol-append name
+                           '-
+                           (if (pair? field)
+                               (car field)
+                               field)))))
 
 (define (symbol-append . parts)
   (string->symbol (apply string-append (map symbol->string parts))))
 
 (define (defined-names datum)
   (match datum
-    [(list* (or 'struct 'define-struct) (? symbol? name) (? symbol?) (? list? fields) _) (struct-names name fields)]
-    [(list* (or 'struct 'define-struct) (? symbol? name) (? list? fields) _) (struct-names name fields)]
+    [(list* (or 'struct 'define-struct) (? symbol? name) (? symbol?) (? list? fields) _)
+     (struct-names name fields)]
+    [(list* (or 'struct 'define-struct) (? symbol? name) (? list? fields) _)
+     (struct-names name fields)]
     [(list* 'define-values (? list? names) _) (filter symbol? names)]
     [(list* (? definer?) (or (? symbol? name) (cons (? symbol? name) _)) _) (list name)]
     [_ '()]))
@@ -179,18 +202,20 @@
   (and (regexp-match? #rx"[.]rkt$" text) (not (regexp-match? #rx"/compiled/" text))))
 
 (define (copied-definitions-in roots)
-  (copied-definitions (sort (append-map (lambda (root) (find-files scanned? root)) roots)
-                            string<?
-                            #:key path->string)))
+  (copied-definitions
+   (sort (append-map (lambda (root) (find-files scanned? root)) roots) string<? #:key path->string)))
 
 (define (describe-copies group)
-  (string-join (for/list ([one (in-list group)])
-                 (format "~a:~a: ~a" (site-file one) (site-line one) (site-name one)))
-               "\n  "
-               #:before-first "copied definition: the same body after renaming, in more than one file; keep one, in the family's shared module, and require it\n  "))
+  (string-join
+   (for/list ([one (in-list group)])
+     (format "~a:~a: ~a" (site-file one) (site-line one) (site-name one)))
+   "\n  "
+   #:before-first
+   "copied definition: the same body after renaming, in more than one file; keep one, in the family's shared module, and require it\n  "))
 
 (module+ main
-  (define pools (map (lambda (pool) (regexp-split #rx":" pool)) (vector->list (current-command-line-arguments))))
+  (define pools
+    (map (lambda (pool) (regexp-split #rx":" pool)) (vector->list (current-command-line-arguments))))
   (define groups (append-map copied-definitions-in pools))
   (for-each (lambda (group) (displayln (describe-copies group))) groups)
   (unless (null? groups)

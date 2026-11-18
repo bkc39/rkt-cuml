@@ -4,7 +4,8 @@
          (only-in racket/match match match-define)
          (only-in racket/math exact-floor)
          (only-in raft list*->device-matrix list->device-vector)
-         (only-in "blob-data.rkt" uniform-source))
+         (only-in "blob-data.rkt" uniform-source)
+         (only-in "kmeans-data.rkt" [mat rows] vec))
 
 (provide accuracy
          integer-weights
@@ -15,12 +16,6 @@
          rows
          vec
          weights-of)
-
-(define (vec xs dt)
-  (list->device-vector xs #:dtype dt))
-
-(define (rows xs dt)
-  (list*->device-matrix xs #:dtype dt))
 
 (define (on xs dt)
   (match xs

@@ -6,22 +6,8 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/dbscan-data.rkt"
-                  distance-matrix
-                  fitted-lists
-                  grid-core
-                  grid-labels
-                  grid-rows
-                  grid-weighted-core
-                  grid-weights
-                  integer-grid
-                  mat
-                  pick
-                  result->lists
-                  seeded
-                  structure-problems
-                  vec)
-         (only-in "private/kmeans-data.rkt" dtypes))
+         (only-in "private/dbscan-data.rkt" distance-matrix fitted-lists grid-core grid-labels grid-rows grid-weighted-core grid-weights integer-grid pick result->lists seeded structure-problems)
+         (only-in "private/kmeans-data.rkt" dtypes mat vec))
 
 (define out-dtypes '(int32 int64))
 

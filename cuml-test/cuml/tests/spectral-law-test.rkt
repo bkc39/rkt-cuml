@@ -1,11 +1,13 @@
 #lang racket/base
 
-(require (only-in racket/function curry curryr)
+(require (only-in cuml/tests/private/kmeans-data mat)
+         (only-in "private/kmeans-data.rkt" mat)
+         (only-in racket/function curry curryr)
          (only-in racket/list count range shuffle take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true fail test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/dbscan-data.rkt" mat pick same-partition? seeded)
+         (only-in "private/dbscan-data.rkt" pick same-partition? seeded)
          (only-in "private/program.rkt" run-program)
          (only-in "private/spectral-data.rkt"
                   blobs
@@ -165,7 +167,6 @@
                        spectral-clustering-fit
                        spectral-clustering-fit-graph
                        spectral-clustering-result-labels)
-              (only-in cuml/tests/private/dbscan-data mat)
               (only-in cuml/tests/private/spectral-data
                        graph->vectors
                        graph-n

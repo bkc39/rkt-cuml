@@ -20,7 +20,7 @@
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/refusal-rows.rkt" check-row row row-call row-id row-message)
+         (only-in "private/refusal-rows.rkt" bad-X-rows check-row row row-call row-id row-message)
          (only-in "private/scaler-data.rkt" rows->matrix))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5)))
@@ -40,14 +40,6 @@
 
 (define (f15-message most got)
   (format "X: expected a squared Frobenius norm of at most ~a, got ~a" most got))
-
-(define (bad-X-rows)
-  (list (row "f1" "X: expected float32 or float64, got int32" (blank-matrix 4 3 'int32))
-        (row "f2" "X: expected rank 2, got rank 1" (blank-vector 4 'float32))
-        (row "f3"
-             "X: expected row-major, got col-major 4x3"
-             (blank-matrix 4 3 'float32 #:layout 'col-major))
-        (row "f1 before f2" "X: expected float32 or float64, got int32" (blank-vector 4 'int32))))
 
 (define (fit-X-rows)
   (append

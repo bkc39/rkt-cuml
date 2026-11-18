@@ -14,10 +14,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes)
-         (only-in "private/refusal-rows.rkt" check-row row row-call row-id))
-
-(define (other dt)
-  (if (eq? dt 'float32) 'float64 'float32))
+         (only-in "private/refusal-rows.rkt" check-row other row row-call row-id))
 
 (define (grid dt)
   (list*->device-matrix (for/list ([i (in-range 10)])

@@ -52,7 +52,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/estimator-data.rkt" printed)
+         (only-in "private/estimator-data.rkt" keywords-of printed)
          (only-in "private/kmeans-data.rkt"
                   blank-matrix
                   blob-data
@@ -63,6 +63,7 @@
                   host
                   host-vector
                   mat
+                  outcome
                   scaled-close?
                   start
                   step-weights
@@ -87,10 +88,6 @@
         (list '#:n-init 'n-init 2)
         (list '#:random-state 'random-state 7)
         (list '#:oversampling-factor 'oversampling-factor 1.5)))
-
-(define (outcome r)
-  (match-define (kmeans-result centroids labels inertia n-iter) r)
-  (list (host centroids) (host-vector labels) inertia n-iter))
 
 (define (grid8-fit [dt 'float64])
   (fit (kmeans #:n-clusters 2 #:random-state 1) (mat grid8 dt)))
@@ -323,9 +320,6 @@
                                    (cons 'fit-predict (lambda () (fit-predict f X)))
                                    (cons 'fit-transform (lambda () (fit-transform f X)))))])
     (check-released (format "~a: the device resources on device 0 were released" who) call)))
-
-(define (keywords-of proc)
-  (call-with-values (lambda () (procedure-keywords proc)) list))
 
 (define public+who
   (list (cons kmeans-fit kmeans-fit/who)

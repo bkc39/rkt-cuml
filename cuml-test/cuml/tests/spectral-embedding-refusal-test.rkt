@@ -23,6 +23,7 @@
                   listed-X
                   nan-message
                   nan-row
+                  tiny-X
                   tiny-with)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix)
@@ -33,9 +34,6 @@
 (struct X-case row (retry?))
 
 (define small (hasheq 'n-neighbors 4))
-
-(define (tiny-X)
-  (fixture-X tiny))
 
 (define (valid-X)
   (fixture-X far-blobs))

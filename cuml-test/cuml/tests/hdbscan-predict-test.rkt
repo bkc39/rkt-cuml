@@ -1,6 +1,8 @@
 #lang racket/base
 
-(require (only-in cuml native-model-release! native-model-released? with-native-models)
+(require (only-in "private/spectral-data.rkt" [repeat-each dup])
+         (only-in "private/kmeans-data.rkt" mat)
+         (only-in cuml native-model-release! native-model-released? with-native-models)
          (only-in cuml/cluster
                   hdbscan-all-points-membership-vectors
                   hdbscan-approximate-predict
@@ -17,16 +19,8 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/hdbscan-data.rkt"
-                  alternate
-                  alternate-matrix
-                  dataset
-                  dup
-                  fit-lists
-                  label-count
-                  prediction->lists))
+         (only-in "private/hdbscan-data.rkt" alternate alternate-matrix dataset fit-lists label-count prediction->lists))
 
 (define (labels-of result)
   (device-vector->list (hdbscan-result-labels result)))

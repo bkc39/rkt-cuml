@@ -15,7 +15,8 @@
                   popvars
                   squared-norm
                   svd
-                  tsvd-of))
+                  tsvd-of)
+         (only-in "private/linear-laws.rkt" gamma))
 
 (define (exact-product rows columns)
   (define exact-columns
@@ -29,9 +30,6 @@
 (define (absolute rows)
   (for/list ([row (in-list rows)])
     (map abs row)))
-
-(define (gamma m u)
-  (/ (* m u) (- 1 (* m u))))
 
 (define (product-problems got a columns u what)
   (define-values (_ m) (extents columns))

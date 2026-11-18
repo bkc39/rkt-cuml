@@ -23,10 +23,8 @@
                   fixture-X
                   fixture-rows
                   fixture-y
-                  overlap))
-
-(define (single? x)
-  (and (flonum? x) (eqv? x (flsingle x))))
+                  overlap)
+         (only-in "private/exact-algebra.rkt" single?))
 
 (test-gpu "the embedding is a fresh n×k float32 matrix, and the result keeps X and the params"
   (for* ([init (in-list '(spectral random))]

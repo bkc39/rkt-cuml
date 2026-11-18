@@ -29,6 +29,7 @@
          host-project
          host-reconstruct
          integer-fixture
+         least-magnitude
          magnitude-rows
          non-increasing?
          norm
@@ -37,6 +38,7 @@
          over-bound
          product
          tie-rows
+         unscaled
          wide-fixture)
 
 (struct fixture (name source))
@@ -178,3 +180,11 @@
                [j (in-naturals)]
                #:unless (= i j))
       (min gap (abs (- v w))))))
+
+(define (least-magnitude dt)
+  (if (eq? dt 'float32)
+      (expt 2 -149)
+      (expt 2 -1074)))
+
+(define (unscaled x by power)
+  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))

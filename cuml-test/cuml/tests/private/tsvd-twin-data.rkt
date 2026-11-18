@@ -17,7 +17,9 @@
                   reference
                   svd
                   tie-fixture
-                  tsvd-of))
+                  tsvd-of)
+         (only-in "linear-twin-data.rkt" [bits-of float-bits])
+         (only-in "pca-twin-data.rkt" twin-key))
 
 (provide (struct-out twin-case)
          float-bits
@@ -49,9 +51,6 @@
         (twin-case uniform-fixture 7)
         (twin-case tie-fixture 1)))
 
-(define (key f dt)
-  (format "~a/~a" (fixture-name f) dt))
-
 (define (width f)
   (match-define (cons first-row _) (fixture-rows f 'float64))
   (length first-row))
@@ -61,7 +60,7 @@
     (for/list ([request (in-list requests)])
       (match-define (list op (twin-case f k) dt solver) request)
       (hasheq 'op op
-              'fixture (key f dt)
+              'fixture (twin-key f dt)
               'd (width f)
               'k k
               'dtype (symbol->string dt)
@@ -70,7 +69,7 @@
     (for*/hasheq ([c (in-list twin-cases)]
                   [dt (in-list '(float32 float64))])
       (define f (twin-case-fixture c))
-      (values (string->symbol (key f dt)) (append* (fixture-rows f dt)))))
+      (values (string->symbol (twin-key f dt)) (append* (fixture-rows f dt)))))
   (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
     (run-twin twin (hasheq 'cases cases 'fixtures payload)))
   (check-equal? version "26.08.00")
@@ -93,11 +92,6 @@
              ratio
              singular
              (take (gaps (map (lambda (s) (* s s)) spectrum)) (length singular))))
-
-(define (float-bits dt xs)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([x (in-list xs)])
-    (integer-bytes->integer (real->floating-point-bytes x size) #f)))
 
 (define (ours c dt solver)
   (match-define (twin-case f k) c)

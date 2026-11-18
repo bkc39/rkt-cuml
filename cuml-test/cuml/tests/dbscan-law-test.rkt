@@ -5,27 +5,8 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/dbscan-data.rkt"
-                  cosine-cloud
-                  cosine-distance
-                  cosine-within
-                  dbscan-oracle
-                  distance-matrix
-                  euclidean-within
-                  expected
-                  expected-core
-                  expected-labels
-                  first-copies
-                  fitted-lists
-                  integer-grid
-                  mat
-                  pick
-                  repeat-rows
-                  same-partition?
-                  seeded
-                  structure-problems
-                  vec)
-         (only-in "private/kmeans-data.rkt" dtypes))
+         (only-in "private/dbscan-data.rkt" cosine-cloud cosine-distance cosine-within dbscan-oracle distance-matrix euclidean-within expected expected-core expected-labels first-copies fitted-lists integer-grid noise pick repeat-rows same-partition? seeded structure-problems)
+         (only-in "private/kmeans-data.rkt" dtypes mat vec))
 
 (define (oracle-of rows eps min-samples #:weights [weights #f])
   (dbscan-oracle (length rows)
@@ -44,12 +25,6 @@
   (define eps (* factor (cosine-distance a b)))
   (values (fitted-lists (mat (list a b) 'float32) #:eps eps #:min-samples 2 #:metric 'cosine)
           (dbscan-oracle 2 (cosine-within (vector a b) eps) 2)))
-
-(define (noise labels)
-  (for/list ([l (in-list labels)]
-             [i (in-naturals)]
-             #:when (= l -1))
-    i))
 
 (define (adjacent? labels core e)
   (match-define (expected _ _ options) e)

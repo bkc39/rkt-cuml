@@ -7,9 +7,10 @@
                   logistic-regression-result-n-iter)
          (only-in racket/list append* make-list)
          (only-in racket/match match match-define struct*)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list device-vector?)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "linear-data.rkt" by-dtype columns-of dyadic on-matrix on-vector))
+         (only-in "linear-data.rkt" by-dtype columns-of dyadic on-matrix on-vector)
+         (only-in "metrics-data.rkt" mean))
 
 (provide (struct-out lr-case)
          (struct-out lr-fit)
@@ -32,6 +33,7 @@
          flat-matrix
          gauged-fit
          gauged-sklearn
+         host
          penalty-settings
          relative-gap
          scaled-case
@@ -195,9 +197,6 @@
     [(list s) (if (> s 0) 1 0)]
     [_ (argmax-index z)]))
 
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
-
 (define (centred-vector xs)
   (define m (mean xs))
   (map (lambda (v) (- v m)) xs))
@@ -231,3 +230,8 @@
       (max m (abs (inexact->exact x)))))
   (/ (largest (map (lambda (o t) (- (inexact->exact o) (inexact->exact t))) ours theirs))
      (max (largest theirs) smallest-scale)))
+
+(define (host v)
+  (if (device-vector? v)
+      (device-vector->list v)
+      v))

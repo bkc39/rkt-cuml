@@ -6,7 +6,8 @@
                   mbsgd-regressor-result-coef
                   mbsgd-regressor-result-intercept)
          (only-in raft device-vector->list)
-         (only-in "blob-data.rkt" normal-source))
+         (only-in "blob-data.rkt" normal-source)
+         (only-in "logistic-data.rkt" [scaled-rows scaled]))
 
 (provide blob-rows
          clf-parts
@@ -17,7 +18,6 @@
          penalties
          reg-parts
          reg-target
-         scaled
          tiled-rows
          with-ones)
 
@@ -59,10 +59,6 @@
                      (/ m 2)
                      (/ m -2)))))
           labels))
-
-(define (scaled rows factor)
-  (for/list ([r (in-list rows)])
-    (map (lambda (x) (* x factor)) r)))
 
 (define (with-ones rows)
   (for/list ([r (in-list rows)])

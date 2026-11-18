@@ -22,6 +22,7 @@
                   fixtures
                   gaps
                   host-gram
+                  least-magnitude
                   magnitude-rows
                   non-increasing?
                   norm
@@ -29,6 +30,7 @@
                   orthonormality-bound
                   over-bound
                   tie-rows
+                  unscaled
                   wide-fixture)
          (only-in "private/scaler-data.rkt" bits-equal? rows->matrix scaled-rows unit-roundoff))
 
@@ -139,14 +141,6 @@
           (define gap (norm (map - c c-all)))
           (check-true (<= gap (/ (* 64 u largest) delta))
                       (format "k=~a: component ~a from the m-fit's, gap ~a" k gap delta)))))))
-
-(define (least-magnitude dt)
-  (if (eq? dt 'float32)
-      (expt 2 -149)
-      (expt 2 -1074)))
-
-(define (unscaled x by power)
-  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))
 
 (define (scaled-problems dt solver by)
   (define unit-X (rows->matrix magnitude-rows dt))

@@ -17,18 +17,14 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
          (only-in "private/mbsgd-data.rkt" blob-rows clf-parts)
-         (only-in "private/refusal-rows.rkt" check-row row row-id))
+         (only-in "private/refusal-rows.rkt" check-row row row-id)
+         (only-in "private/logistic-data.rkt" host))
 
 (define-values (blobs codes) (blob-rows 120 3 31))
 (define losses '(hinge log squared-loss))
 
 (define (relabel table)
   (map (lambda (c) (vector-ref table c)) codes))
-
-(define (host v)
-  (if (device-vector? v)
-      (device-vector->list v)
-      v))
 
 (define (kinds)
   (list (list "int32 0/1" (on-vector codes 'int32) '(0 1) 'int32)

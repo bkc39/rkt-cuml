@@ -27,6 +27,7 @@
                   blob-data
                   close?
                   cyclic-weights
+                  deviation
                   dtypes
                   first-rows
                   grid64
@@ -34,15 +35,13 @@
                   host
                   host-vector
                   mat
+                  outcome
                   tolerance
                   vec))
 
 (define rows 4096)
 
 (define inits '(k-means++ scalable-k-means++ random matrix))
-
-(define (deviation a b)
-  (/ (abs (- a b)) (max 1.0 (abs b))))
 
 (define (spread actual expected)
   (for/list ([a (in-list actual)]
@@ -66,10 +65,6 @@
                 #:n-init n-init
                 #:random-state 3
                 #:sample-weight w)))
-
-(define (outcome r)
-  (match-define (kmeans-result C labels inertia n-iter) r)
-  (list (host C) (host-vector labels) inertia n-iter))
 
 (define (numbers r)
   (match-define (kmeans-result C _ inertia _) r)

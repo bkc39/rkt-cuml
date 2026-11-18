@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml estimator-params hdbscan)
+(require (only-in "private/kmeans-data.rkt" mat)
+         (only-in cuml estimator-params hdbscan)
          (only-in cuml/cluster
                   hdbscan-all-points-membership-vectors
                   hdbscan-approximate-predict
@@ -14,7 +15,6 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options hash-remove*)
          (only-in "private/hdbscan-data.rkt"
                   alternate

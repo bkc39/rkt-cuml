@@ -10,7 +10,10 @@
 
 (define-runtime-path resyntax-script "resyntax.sh")
 
-(define fixture '((define (double x) (* 2 x)) (double 21)))
+(define fixture
+  '((define (double x)
+      (* 2 x))
+    (double 21)))
 
 (define (call-with-fixture proc)
   (define root (make-temporary-directory "resyntax-timeout-~a"))
@@ -42,8 +45,9 @@
      (define-values (ok? output) (run-on file "--analyzer-timeout" "1"))
      (check-true ok?)
      (check-regexp-match #rx"warning: files not fully analysed: 1;" output)
-     (check-regexp-match #rx"\n  [^\n]*resyntax-timeout-[0-9]+/module[.]rkt: [^\n]*identifier-usage-analyzer"
-                         output)
+     (check-regexp-match
+      #rx"\n  [^\n]*resyntax-timeout-[0-9]+/module[.]rkt: [^\n]*identifier-usage-analyzer"
+      output)
      (check-regexp-match #rx"in the analysed files; files not fully analysed: 1," output)
      (check-false (regexp-match? #rx"every file fully analysed" output)))))
 

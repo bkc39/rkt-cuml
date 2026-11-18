@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/cluster
+(require (only-in "private/exact-algebra.rkt" [inexact-rows floats])
+         (only-in cuml/cluster
                   kmeans-fit
                   kmeans-predict
                   kmeans-result
@@ -14,37 +15,7 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/kmeans-data.rkt"
-                  argmin-row
-                  blob-data
-                  cell-means
-                  cyclic-weights
-                  dtypes
-                  far-start
-                  first-rows
-                  floats
-                  grid64
-                  grid64-means
-                  grid64-start
-                  grid8
-                  grid8-labels
-                  grid-weights
-                  host
-                  host-vector
-                  mat
-                  norm2
-                  shift
-                  squared-distance
-                  start
-                  step-weights
-                  string-inits
-                  vec
-                  weighted-grid8
-                  weighted-start))
-
-(define (outcome r)
-  (match-define (kmeans-result centroids labels inertia n-iter) r)
-  (list (host centroids) (host-vector labels) inertia n-iter))
+         (only-in "private/kmeans-data.rkt" argmin-row blob-data cell-means cyclic-weights dtypes far-start first-rows grid-weights grid64 grid64-means grid64-start grid8 grid8-labels host host-vector mat norm2 outcome shift squared-distance start step-weights string-inits vec weighted-grid8 weighted-start))
 
 (define fit-grid
   (make-keyword-procedure

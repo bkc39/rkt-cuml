@@ -4,7 +4,7 @@
          (only-in racket/list take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in "private/metrics-data.rkt" regression-cases regression-pair)
+         (only-in "private/metrics-data.rkt" regression-cases regression-pair relative)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows-of)
          (only-in "private/scores-data.rkt" on weights-of)
@@ -28,9 +28,6 @@
                        #:dtype dt
                        #:weighted? (odd? (quotient i 2))))
     (list (format "matrix ~a ~a ~ax~a" i dt n d) dt (rows-of y d) (rows-of p d) (and w (take w n)))))
-
-(define (relative ours theirs)
-  (/ (abs (- ours theirs)) (abs theirs)))
 
 (define (r2-relative ours theirs)
   (/ (abs (- ours theirs)) (max 1.0 (abs (- 1.0 theirs)))))

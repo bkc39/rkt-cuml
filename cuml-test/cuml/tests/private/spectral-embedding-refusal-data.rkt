@@ -33,6 +33,7 @@
          fault
          graph-shape-rows
          heavy-rows
+         index-message
          path
          unit-weight-rows
          zero-text)

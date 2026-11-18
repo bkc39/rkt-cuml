@@ -10,8 +10,8 @@
          (only-in raft device-matrix->list* dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt" integer-grid mat same-partition?)
-         (only-in "private/kmeans-data.rkt" blob-data)
+         (only-in "private/dbscan-data.rkt" integer-grid same-partition?)
+         (only-in "private/kmeans-data.rkt" blob-data mat)
          (only-in "private/linkage-data.rkt"
                   connectivities
                   group-rows
@@ -20,10 +20,10 @@
                   hand-rows
                   linkage-oracle
                   linked-lists
-                  permuted-children
-                  permuted-labels
                   oracle-cophenetic
                   oracle-weights
+                  permuted-children
+                  permuted-labels
                   permuted-rows
                   result->lists
                   tie-children

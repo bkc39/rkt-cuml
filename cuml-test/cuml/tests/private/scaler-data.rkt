@@ -3,6 +3,7 @@
 (require (only-in cuml/preprocessing
                   standard-scaler-result-mean
                   standard-scaler-result-scale
+                  standard-scaler-result-var
                   standard-scaler-result-with-mean
                   standard-scaler-result-with-std)
          (only-in racket/flonum fl* fl+ fl- fl/ flsingle)
@@ -21,7 +22,10 @@
                   shape)
          (only-in raft/private/array buffer->device-array device-array-buffer)
          (only-in threading ~>)
-         (only-in "blob-data.rkt" normal-source))
+         (only-in "blob-data.rkt" normal-source)
+         (only-in "kmeans-data.rkt" [mat rows->matrix])
+         (only-in "exact-algebra.rkt" dot)
+         (only-in "linear-data.rkt" unit-roundoff))
 
 (provide bits-equal?
          constant-rows
@@ -38,6 +42,7 @@
          rows-of
          scaled-rows
          standardisation-errors
+         statistics
          strided-vector
          transpose
          ulp
@@ -50,9 +55,6 @@
 (define (matrix-shape m)
   (list (device-matrix? m) (dtype m) (layout m) (shape m)))
 
-(define (rows->matrix rows dtype)
-  (list*->device-matrix rows #:dtype dtype))
-
 (define (transpose rows)
   (if (null? rows)
       '()
@@ -63,9 +65,6 @@
 
 (define (scaled-rows rows by)
   (map (lambda (row) (map (lambda (x) (* x by)) row)) rows))
-
-(define (dot xs ys)
-  (for/sum ([x (in-list xs)] [y (in-list ys)]) (* x y)))
 
 (define (strided-vector n [dt 'float64])
   (define backing (list->device-vector (range (* 2 n)) #:dtype dt))
@@ -120,11 +119,6 @@
       add1
       (integer->integer-bytes 8 #f)
       floating-point-bytes->real))
-
-(define (unit-roundoff dtype)
-  (if (eq? dtype 'float32)
-      (expt 2.0 -24)
-      (expt 2.0 -53)))
 
 (define float32-roundoff (unit-roundoff 'float32))
 
@@ -197,3 +191,9 @@
         [s (mul t s)]
         [m (add t m)]
         [else t]))))
+
+(define (statistics result)
+  (for/list ([v (list (standard-scaler-result-mean result)
+                      (standard-scaler-result-var result)
+                      (standard-scaler-result-scale result))])
+    (and v (device-vector->list v))))

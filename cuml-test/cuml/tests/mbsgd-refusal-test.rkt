@@ -14,7 +14,8 @@
          (only-in "private/elastic-net-data.rkt" apply-keywords)
          (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt" on-matrix on-vector)
-         (only-in "private/refusal-rows.rkt" check-row row row-id))
+         (only-in "private/refusal-rows.rkt" check-row row row-id)
+         (only-in "private/estimator-data.rkt" keyword-of))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
 (define targets '(1 2 3 4 5 6))
@@ -49,9 +50,6 @@
     (batch-size 0 ,(string-append count-message "0"))
     (n-iter-no-change 0 ,(string-append count-message "0"))
     (random-state -1 "expected #f or an integer in [0, 4294967295], got -1")))
-
-(define (keyword-of key)
-  (string->keyword (symbol->string key)))
 
 (define (settings-rows go X y)
   (for/list ([fault (in-list settings-faults)]

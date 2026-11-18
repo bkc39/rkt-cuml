@@ -14,7 +14,8 @@
          syntax/parse/define
          (only-in threading ~>))
 
-(provide run-cases
+(provide or-null
+         run-cases
          run-twin
          test-twin
          twin-params)
@@ -88,3 +89,6 @@
                 [name (in-value (twin-key key))]
                 #:unless (memq name (append unbound-twin-params unbound)))
     (values name (twin-value value))))
+
+(define (or-null v)
+  (or v (json-null)))

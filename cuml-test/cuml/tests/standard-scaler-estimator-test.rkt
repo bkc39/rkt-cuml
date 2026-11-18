@@ -31,15 +31,9 @@
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" printed round-trips)
          (only-in "private/kmeans-data.rkt" blank-matrix)
-         (only-in "private/scaler-data.rkt" bits-equal? normal-rows rows->matrix))
+         (only-in "private/scaler-data.rkt" bits-equal? normal-rows rows->matrix statistics))
 
 (define changed (hasheq 'with-mean #f 'with-std #f))
-
-(define (statistics result)
-  (for/list ([v (list (standard-scaler-result-mean result)
-                      (standard-scaler-result-var result)
-                      (standard-scaler-result-scale result))])
-    (and v (device-vector->list v))))
 
 (test-case "the default parameters, and every keyword round-trips"
   (check-equal? (standard-scaler-params) (hasheq 'with-mean #t 'with-std #t))

@@ -7,16 +7,9 @@
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* dtype)
-         (only-in "private/dbscan-data.rkt"
-                  cosine-cloud
-                  distance-matrix
-                  integer-grid
-                  mat
-                  result->lists
-                  seeded
-                  vec)
-         (only-in "private/kmeans-data.rkt" blob-data)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
+         (only-in "private/dbscan-data.rkt" cosine-cloud distance-matrix integer-grid result->lists seeded)
+         (only-in "private/kmeans-data.rkt" blob-data mat vec)
+         (only-in "private/python-env.rkt" or-null run-twin test-twin twin-params))
 
 (define-runtime-path twin "python/dbscan_twin.py")
 
@@ -86,9 +79,6 @@
                 #:max-mbytes-per-batch (spec-mbytes s)
                 #:sample-weight (and w (vec w (spec-dt s)))))
   (run s rows w (result->lists r) (dtype (dbscan-result-labels r))))
-
-(define (or-null v)
-  (or v (json-null)))
 
 (define (sklearn? s)
   (eq? (spec-metric s) 'cosine))

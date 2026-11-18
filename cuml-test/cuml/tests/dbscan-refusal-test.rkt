@@ -17,17 +17,9 @@
          (only-in "private/dbscan-data.rkt" fitted-lists)
          (only-in "private/kmeans-data.rkt" blank-matrix blank-vector dtypes)
          (only-in "private/program.rkt" run-program)
-         (only-in "private/refusal-rows.rkt" check-row row row-id))
+         (only-in "private/refusal-rows.rkt" check-row grid other row row-id))
 
 (define out-dtypes '(int32 int64))
-
-(define (other dt)
-  (if (eq? dt 'float32) 'float64 'float32))
-
-(define (grid dt)
-  (list*->device-matrix (for/list ([i (in-range 10)])
-                          (list (add1 i) (* 2 i)))
-                        #:dtype dt))
 
 (define (with-zero-row bad dt)
   (list*->device-matrix (list '(1 1) '(2 2) bad '(3 3)) #:dtype dt))

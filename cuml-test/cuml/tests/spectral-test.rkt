@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/cluster
+(require (only-in "private/kmeans-data.rkt" mat)
+         (only-in cuml/cluster
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels
@@ -12,7 +13,6 @@
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/spectral-data.rkt"
                   blobs
                   cliques

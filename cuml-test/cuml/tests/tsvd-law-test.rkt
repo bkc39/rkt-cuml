@@ -14,9 +14,11 @@
                   fixture-rows
                   gaps
                   host-gram
+                  least-magnitude
                   magnitude-rows
                   non-increasing?
-                  over-bound)
+                  over-bound
+                  unscaled)
          (only-in "private/scaler-data.rkt" bits-equal? rows->matrix scaled-rows unit-roundoff)
          (only-in "private/tsvd-data.rkt"
                   duplicate-fixture
@@ -115,14 +117,6 @@
       (match-define (svd _ twos-variance twos-ratio _) twos)
       (check-true (positive-zeros? twos-variance) (format "twos ~a" twos-variance))
       (check-true (positive-zeros? twos-ratio) (format "twos ~a" twos-ratio)))))
-
-(define (least-magnitude dt)
-  (if (eq? dt 'float32)
-      (expt 2 -149)
-      (expt 2 -1074)))
-
-(define (unscaled x by power)
-  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))
 
 (define (tiny-problems dt solver by)
   (define unit-X (rows->matrix magnitude-rows dt))

@@ -28,7 +28,8 @@
                   tight-max-iter
                   tight-tol)
          (only-in "logistic-oracle.rkt" residual residual-of)
-         (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
+         (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin)
+         (only-in "real-linear-data.rkt" flonum-exact))
 
 (provide (struct-out labelled)
          check-raw-refusal
@@ -45,9 +46,6 @@
 (define float32-gap-bound 1e-2)
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
-
-(define (flonum-exact v)
-  (inexact->exact (real->double-flonum v)))
 
 (define (standardised X)
   (define (scaled xs)

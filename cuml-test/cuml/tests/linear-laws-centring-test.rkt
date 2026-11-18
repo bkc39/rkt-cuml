@@ -15,12 +15,12 @@
                   exn:test:check?
                   test-case)
          (only-in threading ~>)
-         (only-in "private/exact-algebra.rkt" bottom-vector dot min-norm-solve norm2)
+         (only-in "private/exact-algebra.rkt" bottom-vector dot float32-of min-norm-solve norm2)
          (only-in "private/linear-data.rkt"
                   columns-of
                   lcase
-                  lcase-w
                   lcase-X
+                  lcase-w
                   lcase-y
                   oracle-lstsq
                   solution
@@ -34,21 +34,18 @@
                   staging
                   staging-of
                   y-centring-gamma)
-         (only-in "private/real-linear-data.rkt" offset-law-arms real-lcase))
-
-(define (f32 x)
-  (flsingle (real->double-flonum x)))
+         (only-in "private/real-linear-data.rkt" flonum-exact offset-law-arms real-lcase))
 
 (define (compensated xs)
   (for/fold ([s 0.0]
              [c 0.0])
             ([v (in-list xs)])
-    (define t (f32 (+ s v)))
+    (define t (float32-of (+ s v)))
     (define lost
       (if (>= (abs s) (abs v))
-          (f32 (+ (f32 (- s t)) v))
-          (f32 (+ (f32 (- v t)) s))))
-    (values t (f32 (+ c lost)))))
+          (float32-of (+ (float32-of (- s t)) v))
+          (float32-of (+ (float32-of (- v t)) s))))
+    (values t (float32-of (+ c lost)))))
 
 (define (block-sum partials)
   (define raked
@@ -58,7 +55,7 @@
         [else
          (define-values (segment rest) (split-at xs 8))
          (cons (for/fold ([p (car segment)]) ([x (in-list (cdr segment))])
-                 (f32 (+ p x)))
+                 (float32-of (+ p x)))
                (rake rest))])))
   (let tree ([v (list->vector raked)]
              [offset 1])
@@ -67,7 +64,7 @@
       [else
        (tree (for/vector ([i (in-range 32)])
                (if (< (+ i offset) 32)
-                   (f32 (+ (vector-ref v i) (vector-ref v (+ i offset))))
+                   (float32-of (+ (vector-ref v i) (vector-ref v (+ i offset))))
                    (vector-ref v i)))
              (* 2 offset))])))
 
@@ -80,11 +77,11 @@
                           (compensated (for/list ([i (in-range t n 256)])
                                          (vector-ref v i))))
                         cons)))
-  (define total (f32 (+ (block-sum (map car threads)) (block-sum (map cdr threads)))))
-  (~> (* total (f32 (/ 1.0 n))) f32 inexact->exact))
+  (define total (float32-of (+ (block-sum (map car threads)) (block-sum (map cdr threads)))))
+  (~> (* total (float32-of (/ 1.0 n))) float32-of inexact->exact))
 
 (define (strided-weighted-mean weights ys)
-  (define products (list->vector (map (lambda (w y) (f32 (* w y))) weights ys)))
+  (define products (list->vector (map (lambda (w y) (float32-of (* w y))) weights ys)))
   (define n (vector-length products))
   (define blocks (min 8192 (ceiling (/ n 512))))
   (define (block-partial b)
@@ -95,24 +92,24 @@
         (define-values (s c)
           (compensated (for/list ([j (in-range (+ (* 32 b) ty) n (* 32 blocks))])
                          (vector-ref products j))))
-        (define t (f32 (+ held s)))
+        (define t (float32-of (+ held s)))
         (define lost
           (if (>= (abs held) (abs s))
-              (f32 (+ (f32 (- held t)) s))
-              (f32 (+ (f32 (- s t)) held))))
-        (values t (f32 (+ held-c (f32 (+ c lost)))))))
-    (f32 (+ partial-sum partial-c)))
+              (float32-of (+ (float32-of (- held t)) s))
+              (float32-of (+ (float32-of (- s t)) held))))
+        (values t (float32-of (+ held-c (float32-of (+ c lost)))))))
+    (float32-of (+ partial-sum partial-c)))
   (define partials (sort (map block-partial (range blocks)) > #:key abs))
   (define total
     (for/fold ([s 0.0]) ([p (in-list partials)])
-      (f32 (+ s p))))
-  (~> (/ total (f32 (apply + weights))) f32 inexact->exact))
+      (float32-of (+ s p))))
+  (~> (/ total (float32-of (apply + weights))) float32-of inexact->exact))
 
 (define (serial-mean xs)
   (define total
     (for/fold ([s 0.0]) ([x (in-list xs)])
-      (f32 (+ s (real->double-flonum x)))))
-  (f32 (/ total (length xs))))
+      (float32-of (+ s (real->double-flonum x)))))
+  (float32-of (/ total (length xs))))
 
 (define (weighted-mean weights xs)
   (/ (dot weights xs) (apply + weights)))
@@ -184,14 +181,11 @@
   (for/or ([m (in-list failed)])
     (string-prefix? m (string-append law ":"))))
 
-(define (flonum x)
-  (inexact->exact (real->double-flonum x)))
-
 (define (consistent c coef)
   (define weights (case-weights c))
   (define means (map (lambda (column) (weighted-mean weights column)) (columns-of (lcase-X c))))
-  (define rounded (map flonum coef))
-  (list rounded (flonum (- (weighted-mean weights (lcase-y c)) (dot means rounded)))))
+  (define rounded (map flonum-exact coef))
+  (list rounded (flonum-exact (- (weighted-mean weights (lcase-y c)) (dot means rounded)))))
 
 (define (staged-gram c)
   (match-define (staging scale _ power _ _ _ _) (case-staging c))
@@ -249,8 +243,12 @@
       (define b (quotient i 8))
       (list (+ (expt 2 power) a) (+ (expt 2 power) a b) (+ (* 3 a) (* -2 b) (modulo (* 7 i) 5) -2))))
   (lcase (format "offset grid 2^~a" power)
-         (map (lambda (row) (list (car row) (cadr row))) rows)
-         (map caddr rows)
+         (for/list ([row (in-list rows)])
+           (match-define (list a b _) row)
+           (list a b))
+         (for/list ([row (in-list rows)])
+           (match-define (list _ _ target) row)
+           target)
          #f))
 
 (define (bottom-grid-fit c u)
@@ -270,14 +268,14 @@
   (define y (lcase-y c))
   (define coef
     (for/list ([cj (in-list (solution-coef (oracle-lstsq X y #f #t)))])
-      (f32 cj)))
+      (float32-of cj)))
   (define means (map serial-mean (columns-of X)))
   (define products
     (for/fold ([s 0.0])
               ([m (in-list means)]
                [cj (in-list coef)])
-      (f32 (+ s (f32 (* m cj))))))
-  (define b (inexact->exact (f32 (- (serial-mean y) products))))
+      (float32-of (+ s (float32-of (* m cj))))))
+  (define b (inexact->exact (float32-of (- (serial-mean y) products))))
   (define exact-coef (map inexact->exact coef))
   (define weights (case-weights c))
   (define r1-term
@@ -366,9 +364,15 @@
          (values (cons (list 0 (/ (if (zero? b) big half-ulp) 2) 2) rows) sign)]
         [else (values (cons (list sign 0 1) rows) (- sign))])))
   (lcase "atomic partials"
-         (map (lambda (row) (list (car row))) rows)
-         (map cadr rows)
-         (map caddr rows)))
+         (for/list ([row (in-list rows)])
+           (match-define (list x _ _) row)
+           (list x))
+         (for/list ([row (in-list rows)])
+           (match-define (list _ target _) row)
+           target)
+         (for/list ([row (in-list rows)])
+           (match-define (list _ _ weight) row)
+           weight)))
 
 (test-case "float32 weighted, 2^15 rows in 64 strided blocks, ȳ's block partials added largest first: c* = 0 and b = ŷ̄ exceed T4 under the coalesced count 32 and meet T1 to T4 under the strided count"
   (define c (atomic-case))

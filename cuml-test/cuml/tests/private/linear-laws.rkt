@@ -40,6 +40,7 @@
          check-lstsq-fit
          check-oracle-laws
          check-prediction-law
+         gamma
          staging-of
          y-centring-gamma)
 

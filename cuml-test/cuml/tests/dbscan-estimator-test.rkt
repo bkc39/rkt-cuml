@@ -17,19 +17,9 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt"
-                  grid-labels
-                  grid-rows
-                  grid-weighted-core
-                  grid-weights
-                  cosine-cloud
-                  distance-matrix
-                  integer-grid
-                  mat
-                  result->lists
-                  vec)
-         (only-in "private/estimator-data.rkt" apply-options printed round-trips)
-         (only-in "private/kmeans-data.rkt" dtypes))
+         (only-in "private/dbscan-data.rkt" cosine-cloud distance-matrix grid-labels grid-rows grid-weighted-core grid-weights integer-grid result->lists)
+         (only-in "private/estimator-data.rkt" apply-options printed round-trips subsets)
+         (only-in "private/kmeans-data.rkt" dtypes mat vec))
 
 (define changed
   (hasheq 'eps 0.3 'min-samples 10 'metric 'cosine 'out-dtype 'int64 'max-mbytes-per-batch 4))
@@ -126,11 +116,6 @@
                     (lambda () (fit (dbscan #:metric 'l2) X))))
 
 (define identity-changes (hasheq 'eps 1.5 'min-samples 3 'out-dtype 'int64 'max-mbytes-per-batch 1))
-
-(define (subsets keys n)
-  (for*/list ([k (in-range (add1 n))]
-              [subset (in-list (combinations keys k))])
-    subset))
 
 (define (identity-fixtures dt)
   (define rows (integer-grid 150 2 12 5))

@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml estimator-params spectral-clustering)
+(require (only-in "private/kmeans-data.rkt" mat)
+         (only-in cuml estimator-params spectral-clustering)
          (only-in cuml/cluster spectral-clustering-params)
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
@@ -9,7 +10,6 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in threading cond~>)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
          (only-in "private/spectral-data.rkt"

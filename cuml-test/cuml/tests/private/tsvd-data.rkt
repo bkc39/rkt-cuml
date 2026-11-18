@@ -10,7 +10,8 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
          (only-in "pca-data.rkt" fixture gaps over-bound)
-         (only-in "scaler-data.rkt" dot generated-rows transpose unit-roundoff))
+         (only-in "scaler-data.rkt" dot generated-rows transpose unit-roundoff)
+         (only-in "metrics-data.rkt" [worst worst-difference]))
 
 (provide (struct-out exact)
          (struct-out reference)
@@ -21,8 +22,8 @@
          extents
          first-problems
          geomspace
-         householder-fixtures
          host-transform
+         householder-fixtures
          law-fixtures
          normal-fixture
          normal-rows-of
@@ -55,12 +56,6 @@
 
 (define (first-problems problems)
   (take problems (min 3 (length problems))))
-
-(define (worst-difference xs ys)
-  (for/fold ([worst 0.0])
-            ([x (in-list xs)]
-             [y (in-list ys)])
-    (max worst (abs (- x y)))))
 
 (define (normal-rows-of seed n d)
   (generated-rows seed n d 'float64 (lambda (z _u _j) z)))

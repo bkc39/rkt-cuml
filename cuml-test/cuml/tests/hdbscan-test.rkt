@@ -1,6 +1,8 @@
 #lang racket/base
 
-(require (only-in cuml/cluster
+(require (only-in "private/spectral-data.rkt" [repeat-each dup])
+         (only-in "private/kmeans-data.rkt" mat)
+         (only-in cuml/cluster
                   hdbscan-approximate-predict
                   hdbscan-condensed-tree-lambdas
                   hdbscan-condensed-tree-selected-clusters
@@ -22,20 +24,8 @@
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/dbscan-data.rkt" mat pick same-partition? seeded)
-         (only-in "private/hdbscan-data.rkt"
-                  dataset
-                  dataset-names
-                  descent-problems
-                  dup
-                  fitted-labels
-                  fitted-lambdas
-                  fitted-of
-                  fitted-persistence
-                  fitted-probabilities
-                  label-count
-                  same-fit?
-                  structure-problems))
+         (only-in "private/dbscan-data.rkt" pick same-partition? seeded)
+         (only-in "private/hdbscan-data.rkt" dataset dataset-names descent-problems fitted-labels fitted-lambdas fitted-of fitted-persistence fitted-probabilities label-count same-fit? structure-problems))
 
 (define flt-max 3.4028234663852886e38)
 

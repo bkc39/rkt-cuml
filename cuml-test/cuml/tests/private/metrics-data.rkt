@@ -7,7 +7,9 @@
          (only-in raft list*->device-matrix list->device-vector)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "scaler-data.rkt" rows-of))
+         (only-in "scaler-data.rkt" rows-of)
+         (only-in "kmeans-data.rkt" [vec labels-of])
+         (only-in "dbscan-data.rkt" [pick permute]))
 
 (provide bijection
          choose2
@@ -16,6 +18,7 @@
          exact-r2
          four-blocks
          four-blocks-labels
+         grid-20
          host-ari
          host-counts
          label-pair
@@ -35,6 +38,7 @@
          random-permutation
          regression-cases
          regression-pair
+         relative
          scaled
          shrunk
          sorted-distinct
@@ -43,8 +47,7 @@
          tolerance
          wide-labels
          wide-rows
-         worst
-         grid-20)
+         worst)
 
 (define (seeded seed)
   (define g (make-pseudo-random-generator))
@@ -68,9 +71,6 @@
           (random k2 g)
           (modulo t k2))))
   (values truth found))
-
-(define (labels-of xs dt)
-  (list->device-vector xs #:dtype dt))
 
 (define (normals count seed)
   (define g (seeded seed))
@@ -246,11 +246,6 @@
       (cons (random g) i)))
   (map cdr (sort keyed < #:key car)))
 
-(define (permute xs order)
-  (define v (list->vector xs))
-  (for/list ([i (in-list order)])
-    (vector-ref v i)))
-
 (define (regression-pair n
                          #:offset offset
                          #:noise noise
@@ -337,3 +332,6 @@
     (if (list? x)
         (pow2-scaled x k)
         (* x (expt 2 k)))))
+
+(define (relative ours theirs)
+  (/ (abs (- ours theirs)) (abs theirs)))

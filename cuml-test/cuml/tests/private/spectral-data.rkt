@@ -1,17 +1,17 @@
 #lang racket/base
 
-(require (only-in cuml/cluster
+(require (only-in "kmeans-data.rkt" mat)
+         (only-in cuml/cluster
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
          (only-in racket/flonum flsingle)
          (only-in racket/list append* append-map list-set make-list range take)
-         (only-in racket/match match-lambda)
+         (only-in racket/match match-define match-lambda)
          (only-in racket/math pi)
          (only-in raft device-vector->list list->device-vector)
          (only-in threading ~>)
-         (only-in "dbscan-data.rkt" mat same-partition? seeded)
-         (only-in "linkage-data.rkt" squared-distance))
+         (only-in "dbscan-data.rkt" first-copies same-partition? seeded squared-distance))
 
 (provide (struct-out fit-case)
          (struct-out graph)
@@ -19,8 +19,9 @@
          circles
          clique-graph
          cliques
-         float32-rows
          edited-vectors
+         float32-rows
+         gaussian
          graph->vectors
          graph-dense
          graph-edit
@@ -69,7 +70,7 @@
               n))
 
 (define (unit-rings-of sizes)
-  (unit-edges (for*/list ([(n o) (in-parallel (in-list sizes) (in-list (block-starts sizes)))]
+  (unit-edges (for*/list ([(n o) (in-parallel (in-list sizes) (in-list (first-copies sizes)))]
                           [i (in-range n)])
                 (cons (+ o i) (+ o (modulo (add1 i) n))))
               (apply + sizes)))
@@ -92,9 +93,6 @@
 (define (planted? labels truth)
   (define all (range (length truth)))
   (same-partition? labels all truth all))
-
-(define (gaussian)
-  (* (sqrt (* -2.0 (log (- 1.0 (random))))) (cos (* 2.0 pi (random)))))
 
 (define (truth-of sizes)
   (append* (for/list ([s (in-list sizes)]
@@ -155,15 +153,8 @@
   (hash-set! edges (cons i j) w)
   (hash-set! edges (cons j i) w))
 
-(define (block-starts sizes)
-  (for/fold ([at 0]
-             [starts '()]
-             #:result (reverse starts))
-            ([s (in-list sizes)])
-    (values (+ at s) (cons at starts))))
-
 (define (sparse-blocks sizes p seed #:between [between 2] #:connected? [connected? #t])
-  (define starts (block-starts sizes))
+  (define starts (first-copies sizes))
   (define edges (make-hash))
   (seeded seed
           (lambda ()
@@ -204,7 +195,7 @@
 
 (define (cliques sizes)
   (define edges (make-hash))
-  (for* ([(s o) (in-parallel (in-list sizes) (in-list (block-starts sizes)))]
+  (for* ([(s o) (in-parallel (in-list sizes) (in-list (first-copies sizes)))]
          [i (in-range s)]
          [j (in-range (add1 i) s)])
     (set-edge! edges (+ o i) (+ o j) 1.0))
@@ -297,7 +288,16 @@
   (map list (graph-rows g) (graph-cols g) (graph-vals g)))
 
 (define (entries->graph es n)
-  (graph (map car es) (map cadr es) (map caddr es) n))
+  (graph (for/list ([e (in-list es)])
+           (match-define (list i _ _) e)
+           i)
+         (for/list ([e (in-list es)])
+           (match-define (list _ j _) e)
+           j)
+         (for/list ([e (in-list es)])
+           (match-define (list _ _ v) e)
+           v)
+         n))
 
 (define (graph-upper g)
   (entries->graph (filter (match-lambda
@@ -315,6 +315,9 @@
                                     w))])
                        (entries g))
                   (graph-n g)))
+
+(define (gaussian)
+  (* (sqrt (* -2.0 (log (- 1.0 (random))))) (cos (* 2.0 pi (random)))))
 
 (define (repeat-each rows copies)
   (for*/list ([r (in-list rows)]

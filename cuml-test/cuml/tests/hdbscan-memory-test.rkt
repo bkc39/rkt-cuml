@@ -22,9 +22,8 @@
          (only-in raft/tests/private/collect collect-until drain-finalizers! settled-count)
          (only-in raft/tests/private/probe probe-pool-used)
          (only-in "private/cuml-error.rkt" raised)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/hdbscan-data.rkt" dataset)
-         (only-in "private/kmeans-data.rkt" blank-matrix)
+         (only-in "private/kmeans-data.rkt" blank-matrix mat)
          (only-in "private/process-memory.rkt"
                   baseline-sample
                   device

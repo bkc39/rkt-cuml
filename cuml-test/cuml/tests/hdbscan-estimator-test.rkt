@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml
+(require (only-in "private/kmeans-data.rkt" mat vec)
+         (only-in cuml
                   estimator-params
                   estimator-set-params
                   fit
@@ -24,7 +25,6 @@
          (only-in threading ~>)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt" mat vec)
          (only-in "private/estimator-data.rkt" apply-options hash-remove* printed round-trips)
          (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?))
 

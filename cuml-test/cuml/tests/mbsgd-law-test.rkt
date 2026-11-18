@@ -1,16 +1,11 @@
 #lang racket/base
 
-(require (only-in racket/match match-define)
+(require (only-in "private/logistic-data.rkt" [scaled-rows scaled])
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-not-equal?)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case)
-         (only-in "private/mbsgd-data.rkt"
-                  blob-rows
-                  dtype-penalties
-                  normal-rows
-                  reg-target
-                  scaled
-                  with-ones)
+         (only-in "private/mbsgd-data.rkt" blob-rows dtype-penalties normal-rows reg-target with-ones)
          (only-in "private/mbsgd-twin-data.rkt" clf-fit overridden reg-fit))
 
 (define rows (normal-rows 300 5 21))

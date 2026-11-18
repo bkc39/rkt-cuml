@@ -23,7 +23,7 @@ while [ $# -gt 0 ]; do
       ;;
   esac
 done
-if ! [[ "$timeout_ms" =~ ^[0-9]+$ ]]; then
+if ! [[ $timeout_ms =~ ^[0-9]+$ ]]; then
   echo "resyntax: the analyzer timeout is a whole number of milliseconds, not '$timeout_ms'" >&2
   exit 2
 fi
@@ -71,10 +71,10 @@ unanalysed() {
 }
 
 report_unanalysed() {
-  local listed=$1 file names
+  local listed=$1 file names line
   [ -n "$listed" ] || return 0
   echo "resyntax: warning: files not fully analysed: $(wc -l <<<"$listed"); an analyzer timed out at $timeout_ms ms or failed, so the rules that need it did not run on them; raise --analyzer-timeout or RESYNTAX_ANALYZER_TIMEOUT to cover them"
-  sed 's/^/  /' <<<"$listed"
+  while IFS= read -r line; do echo "  $line"; done <<<"$listed"
   if [ -n "${GITHUB_ACTIONS:-}" ]; then
     while IFS=: read -r file names; do
       echo "::warning file=$file::not fully analysed by Resyntax at $timeout_ms ms (${names# }); the rules that need those analyzers did not run here"

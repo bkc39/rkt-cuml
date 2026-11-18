@@ -27,17 +27,16 @@
                   cosine-message
                   large-message
                   large-row
+                  least-rate-message
                   listed-X
                   nan-message
                   nan-row
+                  tiny-X
                   tiny-with
                   zero-row)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
          (only-in "private/scaler-data.rkt" rows->matrix strided-vector)
          (only-in "private/umap-data.rkt" fixture-X fixture-rows tiny))
-
-(define (tiny-X)
-  (fixture-X tiny))
 
 (define (labels n [dt 'int32] [groups 2])
   (list->device-vector (for/list ([i (in-range n)])
@@ -59,9 +58,6 @@
    "~a: expected a finite value of at least 1.1754943508222875e-38 and at most 3.4028234663852886e+38, got ~a"
    name
    v))
-
-(define (least-rate-message v)
-  (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))
 
 (define (parameter-rows)
   (list

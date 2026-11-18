@@ -8,7 +8,7 @@
          (only-in racket/match == match match-define match-lambda)
          (only-in racket/math sqr)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "dbscan-data.rkt" seeded))
+         (only-in "dbscan-data.rkt" seeded squared-distance))
 
 (provide (struct-out oracle)
          children->labels
@@ -28,7 +28,6 @@
          permuted-labels
          permuted-rows
          result->lists
-         squared-distance
          tie-children
          tie-labels
          tie-rows
@@ -72,9 +71,6 @@
                         [_ (in-range 40)])
               (for/list ([_ (in-range 2)])
                 (+ offset (/ (random 100000) 9973.0)))))))
-
-(define (squared-distance a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (sqr (- x y))))
 
 (struct oracle (n weights edges cophenetic))
 

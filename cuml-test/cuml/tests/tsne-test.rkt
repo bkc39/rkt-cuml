@@ -14,10 +14,8 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
          (only-in "private/tsne-data.rkt" embedded)
-         (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows overlap tiny))
-
-(define (single? x)
-  (and (flonum? x) (eqv? x (flsingle x))))
+         (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows overlap tiny)
+         (only-in "private/exact-algebra.rkt" single?))
 
 (define (check-statistics result max-iter)
   (define n-iter (tsne-result-n-iter result))

@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (for-syntax racket/base)
+(require (only-in "kmeans-data.rkt" mat)
+         (for-syntax racket/base)
          (only-in cuml/cluster
                   hdbscan-condensed-tree-children
                   hdbscan-condensed-tree-lambdas
@@ -29,9 +30,9 @@
          (only-in racket/math pi)
          (only-in racket/runtime-path define-runtime-path)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "dbscan-data.rkt" mat seeded)
+         (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
-         (only-in "spectral-data.rkt" blobs circles float32-rows moons))
+         (only-in "spectral-data.rkt" blobs circles float32-rows gaussian moons [repeat-each dup]))
 
 (provide (struct-out fitted)
          (contract-out [dataset (-> (apply or/c dataset-names) (listof (listof real?)))])
@@ -40,7 +41,6 @@
          close?
          dataset-names
          descent-problems
-         dup
          fit-lists
          fitted->list
          fitted-of
@@ -79,9 +79,6 @@
 (define dataset-names
   '(b50 b10 b5d4 varied overlap moons circles gridclust grid30 one-blob identical))
 
-(define (gaussian)
-  (* (sqrt (* -2.0 (log (- 1.0 (random))))) (cos (* 2.0 pi (random)))))
-
 (define (varied-blobs n-each sds gap seed)
   (seeded seed
           (lambda ()
@@ -113,11 +110,6 @@
     [(grid30) (float32-rows (integer-grid 30))]
     [(one-blob) (numpy-blobs 0.0)]
     [(identical) (make-list 100 '(1.0 1.0))]))
-
-(define (dup rows times)
-  (for*/list ([row (in-list rows)]
-              [_ (in-range times)])
-    row))
 
 (define (alternate rows parity)
   (for/list ([row (in-list rows)]
