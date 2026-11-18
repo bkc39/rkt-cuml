@@ -3,7 +3,6 @@
 (require (only-in racket/file find-files)
          (only-in racket/list append-map remove-duplicates)
          (only-in racket/match match match-define)
-         (only-in racket/path simple-form-path)
          (only-in racket/string string-join)
          (only-in "private/alpha.rkt" alpha-normal procedure-name)
          (only-in "private/imports.rkt" import-resolver)
@@ -80,7 +79,6 @@
     [_ '()]))
 
 (define (definitions-in file)
-  (define-values (directory _name _dir?) (split-path (simple-form-path file)))
   (define scopes (module-scopes (read-module file)))
   (define top-locals
     (match scopes
@@ -90,7 +88,7 @@
               [locals (in-value (append top-locals
                                         (append-map defined-names
                                                     (map syntax->datum (scope-forms one)))))]
-              [resolve (in-value (lazy-resolver directory one))]
+              [resolve (in-value (lazy-resolver file one))]
               [form (in-list (scope-forms one))]
               [datum (in-value (syntax->datum form))]
               [name (in-value (procedure-name datum))]
@@ -99,13 +97,12 @@
       (or (and (not (memq symbol locals)) (resolve symbol)) (format "~a@~a" symbol file)))
     (cons (alpha-normal datum name free) (site file (syntax-line form) name))))
 
-(define (lazy-resolver directory one)
+(define (lazy-resolver file one)
   (define resolve #f)
   (lambda (symbol)
     (unless resolve
-      (set!
-       resolve
-       (import-resolver directory (scope-language one) (map syntax->datum (scope-requires one)))))
+      (set! resolve
+            (import-resolver file (scope-language one) (map syntax->datum (scope-requires one)))))
     (resolve symbol)))
 
 (define (site<? a b)
