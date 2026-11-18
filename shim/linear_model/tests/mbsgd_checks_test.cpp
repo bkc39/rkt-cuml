@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -305,7 +306,7 @@ TEST(MbsgdGate, TheL1AllowanceIsCappedAtFourStarts) {
       "the objective rose from 0.25 to 1.25626; lower #:eta0 (now 0.001)");
 }
 
-TEST(MbsgdGate, TheRegressorL1AllowanceIsUncapped) {
+TEST(MbsgdGate, TheRegressorL1AllowanceIsCappedAtAQuarterOfTheStart) {
   using cumlrkt::glm::mbsgd::l1_allowance;
   const sgd_options o = with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
                                       .alpha = 10,
@@ -313,8 +314,24 @@ TEST(MbsgdGate, TheRegressorL1AllowanceIsUncapped) {
                                       .fit_intercept = 1,
                                       .eta0 = 1e-3});
   const double a = 3.5 * 4 * 1e-3 * 100;
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, a / 8, true), a);
+  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, a * 8, true), a);
+  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, a / 8, true), a / 32);
   EXPECT_DOUBLE_EQ(l1_allowance(o, 3, a / 8, false), a / 2);
+}
+
+TEST(MbsgdGate, AnAlphaWhoseAllowanceOverflowsStaysFinite) {
+  using cumlrkt::glm::mbsgd::gate_refusal;
+  using cumlrkt::glm::mbsgd::l1_allowance;
+  for (const bool regressor : {true, false}) {
+    const sgd_options o = with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
+                                        .alpha = 1e200,
+                                        .l1_ratio = 0.15,
+                                        .fit_intercept = 1,
+                                        .eta0 = 1e-3});
+    const double allowance = l1_allowance(o, 3, 2.0, regressor);
+    EXPECT_TRUE(std::isfinite(allowance));
+    EXPECT_TRUE(gate_refusal(true, 2.0, 1e197, allowance, o.eta0).has_value());
+  }
 }
 
 TEST(MbsgdGate, AnUncheckableStartOrFloorIsRefused) {

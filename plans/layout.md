@@ -2091,14 +2091,15 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. The
   classifier's A is capped at 4·F_start (fix r1e): uncapped, a large eta0
   makes A large enough to hide divergence (ratios to 3,721 at eta0 1,
-  F10-C). The regressor's A is uncapped (fix r1f): its F_start is var(y),
-  not scale-free, so a cap refuses small-variance y at the defaults (2 or
-  3 rows of 3 columns, l1 α 10: F_start to 7.2e-5, ratio to 3,328), some
-  beyond what eta0/10 clears; no regressor l1 study exists (#134). The
-  largest rise a good fit needs at the default eta0 is breast cancer log
-  l1 α 10, ratio 3.21, inside the capped limit of 5.025·F_start; lowering
-  eta0 shrinks A and the oscillation alike, so "lower #:eta0" still clears
-  every refusal the cap adds. The
+  F10-C). The regressor's A is capped at 0.25·F_start (#134, F10-R): A
+  and F_start both scale with y², so the cap is y-scale-invariant, and it
+  keeps A finite for any finite F_start (uncapped, A is inf in float64
+  above α ≈ 1e154 and passed any finite fit). F10-R separates its good
+  fits (largest need 0.0734·F_start) from its bad ones (smallest 0.606).
+  The largest rise a good classifier fit needs at the default eta0 is
+  breast cancer log l1 α 10, ratio 3.21, inside the capped limit of
+  5.025·F_start; lowering eta0 shrinks A and the oscillation alike, so
+  "lower #:eta0" still clears every refusal a cap adds. The
   floor is 1e-12·F_start + 10·ε_T²·mean(y²) for the regressor, ε_T the
   dtype's machine epsilon (round-off of y's magnitude: a constant y, or a
   float32 y far from 0, whose residuals are quantised at ε·|y|), and
@@ -2107,8 +2108,8 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   A admits at eta0 1, and refuses no good fit at the default eta0; it
   refuses 10 good fits at eta0 .01, which no constant s can avoid (F10-C).
   The gate catches blow-ups and fits ending above F_start·1.025 + A, A at
-  most 4·F_start for the classifier under l1 or elastic-net and uncapped for the
-  regressor; it passes a fit at or below that which predicts badly
+  most 4·F_start for the classifier and 0.25·F_start for the regressor
+  under l1 or elastic-net; it passes a fit at or below that which predicts badly
   (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
   blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
   refusals advise lowering eta0, and print both values to 6 significant
@@ -2195,6 +2196,42 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   gap ≤ 1 that the uncapped rule accepts, so the good fits refused stay
   the 10 at eta0 .01 and none at 1e-3; every must-refuse row stays
   refused. F10 (p7, 960 fits) is l2 only, so A = 0 and the cap is moot.
+- **F10-R regressor gate study** (#134; 25,920 fits, uncapped regressor:
+  l1 and elastic net at l1-ratio .15 and .5, α 1e-4..10, eta0 1e-4..1, bs
+  1/32/n, constant/invscaling, epochs 1/10/200 (not bs 1 × 200 above 32
+  rows), f32 and f64, on normal 512×6 seed 3 (noise .5), diabetes 442×10
+  standardised X and raw y (var 5,929), small-y (512×6 seed 5, y × 1e-3)
+  and small-n (3×3, 8 seeds)). F_opt is the lesser of a host
+  coordinate-descent optimum in double and every finite fit's objective;
+  g = (F_end − F_opt)/F_start, and need = (F_end − 1.025·F_start −
+  floor)/F_start is the cap a fit needs to pass. Fixed before reading any
+  gate value: good is g < .1; bad is g ≥ 1 (the excess over the optimum is
+  at least the zero model's objective) or in-sample R² < 0 on a problem
+  whose optimum has R² ≥ .1. Uncapped, the gate accepted 22,438 (3,222
+  rose, 260 not finite): 8,090 good, 1,710 bad (the 30 bad by R² are among
+  them), every bad one only through A (need .606 to 1.7e7: small-y and
+  small-n at large α·eta0, e.g. small-y l1 α 10 eta0 1 bs n invscaling 10
+  epochs, g 1.69e7); diabetes has no bad fit and no good fit that needs A.
+  The largest good need is .0734 (normal, l1-ratio .5, α 10, eta0 .01, bs
+  n, 1 epoch), the smallest bad .606 (small-y, l1-ratio .5, α 1e-3, eta0 1,
+  bs n, 1 epoch, g 1.34): every cap in [.1, .5] refuses no good fit and all
+  1,710 bad; cap 1 keeps 16 bad, the classifier's 4 keeps 410. The cap .25
+  (3.4× the largest good, 2.4× below the smallest bad) refuses 2,148 fits
+  accepted uncapped (0 good, 1,710 bad, 438 neither); eta0/10 clears 784,
+  /100 458 more, /1000 170, lower 34, and 702 are at the grid's eta0 floor
+  1e-4. Caveat: the good side is near-tautological (g < .1 gives need < .1
+  when F_opt ≤ F_start); the bad side is measured, not derived, and a
+  learnable problem could rise less than .25·F_start and still fit badly.
+  The cap bounds what A can hide; it does not certify the fit. The cap
+  refuses no test row with g < .1. Its new refusals among them, each refused
+  at the defaults in f32 and f64 alike and passing at a lower eta0, are now
+  refusal rows: `mbsgd-gate-small-n-test`'s l1 α 10 regressor (3 columns,
+  eta0 1e-3) on 13 of 20 seeds at 2 rows (g .313 to 3,327, seed 1187 at
+  F_start 7.2e-5) and 11 of 20 at 3 rows (g .322 to 15.9), and its 4-row
+  and 6-row seeds (g .612, .607); and `mbsgd-gate-documented-test`'s
+  300×5, y × .01, l1 α 1 (g 8.12, passes at eta0 2e-5). The accepted rows
+  reach g .266 (2 rows, seed 1261). The lowest eta0 a refused row needs is
+  1e-6 (seeds 1002, 1187), the highest 5e-4.
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
   as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
   .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:

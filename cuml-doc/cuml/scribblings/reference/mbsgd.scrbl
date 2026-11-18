@@ -54,7 +54,7 @@ standardise it. Raises when the iterate is not finite or its objective F ends ab
 F₀·1.025 + A + 1e-12·F₀ plus round-off, F₀ the zero model's; lower @racket[eta0] then.
 A = 3.5·k·@racket[eta0]·(@racket[alpha]·r)², k the number of columns plus 1 with
 @racket[fit-intercept] and r the l1 share (1, @racket[l1-ratio] or 0), is capped at 4·F₀ for the
-classifier only; the regressor's is uncapped (#134). Round-off is 10·ε²·mean(y²) for the
+classifier and 0.25·F₀ for the regressor. Round-off is 10·ε²·mean(y²) for the
 regressor in its dtype's machine epsilon ε. The gate sees only the objective, so it passes a fit
 that ends at or below that bound yet predicts badly. A @racket[y] is refused before the solve
 (rescale it) when its F₀ or round-off is not finite, float64 |y| above about 1.3e154, or with
