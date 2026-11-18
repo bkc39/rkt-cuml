@@ -61,7 +61,7 @@ is not minimum-norm.
 The fit is refused when the residual's weighted inner product with some
 centred column exceeds 2@superscript{-8} (float32) or 2@superscript{-18}
 (float64) times that column's weighted spread times @racket[y]'s, as with
-collinear columns in float32; @racket['qr] or float64 often fits. Float32 @racket['svd-qr] is also refused, before the solve, when u·κ ≥ 2@superscript{-8}, κ the float64-computed condition number of the centred, weighted X with unit-norm columns. A
+collinear columns in float32; @racket['qr] or float64 often fits. Float32 @racket['svd-qr] is also refused, before the solve, when u·κ ≥ 2@superscript{-8}, κ the condition number of the centred, weighted X with unit-norm columns, bounded below in float64. A
 coefficient fixed only by rows of low weight w is accurate to about
 u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal
 does not see its loss.
@@ -175,7 +175,7 @@ ill-conditioned for @racket[alpha] (@racket['svd], float64 or a larger
 range. The coefficients are accurate to about u·κ@subscript{α} relative to the
 largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
 (λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the
-eigenvalues λ of XᵀWX on the varying columns, X centred as above. With @racket[alpha] above u times the narrowest column's spread and at most u times the widest's, @racket['svd] is refused before the solve when u·κ′ ≥ 2@superscript{-8} (float32) or 2@superscript{-18} (float64), κ′ the float64-computed condition number of D⁻¹(XᵀWX + @racket[alpha]·I)D⁻¹, D² its diagonal. Elsewhere, where u·κ@subscript{α} is 1 or more, as
+eigenvalues λ of XᵀWX on the varying columns, X centred as above. With @racket[alpha] above u times the narrowest column's spread and at most u times the widest's, @racket['svd] is refused before the solve when u·κ′ ≥ 2@superscript{-8} (float32) or 2@superscript{-18} (float64), κ′ the condition number of D⁻¹(XᵀWX + @racket[alpha]·I)D⁻¹, D² its diagonal, bounded below in float64; in float64 this also refuses some fits that @racket['svd] would return accurately. Elsewhere, where u·κ@subscript{α} is 1 or more, as
 with columns of very different scales or nearly collinear columns, either solver
 may refuse the fit as ill-conditioned or return it wrong. @racket['auto] and
 @racket['eig] can also lose accuracy whatever @racket[alpha] is when XᵀWX has
