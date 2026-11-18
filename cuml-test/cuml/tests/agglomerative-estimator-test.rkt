@@ -24,7 +24,7 @@
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" integer-grid)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips)
-         (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows result->lists))
+         (only-in "private/linkage-data.rkt" hand-children hand-labels-at hand-rows result->lists))
 
 (define changed (hasheq 'n-clusters 3 'metric 'l1 'linkage 'ward 'connectivity 'pairwise 'c 20))
 
@@ -107,12 +107,12 @@
   (check-false (agglomerative-clustering-model e))
   (check-true (single-linkage-result? (agglomerative-clustering-model fitted-e)))
   (check-equal? (result->lists (agglomerative-clustering-model fitted-e))
-                (list (list-ref hand-labels 2) hand-children))
+                (list (hand-labels-at 3) hand-children))
   (check-equal? (format "~v" fitted-e) "#<agglomerative-clustering fitted #:n-clusters 3>")
   (check-not-equal? fitted-e (fit e X))
   (check-equal? fitted-e fitted-e)
   (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
-  (check-equal? (device-vector->list (fit-predict e X)) (list-ref hand-labels 2))
+  (check-equal? (device-vector->list (fit-predict e X)) (hand-labels-at 3))
   (define Y (list*->device-matrix (integer-grid 300 2 20 3) #:dtype 'float32))
   (define options (hasheq 'n-clusters 5 'connectivity 'pairwise 'c 3))
   (check-equal? (device-vector->list (fit-predict (apply-options agglomerative-clustering options) Y))

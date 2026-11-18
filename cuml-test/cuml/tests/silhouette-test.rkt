@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/metrics silhouette-samples silhouette-score)
-         (only-in racket/list make-list)
+         (only-in racket/list last make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft
@@ -107,7 +107,7 @@
   (for ([dt (in-list float-dtypes)])
     (define X (list*->device-matrix (append three-groups '((30 30))) #:dtype dt))
     (define s (samples X (append three-groups-labels '(3))))
-    (check-equal? (list-ref s 10) 0.0)))
+    (check-equal? (last s) 0.0)))
 
 (test-gpu "SL3: relabelling, monotone or not, keeps the score and the samples"
   (for ([dt (in-list float-dtypes)])

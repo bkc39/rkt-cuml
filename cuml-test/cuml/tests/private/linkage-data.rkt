@@ -18,6 +18,7 @@
          group-rows
          hand-children
          hand-labels
+         hand-labels-at
          hand-rows
          linkage-oracle
          linked-lists
@@ -39,6 +40,8 @@
 (define hand-rows '((0) (1) (3) (7) (15)))
 (define hand-children '((0 1) (2 5) (3 6) (4 7)))
 (define hand-labels '((0 0 0 0 0) (0 0 0 0 1) (0 0 0 2 1) (0 0 3 2 1) (4 3 2 1 0)))
+(define (hand-labels-at k)
+  (list-ref hand-labels (sub1 k)))
 (define permuted-rows '((15) (3) (0) (7) (1)))
 (define permuted-children '((2 4) (1 5) (3 6) (0 7)))
 (define permuted-labels '((0 0 0 0 0) (1 0 0 0 0) (2 0 0 1 0) (3 2 0 1 0) (4 3 2 1 0)))

@@ -3,7 +3,7 @@
 (require (only-in racket/port port->string with-output-to-string)
          racket/runtime-path
          (only-in racket/system system*)
-         (only-in rackunit check-false check-regexp-match check-true test-case)
+         (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
          (only-in "../private/modules.rkt" with-temporary-directory))
 
 (define-runtime-path gate "../../scripts/no-positional-access.sh")
@@ -45,7 +45,22 @@
                                                              (define my-cadddr 4)
                                                              (define third-row 3))))
   (check-true ok?)
-  (check-regexp-match #rx"no cadr, caddr, cadddr, third, fourth" output))
+  (check-regexp-match #rx"no cadr, caddr, cadddr, third, fourth, or list-ref with a literal index"
+                      output))
+
+(test-case "list-ref with a literal index is refused, inside another access too"
+  (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref (list-ref rows 0) 2))))
+  (check-false ok?)
+  (check-regexp-match
+   #rx"table-test[.]rkt:3: list-ref with a literal index: read a test table's rows with match-define"
+   output)
+  (check-equal? (length (regexp-match* #rx"list-ref with a literal index:" output)) 2))
+
+(test-case "list-ref with a computed index passes"
+  (define-values (ok? output)
+    (gate-on '((define rows '((a 1 2 3))) (for/list ([i (in-range 3)])
+                                            (list-ref rows (- 2 i))))))
+  (check-true ok? output))
 
 (test-case "an accessor named in a comment or a string is not a use"
   (define-values (ok? output) (gate-on-file (call-with-input-file comments-fixture port->string)))

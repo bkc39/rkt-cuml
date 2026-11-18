@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/metrics adjusted-rand-score contingency-matrix contingency-table)
-         (only-in racket/list remove-duplicates)
+         (only-in racket/list range remove-duplicates)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype list->device-vector shape)
@@ -19,12 +19,13 @@
 
 (define dtypes '(int32 int64))
 
+(define (label-case seed)
+  (define n (+ 20 (* 13 seed)))
+  (define-values (truth found) (label-pair n (+ 1 (modulo seed 6)) (+ 1 (modulo (* 5 seed) 7)) seed))
+  (list n truth found))
+
 (define (cases)
-  (for/list ([seed (in-range 24)])
-    (define n (+ 20 (* 13 seed)))
-    (define-values (truth found)
-      (label-pair n (+ 1 (modulo seed 6)) (+ 1 (modulo (* 5 seed) 7)) seed))
-    (list n truth found)))
+  (map label-case (range 24)))
 
 (define (table truth found #:true [dt1 'int32] #:pred [dt2 'int32])
   (match-define (contingency-table counts rows columns)
@@ -157,7 +158,7 @@
   (check-equal? (ari (list 0 0 (expt 2 40) (expt 2 40)) '(0 0 1 1) #:true 'int64) 1.0))
 
 (test-gpu "CA7: twenty calls give one value"
-  (match-define (list _ truth found) (list-ref (cases) 7))
+  (match-define (list _ truth found) (label-case 7))
   (check-equal? (length (remove-duplicates (for/list ([_ (in-range 20)])
                                              (ari truth found))))
                 1))

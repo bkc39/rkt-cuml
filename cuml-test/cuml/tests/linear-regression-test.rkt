@@ -203,11 +203,12 @@
       (check-equal? (fit-of X (make-list 200 13/4) #f dt #:algorithm a) (list (make-list 5 0.0) 3.25))
       (check-equal? (fit-of X (make-list 200 0) #f dt #:algorithm a #:fit-intercept #f)
                     (list (make-list 5 0.0) 0.0))
+      (define heavy 7)
       (define one
         (for/list ([i (in-range 200)])
-          (if (= i 7) 3/2 0)))
+          (if (= i heavy) 3/2 0)))
       (check-equal? (fit-of X (lcase-y base) one dt #:algorithm a)
-                    (list (make-list 5 0.0) (rounded dt (list-ref (lcase-y base) 7)))))))
+                    (list (make-list 5 0.0) (rounded dt (list-ref (lcase-y base) heavy)))))))
 
 (test-gpu "with every column constant the intercept is the weighted mean of y"
   (for* ([dt (in-list dtypes)]

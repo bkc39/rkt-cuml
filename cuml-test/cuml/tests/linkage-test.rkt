@@ -4,7 +4,7 @@
                   single-linkage-fit
                   single-linkage-result-children
                   single-linkage-result-labels)
-         (only-in racket/list make-list range)
+         (only-in racket/list last make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* dtype list*->device-matrix shape)
@@ -110,6 +110,6 @@
   (match-define (list labels _) (linked-lists X #:c 20))
   (define top
     (for/list ([r (in-list rows)])
-      (if (> (list-ref r 9) 5) 1 0)))
+      (if (> (last r) 5) 1 0)))
   (define all (range (length rows)))
   (check-equal? (same-partition? labels all top all) #t))

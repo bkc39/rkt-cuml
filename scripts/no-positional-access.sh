@@ -26,6 +26,6 @@ while IFS= read -r hit; do
 done <<<"$hits"
 
 if [ "$status" -eq 0 ]; then
-  echo "no-positional-access: no ${refused//,/, } in ${dirs[*]}"
+  echo "no-positional-access: no ${refused//,/, }, or list-ref with a literal index, in ${dirs[*]}"
 fi
 exit "$status"

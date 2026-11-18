@@ -397,8 +397,9 @@ not run there, so raise the timeout to cover it. Resyntax's
 `identifier-usage-analyzer` is quadratic (#128), so the library modules with
 large macro expansions, such as `estimator-support.rkt`, can take minutes.
 `no-positional-access` (`lint/positional.rkt`) refuses `cadr`, `caddr`, `cadddr`,
-`third` and `fourth` under `cuml-test` and `cuml-glmnet-test`, outside comments and
-strings: read a test table's rows with `match-define` or `match-lambda`. Resyntax does
+`third`, `fourth` and `list-ref` with a literal index under `cuml-test` and
+`cuml-glmnet-test`, outside comments and strings: read a test table's rows with
+`match-define` or `match-lambda`; a computed index stays allowed. Resyntax does
 not visit a module's top level as a body, so `who-pair-to-define/who` fixes
 pairs in internal definition contexts and the `review` lint refuses them at
 module level.

@@ -53,7 +53,7 @@
                   with-native-models)
          (only-in datasets/core load-dataset-table)
          (only-in racket/function const)
-         (only-in racket/list take)
+         (only-in racket/list split-at take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft
@@ -69,7 +69,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows)
+         (only-in "private/linkage-data.rkt" hand-children hand-labels-at hand-rows)
          (only-in "private/spectral-data.rkt" planted? truth-of))
 
 (test-case "the manual: a raft handler catches exn:fail:cuml and reads its kind"
@@ -259,9 +259,6 @@
 (define (hand)
   (list*->device-matrix hand-rows #:dtype 'float32))
 
-(define (hand-labels-at k)
-  (list-ref hand-labels (sub1 k)))
-
 (test-gpu "the manual: single linkage cuts the hand grid into three clusters"
   (match-define (single-linkage-result labels children) (single-linkage-fit (hand) #:n-clusters 3))
   (check-equal? (device-vector->list labels) (hand-labels-at 3))
@@ -386,13 +383,14 @@
 (test-gpu "the manual: hdbscan-fit finds three groups and places two of three new points"
   (define result (hdbscan-fit (hdbscan-groups '(0 20 40) 12 4 0.5) #:min-cluster-size 5))
   (define labels (device-vector->list (hdbscan-result-labels result)))
+  (define-values (_first-two third-group) (split-at labels 24))
   (check-true (planted? labels (truth-of '(12 12 12))))
   (check-equal? (~> (hdbscan-approximate-predict result
                                                  (list*->device-matrix '((0.5 0.5) (40.5 1) (10 30))
                                                                        #:dtype 'float32))
                     hdbscan-prediction-labels
                     device-vector->list)
-                (list (car labels) (list-ref labels 24) -1)))
+                (list (car labels) (car third-group) -1)))
 
 (test-gpu "the manual: prediction needs twice min-samples training rows"
   (define few
