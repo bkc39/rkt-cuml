@@ -59,7 +59,7 @@
   (rows-matrix (for/list ([i (in-range 25)])
                  (list (expt 1.25 i) 0.0))))
 
-(test-gpu "L1: the embedding is a fresh n×k float32 matrix, with the neighbours used and the params"
+(test-gpu "the embedding is a fresh n×k float32 matrix, with the neighbours used and the params"
   (for* ([k (in-list '(1 2 5))]
          [drop (in-list '(#t #f))]
          [norm (in-list '(#t #f))])
@@ -77,7 +77,7 @@
        (spectral-embedding-result-params result)
        (spectral-embedding-params #:n-components k #:drop-first drop #:norm-laplacian norm)))))
 
-(test-gpu "L1: the default neighbour count is min(256, max(2, ⌊n/10⌋)), and an explicit one wins"
+(test-gpu "the default neighbour count is min(256, max(2, ⌊n/10⌋)), and an explicit one wins"
   (for ([entry (in-list (list (list (geometric) #f 2)
                               (list (fixture-X far-blobs) #f 30)
                               (list (fixture-X blobs) #f 100)
@@ -87,7 +87,7 @@
     (check-equal? (spectral-embedding-result-n-neighbors result) used)
     (check-equal? (hash-ref (spectral-embedding-result-params result) 'n-neighbors) given)))
 
-(test-gpu "L1: a graph fit reports no neighbour count, and fit-transform returns its embedding"
+(test-gpu "a graph fit reports no neighbour count, and fit-transform returns its embedding"
   (define result (embedded-graph blocks))
   (check-equal? (spectral-embedding-result-n-neighbors result) #f)
   (check-equal? (matrix-shape (spectral-embedding-result-embedding result))
@@ -96,14 +96,14 @@
   (define-values (fitted matrix) (spectral-embedding-fit-transform (fixture-X far-blobs)))
   (check-true (eq? matrix (spectral-embedding-result-embedding fitted))))
 
-(test-gpu "L1: params keep a derived n-neighbors and a drawn seed as #f"
+(test-gpu "params keep a derived n-neighbors and a drawn seed as #f"
   (define params
     (spectral-embedding-result-params (spectral-embedding-fit (fixture-X far-blobs)
                                                               #:random-state #f)))
   (check-equal? (hash-ref params 'n-neighbors) #f)
   (check-equal? (hash-ref params 'random-state) #f))
 
-(test-gpu "L2: the fits leave X and the graph bitwise unchanged, on the rescale path too"
+(test-gpu "the fits leave X and the graph bitwise unchanged, on the rescale path too"
   (for ([rows (in-list (list (fixture-rows far-blobs)
                              (scaled-rows (fixture-rows far-blobs) (expt 2.0 -70))))])
     (define X (rows-matrix rows))
@@ -216,14 +216,14 @@
          #:unless (eq? a b))
     (check-true (> (apply max (map (lambda (x y) (abs (- x y))) a b)) component-gap))))
 
-(test-gpu "L11: rings of 30 and 40 embed as eigenvectors, with either Laplacian, at seeds 0 to 4"
+(test-gpu "rings of 30 and 40 embed as eigenvectors, with either Laplacian, at seeds 0 to 4"
   (define g (unit-rings-of '(30 40)))
   (for* ([norm (in-list '(#t #f))]
          [seed (in-range 5)])
     (define rows (embedded (embedded-graph g (hasheq 'norm-laplacian norm 'random-state seed))))
     (check-residuals g rows (format "norm ~a seed ~a" norm seed) #:norm-laplacian norm)))
 
-(test-gpu "L11: upstream, unchecked: the dense fit of two identical polygons at 3 neighbours is no eigenvector"
+(test-gpu "upstream, unchecked: the dense fit of two identical polygons at 3 neighbours is no eigenvector"
   (define rows
     (embedded (spectral-embedding-fit (rows-matrix (polygons 2 30))
                                       #:n-neighbors 3
@@ -232,7 +232,7 @@
   (define residuals (eigen-residuals (unit-rings 2 30) rows #:norm-laplacian #f))
   (check-true (> (apply max residuals) 0.5) (format "residuals ~a" residuals)))
 
-(test-gpu "L11: a path of 12 and 4 samples without edges embeds the path, then one sample alone, for seeds 0 to 9"
+(test-gpu "a path of 12 and 4 samples without edges embeds the path, then one sample alone, for seeds 0 to 9"
   (define g (with-isolated (unit-path 12) 4))
   (for ([seed (in-range 10)])
     (define rows (embedded (embedded-graph g (hasheq 'n-components 6 'random-state seed))))
@@ -241,7 +241,7 @@
     (check-true (and (andmap (lambda (s) (> s 0.999)) (take shares 5)) (< (last shares) 1e-9))
                 (format "seed ~a shares on the path ~a" seed shares))))
 
-(test-gpu "L11: upstream, unchecked: with 30 samples without edges, no column is on the path of 12"
+(test-gpu "upstream, unchecked: with 30 samples without edges, no column is on the path of 12"
   (define g (with-isolated (unit-path 12) 30))
   (define shares (edge-shares g (embedded (embedded-graph g (hasheq 'n-components 6)))))
   (check-true (andmap (lambda (s) (< s 1e-9)) shares) (format "shares on the path ~a" shares)))
@@ -250,7 +250,7 @@
   (define labels (kmeans-result-labels (kmeans-fit (rows-matrix rows) #:n-clusters 3 #:n-init 10)))
   (adjusted-rand-score (list->device-vector truth #:dtype 'int32) labels))
 
-(test-gpu "L12: k-means recovers the planted labels from the embedding, for seeds 0 to 9"
+(test-gpu "k-means recovers the planted labels from the embedding, for seeds 0 to 9"
   (for ([seed (in-range 10)])
     (check-equal? (ari (embedded (spectral-embedding-fit (rows-matrix (fixture-rows far-blobs))
                                                          #:n-neighbors 10

@@ -38,7 +38,7 @@
    (list
     (hasheq 'init 'random 'learning-rate 0.5 'min-dist 0.3 'n-epochs 60 'negative-sample-rate 2))))
 
-(test-twin "L6: fit and transform equal Python cuML's bitwise on held-out blobs"
+(test-twin "fit and transform equal Python cuML's bitwise on held-out blobs"
   (check-parity held-out-fit held-out-new configs))
 
 (define (partly-unlabelled labels)
@@ -46,7 +46,7 @@
              [i (in-naturals)])
     (if (zero? (modulo i 3)) -1 label)))
 
-(test-twin "L6: a supervised fit equals Python's given the dense codes, -1 unlabelled"
+(test-twin "a supervised fit equals Python's given the dense codes, -1 unlabelled"
   (define labels (fixture-labels held-out-fit))
   (define cases `((spectral ,labels) (random ,labels) (random ,(partly-unlabelled labels))))
   (define runs
@@ -70,7 +70,7 @@
 
 (define merged-labels '(0 16777216 16777217))
 
-(test-twin "L10: labels past 2^24 stay distinct, where Python merges them"
+(test-twin "labels past 2^24 stay distinct, where Python merges them"
   (define labels
     (for/list ([_ (in-range 600)]
                [label (in-cycle merged-labels)])
@@ -91,7 +91,7 @@
 (define twelve
   (fixture "twelve" (take (fixture-rows far-blobs) 12) (take (fixture-labels far-blobs) 12)))
 
-(test-twin "L10: n-neighbors past the row count is Python's clamp, bitwise"
+(test-twin "n-neighbors past the row count is Python's clamp, bitwise"
   (define result (umap-fit (fixture-X twelve) #:n-neighbors 20 #:init 'random))
   (define clamped (umap-fit (fixture-X twelve) #:n-neighbors 12 #:init 'random))
   (match-define (list found) (run-cases twin (list (twin-case twelve result))))
@@ -115,7 +115,7 @@
                      build-kwds
                      device-ids))
 
-(test-twin "L15: the parameters are Python's, but for random-state and build-algo"
+(test-twin "the parameters are Python's, but for random-state and build-algo"
   (match-define (list theirs) (run-cases twin (list (hasheq 'op "params"))))
   (check-equal? (twin-params theirs unbound)
                 (hash-set* (umap-params) 'random-state #f 'build-algo 'auto)))

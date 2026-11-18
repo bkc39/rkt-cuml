@@ -65,7 +65,7 @@
    (outcome (lambda () (ridge-case-fit c dt #:alpha alpha #:solver solver #:fit-intercept fi)))
    (outcome (lambda () (case-fit c dt #:algorithm (lstsq-algorithm solver) #:fit-intercept fi)))))
 
-(test-gpu "alpha 0 is linear-regression-fit's fit, refusals included, bitwise (B1)"
+(test-gpu "alpha 0 is linear-regression-fit's fit, refusals included, bitwise"
   (for* ([c (in-list b1-cases)]
          [dt (in-list dtypes)]
          [solver (in-list '(auto eig svd))]
@@ -98,7 +98,7 @@
                  (expt 2 -1074)
                  1)))))
 
-(test-gpu "alpha 0 on spreads that underflow when staged is linear-regression-fit's fit (B1)"
+(test-gpu "alpha 0 on spreads that underflow when staged is linear-regression-fit's fit"
   (for* ([c (in-list (list (columns-apart -1000 1000) (columns-apart -950 950) subnormal-weight))]
          [solver (in-list '(auto eig svd))]
          [fi (in-list '(#t #f))])
@@ -128,7 +128,7 @@
         (weights-only-at (normal-case 10 3 2) '(0 3))
         (normal-case 3 3 1)))
 
-(test-gpu "small shapes at alpha 0 or under rounding are linear-regression-fit's fit (B1)"
+(test-gpu "small shapes at alpha 0 or under rounding are linear-regression-fit's fit"
   (for* ([c (in-list shape-cases)]
          [dt (in-list dtypes)]
          [solver (in-list '(auto eig svd))]
@@ -140,7 +140,7 @@
 (define threshold-cases
   (list (normal-case 200 7 0) (normal-case 200 7 1 #:weighted? #t) (normal-case 20 2 0)))
 
-(test-gpu "an alpha under rounding is linear-regression-fit's fit (B1)"
+(test-gpu "an alpha under rounding is linear-regression-fit's fit"
   (for* ([c (in-list threshold-cases)]
          [dt (in-list dtypes)]
          [solver (in-list '(eig svd))]
@@ -165,7 +165,7 @@
        (outcome (lambda ()
                   (case-fit (collinear 60) 'float32 #:algorithm (lstsq-algorithm solver))))))))
 
-(test-gpu "two identical fits are bitwise equal (B7)"
+(test-gpu "two identical fits are bitwise equal"
   (for ([spec (in-list (cartesian-product (list (normal-case 200 7 1 #:weighted? #t)
                                                 (normal-case 1000 7 2 #:weighted? #t)
                                                 (normal-case 5000 7 3))
@@ -178,7 +178,7 @@
         (ridge-case-fit c dt #:alpha 3/4 #:solver solver #:fit-intercept fi))
       (check-equal? (once) (once)))))
 
-(test-gpu "ridge-predict is linear-regression-predict on the same coefficients (B9)"
+(test-gpu "ridge-predict is linear-regression-predict on the same coefficients"
   (for ([dt (in-list dtypes)])
     (define c (normal-case 200 7 4))
     (define X (on-matrix (lcase-X c) dt))
@@ -188,7 +188,7 @@
                       (linear-regression-predict X)
                       device-vector->list))))
 
-(test-gpu "the estimator's model, predict and score are ridge-fit's, bitwise (B10)"
+(test-gpu "the estimator's model, predict and score are ridge-fit's, bitwise"
   (define c (normal-case 200 7 5 #:weighted? #t))
   (for* ([dt (in-list dtypes)]
          [solver (in-list '(auto svd))])

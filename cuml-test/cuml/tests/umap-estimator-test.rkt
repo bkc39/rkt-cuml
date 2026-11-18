@@ -41,7 +41,7 @@
           'random-state 7
           'build-algo 'nn-descent))
 
-(test-case "L15: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal? (umap-params)
                 (hasheq 'n-neighbors 15
                         'n-components 2
@@ -59,7 +59,7 @@
   (check-equal? (estimator-params (umap)) (umap-params))
   (check-equal? (round-trips umap changed) changed))
 
-(test-case "L15: printing, equality and set-params"
+(test-case "printing, equality and set-params"
   (check-equal? (printed (umap)) (make-list 3 "#<umap>"))
   (check-equal? (format "~v" (umap #:n-neighbors 5)) "#<umap #:n-neighbors 5>")
   (check-equal? (umap #:init 'random) (umap #:init 'random))
@@ -72,10 +72,10 @@
   (check-false (umap? 'umap))
   (check-false (umap-model (umap))))
 
-(test-case "L15: umap is an estimator and a transformer, not a clusterer or a predictor"
+(test-case "umap is an estimator and a transformer, not a clusterer or a predictor"
   (check-equal? (capabilities (umap) umap?) '(#t #f #f #t #f #t)))
 
-(test-gpu "L11: fit-transform's matrix is the fit's embedding, and the estimator is the procedures"
+(test-gpu "fit-transform's matrix is the fit's embedding, and the estimator is the procedures"
   (define X (fixture-X far-blobs))
   (define-values (result E) (umap-fit-transform X))
   (check-true (eq? E (umap-result-embedding result)))
@@ -88,7 +88,7 @@
   (check-true (bits-equal? (listed (umap-result-embedding (umap-model e))) (listed E)))
   (check-true (bits-equal? (listed (transform e X)) (listed (umap-transform (umap-model e) X)))))
 
-(test-gpu "L11: the generic fit passes y as #:y"
+(test-gpu "the generic fit passes y as #:y"
   (define X (fixture-X overlap))
   (define y (fixture-y overlap))
   (define supervised (listed (umap-result-embedding (umap-fit X #:y y #:init 'random))))

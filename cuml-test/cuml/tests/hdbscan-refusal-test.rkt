@@ -117,19 +117,19 @@
                      "batch-size: expected at least 1, got 0"
                      (lambda () (hdbscan-all-points-membership-vectors result #:batch-size 0))))))
 
-(test-gpu "R1: hdbscan-fit refuses each bad argument with its message"
+(test-gpu "hdbscan-fit refuses each bad argument with its message"
   (for ([r (in-list (fit-rows))])
     (test-case (row-id r)
       (check-row 'hdbscan-fit r))))
 
-(test-gpu "R1: the prediction procedures refuse each bad argument with their own names"
+(test-gpu "the prediction procedures refuse each bad argument with their own names"
   (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
   (for ([r (in-list (prediction-rows result))])
     (test-case (row-id r)
       (match (regexp-match #rx" ([a-z-]+)$" (row-id r))
         [(list _ name) (check-row (string->symbol name) r)]))))
 
-(test-gpu "A0: a released model is refused by every prediction procedure before its points are read"
+(test-gpu "a released model is refused by every prediction procedure before its points are read"
   (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
   (native-model-release! (hdbscan-result-model result))
   (define float64 (grid 'float64 4))
@@ -195,7 +195,7 @@
     [(list status _ errors)
      (fail (format "the refusals' process exited with ~a:\n~a" status errors))]))
 
-(test-gpu "R2: rows at the squared-norm boundary, and subnormal rows, fit and predict"
+(test-gpu "rows at the squared-norm boundary, and subnormal rows, fit and predict"
   (define boundary
     (list*->device-matrix
      (append
@@ -206,7 +206,7 @@
   (define result (hdbscan-fit boundary #:min-cluster-size 2 #:min-samples 2))
   (void (hdbscan-approximate-predict result boundary)))
 
-(test-case "R4: a fixed key other than its value is refused before X is read"
+(test-case "a fixed key other than its value is refused before X is read"
   (for ([params (in-list (list (hdbscan-params #:metric 'cosine)
                                (hdbscan-params #:build-algo 'nn-descent)))]
         [message (in-list '("metric: expected euclidean, got cosine"
@@ -215,7 +215,7 @@
                       (format "hdbscan-fit: ~a" message)
                       (lambda () (hdbscan-fit 'X #:params params #:resources 'unused)))))
 
-(test-gpu "R4: values that do not fit the native types raise exn:fail:contract"
+(test-gpu "values that do not fit the native types raise exn:fail:contract"
   (define X (grid 'float32))
   (define fit (curry hdbscan-fit X))
   (check-exn exn:fail:contract? (lambda () (fit #:max-cluster-size (expt 2 63))))

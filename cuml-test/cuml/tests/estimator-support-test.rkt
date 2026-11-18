@@ -13,7 +13,7 @@
                   score
                   transform
                   transformer?)
-         (only-in cuml/private/estimator-support define-estimator)
+         (only-in cuml/private/estimator-support define-estimator define-predictor)
          (only-in racket/list combinations)
          (only-in racket/match match-define)
          (only-in rackunit
@@ -21,6 +21,7 @@
                   check-false
                   check-match
                   check-not-equal?
+                  check-not-exn
                   check-pred
                   check-regexp-match
                   check-true
@@ -100,14 +101,14 @@
 
 (define table-keys '(size scale shade label))
 
-(test-case "E1: the constructor's parameters are the table's"
+(test-case "the constructor's parameters are the table's"
   (for ([keys (in-list (subsets table-keys 2))])
     (check-equal? (estimator-params (call-with gadget keys '())) (call-with gadget-params keys '()))
     (define base (gadget-params #:size 9))
     (check-equal? (estimator-params (call-with gadget keys (list base)))
                   (call-with gadget-params keys (list base)))))
 
-(test-case "E2: estimator-set-params by keyword, by hash and through the table agree"
+(test-case "estimator-set-params by keyword, by hash and through the table agree"
   (define e (fit (gadget #:label "a" #:speed 4) 'X))
   (for ([key (in-list table-keys)])
     (define value (hash-ref changed key))
@@ -150,7 +151,7 @@
                      ((label place) "#<gadget #:label \"x\" #:place 'here>")
                      ((speed place) "#<gadget #:speed 2 #:place 'here>")))
 
-(test-case "E3: the printer shows the keys that differ from their defaults, then the settings given"
+(test-case "the printer shows the keys that differ from their defaults, then the settings given"
   (check-equal? (length printed) (length (subsets (append table-keys '(speed place)) 2)))
   (for ([keys (in-list (subsets (append table-keys '(speed place)) 2))])
     (match-define (list _ text) (assoc keys printed))
@@ -161,7 +162,7 @@
   (check-equal? (format "~a" (gadget #:size 5)) "#<gadget #:size 5>")
   (check-equal? (format "~a" (fit (gadget #:speed 1) 'X)) "#<gadget fitted #:speed 1>"))
 
-(test-case "E4: equality and hashing cover the parameters and settings, and the fit by eq?"
+(test-case "equality and hashing cover the parameters and settings, and the fit by eq?"
   (check-equal? (gadget #:size 4 #:speed 1) (gadget #:size 4 #:speed 1))
   (check-equal? (equal-hash-code (gadget #:size 4 #:speed 1))
                 (equal-hash-code (gadget #:size 4 #:speed 1)))
@@ -174,7 +175,7 @@
   (check-not-equal? f (fit (gadget) 'X))
   (check-not-equal? f (gadget)))
 
-(test-case "E5: an estimator without sample weights refuses one"
+(test-case "an estimator without sample weights refuses one"
   (check-cuml-error 'logic
                     "fit: gadget takes no sample-weight"
                     (lambda () (fit (gadget) 'X #:sample-weight 'w)))
@@ -184,14 +185,14 @@
   (check-match (fit-predict (weighted-gadget) 'X #:sample-weight 'w)
                (list 'labels (list 'model _ _ _ _ 'w))))
 
-(test-case "E5: fit passes the generic's name, the set and the settings given"
+(test-case "fit passes the generic's name, the set and the settings given"
   (match-define (list 'labels m) (fit-predict (gadget #:size 4 #:place 'p) 'X))
   (check-equal? m (model 'fit-predict 'X (gadget-params #:size 4) (list #f 'p) #f))
   (check-cuml-error 'logic
                     "fit: shade: expected plain, got bold"
                     (lambda () (fit (gadget #:shade 'bold) 'X))))
 
-(test-case "E6: the applied methods pass the generic's name and the settings"
+(test-case "the applied methods pass the generic's name and the settings"
   (define f (fit (gadget #:speed 2) 'X))
   (define m (model 'fit 'X (gadget-params) (list 2 #f) #f))
   (check-equal? (predict f 'Y) (list 'predict 'predict m 'Y 2 #f 'none))
@@ -211,7 +212,7 @@
                     (lambda () (score (fit g 'Y) 'Y #:sample-weight 'w)))
   (check-match (score (fit g 'Y) 'Y) (list 'score 'score _ 'Y #f 'p 'none)))
 
-(test-case "E6: an unfitted estimator is refused before X is read"
+(test-case "an unfitted estimator is refused before X is read"
   (set-box! applied-calls 0)
   (for ([generic (in-list (list predict transform score))]
         [who (in-list '(predict transform score))])
@@ -220,13 +221,13 @@
                       (lambda () (generic (gadget) 'X))))
   (check-equal? (unbox applied-calls) 0))
 
-(test-case "L5: the printer shows a key whose default cannot be computed"
+(test-case "the printer shows a key whose default cannot be computed"
   (check-equal? (format "~a" (gadget (hash-set (gadget-params) 'size 'x)))
                 "#<gadget #:size 'x #:scale 6>")
   (check-equal? (format "~a" (gadget (hash-set* (gadget-params) 'size 'x 'label "y")))
                 "#<gadget #:size 'x #:scale 6 #:label \"y\">"))
 
-(test-case "L11: the constructor and estimator-set-params name the estimator as the owner"
+(test-case "the constructor and estimator-set-params name the estimator as the owner"
   (check-cuml-error 'logic
                     "weighted-gadget: weighted-gadget has no parameter colour"
                     (lambda () (weighted-gadget (hash-set (gadget-params) 'colour 1))))
@@ -248,7 +249,7 @@
   (check-pred exn:fail:syntax? e)
   (check-regexp-match pattern (exn-message e)))
 
-(test-case "L9: a setting named like a hyperparameter or params is refused"
+(test-case "a setting named like a hyperparameter or params is refused"
   (for ([setting (in-list '(size shade params))])
     (check-syntax-error `(define-estimator clash
                            #:hyperparameters gadget-params
@@ -335,13 +336,13 @@
   #:apply values
   [transform (applied-spy 'transform) #:fit-transform taught-matrix])
 
-(test-case "L19: #:supervised passes the generic's y to the fit as #:y, #f included"
+(test-case "#:supervised passes the generic's y to the fit as #:y, #f included"
   (check-equal? (taught-gadget-model (fit (taught-gadget) 'X 'y)) '(taught X y 3))
   (check-equal? (taught-gadget-model (fit (taught-gadget) 'X)) '(taught X #f 3))
   (check-equal? (fit-transform (taught-gadget) 'X 'y) '(embedded (taught X y 3)))
   (check-match (gadget-model (fit (gadget) 'X 'y)) (list 'model 'fit 'X _ _ _)))
 
-(test-case "L19: #:fit-transform is called instead of the transform procedure"
+(test-case "#:fit-transform is called instead of the transform procedure"
   (set-box! applied-calls 0)
   (check-equal? (fit-transform (taught-gadget #:size 4) 'X) '(embedded (taught X #f 4)))
   (check-equal? (unbox applied-calls) 0)
@@ -357,7 +358,7 @@
   #:apply values
   [fit-transform taught-matrix])
 
-(test-case "L17: [fit-transform proc] fits and applies proc, and its transform is refused"
+(test-case "[fit-transform proc] fits and applies proc, and its transform is refused"
   (check-true (transformer? (embedding-gadget)))
   (check-match (fit-transform (embedding-gadget #:speed 2) 'X)
                (list 'embedded (list 'model 'fit-transform 'X _ '(2 #f) #f)))
@@ -371,7 +372,7 @@
                     "transform: embedding-gadget has no transform; use fit-transform"
                     (lambda () (transform (embedding-gadget) 'Z))))
 
-(test-case "L17: [fit-transform proc] cannot be given with [transform proc]"
+(test-case "[fit-transform proc] cannot be given with [transform proc]"
   (check-syntax-error '(define-estimator both
                          #:hyperparameters gadget-params
                          #:fit gadget-fit/who
@@ -427,3 +428,18 @@
                            #:apply values
                            [predict values])
                         #rx"define-estimator: #:needs-y and #:supervised are exclusive")))
+
+(define (predictor-with . options)
+  `(define-predictor swapped
+     #:hyperparameters gadget-params
+     #:fit regressor-fit/who
+     #:predict regressor-fit/who
+     ,@options))
+
+(test-case "define-predictor takes its optional methods in any order, each once"
+  (check-not-exn
+   (lambda ()
+     (expanded
+      (predictor-with '#:decision-function 'regressor-fit/who '#:predict-proba 'regressor-fit/who))))
+  (check-syntax-error (predictor-with '#:scorer 'regressor-fit/who '#:scorer 'regressor-fit/who)
+                      #rx"too many occurrences of #:scorer"))

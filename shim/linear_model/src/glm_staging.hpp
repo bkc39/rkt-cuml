@@ -37,6 +37,15 @@ struct row_selection {
   int64_t count;
 };
 
+template <typename T>
+buffer<T> zeroed(int64_t count, rmm::cuda_stream_view stream) {
+  buffer<T> out = scratch<T>(count, stream);
+  raftrkt::cuda_check(
+      cudaMemsetAsync(out.data(), 0, out.size() * sizeof(T), stream.value()),
+      "cudaMemsetAsync");
+  return out;
+}
+
 enum class glm_family : std::uint8_t { ols, ridge, cd };
 
 struct glm_solver {

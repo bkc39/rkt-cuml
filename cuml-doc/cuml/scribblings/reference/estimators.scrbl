@@ -63,14 +63,21 @@ optional; its fallback raises @racket[exn:fail:support].}
 
 An estimator that scores samples: the method @racket[score], required.}
 
+@defthing[gen:classifier any/c]{
+
+An estimator that gives class scores: the methods @racket[predict-proba],
+@racket[predict-log-proba] and @racket[decision-function], each optional.}
+
 @deftogether[(@defproc[(estimator? [v any/c]) boolean?]
               @defproc[(predictor? [v any/c]) boolean?]
               @defproc[(clusterer? [v any/c]) boolean?]
               @defproc[(transformer? [v any/c]) boolean?]
-              @defproc[(scorer? [v any/c]) boolean?])]{
+              @defproc[(scorer? [v any/c]) boolean?]
+              @defproc[(classifier? [v any/c]) boolean?])]{
 
 Whether @racket[v] implements @racket[gen:estimator], @racket[gen:predictor],
-@racket[gen:clusterer], @racket[gen:transformer] or @racket[gen:scorer].}
+@racket[gen:clusterer], @racket[gen:transformer], @racket[gen:scorer] or
+@racket[gen:classifier].}
 
 @defproc[(fit [estimator estimator?]
               [X any/c]
@@ -130,6 +137,12 @@ them.}
 
 The samples whose @racket[transform] is @racket[X], for a transformer
 that can undo its mapping.}
+
+@deftogether[(@defproc[(predict-proba [classifier classifier?] [X any/c]) any/c]
+              @defproc[(predict-log-proba [classifier classifier?] [X any/c]) any/c]
+              @defproc[(decision-function [classifier classifier?] [X any/c]) any/c])]{
+
+The class probabilities of @racket[X], their logarithms, and the scores they come from.}
 
 @defproc[(score [scorer scorer?]
                 [X any/c]

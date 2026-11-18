@@ -5,8 +5,11 @@
          (only-in rackunit check-equal? check-pred check-regexp-match fail)
          (only-in raft exn:fail:raft-kind exn:fail:raft?))
 
-(provide check-cuml-error
+(provide (struct-out prefixed)
+         check-cuml-error
          raised)
+
+(struct prefixed (prefix pattern))
 
 (define (raised thunk)
   (with-handlers ([exn:fail? values])
@@ -14,9 +17,13 @@
     #f))
 
 (define (check-message expected actual)
-  (if (regexp? expected)
-      (check-regexp-match expected actual)
-      (check-equal? actual expected)))
+  (match expected
+    [(prefixed prefix pattern)
+     (check-equal? (substring actual 0 (min (string-length prefix) (string-length actual))) prefix)
+     (check-regexp-match pattern
+                         (substring actual (min (string-length prefix) (string-length actual))))]
+    [(? regexp?) (check-regexp-match expected actual)]
+    [_ (check-equal? actual expected)]))
 
 (define (check-cuml-error kind message thunk)
   (match (raised thunk)

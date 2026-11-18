@@ -7,6 +7,7 @@
                      threading))
 
 @(define ev (make-base-eval #:lang 'racket/base '(require cuml raft threading)))
+@(define int32-count @racket[(integer-in 1 2147483647)])
 
 @title[#:tag "linear-model"]{Linear models}
 
@@ -38,14 +39,12 @@ dtype and @racket[0.0] without @racket[fit-intercept].}
                                 [#:params params (or/c #f hash?) #f]
                                 [#:resources resources device-resources? (current-device-resources)])
          linear-regression-result?]{
-Fits ordinary least squares to @racket[y] on the columns of @racket[X], a
-row-major @racket['float32] or @racket['float64] matrix of finite values with
-at least two rows. @racket[y] and @racket[sample-weight] are vectors of
-@racket[X]'s dtype with one finite element per row; weights are at least 0
-with a positive sum. A zero weight deletes its row, and so does a weight of
-at most 2@superscript{−150}·4@superscript{k} (float32) or
-2@superscript{−1075}·4@superscript{k} (float64), 4@superscript{k} being the
-largest weight's power of two rounded up to a power of 4.
+Fits ordinary least squares to @racket[y] on the columns of @racket[X], a row-major
+@racket['float32] or @racket['float64] matrix of finite values with at least two rows. @racket[y]
+and @racket[sample-weight] are vectors of @racket[X]'s dtype with one finite element per row;
+weights are at least 0 with a positive sum. A zero weight deletes its row, and so does a weight of
+at most 2@superscript{−150}·4@superscript{k} (float32) or 2@superscript{−1075}·4@superscript{k}
+(float64), 4@superscript{k} being the largest weight's power of two rounded up to a power of 4.
 
 @racket['auto] and @racket['eig] solve the normal equations, @racket['svd]
 and @racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation
@@ -253,7 +252,7 @@ The result of @racket[lasso-fit], as @racket[elastic-net-result].}
                           [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                           [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
                           [#:fit-intercept fit-intercept boolean? #t]
-                          [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                          [#:max-iter max-iter #,int32-count 1000]
                           [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                           [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                           [#:params params (or/c #f hash?) #f]
@@ -300,7 +299,7 @@ As @racket[linear-regression-predict], for an @racket[elastic-net-result].}
 @defproc[(elastic-net-params [base (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                              [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
                              [#:fit-intercept fit-intercept boolean? #t]
-                             [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                             [#:max-iter max-iter #,int32-count 1000]
                              [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                              [#:selection selection (or/c 'cyclic 'random) 'cyclic])
          (and/c hash? hash-eq? immutable?)]{
@@ -310,7 +309,7 @@ The hyperparameters of @racket[elastic-net-fit] and @racket[elastic-net], as @ra
                     [#:sample-weight sample-weight (or/c #f device-vector?) #f]
                     [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                     [#:fit-intercept fit-intercept boolean? #t]
-                    [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                    [#:max-iter max-iter #,int32-count 1000]
                     [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                     [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                     [#:params params (or/c #f hash?) #f]
@@ -325,7 +324,7 @@ As @racket[linear-regression-predict], for a @racket[lasso-result].}
 
 @defproc[(lasso-params [base (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                        [#:fit-intercept fit-intercept boolean? #t]
-                       [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                       [#:max-iter max-iter #,int32-count 1000]
                        [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                        [#:selection selection (or/c 'cyclic 'random) 'cyclic])
          (and/c hash? hash-eq? immutable?)]{
@@ -338,7 +337,7 @@ The hyperparameters of @racket[lasso-fit] and @racket[lasso], as @racket[kmeans-
 @defproc[(elastic-net [params (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                       [#:l1-ratio l1-ratio (and/c rational? (between/c 0 1)) 0.5]
                       [#:fit-intercept fit-intercept boolean? #t]
-                      [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                      [#:max-iter max-iter #,int32-count 1000]
                       [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                       [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                       [#:resources resources (or/c #f device-resources?) #f])
@@ -356,7 +355,7 @@ The @racket[elastic-net-result] of the fit that made @racket[estimator], or @rac
 
 @defproc[(lasso [params (or/c #f hash?) #f] [#:alpha alpha (and/c rational? (>=/c 0)) 1.0]
                 [#:fit-intercept fit-intercept boolean? #t]
-                [#:max-iter max-iter (integer-in 1 2147483647) 1000]
+                [#:max-iter max-iter #,int32-count 1000]
                 [#:tol tol (and/c rational? (>=/c 0)) 1e-3]
                 [#:selection selection (or/c 'cyclic 'random) 'cyclic]
                 [#:resources resources (or/c #f device-resources?) #f])
@@ -369,5 +368,133 @@ As @racket[elastic-net], with @racket[lasso-fit] and @racket[lasso-predict].
 @defproc[(lasso? [v any/c]) boolean?]{Whether @racket[v] is a lasso estimator.}
 @defproc[(lasso-model [estimator lasso?]) (or/c #f lasso-result?)]{
 The @racket[lasso-result] of the fit that made @racket[estimator], or @racket[#f].}
+
+@section[#:tag "logistic-regression"]{Logistic regression}
+
+@declare-exporting[cuml/linear-model cuml]
+
+@examples[#:eval ev
+(define Xc (list*->device-matrix '((0 1) (1 1) (1 2) (2 2) (3 3) (3 4)) #:dtype 'float64))
+(define yc '("no" "no" "no" "yes" "yes" "yes"))
+(define fitted-c (logistic-regression-fit Xc yc))
+(logistic-regression-result-classes fitted-c)
+(logistic-regression-predict fitted-c (list*->device-matrix '((0 0) (4 4)) #:dtype 'float64))
+(~> (logistic-regression-predict-proba fitted-c Xc) device-matrix->list* (map (lambda (r) (decimals 4 r)) _))
+]
+
+@defstruct*[logistic-regression-result
+            ([coef device-matrix?]
+             [intercept device-vector?]
+             [classes list?]
+             [label-kind any/c]
+             [n-iter exact-nonnegative-integer?])]{
+The result of @racket[logistic-regression-fit]: one row of @racket[coef] and one @racket[intercept]
+for two classes (the second's log-odds), else one per class. @racket[label-kind] is opaque: the
+label kind of a fitted result; copy it from one. @racket[logistic-regression-predict] labels by it.}
+
+@defproc[(logistic-regression-fit [X device-matrix?]
+                                  [y (or/c device-vector? list?)]
+                                  [#:sample-weight sample-weight (or/c #f device-vector?) #f]
+                                  [#:penalty penalty (or/c 'l1 'l2 'elasticnet 'none) 'l2]
+                                  [#:C C (and/c rational? positive?) 1.0]
+                                  [#:l1-ratio l1-ratio (or/c #f (real-in 0 1)) #f]
+                                  [#:fit-intercept fit-intercept boolean? #t]
+                                  [#:max-iter max-iter #,int32-count 1000]
+                                  [#:tol tol (and/c rational? (>=/c 0)) 1e-4]
+                                  [#:linesearch-max-iter linesearch-max-iter #,int32-count 50]
+                                  [#:lbfgs-memory lbfgs-memory #,int32-count 5]
+                                  [#:penalty-normalized penalty-normalized boolean? #t]
+                                  [#:class-weight class-weight (or/c #f 'balanced hash?) #f]
+                                  [#:params params (or/c #f hash?) #f]
+                                  [#:resources resources device-resources? (current-device-resources)])
+         logistic-regression-result?]{
+Fits C times the weighted sigmoid (two classes) or softmax loss under @racket[penalty] by
+L-BFGS, OWL-QN with an l1 part; the intercept is not penalised. @racket[y] holds class labels:
+integral numbers on the device, or a list of reals, strings or symbols; @racket[classes] are the
+sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
+
+The fit is refused when the solver has not converged; the check bounds the first-order residual, not
+the distance to the optimum. A column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
+last bits is refused: centre it. Columns of widely mixed scale can be refused at any
+@racket[max-iter]: standardise them. Without @racket[fit-intercept], columns far from zero can be
+refused short of @racket[max-iter]: lower @racket[tol] or centre them
+(@hyperlink["https://github.com/bkc39/rkt-cuml/issues/126"]{#126}). On separable data without a
+penalty the coefficients grow until the solver stops. Large fits do not repeat bitwise.
+@examples[#:eval ev #:label #f
+(logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
+(eval:error (logistic-regression-fit Xc yc #:C 0))
+(eval:error (logistic-regression-fit Xc '("a" "a" "a" "a" "a" "a")))
+]}
+
+@defproc[(logistic-regression-decision-function
+          [result logistic-regression-result?] [X device-matrix?]
+          [#:resources resources device-resources? (current-device-resources)])
+         device-matrix?]{
+X·coefᵀ + intercept, one column per row of @racket[coef].}
+
+@defproc[(logistic-regression-predict [result logistic-regression-result?] [X device-matrix?]
+                                      [#:resources resources device-resources? (current-device-resources)])
+         (or/c device-vector? list?)]{
+The class of largest score, the first on ties (for two classes, the second when its score is
+above 0), as @racket[y] was given: a device-vector of its dtype, or a list.}
+
+@defproc[(logistic-regression-predict-proba
+          [result logistic-regression-result?] [X device-matrix?]
+          [#:resources resources device-resources? (current-device-resources)])
+         device-matrix?]{
+The class probabilities, in X's dtype.}
+
+@defproc[(logistic-regression-predict-log-proba
+          [result logistic-regression-result?] [X device-matrix?]
+          [#:resources resources device-resources? (current-device-resources)])
+         device-matrix?]{
+Their logarithms, computed directly. Unlike Python cuML's, they stay finite where a probability
+underflows.}
+
+@defproc[(logistic-regression-params [base (or/c #f hash?) #f]
+                                     [#:penalty penalty (or/c 'l1 'l2 'elasticnet 'none) 'l2]
+                                     [#:C C (and/c rational? positive?) 1.0]
+                                     [#:l1-ratio l1-ratio (or/c #f (real-in 0 1)) #f]
+                                     [#:fit-intercept fit-intercept boolean? #t]
+                                     [#:max-iter max-iter #,int32-count 1000]
+                                     [#:tol tol (and/c rational? (>=/c 0)) 1e-4]
+                                     [#:linesearch-max-iter linesearch-max-iter #,int32-count 50]
+                                     [#:lbfgs-memory lbfgs-memory #,int32-count 5]
+                                     [#:penalty-normalized penalty-normalized boolean? #t]
+                                     [#:class-weight class-weight (or/c #f 'balanced hash?) #f])
+         (and/c hash? hash-eq? immutable?)]{
+The hyperparameters of @racket[logistic-regression-fit] and @racket[logistic-regression], as
+@racket[kmeans-params].}
+
+@section[#:tag "logistic-regression-estimator"]{Logistic regression estimator}
+
+@declare-exporting[cuml]
+
+@defproc[(logistic-regression [params (or/c #f hash?) #f]
+                              [#:penalty penalty (or/c 'l1 'l2 'elasticnet 'none) 'l2]
+                              [#:C C (and/c rational? positive?) 1.0]
+                              [#:l1-ratio l1-ratio (or/c #f (real-in 0 1)) #f]
+                              [#:fit-intercept fit-intercept boolean? #t]
+                              [#:max-iter max-iter #,int32-count 1000]
+                              [#:tol tol (and/c rational? (>=/c 0)) 1e-4]
+                              [#:linesearch-max-iter linesearch-max-iter #,int32-count 50]
+                              [#:lbfgs-memory lbfgs-memory #,int32-count 5]
+                              [#:penalty-normalized penalty-normalized boolean? #t]
+                              [#:class-weight class-weight (or/c #f 'balanced hash?) #f]
+                              [#:resources resources (or/c #f device-resources?) #f])
+         logistic-regression?]{
+As @racket[ridge]: @racket[fit] is @racket[logistic-regression-fit] and needs @racket[y];
+@racket[predict], @racket[predict-proba], @racket[predict-log-proba] and
+@racket[decision-function] are the @racket[logistic-regression-] functions; and @racket[score]
+is the weighted @racket[accuracy-score], labels outside @racket[classes] counting as wrong.
+@examples[#:eval ev #:label #f
+(score (fit (logistic-regression) Xc yc) Xc yc)
+]}
+
+@defproc[(logistic-regression? [v any/c]) boolean?]{Whether @racket[v] is a logistic regression estimator.}
+
+@defproc[(logistic-regression-model [estimator logistic-regression?]) (or/c #f logistic-regression-result?)]{
+The @racket[logistic-regression-result] of the fit that made @racket[estimator], or @racket[#f].}
 
 @(close-eval ev)

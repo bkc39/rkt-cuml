@@ -196,7 +196,7 @@
       #:labels values
       #:settings ())))
 
-(define regressor-definition
+(define predictor-definition
   '((provide gauge
              gauge?
              gauge-model)
@@ -204,7 +204,7 @@
       (list who X y))
     (define (gauge-predict/who who model X)
       (list who model X))
-    (define-regressor gauge
+    (define-predictor gauge
       #:hyperparameters gauge-params
       #:fit gauge-fit/who
       #:predict gauge-predict/who)))
@@ -215,6 +215,37 @@
              gauge-predict/who)
     (define-cd-result gauge-result gauge-predict)))
 
+(define titles-with-spec-ids
+  '((require (only-in rackunit check-true test-case)
+             (only-in raft/tests/private/gpu test-gpu)
+             (only-in "python-env.rkt" test-twin))
+    (test-case "a fit repeats (S3)"
+      (check-true #t))
+    (test-gpu "a constant column gets coef 0 (S3, H1)"
+      (check-true #t))
+    (test-twin "the fit is Python's bit for bit (T1, F12)"
+      (check-true #t))
+    (test-case "a title may end in a parenthesis (bitwise)"
+      (check-true #t))
+    (test-case "fits at the default tol (L4-f)"
+      (check-true #t))
+    (test-case "refused with its message (#23)"
+      (check-true #t))
+    (test-case "the laws hold (T1–T4)"
+      (check-true #t))
+    (test-case "a fit repeats (S3)."
+      (check-true #t))
+    (test-case "bit for bit (T1 and F12)"
+      (check-true #t))
+    (test-case "R2: raw breast-cancer is refused"
+      (check-true #t))
+    (test-case "l1-ratio 0 is the ridge fit (L2)"
+      (check-true #t))
+    (test-case "the penalty is the l1 norm (L1)"
+      (check-true #t))
+    (test-case "r2: a title may start with a lower-case word and a colon"
+      (check-true #t))))
+
 (define helper-used-in-a-template
   '((require (for-syntax racket/base)) (provide m)
                                        (define (helper x)
@@ -222,6 +253,19 @@
                                        (define-syntax-parse-rule (m x:expr)
                                          #:with y #'x
                                          (helper y))))
+
+(test-case "a test title that carries a spec id is refused"
+  (check-equal?
+   (sort (problems-in titles-with-spec-ids) string<?)
+   '("the test title \"R2: raw breast-cancer is refused\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"a constant column gets coef 0 (S3, H1)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"a fit repeats (S3)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"a fit repeats (S3).\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"bit for bit (T1 and F12)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"fits at the default tol (L4-f)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"refused with its message (#23)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"the fit is Python's bit for bit (T1, F12)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"the laws hold (T1–T4)\" carries a spec id: say the law, and keep ids in plans")))
 
 (test-case "an exported procedure that takes who first is defined with define/who"
   (check-equal? (problems-in exported-who-procedure)
@@ -247,8 +291,8 @@
 (test-case "define-estimator binds the constructor, the predicate and the model accessor"
   (check-equal? (problems-in estimator-definition) '()))
 
-(test-case "define-regressor binds the constructor, the predicate and the model accessor"
-  (check-equal? (problems-in regressor-definition) '()))
+(test-case "define-predictor binds the constructor, the predicate and the model accessor"
+  (check-equal? (problems-in predictor-definition) '()))
 
 (test-case "define-cd-result binds the result struct, the predict and its who form"
   (check-equal? (problems-in cd-result-definition) '()))
@@ -298,10 +342,10 @@
                                     (list who x))
                                   (twice 'twice 1)))
 
-(test-case "L7: a wrapper that passes other arguments than its formals is not a relay"
+(test-case "a wrapper that passes other arguments than its formals is not a relay"
   (check-equal? (problems-in wrapper-that-prepares) '()))
 
-(test-case "L7: all-defined-out and prefix-out export a procedure that takes who"
+(test-case "all-defined-out and prefix-out export a procedure that takes who"
   (check-equal? (problems-in who-procedure-under-all-defined-out)
                 '("twice takes who first and is exported: define it with define/who"))
   (check-equal? (problems-in who-procedure-under-prefix-out)

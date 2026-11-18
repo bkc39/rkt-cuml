@@ -12,9 +12,9 @@
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "glm.rkt"
                   alpha-value/who
+                  bounded-count/who
                   glm-predict/who
                   intercept-flag/who
-                  iteration-count/who
                   real-value/who)
          (only-in "native.rkt" cuml-linear-model-elastic-net-fit-job))
 
@@ -66,7 +66,7 @@
   (define flag (intercept-flag/who who (hyperparameter 'fit-intercept)))
   (define penalty (alpha-value/who who (hyperparameter 'alpha)))
   (define ratio (real-value/who who 'l1-ratio (hyperparameter 'l1-ratio)))
-  (define epochs (iteration-count/who who (hyperparameter 'max-iter)))
+  (define epochs (bounded-count/who who 'max-iter (hyperparameter 'max-iter)))
   (define tolerance (real-value/who who 'tol (hyperparameter 'tol)))
   (define out (deposit-for/who who resources))
   (define-values (intercept n-iter)

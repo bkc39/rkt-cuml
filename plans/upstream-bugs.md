@@ -1,7 +1,7 @@
 # Upstream bugs
 
 Found by the cluster arc (#5), the metrics leg (A2, #34), the PCA leg (A4, #47), the truncated SVD leg
-(A5, #48) and the UMAP leg (B1, #50) against libcuml 26.08.00, cuVS 26.08.01 and raft
+(A5, #48), the UMAP leg (B1, #50) and the linear-model legs (L1–L4) against libcuml 26.08.00, cuVS 26.08.01 and raft
 26.08. None is filed upstream (owner, 2026-10-20: log locally). Each is refused,
 worked around or documented by the shim, and a test pins it; the leg's PR
 packet (§4) has the detail.
@@ -96,6 +96,15 @@ packet (§4) has the detail.
 | L3 #89 | α < 0 and l1_ratio ∉ [0,1] are accepted silently | `cd.cuh` | refused (V8, V8b) |
 | L3 #89 | the residual starts from y, so a non-zero coef on entry is solved wrongly (no warm start) | `cd.cuh:210` | coef zeroed |
 | L3 #89 | `int n_rows`/`n_cols`; the weighted `binary_mult` uses an `int` index (not probed) | `cd.cuh:127,184` | V12; weights never passed |
+| L4 #90 | the binary weighted loss is divided by Σw but its gradient by N, so f and g disagree unless Σw = N: weights ×8 put the coefficients 0.13–0.45 off (l2) | `glm/qn/glm_base.cuh` 141–174 | weights rescaled to Σw̃ = m, penalties by m/(C·W) (L4-b) |
+| L4 #90 | the softmax loss never reads the sample weights: weighted k = 3 fits equal the unweighted one bit for bit, 3–6e-2 off the weighted optimum | `glm/qn/glm_softmax.cuh` 175–181 | unequal weights with 3 or more classes refused (#23, L4-c) |
+| L4 #90 | `lbfgs_memory` 0 segfaults (exit 139); −1 throws "cannot create std::vector larger than max_size()" | `glm/qn/qn_solvers.cuh` | refused below 1 (#11) |
+| L4 #90 | the stop is not scale-invariant: X·2^±10 puts the fit 0.2 / 6e-3 off, X·2^±20 returns garbage after 2 iterations, silently | `glm/qn/qn_util.cuh` `check_convergence`, the absolute line-search cuts | one shared power-of-two staging from the median column spread (L4-a) and the post-solve check (L4-f) |
+| L4 #90 | a line-search failure is a silent stop at the last good point (`OPT_LS_FAILED` only logged) | `glm/qn/qn_solvers.cuh` `qn_fit_x` | the post-solve check (L4-f) |
+| L4 #90 | OWL-QN tests convergence on the gradient of the smooth part, so l1 fits stop almost only on the change or line-search tests | `glm/qn/qn_solvers.cuh` | documented; the check measures the pseudo-gradient |
+| L4 #90 | `atomicAdd` reductions make fits non-repeatable above about 1000 rows (float32 rel 5e-4 at 2000 rows), and float32 softmax fits under l1 or elasticnet already at 150–200 rows (32 runs: 4–30 distinct fits, in Python too) | `glm/qn/glm_base.cuh` `mapThenSumReduce`, the softmax kernel | documented (L4-h); bitwise twins at n ≤ 200 except float32 multiclass OWL-QN, compared within 1e-3 |
+| L4 #90 | `log_sigmoid` uses log(1 + exp) rather than log1p | `glm/qn/glm_logistic.cuh` | documented |
+| L4 #90 | `predict_proba` returns float64 for two classes whatever X's dtype | the Python binary `predict_proba` path | probabilities in X's dtype for every k (L4-i) |
 
 ## cuVS
 
@@ -176,3 +185,7 @@ packet (§4) has the detail.
 | L2 #88 | `solver='auto'` with one column uses a CuPy SVD, which differs from `ridgeFit` in the last bits | `ridge.pyx` | bound to `ridgeFit` |
 | L3 #89 | `ElasticNet`/`Lasso` accept α NaN/inf and l1_ratio NaN (zero coefficients), tol ≤ 0 or NaN (runs to max_iter) and max_iter ≤ 0 (zeros, n_iter 0) | `elastic_net.py`, `lasso.py` | refused |
 | L3 #89 | the docstring says tol checks the dual gap; the code doesn't. There is no warning at max_iter. | `elastic_net.py`, `cd.pyx` | documented; n-iter reported |
+| L4 #90 | `LogisticRegression` accepts C ≤ 0 or NaN (C = 0 is a ZeroDivisionError, C = −1 garbage, NaN zeros), `l1_ratio` NaN (zeros), `max_iter` ≤ 0 (zeros, n_iter 0) and `linesearch_max_iter` ≤ 0 (zeros) | `logistic_regression.py`, `solvers/qn.pyx` | refused (#5, #6, #9, #10) |
+| L4 #90 | a negative class weight gives an intercept of 6.9e307 | `common/classification.py` | refused (#14) |
+| L4 #90 | `l1_ratio` is silently ignored with `penalty='l2'` | `logistic_regression.py` | refused (#7) |
+| L4 #90 | binary `predict_log_proba` is log(predict_proba), −inf where a probability underflows | `logistic_regression.py` | stable log-sigmoid and log-softmax, finite (L4-i) |

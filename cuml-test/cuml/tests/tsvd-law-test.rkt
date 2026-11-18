@@ -83,7 +83,7 @@
                   (format "L3: |CC^T - I| = ~a, ~a d u" off (/ off (* d u))))
       (check-true (andmap positive? (first-max-entries components)) "L4"))))
 
-(test-gpu "L15: rank-deficient fits have no NaN, and their trailing singular values are small"
+(test-gpu "rank-deficient fits have no NaN, and their trailing singular values are small"
   (for* ([dt (in-list dtypes)]
          [solver (in-list solvers)]
          [c (in-list (list (list duplicate-fixture 6 4) (list wide-fixture 4 4)))])
@@ -100,7 +100,7 @@
 (define (positive-zeros? xs)
   (andmap (lambda (x) (eqv? x 0.0)) xs))
 
-(test-gpu "L16: vanishing variance gives positive zeros, never NaN"
+(test-gpu "vanishing variance gives positive zeros, never NaN"
   (for* ([dt (in-list dtypes)]
          [solver (in-list solvers)])
     (test-case (format "~a ~a" dt solver)
@@ -162,7 +162,7 @@
                                  (device-matrix->list* (tsvd-transform small small-X))))
                "fit-transform's matrix is not tsvd-transform's")))))
 
-(test-gpu "L24: tiny data, whose squares underflow, fits as the unit data scaled"
+(test-gpu "tiny data, whose squares underflow, fits as the unit data scaled"
   (for* ([scale (in-list '((float32 1e-20) (float32 1e-25) (float64 1e-160) (float64 1e-165)))]
          [solver (in-list solvers)])
     (match-define (list dt by) scale)

@@ -34,7 +34,7 @@
 (define changed
   (hasheq 'eps 0.3 'min-samples 10 'metric 'cosine 'out-dtype 'int64 'max-mbytes-per-batch 4))
 
-(test-case "L19: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal?
    (dbscan-params)
    (hasheq 'eps 0.5 'min-samples 5 'metric 'euclidean 'out-dtype 'int32 'max-mbytes-per-batch #f))
@@ -43,7 +43,7 @@
   (check-equal? (estimator-params (dbscan (dbscan-params #:eps 0.3) #:min-samples 10))
                 (dbscan-params #:eps 0.3 #:min-samples 10)))
 
-(test-case "L19: resources is a setting, outside the parameters"
+(test-case "resources is a setting, outside the parameters"
   (check-equal? (estimator-params (dbscan #:resources 'some-resources)) (dbscan-params))
   (check-equal? (format "~v" (dbscan #:eps 0.3 #:resources 'some-resources))
                 "#<dbscan #:eps 0.3 #:resources 'some-resources>")
@@ -51,7 +51,7 @@
   (check-equal? (estimator-set-params (dbscan #:resources 'some-resources) #:eps 0.3)
                 (dbscan #:eps 0.3 #:resources 'some-resources)))
 
-(test-case "L19: a base with another key, or without one, is refused under the caller's name"
+(test-case "a base with another key, or without one, is refused under the caller's name"
   (check-cuml-error 'logic
                     "dbscan-params: dbscan has no parameter colour"
                     (lambda () (dbscan-params (hasheq 'colour 'red))))
@@ -62,7 +62,7 @@
                     "dbscan-fit: expected every dbscan parameter, missing min-samples"
                     (lambda () (dbscan-fit 'X #:params (hasheq 'eps 1) #:resources 'unused))))
 
-(test-case "L19: printing shows the parameters that differ from the defaults"
+(test-case "printing shows the parameters that differ from the defaults"
   (check-equal? (printed (dbscan)) (make-list 3 "#<dbscan>"))
   (check-equal? (printed (dbscan #:eps 0.3 #:min-samples 10))
                 (make-list 3 "#<dbscan #:eps 0.3 #:min-samples 10>"))
@@ -72,7 +72,7 @@
                 "#<dbscan #:metric 'cosine #:out-dtype 'int64 #:max-mbytes-per-batch 0>")
   (check-equal? (format "~v" (dbscan #:eps 0.5 #:min-samples 5)) "#<dbscan>"))
 
-(test-case "L19: equal? compares parameters, and set-params gives an unfitted estimator"
+(test-case "equal? compares parameters, and set-params gives an unfitted estimator"
   (check-equal? (dbscan #:eps 0.3) (dbscan #:eps 0.3))
   (check-not-equal? (dbscan #:eps 0.3) (dbscan #:eps 0.4))
   (check-equal? (equal-hash-code (dbscan #:eps 0.3)) (equal-hash-code (dbscan #:eps 0.3)))
@@ -88,7 +88,7 @@
   (check-false (dbscan? 'dbscan))
   (check-false (dbscan-model (dbscan))))
 
-(test-gpu "L19: fit and fit-predict are dbscan-fit's, y is ignored and the argument stays unfitted"
+(test-gpu "fit and fit-predict are dbscan-fit's, y is ignored and the argument stays unfitted"
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (define X (mat grid-rows dt))
@@ -113,7 +113,7 @@
                     (device-vector->list (dbscan-result-labels
                                           (apply-options dbscan-fit options Y)))))))
 
-(test-gpu "L19: errors are named after the generic that was called"
+(test-gpu "errors are named after the generic that was called"
   (define X (mat grid-rows 'float64))
   (check-cuml-error 'logic
                     "fit: eps: expected greater than 0, got 0"
@@ -157,7 +157,7 @@
              (estimated (dbscan (apply-options dbscan-params options)))
              (estimated (apply-options estimator-set-params options (dbscan))))))
 
-(test-gpu "L19: the identity fixture has core points at the base, and every way takes out-dtype"
+(test-gpu "the identity fixture has core points at the base, and every way takes out-dtype"
   (for ([dt (in-list dtypes)])
     (match-define (list (list _ X _) _ _) (identity-fixtures dt))
     (match-define (list _ core) (result->lists (dbscan-fit X #:params identity-base)))
@@ -166,7 +166,7 @@
                   (make-list 7 'int64)
                   (symbol->string dt))))
 
-(test-gpu "L19: a keyword is the same as a set with that keyword, through dbscan-fit and the estimator"
+(test-gpu "a keyword is the same as a set with that keyword, through dbscan-fit and the estimator"
   (for* ([dt (in-list dtypes)]
          [fixture (in-list (identity-fixtures dt))]
          [keys (in-list (subsets '(eps min-samples out-dtype max-mbytes-per-batch) 2))])

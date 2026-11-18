@@ -20,7 +20,7 @@
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/scaler-data.rkt" matrix-shape normal-rows rows->matrix vector-shape))
 
-(test-gpu "L1: the result's vectors are float64 of length d, and the outputs keep X's shape and dtype"
+(test-gpu "the result's vectors are float64 of length d, and the outputs keep X's shape and dtype"
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((1 1) (7 13) (256 64)))])
     (match-define (list n d) size)
@@ -44,7 +44,7 @@
         (check-equal? (matrix-shape out) (list #t dt 'row-major (list n d))))
       (check-true (standard-scaler-result? again)))))
 
-(test-gpu "L1: the flags give the documented fields"
+(test-gpu "the flags give the documented fields"
   (define X (rows->matrix (normal-rows 3 7 3 'float32) 'float32))
   (for* ([with-mean (in-list '(#t #f))]
          [with-std (in-list '(#t #f))])

@@ -7,12 +7,12 @@
          (only-in "private/python-env.rkt" test-twin twin-params))
 
 (for ([name (in-list '("normal" "correlated"))])
-  (test-twin (format "L15: ~a is cuML-Python's within the L14 bounds" name)
+  (test-twin (format "~a is cuML-Python's within the L14 bounds" name)
     (check-against-cuml (named name))))
 
 (define renames (hasheq 'iterated-power 'iterations 'svd-solver 'solver))
 
-(test-twin "L18: the hyperparameters are cuML-Python's but copy, with two departures"
+(test-twin "the hyperparameters are cuML-Python's but copy, with two departures"
   (match-define (list theirs) (twin-results (list (hasheq 'op "params"))))
   (define mapped
     (for/hasheq ([(key value) (in-hash (twin-params theirs '(copy)))])

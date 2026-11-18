@@ -4,5 +4,5 @@
          (only-in "private/tsne-data.rkt" check-quality)
          (only-in "private/umap-data.rkt" blobs overlap))
 
-(test-gpu "L6: exact trustworthiness is above its measured floor on blobs and overlap"
+(test-gpu "exact trustworthiness is above its measured floor on blobs and overlap"
   (check-quality 'exact (list blobs overlap)))

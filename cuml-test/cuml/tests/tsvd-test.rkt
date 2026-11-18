@@ -17,7 +17,7 @@
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix vector-shape)
          (only-in "private/tsvd-data.rkt" extents law-fixtures))
 
-(test-gpu "L1: the result's fields have their shapes and X's dtype, and the outputs keep it"
+(test-gpu "the result's fields have their shapes and X's dtype, and the outputs keep it"
   (for* ([dt (in-list '(float32 float64))]
          [f (in-list law-fixtures)]
          [k (in-list '(1 2))])
@@ -42,7 +42,7 @@
       (for ([out (list T I T2)])
         (check-false (eq? out X))))))
 
-(test-gpu "L1: fit, transform and inverse leave the caller's arrays bitwise unchanged"
+(test-gpu "fit, transform and inverse leave the caller's arrays bitwise unchanged"
   (for* ([dt (in-list '(float32 float64))]
          [f (in-list law-fixtures)]
          [solver (in-list '(full jacobi))])

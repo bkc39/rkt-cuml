@@ -41,7 +41,7 @@
                       (standard-scaler-result-scale result))])
     (and v (device-vector->list v))))
 
-(test-case "L17: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal? (standard-scaler-params) (hasheq 'with-mean #t 'with-std #t))
   (check-equal? (estimator-params (standard-scaler)) (standard-scaler-params))
   (check-equal? (round-trips standard-scaler changed) changed)
@@ -49,7 +49,7 @@
                                                    #:with-std #f))
                 (standard-scaler-params #:with-mean #f #:with-std #f)))
 
-(test-case "L17: printing, equality and set-params"
+(test-case "printing, equality and set-params"
   (check-equal? (printed (standard-scaler)) (make-list 3 "#<standard-scaler>"))
   (check-equal? (format "~v" (standard-scaler #:with-mean #f)) "#<standard-scaler #:with-mean #f>")
   (check-equal? (format "~v" (standard-scaler #:with-std #f #:with-mean #f))
@@ -71,10 +71,10 @@
   (check-false (standard-scaler? 'standard-scaler))
   (check-false (standard-scaler-model (standard-scaler))))
 
-(test-case "L18: a standard scaler is an estimator and a transformer, not a clusterer or a predictor"
+(test-case "a standard scaler is an estimator and a transformer, not a clusterer or a predictor"
   (check-equal? (capabilities (standard-scaler) standard-scaler?) '(#t #f #f #t #f #t)))
 
-(test-gpu "L18: inverse-transform of a transformer without one is not supported"
+(test-gpu "inverse-transform of a transformer without one is not supported"
   (define X (rows->matrix (normal-rows 2 40 2 'float32) 'float32))
   (check-exn exn:fail:support? (lambda () (inverse-transform (fit (kmeans #:n-clusters 2) X) X))))
 
@@ -105,7 +105,7 @@
                                (device-matrix->list* (standard-scaler-inverse-transform result
                                                                                         Tm)))))))
 
-(test-gpu "L11: fit-transform names the generic for a fit refusal"
+(test-gpu "fit-transform names the generic for a fit refusal"
   (check-cuml-error 'logic
                     "fit-transform: X: expected at least 1 row, got 0"
                     (lambda () (fit-transform (standard-scaler) (blank-matrix 0 3 'float32)))))

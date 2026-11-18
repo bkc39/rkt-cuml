@@ -7,7 +7,7 @@
                   lasso-fit/who
                   lasso-params
                   lasso-predict/who)
-         (only-in "estimator-support.rkt" define-regressor))
+         (only-in "estimator-support.rkt" define-predictor))
 
 (provide elastic-net
          elastic-net-model
@@ -16,12 +16,12 @@
          lasso-model
          lasso?)
 
-(define-regressor lasso
+(define-predictor lasso
   #:hyperparameters lasso-params
   #:fit lasso-fit/who
   #:predict lasso-predict/who)
 
-(define-regressor elastic-net
+(define-predictor elastic-net
   #:hyperparameters elastic-net-params
   #:fit elastic-net-fit/who
   #:predict elastic-net-predict/who)

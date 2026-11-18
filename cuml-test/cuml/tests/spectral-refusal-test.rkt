@@ -271,13 +271,13 @@
     (test-case (row-id r)
       (check-row 'spectral-clustering-fit-graph r))))
 
-(test-gpu "R3: the graph-size limit is refused before the row scan"
+(test-gpu "the graph-size limit is refused before the row scan"
   (check-cuml-error 'logic
                     (string-append "spectral-clustering-fit: X: 102261127 rows with 10 neighbours"
                                    " need 2147483667 graph entries, more than 2147483647")
                     (lambda () (spectral-clustering-fit (blank-matrix 102261127 1 'float32)))))
 
-(test-gpu "R2: rows at the squared-norm boundary, and subnormal rows, fit"
+(test-gpu "rows at the squared-norm boundary, and subnormal rows, fit"
   (define boundary
     (list*->device-matrix
      (append
@@ -287,7 +287,7 @@
      #:dtype 'float32))
   (check-equal? (length (labels boundary #:n-clusters 3)) 10))
 
-(test-gpu "R5: values that do not fit the native types raise exn:fail:contract"
+(test-gpu "values that do not fit the native types raise exn:fail:contract"
   (define X (grid 'float32))
   (define fit (curry spectral-clustering-fit X))
   (check-exn exn:fail:contract? (lambda () (fit #:n-init (expt 2 31))))
@@ -299,7 +299,7 @@
   (check-exn exn:fail:contract? (lambda () (graph-labels ring #:n-init (expt 2 31))))
   (check-exn exn:fail:contract? (lambda () (graph-labels ring #:random-state -1))))
 
-(test-gpu "R4: released resources are refused under the procedure's own name"
+(test-gpu "released resources are refused under the procedure's own name"
   (define released (with-device-resources ([r (device-resources)]) r))
   (for ([call (in-list (list (lambda ()
                                (spectral-clustering-fit (grid 'float32) #:resources released))

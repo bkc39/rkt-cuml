@@ -14,11 +14,13 @@
                   ridge-fit
                   ridge-predict
                   ridge-result-coef)
-         (only-in rackunit check-equal?)
+         (only-in racket/string string-contains?)
+         (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/guide-data.rkt" flattened-text)
          (only-in "private/linear-data.rkt"
                   decimals
                   docs-case
@@ -102,3 +104,15 @@
   (check-equal? (~> (elastic-net #:alpha 0.1) (fit X y) (score X y) (real->decimal-string 6))
                 "0.986786")
   (check-cuml-error 'logic "fit: lasso needs y" (lambda () (fit (lasso) X))))
+
+(test-case "the logistic-regression entry bounds the residual and states the column rules"
+  (define text
+    (flattened-text (collection-file-path "linear-model.scrbl" "cuml" "scribblings" "reference")))
+  (check-true (string-contains?
+               text
+               "the check bounds the first-order residual, not the distance to the optimum"))
+  (check-false (string-contains? text "10⁻²"))
+  (check-true
+   (string-contains?
+    text
+    "with @racket[fit-intercept], one that varies only in its last bits is refused: centre it")))

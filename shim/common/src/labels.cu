@@ -1,5 +1,7 @@
 #include <thrust/binary_search.h>
 #include <thrust/copy.h>
+#include <thrust/for_each.h>
+#include <thrust/iterator/counting_iterator.h>
 #include <thrust/sort.h>
 #include <thrust/unique.h>
 
@@ -13,6 +15,33 @@
 #include "cumlrkt/labels.hpp"
 
 namespace cumlrkt {
+
+namespace {
+
+template <typename T>
+struct encoded {
+  const T* labels;
+  const T* classes;
+  int64_t k;
+  int32_t* codes;
+
+  __device__ void operator()(int64_t i) const {
+    const T v = labels[i];
+    int64_t lo = 0;
+    int64_t hi = k;
+    while (lo < hi) {
+      const int64_t mid = (lo + hi) / 2;
+      if (classes[mid] < v) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
+      }
+    }
+    codes[i] = lo < k && classes[lo] == v ? static_cast<int32_t>(lo) : -1;
+  }
+};
+
+}  // namespace
 
 template <typename T>
 dense_labels<T> dense_codes(const T* labels, int64_t n,
@@ -35,9 +64,23 @@ dense_labels<T> dense_codes(const T* labels, int64_t n,
   return {std::move(codes), std::move(values), k};
 }
 
-template dense_labels<int32_t> dense_codes<int32_t>(const int32_t*, int64_t,
-                                                    rmm::cuda_stream_view);
-template dense_labels<int64_t> dense_codes<int64_t>(const int64_t*, int64_t,
-                                                    rmm::cuda_stream_view);
+template <typename T>
+void encode_against(const T* labels, int64_t n, const T* classes, int64_t k,
+                    int32_t* codes, rmm::cuda_stream_view stream) {
+  thrust::for_each_n(rmm::exec_policy(stream),
+                     thrust::counting_iterator<int64_t>(0), n,
+                     encoded<T>{labels, classes, k, codes});
+}
+
+#define CUMLRKT_LABELS(T)                                               \
+  template dense_labels<T> dense_codes<T>(const T*, int64_t,            \
+                                          rmm::cuda_stream_view);       \
+  template void encode_against<T>(const T*, int64_t, const T*, int64_t, \
+                                  int32_t*, rmm::cuda_stream_view);
+
+CUMLRKT_LABELS(int32_t)
+CUMLRKT_LABELS(int64_t)
+CUMLRKT_LABELS(float)
+CUMLRKT_LABELS(double)
 
 }  // namespace cumlrkt

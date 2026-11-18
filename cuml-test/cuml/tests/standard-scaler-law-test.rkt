@@ -56,7 +56,7 @@
                                  (host-inverse fitted t-host dt))
                     "inverse")))))
 
-(test-gpu "L4: dyadic columns give exact statistics, an exact transform and an exact inverse"
+(test-gpu "dyadic columns give exact statistics, an exact transform and an exact inverse"
   (for* ([dt (in-list '(float32 float64))]
          [k (in-list '(-3 0 5))]
          [c (in-list '(0 12 -7.5))])
@@ -72,7 +72,7 @@
       (check-true (bits-equal? (device-matrix->list* (standard-scaler-inverse-transform fitted T))
                                (device-matrix->list* X))))))
 
-(test-gpu "L5: the round trip is within the first-order rounding bound"
+(test-gpu "the round trip is within the first-order rounding bound"
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((7 13) (256 64) (4099 13)))])
     (match-define (list n d) size)
@@ -90,7 +90,7 @@
         (max w (/ (abs (- b x)) (* 1.01 u (+ (* 3 (abs (- x m))) (abs x)))))))
     (check-true (<= worst 1.0) (format "~a ~a: worst ratio ~a" dt size worst))))
 
-(test-gpu "L6: standardised columns have mean 0 and sd 1, within the rounding of the statistics"
+(test-gpu "standardised columns have mean 0 and sd 1, within the rounding of the statistics"
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((7 13) (256 64) (4099 13)))])
     (match-define (list n d) size)
@@ -107,7 +107,7 @@
         (check-true (<= ratio 1)
                     (format "~a ~a column ~a, ~a: ~a of its bound" dt size j bound ratio))))))
 
-(test-gpu "L7: a constant column scales by exactly 1 and centres to (nearly) 0"
+(test-gpu "a constant column scales by exactly 1 and centres to (nearly) 0"
   (for* ([dt (in-list '(float32 float64))]
          [value (in-list '(3.3 0.1 -1234.5678 1e4))]
          [n (in-list '(1 2 9 1000))])
@@ -125,7 +125,7 @@
          (for ([t (in-list ts)])
            (check-true (<= (abs t) (ulp rounded)) (format "t ~a" t)))]))))
 
-(test-gpu "L8: the near-constant mask is sklearn's"
+(test-gpu "the near-constant mask is sklearn's"
   (define base 1e8)
   (define tiny (rows->matrix (list (list base) (list base) (list (+ base (ulp base)))) 'float64))
   (check-equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit tiny)))
@@ -134,7 +134,7 @@
   (check-false
    (equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit spread))) '(1.0))))
 
-(test-gpu "L9: the flags decide what is kept and what is applied"
+(test-gpu "the flags decide what is kept and what is applied"
   (for ([dt (in-list '(float32 float64))])
     (define X (rows->matrix (normal-rows 17 50 6 dt) dt))
     (define host (device-matrix->list* X))
@@ -164,7 +164,7 @@
                                           [k (in-list m)])
                                  (narrow (- x k))))))))
 
-(test-gpu "L10: fits are deterministic, whatever the scratch"
+(test-gpu "fits are deterministic, whatever the scratch"
   (for ([dt (in-list '(float32 float64))])
     (define n 1000)
     (define d 24)
@@ -176,7 +176,7 @@
         (check-true (bits-equal? (statistics (standard-scaler-fit X)) once)
                     (format "~a scratch ~a" dt elements))))))
 
-(test-gpu "L12: a fit transforms either dtype, rounding its statistics to X's"
+(test-gpu "a fit transforms either dtype, rounding its statistics to X's"
   (define rows (normal-rows 41 64 5 'float32))
   (define X32 (rows->matrix rows 'float32))
   (define X64 (rows->matrix rows 'float64))

@@ -17,13 +17,13 @@
             'learning-rate 150.0
             'max-iter 400)))
 
-(test-twin "L5: FFT fits equal Python cuML's bitwise on held-out blobs, every metric and init"
+(test-twin "FFT fits equal Python cuML's bitwise on held-out blobs, every metric and init"
   (check-tsne-parity held-out-fit held-out-configs))
 
-(test-twin "L5: FFT fits equal Python cuML's bitwise on digits at the defaults"
+(test-twin "FFT fits equal Python cuML's bitwise on digits at the defaults"
   (check-tsne-parity (digits) (list (hasheq 'init 'random) (hasheq 'init 'pca))))
 
-(test-twin "L13: perplexity 30 takes 90 neighbours, 5 takes 15, and an explicit k wins"
+(test-twin "perplexity 30 takes 90 neighbours, 5 takes 15, and an explicit k wins"
   (check-tsne-parity held-out-fit
                      (list (hasheq 'perplexity 30.0)
                            (hasheq 'perplexity 5.0)
@@ -43,7 +43,7 @@
                       precomputed-knn
                       handle))
 
-(test-twin "L12: the parameters are Python's, but for random-state and n-neighbors"
+(test-twin "the parameters are Python's, but for random-state and n-neighbors"
   (match-define (list theirs) (run-cases twin (list (hasheq 'op "params"))))
   (check-equal? (twin-params theirs unbound)
                 (hash-set* (tsne-params) 'random-state #f 'n-neighbors 90)))

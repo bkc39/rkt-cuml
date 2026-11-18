@@ -130,14 +130,14 @@
   (list (cons 'transform (lambda (X) (transform fitted-estimator X)))
         (cons 'inverse-transform (lambda (X) (inverse-transform fitted-estimator X)))))
 
-(test-gpu "L13: the fits refuse each bad X with its message, the first refusal winning"
+(test-gpu "the fits refuse each bad X with its message, the first refusal winning"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (fit-rows))])
     (match-define (cons who call) entry)
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call (row-call r)))))))
 
-(test-gpu "L13: transform and inverse-transform refuse each bad argument with its message"
+(test-gpu "transform and inverse-transform refuse each bad argument with its message"
   (for* ([entry (in-list (applied-calls))]
          [r (in-list (applied-rows))])
     (match-define (cons who call) entry)
@@ -145,7 +145,7 @@
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call fitted X))))))
 
-(test-gpu "L13: the generics refuse a bad X with their own names"
+(test-gpu "the generics refuse a bad X with their own names"
   (for* ([entry (in-list (generic-calls))]
          [r (in-list
              (append (bad-X-rows)
@@ -154,7 +154,7 @@
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call (row-call r)))))))
 
-(test-gpu "L13: the estimator refuses an unfitted use and a sample weight"
+(test-gpu "the estimator refuses an unfitted use and a sample weight"
   (define X (rows->matrix grid 'float32))
   (define w (list->device-vector '(1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic
@@ -178,7 +178,7 @@
                   (current-scratch-elements))
                 1))
 
-(test-pools "L13: a refusal leaves the RMM pool where it was"
+(test-pools "a refusal leaves the RMM pool where it was"
   (define device 0)
   (define (unchanged id thunk)
     (drain-finalizers!)

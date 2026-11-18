@@ -28,7 +28,7 @@
 (define (single? x)
   (and (flonum? x) (eqv? x (flsingle x))))
 
-(test-gpu "L1: the embedding is a fresh n×k float32 matrix, and the result keeps X and the params"
+(test-gpu "the embedding is a fresh n×k float32 matrix, and the result keeps X and the params"
   (for* ([init (in-list '(spectral random))]
          [k (in-list '(1 2 3))])
     (test-case (format "~a k=~a" init k)
@@ -46,17 +46,17 @@
       (check-equal? (matrix-shape T) (list #t 'float32 'row-major (list 300 k)))
       (check-false (eq? T X)))))
 
-(test-gpu "L1: explicit curve parameters are stored as their float32 values"
+(test-gpu "explicit curve parameters are stored as their float32 values"
   (define result (umap-fit (fixture-X far-blobs) #:a 1.1 #:b 0.7))
   (check-equal? (umap-result-a result) (flsingle 1.1))
   (check-equal? (umap-result-b result) (flsingle 0.7))
   (check-equal? (hash-ref (umap-result-params result) 'a) 1.1))
 
-(test-gpu "L1: fit-transform's matrix is its result's embedding"
+(test-gpu "fit-transform's matrix is its result's embedding"
   (define-values (result E) (umap-fit-transform (fixture-X far-blobs)))
   (check-true (eq? E (umap-result-embedding result))))
 
-(test-gpu "L2: fit leaves X and y bitwise unchanged; transform leaves the result unchanged"
+(test-gpu "fit leaves X and y bitwise unchanged; transform leaves the result unchanged"
   (define X (fixture-X overlap))
   (define y (fixture-y overlap 'int64))
   (define result (umap-fit X #:y y #:init 'random))

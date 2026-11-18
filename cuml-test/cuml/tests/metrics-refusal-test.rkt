@@ -66,7 +66,7 @@
         "labels-true: expected int32 or int64, got float32"
         (lambda () (proc (blank-vector 5 'float32) (labels-of '(1) 'int32))))))
 
-(test-gpu "R1: contingency-matrix and adjusted-rand-score refuse each bad label argument"
+(test-gpu "contingency-matrix and adjusted-rand-score refuse each bad label argument"
   (for* ([proc (in-list (list contingency-matrix adjusted-rand-score))]
          [r (in-list (label-rows proc))])
     (test-case (format "~a ~a" (object-name proc) (row-id r))
@@ -159,13 +159,13 @@
         (norm-message "X" 3 float-most "nan")
         (lambda () (proc (cosine-rows '((2 (0 0)) (3 (+nan.0 0)))) two #:metric 'cosine)))))
 
-(test-gpu "R1: silhouette-score and silhouette-samples refuse each bad argument"
+(test-gpu "silhouette-score and silhouette-samples refuse each bad argument"
   (for* ([proc (in-list (list silhouette-score silhouette-samples))]
          [r (in-list (silhouette-rows proc))])
     (test-case (format "~a ~a" (object-name proc) (row-id r))
       (check-row (object-name proc) r))))
 
-(test-gpu "S13: under cosine, a squared norm under d times the least normal is refused, however wide"
+(test-gpu "under cosine, a squared norm under d times the least normal is refused, however wide"
   (define narrow (device-matrix->list* (overlap 'float32 #:each 150)))
   (define narrow-labels (overlap-labels #:each 150))
   (define cases
@@ -240,12 +240,12 @@
              "n-neighbors: expected less than half the 100 rows, got 50"
              (lambda () (trustworthiness (rows-with 100 '(+nan.0 0)) E #:n-neighbors 50)))))
 
-(test-gpu "R1: trustworthiness refuses each bad argument"
+(test-gpu "trustworthiness refuses each bad argument"
   (for ([r (in-list (trust-rows))])
     (test-case (row-id r)
       (check-row 'trustworthiness r))))
 
-(test-gpu "R2: rows at the squared-norm bound are scored, rows past it refused"
+(test-gpu "rows at the squared-norm bound are scored, rows past it refused"
   (define two (labels-of (append '(0 1) (make-list 28 1)) 'int32))
   (for ([proc (in-list (list silhouette-score silhouette-samples))])
     (define (refuses message thunk)
@@ -269,7 +269,7 @@
                       (lambda () (trustworthiness X (rows-with 100 bad))))
     (check-equal? (trustworthiness X X) 1.0 "a valid call after the refusal runs")))
 
-(test-gpu "R3: chunk-size 0 and -1 and batch-size 0 refuse at once"
+(test-gpu "chunk-size 0 and -1 and batch-size 0 refuse at once"
   (define X (rows-with 30 '(1 1)))
   (define two (labels-of (append '(0 1) (make-list 28 1)) 'int32))
   (for ([chunk (in-list '(0 -1))])
@@ -281,7 +281,7 @@
                     (lambda ()
                       (trustworthiness (distinct-rows 30) (distinct-rows 30) #:batch-size 0))))
 
-(test-gpu "R4: the index bounds are refused on the host"
+(test-gpu "the index bounds are refused on the host"
   (check-cuml-error
    'logic
    "adjusted-rand-score: labels-true: expected at most 46340 distinct labels, got 46341"
@@ -314,7 +314,7 @@
                       (blank-matrix 46341 1 'float32)
                       #:batch-size 46341))))
 
-(test-gpu "R6: values that do not fit the native types raise exn:fail:contract"
+(test-gpu "values that do not fit the native types raise exn:fail:contract"
   (define X (rows-with 30 '(1 1)))
   (define two (labels-of (append '(0 1) (make-list 28 1)) 'int32))
   (check-exn exn:fail:contract? (lambda () (silhouette-score X two #:chunk-size (expt 2 63))))

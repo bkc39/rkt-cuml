@@ -43,14 +43,14 @@
 
 (define entry-keys '(size scale label))
 
-(test-case "H1: the defaults are the literal table, an immutable hasheq with the table's keys"
+(test-case "the defaults are the literal table, an immutable hasheq with the table's keys"
   (check-equal? (widget-params) literal)
   (check-true (immutable? (widget-params)))
   (check-true (hash-eq? (widget-params)))
   (check-equal? (sort (hash-keys (widget-params)) symbol<?) '(label scale shade size))
   (check-equal? (object-name widget-params) 'widget-params))
 
-(test-case "H2: one keyword replaces its key; the dependent default follows its expression"
+(test-case "one keyword replaces its key; the dependent default follows its expression"
   (for ([key (in-list '(size scale shade label))])
     (define value (hash-ref changed key))
     (define expected
@@ -59,7 +59,7 @@
         [_ (hash-set literal key value)]))
     (check-equal? (call-with widget-params (list key) changed '()) expected (format "~a" key))))
 
-(test-case "H3: an override of an override is hash-set*, and a base's dependent default stays"
+(test-case "an override of an override is hash-set*, and a base's dependent default stays"
   (for* ([first (in-list (subsets '(size scale shade label) 2))]
          [second (in-list (subsets '(size scale shade label) 2))])
     (define base (call-with widget-params first changed '()))
@@ -71,13 +71,13 @@
        (hash-set set key (hash-ref (hasheq 'size 11 'scale 13 'shade 'x 'label "y") key)))))
   (check-equal? (hash-ref (widget-params (widget-params) #:size 10) 'scale) 6))
 
-(test-case "H4: a set resolves to itself, and #f to the defaults"
+(test-case "a set resolves to itself, and #f to the defaults"
   (for ([keys (in-list (subsets '(size scale shade label) 2))])
     (define s (call-with widget-params keys changed '()))
     (check-equal? (widget-params s) s))
   (check-equal? (widget-params #f) (widget-params)))
 
-(test-case "H5: the messages of a bad base"
+(test-case "the messages of a bad base"
   (check-cuml-error 'logic
                     "widget-params: widget has no parameter colour"
                     (lambda () (widget-params (hash-set literal 'colour 'red))))
@@ -92,7 +92,7 @@
   (check-regexp-match #rx"^widget-params: contract violation\n  expected: \\(or/c #f hash\\?\\)"
                       (exn-message e)))
 
-(test-case "H6: a keyword is the same as a set with that keyword, with or without a base"
+(test-case "a keyword is the same as a set with that keyword, with or without a base"
   (for* ([keys (in-list (subsets entry-keys 2))]
          [base (in-list (list #f (widget-params #:size 9 #:label "b")))])
     (check-equal? (call-with spy keys changed (list 'X))
@@ -103,7 +103,7 @@
 (define (keywords-of proc)
   (call-with-values (lambda () (procedure-keywords proc)) list))
 
-(test-case "H7: the entry point names itself, checks the fixed key and takes the table's keywords"
+(test-case "the entry point names itself, checks the fixed key and takes the table's keywords"
   (check-cuml-error 'logic
                     "spy: widget has no parameter colour"
                     (lambda () (spy 'X #:params (hash-set literal 'colour 'red))))
@@ -120,7 +120,7 @@
   (check-equal? (keywords-of spy/who) (keywords-of spy))
   (check-equal? (keywords-of skipping) '(() (#:params #:scale #:size))))
 
-(test-case "L5: the fixed-key check names the entry point when another key's default cannot run"
+(test-case "the fixed-key check names the entry point when another key's default cannot run"
   (check-cuml-error 'logic
                     "spy: shade: expected plain, got bold"
                     (lambda () (spy 'X #:params (hash-set* literal 'size 'x 'shade 'bold))))
@@ -138,7 +138,7 @@
   (check-pred exn:fail:syntax? e)
   (check-regexp-match pattern (exn-message e)))
 
-(test-case "H8: the definitions refuse malformed tables and entry points"
+(test-case "the definitions refuse malformed tables and entry points"
   (check-syntax-error '(define-hyperparameters widget-table
                          [size 1])
                       #rx"ending in -params")
@@ -158,7 +158,7 @@
                       #rx"widget-params has no key colour")
   (check-syntax-error '(define/who (f who X #:hyperparameters twice) X) #rx"define-hyperparameters"))
 
-(test-case "M4: a later default that names a hyperparameter is refused"
+(test-case "a later default that names a hyperparameter is refused"
   (check-syntax-error '(define/who (f who X #:hyperparameters widget-params #:extra [extra size])
                          extra)
                       #rx"refers to a hyperparameter")
@@ -172,13 +172,13 @@
                           extra))))
    #f))
 
-(test-case "L9: a key named params is refused"
+(test-case "a key named params is refused"
   (check-syntax-error '(define-hyperparameters clash-params
                          [size 1]
                          [params 2])
                       #rx"params is the #:params keyword"))
 
-(test-case "H8: a misspelt keyword is a syntax error, and a run-time call Racket's error"
+(test-case "a misspelt keyword is a syntax error, and a run-time call Racket's error"
   (check-syntax-error '(widget-params #:colour 1) #rx"#:colour")
   (check-syntax-error '(spy 'X #:colour 1) #rx"#:colour")
   (define e (raised (lambda () (keyword-apply widget-params '(#:colour) '(1) '()))))

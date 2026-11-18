@@ -22,7 +22,12 @@
          inverse-transform
          gen:scorer
          scorer?
-         score)
+         score
+         gen:classifier
+         classifier?
+         decision-function
+         predict-log-proba
+         predict-proba)
 
 (define-generics estimator
                  (fit estimator X [y] #:sample-weight [sample-weight])
@@ -55,6 +60,11 @@
                     (raise-support-error 'inverse-transform transformer))])
 
 (define-generics scorer (score scorer X [y] #:sample-weight [sample-weight]) #:requires (score))
+
+(define-generics classifier
+                 (predict-proba classifier X)
+                 (predict-log-proba classifier X)
+                 (decision-function classifier X))
 
 (define (keyword->symbol kw)
   (string->symbol (keyword->string kw)))

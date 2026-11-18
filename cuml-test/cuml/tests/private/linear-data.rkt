@@ -28,6 +28,7 @@
          (struct-out ridge-solution)
          (struct-out solution)
          algorithms
+         by-dtype
          case-fit
          case-result
          check-law
@@ -78,6 +79,9 @@
 
 (define algorithms '(auto svd qr svd-qr))
 (define dtypes '(float32 float64))
+
+(define (by-dtype dt float32 float64)
+  (if (eq? dt 'float32) float32 float64))
 
 (define (unit-roundoff dtype)
   (if (eq? dtype 'float32)

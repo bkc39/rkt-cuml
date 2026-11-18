@@ -7,15 +7,23 @@
                      syntax/parse/pre)
          (only-in cuml/core/private/define-who define-checked)
          (only-in cuml/core/private/hyperparameters absent given-hash key->keyword proc-name table-id)
+         (only-in cuml/core/private/label-codes label-codes/who)
          (only-in cuml/core/private/logic-error logic-error)
-         (only-in cuml/estimator gen:clusterer gen:estimator gen:predictor gen:scorer gen:transformer)
-         (only-in cuml/metrics/private/metrics r2-score/who)
+         (only-in cuml/estimator
+                  gen:classifier
+                  gen:clusterer
+                  gen:estimator
+                  gen:predictor
+                  gen:scorer
+                  gen:transformer)
+         (only-in cuml/metrics/private/metrics accuracy-score/who r2-score/who)
          (only-in racket/string string-append*)
          (only-in raft current-device-resources)
          (only-in syntax/parse/define define-syntax-parse-rule))
 
-(provide define-estimator
-         define-regressor
+(provide accuracy-scorer
+         define-estimator
+         define-predictor
          params->string)
 
 (define ((r2-scorer predict/who) who
@@ -29,6 +37,19 @@
                 (predict/who who result X #:resources resources)
                 #:sample-weight sample-weight
                 #:resources resources))
+
+(define ((accuracy-scorer predict/who) who
+                                       result
+                                       X
+                                       y
+                                       #:sample-weight [sample-weight #f]
+                                       #:resources [resources (current-device-resources)])
+  (accuracy-score/who
+   who
+   (label-codes/who who result y resources)
+   (label-codes/who who result (predict/who who result X #:resources resources) resources)
+   #:sample-weight sample-weight
+   #:resources resources))
 
 (define (params->string name keys hyperparameters defaults setting-names settings fitted?)
   (define shown
@@ -93,12 +114,24 @@
 (begin-for-syntax
   (define-syntax-class applied
     #:attributes (generic kind [method 1])
-    #:datum-literals (fit-transform inverse-transform predict score transform)
+    #:datum-literals (decision-function fit-transform
+                                        inverse-transform
+                                        predict
+                                        predict-log-proba
+                                        predict-proba
+                                        score
+                                        transform)
     (pattern [predict proc:expr]
       #:attr kind #f
       #:with generic #'gen:predictor
       #:with (method ...) #'((define (predict e X)
                                (on-model proc 'predict e X))))
+    (pattern [(~and name (~or* predict-proba predict-log-proba decision-function)) proc:expr]
+      #:attr kind #f
+      #:with generic #'gen:classifier
+      #:with method-name (datum->syntax #'generic (syntax-e #'name))
+      #:with (method ...) #'((define (method-name e X)
+                               (on-model proc 'name e X))))
     (pattern [transform proc:expr (~optional (~seq #:fit-transform result->matrix:expr))]
       #:attr kind 'transform
       #:with generic #'gen:transformer
@@ -258,10 +291,17 @@
               (hasheq (~@ 'setting setting) ...)
               #f)))))
 
-(define-syntax-parse-rule (define-regressor name:id
+(define-syntax-parse-rule (define-predictor name:id
                             #:hyperparameters table:id
                             #:fit fit/who:id
-                            #:predict predict/who:id)
+                            #:predict predict/who:id
+                            (~alt (~optional (~seq #:scorer scorer:id) #:name "#:scorer")
+                                  (~optional (~seq #:predict-proba proba/who:id)
+                                             #:name "#:predict-proba")
+                                  (~optional (~seq #:predict-log-proba log-proba/who:id)
+                                             #:name "#:predict-log-proba")
+                                  (~optional (~seq #:decision-function decision/who:id)
+                                             #:name "#:decision-function")) ...)
   (define-estimator name
     #:hyperparameters table
     #:fit fit/who
@@ -269,4 +309,7 @@
     #:settings (resources)
     #:apply values
     [predict predict/who]
-    [score (r2-scorer predict/who) #:sample-weight]))
+    (~? [predict-proba proba/who])
+    (~? [predict-log-proba log-proba/who])
+    (~? [decision-function decision/who])
+    [score ((~? scorer r2-scorer) predict/who) #:sample-weight]))

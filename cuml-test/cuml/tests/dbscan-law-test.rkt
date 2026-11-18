@@ -72,7 +72,7 @@
   (check-batched found e)
   (check-equal? found (list (expected-labels e) (expected-core e)) "the smallest neighbouring label"))
 
-(test-gpu "L2: random integer grids match the host oracle, border points taking the smallest label"
+(test-gpu "random integer grids match the host oracle, border points taking the smallest label"
   (for* ([dt (in-list dtypes)]
          [seed (in-range 1 6)])
     (test-case (format "~a seed ~a" dt seed)
@@ -83,7 +83,7 @@
 (define big-rows (integer-grid 2001 2 60 21))
 (define big-oracle (oracle-of big-rows 3/2 4))
 
-(test-gpu "L3: the core samples, their clusters and the noise do not depend on the batch size"
+(test-gpu "the core samples, their clusters and the noise do not depend on the batch size"
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (define X (mat big-rows dt))
@@ -94,7 +94,7 @@
       (check-equal? (fitted-lists X #:eps 1.5 #:min-samples 4 #:max-mbytes-per-batch 0)
                     (fitted-lists X #:eps 1.5 #:min-samples 4)))))
 
-(test-gpu "L4: permuting the rows permutes the core samples and the noise"
+(test-gpu "permuting the rows permutes the core samples and the noise"
   (define rows (integer-grid 300 2 20 8))
   (define p (seeded 3 (lambda () (shuffle (range 300)))))
   (define permuted (pick rows p))
@@ -116,7 +116,7 @@
       (check-true (same-partition? p-labels p-core p-mapped p-core))
       (check-true (adjacent? p-labels p-core (oracle-of permuted 3/2 4))))))
 
-(test-gpu "L5: translating or negating an integer grid changes nothing"
+(test-gpu "translating or negating an integer grid changes nothing"
   (define rows (integer-grid 300 3 10 12))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
@@ -128,7 +128,7 @@
        (fitted-lists (mat (map (lambda (r) (map - r)) rows) dt) #:eps 1.5 #:min-samples 5)
        found))))
 
-(test-gpu "L6: integer weights act as repeated rows; negative weights subtract"
+(test-gpu "integer weights act as repeated rows; negative weights subtract"
   (define rows (integer-grid 200 2 16 5))
   (define weights (seeded 9 (lambda () (map (lambda (_) (add1 (random 4))) rows))))
   (define repeated (repeat-rows rows weights))
@@ -169,7 +169,7 @@
 (define pre-rows (integer-grid 2001 2 60 33))
 (define pre-distances (distance-matrix pre-rows))
 
-(test-gpu "L7: precomputed distances give the euclidean labels, at one batch and at many"
+(test-gpu "precomputed distances give the euclidean labels, at one batch and at many"
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (define X (mat pre-rows dt))
@@ -184,7 +184,7 @@
                       (fitted-lists X #:eps eps #:min-samples 5 #:max-mbytes-per-batch mbytes)
                       (format "eps ~a, max-mbytes-per-batch ~a" eps mbytes))))))
 
-(test-gpu "L8: cosine labels match the host oracle on one minus the cosine similarity"
+(test-gpu "cosine labels match the host oracle on one minus the cosine similarity"
   (define eps 0.02)
   (define rows (cosine-cloud 300 3 eps 4))
   (define e (dbscan-oracle 300 (cosine-within (list->vector rows) eps) 4))
@@ -193,7 +193,7 @@
     (test-case (symbol->string dt)
       (check-one-batch (fitted-lists (mat rows dt) #:eps eps #:min-samples 4 #:metric 'cosine) e))))
 
-(test-gpu "L8: scaling each row by a factor in [0.1, 10] leaves the cosine labels and the oracle's"
+(test-gpu "scaling each row by a factor in [0.1, 10] leaves the cosine labels and the oracle's"
   (define eps 0.02)
   (define rows (cosine-cloud 300 3 eps 4))
   (define scaled
@@ -210,7 +210,7 @@
       (check-one-batch found e)
       (check-equal? found (fitted-lists (mat rows dt) #:eps eps #:min-samples 4 #:metric 'cosine)))))
 
-(test-gpu "L8: cosine labels do not depend on the order or the scale of the rows"
+(test-gpu "cosine labels do not depend on the order or the scale of the rows"
   (for* ([dt (in-list dtypes)]
          [c (in-list '((((2 0) (0 1) (4 0)) (0 -1 0)) (((0 1) (2 0) (4 0)) (-1 0 0))))])
     (match-define (list rows labels) c)
@@ -219,14 +219,14 @@
         (fitted-lists (mat rows dt) #:eps 0.49 #:min-samples 2 #:metric 'cosine))
       (check-equal? found labels))))
 
-(test-gpu "L8: rows along one direction are cosine neighbours at any eps"
+(test-gpu "rows along one direction are cosine neighbours at any eps"
   (for* ([dt (in-list dtypes)]
          [eps (in-list '(1e-30 1e-6 0.49))])
     (test-case (format "~a eps ~a" dt eps)
       (check-equal? (fitted-lists (mat '((1 0) (2 0)) dt) #:eps eps #:min-samples 2 #:metric 'cosine)
                     '((0 0) (0 1))))))
 
-(test-gpu "L8: a pair at cosine distance exactly eps is a neighbour pair"
+(test-gpu "a pair at cosine distance exactly eps is a neighbour pair"
   (for* ([dt (in-list dtypes)]
          [c (in-list '((((1 0) (0 1)) 1) (((1 1 1 1) (1 -1 -1 -1)) 1.5)
                                          (((1 1 1 1) (1 1 1 -1)) 0.5)
@@ -236,14 +236,14 @@
       (check-equal? (fitted-lists (mat rows dt) #:eps eps #:min-samples 2 #:metric 'cosine)
                     '((0 0) (0 1))))))
 
-(test-gpu "L8: at eps 2 every pair is a neighbour pair"
+(test-gpu "at eps 2 every pair is a neighbour pair"
   (for* ([dt (in-list dtypes)]
          [rows (in-list '(((8 6) (-8 -6)) ((24 10) (-24 -10))))])
     (test-case (format "~a ~a" dt rows)
       (check-equal? (fitted-lists (mat rows dt) #:eps 2 #:min-samples 2 #:metric 'cosine)
                     '((0 0) (0 1))))))
 
-(test-gpu "L8: float32 cosine labels match the oracle at eps 1e-3, and at 1024 columns 1e-5, either side of a wide pair's distance"
+(test-gpu "float32 cosine labels match the oracle at eps 1e-3, and at 1024 columns 1e-5, either side of a wide pair's distance"
   (for ([c (in-list `((1024 0.999) (1024 1.001)
                                    (1024 ,(- 1 1e-5))
                                    (1024 ,(+ 1 1e-5))
@@ -254,11 +254,11 @@
       (define-values (found e) (wide-pair-fit d factor))
       (check-equal? found (list (expected-labels e) (expected-core e))))))
 
-(test-gpu "L8: float32 cosine at 4096 columns stays within 3e-5 of eps (double row sums)"
+(test-gpu "float32 cosine at 4096 columns stays within 3e-5 of eps (double row sums)"
   (define-values (found _) (wide-pair-fit 4096 (+ 1 3e-5)))
   (check-equal? found '((0 0) (0 1))))
 
-(test-gpu "L8: a subnormal eps under cosine returns"
+(test-gpu "a subnormal eps under cosine returns"
   (check-equal?
    (fitted-lists (mat '((1 0) (0 1)) 'float64) #:eps 5e-324 #:min-samples 2 #:metric 'cosine)
    '((-1 -1) ())))

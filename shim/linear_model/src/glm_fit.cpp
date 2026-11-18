@@ -22,15 +22,6 @@ namespace cumlrkt::glm {
 namespace {
 
 template <typename T>
-std::unique_ptr<buffer<T>> zero_coef(int64_t d, rmm::cuda_stream_view stream) {
-  auto coef = std::make_unique<buffer<T>>(scratch<T>(d, stream));
-  raftrkt::cuda_check(cudaMemsetAsync(coef->data(), 0, coef->size() * sizeof(T),
-                                      stream.value()),
-                      "cudaMemsetAsync");
-  return coef;
-}
-
-template <typename T>
 counted_rows counted_rows_of(const T* w, int64_t n, int64_t positive,
                              rmm::cuda_stream_view stream) {
   const bool compact = positive < n && positive >= 2;
@@ -49,7 +40,7 @@ fit_result<T> nothing_to_solve(const raft::handle_t& handle,
                                bool constant_y) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const auto& [x, y, w] = in;
-  auto coef = zero_coef<T>(x.d, stream);
+  auto coef = std::make_unique<buffer<T>>(zeroed<T>(x.d, stream));
   double intercept = 0;
   if (plan.fit_intercept && constant_y) {
     intercept = static_cast<double>(

@@ -4,5 +4,5 @@
          (only-in "private/python-env.rkt" test-twin))
 
 (for ([name (in-list '("scales" "uniform integers"))])
-  (test-twin (format "L15: ~a is cuML-Python's within the L14 bounds" name)
+  (test-twin (format "~a is cuML-Python's within the L14 bounds" name)
     (check-against-cuml (named name))))

@@ -8,16 +8,19 @@
          (only-in "native.rkt" cuml-linear-model-gemm-predict-job))
 
 (provide alpha-value/who
+         bounded-count/who
+         flag/who
          glm-predict/who
          intercept-flag/who
-         iteration-count/who
          real-value/who)
 
-(define/who (intercept-flag who fit-intercept)
-  (match fit-intercept
+(define/who (flag who key v)
+  (match v
     [#t 1]
     [#f 0]
-    [v (logic-error "~a: fit-intercept: expected #t or #f, got ~e" who v)]))
+    [_ (logic-error "~a: ~a: expected #t or #f, got ~e" who key v)]))
+
+(define/who (intercept-flag who fit-intercept) (flag/who who 'fit-intercept fit-intercept))
 
 (define/who (real-value who key v)
   (if (real? v)
@@ -28,10 +31,10 @@
 
 (define int32-max (sub1 (expt 2 31)))
 
-(define/who (iteration-count who n)
+(define/who (bounded-count who key n)
   (if (and (exact-integer? n) (<= 1 n int32-max))
       n
-      (logic-error "~a: max-iter: expected an exact integer from 1 to ~a, got ~e" who int32-max n)))
+      (logic-error "~a: ~a: expected an exact integer from 1 to ~a, got ~e" who key int32-max n)))
 
 (define (intercept-value who intercept)
   (if (real? intercept)

@@ -582,7 +582,13 @@
             echo "WARNING: $_l not found via ldconfig; GPU tests will skip" >&2
           fi
         done
-        export LD_LIBRARY_PATH="$_drv_farm''${_filtered:+:$_filtered}"
+        export LD_LIBRARY_PATH="$_drv_farm:${
+          # math/bigfloat (the logistic check oracle) dlopens gmp and mpfr.
+          lib.makeLibraryPath [
+            pkgs.gmp
+            pkgs.mpfr
+          ]
+        }''${_filtered:+:$_filtered}"
         export CUML_CUDA_DRIVER_PATH="$_drv_farm"
         export CUML_SHIM_TESTS="${shim.tests}/bin"
         export CUML_SHIM_SANITIZED_TESTS="${shimSanitizers.tests}/bin"

@@ -169,7 +169,7 @@
                                        #:sample-weight (vec '(1) 'int32)))))
           (weight-rows accuracy-score a b)))
 
-(test-gpu "B1: r2-score, mean-squared-error and accuracy-score refuse each bad argument by name"
+(test-gpu "r2-score, mean-squared-error and accuracy-score refuse each bad argument by name"
   (for* ([entry (in-list (list (cons r2-score (r2-rows))
                                (cons mean-squared-error
                                      (append (value-rows mean-squared-error) (matrix-rows)))

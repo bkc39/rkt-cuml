@@ -113,7 +113,7 @@
         (check-true (<= (abs (- var 1.0)) (* 8 d u (/ largest v)))
                     (format "L9: column ~a has variance ~a" j var))))))
 
-(test-gpu "L9: a zero-variance component is divided by epsilon, and the round trip holds"
+(test-gpu "a zero-variance component is divided by epsilon, and the round trip holds"
   (for ([dt (in-list dtypes)])
     (define narrow (round-to dt))
     (define rows
@@ -143,7 +143,7 @@
                        (* 4 4 u (+ r (abs m)))))))
     (check-true (<= worst 1.0) (format "~a: round trip ~a of the bound" dt worst))))
 
-(test-gpu "L7: at full rank the round trip returns X, whitened or not"
+(test-gpu "at full rank the round trip returns X, whitened or not"
   (define checked
     (for*/list ([dt (in-list dtypes)]
                 [f (in-list fixtures)]
@@ -170,7 +170,7 @@
       (fixture-name f)))
   (check-true (and (member "normal" checked) (member "uniform integers" checked) #t)))
 
-(test-gpu "L10: whitening ignores the row count of the call"
+(test-gpu "whitening ignores the row count of the call"
   (for* ([dt (in-list dtypes)]
          [f (in-list (list normal-fixture integer-fixture))])
     (define u (unit-roundoff dt))
@@ -205,7 +205,7 @@
        (<= worst-inverse 1.0)
        (format "~a ~a ~a rows: inverse ~a of the bound" dt (fixture-name f) m worst-inverse)))))
 
-(test-gpu "L13a: transform and inverse of one fit repeat bitwise, and fit-transform is the transform of its fit"
+(test-gpu "transform and inverse of one fit repeat bitwise, and fit-transform is the transform of its fit"
   (for* ([dt (in-list dtypes)]
          [whiten (in-list '(#f #t))])
     (define X (fixture-matrix normal-fixture dt))
@@ -242,7 +242,7 @@
       [(list* a b more) (cons (list a b) (loop more))]
       [_ '()])))
 
-(test-gpu "L13b: on exact-sum data six fits in three processes are bitwise equal"
+(test-gpu "on exact-sum data six fits in three processes are bitwise equal"
   (define outputs
     (for/list ([_ (in-range 3)])
       (match-define (list status out err) (run-program fit-program))

@@ -35,7 +35,7 @@
 
 (define renames (hasheq 'algorithm 'solver 'n-iter 'iterations))
 
-(test-twin "L20: the hyperparameters are cuML-Python's but random-state, with tol the one departure"
+(test-twin "the hyperparameters are cuML-Python's but random-state, with tol the one departure"
   (match-define (cons first-case _) twin-cases)
   (match-define (list theirs) (twin-results (list (list "params" first-case 'float64 'full))))
   (define mapped

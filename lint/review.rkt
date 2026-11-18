@@ -74,6 +74,23 @@
     #:with procedure #'(lambda (who-id . rest)
                          body ...)))
 
+(define spec-id "(?:#[0-9]+|[A-Z][0-9]+[a-z]?(?:[-–][A-Za-z0-9]+)?)")
+
+(define spec-id-label
+  (pregexp (string-append "^" spec-id ":|\\(" spec-id "(?:(?:, ?| and )" spec-id ")*\\)\\.?$")))
+
+(define penalty-name #px"\\(L[12]\\)$")
+
+(define (spec-id-title? title)
+  (and (string? title) (regexp-match? spec-id-label title) (not (regexp-match? penalty-name title))))
+
+(define (check-test-title name)
+  (define title (syntax-e name))
+  (when (spec-id-title? title)
+    (track-error name
+                 (format "the test title ~s carries a spec id: say the law, and keep ids in plans"
+                         title))))
+
 (define-syntax-class test-form-name
   #:datum-literals (test-gpu test-model-probe test-process-memory test-twin test-without-gpu)
   (pattern (~or* test-gpu test-model-probe test-process-memory test-twin test-without-gpu)))
@@ -82,7 +99,7 @@
   #:datum-literals (define-cd-result define-definition-context-refactoring-rule
                      define-estimator
                      define-generics
-                     define-regressor
+                     define-predictor
                      define-refactoring-rule
                      define-hyperparameters
                      define-page-helpers
@@ -117,7 +134,7 @@
     #:attr review (lambda ()
                     (track-binding #'name)
                     (for-each recur (filter values (attribute entry.default)))))
-  (pattern ((~or* define-estimator define-regressor) name:id . options)
+  (pattern ((~or* define-estimator define-predictor) name:id . options)
     #:attr review (lambda ()
                     (track-binding #'name)
                     (track-binding #'name "~a?" #:check-usages? #f)
@@ -157,8 +174,10 @@
                                body ...))))
   (pattern (test-unless-skipped reason name body ...)
     #:attr review (lambda () (review-scoped-body (list #'reason #'name) (attribute body))))
-  (pattern (_:test-form-name name body ...)
-    #:attr review (lambda () (review-scoped-body (list #'name) (attribute body)))))
+  (pattern ((~or* _:test-form-name (~datum test-case)) name body ...)
+    #:attr review (lambda ()
+                    (check-test-title #'name)
+                    (review-scoped-body (list #'name) (attribute body)))))
 
 (define (should-review? stx)
   (syntax-parse stx

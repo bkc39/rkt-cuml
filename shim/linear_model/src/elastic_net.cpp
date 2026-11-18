@@ -111,10 +111,7 @@ cd_solution<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                             ? stage_weighted(handle, x, y, w, rows, s, centres,
                                              weight_total(w, rows, stream))
                             : stage_problem(handle, x, y, w, s, rows);
-  buffer<T> cs = scratch<T>(kept, stream);
-  raftrkt::cuda_check(
-      cudaMemsetAsync(cs.data(), 0, cs.size() * sizeof(T), stream.value()),
-      "cudaMemsetAsync");
+  buffer<T> cs = zeroed<T>(kept, stream);
   T intercept{0};
   T* const unweighted = nullptr;
   const int32_t n_iter = ML::Solver::cdFit(

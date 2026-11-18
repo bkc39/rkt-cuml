@@ -41,7 +41,7 @@
           'random-state 7
           'affinity 'precomputed))
 
-(test-case "L14: the default parameters, and every keyword round-trips"
+(test-case "the default parameters, and every keyword round-trips"
   (check-equal? (spectral-embedding-params)
                 (hasheq 'n-components 2
                         'n-neighbors #f
@@ -52,7 +52,7 @@
   (check-equal? (estimator-params (spectral-embedding)) (spectral-embedding-params))
   (check-equal? (round-trips spectral-embedding changed) changed))
 
-(test-case "L14: printing, equality and set-params"
+(test-case "printing, equality and set-params"
   (check-equal? (printed (spectral-embedding)) (make-list 3 "#<spectral-embedding>"))
   (check-equal? (format "~v" (spectral-embedding #:n-neighbors 10))
                 "#<spectral-embedding #:n-neighbors 10>")
@@ -66,15 +66,15 @@
   (check-false (spectral-embedding? 'spectral-embedding))
   (check-false (spectral-embedding-model (spectral-embedding))))
 
-(test-case "L14: spectral-embedding is an estimator and a transformer, not a clusterer or a predictor"
+(test-case "spectral-embedding is an estimator and a transformer, not a clusterer or a predictor"
   (check-equal? (capabilities (spectral-embedding) spectral-embedding?) '(#t #f #f #t #f #t)))
 
-(test-case "L14: transform is refused, fitted or not"
+(test-case "transform is refused, fitted or not"
   (check-cuml-error 'logic
                     "transform: spectral-embedding has no transform; use fit-transform"
                     (lambda () (transform (spectral-embedding) 'X))))
 
-(test-gpu "L14: fit-transform's matrix is the procedures', and transform is refused after a fit"
+(test-gpu "fit-transform's matrix is the procedures', and transform is refused after a fit"
   (define X (fixture-X far-blobs))
   (define-values (result E) (spectral-embedding-fit-transform X #:random-state 3))
   (check-true (eq? E (spectral-embedding-result-embedding result)))
@@ -93,7 +93,7 @@
                     "transform: spectral-embedding has no transform; use fit-transform"
                     (lambda () (transform e X))))
 
-(test-gpu "L14: (random-seed 7) repeats a drawn seed; seeds 0 and 1 differ in bits, not in the bound"
+(test-gpu "(random-seed 7) repeats a drawn seed; seeds 0 and 1 differ in bits, not in the bound"
   (define g (stochastic-graph))
   (define (drawn)
     (random-seed 7)
@@ -104,7 +104,7 @@
   (check-false (bits-equal? zero one))
   (check-true (<= (apply max (column-gaps one zero)) 1e-4) (format "~a" (column-gaps one zero))))
 
-(test-twin "L14: the parameters are Python's, but for random-state 0 and the function-only keywords"
+(test-twin "the parameters are Python's, but for random-state 0 and the function-only keywords"
   (match-define (list theirs) (run-cases twin (list (hasheq 'op "params"))))
   (check-equal? (hash-set (twin-params theirs '()) 'random-state 0)
                 (hash-remove (hash-remove (spectral-embedding-params) 'norm-laplacian) 'drop-first)

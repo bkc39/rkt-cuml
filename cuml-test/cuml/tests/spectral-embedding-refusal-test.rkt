@@ -140,7 +140,7 @@
     (8 #t 20 "8 components with drop-first need at least 20 rows, got 19")
     (19 #t 42 "19 components with drop-first need at least 42 rows, got 41")))
 
-(test-gpu "L13: the fits refuse each bad X or parameter with its message, the first refusal winning"
+(test-gpu "the fits refuse each bad X or parameter with its message, the first refusal winning"
   (for* ([entry (in-list (fit-calls))]
          [r (in-list (X-rows))])
     (match-define (cons who call) entry)
@@ -151,7 +151,7 @@
     (check-exn exn:fail:contract?
                (lambda () (apply-options spectral-embedding-fit options (tiny-X))))))
 
-(test-case "L13: s0: an affinity other than nearest-neighbors in params is refused before X is read"
+(test-case "s0: an affinity other than nearest-neighbors in params is refused before X is read"
   (for ([affinity (in-list '(precomputed rbf))])
     (check-cuml-error
      'logic
@@ -166,7 +166,7 @@
                     (lambda ()
                       (fit (spectral-embedding #:affinity 'precomputed #:resources 'unused) 'X))))
 
-(test-gpu "L13: s7: the least rows fit for every probed (n-components, drop-first)"
+(test-gpu "s7: the least rows fit for every probed (n-components, drop-first)"
   (for ([entry (in-list least-rows)])
     (match-define (list k drop least message) entry)
     (test-case (format "k ~a drop ~a" k drop)
@@ -179,19 +179,19 @@
       (define rows (embedded (apply-options spectral-embedding-fit options (line-X least))))
       (check-true (and (finite-rows? rows) (sign-ruled? rows))))))
 
-(test-gpu "L13: s14's remedies fit: centred offset rows and fewer neighbours"
+(test-gpu "s14's remedies fit: centred offset rows and fewer neighbours"
   (for ([entry (in-list (list (list (line-X 64) small) (list (line-X 50) (hasheq 'n-neighbors 10))))])
     (match-define (list X options) entry)
     (check-pred spectral-embedding-result? (apply-options spectral-embedding-fit options X))))
 
-(test-pools "L13: s14: a zero column is refused and freed, under every fit"
+(test-pools "s14: a zero column is refused and freed, under every fit"
   (for ([entry (in-list (fit-calls))])
     (match-define (cons who call) entry)
     (check-pool-kept
      (row (symbol->string who) zero-message (lambda () (call (halves) (hasheq 'n-neighbors 10))))
      #:who who)))
 
-(test-gpu "L13: a non-array X is refused by the view check, under any seed"
+(test-gpu "a non-array X is refused by the view check, under any seed"
   (for ([seed (in-list '(0 #f))])
     (match (raised (lambda () (spectral-embedding-fit listed-X #:random-state seed)))
       [(? exn:fail:raft? e)
@@ -201,7 +201,7 @@
                 listed-X))]
       [other (fail (format "expected an exn:fail:raft, got ~e" other))])))
 
-(test-gpu "L13: the generics refuse with their own names"
+(test-gpu "the generics refuse with their own names"
   (define w (list->device-vector '(1 1 1 1 1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic
                     "transform: spectral-embedding has no transform; use fit-transform"
@@ -214,7 +214,7 @@
                     "fit-transform: spectral-embedding takes no sample-weight"
                     (lambda () (fit-transform (spectral-embedding) (tiny-X) #:sample-weight w))))
 
-(test-gpu "L13: after a refused s7, s10, s11, s12 or s14, a valid call succeeds"
+(test-gpu "after a refused s7, s10, s11, s12 or s14, a valid call succeeds"
   (for ([r (in-list (X-rows))]
         #:when (X-case-retry? r))
     (check-row 'spectral-embedding-fit r (fit-thunk r))
@@ -222,6 +222,6 @@
                 (spectral-embedding-fit (valid-X) #:n-neighbors 10)
                 (row-id r))))
 
-(test-pools "L13: a refusal leaves the RMM pool where it was"
+(test-pools "a refusal leaves the RMM pool where it was"
   (for ([r (in-list (X-rows))])
     (check-pool-kept r #:who 'spectral-embedding-fit #:call (fit-thunk r))))
