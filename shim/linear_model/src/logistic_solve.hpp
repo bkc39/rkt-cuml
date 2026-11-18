@@ -53,12 +53,9 @@ attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
                      const std::vector<T>& start = {});
 
 template <typename T>
-std::optional<qn_solution<T>> rescued(const raft::handle_t& handle,
-                                      const matrix<T, int64_t>& x,
-                                      row_selection rows,
-                                      const column_stats& stats,
-                                      staged_fit<T>& st,
-                                      const attempt<T>& plain,
-                                      const fit_options& options);
+std::optional<qn_solution<T>> rescued(
+    const raft::handle_t& handle, const matrix<T, int64_t>& x,
+    row_selection rows, const column_stats& stats, staged_fit<T>& st,
+    const attempt<T>& plain, const fit_options& options);
 
 }  // namespace cumlrkt::glm::logistic

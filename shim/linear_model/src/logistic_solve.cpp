@@ -98,8 +98,9 @@ std::vector<T> mapped_forward(const std::vector<T>& plain,
 }
 
 template <typename T>
-std::vector<T> mapped_back(const std::vector<T>& rescue, const rescue_plan& plan,
-                           int shared, const qn_shape& shape) {
+std::vector<T> mapped_back(const std::vector<T>& rescue,
+                           const rescue_plan& plan, int shared,
+                           const qn_shape& shape) {
   const int64_t k = shape.k;
   std::vector<T> out(rescue.size());
   for (int64_t c = 0; c < k; ++c) {
@@ -146,13 +147,10 @@ attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
 }
 
 template <typename T>
-std::optional<qn_solution<T>> rescued(const raft::handle_t& handle,
-                                      const matrix<T, int64_t>& x,
-                                      row_selection rows,
-                                      const column_stats& stats,
-                                      staged_fit<T>& st,
-                                      const attempt<T>& plain,
-                                      const fit_options& options) {
+std::optional<qn_solution<T>> rescued(
+    const raft::handle_t& handle, const matrix<T, int64_t>& x,
+    row_selection rows, const column_stats& stats, staged_fit<T>& st,
+    const attempt<T>& plain, const fit_options& options) {
   const bool per_column = options.penalty == CUML_LINEAR_MODEL_PENALTY_NONE;
   if (!options.fit_intercept && !per_column) {
     return std::nullopt;
@@ -182,10 +180,10 @@ std::optional<qn_solution<T>> rescued(const raft::handle_t& handle,
     const attempt<T> rescue = attempted<T>(
         handle, copy.data(), st.y.data(), st.weights(), check, options, *start);
     total.n_iter += rescue.solution.n_iter;
-    buffer<T> params = to_device(
-        mapped_back(to_host(rescue.solution.params, stream), plan, st.shift,
-                    shape),
-        stream);
+    buffer<T> params =
+        to_device(mapped_back(to_host(rescue.solution.params, stream), plan,
+                              st.shift, shape),
+                  stream);
     require_finite_solution(params.data(), static_cast<int64_t>(params.size()),
                             stream);
     if (checked<T>(handle, st.x(), st.y.data(), st.weights(), params, options,
@@ -197,13 +195,13 @@ std::optional<qn_solution<T>> rescued(const raft::handle_t& handle,
   return std::nullopt;
 }
 
-#define CUMLRKT_LOGISTIC_SOLVE(T)                                            \
-  template attempt<T> attempted<T>(const raft::handle_t&, T*, T*, T*,        \
-                                   solve_check, const fit_options&,          \
-                                   const std::vector<T>&);                   \
-  template std::optional<qn_solution<T>> rescued<T>(                         \
-      const raft::handle_t&, const matrix<T, int64_t>&, row_selection,       \
-      const column_stats&, staged_fit<T>&, const attempt<T>&,                \
+#define CUMLRKT_LOGISTIC_SOLVE(T)                                      \
+  template attempt<T> attempted<T>(const raft::handle_t&, T*, T*, T*,  \
+                                   solve_check, const fit_options&,    \
+                                   const std::vector<T>&);             \
+  template std::optional<qn_solution<T>> rescued<T>(                   \
+      const raft::handle_t&, const matrix<T, int64_t>&, row_selection, \
+      const column_stats&, staged_fit<T>&, const attempt<T>&,          \
       const fit_options&);
 
 CUMLRKT_LOGISTIC_SOLVE(float)

@@ -252,9 +252,9 @@ template <typename T>
 qn_solution<T> solve(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                      row_selection rows, const column_stats& stats,
                      staged_fit<T>& st, const fit_options& options) {
-  attempt<T> plain = attempted<T>(handle, st.x(), st.y.data(), st.weights(),
-                                  {st.shape, st.sigma, st.mean, st.pen, 0},
-                                  options);
+  attempt<T> plain =
+      attempted<T>(handle, st.x(), st.y.data(), st.weights(),
+                   {st.shape, st.sigma, st.mean, st.pen, 0}, options);
   if (plain.r.resolved()) {
     return std::move(plain.solution);
   }

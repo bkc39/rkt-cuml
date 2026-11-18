@@ -21,10 +21,10 @@
   (define uniform (uniform-source (add1 seed)))
   (for/lists (X y)
              ([_ (in-range 400)])
-    (define a (normal))
-    (define t (* span (uniform)))
-    (values (list a (+ 1.7e9 t))
-            (if (positive? (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2))) 1 0))))
+             (define a (normal))
+             (define t (* span (uniform)))
+             (values (list a (+ 1.7e9 t))
+                     (if (positive? (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2))) 1 0))))
 
 (define (residual-at r X y penalty tol #:fit-intercept [fi #t])
   (residual-of X
@@ -41,7 +41,8 @@
          [penalty (in-list '(none l2))])
     (test-case (format "~a ~a" seed penalty)
       (define-values (X y) (stamps 60.0 seed))
-      (define r (logistic-regression-fit (on-matrix X 'float64) (on-vector y 'int32) #:penalty penalty))
+      (define r
+        (logistic-regression-fit (on-matrix X 'float64) (on-vector y 'int32) #:penalty penalty))
       (match-define (residual K _ bound) (residual-at r X y penalty 1e-4))
       (check-true (<= K bound) (format "K ~a bound ~a" (exact->inexact K) (exact->inexact bound))))))
 

@@ -11,7 +11,13 @@
          (only-in "private/linear-twin-data.rkt" decoded)
          (only-in "private/logistic-data.rkt" fit-flat fit-parts flat-matrix lr-case-X lr-fit-n-iter)
          (only-in "private/logistic-twin-data.rkt" logistic-twin-results their-fit twin-trial)
-         (only-in "private/logistic-twin-rows.rkt" classes-of repeatable? request row-fit row-name rows)
+         (only-in "private/logistic-twin-rows.rkt"
+                  classes-of
+                  repeatable?
+                  request
+                  row-fit
+                  row-name
+                  rows)
          (only-in "private/python-env.rkt" test-twin))
 
 (define (proba-gap ours theirs k)
