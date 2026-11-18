@@ -1026,8 +1026,13 @@ Follow-ups are GitHub issues.
   e_s = max(0, e − 1021), only as far as the difference needs, so every
   residual of values below 2^1022 is the correctly rounded y − ŷ. With s
   that value scaling, each residual s·y − s·ŷ is divided again by 2^e_r,
-  e_r = ilogb(max |s·y − s·ŷ|), and for r2 each deviation s·y − ȳ by
-  2^e_d, e_d = ilogb(max |s·y − ȳ|), before squaring; both maxima are over
+  e_r = ilogb(max |s·y − s·ŷ|), and for r2 each deviation by 2^e_d before
+  squaring. The deviation is anchored at the first positive-weight sample
+  f, (s·y − s·y_f) − m, m the weighted mean of s·y − s·y_f, so a heavy
+  near-constant sample's rounded mean cannot swamp a light sample's spread
+  (#98: y ≈ 2.59e-113 at weights 2.7e232 and 2.5e173 scored 1.0 against
+  the exact −178637.99, as sklearn does; now within 1e-14);
+  e_d = ilogb(max |(s·y − s·y_f) − m|); both maxima are over
   the positive samples, whatever their weights. The final ratio divides
   the frexp mantissas and applies one ldexp, so it is rounded once, as a
   normal number, whatever the exponents: with R′ = m_R·2^a,
