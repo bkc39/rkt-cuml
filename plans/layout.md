@@ -1970,7 +1970,14 @@ scratch, the source is `cpp/src/glm/qn/`.
   row-major (house `rows_of`, as L1–L3), so the twins run row-major
   and col-major X is a refusal row; float32 multiclass fits under l1
   or elasticnet repeat on neither side at 150–200 rows, so those rows
-  compare within S3's 1e-3 and the rest stay bit for bit. R1 and R3:
+  compare within 3e-3 and the rest stay bit for bit. The bound is twice
+  the worst of #133's repeat study: 50 fits a side of each such row
+  under a `-j 4` load, every pair of ours and Python's (2,500 a row),
+  worst 1.49e-3 (five classes, elasticnet, no intercept; 303 pairs above
+  S3's old 1e-3), three classes at most 1.0e-4; 3 of our 400 fits
+  logged a failed line search (five classes, l1: n-iter 58, 34 and 36
+  against 63 and 38), Python's n-iter has 3 such outliers there, and
+  none is in the worst pair. R1 and R3:
   sklearn's point is not a 1e-6 oracle on the real sets (lbfgs stops
   on ftol = 64ε, breast-cancer l2 K 1.1e-8 at sklearn's point and
   8.6e-7 off our tol-0 fit, iris 1.1e-6; saga takes 70 s for l1 and
