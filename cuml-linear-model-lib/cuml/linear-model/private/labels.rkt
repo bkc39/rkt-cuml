@@ -7,7 +7,9 @@
          (only-in racket/match match match-define)
          (only-in raft device-vector->list device-vector? dtype list->device-vector)
          (only-in raft/unsafe deposit->list)
-         (only-in "native.rkt" cuml-linear-model-label-encode-job))
+         (only-in "native.rkt"
+                  cuml-linear-model-label-classes-job
+                  cuml-linear-model-label-encode-job))
 
 (provide class-view
          decode-labels
@@ -111,12 +113,11 @@
         (real->double-flonum (hash-ref cw k))
         1.0)))
 
-(define (integral-classes y)
-  (define integral
-    (for/list ([v (in-list (device-vector->list y))]
-               #:when (and (rational? v) (integer? v)))
-      v))
-  (sort (remove-duplicates integral =) <))
+(define (device-classes who y resources)
+  (define out (deposit-for/who who resources))
+  (cuml-linear-model-label-classes-job who resources y out)
+  (match-define (list classes) (deposit->list out))
+  (device-vector->list classes))
 
 (define (class-weight-view who kind classes cw resources)
   (and
@@ -126,7 +127,10 @@
 (define/who (fit-labels who kind y cw resources)
   (match kind
     [(? device-kind?)
-     (values y #f (class-weight-view who real-labels (integral-classes y) cw resources))]
+     (values y
+             #f
+             (and (hash? cw)
+                  (class-weight-view who real-labels (device-classes who y resources) cw resources)))]
     [_
      (define-values (classes codes) (host-labels who kind y))
      (values (list->device-vector codes #:dtype 'int32 #:resources resources)
