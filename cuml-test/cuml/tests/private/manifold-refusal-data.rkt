@@ -2,7 +2,7 @@
 
 (require (only-in racket/flonum flsingle)
          (only-in racket/match match)
-         (only-in "scaler-data.rkt" rows->matrix)
+         (only-in "common-data.rkt" mat)
          (only-in "umap-data.rkt" fixture-X fixture-rows tiny))
 
 (provide cosine-message
@@ -18,14 +18,14 @@
          zero-row)
 
 (define (tiny-with cells [dt 'float32] [rows (fixture-rows tiny)])
-  (rows->matrix (for/list ([row (in-list rows)]
-                           [r (in-naturals)])
-                  (for/list ([x (in-list row)]
-                             [c (in-naturals)])
-                    (match (assoc (list r c) cells)
-                      [(list _ value) value]
-                      [#f x])))
-                dt))
+  (mat (for/list ([row (in-list rows)]
+                  [r (in-naturals)])
+         (for/list ([x (in-list row)]
+                    [c (in-naturals)])
+           (match (assoc (list r c) cells)
+             [(list _ value) value]
+             [#f x])))
+       dt))
 
 (define large (flsingle 1e20))
 

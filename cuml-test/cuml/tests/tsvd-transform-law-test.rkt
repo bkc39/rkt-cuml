@@ -6,8 +6,9 @@
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" gamma mat unit-roundoff)
          (only-in "private/pca-data.rkt" column fixture-name fixture-rows norm)
-         (only-in "private/scaler-data.rkt" rows->matrix transpose unit-roundoff)
+         (only-in "private/scaler-data.rkt" transpose)
          (only-in "private/tsvd-data.rkt"
                   extents
                   first-problems
@@ -15,8 +16,7 @@
                   popvars
                   squared-norm
                   svd
-                  tsvd-of)
-         (only-in "private/linear-laws.rkt" gamma))
+                  tsvd-of))
 
 (define (exact-product rows columns)
   (define exact-columns
@@ -57,7 +57,7 @@
     (match-define (list dt solver f) c)
     (test-case (format "~a ~a ~a" dt solver (fixture-name f))
       (define rows (fixture-rows f dt))
-      (define X (rows->matrix rows dt))
+      (define X (mat rows dt))
       (define result (tsvd-fit X #:n-components 3 #:solver solver))
       (match-define (svd components _ _ _) (tsvd-of result))
       (define T (tsvd-transform result X))
@@ -75,7 +75,7 @@
     (define rows (fixture-rows f dt))
     (define-values (_n d) (extents rows))
     (test-case (format "~a ~a ~a" dt solver (fixture-name f))
-      (define X (rows->matrix rows dt))
+      (define X (mat rows dt))
       (define result (tsvd-fit X #:n-components d #:solver solver))
       (define back
         (~> (tsvd-transform result X) (tsvd-inverse-transform result _) device-matrix->list*))
@@ -102,7 +102,7 @@
           (min n d)
           3))
     (test-case (format "~a ~a ~a k=~a" dt solver (fixture-name f) k)
-      (define X (rows->matrix rows dt))
+      (define X (mat rows dt))
       (define result (tsvd-fit X #:n-components k #:solver solver))
       (match-define (svd _ variance ratio _) (tsvd-of result))
       (define T-rows (device-matrix->list* (tsvd-transform result X)))

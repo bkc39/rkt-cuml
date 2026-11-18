@@ -15,11 +15,12 @@
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/refusal-rows.rkt"
                   check-row
                   grid
+                  index-message
                   norm-message
                   row
                   row-id
@@ -33,8 +34,7 @@
                   graph-labels
                   graph-map-vals
                   labels
-                  set-entry)
-         (only-in "private/spectral-embedding-refusal-data.rkt" index-message))
+                  set-entry))
 
 (define tol-most "eigen-tol: expected at most 3.4028234663852886e+38, got ")
 

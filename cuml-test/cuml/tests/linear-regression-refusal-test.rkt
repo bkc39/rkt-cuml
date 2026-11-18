@@ -10,8 +10,8 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" uniform-source)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/linear-data.rkt"
                   algorithms
                   dtypes

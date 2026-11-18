@@ -2,8 +2,8 @@
 
 (require (only-in cuml/cluster kmeans-result)
          (only-in cuml/cluster/private/blobs blobs)
-         (only-in racket/match match-define)
          (only-in racket/list take)
+         (only-in racket/match match-define)
          (only-in raft
                   device-matrix
                   device-matrix->list*
@@ -11,11 +11,9 @@
                   device-vector->list
                   list*->device-matrix
                   list->device-vector)
-         (only-in "exact-algebra.rkt" [inexact-rows floats]))
+         (only-in "common-data.rkt" mat))
 
 (provide argmin-row
-         blank-matrix
-         blank-vector
          blob-data
          cell-means
          close?
@@ -32,7 +30,6 @@
          grid8-labels
          host
          host-vector
-         mat
          norm2
          outcome
          scaled-close?
@@ -42,7 +39,6 @@
          step-weights
          string-inits
          tolerance
-         vec
          weighted-grid8
          weighted-start)
 
@@ -74,18 +70,6 @@
 
 (define grid64-start (shift offsets '(1 1)))
 (define grid64-means (shift offsets '(3 3)))
-
-(define (mat rows dt)
-  (list*->device-matrix rows #:dtype dt))
-
-(define (vec xs dt)
-  (list->device-vector xs #:dtype dt))
-
-(define (blank-matrix rows cols dt #:layout [order 'row-major])
-  (device-matrix rows cols #:dtype dt #:layout order))
-
-(define (blank-vector n dt)
-  (device-vector n #:dtype dt))
 
 (define (cyclic-weights n)
   (for/list ([i (in-range n)])

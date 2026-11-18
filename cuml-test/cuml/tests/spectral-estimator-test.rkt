@@ -21,9 +21,9 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
+         (only-in "private/common-data.rkt" blank-vector mat)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips)
-         (only-in "private/kmeans-data.rkt" blank-vector mat)
          (only-in "private/spectral-data.rkt"
                   blobs
                   graph-labels

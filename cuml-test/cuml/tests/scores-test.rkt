@@ -7,18 +7,17 @@
          (only-in rackunit check-= check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
+         (only-in "private/common-data.rkt" columns-of mean)
          (only-in "private/metrics-data.rkt"
                   exact-accuracy
                   exact-mse
                   exact-r2
-                  mean
                   pow2-scaled
                   r2-bound
                   r2-gap
                   regression-cases)
          (only-in "private/scaler-data.rkt" rows-of)
-         (only-in "private/scores-data.rkt" accuracy integer-weights label-cases mse r2)
-         (only-in "private/linear-data.rkt" columns-of))
+         (only-in "private/scores-data.rkt" accuracy integer-weights label-cases mse r2))
 
 (define (relative-gap ours exact)
   (/ (abs (- (inexact->exact ours) exact)) exact))

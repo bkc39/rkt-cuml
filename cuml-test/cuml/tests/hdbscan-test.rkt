@@ -1,8 +1,6 @@
 #lang racket/base
 
-(require (only-in "private/spectral-data.rkt" [repeat-each dup])
-         (only-in "private/kmeans-data.rkt" mat)
-         (only-in cuml/cluster
+(require (only-in cuml/cluster
                   hdbscan-approximate-predict
                   hdbscan-condensed-tree-lambdas
                   hdbscan-condensed-tree-selected-clusters
@@ -24,8 +22,20 @@
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/dbscan-data.rkt" pick same-partition? seeded)
-         (only-in "private/hdbscan-data.rkt" dataset dataset-names descent-problems fitted-labels fitted-lambdas fitted-of fitted-persistence fitted-probabilities label-count same-fit? structure-problems))
+         (only-in "private/common-data.rkt" mat pick repeat-each)
+         (only-in "private/dbscan-data.rkt" same-partition? seeded)
+         (only-in "private/hdbscan-data.rkt"
+                  dataset
+                  dataset-names
+                  descent-problems
+                  fitted-labels
+                  fitted-lambdas
+                  fitted-of
+                  fitted-persistence
+                  fitted-probabilities
+                  label-count
+                  same-fit?
+                  structure-problems))
 
 (define flt-max 3.4028234663852886e38)
 
@@ -80,9 +90,9 @@
   (define single (fitted-of rows #:options (hasheq 'allow-single-cluster #t)))
   (check-equal? (fitted-labels single) (make-list 100 0))
   (check-equal? (fitted-probabilities single) (make-list 100 1.0))
-  (test-case "dup x10 lambdas are finite"
+  (test-case "repeat-each x10 lambdas are finite"
     (check-true (andmap (lambda (l) (<= l flt-max))
-                        (fitted-lambdas (fitted-of (dup (dataset 'b50) 10)))))))
+                        (fitted-lambdas (fitted-of (repeat-each (dataset 'b50) 10)))))))
 
 (test-gpu "the manual: an alpha far below 1e-17 leaves every sample noise"
   (define fitted (fitted-of (dataset 'b50) #:options (hasheq 'alpha 1e-30)))
@@ -119,10 +129,10 @@
    1))
 
 (test-gpu "each ten-fold duplicate of b50 is its own cluster but one"
-  (check-equal? (~> (dataset 'b50) (dup 10) fitted-of fitted-labels label-count) 299))
+  (check-equal? (~> (dataset 'b50) (repeat-each 10) fitted-of fitted-labels label-count) 299))
 
 (test-gpu "b50 doubled is 24 clusters, and a permutation changes the partition"
-  (define rows (dup (dataset 'b50) 2))
+  (define rows (repeat-each (dataset 'b50) 2))
   (define labels (fitted-labels (fitted-of rows)))
   (check-equal? (label-count labels) 24)
   (define perm (seeded 1 (lambda () (shuffle (range (length rows))))))

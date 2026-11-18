@@ -13,6 +13,7 @@
          (only-in rackunit check-equal? check-eqv? check-false check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" mat unit-roundoff)
          (only-in "private/scaler-data.rkt"
                   bits-equal?
                   constant-rows
@@ -21,12 +22,10 @@
                   host-transform
                   normal-rows
                   round-to
-                  rows->matrix
                   standardisation-errors
                   statistics
                   transpose
-                  ulp
-                  unit-roundoff))
+                  ulp))
 
 (define flag-pairs '((#t #t) (#t #f) (#f #t) (#f #f)))
 
@@ -39,7 +38,7 @@
          [n (in-list '(1 7 256 4099))]
          [d (in-list '(1 13 64))])
     (define rows (normal-rows (+ (* 31 n) d) n d dt))
-    (define X (rows->matrix rows dt))
+    (define X (mat rows dt))
     (define host (device-matrix->list* X))
     (for ([flags (in-list flag-pairs)])
       (test-case (format "~a ~ax~a ~a" dt n d flags)
@@ -56,7 +55,7 @@
          [k (in-list '(-3 0 5))]
          [c (in-list '(0 12 -7.5))])
     (test-case (format "~a k=~a c=~a" dt k c)
-      (define X (rows->matrix (dyadic-rows c k) dt))
+      (define X (mat (dyadic-rows c k) dt))
       (define fitted (standard-scaler-fit X))
       (check-equal? (statistics fitted)
                     (map (lambda (v) (list (exact->inexact v))) (list c (expt 4 k) (expt 2 k))))
@@ -71,7 +70,7 @@
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((7 13) (256 64) (4099 13)))])
     (match-define (list n d) size)
-    (define X (rows->matrix (normal-rows (+ n (* 3 d)) n d dt) dt))
+    (define X (mat (normal-rows (+ n (* 3 d)) n d dt) dt))
     (define fitted (standard-scaler-fit X))
     (define u (unit-roundoff dt))
     (define means (map (round-to dt) (device-vector->list (standard-scaler-result-mean fitted))))
@@ -89,7 +88,7 @@
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((7 13) (256 64) (4099 13)))])
     (match-define (list n d) size)
-    (define X (rows->matrix (normal-rows (+ 5 n d) n d dt) dt))
+    (define X (mat (normal-rows (+ 5 n d) n d dt) dt))
     (define fitted (standard-scaler-fit X))
     (define T (standard-scaler-transform fitted X))
     (for ([x-column (in-list (transpose (device-matrix->list* X)))]
@@ -108,7 +107,7 @@
          [n (in-list '(1 2 9 1000))])
     (test-case (format "~a ~a x~a" dt value n)
       (define rounded ((round-to dt) value))
-      (define X (rows->matrix (constant-rows n rounded) dt))
+      (define X (mat (constant-rows n rounded) dt))
       (define fitted (standard-scaler-fit X))
       (match-define (list _ (list var) (list scale)) (statistics fitted))
       (check-equal? scale 1.0)
@@ -122,16 +121,16 @@
 
 (test-gpu "the near-constant mask is sklearn's"
   (define base 1e8)
-  (define tiny (rows->matrix (list (list base) (list base) (list (+ base (ulp base)))) 'float64))
+  (define tiny (mat (list (list base) (list base) (list (+ base (ulp base)))) 'float64))
   (check-equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit tiny)))
                 '(1.0))
-  (define spread (rows->matrix (cons (list (+ 1e6 1e-4)) (constant-rows 999 1e6)) 'float64))
+  (define spread (mat (cons (list (+ 1e6 1e-4)) (constant-rows 999 1e6)) 'float64))
   (check-false
    (equal? (device-vector->list (standard-scaler-result-scale (standard-scaler-fit spread))) '(1.0))))
 
 (test-gpu "the flags decide what is kept and what is applied"
   (for ([dt (in-list '(float32 float64))])
-    (define X (rows->matrix (normal-rows 17 50 6 dt) dt))
+    (define X (mat (normal-rows 17 50 6 dt) dt))
     (define host (device-matrix->list* X))
     (define full (standard-scaler-fit X))
     (define none (fit-with X '(#f #f)))
@@ -163,7 +162,7 @@
   (for ([dt (in-list '(float32 float64))])
     (define n 1000)
     (define d 24)
-    (define X (rows->matrix (normal-rows 99 n d dt) dt))
+    (define X (mat (normal-rows 99 n d dt) dt))
     (define once (statistics (standard-scaler-fit X)))
     (check-true (bits-equal? (statistics (standard-scaler-fit X)) once) "a second fit")
     (for ([elements (in-list (list n (* 3 n) (sub1 (* n d)) (expt 2 26)))])
@@ -173,8 +172,8 @@
 
 (test-gpu "a fit transforms either dtype, rounding its statistics to X's"
   (define rows (normal-rows 41 64 5 'float32))
-  (define X32 (rows->matrix rows 'float32))
-  (define X64 (rows->matrix rows 'float64))
+  (define X32 (mat rows 'float32))
+  (define X64 (mat rows 'float64))
   (define fit32 (standard-scaler-fit X32))
   (define fit64 (standard-scaler-fit X64))
   (check-true (bits-equal? (statistics fit32) (statistics fit64)) "float32 values fit as float64")

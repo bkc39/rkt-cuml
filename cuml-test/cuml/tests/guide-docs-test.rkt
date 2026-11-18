@@ -88,9 +88,9 @@
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" mean worst)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/guide-data.rkt" check-scored cluster-columns host scaled-matrix)
-         (only-in "private/metrics-data.rkt" mean worst)
          (only-in "private/scaler-data.rkt" [float32-roundoff u]))
 
 (define-namespace-anchor anchor)

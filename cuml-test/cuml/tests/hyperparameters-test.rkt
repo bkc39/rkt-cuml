@@ -2,7 +2,6 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
-         (only-in racket/list combinations)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-pred check-regexp-match check-true test-case)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)

@@ -12,6 +12,7 @@
          (only-in raft device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   case-fit
@@ -33,7 +34,6 @@
                   remove-at
                   result-fit
                   rounded
-                  unit-roundoff
                   zeroed)
          (only-in "private/scaler-data.rkt" bits-equal?))
 

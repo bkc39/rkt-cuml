@@ -13,8 +13,9 @@
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" mat)
          (only-in "private/pca-data.rkt" fixture-name fixture-rows)
-         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix vector-shape)
+         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape vector-shape)
          (only-in "private/tsvd-data.rkt" extents law-fixtures))
 
 (test-gpu "the result's fields have their shapes and X's dtype, and the outputs keep it"
@@ -24,7 +25,7 @@
     (define rows (fixture-rows f dt))
     (define-values (n d) (extents rows))
     (test-case (format "~a ~a k=~a" dt (fixture-name f) k)
-      (define X (rows->matrix rows dt))
+      (define X (mat rows dt))
       (define result (tsvd-fit X #:n-components k))
       (check-true (tsvd-result? result))
       (check-equal? (matrix-shape (tsvd-result-components result)) (list #t dt 'row-major (list k d)))
@@ -48,7 +49,7 @@
          [solver (in-list '(full jacobi))])
     (test-case (format "~a ~a ~a" dt (fixture-name f) solver)
       (define rows (fixture-rows f dt))
-      (define X (rows->matrix rows dt))
+      (define X (mat rows dt))
       (define result (tsvd-fit X #:n-components 2 #:solver solver))
       (define components (device-matrix->list* (tsvd-result-components result)))
       (define T (tsvd-transform result X))

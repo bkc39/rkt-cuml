@@ -15,6 +15,7 @@
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/elastic-net-data.rkt"
                   correlated-case
                   en-case-fit
@@ -30,14 +31,13 @@
                   dtypes
                   insert-column
                   lcase
-                  lcase-w
                   lcase-X
+                  lcase-w
                   lcase-y
                   max-abs
                   on-matrix
                   on-vector
                   remove-at
-                  unit-roundoff
                   weights-or-ones))
 
 (define zero-fit-rounding 4)

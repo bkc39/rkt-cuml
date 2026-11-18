@@ -7,9 +7,7 @@
          (only-in raft list*->device-matrix list->device-vector)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "scaler-data.rkt" rows-of)
-         (only-in "kmeans-data.rkt" [vec labels-of])
-         (only-in "dbscan-data.rkt" [pick permute]))
+         (only-in "scaler-data.rkt" rows-of))
 
 (provide bijection
          choose2
@@ -23,14 +21,11 @@
          host-counts
          label-pair
          labels
-         labels-of
-         mean
          median
          monotone-maps
          normals
          overlap
          overlap-labels
-         permute
          pow2-scaled
          projection
          r2-bound
@@ -38,7 +33,6 @@
          random-permutation
          regression-cases
          regression-pair
-         relative
          scaled
          shrunk
          sorted-distinct
@@ -46,8 +40,7 @@
          three-groups-labels
          tolerance
          wide-labels
-         wide-rows
-         worst)
+         wide-rows)
 
 (define (seeded seed)
   (define g (make-pseudo-random-generator))
@@ -208,9 +201,6 @@
       1
       (/ (- index expected) (- most expected))))
 
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
-
 (define (median xs)
   (define sorted (sort xs <))
   (define n (length sorted))
@@ -219,12 +209,6 @@
      #:when (even? n)
      (/ (+ lo hi) 2)]
     [(cons middle _) middle]))
-
-(define (worst xs ys)
-  (for/fold ([w 0.0])
-            ([x (in-list xs)]
-             [y (in-list ys)])
-    (max w (abs (- x y)))))
 
 (define tolerances
   (hasheq 'score '(1e-6 1e-14)
@@ -332,6 +316,3 @@
     (if (list? x)
         (pow2-scaled x k)
         (* x (expt 2 k)))))
-
-(define (relative ours theirs)
-  (/ (abs (- ours theirs)) (abs theirs)))

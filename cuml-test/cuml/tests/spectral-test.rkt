@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in "private/kmeans-data.rkt" mat)
-         (only-in cuml/cluster
+(require (only-in cuml/cluster
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels
@@ -12,6 +11,7 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" mat repeat-each)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/spectral-data.rkt"
                   blobs
@@ -26,7 +26,6 @@
                   graph-upper
                   labels
                   planted?
-                  repeat-each
                   set-entry
                   three-blobs-matrix
                   three-blocks

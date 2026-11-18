@@ -10,7 +10,8 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix on-vector unit-roundoff)
+         (only-in "private/common-data.rkt" unit-roundoff)
+         (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix on-vector)
          (only-in "private/logistic-data.rkt"
                   blob-case
                   case-fit

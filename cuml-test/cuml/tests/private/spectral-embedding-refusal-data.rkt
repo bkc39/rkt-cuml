@@ -6,8 +6,8 @@
          (only-in rackunit check-equal? check-pred)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/probe probe-pool-used)
-         (only-in "kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "refusal-rows.rkt" check-row row row-call row-id)
+         (only-in "common-data.rkt" blank-matrix blank-vector)
+         (only-in "refusal-rows.rkt" check-row index-message row row-call row-id)
          (only-in "spectral-data.rkt"
                   clique-graph
                   graph->vectors
@@ -33,7 +33,6 @@
          fault
          graph-shape-rows
          heavy-rows
-         index-message
          path
          unit-weight-rows
          zero-text)
@@ -74,9 +73,6 @@
           column
           what
           advice))
-
-(define (index-message name entry got)
-  (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))
 
 (define (fault g [options (hasheq)])
   (lambda () (embedded-graph g options)))

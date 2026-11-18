@@ -19,8 +19,8 @@
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" raised)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/process-memory.rkt"
                   baseline-sample
                   device-growth

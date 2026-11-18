@@ -5,7 +5,8 @@
          (only-in rackunit check-equal? check-true fail test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/dbscan-data.rkt" noise pick same-partition? seeded)
+         (only-in "private/common-data.rkt" noise pick)
+         (only-in "private/dbscan-data.rkt" same-partition? seeded)
          (only-in "private/hdbscan-data.rkt"
                   close?
                   dataset

@@ -2,7 +2,11 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters flag)
+         (only-in cuml/core/private/hyperparameters
+                  bound-params
+                  define-codes
+                  define-hyperparameters
+                  flag)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
          (only-in racket/match match-define)

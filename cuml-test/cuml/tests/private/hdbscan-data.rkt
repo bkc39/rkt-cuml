@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in "kmeans-data.rkt" mat)
-         (for-syntax racket/base)
+(require (for-syntax racket/base)
          (only-in cuml/cluster
                   hdbscan-condensed-tree-children
                   hdbscan-condensed-tree-lambdas
@@ -27,12 +26,12 @@
          (only-in racket/file file->value)
          (only-in racket/list append* last list-set make-list range remove-duplicates)
          (only-in racket/match match match-define match-lambda)
-         (only-in racket/math pi)
          (only-in racket/runtime-path define-runtime-path)
          (only-in raft device-matrix->list* device-vector->list)
+         (only-in "common-data.rkt" gaussian mat repeat-each)
          (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
-         (only-in "spectral-data.rkt" blobs circles float32-rows gaussian moons [repeat-each dup]))
+         (only-in "spectral-data.rkt" blobs circles float32-rows moons))
 
 (provide (struct-out fitted)
          (contract-out [dataset (-> (apply or/c dataset-names) (listof (listof real?)))])

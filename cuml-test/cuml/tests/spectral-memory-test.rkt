@@ -11,8 +11,8 @@
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/cuml-error.rkt" raised)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/process-memory.rkt"
                   baseline-sample
                   device-growth

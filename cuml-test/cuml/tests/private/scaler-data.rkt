@@ -23,13 +23,10 @@
          (only-in raft/private/array buffer->device-array device-array-buffer)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source)
-         (only-in "kmeans-data.rkt" [mat rows->matrix])
-         (only-in "exact-algebra.rkt" dot)
-         (only-in "linear-data.rkt" unit-roundoff))
+         (only-in "common-data.rkt" mat unit-roundoff))
 
 (provide bits-equal?
          constant-rows
-         dot
          dyadic-rows
          float32-roundoff
          generated-rows
@@ -38,7 +35,6 @@
          matrix-shape
          normal-rows
          round-to
-         rows->matrix
          rows-of
          scaled-rows
          standardisation-errors
@@ -46,7 +42,6 @@
          strided-vector
          transpose
          ulp
-         unit-roundoff
          vector-shape)
 
 (define (vector-shape v)

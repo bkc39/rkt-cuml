@@ -3,9 +3,8 @@
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
          (only-in racket/match match match-define)
          (only-in racket/math exact-floor)
-         (only-in raft list*->device-matrix list->device-vector)
          (only-in "blob-data.rkt" uniform-source)
-         (only-in "kmeans-data.rkt" [mat rows] vec))
+         (only-in "common-data.rkt" mat vec))
 
 (provide accuracy
          integer-weights
@@ -13,13 +12,11 @@
          mse
          on
          r2
-         rows
-         vec
          weights-of)
 
 (define (on xs dt)
   (match xs
-    [(cons (? list?) _) (rows xs dt)]
+    [(cons (? list?) _) (mat xs dt)]
     [_ (vec xs dt)]))
 
 (define (weights-of w [dt 'float64])

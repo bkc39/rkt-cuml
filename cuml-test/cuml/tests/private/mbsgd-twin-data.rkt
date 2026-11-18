@@ -6,9 +6,10 @@
          racket/runtime-path
          (only-in racket/string string-replace)
          (only-in threading ~>)
+         (only-in "common-data.rkt" bits-of)
          (only-in "elastic-net-data.rkt" apply-keywords)
          (only-in "linear-data.rkt" on-matrix on-vector)
-         (only-in "linear-twin-data.rkt" bits-of decoded twin-results)
+         (only-in "linear-twin-data.rkt" decoded twin-results)
          (only-in "mbsgd-data.rkt" clf-parts reg-parts))
 
 (provide clf-fit

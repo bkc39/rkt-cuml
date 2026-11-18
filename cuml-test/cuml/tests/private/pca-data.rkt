@@ -10,7 +10,9 @@
          (only-in racket/list argmax list-set make-list take)
          (only-in racket/match match)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "scaler-data.rkt" dot generated-rows round-to rows->matrix transpose))
+         (only-in "common-data.rkt" mat)
+         (only-in "exact-algebra.rkt" dot)
+         (only-in "scaler-data.rkt" generated-rows round-to transpose))
 
 (provide (struct-out fitted)
          (struct-out fixture)
@@ -29,7 +31,6 @@
          host-project
          host-reconstruct
          integer-fixture
-         least-magnitude
          magnitude-rows
          non-increasing?
          norm
@@ -38,7 +39,6 @@
          over-bound
          product
          tie-rows
-         unscaled
          wide-fixture)
 
 (struct fixture (name source))
@@ -98,7 +98,7 @@
            rows)))
 
 (define (fixture-matrix f dtype [count #f])
-  (rows->matrix (fixture-rows f dtype count) dtype))
+  (mat (fixture-rows f dtype count) dtype))
 
 (define (axis-rows a b c permutation)
   (define (on-axis axis value)
@@ -180,11 +180,3 @@
                [j (in-naturals)]
                #:unless (= i j))
       (min gap (abs (- v w))))))
-
-(define (least-magnitude dt)
-  (if (eq? dt 'float32)
-      (expt 2 -149)
-      (expt 2 -1074)))
-
-(define (unscaled x by power)
-  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))

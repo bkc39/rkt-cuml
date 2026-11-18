@@ -18,9 +18,9 @@
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/hdbscan-data.rkt" dataset)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/program.rkt" run-program)
          (only-in "private/refusal-rows.rkt"
                   check-row

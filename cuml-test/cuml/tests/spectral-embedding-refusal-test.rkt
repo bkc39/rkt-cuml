@@ -14,9 +14,9 @@
          (only-in raft exn:fail:raft? list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe test-pools)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/manifold-refusal-data.rkt"
                   large-message
                   large-row
@@ -26,7 +26,6 @@
                   tiny-X
                   tiny-with)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
-         (only-in "private/scaler-data.rkt" rows->matrix)
          (only-in "private/spectral-embedding-data.rkt" embedded polygons rows-matrix sign-ruled?)
          (only-in "private/spectral-embedding-refusal-data.rkt" check-pool-kept zero-text)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows tiny))
@@ -43,23 +42,23 @@
     (list (+ offset (exact->inexact i)) (exact->inexact (modulo i 3)))))
 
 (define (line-X count)
-  (rows->matrix (line count) 'float32))
+  (mat (line count) 'float32))
 
 (define two-message "n-components: 2 components with drop-first need at least 8 rows, got 7")
 
 (define zero-message (string-append zero-text "; deduplicate or centre X, or change n-neighbors"))
 
 (define (halves)
-  (rows->matrix (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0))) 'float32))
+  (mat (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0))) 'float32))
 
 (define (offset)
-  (rows->matrix (line 64 1e9) 'float32))
+  (mat (line 64 1e9) 'float32))
 
 (define (X-row id message X [options small] #:retry? [retry? #f])
   (X-case id message (cons X options) retry?))
 
 (define (X-rows)
-  (define one-column (rows->matrix (map (lambda (r) (take r 1)) (fixture-rows tiny)) 'float32))
+  (define one-column (mat (map (lambda (r) (take r 1)) (fixture-rows tiny)) 'float32))
   (list
    (X-row "s1" "n-components: expected at least 1, got 0" (tiny-X) (hasheq 'n-components 0))
    (X-row "s2" "n-neighbors: expected at least 2, got 1" (tiny-X) (hasheq 'n-neighbors 1))
@@ -86,7 +85,7 @@
    (X-row "s11" large-message (tiny-with large-row) #:retry? #t)
    (X-row "s12"
           "X: every row equals row 0; a spectral embedding needs two distinct rows"
-          (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32)
+          (mat (make-list 8 '(1.5 1.5 1.5)) 'float32)
           #:retry? #t)
    (X-row "s14 halves" zero-message (halves) (hasheq 'n-neighbors 10) #:retry? #t)
    (X-row "s14 offset" zero-message (offset) (hasheq 'n-neighbors 10) #:retry? #t)
@@ -109,7 +108,7 @@
    (X-row "s11 before s12"
           (format "X: row 0: expected a squared norm of at most 4.253529586511731e+37, got ~a"
                   (* 3 (sqr (flsingle 1e20))))
-          (rows->matrix (make-list 8 '(1e20 1e20 1e20)) 'float32))))
+          (mat (make-list 8 '(1e20 1e20 1e20)) 'float32))))
 
 (define (fit-calls)
   (list (cons 'spectral-embedding-fit

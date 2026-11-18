@@ -13,14 +13,8 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
-         (only-in "private/metrics-data.rkt"
-                  label-pair
-                  labels-of
-                  overlap
-                  overlap-labels
-                  projection
-                  tolerance
-                  worst)
+         (only-in "private/common-data.rkt" vec worst)
+         (only-in "private/metrics-data.rkt" label-pair overlap overlap-labels projection tolerance)
          (only-in "private/python-env.rkt" run-twin test-twin))
 
 (define-runtime-path twin "python/metrics_twin.py")
@@ -53,7 +47,7 @@
     (list truth found)))
 
 (define (counts truth found)
-  (~> (contingency-matrix (labels-of truth 'int32) (labels-of found 'int64))
+  (~> (contingency-matrix (vec truth 'int32) (vec found 'int64))
       contingency-table-counts
       device-matrix->list*))
 
@@ -87,7 +81,7 @@
                [theirs (in-list results)]
                [i (in-naturals)])
       (match-define (list truth found) c)
-      (define ours (adjusted-rand-score (labels-of truth 'int32) (labels-of found 'int32)))
+      (define ours (adjusted-rand-score (vec truth 'int32) (vec found 'int32)))
       (define gap (abs (- ours (hash-ref theirs 'sklearn))))
       (test-case (format "case ~a" i)
         (check-true (<= gap 1e-14) (format "~a against sklearn's ~a" ours (hash-ref theirs 'sklearn)))
@@ -106,8 +100,8 @@
           'cuml #t))
 
 (define (ours X ys metric)
-  (list (silhouette-score X (labels-of ys 'int32) #:metric metric)
-        (device-vector->list (silhouette-samples X (labels-of ys 'int32) #:metric metric))))
+  (list (silhouette-score X (vec ys 'int32) #:metric metric)
+        (device-vector->list (silhouette-samples X (vec ys 'int32) #:metric metric))))
 
 (define (noisy-labels)
   (for/list ([y (in-list (overlap-labels #:each each))]

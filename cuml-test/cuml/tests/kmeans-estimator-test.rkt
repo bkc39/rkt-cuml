@@ -51,10 +51,10 @@
          (only-in raft device-resources exn:fail:raft-kind exn:fail:raft? shape with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
+         (only-in "private/common-data.rkt" blank-matrix mat vec)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" keywords-of printed)
          (only-in "private/kmeans-data.rkt"
-                  blank-matrix
                   blob-data
                   cyclic-weights
                   dtypes
@@ -62,14 +62,12 @@
                   grid8
                   host
                   host-vector
-                  mat
                   outcome
                   scaled-close?
                   start
                   step-weights
                   string-inits
-                  tolerance
-                  vec))
+                  tolerance))
 
 (define default-params
   (hasheq 'init 'scalable-k-means++

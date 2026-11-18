@@ -5,8 +5,8 @@
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in "private/python-env.rkt" run-cases test-twin)
-         (only-in "private/metrics-data.rkt" relative))
+         (only-in "private/common-data.rkt" relative)
+         (only-in "private/python-env.rkt" run-cases test-twin))
 
 (define-runtime-path twin "python/umap_twin.py")
 

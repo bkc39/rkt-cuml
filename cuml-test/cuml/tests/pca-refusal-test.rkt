@@ -19,23 +19,23 @@
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/refusal-rows.rkt" bad-X-rows check-row row row-call row-id row-message)
-         (only-in "private/scaler-data.rkt" rows->matrix strided-vector))
+         (only-in "private/scaler-data.rkt" strided-vector))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5)))
 
 (define (grid-with cells [dt 'float32] [rows grid])
-  (rows->matrix (for/list ([row (in-list rows)]
-                           [r (in-naturals)])
-                  (for/list ([x (in-list row)]
-                             [c (in-naturals)])
-                    (match (assoc (list r c) cells)
-                      [(list _ value) value]
-                      [#f x])))
-                dt))
+  (mat (for/list ([row (in-list rows)]
+                  [r (in-naturals)])
+         (for/list ([x (in-list row)]
+                    [c (in-naturals)])
+           (match (assoc (list r c) cells)
+             [(list _ value) value]
+             [#f x])))
+       dt))
 
 (define f16-message
   "X: row 3, column 1: expected a magnitude of at most 2662558084806667776, got 1e+19")
@@ -43,10 +43,10 @@
 (define (fit-X-rows)
   (append
    (bad-X-rows)
-   (list (row "f4" "X: expected at least 2 rows, got 1" (rows->matrix '((1 2 3)) 'float32))
+   (list (row "f4" "X: expected at least 2 rows, got 1" (mat '((1 2 3)) 'float32))
          (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
-         (row "f5" "X: expected at least 2 columns, got 1" (rows->matrix '((1) (2) (3)) 'float64))
-         (row "f4 before f5" "X: expected at least 2 rows, got 1" (rows->matrix '((1)) 'float32))
+         (row "f5" "X: expected at least 2 columns, got 1" (mat '((1) (2) (3)) 'float64))
+         (row "f4 before f5" "X: expected at least 2 rows, got 1" (mat '((1)) 'float32))
          (row "f15 nan"
               "X: row 3, column 1: expected a finite value, got nan"
               (grid-with '([(3 1) +nan.0])))
@@ -63,12 +63,10 @@
          (row "f15 before f16"
               "X: row 3, column 1: expected a finite value, got nan"
               (grid-with '([(0 0) 1e19] [(3 1) +nan.0])))
-         (row "f17"
-              "X: expected at least 2 distinct rows, got 1"
-              (rows->matrix (make-list 5 '(1 2)) 'float64))
+         (row "f17" "X: expected at least 2 distinct rows, got 1" (mat (make-list 5 '(1 2)) 'float64))
          (row "f16 before f17"
               "X: row 0, column 0: expected a magnitude of at most 2662558084806667776, got 1e+19"
-              (rows->matrix (make-list 4 '(1e19 2.0 3.0)) 'float32)))))
+              (mat (make-list 4 '(1e19 2.0 3.0)) 'float32)))))
 
 (define (parameter-rows)
   (list
@@ -113,11 +111,10 @@
           (grid-with '())))
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call X (row-call r))))))
-  (check-cuml-error 'logic
-                    "pca-fit: n-components: expected at most 3, got 4"
-                    (lambda ()
-                      (pca-fit (rows->matrix '((1 0 2 1 0) (0 3 1 2 2) (4 1 0 3 1)) 'float32)
-                               #:n-components 4)))
+  (check-cuml-error
+   'logic
+   "pca-fit: n-components: expected at most 3, got 4"
+   (lambda () (pca-fit (mat '((1 0 2 1 0) (0 3 1 2 2) (4 1 0 3 1)) 'float32) #:n-components 4)))
   (for ([bad (in-list (list (lambda () (pca-fit (grid-with '()) #:n-components 1.5))
                             (lambda () (pca-fit (grid-with '()) #:iterations 2.5))
                             (lambda () (pca-fit (grid-with '()) #:tol 'small))))])
@@ -150,10 +147,10 @@
   "X: row 0, column 2: expected a magnitude of at most 2.8356862219877405e+37, got 1e+38")
 
 (define (whitened-fit rows dt)
-  (pca-fit (rows->matrix rows dt) #:whiten #t))
+  (pca-fit (mat rows dt) #:whiten #t))
 
 (define (whitened-row id message fit-rows X-rows dt)
-  (row id message (cons (whitened-fit fit-rows dt) (rows->matrix X-rows dt))))
+  (row id message (cons (whitened-fit fit-rows dt) (mat X-rows dt))))
 
 (define (narrowed width [cells '()] [dt 'float32])
   (grid-with cells dt (map (lambda (row) (take row width)) grid)))
@@ -240,7 +237,7 @@
    (list (row "t9 inverse" "X: expected 2 columns, got 3" (cons (fitted) (grid-with '())))
          (row "t13 inverse"
               "X: row 0, column 1: expected a magnitude of at most 4.2535293329816107e+37, got 1e+38"
-              (cons (fitted) (rows->matrix '((1 1e38) (2 3)) 'float32)))
+              (cons (fitted) (mat '((1 1e38) (2 3)) 'float32)))
          (whitened-row
           "t13 whitened inverse"
           "X: row 0, column 0: expected a magnitude of at most 1.7406088932282882e+307, got 1e+308"
@@ -249,7 +246,7 @@
           'float64)
          (row "t12 inverse"
               "X: row 1, column 0: expected a finite value, got -inf"
-              (cons (fitted) (rows->matrix '((1 1) (-inf.0 3)) 'float32))))))
+              (cons (fitted) (mat '((1 1) (-inf.0 3)) 'float32))))))
 
 (define (applied-calls)
   (list (list 'pca-transform pca-transform transform-rows)
@@ -292,12 +289,12 @@
                     (lambda () (fit-transform (pca) X #:sample-weight w))))
 
 (define (one-large dt value)
-  (rows->matrix (for/list ([i (in-range 50)])
-                  (for/list ([j (in-range 4)])
-                    (if (and (= i 7) (= j 2))
-                        value
-                        (exact->inexact (- (modulo (* i (add1 j)) 7) 3)))))
-                dt))
+  (mat (for/list ([i (in-range 50)])
+         (for/list ([j (in-range 4)])
+           (if (and (= i 7) (= j 2))
+               value
+               (exact->inexact (- (modulo (* i (add1 j)) 7) 3)))))
+       dt))
 
 (test-gpu "an element whose covariance could overflow is refused, and one under the bound fits"
   (for ([c (in-list '((float32 1e19 "652190871829835648" "1e+19")

@@ -7,25 +7,24 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" blank-matrix unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
                   check-law
                   dtypes
                   exact-fit
                   gap
                   lcase
-                  lcase-name
                   lcase-X
+                  lcase-name
                   lcase-y
+                  [on-matrix matrix]
                   max-abs
                   normal-case
                   oracle-ridge
-                  [on-matrix matrix]
-                  [on-vector vector]
                   ridge-solution
                   rounded
-                  unit-roundoff
+                  [on-vector vector]
                   weighted-spread)
          (only-in "private/linear-refusal-rows.rkt"
                   grid

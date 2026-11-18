@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in "private/kmeans-data.rkt" mat vec)
-         (only-in cuml
+(require (only-in cuml
                   estimator-params
                   estimator-set-params
                   fit
@@ -24,6 +23,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/capabilities.rkt" capabilities)
+         (only-in "private/common-data.rkt" mat vec)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options hash-remove* printed round-trips)
          (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?))

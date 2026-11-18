@@ -1,8 +1,6 @@
 #lang racket/base
 
-(require (only-in "private/spectral-data.rkt" [repeat-each dup])
-         (only-in "private/kmeans-data.rkt" mat)
-         (only-in cuml native-model-release! native-model-released? with-native-models)
+(require (only-in cuml native-model-release! native-model-released? with-native-models)
          (only-in cuml/cluster
                   hdbscan-all-points-membership-vectors
                   hdbscan-approximate-predict
@@ -18,9 +16,16 @@
          (only-in raft device-matrix->list* device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" mat repeat-each)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/hdbscan-data.rkt" alternate alternate-matrix dataset fit-lists label-count prediction->lists))
+         (only-in "private/hdbscan-data.rkt"
+                  alternate
+                  alternate-matrix
+                  dataset
+                  fit-lists
+                  label-count
+                  prediction->lists))
 
 (define (labels-of result)
   (device-vector->list (hdbscan-result-labels result)))
@@ -56,7 +61,7 @@
              (list "b10" (dataset 'b10) (hasheq))
              (list "one-blob, allow-single" (dataset 'one-blob) (hasheq 'allow-single-cluster #t))
              (list "b10, epsilon 3" (dataset 'b10) (hasheq 'cluster-selection-epsilon 3.0))
-             (list "b50 x10" (dup (dataset 'b50) 10) (hasheq))))])
+             (list "b50 x10" (repeat-each (dataset 'b50) 10) (hasheq))))])
     (match-define (list name rows options) c)
     (test-case name
       (define X (mat rows 'float32))

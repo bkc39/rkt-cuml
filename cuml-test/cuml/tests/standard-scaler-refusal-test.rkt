@@ -14,20 +14,20 @@
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id row-message)
-         (only-in "private/scaler-data.rkt" rows->matrix strided-vector))
+         (only-in "private/scaler-data.rkt" strided-vector))
 
 (define grid '((1 2 3) (4 5 6) (7 8 9) (10 11 12)))
 
 (define (grid-with i j value [dt 'float32])
-  (rows->matrix (for/list ([row (in-list grid)]
-                           [r (in-naturals)])
-                  (for/list ([x (in-list row)]
-                             [c (in-naturals)])
-                    (if (and (= r i) (= c j)) value x)))
-                dt))
+  (mat (for/list ([row (in-list grid)]
+                  [r (in-naturals)])
+         (for/list ([x (in-list row)]
+                    [c (in-naturals)])
+           (if (and (= r i) (= c j)) value x)))
+       dt))
 
 (define (bad-X-rows)
   (list (row "f1" "X: expected float32 or float64, got int32" (blank-matrix 4 3 'int32))
@@ -47,7 +47,7 @@
              (grid-with 3 0 -inf.0 'float64))
         (row "f8 first in row-major order"
              "X: row 1, column 2: expected a finite value, got nan"
-             (rows->matrix '((1 2 3) (4 5 +nan.0) (+inf.0 8 9)) 'float32))))
+             (mat '((1 2 3) (4 5 +nan.0) (+inf.0 8 9)) 'float32))))
 
 (define (fit-rows)
   (append (bad-X-rows)
@@ -58,7 +58,7 @@
                      (blank-matrix 4 3 'float32 #:layout 'col-major)))))
 
 (define (fitted)
-  (standard-scaler-fit (rows->matrix grid 'float64)))
+  (standard-scaler-fit (mat grid 'float64)))
 
 (define (float64s xs)
   (list->device-vector xs #:dtype 'float64))
@@ -68,52 +68,51 @@
 
 (define (applied-rows)
   (define good (float64s '(1 2 3)))
-  (append
-   (for/list ([r (in-list (bad-X-rows))])
-     (row (row-id r) (row-message r) (cons (fitted) (row-call r))))
-   (list (row "t5" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
-         (row "t5 with both flags off"
-              "X: expected 3 columns, got 2"
-              (cons (standard-scaler-fit (rows->matrix grid 'float32) #:with-mean #f #:with-std #f)
-                    (blank-matrix 4 2 'float64)))
-         (row "t6"
-              "mean: expected float64, got float32"
-              (cons (hand-built (list->device-vector '(1 2 3) #:dtype 'float32) good)
-                    (rows->matrix grid 'float32)))
-         (row "t7"
-              "mean: expected 3 elements, got 2"
-              (cons (hand-built (float64s '(1 2)) good) (rows->matrix grid 'float32)))
-         (row "t8"
-              "mean: expected contiguous elements, got stride 2"
-              (cons (hand-built (strided-vector 3) good) (rows->matrix grid 'float32)))
-         (row "t9"
-              "scale: expected float64, got float32"
-              (cons (hand-built good (list->device-vector '(1 2 3) #:dtype 'float32))
-                    (rows->matrix grid 'float64)))
-         (row "t10"
-              "scale: expected 3 elements, got 2"
-              (cons (hand-built good (float64s '(1 2))) (rows->matrix grid 'float64)))
-         (row "t11"
-              "scale: expected contiguous elements, got stride 2"
-              (cons (hand-built good (strided-vector 3)) (rows->matrix grid 'float64)))
-         (row "t12"
-              "X: row 0, column 2: expected a finite value, got nan"
-              (cons (fitted) (grid-with 0 2 +nan.0)))
-         (row "t3 before t5"
-              "X: expected row-major, got col-major 4x2"
-              (cons (fitted) (blank-matrix 4 2 'float32 #:layout 'col-major)))
-         (row "t4 before t5"
-              "X: expected at least 1 row, got 0"
-              (cons (fitted) (blank-matrix 0 2 'float32)))
-         (row "t5 before t6"
-              "X: expected 3 columns, got 2"
-              (cons (hand-built (float64s '(1 2)) good) (blank-matrix 4 2 'float32)))
-         (row "t8 before t9"
-              "mean: expected contiguous elements, got stride 2"
-              (cons (hand-built (strided-vector 3) (float64s '(1 2))) (rows->matrix grid 'float32)))
-         (row "t11 before t12"
-              "scale: expected contiguous elements, got stride 2"
-              (cons (hand-built good (strided-vector 3)) (grid-with 1 1 +inf.0 'float64))))))
+  (append (for/list ([r (in-list (bad-X-rows))])
+            (row (row-id r) (row-message r) (cons (fitted) (row-call r))))
+          (list (row "t5" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 4 2 'float32)))
+                (row "t5 with both flags off"
+                     "X: expected 3 columns, got 2"
+                     (cons (standard-scaler-fit (mat grid 'float32) #:with-mean #f #:with-std #f)
+                           (blank-matrix 4 2 'float64)))
+                (row "t6"
+                     "mean: expected float64, got float32"
+                     (cons (hand-built (list->device-vector '(1 2 3) #:dtype 'float32) good)
+                           (mat grid 'float32)))
+                (row "t7"
+                     "mean: expected 3 elements, got 2"
+                     (cons (hand-built (float64s '(1 2)) good) (mat grid 'float32)))
+                (row "t8"
+                     "mean: expected contiguous elements, got stride 2"
+                     (cons (hand-built (strided-vector 3) good) (mat grid 'float32)))
+                (row "t9"
+                     "scale: expected float64, got float32"
+                     (cons (hand-built good (list->device-vector '(1 2 3) #:dtype 'float32))
+                           (mat grid 'float64)))
+                (row "t10"
+                     "scale: expected 3 elements, got 2"
+                     (cons (hand-built good (float64s '(1 2))) (mat grid 'float64)))
+                (row "t11"
+                     "scale: expected contiguous elements, got stride 2"
+                     (cons (hand-built good (strided-vector 3)) (mat grid 'float64)))
+                (row "t12"
+                     "X: row 0, column 2: expected a finite value, got nan"
+                     (cons (fitted) (grid-with 0 2 +nan.0)))
+                (row "t3 before t5"
+                     "X: expected row-major, got col-major 4x2"
+                     (cons (fitted) (blank-matrix 4 2 'float32 #:layout 'col-major)))
+                (row "t4 before t5"
+                     "X: expected at least 1 row, got 0"
+                     (cons (fitted) (blank-matrix 0 2 'float32)))
+                (row "t5 before t6"
+                     "X: expected 3 columns, got 2"
+                     (cons (hand-built (float64s '(1 2)) good) (blank-matrix 4 2 'float32)))
+                (row "t8 before t9"
+                     "mean: expected contiguous elements, got stride 2"
+                     (cons (hand-built (strided-vector 3) (float64s '(1 2))) (mat grid 'float32)))
+                (row "t11 before t12"
+                     "scale: expected contiguous elements, got stride 2"
+                     (cons (hand-built good (strided-vector 3)) (grid-with 1 1 +inf.0 'float64))))))
 
 (define (fit-calls)
   (list (cons 'standard-scaler-fit standard-scaler-fit)
@@ -126,7 +125,7 @@
         (cons 'standard-scaler-inverse-transform standard-scaler-inverse-transform)))
 
 (define (generic-calls)
-  (define fitted-estimator (fit (standard-scaler) (rows->matrix grid 'float64)))
+  (define fitted-estimator (fit (standard-scaler) (mat grid 'float64)))
   (list (cons 'transform (lambda (X) (transform fitted-estimator X)))
         (cons 'inverse-transform (lambda (X) (inverse-transform fitted-estimator X)))))
 
@@ -155,7 +154,7 @@
       (check-row who r (lambda () (call (row-call r)))))))
 
 (test-gpu "the estimator refuses an unfitted use and a sample weight"
-  (define X (rows->matrix grid 'float32))
+  (define X (mat grid 'float32))
   (define w (list->device-vector '(1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic
                     "transform: standard-scaler is not fitted"

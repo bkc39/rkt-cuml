@@ -2,7 +2,7 @@
 
 (require (only-in racket/list range)
          (only-in racket/match match-define)
-         (only-in "kmeans-data.rkt" blank-matrix)
+         (only-in "common-data.rkt" blank-matrix)
          (only-in "linear-data.rkt" [on-matrix matrix] [on-vector vector])
          (only-in "refusal-rows.rkt" row))
 

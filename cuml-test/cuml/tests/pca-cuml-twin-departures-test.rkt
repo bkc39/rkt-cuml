@@ -6,6 +6,7 @@
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" mat unit-roundoff)
          (only-in "private/pca-data.rkt" fitted-variance)
          (only-in "private/pca-twin-data.rkt"
                   fit-ours
@@ -17,8 +18,7 @@
                   twin-ks
                   twin-results
                   twin-rows)
-         (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/scaler-data.rkt" rows->matrix unit-roundoff))
+         (only-in "private/python-env.rkt" test-twin))
 
 (test-twin "the departures from cuML-Python are pinned"
   (define wide (named "wide"))
@@ -38,13 +38,9 @@
     (check-true (> (abs (- ours (hash-ref wide-cuml 'noise_variance))) bound)))
   (test-case "whitened rows: theirs scale by the call's row count"
     (define rows (twin-rows correlated 'float64))
-    (define result (pca-fit (rows->matrix rows 'float64) #:n-components 3 #:whiten #t))
+    (define result (pca-fit (mat rows 'float64) #:n-components 3 #:whiten #t))
     (define mine
-      (~> (take rows 10)
-          (rows->matrix 'float64)
-          (pca-transform result _)
-          device-matrix->list*
-          append*))
+      (~> (take rows 10) (mat 'float64) (pca-transform result _) device-matrix->list* append*))
     (define factor (sqrt (/ 9.0 (sub1 (sample-count correlated)))))
     (define top (apply max (map abs mine)))
     (for ([ours (in-list mine)]

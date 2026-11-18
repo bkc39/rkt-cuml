@@ -8,7 +8,8 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list)
-         (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix unit-roundoff)
+         (only-in "private/common-data.rkt" unit-roundoff)
+         (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix)
          (only-in "private/linear-twin-data.rkt" decoded)
          (only-in "private/logistic-data.rkt"
                   blob-case
@@ -17,9 +18,9 @@
                   fit-parts
                   flat-matrix
                   lr-case
+                  lr-case-X
                   lr-case-name
                   lr-case-w
-                  lr-case-X
                   lr-case-y
                   lr-fit-n-iter
                   penalty-settings

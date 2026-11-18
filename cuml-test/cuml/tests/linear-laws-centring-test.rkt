@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in racket/flonum flsingle)
-         (only-in racket/list range split-at)
+(require (only-in racket/list range split-at)
          (only-in racket/match match-define)
          (only-in racket/string string-prefix?)
          (only-in rackunit
@@ -15,9 +14,9 @@
                   exn:test:check?
                   test-case)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" columns-of flonum-exact unit-roundoff)
          (only-in "private/exact-algebra.rkt" bottom-vector dot float32-of min-norm-solve norm2)
          (only-in "private/linear-data.rkt"
-                  columns-of
                   lcase
                   lcase-X
                   lcase-w
@@ -25,7 +24,6 @@
                   oracle-lstsq
                   solution
                   solution-coef
-                  unit-roundoff
                   weighted-gram
                   weights-or-ones)
          (only-in "private/linear-laws.rkt"
@@ -34,7 +32,7 @@
                   staging
                   staging-of
                   y-centring-gamma)
-         (only-in "private/real-linear-data.rkt" flonum-exact offset-law-arms real-lcase))
+         (only-in "private/real-linear-data.rkt" offset-law-arms real-lcase))
 
 (define (compensated xs)
   (for/fold ([s 0.0]

@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in "private/kmeans-data.rkt" mat)
-         (only-in cuml
+(require (only-in cuml
                   agglomerative-clustering
                   current-batch-samples
                   dbscan
@@ -69,6 +68,7 @@
                   shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" mat)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows)
          (only-in "private/spectral-data.rkt" planted? truth-of))

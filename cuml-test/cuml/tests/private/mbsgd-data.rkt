@@ -6,8 +6,7 @@
                   mbsgd-regressor-result-coef
                   mbsgd-regressor-result-intercept)
          (only-in raft device-vector->list)
-         (only-in "blob-data.rkt" normal-source)
-         (only-in "logistic-data.rkt" [scaled-rows scaled]))
+         (only-in "blob-data.rkt" normal-source))
 
 (provide blob-rows
          clf-parts

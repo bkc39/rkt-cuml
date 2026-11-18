@@ -10,6 +10,7 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "common-data.rkt" columns-of flonum-exact unit-roundoff)
          (only-in "cuml-error.rkt" check-cuml-error)
          (only-in "elastic-net-data.rkt"
                   apply-keywords
@@ -36,7 +37,6 @@
                   varying-inner)
          (only-in "linear-data.rkt"
                   case-fit
-                  columns-of
                   law-case
                   lcase
                   lcase-X
@@ -48,14 +48,12 @@
                   on-vector
                   ridge-solve
                   rounded-case
-                  solution
-                  unit-roundoff)
+                  solution)
          (only-in "linear-laws.rkt" check-lstsq-fit staging-of)
          (only-in "metrics-data.rkt" exact-r2 r2-bound r2-gap)
          (only-in "ridge-data.rkt" check-ridge-fit ridge-case-fit solvers))
 
-(provide flonum-exact
-         offset-law-arms
+(provide offset-law-arms
          real-lcase
          set-data
          test-real-set
@@ -92,9 +90,6 @@
 
 (define (tight-tol dt)
   (if (eq? dt 'float32) 1e-7 1e-10))
-
-(define (flonum-exact v)
-  (inexact->exact (real->double-flonum v)))
 
 (define data-sets (make-hasheq))
 

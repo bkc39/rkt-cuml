@@ -16,8 +16,9 @@
          (only-in "blob-data.rkt" centred-blobs)
          (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
+         (only-in "exact-algebra.rkt" dot)
          (only-in "python-env.rkt" run-cases)
-         (only-in "scaler-data.rkt" bits-equal? dot transpose)
+         (only-in "scaler-data.rkt" bits-equal? transpose)
          (only-in "spectral-data.rkt"
                   graph
                   graph->vectors

@@ -60,11 +60,12 @@
                 '(("a-test.rkt:2: worst" "b-test.rkt:2: largest-gap"))))
 
 (test-case "the refusal names what to change"
-  (call-with-modules `(("a-test.rkt" (,helper)) ("b-test.rkt" (,helper)))
-                     (lambda (root)
-                       (check-regexp-match
-                        #rx"keep one, in the family's shared module, and require it"
-                        (describe-copies (car (copied-definitions-in (list root))))))))
+  (call-with-modules
+   `(("a-test.rkt" (,helper)) ("b-test.rkt" (,helper)))
+   (lambda (root)
+     (check-regexp-match
+      #rx"keep one, in the family's shared module [(]cuml-test's private/common-data[.]rkt when two families use it[)], and require it from there"
+      (describe-copies (car (copied-definitions-in (list root))))))))
 
 (test-case "one definition per helper, or two in one file, passes"
   (check-equal? (copies `(("a-test.rkt" (,helper))

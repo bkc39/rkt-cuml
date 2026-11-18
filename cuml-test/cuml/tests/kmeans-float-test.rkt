@@ -10,6 +10,7 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" vec)
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   cyclic-weights
@@ -20,8 +21,7 @@
                   scaled-close?
                   squared-distance
                   string-inits
-                  tolerance
-                  vec))
+                  tolerance))
 
 (define (host-inertia rows centroids weights)
   (define rescale (/ (length rows) (apply + weights)))

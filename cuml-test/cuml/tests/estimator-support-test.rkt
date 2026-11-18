@@ -14,7 +14,6 @@
                   transform
                   transformer?)
          (only-in cuml/private/estimator-support define-estimator define-predictor)
-         (only-in racket/list combinations)
          (only-in racket/match match-define)
          (only-in rackunit
                   check-equal?

@@ -24,12 +24,6 @@
 
 (define match-heads '(match match*))
 
-(define match-clause-heads
-  '(match-lambda
-     match-lambda*
-     match-let
-     match-let*))
-
 (define pattern-heads '(list list* cons vector struct* and or hash-table))
 
 (define (for-head? head)
@@ -173,7 +167,7 @@
 
 (define (definitions-in file)
   (define forms (module-forms file))
-  (define file-locals (append-map (lambda (form) (defined-names (syntax->datum form))) forms))
+  (define file-locals (append-map defined-names (map syntax->datum forms)))
   (for*/list ([form (in-list forms)]
               [datum (in-value (syntax->datum form))]
               [name (in-value (procedure-name datum))]
@@ -211,7 +205,7 @@
      (format "~a:~a: ~a" (site-file one) (site-line one) (site-name one)))
    "\n  "
    #:before-first
-   "copied definition: the same body after renaming, in more than one file; keep one, in the family's shared module, and require it\n  "))
+   "copied definition: the same body after renaming, in more than one file; keep one, in the family's shared module (cuml-test's private/common-data.rkt when two families use it), and require it from there\n  "))
 
 (module+ main
   (define pools

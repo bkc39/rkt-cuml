@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/tests/private/linear-data
+(require (only-in cuml/tests/private/exact-algebra inexact-rows)
+         (only-in cuml/tests/private/linear-data
                   by-dtype
                   lcase
                   lcase-name
@@ -22,8 +23,7 @@
                   multinomial-result-intercepts)
          (only-in racket/list append* make-list)
          (only-in racket/match match match-define struct*)
-         (only-in threading ~>)
-         (only-in cuml/tests/private/exact-algebra inexact-rows))
+         (only-in threading ~>))
 
 (provide bound-of
          default-bound

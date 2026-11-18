@@ -22,6 +22,7 @@
                   exn:test:check?
                   test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" mat vec)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/kmeans-data.rkt"
                   blob-data
@@ -34,10 +35,8 @@
                   grid64-start
                   host
                   host-vector
-                  mat
                   outcome
-                  tolerance
-                  vec))
+                  tolerance))
 
 (define rows 4096)
 

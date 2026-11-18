@@ -9,8 +9,8 @@
          (only-in racket/match match match-define struct*)
          (only-in raft device-matrix->list* device-vector->list device-vector?)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "linear-data.rkt" by-dtype columns-of dyadic on-matrix on-vector)
-         (only-in "metrics-data.rkt" mean))
+         (only-in "common-data.rkt" columns-of mean scaled-rows)
+         (only-in "linear-data.rkt" by-dtype dyadic on-matrix on-vector))
 
 (provide (struct-out lr-case)
          (struct-out lr-fit)
@@ -33,12 +33,10 @@
          flat-matrix
          gauged-fit
          gauged-sklearn
-         host
          penalty-settings
          relative-gap
          scaled-case
          scaled-parts
-         scaled-rows
          separable-case
          setting-fit
          tight-max-iter
@@ -108,10 +106,6 @@
     (define label (if (positive? first) 1 0))
     (values (cons (+ first (if (= label 1) 1/2 -1/2)) rest) label))
   (for/lists (X y #:result (lr-case name X y #f)) ([row (in-list rows)]) (separated row)))
-
-(define (scaled-rows rows factor)
-  (for/list ([row (in-list rows)])
-    (map (lambda (v) (* v factor)) row)))
 
 (define (scaled-case c factor)
   (struct-copy lr-case c [X (scaled-rows (lr-case-X c) factor)]))
@@ -230,8 +224,3 @@
       (max m (abs (inexact->exact x)))))
   (/ (largest (map (lambda (o t) (- (inexact->exact o) (inexact->exact t))) ours theirs))
      (max (largest theirs) smallest-scale)))
-
-(define (host v)
-  (if (device-vector? v)
-      (device-vector->list v)
-      v))

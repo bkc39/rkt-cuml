@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (for-syntax racket/base)
-         (only-in racket/file delete-directory/files make-temporary-directory)
+(require (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/port with-output-to-string)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
@@ -28,20 +27,18 @@
 
 (test-case "a test table read with caddr or cadddr is refused, with what to use instead"
   (for ([accessor (in-list '(caddr cadddr))])
-    (define-values (ok? output)
-      (gate-on `((define rows '((a 1 2 3)))
-                 (map ,accessor rows))))
+    (define-values (ok? output) (gate-on `((define rows '((a 1 2 3))) (map ,accessor rows))))
     (check-false ok?)
     (check-regexp-match #rx"table-test[.]rkt:3: read a test table's rows with match-define" output)))
 
 (test-case "a table read with match-define passes, and so do names that only contain the accessor"
   (define-values (ok? output)
-    (gate-on '((require (only-in racket/match match-define))
-               (define rows '((a 1 2)))
-               (for ([row (in-list rows)])
-                 (match-define (list name x y) row)
-                 (list name x y))
-               (define (caddr-free x) x)
-               (define my-cadddr 4))))
+    (gate-on '((require (only-in racket/match match-define)) (define rows '((a 1 2)))
+                                                             (for ([row (in-list rows)])
+                                                               (match-define (list name x y) row)
+                                                               (list name x y))
+                                                             (define (caddr-free x)
+                                                               x)
+                                                             (define my-cadddr 4))))
   (check-true ok?)
   (check-regexp-match #rx"no caddr or cadddr" output))

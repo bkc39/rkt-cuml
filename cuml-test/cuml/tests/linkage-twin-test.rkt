@@ -9,8 +9,9 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* dtype)
+         (only-in "private/common-data.rkt" mat)
          (only-in "private/dbscan-data.rkt" integer-grid same-partition?)
-         (only-in "private/kmeans-data.rkt" blob-data mat)
+         (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
                   hand-rows
                   linkage-oracle

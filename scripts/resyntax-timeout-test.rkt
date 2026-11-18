@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (for-syntax racket/base)
-         (only-in racket/file delete-directory/files make-temporary-directory)
+(require (only-in racket/file delete-directory/files make-temporary-directory)
          (only-in racket/port with-output-to-string)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path

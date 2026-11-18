@@ -1,14 +1,15 @@
 #lang racket/base
 
 (require (only-in raft list*->device-matrix)
-         (only-in "cuml-error.rkt" check-cuml-error prefixed)
-         (only-in "kmeans-data.rkt" blank-matrix blank-vector))
+         (only-in "common-data.rkt" blank-matrix blank-vector)
+         (only-in "cuml-error.rkt" check-cuml-error prefixed))
 
 (provide (struct-out row)
          bad-X-rows
          check-row
          float-most
          grid
+         index-message
          norm-message
          other
          with-bad-row
@@ -52,3 +53,6 @@
              "X: expected row-major, got col-major 4x3"
              (blank-matrix 4 3 'float32 #:layout 'col-major))
         (row "f1 before f2" "X: expected float32 or float64, got int32" (blank-vector 4 'int32))))
+
+(define (index-message name entry got)
+  (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))

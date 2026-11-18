@@ -2,13 +2,18 @@
 
 (require (only-in cuml/cluster dbscan-fit dbscan-params dbscan-result-labels)
          (only-in cuml/cluster/private/native libcuml-version)
-         (only-in json json-null)
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* dtype)
-         (only-in "private/dbscan-data.rkt" cosine-cloud distance-matrix integer-grid result->lists seeded)
-         (only-in "private/kmeans-data.rkt" blob-data mat vec)
+         (only-in "private/common-data.rkt" mat vec)
+         (only-in "private/dbscan-data.rkt"
+                  cosine-cloud
+                  distance-matrix
+                  integer-grid
+                  result->lists
+                  seeded)
+         (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/python-env.rkt" or-null run-twin test-twin twin-params))
 
 (define-runtime-path twin "python/dbscan_twin.py")

@@ -6,6 +6,7 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in threading ~>)
+         (only-in "common-data.rkt" bits-of unit-roundoff)
          (only-in "linear-data.rkt"
                   algorithms
                   case-fit
@@ -14,8 +15,8 @@
                   fit-size
                   kappa-of
                   lcase
-                  lcase-name
                   lcase-X
+                  lcase-name
                   lcase-w
                   lcase-y
                   max-abs
@@ -23,12 +24,10 @@
                   oracle-lstsq
                   rounded-case
                   scaled-columns
-                  solution
-                  unit-roundoff)
+                  solution)
          (only-in "python-env.rkt" run-twin))
 
-(provide bits-of
-         case-request
+(provide case-request
          check-cuml-failures
          check-cuml-parity
          decoded
@@ -41,11 +40,6 @@
          with-constant)
 
 (define-runtime-path twin "../python/linear_regression_twin.py")
-
-(define (bits-of dt xs)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([x (in-list xs)])
-    (integer-bytes->integer (real->floating-point-bytes x size) #f)))
 
 (define (decoded dt bits)
   (define size (if (eq? dt 'float32) 4 8))

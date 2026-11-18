@@ -5,7 +5,7 @@
          (only-in racket/match match)
          (only-in racket/math sqr)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
-         (only-in "kmeans-data.rkt" mat vec))
+         (only-in "common-data.rkt" mat pick squared-distance vec))
 
 (provide (struct-out expected)
          canonical
@@ -15,7 +15,6 @@
          dbscan-oracle
          distance-matrix
          euclidean-within
-         first-copies
          fitted-lists
          grid-core
          grid-labels
@@ -23,13 +22,10 @@
          grid-weighted-core
          grid-weights
          integer-grid
-         noise
-         pick
          repeat-rows
          result->lists
          same-partition?
          seeded
-         squared-distance
          structure-problems)
 
 (struct expected (labels core options))
@@ -46,11 +42,6 @@
 
 (define fitted-lists (compose1 result->lists dbscan-fit))
 
-(define (pick xs indices)
-  (define at (list->vector xs))
-  (for/list ([i (in-list indices)])
-    (vector-ref at i)))
-
 (define (seeded seed thunk)
   (parameterize ([current-pseudo-random-generator
                   (vector->pseudo-random-generator (vector seed 7 11 13 17 19))])
@@ -62,9 +53,6 @@
             (for/list ([_ (in-range n)])
               (for/list ([_ (in-range d)])
                 (random extent))))))
-
-(define (squared-distance a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (sqr (- x y))))
 
 (define ((euclidean-within rows eps) i j)
   (<= (squared-distance (vector-ref rows i) (vector-ref rows j)) (sqr eps)))
@@ -152,13 +140,6 @@
               [_ (in-range w)])
     row))
 
-(define (first-copies weights)
-  (for/fold ([at 0]
-             [firsts '()]
-             #:result (reverse firsts))
-            ([w (in-list weights)])
-    (values (+ at w) (cons at firsts))))
-
 (define (structure-problems labels core)
   (define k (add1 (apply max -1 labels)))
   (define core-labels (pick labels core))
@@ -207,9 +188,3 @@
                             (> (abs (- (cosine-distance row other) eps)) margin)))
                      (grow (cons row rows) (add1 count))
                      (grow rows count))])))))
-
-(define (noise labels)
-  (for/list ([l (in-list labels)]
-             [i (in-naturals)]
-             #:when (= l -1))
-    i))

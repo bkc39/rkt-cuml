@@ -2,8 +2,8 @@
 
 (require (only-in racket/list split-at)
          (only-in racket/math sgn sqr)
-         (only-in "exact-algebra.rkt" dot)
-         (only-in "metrics-data.rkt" mean))
+         (only-in "common-data.rkt" mean)
+         (only-in "exact-algebra.rkt" dot))
 
 (provide (struct-out replay)
          sgd-objective

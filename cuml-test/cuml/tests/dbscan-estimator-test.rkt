@@ -16,10 +16,19 @@
          (only-in raft device-vector->list dtype)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
+         (only-in "private/common-data.rkt" mat vec)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt" cosine-cloud distance-matrix grid-labels grid-rows grid-weighted-core grid-weights integer-grid result->lists)
+         (only-in "private/dbscan-data.rkt"
+                  cosine-cloud
+                  distance-matrix
+                  grid-labels
+                  grid-rows
+                  grid-weighted-core
+                  grid-weights
+                  integer-grid
+                  result->lists)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips subsets)
-         (only-in "private/kmeans-data.rkt" dtypes mat vec))
+         (only-in "private/kmeans-data.rkt" dtypes))
 
 (define changed
   (hasheq 'eps 0.3 'min-samples 10 'metric 'cosine 'out-dtype 'int64 'max-mbytes-per-batch 4))

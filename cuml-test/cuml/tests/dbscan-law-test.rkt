@@ -5,8 +5,24 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/dbscan-data.rkt" cosine-cloud cosine-distance cosine-within dbscan-oracle distance-matrix euclidean-within expected expected-core expected-labels first-copies fitted-lists integer-grid noise pick repeat-rows same-partition? seeded structure-problems)
-         (only-in "private/kmeans-data.rkt" dtypes mat vec))
+         (only-in "private/common-data.rkt" first-copies mat noise pick vec)
+         (only-in "private/dbscan-data.rkt"
+                  cosine-cloud
+                  cosine-distance
+                  cosine-within
+                  dbscan-oracle
+                  distance-matrix
+                  euclidean-within
+                  expected
+                  expected-core
+                  expected-labels
+                  fitted-lists
+                  integer-grid
+                  repeat-rows
+                  same-partition?
+                  seeded
+                  structure-problems)
+         (only-in "private/kmeans-data.rkt" dtypes))
 
 (define (oracle-of rows eps min-samples #:weights [weights #f])
   (dbscan-oracle (length rows)

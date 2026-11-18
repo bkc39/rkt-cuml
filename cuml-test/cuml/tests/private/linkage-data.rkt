@@ -6,9 +6,9 @@
                   single-linkage-result-labels)
          (only-in racket/list append* argmin filter-map first range remove-duplicates)
          (only-in racket/match == match match-define match-lambda)
-         (only-in racket/math sqr)
          (only-in raft device-matrix->list* device-vector->list)
-         (only-in "dbscan-data.rkt" seeded squared-distance))
+         (only-in "common-data.rkt" squared-distance)
+         (only-in "dbscan-data.rkt" seeded))
 
 (provide (struct-out oracle)
          children->labels

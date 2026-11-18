@@ -7,7 +7,8 @@
          (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in threading ~>)
-         (only-in "linear-data.rkt" columns-of on-matrix)
+         (only-in "common-data.rkt" columns-of flonum-exact)
+         (only-in "linear-data.rkt" on-matrix)
          (only-in "linear-twin-data.rkt" decoded)
          (only-in "logistic-data.rkt"
                   correct
@@ -28,8 +29,7 @@
                   tight-max-iter
                   tight-tol)
          (only-in "logistic-oracle.rkt" residual residual-of)
-         (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin)
-         (only-in "real-linear-data.rkt" flonum-exact))
+         (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
 
 (provide (struct-out labelled)
          check-raw-refusal

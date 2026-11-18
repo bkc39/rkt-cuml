@@ -7,9 +7,11 @@
          racket/runtime-path
          (only-in rackunit check-equal?)
          (only-in raft device-matrix->list*)
+         (only-in "common-data.rkt" bits-of mat)
          (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps product)
+         (only-in "pca-twin-data.rkt" twin-key)
          (only-in "python-env.rkt" run-twin)
-         (only-in "scaler-data.rkt" generated-rows rows->matrix rows-of)
+         (only-in "scaler-data.rkt" generated-rows rows-of)
          (only-in "tsvd-data.rkt"
                   normal-fixture
                   normal-rows-of
@@ -17,12 +19,9 @@
                   reference
                   svd
                   tie-fixture
-                  tsvd-of)
-         (only-in "linear-twin-data.rkt" [bits-of float-bits])
-         (only-in "pca-twin-data.rkt" twin-key))
+                  tsvd-of))
 
 (provide (struct-out twin-case)
-         float-bits
          ours
          theirs-reference
          theirs-svd
@@ -96,7 +95,7 @@
 (define (ours c dt solver)
   (match-define (twin-case f k) c)
   (define rows (fixture-rows f dt))
-  (define X (rows->matrix rows dt))
+  (define X (mat rows dt))
   (define result (tsvd-fit X #:n-components k #:solver solver))
   (define T (tsvd-transform result X))
   (values rows

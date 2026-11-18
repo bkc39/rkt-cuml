@@ -11,6 +11,8 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list*)
+         (only-in "common-data.rkt" mat unit-roundoff)
+         (only-in "exact-algebra.rkt" dot)
          (only-in "pca-data.rkt"
                   fitted-components
                   fitted-mean
@@ -23,7 +25,7 @@
                   norm
                   over-bound)
          (only-in "python-env.rkt" run-twin)
-         (only-in "scaler-data.rkt" dot rows->matrix rows-of unit-roundoff))
+         (only-in "scaler-data.rkt" rows-of))
 
 (provide (struct-out ours)
          check-against-cuml
@@ -88,7 +90,7 @@
 (define (fit-ours f dt k #:whiten [whiten #f] #:solver [solver 'full])
   (define rows (twin-rows f dt))
   (match-define (cons first-row _) rows)
-  (define X (rows->matrix rows dt))
+  (define X (mat rows dt))
   (define m (min (length rows) (length first-row)))
   (define result (pca-fit X #:n-components (and (< k m) k) #:whiten whiten #:solver solver #:tol 0.0))
   (ours (fitted-of result)

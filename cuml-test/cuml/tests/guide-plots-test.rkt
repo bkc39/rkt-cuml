@@ -57,6 +57,7 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" mean)
          (only-in "private/guide-data.rkt"
                   blended
                   drawn?
@@ -66,7 +67,6 @@
                   painted
                   pixels
                   scaled-matrix)
-         (only-in "private/metrics-data.rkt" mean)
          (only-in "private/scaler-data.rkt" float32-roundoff transpose))
 
 (match-define (list* blue orange _) cluster-colors)

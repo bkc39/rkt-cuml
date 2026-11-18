@@ -3,11 +3,12 @@
 (require (only-in racket/list append*)
          racket/runtime-path
          (only-in threading ~>)
-         (only-in "linear-twin-data.rkt" bits-of decoded twin-results)
+         (only-in "common-data.rkt" bits-of)
+         (only-in "linear-twin-data.rkt" decoded twin-results)
          (only-in "logistic-data.rkt"
                   default-tol
-                  lr-case-w
                   lr-case-X
+                  lr-case-w
                   lr-case-y
                   lr-fit
                   setting-C

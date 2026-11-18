@@ -1,9 +1,9 @@
 #lang racket/base
 
-(require (only-in "private/logistic-data.rkt" [scaled-rows scaled])
-         (only-in racket/match match-define)
+(require (only-in racket/match match-define)
          (only-in rackunit check-equal? check-not-equal?)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" scaled-rows)
          (only-in "private/linear-data.rkt" dtypes law-case)
          (only-in "private/mbsgd-data.rkt" blob-rows dtype-penalties normal-rows reg-target with-ones)
          (only-in "private/mbsgd-twin-data.rkt" clf-fit overridden reg-fit))
@@ -41,7 +41,7 @@
          [intercept? (in-list '(#t #f))])
     (define (at k)
       (reg dt
-           (scaled rows (expt 2 k))
+           (scaled-rows rows (expt 2 k))
            targets
            (hash '#:penalty penalty
                  '#:alpha (* 0.01 (scale-alpha penalty k))
@@ -56,7 +56,7 @@
          [loss (in-list '(log hinge))])
     (define (at k)
       (clf-fit dt
-               (scaled blobs (expt 2 k))
+               (scaled-rows blobs (expt 2 k))
                labels
                loss
                (overridden law-settings

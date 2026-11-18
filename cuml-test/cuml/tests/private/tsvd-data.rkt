@@ -9,9 +9,10 @@
          (only-in racket/match match-define)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
+         (only-in "common-data.rkt" unit-roundoff worst)
+         (only-in "exact-algebra.rkt" dot)
          (only-in "pca-data.rkt" fixture gaps over-bound)
-         (only-in "scaler-data.rkt" dot generated-rows transpose unit-roundoff)
-         (only-in "metrics-data.rkt" [worst worst-difference]))
+         (only-in "scaler-data.rkt" generated-rows transpose))
 
 (provide (struct-out exact)
          (struct-out reference)
@@ -35,7 +36,6 @@
          tsvd-of
          twos-fixture
          wide-fixture
-         worst-difference
          zeros-fixture)
 
 (struct svd (components variance ratio singular) #:transparent)
@@ -171,24 +171,22 @@
   (define n (length rows))
   (define total (apply + (popvars rows)))
   (define bound (* c u (squared-norm rows)))
-  (filter values
-          (append (for/list ([s (in-list singular)]
-                             [s-ref (in-list (reference-singular ref))]
-                             [i (in-naturals)])
-                    (over-bound (format "singular value ~a squared" i) (* s s) (* s-ref s-ref) bound))
-                  (for/list ([row (in-list components)]
-                             [row-ref (in-list (reference-components ref))]
-                             [g (in-list (reference-gaps ref))]
-                             [i (in-naturals)])
-                    (over-bound (format "component ~a times its gap" i)
-                                (* (worst-difference row row-ref) g)
-                                0.0
-                                bound))
-                  (for/list ([v (in-list variance)]
-                             [v-ref (in-list (reference-variance ref))]
-                             [i (in-naturals)])
-                    (over-bound (format "explained variance ~a" i) v v-ref (/ bound n)))
-                  (for/list ([r (in-list ratio)]
-                             [r-ref (in-list (reference-ratio ref))]
-                             [i (in-naturals)])
-                    (over-bound (format "ratio ~a" i) r r-ref (/ bound (* n total)))))))
+  (filter
+   values
+   (append (for/list ([s (in-list singular)]
+                      [s-ref (in-list (reference-singular ref))]
+                      [i (in-naturals)])
+             (over-bound (format "singular value ~a squared" i) (* s s) (* s-ref s-ref) bound))
+           (for/list ([row (in-list components)]
+                      [row-ref (in-list (reference-components ref))]
+                      [g (in-list (reference-gaps ref))]
+                      [i (in-naturals)])
+             (over-bound (format "component ~a times its gap" i) (* (worst row row-ref) g) 0.0 bound))
+           (for/list ([v (in-list variance)]
+                      [v-ref (in-list (reference-variance ref))]
+                      [i (in-naturals)])
+             (over-bound (format "explained variance ~a" i) v v-ref (/ bound n)))
+           (for/list ([r (in-list ratio)]
+                      [r-ref (in-list (reference-ratio ref))]
+                      [i (in-naturals)])
+             (over-bound (format "ratio ~a" i) r r-ref (/ bound (* n total)))))))

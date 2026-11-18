@@ -6,8 +6,9 @@
          (only-in racket/math nan?)
          (only-in rackunit check-= check-equal? check-true test-case)
          (only-in "private/blob-data.rkt" uniform-source)
+         (only-in "private/common-data.rkt" vec)
          (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/scores-data.rkt" label-cases on vec weights-of)
+         (only-in "private/scores-data.rkt" label-cases on weights-of)
          (only-in "private/scores-twin-data.rkt" case-of checked-twin-results))
 
 (define (weighted-label-cases)

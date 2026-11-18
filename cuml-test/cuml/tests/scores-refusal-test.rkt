@@ -3,10 +3,9 @@
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector mat vec)
          (only-in "private/refusal-rows.rkt" check-row row row-id)
-         (only-in "private/scaler-data.rkt" strided-vector)
-         (only-in "private/scores-data.rkt" rows vec))
+         (only-in "private/scaler-data.rkt" strided-vector))
 
 (define (weight-rows proc y p)
   (define (with w)
@@ -95,16 +94,16 @@
         (value-rows r2-score)))
 
 (define (matrix-rows)
-  (define Y (rows '((1 2) (3 4) (5 6) (7 8)) 'float64))
-  (define P (rows '((1 2) (3 4) (5 6) (7 9)) 'float32))
+  (define Y (mat '((1 2) (3 4) (5 6) (7 8)) 'float64))
+  (define P (mat '((1 2) (3 4) (5 6) (7 9)) 'float32))
   (list (row "V3 matrix"
              "y-true: expected row-major, got col-major 4x2"
              (lambda () (mean-squared-error (blank-matrix 4 2 'float64 #:layout 'col-major) P)))
         (row "V5 matrix"
              "y-pred: expected rank 2, got rank 1"
              (lambda () (mean-squared-error Y (blank-vector 4 'float64))))
-        (row "V6 rows"
-             "y-pred: expected 4 rows, got 3"
+        (row "V6 mat"
+             "y-pred: expected 4 mat, got 3"
              (lambda () (mean-squared-error Y (blank-matrix 3 2 'float64))))
         (row "V6 columns"
              "y-pred: expected 2 columns, got 3"
@@ -112,7 +111,7 @@
         (row "V7 matrix"
              "y-pred: expected row-major, got col-major 4x2"
              (lambda () (mean-squared-error Y (blank-matrix 4 2 'float32 #:layout 'col-major))))
-        (row "V8 rows"
+        (row "V8 mat"
              "y-true: expected at least 1 row, got 0"
              (lambda () (mean-squared-error (blank-matrix 0 2 'float64) (blank-matrix 0 2 'float64))))
         (row "V8 columns"
@@ -120,10 +119,10 @@
              (lambda () (mean-squared-error (blank-matrix 4 0 'float64) (blank-matrix 4 0 'float64))))
         (row "V10 matrix"
              "y-true: row 1, column 0: expected a finite value, got inf"
-             (lambda () (mean-squared-error (rows '((1 2) (+inf.0 4) (5 6) (7 8)) 'float32) P)))
+             (lambda () (mean-squared-error (mat '((1 2) (+inf.0 4) (5 6) (7 8)) 'float32) P)))
         (row "V10 matrix pred"
              "y-pred: row 3, column 1: expected a finite value, got nan"
-             (lambda () (mean-squared-error Y (rows '((1 2) (3 4) (5 6) (7 +nan.0)) 'float64))))
+             (lambda () (mean-squared-error Y (mat '((1 2) (3 4) (5 6) (7 +nan.0)) 'float64))))
         (row "V9 matrix length"
              "sample-weight: expected 4 elements, got 3"
              (lambda () (mean-squared-error Y P #:sample-weight (vec '(1 1 1) 'float64))))))

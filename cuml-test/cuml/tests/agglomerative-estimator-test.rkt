@@ -20,10 +20,10 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
+         (only-in "private/common-data.rkt" blank-vector mat)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" integer-grid)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips)
-         (only-in "private/kmeans-data.rkt" blank-vector mat)
          (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows result->lists))
 
 (define changed (hasheq 'n-clusters 3 'metric 'l1 'linkage 'ward 'connectivity 'pairwise 'c 20))

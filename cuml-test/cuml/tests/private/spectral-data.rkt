@@ -1,7 +1,6 @@
 #lang racket/base
 
-(require (only-in "kmeans-data.rkt" mat)
-         (only-in cuml/cluster
+(require (only-in cuml/cluster
                   spectral-clustering-fit
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
@@ -11,7 +10,8 @@
          (only-in racket/math pi)
          (only-in raft device-vector->list list->device-vector)
          (only-in threading ~>)
-         (only-in "dbscan-data.rkt" first-copies same-partition? seeded squared-distance))
+         (only-in "common-data.rkt" first-copies gaussian mat squared-distance)
+         (only-in "dbscan-data.rkt" same-partition? seeded))
 
 (provide (struct-out fit-case)
          (struct-out graph)
@@ -21,7 +21,6 @@
          cliques
          edited-vectors
          float32-rows
-         gaussian
          graph->vectors
          graph-dense
          graph-edit
@@ -38,7 +37,6 @@
          permute-rows
          planted
          planted?
-         repeat-each
          set-entry
          sparse-blocks
          three-blobs
@@ -315,11 +313,3 @@
                                     w))])
                        (entries g))
                   (graph-n g)))
-
-(define (gaussian)
-  (* (sqrt (* -2.0 (log (- 1.0 (random))))) (cos (* 2.0 pi (random)))))
-
-(define (repeat-each rows copies)
-  (for*/list ([r (in-list rows)]
-              [_ (in-range copies)])
-    r))

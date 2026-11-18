@@ -10,12 +10,12 @@
                   kmeans-score
                   kmeans-transform)
          (only-in cuml/cluster/private/native libcuml-version)
-         (only-in json json-null)
          (only-in racket/list take)
          (only-in racket/match match match* match-define)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in rackunit check-equal? check-not-equal? check-true test-case)
+         (only-in "private/common-data.rkt" mat vec)
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   close?
@@ -23,12 +23,10 @@
                   dtypes
                   host
                   host-vector
-                  mat
                   norm2
                   scaled-close?
                   string-inits
-                  tolerance
-                  vec)
+                  tolerance)
          (only-in "private/python-env.rkt" or-null run-twin test-twin twin-params))
 
 (define-runtime-path twin "python/kmeans_twin.py")

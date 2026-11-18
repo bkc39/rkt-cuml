@@ -9,9 +9,10 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" mat)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" integer-grid same-partition?)
-         (only-in "private/kmeans-data.rkt" blob-data mat)
+         (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
                   connectivities
                   group-rows

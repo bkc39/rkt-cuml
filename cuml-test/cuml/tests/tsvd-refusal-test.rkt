@@ -17,23 +17,22 @@
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/refusal-rows.rkt" bad-X-rows check-row row row-call row-id row-message)
-         (only-in "private/scaler-data.rkt" rows->matrix))
+         (only-in "private/refusal-rows.rkt" bad-X-rows check-row row row-call row-id row-message))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5)))
 
 (define (grid-with cells [dt 'float32] [rows grid])
-  (rows->matrix (for/list ([row (in-list rows)]
-                           [r (in-naturals)])
-                  (for/list ([x (in-list row)]
-                             [c (in-naturals)])
-                    (match (assoc (list r c) cells)
-                      [(list _ value) value]
-                      [#f x])))
-                dt))
+  (mat (for/list ([row (in-list rows)]
+                  [r (in-naturals)])
+         (for/list ([x (in-list row)]
+                    [c (in-naturals)])
+           (match (assoc (list r c) cells)
+             [(list _ value) value]
+             [#f x])))
+       dt))
 
 (define past-float32 (expt 2.0 64))
 (define past-float64 (expt 2.0 511))
@@ -42,36 +41,35 @@
   (format "X: expected a squared Frobenius norm of at most ~a, got ~a" most got))
 
 (define (fit-X-rows)
-  (append
-   (bad-X-rows)
-   (list (row "f4" "X: expected at least 2 rows, got 1" (rows->matrix '((1 2 3)) 'float32))
-         (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
-         (row "f5" "X: expected at least 2 columns, got 1" (rows->matrix '((1) (2) (3)) 'float64))
-         (row "f4 before f5" "X: expected at least 2 rows, got 1" (rows->matrix '((1)) 'float32))
-         (row "f6"
-              "X: 46341 columns: a 46341x46341 Gram matrix does not fit the index type"
-              (blank-matrix 2 46341 'float32))
-         (row "f14 nan"
-              "X: row 3, column 1: expected a finite value, got nan"
-              (grid-with '([(3 1) +nan.0])))
-         (row "f14 inf"
-              "X: row 0, column 2: expected a finite value, got inf"
-              (grid-with '([(0 2) +inf.0]) 'float64))
-         (row "f14 -inf"
-              "X: row 2, column 0: expected a finite value, got -inf"
-              (grid-with '([(2 0) -inf.0])))
-         (row "f14 first in row-major order"
-              "X: row 1, column 2: expected a finite value, got nan"
-              (grid-with `([(1 2) +nan.0] [(2 0) +inf.0])))
-         (row "f15"
-              (f15-message 4.253529586511731e+37 3.402823669209385e+38)
-              (grid-with `([(3 1) ,past-float32])))
-         (row "f15 float64"
-              (f15-message 2.247116418577895e+307 4.49423283715579e+307)
-              (grid-with `([(0 0) ,past-float64]) 'float64))
-         (row "f14 before f15"
-              "X: row 3, column 1: expected a finite value, got nan"
-              (grid-with `([(0 0) ,past-float32] [(3 1) +nan.0]))))))
+  (append (bad-X-rows)
+          (list (row "f4" "X: expected at least 2 rows, got 1" (mat '((1 2 3)) 'float32))
+                (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
+                (row "f5" "X: expected at least 2 columns, got 1" (mat '((1) (2) (3)) 'float64))
+                (row "f4 before f5" "X: expected at least 2 rows, got 1" (mat '((1)) 'float32))
+                (row "f6"
+                     "X: 46341 columns: a 46341x46341 Gram matrix does not fit the index type"
+                     (blank-matrix 2 46341 'float32))
+                (row "f14 nan"
+                     "X: row 3, column 1: expected a finite value, got nan"
+                     (grid-with '([(3 1) +nan.0])))
+                (row "f14 inf"
+                     "X: row 0, column 2: expected a finite value, got inf"
+                     (grid-with '([(0 2) +inf.0]) 'float64))
+                (row "f14 -inf"
+                     "X: row 2, column 0: expected a finite value, got -inf"
+                     (grid-with '([(2 0) -inf.0])))
+                (row "f14 first in row-major order"
+                     "X: row 1, column 2: expected a finite value, got nan"
+                     (grid-with `([(1 2) +nan.0] [(2 0) +inf.0])))
+                (row "f15"
+                     (f15-message 4.253529586511731e+37 3.402823669209385e+38)
+                     (grid-with `([(3 1) ,past-float32])))
+                (row "f15 float64"
+                     (f15-message 2.247116418577895e+307 4.49423283715579e+307)
+                     (grid-with `([(0 0) ,past-float64]) 'float64))
+                (row "f14 before f15"
+                     "X: row 3, column 1: expected a finite value, got nan"
+                     (grid-with `([(0 0) ,past-float32] [(3 1) +nan.0]))))))
 
 (define (parameter-rows)
   (list
@@ -121,14 +119,13 @@
     (define X (parameter-X r))
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call X (row-call r))))))
-  (check-cuml-error 'logic
-                    "tsvd-fit: n-components: expected at most 3, got 4"
-                    (lambda ()
-                      (tsvd-fit (rows->matrix '((1 0 2 1 0) (0 3 1 2 2) (4 1 0 3 1)) 'float32)
-                                #:n-components 4)))
+  (check-cuml-error
+   'logic
+   "tsvd-fit: n-components: expected at most 3, got 4"
+   (lambda () (tsvd-fit (mat '((1 0 2 1 0) (0 3 1 2 2) (4 1 0 3 1)) 'float32) #:n-components 4)))
   (check-cuml-error 'logic
                     "tsvd-fit: X: expected at least 2 rows, got 1"
-                    (lambda () (tsvd-fit (rows->matrix '((1 2 3)) 'float32) #:n-components 3)))
+                    (lambda () (tsvd-fit (mat '((1 2 3)) 'float32) #:n-components 3)))
   (for ([bad (in-list (list (lambda () (tsvd-fit (grid-with '()) #:n-components 1.5))
                             (lambda () (tsvd-fit (grid-with '()) #:iterations 2.5))
                             (lambda () (tsvd-fit (grid-with '()) #:tol 'small))))])

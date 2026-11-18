@@ -24,6 +24,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" raised)
+         (only-in "private/exact-algebra.rkt" float32-of)
          (only-in "private/program.rkt" run-program)
          (only-in "private/table-data.rkt"
                   edge-table
@@ -32,8 +33,7 @@
                   numeric-selections
                   selection
                   selection-name
-                  synthetic-table)
-         (only-in "private/exact-algebra.rkt" float32-of))
+                  synthetic-table))
 
 (define dtypes '(float32 float64))
 

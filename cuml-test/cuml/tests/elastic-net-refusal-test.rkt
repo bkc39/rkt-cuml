@@ -14,6 +14,7 @@
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source)
+         (only-in "private/common-data.rkt" blank-matrix unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/elastic-net-data.rkt"
                   apply-keywords
@@ -35,21 +36,19 @@
                   kkt
                   oracle-elastic-net
                   problem-of)
-         (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
                   docs-case
                   dtypes
                   dyadic
                   lcase
-                  lcase-w
                   lcase-X
+                  lcase-w
                   lcase-y
-                  max-abs
                   [on-matrix matrix]
-                  [on-vector vector]
+                  max-abs
                   scaled-case
                   scaled-columns
-                  unit-roundoff)
+                  [on-vector vector])
          (only-in "private/linear-refusal-rows.rkt" grid shared-fit-rows targets)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 

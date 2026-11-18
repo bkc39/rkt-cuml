@@ -16,6 +16,7 @@
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
+         (only-in "common-data.rkt" columns-of)
          (only-in "exact-algebra.rkt"
                   condition
                   dot
@@ -33,7 +34,6 @@
          case-result
          check-law
          check-law-case
-         columns-of
          decimals
          docs-case
          dtypes
@@ -67,7 +67,6 @@
          rounded-case
          scaled-case
          scaled-columns
-         unit-roundoff
          weighted-gram
          weighted-spread
          weights-or-ones
@@ -82,11 +81,6 @@
 
 (define (by-dtype dt float32 float64)
   (if (eq? dt 'float32) float32 float64))
-
-(define (unit-roundoff dtype)
-  (if (eq? dtype 'float32)
-      (expt 2.0 -24)
-      (expt 2.0 -53)))
 
 (define docs-case (lcase "docs" '((1 1) (1 2) (2 2) (2 3)) '(6 8 9 11) #f))
 
@@ -302,9 +296,6 @@
   (let ([law name])
     (law-case law
       (check-law law got bound))))
-
-(define (columns-of rows)
-  (apply map list rows))
 
 (define (max-abs xs)
   (for/fold ([m 0]) ([x (in-list xs)])
