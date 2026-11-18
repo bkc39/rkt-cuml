@@ -34,7 +34,8 @@
          check-raw-refusal
          check-score
          check-sklearn-optimum
-         labelled-set)
+         labelled-set
+         standardised)
 
 (struct labelled
         (case labels

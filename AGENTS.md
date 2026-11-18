@@ -12,7 +12,7 @@ Scope: clustering (k-means, DBSCAN, single-linkage agglomerative,
 spectral, HDBSCAN) and metrics (contingency, adjusted Rand, silhouette,
 trustworthiness, R², accuracy, mean squared error), preprocessing (standard
 scaling), decomposition (PCA) and manifold (UMAP, t-SNE, spectral embedding); epic #53 adds the rest of decomposition and
-manifold, and epic #97 linear models (ordinary least squares, `linear-regression`; ridge, `ridge`; lasso and elastic net, `lasso` and `elastic-net`). `plans/layout.md` holds the owner's decisions;
+manifold, and epic #97 linear models (ordinary least squares, `linear-regression`; ridge, `ridge`; lasso and elastic net, `lasso` and `elastic-net`; logistic regression, `logistic-regression`; minibatch SGD, `mbsgd-regressor` and `mbsgd-classifier`). `plans/layout.md` holds the owner's decisions;
 `plans/starting-notes.md` what rkt-raft established.
 
 ## Layout
@@ -28,9 +28,9 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-preprocessing-lib/` | cuml-preprocessing-lib | `cuml/preprocessing` (`standard-scaler-params`, `standard-scaler-fit`, `standard-scaler-transform`, `standard-scaler-inverse-transform`, `standard-scaler-fit-transform`, and the `standard-scaler-result` struct), `cuml/preprocessing/private/` (the bodies, their `/who` forms, the private `current-scratch-elements`, and the loader of `libcumlrkt_preprocessing.so`) |
 | `cuml-decomposition-lib/` | cuml-decomposition-lib | `cuml/decomposition` (`pca-params`, `pca-fit`, `pca-transform`, `pca-inverse-transform`, `pca-fit-transform`, and the `pca-result` struct; `tsvd-params`, `tsvd-fit`, `tsvd-transform`, `tsvd-inverse-transform`, `tsvd-fit-transform`, and the `tsvd-result` struct), `cuml/decomposition/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_decomposition.so`) |
 | `cuml-manifold-lib/` | cuml-manifold-lib | `cuml/manifold` (`umap-params`, `umap-fit`, `umap-transform`, `umap-fit-transform`, the `umap-result` struct, `tsne-params`, `tsne-fit`, `tsne-fit-transform`, the `tsne-result` struct, `spectral-embedding-params`, `spectral-embedding-fit`, `spectral-embedding-fit-graph`, `spectral-embedding-fit-transform` and the `spectral-embedding-result` struct), `cuml/manifold/private/` (the bodies, their `/who` forms, `curve.rkt`'s a, b fit, `support.rkt`'s `drawn-seed`, `finite-real?`, `metric-code`, `rows-of` and `flag`, shared by UMAP, t-SNE and spectral embedding, and the loader of `libcumlrkt_manifold.so`) |
-| `cuml-linear-model-lib/` | cuml-linear-model-lib | `cuml/linear-model`: for each of `linear-regression`, `ridge`, `lasso` and `elastic-net`, its `-params` table, `-fit`, `-predict` and `-result` struct; `logistic-regression`'s table, `-fit`, `-decision-function`, `-predict`, `-predict-proba`, `-predict-log-proba` and `-result` |
-| `cuml-linear-model-lib/` (private) | cuml-linear-model-lib | `cuml/linear-model/private/`: the bodies and their `/who` forms; `glm.rkt`'s `glm-predict`, `flag`, `intercept-flag`, `alpha-value`, `real-value` and `bounded-count`, shared by the linear models; `elastic-net.rkt`'s `define-cd-result`, each coordinate-descent result struct with its predict; the loader of `libcumlrkt_linear_model.so` |
-| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` and `define-predictor` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, `spectral-embedding`, `linear-regression`, `ridge`, `lasso`, `elastic-net`, `logistic-regression`, and `table.rkt`, the conversion's body) |
+| `cuml-linear-model-lib/` | cuml-linear-model-lib | `cuml/linear-model`: for each of `linear-regression`, `ridge`, `lasso` and `elastic-net`, its `-params` table, `-fit`, `-predict` and `-result` struct; `logistic-regression`'s table, `-fit`, `-decision-function`, `-predict`, `-predict-proba`, `-predict-log-proba` and `-result`; `mbsgd-regressor`'s table, `-fit`, `-predict` and `-result`; `mbsgd-classifier`'s table, `-fit`, `-decision-function`, `-predict` and `-result` |
+| `cuml-linear-model-lib/` (private) | cuml-linear-model-lib | `cuml/linear-model/private/`: the bodies and their `/who` forms; `glm.rkt`'s `glm-predict`, `flag`, `intercept-flag`, `alpha-value`, `real-value` and `bounded-count`, shared by the linear models; `elastic-net.rkt`'s `define-cd-result`, each coordinate-descent result struct with its predict; `labels.rkt`, the label kinds, codes and class views logistic regression and the MBSGD classifier share; `mbsgd.rkt`, both MBSGD estimators over one `sgdFit` job; the loader of `libcumlrkt_linear_model.so` |
+| `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` and `define-predictor` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, `spectral-embedding`, `linear-regression`, `ridge`, `lasso`, `elastic-net`, `logistic-regression`, `mbsgd-regressor`, `mbsgd-classifier`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
 | `cuml-glmnet-test/` | cuml-glmnet-test | the glmnet parity tests, `cuml/tests/*glmnet*` and `cuml/tests/private/*glmnet-data.rkt`; a package of its own, licensed GPL-2.0-or-later and in no catalog, because glmnet is GPL and cuml-test stays Apache-2.0 |
@@ -264,6 +264,36 @@ For a classifier:
   an accuracy promise.
 - *Softmax gauge.* Tests centre k > 2 intercepts, and l1 or `'none`
   coefficients, before comparing.
+- *No sample weights.* `define-estimator` and `define-predictor` take
+  `#:no-sample-weight` for a fit that has none (`sgdFit` has none): the
+  estimator's `fit` offers no `#:sample-weight`; `score`'s stays, it is the
+  scorer's.
+
+For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
+
+- *mbsgd-unstaged.* X goes to `sgdFit` as given, copied column-major (it
+  mutates X and y). The steps scale with X, so the docs say to standardise
+  it; the scale law (X·2^k, alpha·4^k or 2^k, eta0·4^-k gives coef·2^-k)
+  is exact for `'constant` and `'invscaling` only.
+- *mbsgd-gate.* After the solve, a non-finite iterate or an objective that
+  ends above F_start·(1 + 0.025) + A + floor, F_start the zero model's, is
+  refused with "lower #:eta0". A = 3.5·k·eta0·(α·r)², k the fitted
+  coefficients (d, +1 with fit-intercept), r the l1 share (1, l1-ratio, 0),
+  admits an l1 or elastic-net fit oscillating about a zero optimum. The
+  floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
+  a constant y. The gate catches blow-ups and fits ending above
+  F_start·1.025 + A, A at most 4·F_start for the classifier under l1 or
+  elastic-net and uncapped for the regressor (#134; L5-d, F10-C).
+- *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains
+  on -1/+1; the `'log` and `'hinge` intercepts are a penalised ones column
+  in the copy; predict thresholds the decision at 0 (`'log`, `'hinge`) or
+  0.5 (`'squared-loss`).
+- *mbsgd-twin.* Bitwise against Python cuML through `python/mbsgd_twin.py`'s
+  ops `cuml-reg`, `cuml-clf`, `fit-sgd` (the corrected classifier) and
+  `permute` (a seeded shuffle); every op copies X and y first, since Python
+  mutates the caller's arrays.
+- *mbsgd-no-n-iter.* `sgdFit` returns no epoch count, so the results have
+  no `n-iter`; tests observe early stopping only as fit(m) = fit(m + 50).
 
 ## Build and test
 
@@ -377,7 +407,7 @@ replace each when raft offers a public form:
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `linear-model-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test` |
 | `raft/tests/private/deposits` | `filled` | `model-test` |
-| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-embeddings-test`, `guide-embeddings-figures-test`, `guide-embeddings-seeds-test`, `guide-embeddings-twin-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `scores-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*`, `tsne-*`, `linear-regression-*`, `ridge-*`, `elastic-net-*` and `logistic-regression-*` tests, `preprocessing-docs-test`, `linear-model-docs-test`, `linear-model-memory-test`, the `linear-model-glmnet*` and `logistic-regression-glmnet-*` tests, the `linear-model-real-*` tests, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
+| `raft/tests/private/gpu` | `test-gpu`, `gpu-skip`, `test-unless-skipped` | `smoke-test`, `device-memory-test`, `docs-test`, `guide-docs-test`, `guide-decomposition-test`, `guide-embeddings-test`, `guide-embeddings-figures-test`, `guide-embeddings-seeds-test`, `guide-embeddings-twin-test`, `guide-plots-test`, `guide-twin-test`, the `kmeans-*`, `dbscan-*`, `linkage-*`, `agglomerative-*`, `spectral-*`, `hdbscan-*`, `table-*`, `metrics-*`, `scores-*`, `silhouette-*`, `trustworthiness-*`, `standard-scaler-*`, `pca-*`, `tsvd-*`, `umap-*`, `tsne-*`, `linear-regression-*`, `ridge-*`, `elastic-net-*`, `logistic-regression-*` and `mbsgd-*` tests, `preprocessing-docs-test`, `linear-model-docs-test`, `linear-model-memory-test`, the `linear-model-glmnet*` and `logistic-regression-glmnet-*` tests, the `linear-model-real-*` tests, `decomposition-docs-test`, `manifold-docs-test`, `private/process-memory`, `private/python-env`, `private/model-probe` |
 
 The repo's own test support, in `cuml-test/cuml/tests/private/`:
 
@@ -415,6 +445,11 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `logistic-twin-data` | `logistic-twin op c dt #:penalty #:C ...` (an `lr-case`'s payload for `python/logistic_regression_twin.py`), `setting-twin`, `logistic-twin-results`, `their-fit`; `twin-trial`, a twin test's row |
 | `logistic-oracle` | `residual-of X y w coef intercept #:penalty #:C #:l1-ratio #:fit-intercept #:tol #:dtype`: the check's residual, objective and bound recomputed in bigfloats from a returned point (without an intercept, each column's residual divided by the smaller of its centred and RMS spreads, as the shim's, once the centred spread is resolved in `dtype`) |
 | `logistic-newton` | `newton-coef X y #:lam #:fit-intercept`: the unweighted binary optimum of the mean log-loss plus `lam`/2 times the squared coefficients (the intercept unpenalised), by undamped Newton in float64 from zero (at most 100 steps), for the coefficient gap of a fit |
+| `mbsgd-data` | the MBSGD fixtures: `normal-rows`, `tiled-rows` (distinct rows cycled, for large repeat cases), `reg-target`, `blob-rows` (two Gaussian blobs and their 0/1 labels, by minority share), `scaled`, `with-ones`; `reg-parts` and `clf-parts` (a result as coef list and intercept), `coef-gap`; the grids `penalties`, `learning-rates`, `dtype-penalties` |
+| `mbsgd-gate-data` | the `mbsgd-gate-*` tests' shared fixtures and checks: `grid-rows` and `grid-targets` (300×5 normal rows), `blobs` and `labels` (512×6 blobs), `rose eta0` (the objective-rose refusal's regexp), `check-classifier-rise loss` and `check-classifier-lower loss` (the blobs classifier at α 10, batch 1, refused at eta0 0.05 and passing at 0.01); the gate test is split across those files to keep each under the GPU suite's 45 s `--timeout` |
+| `mbsgd-twin-data` | `reg-fit`, `clf-fit`, `clf-result` (a fit at Python cuML's defaults overridden by a keyword hash), `overridden base more` (one keyword hash over another), `twin-request op dt X settings #:y #:codes #:loss #:seed` (a payload for `python/mbsgd_twin.py`), `mbsgd-twin-results`, `their-parts` |
+| `sgd-replay` | `sgd-replay X y #:loss ... #:n-iter-no-change`: the `sgdFit` schedule (minibatches, learning rates, penalties, the stop rule) on host floats without shuffling, returning a `replay` of coef, intercept, epochs run and the smallest relative margin of any stop test |
+| `real-mbsgd-data` | `diabetes #:standardise?`, `check-diabetes-twin`, `check-diabetes-gap` (the objective gap to the exact ridge optimum at alpha 1e-4), `check-breast-cancer dt` (train accuracy of the documented arms) |
 | `real-logistic-data` | `labelled-set name response excluded #:standardise?` (a `datasets/core` set as a `labelled`), `check-sklearn-optimum`, `check-raw-refusal` (the refusal, and Python cuML's point there off the optimum), `check-score` |
 | `elastic-net-twin-data` | the elastic-net twin's checks over `python/elastic_net_twin.py`: `check-raw-parity` (Python cuML, bit for bit) and `check-sklearn-parity` (scikit-learn, within sklearn-distance) |
 | `linear-refusal-rows` | the refusal rows linear-regression and ridge share: `shared-fit-rows go`, and `grid`, `targets`, `with-cell`, `with-element`, `overflow-X`, `overflow-y` |

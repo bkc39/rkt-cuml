@@ -33,6 +33,12 @@
                              logistic-regression
                              logistic-regression-model
                              logistic-regression?
+                             mbsgd-classifier
+                             mbsgd-classifier-model
+                             mbsgd-classifier?
+                             mbsgd-regressor
+                             mbsgd-regressor-model
+                             mbsgd-regressor?
                              pca
                              ridge
                              ridge-model

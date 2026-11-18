@@ -2035,3 +2035,173 @@ scratch, the source is `cpp/src/glm/qn/`.
   At the default tol the blob and wine fits are within the default-tol
   cap; breast-cancer l1 (4.4e-2 at C 1, 8.1e-2 at C 10, f64) and iris l1
   (5.1e-2) are not, and iris at C 10 is refused at max-iter 1000.
+
+## Decisions recorded in leg L5 (#91): minibatch SGD
+
+Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
+1.8.0); the probes p0–p11 are in the leg's scratch, the source is
+`cpp/src/solver/sgd.cuh`. The reference is its own section file,
+`reference/mbsgd.scrbl` (L5-m), since `linear-model.scrbl` is at the
+500-line limit.
+
+### Semantics
+
+- **Objective.** With an intercept, upstream centres X and y and sets
+  b = ȳ − x̄·w after; the intercept is never penalised. Over w:
+  squared mean((y − Xw)²) + P(w); log mean(−y log σ(z) − (1 − y) log(1 − σ(z)))
+  + P(w); hinge mean(max(0, 1 − yz)) + P(w), y ∈ {−1, +1}. P: `'none` 0,
+  `'l2` α‖w‖², `'l1` α‖w‖₁, `'elasticnet` α(1 − r)‖w‖² + αr‖w‖₁ (r read only
+  under `'elasticnet`). No sample weights.
+- **sklearn mappings** (exact minimisers): `'l2` is Ridge(nα); `'l1` is
+  Lasso(α/2); `'elasticnet` is ElasticNet(A, L) with A = αr/2 + α(1 − r),
+  L = (αr/2)/A; `'none` is LinearRegression; `'log` with `'l2` is
+  LogisticRegression(C = 1/(2αn)).
+- **Schedule.** Minibatches of batch-size rows in the current order, the
+  last one partial; t counts batches from 1 across epochs, stored in the
+  float type. Each batch: w −= lr·(∇loss_batch + ∇P), ∇P: l2 2αw, l1
+  α·sign(w), elastic net the sum. lr: `'constant` eta0; `'invscaling`
+  eta0/⌊t⌋^power-t; `'adaptive` starts at eta0 and is divided by 5 when the
+  stop counter fires while lr > 1e-6 (absolute floor; the counter resets).
+- **Stop rule.** Only with tol > 0: after epoch e the full centred loss
+  plus P is L_e (hinge: the sum over rows); for e > 0, L_e > L_(e−1) − tol
+  counts, an improvement resets; n-iter-no-change + 1 consecutive
+  non-improving epochs stop `'constant` and `'invscaling`. Against the
+  previous epoch's loss, not the best (sklearn's). No n-iter (L5-f).
+- **Gate (L5-d).** In the shim, in double, on the caller's uncentred X at
+  (w, b): refused when any coefficient or the intercept is not finite, or
+  F_end > F_start·(1 + s) + A + floor, F the objective above in its mean
+  form (hinge too) and F_start its value at w = 0 with b = ȳ (squared with
+  an intercept) or 0: var(y) or mean(y²), log 2, 1. s = .025 and
+  A = c·k·eta0·(α·r)² with c = 3.5, k the fitted coefficients (d, plus 1
+  under fit-intercept: the ones column, or for squared loss an upper
+  bound) and r the l1 share (1 for l1, l1-ratio for elastic net, 0 for l2
+  and none); eta0 bounds the step under every schedule. A covers an l1 or
+  elastic-net fit whose optimum is w = 0: each coordinate oscillates by
+  about eta0·α·r, the penalty rises by α·r·|w|₁ and the loss can fall by
+  no more (|∂loss_i(0)| ≤ α·r there), so the rise is about 2·k·eta0·(α·r)².
+  Measured on F10-C's zero-optimum l1 problems the rise is at most
+  1.644·k·eta0·(α·r)² (overlap hinge α 1, bs 1, every eta0 to .05): bs-1
+  gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. The
+  classifier's A is capped at 4·F_start (fix r1e): uncapped, a large eta0
+  makes A large enough to hide divergence (ratios to 3,721 at eta0 1,
+  F10-C). The regressor's A is uncapped (fix r1f): its F_start is var(y),
+  not scale-free, so a cap refuses small-variance y at the defaults (2 or
+  3 rows of 3 columns, l1 α 10: F_start to 7.2e-5, ratio to 3,328), some
+  beyond what eta0/10 clears; no regressor l1 study exists (#134). The
+  largest rise a good fit needs at the default eta0 is breast cancer log
+  l1 α 10, ratio 3.21, inside the capped limit of 5.025·F_start; lowering
+  eta0 shrinks A and the oscillation alike, so "lower #:eta0" still clears
+  every refusal the cap adds. The
+  floor is 1e-12·F_start + 10·ε_T²·mean(y²) for the regressor, ε_T the
+  dtype's machine epsilon (round-off of y's magnitude: a constant y, or a
+  float32 y far from 0, whose residuals are quantised at ε·|y|), and
+  1e-12·F_start for the classifier. s is set by F10-C: .025 refuses every
+  setting the review found at chance above the zero model except one that
+  A admits at eta0 1, and refuses no good fit at the default eta0; it
+  refuses 10 good fits at eta0 .01, which no constant s can avoid (F10-C).
+  The gate catches blow-ups and fits ending above F_start·1.025 + A, A at
+  most 4·F_start for the classifier under l1 or elastic-net and uncapped for the
+  regressor; it passes a fit at or below that which predicts badly
+  (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
+  blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
+  refusals advise lowering eta0, and print both values to 6 significant
+  figures. A y whose F_start or floor is not finite (float64 |y| above
+  about 1.3e154, or with fit-intercept |y − ȳ| above it; each term of a mean is
+  divided by n before the sum) is
+  refused before the solve, "y is too large to check the fit; rescale
+  y" (fix r1f, r1g). Each of alpha, tol, eta0 and power-t is checked
+  against X's dtype right after its own range, in settings order: one
+  that overflows it, "alpha: 1e+150 overflows float32", or an alpha or
+  eta0 that rounds to 0 in it, "eta0: 1e-50 rounds to 0 in float32"
+  (fix r1g).
+- **Seeds (L5-e).** `#f` is cuML's fixed order (`initShuffle` reseeds
+  mt19937 with 0); an integer s permutes the copy's rows by Fisher–Yates
+  over std::mt19937(s), i from n − 1 down to 1, j = g() mod (i + 1), only
+  with shuffle. numpy's `RandomState(s)` raw output is the same stream, so
+  the twin's `permute` op replays it (T4).
+
+### Findings
+
+- **F3 objective** (bs = n, shuffle off, tol 0, eta0 .05, 256×4, coef
+  relative error to the f64 optimum): l2 α .1 at 10/100/1000 epochs
+  3.6e-1/1.0e-4/7.4e-16 (f64), f32 3.5e-7 at 1000; l1 α .05 6.8e-16/3.45e-7
+  (f64/f32); elastic net 6.1e-16/3.3e-7; none 1.3e-15/5.95e-7; log without
+  intercept, eta0 .5, α 1e-2, 4.5e-9/7.1e-7. Minibatch 32, 1000 epochs:
+  constant eta0 .01 5.25e-4, 1e-3 1.09e-5; invscaling .05/.5 4.5e-6. Those
+  floors are one draw's: over this repo's `normal-rows` 256×4 seeds 1–8
+  (f64) they range constant 1e-3 6.3e-6–4.96e-5, invscaling 3.1e-6–2.41e-5,
+  constant .01 3.1e-4–1.15e-3. O6 runs on the spec's seed 5 (F3's) and holds
+  each bound above that range: constant 1e-3 within 1e-4, invscaling
+  5e-5, constant .01 3e-3.
+- **F10 gate study** (1824 fits: normal 512×6, mixed column scales,
+  diabetes as shipped and standardised × dtype × learning rate × eta0
+  1e-4..10 × batch 1/32/n × l2/none × epochs 1/10/200): 118 non-finite (87
+  f32). F_end > F_start refuses 352 finite fits, none within .1 relative
+  coefficient error of the optimum (largest F_end/F_start among error < .1
+  is .498, among error < .01 .021); 280 of 280 fits with error > 10 are
+  refused. Re-run under F_end > F_start·(1 + 1e-3) + floor (fix r1a): the
+  same 352 refused, none within .1 (smallest refused error .977), 280 of
+  280 with error > 10 refused; no fit has a ratio in (1, 1.001], and the
+  floor is below 1e-11·F_start on every set. Re-counted under the 1e-2
+  slack (fix r1b): the same 352 refused, none within .1, 280 of 280 with
+  error > 10 refused; the smallest refused ratio is 1.311, so no fit has a
+  ratio in (1, 1.311) and the 0.1 slack (fix r1c) refuses the same 352.
+  Near-zero optima (bs 1, α 10, l2, eta0 .05, the gate test's data) rise
+  to ratios 3.02 (regressor), 1.028 (log) and 1.072 (hinge, accuracy .791
+  against .941 at eta0 .01); the r1d gate (A = 0 under l2, s .025) refuses
+  all three, and eta0/10 clears every one. These are F10's regressor
+  numbers: the classifier gate is set by F10-C.
+- **F10-C classifier gate study** (r1 review; 23,174 fits, log 11,576,
+  hinge 11,598: l2, l1 and none at α 1e-4..10 on blobs 512×6 seed 43,
+  overlap 512×6 sep .3 seed 45, imbalanced 512×6 10% minority, standardised
+  breast cancer 569×30; eta0 1e-4..1, bs 1/32/n, constant/invscaling,
+  epochs 1/10/200, f32 and f64; gap = F_end − best known F). Good fits
+  (gap < .1) reach ratio 1.136 (log) and 1.098 (hinge). Eleven settings end
+  above the zero model at or near chance (ratios 1.038–1.096, gap ≥ .2):
+  the r1c slack .1 accepted all of them; s .025 with A refuses every one
+  but imbalanced log l1 α .1 eta0 1 (ratio 1.038, A/F_start .35); the
+  closest must-refuse row is blobs log l1 α .1 eta0 .1 (1.06206 against
+  1.06035), and the gate test's three chance-fit rows clear their limits
+  by .17%, .19% and .3%. No s separates these from the good fits: at eta0 .01, bs 1,
+  overlap's good fits reach 1.104 (log l1 α .1) and 1.068 (log l2 α 1),
+  so s .025 refuses 10 good fits at eta0 ≤ 1e-2 and none at the default
+  1e-3. Uncapped, A admits the zero-optimum oscillation at any eta0: of
+  1,940 fits with gap > 1, r1c refused all, s .025 with A accepts 1,402,
+  every one l1 (log 690, hinge 712; α 1 or 10 but 4 hinge α .1 at eta0
+  1), at ratios up to 4.5 at eta0 1e-3 and 3,721 at eta0 1. The cap at
+  4·F_start refuses 1,016 of them, all at eta0 ≥ .01 (.01: 78, .05: 162,
+  .1: 174, .3: 250, 1: 352); the 386 left end below 5.02·F_start, 28 at
+  eta0 1e-3 (breast cancer α 10, ratio ≤ 4.51). It refuses no fit with
+  gap ≤ 1 that the uncapped rule accepts, so the good fits refused stay
+  the 10 at eta0 .01 and none at 1e-3; every must-refuse row stays
+  refused. F10 (p7, 960 fits) is l2 only, so A = 0 and the cap is moot.
+- **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
+  as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
+  .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:
+  defaults 4.8e-3; eta0 .01 1.63e-4; invscaling .01/.25 4.3e-3; adaptive
+  .01 1.63e-4; f32 = f64 to printed precision. D1–D2 pin these.
+- **L5-q (probed in part 1).** `sgdFit` indexes n × p in int: a float32 X
+  of (2^30 + 1) × 2 fits coef[1] = 2.35e-41 (expected ~1e-3), correct at
+  2^29 + 1. X of more than 2^31 − 1 elements, counting the ones column, is
+  refused before S5 ("X: expected at most 2147483647 elements, got ~a");
+  its range row is a gtest only (a Racket row needs 8.6 GB). Upstream row
+  in `plans/upstream-bugs.md`. Only 2^30 + 2 elements (right) and
+  2^31 + 2 (wrong) are probed; where between them the int indexing first
+  goes wrong is unprobed, and the 2^31 − 1 cap is read from the int
+  arithmetic. The element cap subsumes any column cap (n ≥ 2), so there is
+  none.
+- **E3 large cases** keep the spec's sizes and batches (2e5×20 at 256,
+  1e6×20 at 4096) but are lighter: 4096 distinct rows cycled to the row
+  count, and 5 epochs (raft has no bulk flvector->matrix; the law is about
+  repeatability, not the data).
+
+### Decisions
+
+L5-a to L5-r as the spec recommended (the owner's table in the leg's
+decisions comment): the classifier corrected in the shim; no staging; a
+penalised ones-column intercept for `'log` and `'hinge` (deviation from
+sklearn); the post-solve gate; `#:random-state`; no n-iter; α positive
+finite; no predict-proba; power-t nonnegative finite; gemmPredict plus a
+threshold-labels job; one class refused; two result structs; cuML's loss
+names; l1-ratio range-checked always; L4's label code moved to
+`private/labels.rkt`; hinge's tol passed through unchanged (U4).

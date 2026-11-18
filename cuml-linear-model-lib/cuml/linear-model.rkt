@@ -3,6 +3,7 @@
 (require "linear-model/private/elastic-net.rkt"
          "linear-model/private/linear-regression.rkt"
          "linear-model/private/logistic-regression.rkt"
+         "linear-model/private/mbsgd.rkt"
          "linear-model/private/ridge.rkt")
 
 (provide (except-out (all-from-out "linear-model/private/elastic-net.rkt")
@@ -19,4 +20,10 @@
                      logistic-regression-predict-log-proba/who
                      logistic-regression-predict-proba/who
                      logistic-regression-predict/who)
+         (except-out (all-from-out "linear-model/private/mbsgd.rkt")
+                     mbsgd-classifier-decision-function/who
+                     mbsgd-classifier-fit/who
+                     mbsgd-classifier-predict/who
+                     mbsgd-regressor-fit/who
+                     mbsgd-regressor-predict/who)
          (except-out (all-from-out "linear-model/private/ridge.rkt") ridge-fit/who ridge-predict/who))

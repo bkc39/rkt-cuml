@@ -16,6 +16,7 @@ together.
 @include-section["reference/decomposition.scrbl"]
 @include-section["reference/manifold.scrbl"]
 @include-section["reference/linear-model.scrbl"]
+@include-section["reference/mbsgd.scrbl"]
 @include-section["reference/metrics.scrbl"]
 @include-section["reference/models.scrbl"]
 @include-section["reference/errors.scrbl"]

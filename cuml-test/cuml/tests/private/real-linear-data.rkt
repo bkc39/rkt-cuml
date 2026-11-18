@@ -56,6 +56,7 @@
 
 (provide offset-law-arms
          real-lcase
+         set-data
          test-real-set
          tight-max-iter
          tight-tol)
