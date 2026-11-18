@@ -156,9 +156,8 @@
                   (format "correct ~a, sklearn ~a" ours sklearn)))))
 
 (define (python-and-oracle c dt)
-  (logistic-twin-results
-   (list (logistic-twin "cuml-fit" c dt)
-         (logistic-twin "sklearn-fit" c 'float64 #:tol (tight-tol 'float64)))))
+  (logistic-twin-results (list (logistic-twin "cuml-fit" c dt)
+                               (logistic-twin "sklearn-fit" c 'float64 #:tol (tight-tol 'float64)))))
 
 (define (check-python-off-optimum python oracle dt)
   (define gap
