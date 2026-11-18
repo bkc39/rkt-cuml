@@ -195,16 +195,21 @@ std::optional<qn_solution<T>> rescued(
   return std::nullopt;
 }
 
-#define CUMLRKT_LOGISTIC_SOLVE(T)                                      \
-  template attempt<T> attempted<T>(const raft::handle_t&, T*, T*, T*,  \
-                                   solve_check, const fit_options&,    \
-                                   const std::vector<T>&);             \
-  template std::optional<qn_solution<T>> rescued<T>(                   \
-      const raft::handle_t&, const matrix<T, int64_t>&, row_selection, \
-      const column_stats&, staged_fit<T>&, const attempt<T>&,          \
-      const fit_options&);
-
-CUMLRKT_LOGISTIC_SOLVE(float)
-CUMLRKT_LOGISTIC_SOLVE(double)
+template attempt<float> attempted<float>(const raft::handle_t&, float*, float*,
+                                         float*, solve_check,
+                                         const fit_options&,
+                                         const std::vector<float>&);
+template std::optional<qn_solution<float>> rescued<float>(
+    const raft::handle_t&, const matrix<float, int64_t>&, row_selection,
+    const column_stats&, staged_fit<float>&, const attempt<float>&,
+    const fit_options&);
+template attempt<double> attempted<double>(const raft::handle_t&, double*,
+                                           double*, double*, solve_check,
+                                           const fit_options&,
+                                           const std::vector<double>&);
+template std::optional<qn_solution<double>> rescued<double>(
+    const raft::handle_t&, const matrix<double, int64_t>&, row_selection,
+    const column_stats&, staged_fit<double>&, const attempt<double>&,
+    const fit_options&);
 
 }  // namespace cumlrkt::glm::logistic
