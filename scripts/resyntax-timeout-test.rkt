@@ -1,13 +1,14 @@
 #lang racket/base
 
-(require (only-in racket/file delete-directory/files make-temporary-directory)
-         (only-in racket/port with-output-to-string)
-         ;; whole-module: define-runtime-path needs bindings only-in strips
+(require (only-in racket/port with-output-to-string)
          racket/runtime-path
          (only-in racket/system system*)
-         (only-in rackunit check-false check-regexp-match check-true test-case))
+         (only-in rackunit check-false check-regexp-match check-true test-case)
+         (only-in "../lint/private/modules.rkt" with-temporary-directory write-module))
 
 (define-runtime-path resyntax-script "resyntax.sh")
+
+(define-runtime-path fake-resyntax "fixtures/fake-resyntax")
 
 (define fixture
   '((define (double x)
@@ -15,16 +16,10 @@
     (double 21)))
 
 (define (call-with-fixture proc)
-  (define root (make-temporary-directory "resyntax-timeout-~a"))
-  (define file (build-path root "module.rkt"))
-  (dynamic-wind void
-                (lambda ()
-                  (with-output-to-file file
-                                       (lambda ()
-                                         (displayln "#lang racket/base")
-                                         (for-each writeln fixture)))
-                  (proc file))
-                (lambda () (delete-directory/files root))))
+  (with-temporary-directory (root "resyntax-timeout-~a")
+                            (define file (build-path root "module.rkt"))
+                            (write-module file "#lang racket/base" fixture)
+                            (proc file)))
 
 (define (run-on file . options)
   (define ok? #f)
@@ -74,3 +69,29 @@
                        (define-values (ok? output) (run-on file "--analyzer-timeout" "30s"))
                        (check-false ok?)
                        (check-regexp-match #rx"whole number of milliseconds, not '30s'" output))))
+
+(define (run-faked file rc)
+  (parameterize ([current-environment-variables
+                  (environment-variables-copy (current-environment-variables))])
+    (putenv "PATH" (format "~a:~a" (path->string fake-resyntax) (getenv "PATH")))
+    (putenv "FAKE_RESYNTAX_FILE" (path->string file))
+    (putenv "FAKE_RESYNTAX_RC" (number->string rc))
+    (run-on file)))
+
+(test-case "a file whose path has a space is listed whole, with every analyzer it missed"
+  (with-temporary-directory
+   (root "resyntax-space-~a")
+   (define file (build-path root "a module.rkt"))
+   (write-module file "#lang racket/base" fixture)
+   (define-values (ok? output) (run-faked file 0))
+   (check-true ok?)
+   (check-regexp-match
+    #rx"\n  [^\n]*/a module[.]rkt: identifier-usage-analyzer, variable-mutability-analyzer\n"
+    output)))
+
+(test-case "the files an analyzer missed are listed when Resyntax itself fails"
+  (call-with-fixture (lambda (file)
+                       (define-values (ok? output) (run-faked file 3))
+                       (check-false ok?)
+                       (check-regexp-match #rx"files not fully analysed: 1;" output)
+                       (check-regexp-match #rx"resyntax exited 3" output))))

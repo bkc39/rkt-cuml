@@ -63,21 +63,21 @@ cache_key() {
 }
 
 unanalysed() {
-  sed -nE 's/^resyntax: analyzer ([^ ]+) (timed out after [0-9]+ ms|failed with error) while analyzing (.*[.](rkt|scrbl))(: .*)?$/\3 \1/p' |
+  sed -nE 's/^resyntax: analyzer ([^ ]+) (timed out after [0-9]+ ms|failed with error) while analyzing (.*[.](rkt|scrbl))(: .*)?$/\3\t\1/p' |
     sed "s|^$PWD/||" | sort -u |
-    awk '$1 == file { names = names ", " $2; next }
-         { if (file != "") print file ": " names; file = $1; names = $2 }
-         END { if (file != "") print file ": " names }'
+    awk -F'\t' '$1 == file { names = names ", " $2; next }
+         { if (file != "") print file "\t" names; file = $1; names = $2 }
+         END { if (file != "") print file "\t" names }'
 }
 
 report_unanalysed() {
-  local listed=$1 file names line
+  local listed=$1 file names
   [ -n "$listed" ] || return 0
   echo "resyntax: warning: files not fully analysed: $(wc -l <<<"$listed"); an analyzer timed out at $timeout_ms ms or failed, so the rules that need it did not run on them; raise --analyzer-timeout or RESYNTAX_ANALYZER_TIMEOUT to cover them"
-  while IFS= read -r line; do echo "  $line"; done <<<"$listed"
+  while IFS=$'\t' read -r file names; do echo "  $file: $names"; done <<<"$listed"
   if [ -n "${GITHUB_ACTIONS:-}" ]; then
-    while IFS=: read -r file names; do
-      echo "::warning file=$file::not fully analysed by Resyntax at $timeout_ms ms (${names# }); the rules that need those analyzers did not run here"
+    while IFS=$'\t' read -r file names; do
+      echo "::warning file=$file::not fully analysed by Resyntax at $timeout_ms ms ($names); the rules that need those analyzers did not run here"
     done <<<"$listed"
   fi
 }
@@ -110,12 +110,12 @@ echo "resyntax: analyzer timeout $timeout_ms ms"
 rc=0
 out=$(resyntax analyze "${suite[@]}" "${targets[@]}" --analyzer-timeout "$timeout_ms" 2>&1) || rc=$?
 echo "$out"
+listed=$(unanalysed <<<"$out")
+report_unanalysed "$listed"
 if [ "$rc" -ne 0 ]; then
   echo "resyntax exited $rc without completing the analysis" >&2
   exit 1
 fi
-listed=$(unanalysed <<<"$out")
-report_unanalysed "$listed"
 if grep -qE "resyntax: .*\.rkt:[0-9]+:[0-9]+ \[" <<<"$out"; then
   echo "resyntax found refactoring suggestions; run: resyntax fix ${suite[0]} '${suite[1]}' ${suite[2]} ${targets[*]} --analyzer-timeout $timeout_ms" >&2
   exit 1
