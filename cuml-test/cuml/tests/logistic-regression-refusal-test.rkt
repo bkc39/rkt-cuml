@@ -23,6 +23,10 @@
   (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
                          "after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter$")))
 
+(define mixed-spread-cutoff
+  (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
+                         "after 1 iterations \\(max-iter 1, tol 1e-04\\); standardise the columns$")))
+
 (define (tiny-last rows factor)
   (map (match-lambda
          [(list a b c) (list a b (* factor c))])
@@ -212,7 +216,10 @@
           (go (on-matrix (scaled-rows '((1 0) (0 1) (2 1) (3 0) (5 1) (4 0)) (expt 2 -124)) 'float32)
               (on-vector '(0 0 0 1 1 1) 'int32)
               #:penalty 'none)))
-   (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))))
+   (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))
+   (row "an iteration cutoff on columns of spreads 2^8 apart names standardising"
+        mixed-spread-cutoff
+        (lambda () (go (on-matrix (tiny-last grid 1000)) y #:max-iter 1)))))
 
 (test-gpu "logistic-regression-fit refuses each row, the earlier fault first"
   (for ([r (in-list (append (racket-rows logistic-regression-fit)
