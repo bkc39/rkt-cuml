@@ -5,7 +5,7 @@
          (only-in racket/match match)
          (only-in racket/math sqr)
          (only-in raft device-vector->list list*->device-matrix list->device-vector)
-         (only-in "common-data.rkt" mat pick squared-distance vec))
+         (only-in "common-data.rkt" pick squared-distance))
 
 (provide (struct-out expected)
          canonical

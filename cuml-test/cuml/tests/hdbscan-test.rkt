@@ -19,10 +19,10 @@
                   hdbscan-spanning-tree-weights)
          (only-in racket/list count make-list range shuffle take)
          (only-in rackunit check-equal? check-pred check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list dtype shape)
+         (only-in raft device-matrix->list* device-vector->list dtype list*->device-matrix shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" mat pick repeat-each)
+         (only-in "private/common-data.rkt" pick repeat-each)
          (only-in "private/dbscan-data.rkt" same-partition? seeded)
          (only-in "private/hdbscan-data.rkt"
                   dataset
@@ -40,7 +40,7 @@
 (define flt-max 3.4028234663852886e38)
 
 (test-gpu "HD1: outputs have their dtypes, shapes and structure"
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (define tree (hdbscan-result-condensed-tree result))
   (define linkage (hdbscan-result-single-linkage-tree result))
   (define mst (hdbscan-result-minimum-spanning-tree result))
@@ -109,7 +109,7 @@
                     (make-list n -1)))))
 
 (test-gpu "HD9: a fit leaves X unchanged"
-  (define X (mat (dataset 'moons) 'float32))
+  (define X (list*->device-matrix (dataset 'moons) #:dtype 'float32))
   (define before (device-matrix->list* X))
   (hdbscan-fit X)
   (check-equal? (device-matrix->list* X) before))
@@ -152,7 +152,7 @@
                 1))
 
 (test-gpu "leaf selection on b50 predicts at least 290 of its own fit labels"
-  (define X (mat (dataset 'b50) 'float32))
+  (define X (list*->device-matrix (dataset 'b50) #:dtype 'float32))
   (define result (hdbscan-fit X #:cluster-selection-method 'leaf))
   (define predicted
     (~> result (hdbscan-approximate-predict X) hdbscan-prediction-labels device-vector->list))

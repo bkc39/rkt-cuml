@@ -8,11 +8,11 @@
          (only-in racket/match match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
-         (only-in raft exn:fail:raft? list->device-vector)
+         (only-in raft exn:fail:raft? list*->device-matrix list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/manifold-refusal-data.rkt"
@@ -140,7 +140,8 @@
                  " lower learning-rate, centre or rescale X, or raise n-neighbors"))
 
 (define (scaled-tiny k)
-  (mat (map (lambda (r) (map (lambda (x) (* x k)) r)) (fixture-rows tiny)) 'float32))
+  (list*->device-matrix (map (lambda (r) (map (lambda (x) (* x k)) r)) (fixture-rows tiny))
+                        #:dtype 'float32))
 
 (define (offset-rows t0)
   (for/list ([i (in-range 32)])
@@ -151,12 +152,12 @@
   (map (lambda (r) (map - r means)) rows))
 
 (define (duplicates k)
-  (mat (append (make-list k '(0 0)) (make-list k '(1 1))) 'float32))
+  (list*->device-matrix (append (make-list k '(0 0)) (make-list k '(1 1))) #:dtype 'float32))
 
 (define (line-rows largest)
-  (mat (for/list ([i (in-range 8)])
-         (list (* i (/ largest 7)) 0.0))
-       'float32))
+  (list*->device-matrix (for/list ([i (in-range 8)])
+                          (list (* i (/ largest 7)) 0.0))
+                        #:dtype 'float32))
 
 (define limit-ratio 0.97)
 
@@ -164,13 +165,13 @@
   (row id message (cons X options)))
 
 (define (X-rows)
-  (define one-row (mat '((1 2 3)) 'float32))
-  (define zeros (mat (make-list 8 '(0 0 0)) 'float32))
+  (define one-row (list*->device-matrix '((1 2 3)) #:dtype 'float32))
+  (define zeros (list*->device-matrix (make-list 8 '(0 0 0)) #:dtype 'float32))
   (define cosine (hash-set small 'metric 'cosine))
   (define sqeuclidean (hash-set small 'metric 'sqeuclidean))
   (define manhattan (hash-set small 'metric 'manhattan))
   (define pca (hasheq 'perplexity 3.0 'init 'pca))
-  (define normless-pca (mat (cons '(0.0 0.0 0.0) (cdr past-pca)) 'float32))
+  (define normless-pca (list*->device-matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) #:dtype 'float32))
   (list
    (X-row "f11" "X: expected float32, got float64" (tiny-with '() 'float64))
    (X-row "f12" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
@@ -180,7 +181,7 @@
    (X-row "f13" "X: expected at least 2 rows, got 1" one-row)
    (X-row "f14"
           "X: expected at least 2 columns, got 1"
-          (mat (map (lambda (r) (take r 1)) (fixture-rows tiny)) 'float32))
+          (list*->device-matrix (map (lambda (r) (take r 1)) (fixture-rows tiny)) #:dtype 'float32))
    (X-row "f17" "perplexity: expected at most the 8 neighbours, got 30" (tiny-X) (hasheq))
    (X-row "f17 neighbours"
           "perplexity: expected at most the 4 neighbours, got 5"
@@ -208,10 +209,13 @@
           (manhattan-message (* 3 past-manhattan))
           (tiny-with (antipodal past-manhattan past-manhattan past-manhattan))
           (hash-set manhattan 'method 'exact))
-   (X-row "f20d" (pca-message (spread-of past-pca)) (mat past-pca 'float32) pca)
+   (X-row "f20d"
+          (pca-message (spread-of past-pca))
+          (list*->device-matrix past-pca #:dtype 'float32)
+          pca)
    (X-row "f20d exact"
           (pca-message (spread-of past-pca))
-          (mat past-pca 'float32)
+          (list*->device-matrix past-pca #:dtype 'float32)
           (hash-set pca 'method 'exact))
    (X-row "f21" cosine-message (tiny-with zero-row) cosine)
    (X-row "f23 small scale" small-scale-message (scaled-tiny 1e-11) sqeuclidean)
@@ -219,7 +223,9 @@
           small-scale-message
           (scaled-tiny 1e-11)
           (hash-set sqeuclidean 'method 'exact))
-   (X-row "f23 offset" small-scale-message (mat (offset-rows 1.7e9) 'float32))
+   (X-row "f23 offset"
+          small-scale-message
+          (list*->device-matrix (offset-rows 1.7e9) #:dtype 'float32))
    (X-row "f23 duplicates" small-scale-message (duplicates 40))
    (X-row "f23 duplicates past the n-neighbors cap"
           small-scale-message
@@ -229,7 +235,7 @@
           small-scale-message
           (line-rows (* limit-ratio (expt 2.0 -64)))
           (hash-set small 'metric 'manhattan))
-   (X-row "f22" every-row-equal (mat (make-list 8 '(1.5 1.5 1.5)) 'float32))
+   (X-row "f22" every-row-equal (list*->device-matrix (make-list 8 '(1.5 1.5 1.5)) #:dtype 'float32))
    (X-row "f22 zeros" every-row-equal zeros)
    (X-row "f1 before f11"
           "method: expected fft or exact"
@@ -285,22 +291,26 @@
   (check-row 'tsne-fit r (lambda () (apply-options tsne-fit options X))))
 
 (test-gpu "rows just inside the sqeuclidean, manhattan and pca init bounds fit"
-  (for* ([entry
-          (in-list
-           (list (list "f20b"
-                       (tiny-with (antipodal 1278245504.0 819714240.0))
-                       (hasheq 'perplexity 5.0 'metric 'sqeuclidean))
-                 (list "f20c"
-                       (tiny-with (antipodal inside-manhattan inside-manhattan inside-manhattan))
-                       (hasheq 'perplexity 5.0 'metric 'manhattan))
-                 (list "f20d" (mat inside-pca 'float32) (hasheq 'perplexity 3.0 'init 'pca))))]
+  (for* ([entry (in-list (list (list "f20b"
+                                     (tiny-with (antipodal 1278245504.0 819714240.0))
+                                     (hasheq 'perplexity 5.0 'metric 'sqeuclidean))
+                               (list "f20c"
+                                     (tiny-with
+                                      (antipodal inside-manhattan inside-manhattan inside-manhattan))
+                                     (hasheq 'perplexity 5.0 'metric 'manhattan))
+                               (list "f20d"
+                                     (list*->device-matrix inside-pca #:dtype 'float32)
+                                     (hasheq 'perplexity 3.0 'init 'pca))))]
          [method (in-list '(fft exact))])
     (match-define (list id X options) entry)
     (define fitted (apply-options tsne-fit (hash-set options 'method method) X))
     (check-true (finite-rows? (embedded fitted)) (format "~a ~a" id method))))
 
 (test-gpu "f23's remedies fit: centred offset rows, more neighbours, a line just above 2^-64"
-  (for* ([entry (in-list (list (list "centred" (mat (centred (offset-rows 1.7e9)) 'float32) small)
+  (for* ([entry (in-list (list (list "centred"
+                                     (list*->device-matrix (centred (offset-rows 1.7e9))
+                                                           #:dtype 'float32)
+                                     small)
                                (list "n-neighbors" (duplicates 40) (hash-set small 'n-neighbors 60))
                                (list "above 2^-64"
                                      (line-rows (/ (expt 2.0 -64) limit-ratio))
@@ -321,11 +331,12 @@
                       (lambda () (call X (hasheq 'perplexity 5.0 'learning-rate 1e30))))
     (drain-finalizers!)
     (check-equal? (probe-pool-used pool-device) before (symbol->string who)))
-  (check-cuml-error
-   'logic
-   (diverged-rx 'tsne-fit)
-   (lambda ()
-     (tsne-fit (mat (take (fixture-rows tiny) 2) 'float32) #:perplexity 2.0 #:method 'exact))))
+  (check-cuml-error 'logic
+                    (diverged-rx 'tsne-fit)
+                    (lambda ()
+                      (tsne-fit (list*->device-matrix (take (fixture-rows tiny) 2) #:dtype 'float32)
+                                #:perplexity 2.0
+                                #:method 'exact))))
 
 (test-gpu "f24: a non-array X is refused by the view check, under any seed"
   (for ([seed (in-list '(0 #f))])

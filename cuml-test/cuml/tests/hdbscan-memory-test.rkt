@@ -16,12 +16,12 @@
          (only-in racket/list take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
-         (only-in raft device-vector->list)
+         (only-in raft device-vector->list list*->device-matrix)
          (only-in raft/private/foreign/memory release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until drain-finalizers! settled-count)
          (only-in raft/tests/private/probe probe-pool-used)
-         (only-in "private/common-data.rkt" blank-matrix mat)
+         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/hdbscan-data.rkt" dataset)
          (only-in "private/process-memory.rkt"
@@ -52,12 +52,16 @@
   (native-model-release! (hdbscan-result-model released))
   (define live (hdbscan-fit X))
   (define short
-    (hdbscan-fit (mat (take (dataset 'b50) 9) 'float32) #:min-cluster-size 2 #:min-samples 5))
-  (define nan-row (mat '((1 1) (2 2) (+nan.0 0) (4 4)) 'float32))
+    (hdbscan-fit (list*->device-matrix (take (dataset 'b50) 9) #:dtype 'float32)
+                 #:min-cluster-size 2
+                 #:min-samples 5))
+  (define nan-row (list*->device-matrix '((1 1) (2 2) (+nan.0 0) (4 4)) #:dtype 'float32))
   (list (lambda () (hdbscan-fit (blank-matrix 300 2 'float64)))
         (lambda () (hdbscan-fit (blank-matrix 1 2 'float32)))
         (lambda () (hdbscan-fit X #:min-cluster-size 1))
-        (lambda () (hdbscan-fit (mat '((1 1) (2 2) (+nan.0 0) (4 4) (5 5) (6 6)) 'float32)))
+        (lambda ()
+          (hdbscan-fit (list*->device-matrix '((1 1) (2 2) (+nan.0 0) (4 4) (5 5) (6 6))
+                                             #:dtype 'float32)))
         (lambda () (hdbscan-approximate-predict live (blank-matrix 0 2 'float32)))
         (lambda () (hdbscan-membership-vector live (blank-matrix 4 3 'float32)))
         (lambda () (hdbscan-approximate-predict short points))
@@ -72,8 +76,8 @@
 (test-process-memory (format
                       "~a rounds of HDBSCAN fits, predictions and memberships leave device memory flat"
                       rounds)
-  (define X (mat (dataset 'b50) 'float32))
-  (define points (mat (dataset 'b10) 'float32))
+  (define X (list*->device-matrix (dataset 'b50) #:dtype 'float32))
+  (define points (list*->device-matrix (dataset 'b10) #:dtype 'float32))
   (define e (hdbscan))
   (define calls (refusals X points))
   (for ([i (in-range 4)])
@@ -124,7 +128,7 @@
 
 (test-process-memory "a release frees exactly the opaque bytes hdbscan-fit hands its model"
   (define rows (dataset 'overlap))
-  (define X (mat rows 'float32))
+  (define X (list*->device-matrix rows #:dtype 'float32))
   (define result (hdbscan-fit X))
   (define model (hdbscan-result-model result))
   (define opaque (native-model-opaque-bytes model))

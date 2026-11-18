@@ -23,7 +23,7 @@
          (only-in raft/private/array buffer->device-array device-array-buffer)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source)
-         (only-in "common-data.rkt" mat unit-roundoff))
+         (only-in "common-data.rkt" unit-roundoff))
 
 (provide bits-equal?
          constant-rows

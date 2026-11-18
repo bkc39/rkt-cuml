@@ -13,10 +13,9 @@
          (only-in racket/list combinations make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-vector->list dtype)
+         (only-in raft device-vector->list dtype list->device-vector list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" mat vec)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt"
                   cosine-cloud
@@ -90,7 +89,7 @@
 (test-gpu "fit and fit-predict are dbscan-fit's, y is ignored and the argument stays unfitted"
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (define X (mat grid-rows dt))
+      (define X (list*->device-matrix grid-rows #:dtype dt))
       (define e (dbscan #:eps 2 #:min-samples 4))
       (define fitted-e (fit e X '(ignored)))
       (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
@@ -104,16 +103,17 @@
       (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
       (check-equal? (device-vector->list (fit-predict e X)) grid-labels)
       (match-define (list _ weighted-core)
-        (result->lists (dbscan-model (fit e X #:sample-weight (vec grid-weights dt)))))
+        (result->lists
+         (dbscan-model (fit e X #:sample-weight (list->device-vector grid-weights #:dtype dt)))))
       (check-equal? weighted-core grid-weighted-core)
-      (define Y (mat (integer-grid 300 2 20 3) dt))
+      (define Y (list*->device-matrix (integer-grid 300 2 20 3) #:dtype dt))
       (define options (hasheq 'eps 1.5 'max-mbytes-per-batch 1 'min-samples 4 'out-dtype 'int64))
       (check-equal? (device-vector->list (fit-predict (apply-options dbscan options) Y))
                     (device-vector->list (dbscan-result-labels
                                           (apply-options dbscan-fit options Y)))))))
 
 (test-gpu "errors are named after the generic that was called"
-  (define X (mat grid-rows 'float64))
+  (define X (list*->device-matrix grid-rows #:dtype 'float64))
   (check-cuml-error 'logic
                     "fit: eps: expected greater than 0, got 0"
                     (lambda () (fit (dbscan #:eps 0) X)))
@@ -128,10 +128,12 @@
 
 (define (identity-fixtures dt)
   (define rows (integer-grid 150 2 12 5))
-  (list (list "euclidean" (mat (integer-grid 300 2 20 3) dt) (hasheq))
-        (list "precomputed" (mat (distance-matrix rows) dt) (hasheq 'metric 'precomputed))
+  (list (list "euclidean" (list*->device-matrix (integer-grid 300 2 20 3) #:dtype dt) (hasheq))
+        (list "precomputed"
+              (list*->device-matrix (distance-matrix rows) #:dtype dt)
+              (hasheq 'metric 'precomputed))
         (list "cosine"
-              (mat (cosine-cloud 300 3 0.02 4) dt)
+              (list*->device-matrix (cosine-cloud 300 3 0.02 4) #:dtype dt)
               (hasheq 'metric 'cosine 'eps 0.02 'min-samples 4))))
 
 (define identity-base (dbscan-params #:eps 2 #:min-samples 7 #:out-dtype 'int64))

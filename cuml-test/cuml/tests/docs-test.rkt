@@ -68,7 +68,6 @@
                   shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" mat)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/linkage-data.rkt" hand-children hand-labels hand-rows)
          (only-in "private/spectral-data.rkt" planted? truth-of))
@@ -258,7 +257,7 @@
                 '(0 0 0 0 1 1 1 -1)))
 
 (define (hand)
-  (mat hand-rows 'float32))
+  (list*->device-matrix hand-rows #:dtype 'float32))
 
 (define (hand-labels-at k)
   (list-ref hand-labels (sub1 k)))

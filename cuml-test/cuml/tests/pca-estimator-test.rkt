@@ -21,9 +21,9 @@
                   pca-transform)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
+         (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" mat)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" listed printed round-trips)
          (only-in "private/pca-data.rkt" fitted-of fixture-matrix integer-fixture normal-fixture)
@@ -93,4 +93,5 @@
 (test-gpu "fit-transform names the generic for a fit refusal"
   (check-cuml-error 'logic
                     "fit-transform: X: expected at least 2 rows, got 1"
-                    (lambda () (fit-transform (pca) (mat '((1 2 3)) 'float32)))))
+                    (lambda ()
+                      (fit-transform (pca) (list*->device-matrix '((1 2 3)) #:dtype 'float32)))))

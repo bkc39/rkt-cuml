@@ -25,7 +25,6 @@
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" mat)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/pca-data.rkt" magnitude-rows)
          (only-in "private/scaler-data.rkt" scaled-rows))
@@ -130,7 +129,7 @@
 
 (test-gpu "the manual: the whitened round trip needs every root of variance at least epsilon"
   (define (round-trip rows)
-    (define M (mat rows 'float32))
+    (define M (list*->device-matrix rows #:dtype 'float32))
     (define fitted (pca-fit M #:whiten #t))
     (values (~> (pca-transform fitted M) (pca-inverse-transform fitted _) device-matrix->list*)
             (map sqrt (device-vector->list (pca-result-explained-variance fitted)))

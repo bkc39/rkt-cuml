@@ -9,9 +9,9 @@
          (only-in racket/list append* append-map list-set make-list range take)
          (only-in racket/match match-define match-lambda)
          (only-in racket/math pi)
-         (only-in raft device-vector->list list->device-vector)
+         (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in threading ~>)
-         (only-in "common-data.rkt" first-copies gaussian mat squared-distance)
+         (only-in "common-data.rkt" block-starts gaussian squared-distance)
          (only-in "dbscan-data.rkt" same-partition? seeded))
 
 (provide (struct-out fit-case)
@@ -72,7 +72,7 @@
               n))
 
 (define (unit-rings-of sizes)
-  (unit-edges (for*/list ([(n o) (in-parallel (in-list sizes) (in-list (first-copies sizes)))]
+  (unit-edges (for*/list ([(n o) (in-parallel (in-list sizes) (in-list (block-starts sizes)))]
                           [i (in-range n)])
                 (cons (+ o i) (+ o (modulo (add1 i) n))))
               (apply + sizes)))
@@ -156,7 +156,7 @@
   (hash-set! edges (cons j i) w))
 
 (define (sparse-blocks sizes p seed #:between [between 2] #:connected? [connected? #t])
-  (define starts (first-copies sizes))
+  (define starts (block-starts sizes))
   (define edges (make-hash))
   (seeded seed
           (lambda ()
@@ -197,7 +197,7 @@
 
 (define (cliques sizes)
   (define edges (make-hash))
-  (for* ([(s o) (in-parallel (in-list sizes) (in-list (first-copies sizes)))]
+  (for* ([(s o) (in-parallel (in-list sizes) (in-list (block-starts sizes)))]
          [i (in-range s)]
          [j (in-range (add1 i) s)])
     (set-edge! edges (+ o i) (+ o j) 1.0))
@@ -281,7 +281,7 @@
 
 (define (three-blobs-matrix #:n-each [n-each 100])
   (define-values (rows _truth) (three-blobs #:n-each n-each))
-  (mat rows 'float32))
+  (list*->device-matrix rows #:dtype 'float32))
 
 (define (three-blocks)
   (sparse-blocks '(30 40 50) 0.3 0))
@@ -290,16 +290,10 @@
   (map list (graph-rows g) (graph-cols g) (graph-vals g)))
 
 (define (entries->graph es n)
-  (graph (for/list ([e (in-list es)])
-           (match-define (list i _ _) e)
-           i)
-         (for/list ([e (in-list es)])
-           (match-define (list _ j _) e)
-           j)
-         (for/list ([e (in-list es)])
-           (match-define (list _ _ v) e)
-           v)
-         n))
+  (for/lists (rows cols vals #:result (graph rows cols vals n))
+             ([e (in-list es)])
+             (match-define (list i j v) e)
+             (values i j v)))
 
 (define (graph-upper g)
   (entries->graph (filter (match-lambda

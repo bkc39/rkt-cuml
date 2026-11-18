@@ -2,7 +2,8 @@
 
 (require (only-in cuml/manifold umap-fit umap-fit-transform umap-transform)
          (only-in racket/list make-list)
-         (only-in "private/common-data.rkt" blank-matrix mat)
+         (only-in raft list*->device-matrix)
+         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/process-memory.rkt" test-rounds-and-refusals)
          (only-in "private/scaler-data.rkt" normal-rows))
 
@@ -13,7 +14,8 @@
   fitted)
 
 (define (refusals fitted)
-  (define nan-row (mat (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) 'float32))
+  (define nan-row
+    (list*->device-matrix (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) #:dtype 'float32))
   (define narrow (blank-matrix 4 3 'float32))
   (define no-rows (blank-matrix 0 16 'float32))
   (define one-row (blank-matrix 1 16 'float32))
@@ -24,7 +26,8 @@
         (lambda () (umap-transform fitted no-rows))))
 
 (test-rounds-and-refusals "fit, transform and fit-transform"
-                          (lambda () (mat (normal-rows 7 4096 16 'float32) 'float32))
+                          (lambda ()
+                            (list*->device-matrix (normal-rows 7 4096 16 'float32) #:dtype 'float32))
                           one-round
                           refusals
                           #:rounds 30

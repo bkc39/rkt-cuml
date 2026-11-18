@@ -18,10 +18,10 @@
          (only-in racket/list combinations make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-vector->list)
+         (only-in raft device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" blank-vector mat)
+         (only-in "private/common-data.rkt" blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips)
          (only-in "private/spectral-data.rkt"
@@ -156,7 +156,7 @@
 
 (define (close-blobs-matrix)
   (define-values (rows _truth) (blobs 30 3 2 2.0 0))
-  (mat rows 'float32))
+  (list*->device-matrix rows #:dtype 'float32))
 
 (define (ways X options)
   (define base (spectral-clustering-params #:n-init 2 #:random-state 1))

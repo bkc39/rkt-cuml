@@ -10,8 +10,8 @@
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
-         (only-in "common-data.rkt" mat unit-roundoff)
+         (only-in raft device-matrix->list* list*->device-matrix)
+         (only-in "common-data.rkt" unit-roundoff)
          (only-in "exact-algebra.rkt" dot)
          (only-in "pca-data.rkt"
                   fitted-components
@@ -90,7 +90,7 @@
 (define (fit-ours f dt k #:whiten [whiten #f] #:solver [solver 'full])
   (define rows (twin-rows f dt))
   (match-define (cons first-row _) rows)
-  (define X (mat rows dt))
+  (define X (list*->device-matrix rows #:dtype dt))
   (define m (min (length rows) (length first-row)))
   (define result (pca-fit X #:n-components (and (< k m) k) #:whiten whiten #:solver solver #:tol 0.0))
   (ours (fitted-of result)

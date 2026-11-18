@@ -11,9 +11,9 @@
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list list->device-vector)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" vec worst)
+         (only-in "private/common-data.rkt" worst)
          (only-in "private/metrics-data.rkt" label-pair overlap overlap-labels projection tolerance)
          (only-in "private/python-env.rkt" run-twin test-twin))
 
@@ -47,7 +47,8 @@
     (list truth found)))
 
 (define (counts truth found)
-  (~> (contingency-matrix (vec truth 'int32) (vec found 'int64))
+  (~> (contingency-matrix (list->device-vector truth #:dtype 'int32)
+                          (list->device-vector found #:dtype 'int64))
       contingency-table-counts
       device-matrix->list*))
 
@@ -81,7 +82,9 @@
                [theirs (in-list results)]
                [i (in-naturals)])
       (match-define (list truth found) c)
-      (define ours (adjusted-rand-score (vec truth 'int32) (vec found 'int32)))
+      (define ours
+        (adjusted-rand-score (list->device-vector truth #:dtype 'int32)
+                             (list->device-vector found #:dtype 'int32)))
       (define gap (abs (- ours (hash-ref theirs 'sklearn))))
       (test-case (format "case ~a" i)
         (check-true (<= gap 1e-14) (format "~a against sklearn's ~a" ours (hash-ref theirs 'sklearn)))
@@ -100,8 +103,9 @@
           'cuml #t))
 
 (define (ours X ys metric)
-  (list (silhouette-score X (vec ys 'int32) #:metric metric)
-        (device-vector->list (silhouette-samples X (vec ys 'int32) #:metric metric))))
+  (list (silhouette-score X (list->device-vector ys #:dtype 'int32) #:metric metric)
+        (device-vector->list
+         (silhouette-samples X (list->device-vector ys #:dtype 'int32) #:metric metric))))
 
 (define (noisy-labels)
   (for/list ([y (in-list (overlap-labels #:each each))]

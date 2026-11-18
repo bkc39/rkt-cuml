@@ -5,10 +5,10 @@
          (only-in racket/match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" least-magnitude mat unit-roundoff unscaled worst)
+         (only-in "private/common-data.rkt" least-magnitude unit-roundoff unscaled worst)
          (only-in "private/pca-data.rkt"
                   first-max-entries
                   fixture-name
@@ -54,7 +54,9 @@
 
 (define (fit-of f dt solver k)
   (define rows (fixture-rows f dt))
-  (values rows (tsvd-of (tsvd-fit (mat rows dt) #:n-components k #:solver solver))))
+  (values rows
+          (tsvd-of
+           (tsvd-fit (list*->device-matrix rows #:dtype dt) #:n-components k #:solver solver))))
 
 (define (law-cases)
   (for*/list ([dt (in-list dtypes)]
@@ -117,8 +119,8 @@
       (check-true (positive-zeros? twos-ratio) (format "twos ~a" twos-ratio)))))
 
 (define (tiny-problems dt solver by)
-  (define unit-X (mat magnitude-rows dt))
-  (define small-X (mat (scaled-rows magnitude-rows by) dt))
+  (define unit-X (list*->device-matrix magnitude-rows #:dtype dt))
+  (define small-X (list*->device-matrix (scaled-rows magnitude-rows by) #:dtype dt))
   (match-define (svd c v r s) (tsvd-of (tsvd-fit unit-X #:n-components 2 #:solver solver)))
   (match-define (svd _ _ _ all-singular) (tsvd-of (tsvd-fit unit-X #:n-components 3 #:solver solver)))
   (define-values (small T*) (tsvd-fit-transform small-X #:n-components 2 #:solver solver))
@@ -165,7 +167,7 @@
   (for ([c (in-list '((float32 full 1e-38) (float64 full 1e-308) (float32 jacobi 1e-40)))])
     (match-define (list dt solver by) c)
     (test-case (format "~a ~a ~a" dt solver by)
-      (define X (mat (scaled-rows magnitude-rows by) dt))
+      (define X (list*->device-matrix (scaled-rows magnitude-rows by) #:dtype dt))
       (define-values (_ T) (tsvd-fit-transform X #:n-components 2 #:solver solver))
       (define fitted (tsvd-fit X #:n-components 2 #:solver solver))
       (check-true (bits-equal? (device-matrix->list* T)

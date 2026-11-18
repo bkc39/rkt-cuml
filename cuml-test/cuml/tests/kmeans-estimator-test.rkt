@@ -48,10 +48,17 @@
                   check-true
                   fail
                   test-case)
-         (only-in raft device-resources exn:fail:raft-kind exn:fail:raft? shape with-device-resources)
+         (only-in raft
+                  device-resources
+                  exn:fail:raft-kind
+                  exn:fail:raft?
+                  list->device-vector
+                  list*->device-matrix
+                  shape
+                  with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" blank-matrix mat vec)
+         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" keywords-of printed)
          (only-in "private/kmeans-data.rkt"
@@ -88,7 +95,7 @@
         (list '#:oversampling-factor 'oversampling-factor 1.5)))
 
 (define (grid8-fit [dt 'float64])
-  (fit (kmeans #:n-clusters 2 #:random-state 1) (mat grid8 dt)))
+  (fit (kmeans #:n-clusters 2 #:random-state 1) (list*->device-matrix grid8 #:dtype dt)))
 
 (test-case "the default parameters, and every keyword round-trips"
   (check-equal? (estimator-params (kmeans)) default-params)
@@ -155,7 +162,7 @@
 (test-gpu "a fitted estimator prints fitted"
   (define text "#<kmeans fitted #:n-clusters 2 #:random-state 1>")
   (check-equal? (printed (grid8-fit)) (list text text text))
-  (define bare (fit (kmeans #:n-clusters 2) (mat grid8 'float64)))
+  (define bare (fit (kmeans #:n-clusters 2) (list*->device-matrix grid8 #:dtype 'float64)))
   (check-equal? (printed bare) (make-list 3 "#<kmeans fitted #:n-clusters 2>")))
 
 (test-case "equal parameters are equal, with equal hash codes"
@@ -168,11 +175,11 @@
 
 (test-gpu "a fit is equal only to itself"
   (define e (kmeans #:n-clusters 2 #:random-state 1))
-  (define f (fit e (mat grid8 'float64)))
+  (define f (fit e (list*->device-matrix grid8 #:dtype 'float64)))
   (check-false (fitted? e))
   (check-equal? f f)
   (check-not-equal? e f)
-  (check-not-equal? f (fit e (mat grid8 'float64)))
+  (check-not-equal? f (fit e (list*->device-matrix grid8 #:dtype 'float64)))
   (check-equal? (estimator-set-params f (hasheq)) e)
   (check-equal? (equal-hash-code (estimator-set-params f (hasheq))) (equal-hash-code e)))
 
@@ -189,24 +196,24 @@
                  #:sample-weight (fit-case-w c)))
 
 (define (weightings dt weights)
-  (list #f (vec weights dt)))
+  (list #f (list->device-vector weights #:dtype dt)))
 
 (define (grid-cases dt)
   (append (for*/list ([init (in-list string-inits)]
                       [seed (in-range 1 4)]
                       [w (in-list (weightings dt (cyclic-weights 64)))])
             (fit-case (format "grid64 ~a ~a seed ~a~a" dt init seed (if w " weighted" ""))
-                      (mat grid64 dt)
+                      (list*->device-matrix grid64 #:dtype dt)
                       w
                       '(#:init #:n-clusters #:random-state)
                       (list init 4 seed)
                       #t))
           (for/list ([w (in-list (weightings dt step-weights))])
             (fit-case (format "grid8 ~a matrix init~a" dt (if w " weighted" ""))
-                      (mat grid8 dt)
+                      (list*->device-matrix grid8 #:dtype dt)
                       w
                       '(#:init)
-                      (list (mat start dt))
+                      (list (list*->device-matrix start #:dtype dt))
                       #t))))
 
 (define (blob-cases dt)
@@ -262,12 +269,12 @@
          [init (in-list string-inits)])
     (test-case (format "~a ~a" dt init)
       (define e (kmeans #:n-clusters 4 #:init init #:random-state 1))
-      (define B (mat grid64 dt))
-      (check-equal? (outcome (kmeans-model (fit (fit e (mat grid8 dt)) B)))
+      (define B (list*->device-matrix grid64 #:dtype dt))
+      (check-equal? (outcome (kmeans-model (fit (fit e (list*->device-matrix grid8 #:dtype dt)) B)))
                     (outcome (kmeans-model (fit e B)))))))
 
 (test-gpu "errors name the generic that was called"
-  (define X (mat grid8 'float64))
+  (define X (list*->device-matrix grid8 #:dtype 'float64))
   (define f (grid8-fit))
   (define int32 (blank-matrix 4 2 'int32))
   (for ([message (in-list '("fit: X: 8 samples are fewer than the 9 clusters"
@@ -305,7 +312,7 @@
     [other (fail (format "expected an exn:fail:raft, got ~e" other))]))
 
 (test-gpu "the resources parameter is forwarded"
-  (define X (mat grid8 'float64))
+  (define X (list*->device-matrix grid8 #:dtype 'float64))
   (define released (with-device-resources ([r (device-resources)]) r))
   (check-released "fit: the device resources on device 0 were released"
                   (lambda () (fit (kmeans #:n-clusters 2 #:resources released) X)))
@@ -366,7 +373,7 @@
   (check-true (and (memq 'kmeans-params names) (memq 'current-batch-samples names) #t)))
 
 (test-gpu "n-clusters is inferred from a matrix init when the estimator is built"
-  (define m (mat start 'float64))
+  (define m (list*->device-matrix start #:dtype 'float64))
   (define e (kmeans #:init m))
   (check-equal? (hash-ref (estimator-params e) 'n-clusters) (car (shape m)))
   (check-equal? (hash-ref (estimator-params (estimator-set-params e (hasheq 'init 'random)))
@@ -389,10 +396,10 @@
               [name (list (cons '#:init name))]))))
 
 (define (first-rows-of rows k)
-  (mat (for/list ([row (in-list rows)]
-                  [_ (in-range k)])
-         row)
-       'float64))
+  (list*->device-matrix (for/list ([row (in-list rows)]
+                                   [_ (in-range k)])
+                          row)
+                        #:dtype 'float64))
 
 (define (kw-call proc options positional)
   (define sorted (sort options keyword<? #:key car))
@@ -433,11 +440,14 @@
                      (fit-case-w c)
                      (map cons (fit-case-kws c) (fit-case-vals c))))
   (for ([options (in-list (option-cases grid64))])
-    (check-five-ways (format "~a" options) (mat grid64 'float64) #f options)))
+    (check-five-ways (format "~a" options)
+                     (list*->device-matrix grid64 #:dtype 'float64)
+                     #f
+                     options)))
 
 (test-gpu "a set's n-clusters stays when only init is given"
-  (define X (mat grid8 'float64))
-  (define M (mat start 'float64))
+  (define X (list*->device-matrix grid8 #:dtype 'float64))
+  (define M (list*->device-matrix start #:dtype 'float64))
   (check-cuml-error 'logic
                     "kmeans-fit: init: expected 8 rows, got 2"
                     (lambda () (kmeans-fit X #:params (kmeans-params) #:init M)))

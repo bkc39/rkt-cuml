@@ -27,8 +27,8 @@
          (only-in racket/list append* last list-set make-list range remove-duplicates)
          (only-in racket/match match match-define match-lambda)
          (only-in racket/runtime-path define-runtime-path)
-         (only-in raft device-matrix->list* device-vector->list)
-         (only-in "common-data.rkt" gaussian mat repeat-each)
+         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
+         (only-in "common-data.rkt" gaussian repeat-each)
          (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
          (only-in "spectral-data.rkt" blobs circles float32-rows moons))
@@ -117,7 +117,7 @@
     row))
 
 (define (alternate-matrix name parity)
-  (mat (alternate (dataset name) parity) 'float32))
+  (list*->device-matrix (alternate (dataset name) parity) #:dtype 'float32))
 
 (define (label-count labels)
   (add1 (apply max -1 labels)))
@@ -142,7 +142,7 @@
           (device-vector->list (hdbscan-spanning-tree-weights mst))))
 
 (define (fitted-of rows #:options [options (hasheq)])
-  (fit-lists (apply-options hdbscan-fit options (mat rows 'float32))))
+  (fit-lists (apply-options hdbscan-fit options (list*->device-matrix rows #:dtype 'float32))))
 
 (define (prediction->lists p)
   (list (device-vector->list (hdbscan-prediction-labels p))

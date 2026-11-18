@@ -10,10 +10,11 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
+         (only-in raft list*->device-matrix)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
-         (only-in "private/common-data.rkt" blank-matrix mat)
+         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/process-memory.rkt"
                   baseline-sample
@@ -35,11 +36,12 @@
   fitted)
 
 (define (refusals fitted)
-  (define nan-row (mat (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) 'float32))
+  (define nan-row
+    (list*->device-matrix (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) #:dtype 'float32))
   (define no-rows (blank-matrix 0 32 'float32))
   (define narrow (blank-matrix 4 3 'float32))
   (define integers (blank-matrix 4 32 'int32))
-  (define inf-row (mat (list (cons +inf.0 (make-list 31 0.0))) 'float32))
+  (define inf-row (list*->device-matrix (list (cons +inf.0 (make-list 31 0.0))) #:dtype 'float32))
   (list (lambda () (standard-scaler-fit nan-row))
         (lambda () (standard-scaler-fit no-rows))
         (lambda () (standard-scaler-transform fitted narrow))
@@ -49,7 +51,7 @@
 (test-process-memory (format
                       "~a fit, transform and inverse rounds and their refusals leave device memory flat"
                       rounds)
-  (define X (mat (normal-rows 7 4096 32 'float32) 'float32))
+  (define X (list*->device-matrix (normal-rows 7 4096 32 'float32) #:dtype 'float32))
   (define fitted (one-round X))
   (define calls (refusals fitted))
   (define (refuse-all)

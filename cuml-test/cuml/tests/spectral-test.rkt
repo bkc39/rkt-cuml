@@ -9,9 +9,9 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list dtype shape)
+         (only-in raft device-matrix->list* device-vector->list dtype list*->device-matrix shape)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" mat repeat-each)
+         (only-in "private/common-data.rkt" repeat-each)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/spectral-data.rkt"
                   blobs
@@ -57,7 +57,7 @@
 
 (test-gpu "SC11: n-neighbors past n-1 counts as n-1, and auto components are min(k, (n-1)/3)"
   (define-values (rows _truth) (blobs 10 2 2 50.0 3))
-  (define X (mat rows 'float32))
+  (define X (list*->device-matrix rows #:dtype 'float32))
   (define at-most (labels X #:n-clusters 2 #:n-neighbors 19))
   (for ([nn (in-list '(20 21 1000 2147483647))])
     (check-equal? (labels X #:n-clusters 2 #:n-neighbors nn) at-most (format "~a neighbours" nn)))
@@ -148,8 +148,11 @@
   (check-cuml-error 'generic
                     eigensolver
                     (lambda ()
-                      (labels (mat (repeat-each rows 30) 'float32) #:n-clusters 3 #:random-state 0)))
-  (check-true (planted? (labels (mat (repeat-each rows 2) 'float32) #:n-clusters 3)
+                      (labels (list*->device-matrix (repeat-each rows 30) #:dtype 'float32)
+                              #:n-clusters 3
+                              #:random-state 0)))
+  (check-true (planted? (labels (list*->device-matrix (repeat-each rows 2) #:dtype 'float32)
+                                #:n-clusters 3)
                         (repeat-each truth 2))))
 
 (test-gpu "one edge among 1000 samples, the rest isolated, does not converge"

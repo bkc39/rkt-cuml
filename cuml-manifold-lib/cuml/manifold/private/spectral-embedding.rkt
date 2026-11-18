@@ -42,13 +42,15 @@
                             ['random-state random-state])
     params)
   (define out (deposit-for/who who resources))
-  (apply
-   job
-   who
-   resources
-   (append
-    inputs
-    (list out n-components (boolean->int norm-laplacian) (boolean->int drop-first) (or random-state (drawn-seed)))))
+  (apply job
+         who
+         resources
+         (append inputs
+                 (list out
+                       n-components
+                       (boolean->int norm-laplacian)
+                       (boolean->int drop-first)
+                       (or random-state (drawn-seed)))))
   (match-define (list embedding) (deposit->list out))
   (spectral-embedding-result embedding n-neighbors params))
 

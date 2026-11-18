@@ -17,10 +17,10 @@
          (only-in racket/list combinations make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-vector->list)
+         (only-in raft device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" blank-vector mat)
+         (only-in "private/common-data.rkt" blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/dbscan-data.rkt" integer-grid)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips)
@@ -100,7 +100,7 @@
   (check-false (agglomerative-clustering-model (agglomerative-clustering))))
 
 (test-gpu "fit and fit-predict are single-linkage-fit's, y is ignored and the argument stays unfitted"
-  (define X (mat hand-rows 'float32))
+  (define X (list*->device-matrix hand-rows #:dtype 'float32))
   (define e (agglomerative-clustering #:n-clusters 3))
   (define fitted-e (fit e X '(ignored)))
   (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
@@ -113,7 +113,7 @@
   (check-equal? fitted-e fitted-e)
   (check-false (fitted? (estimator-set-params fitted-e (hasheq))))
   (check-equal? (device-vector->list (fit-predict e X)) (list-ref hand-labels 2))
-  (define Y (mat (integer-grid 300 2 20 3) 'float32))
+  (define Y (list*->device-matrix (integer-grid 300 2 20 3) #:dtype 'float32))
   (define options (hasheq 'n-clusters 5 'connectivity 'pairwise 'c 3))
   (check-equal? (device-vector->list (fit-predict (apply-options agglomerative-clustering options) Y))
                 (device-vector->list (single-linkage-result-labels
@@ -135,7 +135,7 @@
    (estimated (apply-options estimator-set-params options (agglomerative-clustering)))))
 
 (test-gpu "a keyword is the same as a set with that keyword, through single-linkage-fit and the estimator"
-  (define X (mat (integer-grid 300 2 20 3) 'float32))
+  (define X (list*->device-matrix (integer-grid 300 2 20 3) #:dtype 'float32))
   (for* ([k (in-range 3)]
          [keys (in-list (combinations '(n-clusters connectivity c) k))])
     (define options
@@ -149,7 +149,7 @@
       (check-equal? estimated keyword label))))
 
 (test-gpu "errors are named after the generic that was called"
-  (define X (mat hand-rows 'float32))
+  (define X (list*->device-matrix hand-rows #:dtype 'float32))
   (check-cuml-error 'logic
                     "fit: n-clusters: expected at least 1, got 0"
                     (lambda () (fit (agglomerative-clustering #:n-clusters 0) X)))

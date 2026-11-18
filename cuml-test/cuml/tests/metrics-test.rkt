@@ -4,9 +4,9 @@
          (only-in racket/list remove-duplicates)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list dtype shape)
+         (only-in raft device-matrix->list* device-vector->list dtype list->device-vector shape)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" pick vec)
+         (only-in "private/common-data.rkt" pick)
          (only-in "private/metrics-data.rkt"
                   bijection
                   host-ari
@@ -28,7 +28,8 @@
 
 (define (table truth found #:true [dt1 'int32] #:pred [dt2 'int32])
   (match-define (contingency-table counts rows columns)
-    (contingency-matrix (vec truth dt1) (vec found dt2)))
+    (contingency-matrix (list->device-vector truth #:dtype dt1)
+                        (list->device-vector found #:dtype dt2)))
   (list counts rows columns))
 
 (define (table-lists truth found #:true [dt1 'int32] #:pred [dt2 'int32])
@@ -36,7 +37,8 @@
   (list (device-matrix->list* counts) (device-vector->list rows) (device-vector->list columns)))
 
 (define (ari truth found #:true [dt1 'int32] #:pred [dt2 'int32])
-  (adjusted-rand-score (vec truth dt1) (vec found dt2)))
+  (adjusted-rand-score (list->device-vector truth #:dtype dt1)
+                       (list->device-vector found #:dtype dt2)))
 
 (test-gpu "CC1: counts are int64 k1 x k2; the label vectors are the sorted distinct values in their dtypes"
   (for* ([c (in-list (cases))]

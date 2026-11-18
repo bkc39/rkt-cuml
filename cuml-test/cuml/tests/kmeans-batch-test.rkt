@@ -21,8 +21,8 @@
                   check-true
                   exn:test:check?
                   test-case)
+         (only-in raft list*->device-matrix list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" mat vec)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/kmeans-data.rkt"
                   blob-data
@@ -150,7 +150,7 @@
                 [X (in-value (blob-data rows 4 16 11 dt))]
                 [init (in-list inits)]
                 [n-init (in-list '(1 3))]
-                [w (in-list (list #f (vec (cyclic-weights rows) dt)))]
+                [w (in-list (list #f (list->device-vector (cyclic-weights rows) #:dtype dt)))]
                 [reference (in-value (fitted X dt init n-init w 32768))]
                 [batch (in-list (list 7 100 (sub1 rows) rows))])
       (define name (format "~a ~a n-init ~a~a batch ~a" dt init n-init (if w " weighted" "") batch))
@@ -170,11 +170,11 @@
   (define grids
     (for*/list ([dt (in-list dtypes)]
                 [batch (in-list '(1 7 63 64))])
-      (define X (mat grid64 dt))
+      (define X (list*->device-matrix grid64 #:dtype dt))
       (define name (format "grid64 ~a batch ~a" dt batch))
       (define reference (fitted X dt 'random 1 #f 32768))
       (define (started)
-        (outcome (kmeans-fit X #:init (mat grid64-start dt))))
+        (outcome (kmeans-fit X #:init (list*->device-matrix grid64-start #:dtype dt))))
       (check-equal? (outcome (fitted X dt 'random 1 #f batch)) (outcome reference) name)
       (check-equal? (parameterize ([current-batch-samples batch])
                       (started))
@@ -199,7 +199,7 @@
 
 (test-gpu "a parameterize, the keyword and the estimator's setting choose the same batch"
   (for ([dt (in-list dtypes)])
-    (define X (mat grid64 dt))
+    (define X (list*->device-matrix grid64 #:dtype dt))
     (define by-parameter
       (parameterize ([current-batch-samples 7])
         (kmeans-fit X #:n-clusters 4 #:init 'random #:random-state 2)))

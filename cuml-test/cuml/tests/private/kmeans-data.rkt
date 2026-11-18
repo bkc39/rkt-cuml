@@ -10,8 +10,7 @@
                   device-vector
                   device-vector->list
                   list*->device-matrix
-                  list->device-vector)
-         (only-in "common-data.rkt" mat))
+                  list->device-vector))
 
 (provide argmin-row
          blob-data
@@ -86,7 +85,7 @@
   X)
 
 (define (first-rows X k dt)
-  (mat (take (host X) k) dt))
+  (list*->device-matrix (take (host X) k) #:dtype dt))
 
 (define (squared-distance x c)
   (for/sum ([a (in-list x)] [b (in-list c)]) (* (- a b) (- a b))))

@@ -3,8 +3,8 @@
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
          (only-in racket/match match match-define)
          (only-in racket/math exact-floor)
-         (only-in "blob-data.rkt" uniform-source)
-         (only-in "common-data.rkt" mat vec))
+         (only-in raft list*->device-matrix list->device-vector)
+         (only-in "blob-data.rkt" uniform-source))
 
 (provide accuracy
          integer-weights
@@ -16,20 +16,24 @@
 
 (define (on xs dt)
   (match xs
-    [(cons (? list?) _) (mat xs dt)]
-    [_ (vec xs dt)]))
+    [(cons (? list?) _) (list*->device-matrix xs #:dtype dt)]
+    [_ (list->device-vector xs #:dtype dt)]))
 
 (define (weights-of w [dt 'float64])
-  (and w (vec w dt)))
+  (and w (list->device-vector w #:dtype dt)))
 
 (define (r2 y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
-  (r2-score (vec y dt) (vec p pt) #:sample-weight (weights-of w wt)))
+  (r2-score (list->device-vector y #:dtype dt)
+            (list->device-vector p #:dtype pt)
+            #:sample-weight (weights-of w wt)))
 
 (define (mse y p [w #f] #:dtype [dt 'float64] #:pred [pt dt] #:weight [wt 'float64])
   (mean-squared-error (on y dt) (on p pt) #:sample-weight (weights-of w wt)))
 
 (define (accuracy a b [w #f] #:true [at 'int32] #:pred [bt at] #:weight [wt 'float64])
-  (accuracy-score (vec a at) (vec b bt) #:sample-weight (weights-of w wt)))
+  (accuracy-score (list->device-vector a #:dtype at)
+                  (list->device-vector b #:dtype bt)
+                  #:sample-weight (weights-of w wt)))
 
 (define int32-palette '(-1 0 1 2 7 2147483647 -2147483647 -2147483648))
 

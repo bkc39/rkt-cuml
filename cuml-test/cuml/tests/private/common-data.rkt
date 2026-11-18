@@ -1,25 +1,18 @@
 #lang racket/base
 
 (require (only-in racket/math pi sqr)
-         (only-in raft
-                  device-matrix
-                  device-vector
-                  device-vector->list
-                  device-vector?
-                  list*->device-matrix
-                  list->device-vector))
+         (only-in raft device-matrix device-vector device-vector->list device-vector?))
 
 (provide bits-of
          blank-matrix
          blank-vector
          columns-of
-         first-copies
+         block-starts
          flonum-exact
          gamma
          gaussian
          host
          least-magnitude
-         mat
          mean
          noise
          pick
@@ -29,7 +22,6 @@
          squared-distance
          unit-roundoff
          unscaled
-         vec
          worst)
 
 (define (bits-of dt xs)
@@ -46,7 +38,7 @@
 (define (columns-of rows)
   (apply map list rows))
 
-(define (first-copies weights)
+(define (block-starts weights)
   (for/fold ([at 0]
              [firsts '()]
              #:result (reverse firsts))
@@ -71,9 +63,6 @@
   (if (eq? dt 'float32)
       (expt 2 -149)
       (expt 2 -1074)))
-
-(define (mat rows dt)
-  (list*->device-matrix rows #:dtype dt))
 
 (define (mean xs)
   (/ (apply + xs) (length xs)))
@@ -111,9 +100,6 @@
 
 (define (unscaled x by power)
   (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))
-
-(define (vec xs dt)
-  (list->device-vector xs #:dtype dt))
 
 (define (worst xs ys)
   (for/fold ([w 0.0])

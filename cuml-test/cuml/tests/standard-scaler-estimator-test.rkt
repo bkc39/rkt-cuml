@@ -25,10 +25,10 @@
          (only-in racket/generic exn:fail:support?)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-exn check-false check-not-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" blank-matrix mat)
+         (only-in "private/common-data.rkt" blank-matrix)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" printed round-trips)
          (only-in "private/scaler-data.rkt" bits-equal? normal-rows statistics))
@@ -69,7 +69,7 @@
   (check-equal? (capabilities (standard-scaler) standard-scaler?) '(#t #f #f #t #f #t)))
 
 (test-gpu "inverse-transform of a transformer without one is not supported"
-  (define X (mat (normal-rows 2 40 2 'float32) 'float32))
+  (define X (list*->device-matrix (normal-rows 2 40 2 'float32) #:dtype 'float32))
   (check-exn exn:fail:support? (lambda () (inverse-transform (fit (kmeans #:n-clusters 2) X) X))))
 
 (test-gpu "L11, L18: the estimator is the procedures, bitwise, and fit leaves its argument unfitted"
@@ -77,7 +77,7 @@
          [with-mean (in-list '(#t #f))]
          [with-std (in-list '(#t #f))])
     (test-case (format "~a ~a ~a" dt with-mean with-std)
-      (define X (mat (normal-rows 11 300 7 dt) dt))
+      (define X (list*->device-matrix (normal-rows 11 300 7 dt) #:dtype dt))
       (define e (standard-scaler #:with-mean with-mean #:with-std with-std))
       (define fitted-e (fit e X '(ignored)))
       (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))

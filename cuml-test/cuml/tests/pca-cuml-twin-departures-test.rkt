@@ -4,9 +4,9 @@
          (only-in racket/list append* last take)
          (only-in racket/match match-define)
          (only-in rackunit check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" mat unit-roundoff)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/pca-data.rkt" fitted-variance)
          (only-in "private/pca-twin-data.rkt"
                   fit-ours
@@ -38,9 +38,14 @@
     (check-true (> (abs (- ours (hash-ref wide-cuml 'noise_variance))) bound)))
   (test-case "whitened rows: theirs scale by the call's row count"
     (define rows (twin-rows correlated 'float64))
-    (define result (pca-fit (mat rows 'float64) #:n-components 3 #:whiten #t))
+    (define result
+      (pca-fit (list*->device-matrix rows #:dtype 'float64) #:n-components 3 #:whiten #t))
     (define mine
-      (~> (take rows 10) (mat 'float64) (pca-transform result _) device-matrix->list* append*))
+      (~> (take rows 10)
+          (list*->device-matrix #:dtype 'float64)
+          (pca-transform result _)
+          device-matrix->list*
+          append*))
     (define factor (sqrt (/ 9.0 (sub1 (sample-count correlated)))))
     (define top (apply max (map abs mine)))
     (for ([ours (in-list mine)]

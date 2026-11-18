@@ -5,8 +5,7 @@
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
-         (only-in raft device-matrix->list* dtype)
-         (only-in "private/common-data.rkt" mat vec)
+         (only-in raft device-matrix->list* dtype list->device-vector list*->device-matrix)
          (only-in "private/dbscan-data.rkt"
                   cosine-cloud
                   distance-matrix
@@ -76,13 +75,13 @@
   (define rows (spec-rows s))
   (define w (weights-of s (length rows)))
   (define r
-    (dbscan-fit (mat rows (spec-dt s))
+    (dbscan-fit (list*->device-matrix rows #:dtype (spec-dt s))
                 #:eps (spec-eps s)
                 #:min-samples (spec-min-samples s)
                 #:metric (spec-metric s)
                 #:out-dtype (spec-out-dtype s)
                 #:max-mbytes-per-batch (spec-mbytes s)
-                #:sample-weight (and w (vec w (spec-dt s)))))
+                #:sample-weight (and w (list->device-vector w #:dtype (spec-dt s)))))
   (run s rows w (result->lists r) (dtype (dbscan-result-labels r))))
 
 (define (sklearn? s)

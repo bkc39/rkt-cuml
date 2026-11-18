@@ -15,7 +15,7 @@
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in rackunit check-equal? check-not-equal? check-true test-case)
-         (only-in "private/common-data.rkt" mat vec)
+         (only-in raft list*->device-matrix list->device-vector)
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   close?
@@ -106,7 +106,7 @@
     (kmeans-fit X
                 #:n-clusters (spec-k s)
                 #:init (if init-rows
-                           (mat init-rows (spec-dt s))
+                           (list*->device-matrix init-rows #:dtype (spec-dt s))
                            (spec-init s))
                 #:random-state (spec-seed s)
                 #:max-iter (option s 'max-iter 300)
@@ -114,7 +114,7 @@
                 #:n-init (option s 'n-init 'auto)
                 #:oversampling-factor (option s 'oversampling-factor 2.0)
                 #:max-samples-per-batch (option s 'max-samples-per-batch 32768)
-                #:sample-weight (and w (vec w (spec-dt s)))))
+                #:sample-weight (and w (list->device-vector w #:dtype (spec-dt s)))))
   (run s X init-rows w result))
 
 (define (fit-case r)
@@ -141,7 +141,7 @@
   (match-define (run s _ _ _ (kmeans-result C _ _ _)) r)
   (define Y (blob-data 200 (spec-d s) (spec-k s) (+ (spec-seed s) 200) (spec-dt s)))
   (define w (weights 200))
-  (define wv (vec w (spec-dt s)))
+  (define wv (list->device-vector w #:dtype (spec-dt s)))
   (applied s
            Y
            C

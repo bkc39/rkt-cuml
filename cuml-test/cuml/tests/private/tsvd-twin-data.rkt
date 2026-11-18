@@ -6,8 +6,8 @@
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal?)
-         (only-in raft device-matrix->list*)
-         (only-in "common-data.rkt" bits-of mat)
+         (only-in raft device-matrix->list* list*->device-matrix)
+         (only-in "common-data.rkt" bits-of)
          (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps product)
          (only-in "pca-twin-data.rkt" twin-key)
          (only-in "python-env.rkt" run-twin)
@@ -95,7 +95,7 @@
 (define (ours c dt solver)
   (match-define (twin-case f k) c)
   (define rows (fixture-rows f dt))
-  (define X (mat rows dt))
+  (define X (list*->device-matrix rows #:dtype dt))
   (define result (tsvd-fit X #:n-components k #:solver solver))
   (define T (tsvd-transform result X))
   (values rows

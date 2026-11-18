@@ -19,11 +19,10 @@
                   hdbscan-result?)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-vector->list)
+         (only-in raft device-vector->list list->device-vector list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/capabilities.rkt" capabilities)
-         (only-in "private/common-data.rkt" mat vec)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options hash-remove* printed round-trips)
          (only-in "private/hdbscan-data.rkt" dataset fit-lists prediction->lists same-fit?))
@@ -77,7 +76,7 @@
   (check-false (hdbscan-model (hdbscan))))
 
 (test-gpu "fit and fit-predict are hdbscan-fit's, and the argument stays unfitted"
-  (define X (mat (dataset 'b10) 'float32))
+  (define X (list*->device-matrix (dataset 'b10) #:dtype 'float32))
   (define e (hdbscan #:min-cluster-size 10))
   (define fitted-e (fit e X '(ignored)))
   (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
@@ -98,19 +97,21 @@
                     device-vector->list)))
 
 (test-gpu "errors are named after the generic that was called"
-  (define X (mat (dataset 'b10) 'float32))
+  (define X (list*->device-matrix (dataset 'b10) #:dtype 'float32))
   (check-cuml-error 'logic
                     "fit: alpha: expected greater than 0, got 0"
                     (lambda () (fit (hdbscan #:alpha 0) X)))
   (check-cuml-error 'logic
                     "fit-predict: min-samples: expected at most 1023, got 1024"
                     (lambda () (fit-predict (hdbscan #:min-samples 1024) X)))
-  (check-cuml-error 'logic
-                    "fit: hdbscan takes no sample-weight"
-                    (lambda () (fit (hdbscan) X #:sample-weight (vec (make-list 300 1.0) 'float32)))))
+  (check-cuml-error
+   'logic
+   "fit: hdbscan takes no sample-weight"
+   (lambda ()
+     (fit (hdbscan) X #:sample-weight (list->device-vector (make-list 300 1.0) #:dtype 'float32)))))
 
 (test-gpu "a refit leaves the first model live"
-  (define X (mat (dataset 'b50) 'float32))
+  (define X (list*->device-matrix (dataset 'b50) #:dtype 'float32))
   (define e (hdbscan))
   (define first-fit (hdbscan-model (fit e X)))
   (define second-fit (hdbscan-model (fit e X)))

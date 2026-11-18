@@ -3,9 +3,9 @@
 (require (only-in racket/list first range remove-duplicates rest second shuffle)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" mat pick)
+         (only-in "private/common-data.rkt" pick)
          (only-in "private/dbscan-data.rkt" integer-grid same-partition? seeded)
          (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
@@ -21,7 +21,10 @@
                   partition-refines?))
 
 (define (fit-lists rows k connectivity #:c [c 15])
-  (linked-lists (mat rows 'float32) #:n-clusters k #:connectivity connectivity #:c c))
+  (linked-lists (list*->device-matrix rows #:dtype 'float32)
+                #:n-clusters k
+                #:connectivity connectivity
+                #:c c))
 
 (define (children-of rows connectivity #:c [c 15])
   (match-define (list _ children) (fit-lists rows 2 connectivity #:c c))

@@ -8,8 +8,8 @@
          (only-in racket/match match match-define match-lambda)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
+         (only-in raft list*->device-matrix)
          (only-in threading cond~>)
-         (only-in "private/common-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
          (only-in "private/spectral-data.rkt"
@@ -76,7 +76,7 @@
     (cond~> (hash-set (options-of s) 'n-clusters (fit-case-k s)) [graph? (hash-remove 'n-neighbors)]))
   (if graph?
       (apply-options graph-labels options (fit-case-data s))
-      (apply-options labels options (mat (fit-case-data s) 'float32))))
+      (apply-options labels options (list*->device-matrix (fit-case-data s) #:dtype 'float32))))
 
 (define (python-params s)
   (define o (options-of s))

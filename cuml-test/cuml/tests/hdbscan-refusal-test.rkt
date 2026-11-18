@@ -18,7 +18,7 @@
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/hdbscan-data.rkt" dataset)
          (only-in "private/program.rkt" run-program)
@@ -105,7 +105,7 @@
                 (blank-matrix 4 3 'float32))
           (both "A4 before A8"
                 "points: expected 2 columns, as the model was fit on, got 3"
-                (mat '((1 2 3) (+nan.0 0 0)) 'float32))
+                (list*->device-matrix '((1 2 3) (+nan.0 0 0)) #:dtype 'float32))
           (list (row "M1 hdbscan-membership-vector"
                      "batch-size: expected at least 1, got 0"
                      (lambda () (membership (grid 'float32 4) #:batch-size 0)))
@@ -119,14 +119,14 @@
       (check-row 'hdbscan-fit r))))
 
 (test-gpu "the prediction procedures refuse each bad argument with their own names"
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (for ([r (in-list (prediction-rows result))])
     (test-case (row-id r)
       (match (regexp-match #rx" ([a-z-]+)$" (row-id r))
         [(list _ name) (check-row (string->symbol name) r)]))))
 
 (test-gpu "a released model is refused by every prediction procedure before its points are read"
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (native-model-release! (hdbscan-result-model result))
   (define float64 (grid 'float64 4))
   (for ([name (in-list '(hdbscan-approximate-predict hdbscan-membership-vector
@@ -217,7 +217,7 @@
   (check-exn exn:fail:contract? (lambda () (fit #:max-cluster-size (expt 2 63))))
   (check-exn exn:fail:contract? (lambda () (fit #:min-cluster-size 2.5)))
   (check-exn exn:fail:contract? (lambda () (fit #:alpha 'one)))
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (check-exn exn:fail:contract?
              (lambda () (hdbscan-membership-vector result (grid 'float32) #:batch-size (expt 2 63))))
   (check-exn exn:fail:contract?

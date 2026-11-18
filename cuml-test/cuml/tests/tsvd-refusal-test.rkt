@@ -13,11 +13,11 @@
                   tsvd-transform)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn test-case)
-         (only-in raft list->device-vector)
+         (only-in raft list*->device-matrix list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
-         (only-in "private/common-data.rkt" blank-matrix blank-vector mat)
+         (only-in "private/common-data.rkt" blank-matrix blank-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/refusal-rows.rkt" bad-X-rows check-row row row-call row-id row-message))
@@ -25,14 +25,14 @@
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5)))
 
 (define (grid-with cells [dt 'float32] [rows grid])
-  (mat (for/list ([row (in-list rows)]
-                  [r (in-naturals)])
-         (for/list ([x (in-list row)]
-                    [c (in-naturals)])
-           (match (assoc (list r c) cells)
-             [(list _ value) value]
-             [#f x])))
-       dt))
+  (list*->device-matrix (for/list ([row (in-list rows)]
+                                   [r (in-naturals)])
+                          (for/list ([x (in-list row)]
+                                     [c (in-naturals)])
+                            (match (assoc (list r c) cells)
+                              [(list _ value) value]
+                              [#f x])))
+                        #:dtype dt))
 
 (define past-float32 (expt 2.0 64))
 (define past-float64 (expt 2.0 511))
@@ -42,10 +42,16 @@
 
 (define (fit-X-rows)
   (append (bad-X-rows)
-          (list (row "f4" "X: expected at least 2 rows, got 1" (mat '((1 2 3)) 'float32))
+          (list (row "f4"
+                     "X: expected at least 2 rows, got 1"
+                     (list*->device-matrix '((1 2 3)) #:dtype 'float32))
                 (row "f4 none" "X: expected at least 2 rows, got 0" (blank-matrix 0 3 'float64))
-                (row "f5" "X: expected at least 2 columns, got 1" (mat '((1) (2) (3)) 'float64))
-                (row "f4 before f5" "X: expected at least 2 rows, got 1" (mat '((1)) 'float32))
+                (row "f5"
+                     "X: expected at least 2 columns, got 1"
+                     (list*->device-matrix '((1) (2) (3)) #:dtype 'float64))
+                (row "f4 before f5"
+                     "X: expected at least 2 rows, got 1"
+                     (list*->device-matrix '((1)) #:dtype 'float32))
                 (row "f6"
                      "X: 46341 columns: a 46341x46341 Gram matrix does not fit the index type"
                      (blank-matrix 2 46341 'float32))
@@ -119,13 +125,16 @@
     (define X (parameter-X r))
     (test-case (format "~a ~a" who (row-id r))
       (check-row who r (lambda () (call X (row-call r))))))
-  (check-cuml-error
-   'logic
-   "tsvd-fit: n-components: expected at most 3, got 4"
-   (lambda () (tsvd-fit (mat '((1 0 2 1 0) (0 3 1 2 2) (4 1 0 3 1)) 'float32) #:n-components 4)))
+  (check-cuml-error 'logic
+                    "tsvd-fit: n-components: expected at most 3, got 4"
+                    (lambda ()
+                      (tsvd-fit (list*->device-matrix '((1 0 2 1 0) (0 3 1 2 2) (4 1 0 3 1))
+                                                      #:dtype 'float32)
+                                #:n-components 4)))
   (check-cuml-error 'logic
                     "tsvd-fit: X: expected at least 2 rows, got 1"
-                    (lambda () (tsvd-fit (mat '((1 2 3)) 'float32) #:n-components 3)))
+                    (lambda ()
+                      (tsvd-fit (list*->device-matrix '((1 2 3)) #:dtype 'float32) #:n-components 3)))
   (for ([bad (in-list (list (lambda () (tsvd-fit (grid-with '()) #:n-components 1.5))
                             (lambda () (tsvd-fit (grid-with '()) #:iterations 2.5))
                             (lambda () (tsvd-fit (grid-with '()) #:tol 'small))))])

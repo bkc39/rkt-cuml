@@ -10,9 +10,9 @@
          (only-in racket/list append*)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" mat unit-roundoff worst)
+         (only-in "private/common-data.rkt" unit-roundoff worst)
          (only-in "private/pca-data.rkt" centred column fixture-name fixture-rows)
          (only-in "private/scaler-data.rkt" round-to)
          (only-in "private/tsvd-data.rkt"
@@ -34,7 +34,8 @@
     (match-define (exact f spectrum components) e)
     (test-case (format "~a ~a ~a k=~a" (fixture-name f) dt solver k)
       (define rows (fixture-rows f dt))
-      (define fitted (tsvd-of (tsvd-fit (mat rows dt) #:n-components k #:solver solver)))
+      (define fitted
+        (tsvd-of (tsvd-fit (list*->device-matrix rows #:dtype dt) #:n-components k #:solver solver)))
       (define c (if (eq? solver 'jacobi) 256 64))
       (check-equal?
        (first-problems
@@ -58,7 +59,7 @@
          [dt (in-list '(float32 float64))])
     (match-define (list n d k) shape)
     (test-case (format "~ax~a k=~a ~a" n d k dt)
-      (define X (mat (centred-rows (+ n d) n d dt) dt))
+      (define X (list*->device-matrix (centred-rows (+ n d) n d dt) #:dtype dt))
       (match-define (svd components variance ratio singular) (tsvd-of (tsvd-fit X #:n-components k)))
       (define pca (pca-fit X #:n-components k))
       (define pca-variance (device-vector->list (pca-result-explained-variance pca)))
