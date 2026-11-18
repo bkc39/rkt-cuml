@@ -110,7 +110,11 @@
   (graph-edit g
               #:rows (lambda (rows) (append rows rows))
               #:cols (lambda (cols) (append cols cols))
-              #:vals (lambda (_) (append (map car split) (map cadr split)))))
+              #:vals (lambda (_)
+                       (for/lists (firsts seconds #:result (append firsts seconds))
+                                  ([part (in-list split)])
+                                  (match-define (list first second) part)
+                                  (values first second)))))
 
 (define (summed-entries g parts)
   (graph-map-vals g (lambda (w) (flsingle (apply + (parts w))))))

@@ -31,17 +31,7 @@
          (only-in datasets/core load-dataset-table)
          (only-in pict pict-height pict-width pict?)
          (only-in racket/function curry curryr)
-         (only-in racket/list
-                  count
-                  first
-                  group-by
-                  last
-                  make-list
-                  range
-                  remove-duplicates
-                  rest
-                  second
-                  third)
+         (only-in racket/list count first group-by last make-list range remove-duplicates rest second)
          (only-in racket/match match-define)
          (only-in racket/promise delay force)
          (only-in rackunit
@@ -289,11 +279,12 @@
       (dbscan-fit eruptions #:eps eps #:min-samples 5)))
   (define (labels-in result)
     (device-vector->list (dbscan-result-labels result)))
-  (define groups (labels-in (third fits)))
+  (match-define (list _ _ middle _) fits)
+  (define groups (labels-in middle))
   (define matched
     (for/list ([result (in-list fits)])
       (matched-labels (labels-in result) groups)))
-  (define core (device-vector->list (dbscan-result-core-sample-indices (third fits))))
+  (define core (device-vector->list (dbscan-result-core-sample-indices middle)))
   (check-equal? (map (lambda (labels) (sort (remove-duplicates labels) <)) matched)
                 '((-1 0 1 2 3 4 5 6 7) (-1 0 1) (-1 0 1) (0)))
   (check-equal? (map (lambda (labels) (count negative? labels)) matched) '(126 25 8 0))
@@ -303,8 +294,9 @@
                            labels
                            (renumbered groups))))
                 '((71 42) (160 87) (168 96) (168 0)))
+  (match-define (list _ _ middle-matched _) matched)
   (check-equal? (count (lambda (label index) (and (>= label 0) (not (memv index core))))
-                       (third matched)
+                       middle-matched
                        (range (length groups)))
                 12))
 

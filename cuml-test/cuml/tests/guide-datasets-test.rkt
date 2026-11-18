@@ -4,7 +4,7 @@
          (only-in datasets/core dataset-table-names load-dataset-table)
          (only-in pkg/lib pkg-directory)
          (only-in racket/list append-map last make-list remove-duplicates second)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match-define match-lambda)
          (only-in racket/path file-name-from-path)
          (only-in racket/string string-contains?)
          (only-in rackunit check-equal? check-not-false check-true test-case)
@@ -42,7 +42,11 @@
 (define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
 (define (chapter-datasets chapter)
-  (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))
+  (map string->symbol
+       (regexp-match* dataset-use
+                      (flattened-text chapter)
+                      #:match-select (match-lambda
+                                       [(list _ name) name]))))
 
 (define (notice-of pkg)
   (define dir (pkg-directory (symbol->string pkg)))

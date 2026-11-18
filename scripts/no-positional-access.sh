@@ -6,25 +6,26 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 if [ $# -gt 0 ]; then
   dirs=("$@")
 else
-  dirs=(cuml-test)
+  dirs=(cuml-test cuml-glmnet-test)
 fi
-before='(^|[^-[:alnum:]!?*<>=/+.$%&^~_])'
-after='([^-[:alnum:]!?*<>=/+:.$%&^~_]|$)'
-message="read a test table's rows with match-define, not caddr or cadddr"
-
-hits=$(grep -rnE --include='*.rkt' "${before}cadd?dr${after}" "${dirs[@]}" || true)
+refused=cadr,caddr,cadddr,third,fourth
 
 status=0
-while IFS=: read -r file line _; do
-  [ -n "$file" ] || continue
-  status=1
-  echo "$file:$line: $message"
+hits=$(racket lint/positional.rkt "$refused" "${dirs[@]}") || status=$?
+if [ "$status" -gt 1 ]; then
+  echo "$hits"
+  exit "$status"
+fi
+while IFS= read -r hit; do
+  [ -n "$hit" ] || continue
+  echo "$hit"
   if [ -n "${GITHUB_ACTIONS:-}" ]; then
-    echo "::error file=$file,line=$line::$message"
+    IFS=: read -r file line _ <<<"$hit"
+    echo "::error file=$file,line=$line::${hit#*: *: }"
   fi
 done <<<"$hits"
 
 if [ "$status" -eq 0 ]; then
-  echo "no-positional-access: no caddr or cadddr in ${dirs[*]}"
+  echo "no-positional-access: no ${refused//,/, } in ${dirs[*]}"
 fi
 exit "$status"

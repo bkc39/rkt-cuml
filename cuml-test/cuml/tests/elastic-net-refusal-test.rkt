@@ -255,8 +255,8 @@
     (define c (columns-apart narrow))
     (define message
       (exn-message (raised (lambda () (en-case-fit c dt #:alpha 1e300 #:l1-ratio 1e-13)))))
-    (define printed (string->number (cadr (regexp-match #rx"at most ([^ ]+) for" message))))
-    (check-true (en-run? (en-case-fit c dt #:alpha printed #:l1-ratio 1e-13)))))
+    (match-define (list _ printed) (regexp-match #rx"at most ([^ ]+) for" message))
+    (check-true (en-run? (en-case-fit c dt #:alpha (string->number printed) #:l1-ratio 1e-13)))))
 
 (define stop-message
   #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol ")

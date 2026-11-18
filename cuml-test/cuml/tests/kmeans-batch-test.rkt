@@ -10,8 +10,8 @@
                   kmeans-result-inertia
                   kmeans-score
                   kmeans-transform)
-         (only-in racket/list append* first second third)
-         (only-in racket/match == match match-define)
+         (only-in racket/list append* first second)
+         (only-in racket/match == match match-define match-lambda)
          (only-in rackunit
                   check-equal?
                   check-exn
@@ -181,7 +181,11 @@
                     (started)
                     (format "~a, start" name))
       (check-same-apply name dt (kmeans-result-centroids reference) X #f batch)))
-  (define spreads (append* (append (map third fits) grids)))
+  (define spreads
+    (append* (append (map (match-lambda
+                            [(list _ _ spread) spread])
+                          fits)
+                     grids)))
   (define (named verdict)
     (for/list ([fit (in-list fits)]
                #:when (eq? (second fit) verdict))

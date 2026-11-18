@@ -2,7 +2,7 @@
 
 (require (only-in cuml fit ridge)
          (only-in cuml/linear-model linear-regression-result ridge-fit ridge-params ridge-predict)
-         (only-in racket/match match-define struct*)
+         (only-in racket/match match-define match-lambda struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
@@ -150,7 +150,10 @@
       inexact->exact))
 
 (define (narrow-alpha c k)
-  (spread-alpha (map cadr (lcase-X c)) k))
+  (spread-alpha (map (match-lambda
+                       [(list* _ second-column _) second-column])
+                     (lcase-X c))
+                k))
 
 (test-gpu "a narrow column's coefficient lost under a large alpha is refused"
   (for* ([p (in-list '((float32 44 30) (float64 100 40) (float32 60 0)))]

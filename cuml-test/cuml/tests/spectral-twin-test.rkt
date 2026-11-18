@@ -5,7 +5,7 @@
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list count split-at)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match-define match-lambda)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in threading cond~>)
@@ -154,7 +154,9 @@
    (count (lambda (s) (eq? (fit-case-compare s) 'partition)) gs))
   (printf "twin sklearn: ~a graphs; partitions agree in ~a\n"
           (length gs)
-          (count cadr graph-outcomes)))
+          (count (match-lambda
+                   [(list _ agree?) agree?])
+                 graph-outcomes)))
 
 (test-twin "cuml's SpectralClustering default parameters are spectral-clustering-params'"
   (match-define (hash-table ('results (list theirs)))
