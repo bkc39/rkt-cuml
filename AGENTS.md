@@ -396,6 +396,8 @@ an analyzer timed out or failed on is listed as a warning (an Actions
 not run there, so raise the timeout to cover it. Resyntax's
 `identifier-usage-analyzer` is quadratic (#128), so the library modules with
 large macro expansions, such as `estimator-support.rkt`, can take minutes.
+Its times on a loaded host (#128), the first four past the 120 s default, so skipped and listed: `pca.rkt` 522 s, `tsvd.rkt` 417 s,
+`standard-scaler.rkt` 341 s, `glmnet-data.rkt` 180 s, `resyntax-timeout-test.rkt` 62 s.
 `no-positional-access` (`lint/positional.rkt`) refuses `cadr`, `caddr`, `cadddr`,
 `third`, `fourth` and `list-ref` with a literal index under `cuml-test` and
 `cuml-glmnet-test`, outside comments and strings: read a test table's rows with
