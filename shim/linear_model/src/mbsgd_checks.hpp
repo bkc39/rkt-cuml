@@ -173,6 +173,23 @@ inline std::optional<std::string> scale_refusal(double start, double floor) {
   return std::nullopt;
 }
 
+inline constexpr double solver_headroom = 4;
+
+// sgdFit sums in y's dtype: y itself for the centring mean, and the
+// products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).
+// Their bounds must stay a solver_headroom below the dtype's largest value.
+template <typename T>
+std::optional<std::string> solver_scale_refusal(double x_largest,
+                                                double residual_mass,
+                                                double y_mass, bool centred) {
+  const double limit = std::numeric_limits<T>::max() / solver_headroom;
+  const double reach = centred ? 2 * x_largest : x_largest;
+  if (!(reach * residual_mass <= limit) || (centred && !(y_mass <= limit))) {
+    return "y is too large to check the fit; rescale y";
+  }
+  return std::nullopt;
+}
+
 inline std::optional<std::string> gate_refusal(bool finite, double start,
                                                double end, double allowance,
                                                double eta0) {

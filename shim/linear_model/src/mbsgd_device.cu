@@ -67,6 +67,29 @@ inline __device__ double row_loss(int32_t loss, double y, double z) {
     }
   }
 }
+template <typename T>
+double largest_magnitude(const raft::handle_t& handle, const T* v,
+                         int64_t count) {
+  const auto begin = thrust::counting_iterator<int64_t>(0);
+  return thrust::transform_reduce(
+      rmm::exec_policy(stream_of(handle)), begin, begin + count,
+      [=] __device__(int64_t i) -> double {
+        return fabs(static_cast<double>(v[i]));
+      },
+      0.0, thrust::maximum<double>());
+}
+
+template <typename T>
+double magnitude_sum(const raft::handle_t& handle, const T* y, int64_t n,
+                     double centre) {
+  const auto begin = thrust::counting_iterator<int64_t>(0);
+  return thrust::transform_reduce(
+      rmm::exec_policy(stream_of(handle)), begin, begin + n,
+      [=] __device__(int64_t i) -> double {
+        return fabs(static_cast<double>(y[i]) - centre);
+      },
+      0.0, thrust::plus<double>());
+}
 
 template <typename T>
 double mean_loss(const raft::handle_t& handle, const T* x, const T* y,
@@ -110,6 +133,10 @@ void threshold_labels(const raft::handle_t& handle, const T* decision,
   template void code_targets<T>(const raft::handle_t&, const int32_t*,         \
                                 int64_t, bool, T*);                            \
   template double mean_of<T>(const raft::handle_t&, const T*, int64_t);        \
+  template double largest_magnitude<T>(const raft::handle_t&, const T*,        \
+                                       int64_t);                               \
+  template double magnitude_sum<T>(const raft::handle_t&, const T*, int64_t,   \
+                                   double);                                    \
   template double mean_loss<T>(const raft::handle_t&, const T*, const T*,      \
                                const T*, double, const objective_shape&);      \
   template void threshold_labels<T, int32_t>(const raft::handle_t&, const T*,  \

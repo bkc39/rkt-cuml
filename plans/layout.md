@@ -2116,7 +2116,20 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   about 1.3e154, or with fit-intercept |y − ȳ| above it; each term of a mean is
   divided by n before the sum) is
   refused before the solve, "y is too large to check the fit; rescale
-  y" (fix r1f, r1g). Each of alpha, tol, eta0 and power-t is checked
+  y" (fix r1f, r1g). So is a y the solver's own sums in X's dtype could
+  overflow (#135): float32's sums overflow long before the double
+  checks, and the fit was then refused as not finite with "lower
+  #:eta0", which no eta0 clears. Bisected at eta0 1e-30 (2 epochs,
+  n 2 to 20,000, X unit or ×1e3, batch 1, 32, n, with and without
+  fit-intercept), the first non-finite iterate comes at Σ|y| ≥ 1.01·max
+  under fit-intercept (the centring mean's sum) or at
+  max_j Σ_i |x_ij|·|y_i − ȳ| ≥ 0.646·max (a batch's gradient sum), max
+  the dtype's largest value. The refusal bounds both before the solve:
+  m·Σ|y − ȳ| with m = max|x| (2·max|x| under fit-intercept, which centres
+  X) or, under fit-intercept, Σ|y|, above max/4; ȳ is 0 without
+  fit-intercept. Its bound is at least the measured sum, so it refuses at least 2.5×
+  below every measured overflow;
+  in float64 it needs m·Σ|y − ȳ| above 4.5e307. Each of alpha, tol, eta0 and power-t is checked
   against X's dtype right after its own range, in settings order: one
   that overflows it, "alpha: 1e+150 overflows float32", or an alpha or
   eta0 that rounds to 0 in it, "eta0: 1e-50 rounds to 0 in float32"

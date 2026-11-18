@@ -56,8 +56,12 @@ A = 3.5·k·@racket[eta0]·(@racket[alpha]·r)², k the number of columns plus 1
 @racket[fit-intercept] and r the l1 share (1, @racket[l1-ratio] or 0), is capped at 4·F₀ for the
 classifier only; the regressor's is uncapped (#134). Round-off is 10·ε²·mean(y²) for the
 regressor in its dtype's machine epsilon ε. The gate sees only the objective, so it passes a fit
-that ends at or below that bound yet predicts badly. A @racket[y] whose F₀ or round-off is not
-finite, float64 |y| above about 1.3e154, or with @racket[fit-intercept] |y − ȳ| above it, is refused before the solve (rescale it). So is an
+that ends at or below that bound yet predicts badly. A @racket[y] is refused before the solve
+(rescale it) when its F₀ or round-off is not finite, float64 |y| above about 1.3e154, or with
+@racket[fit-intercept] |y − ȳ| above it, or when the solver's sums in @racket[X]'s dtype could
+overflow: m·Σ|y − ȳ| or, with @racket[fit-intercept], Σ|y| above a quarter of the dtype's largest
+value, m the largest |x|, doubled with @racket[fit-intercept], and ȳ 0 without it. For a float32
+@racket[y] and standardised @racket[X] that is Σ|y| of about 1e37. So is an
 @racket[alpha], @racket[tol], @racket[eta0] or @racket[power-t] that overflows @racket[X]'s dtype,
 an @racket[alpha] or @racket[eta0] that rounds to 0 in it, or an exact @racket[alpha] or
 @racket[eta0] that rounds to 0.0. With @racket[random-state] an integer and @racket[shuffle], rows

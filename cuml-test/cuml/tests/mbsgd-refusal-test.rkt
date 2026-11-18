@@ -7,6 +7,7 @@
                   mbsgd-classifier-predict
                   mbsgd-regressor-fit
                   mbsgd-regressor-predict)
+         (only-in racket/list make-list)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-not-exn check-pred test-case)
          (only-in raft list*->device-matrix)
@@ -31,6 +32,12 @@
 (define offset-y
   (for/list ([t (in-list targets)])
     (+ 1.4e154 (* t 1e150))))
+
+(define (alternating v)
+  (for/list ([i (in-range 6)])
+    (if (even? i)
+        v
+        (- v))))
 
 (define (on-float32 go given)
   (apply-keywords go given (list (on-matrix grid 'float32) (on-vector targets 'float32))))
@@ -150,7 +157,22 @@
                          (mbsgd-regressor-fit (on-matrix lopsided-X) (on-vector lopsided-y))))
                   (row "a float64 y whose values, not centred values, overflow under fit-intercept"
                        "y is too large to check the fit; rescale y"
-                       (lambda () (mbsgd-regressor-fit X (on-vector offset-y)))))))
+                       (lambda () (mbsgd-regressor-fit X (on-vector offset-y))))
+                  (row "a float32 y the solver's gradient sums would overflow, whatever eta0"
+                       "y is too large to check the fit; rescale y"
+                       (lambda ()
+                         (mbsgd-regressor-fit (on-matrix grid 'float32)
+                                              (on-vector (alternating 3e38) 'float32)
+                                              #:eta0 1e-30
+                                              #:epochs 1
+                                              #:fit-intercept #f)))
+                  (row "a float32 y whose centring sum would overflow under fit-intercept"
+                       "y is too large to check the fit; rescale y"
+                       (lambda ()
+                         (mbsgd-regressor-fit (on-matrix grid 'float32)
+                                              (on-vector (make-list 6 1e38) 'float32)
+                                              #:eta0 1e-30
+                                              #:epochs 1))))))
   (for ([r (in-list rows)])
     (test-case (row-id r)
       (check-row "mbsgd-regressor-fit" r))))
@@ -272,6 +294,12 @@
                 (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector targets) #:eta0 1e-310)))
           (list "a float64 y whose sum of squares, not mean, overflows"
                 (lambda () (mbsgd-regressor-fit (on-matrix grid) (on-vector overflowing-sum-y))))
+          (list "a float32 y a quarter of the solver's range from its sums' overflow"
+                (lambda ()
+                  (mbsgd-regressor-fit (on-matrix grid 'float32)
+                                       (on-vector (alternating 1e36) 'float32)
+                                       #:eta0 1e-30
+                                       #:epochs 1)))
           (list "a float64 y whose centred values overflow, without fit-intercept"
                 (lambda ()
                   (mbsgd-regressor-fit (on-matrix lopsided-X)

@@ -109,6 +109,20 @@ baseline baseline_of(const raft::handle_t& handle, const matrix<T, int64_t>& x,
 }
 
 template <typename T>
+void require_solver_scale(const raft::handle_t& handle,
+                          const matrix<T, int64_t>& x, const T* y,
+                          const sgd_options& o) {
+  const bool centred = o.fit_intercept != 0;
+  const double centre = centred ? mean_of<T>(handle, y, x.n) : 0.0;
+  if (const auto refusal = solver_scale_refusal<T>(
+          largest_magnitude<T>(handle, x.data, x.n * x.d),
+          magnitude_sum<T>(handle, y, x.n, centre),
+          magnitude_sum<T>(handle, y, x.n, 0.0), centred)) {
+    throw logic_error(*refusal);
+  }
+}
+
+template <typename T>
 void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                       const T* y, const T* coef, T intercept,
                       const sgd_options& o, bool ones, bool regressor,
@@ -195,6 +209,7 @@ void regress_into(const raft::handle_t& handle, const rr_view* xv,
   const matrix<T, int64_t> x = checked_x<T>(xv, yv, o, false, stream);
   const T* y = raftrkt::vector_data<T, int32_t>(yv, "y", x.n);
   require_finite_elements("y", y, x.n, stream);
+  require_solver_scale<T>(handle, x, y, o);
   const baseline base = baseline_of<T>(handle, x, y, o, false, true);
   auto owned = std::make_unique<sgd_fit<T>>(
       solved<T>(handle, x, y, o, false, true, base));

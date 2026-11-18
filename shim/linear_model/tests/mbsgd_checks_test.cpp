@@ -328,6 +328,30 @@ TEST(MbsgdGate, AnUncheckableStartOrFloorIsRefused) {
             "y is too large to check the fit; rescale y");
 }
 
+TEST(MbsgdGate, AYTheFloat32SolverWouldOverflowIsRefused) {
+  using cumlrkt::glm::mbsgd::solver_scale_refusal;
+  constexpr double limit = std::numeric_limits<float>::max() / 4;
+  const std::string rescale = "y is too large to check the fit; rescale y";
+  EXPECT_FALSE(solver_scale_refusal<float>(1, limit, 0, false).has_value());
+  EXPECT_EQ(
+      solver_scale_refusal<float>(1, limit * 1.001, 0, false).value_or(""),
+      rescale);
+  EXPECT_FALSE(
+      solver_scale_refusal<float>(0.5, limit, limit, true).has_value());
+  EXPECT_EQ(solver_scale_refusal<float>(1, limit, 0, true).value_or(""),
+            rescale);
+  EXPECT_EQ(solver_scale_refusal<float>(0, 0, limit * 1.001, true).value_or(""),
+            rescale);
+  EXPECT_FALSE(
+      solver_scale_refusal<float>(0, 0, limit * 1.001, false).has_value());
+  EXPECT_EQ(solver_scale_refusal<float>(1, inf, 0, false).value_or(""),
+            rescale);
+  EXPECT_FALSE(solver_scale_refusal<double>(1, limit * 1e3, limit * 1e3, true)
+                   .has_value());
+  EXPECT_EQ(solver_scale_refusal<double>(1, inf, 0, false).value_or(""),
+            rescale);
+}
+
 TEST(MbsgdGate, TheRegressorFloorIsRoundOffOfY) {
   using cumlrkt::glm::mbsgd::classifier_floor;
   using cumlrkt::glm::mbsgd::regressor_floor;
