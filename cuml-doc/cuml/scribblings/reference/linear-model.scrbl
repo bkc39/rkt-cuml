@@ -61,7 +61,7 @@ is not minimum-norm.
 The fit is refused when the residual's weighted inner product with some
 centred column exceeds 2@superscript{-8} (float32) or 2@superscript{-18}
 (float64) times that column's weighted spread times @racket[y]'s, as with
-collinear columns in float32; @racket['qr] or float64 often fits. Float32 @racket['svd-qr] is also refused, before the solve, when u·κ ≥ 2@superscript{-8}, κ the condition number of the centred, weighted X with unit-norm columns, bounded below in float64. A
+collinear columns in float32, where float64 often fits. Float32 fits under every @racket[algorithm] are also refused, before the solve, when u·κ ≥ 2@superscript{-8}, κ the condition number of the centred, weighted X with unit-norm columns, bounded below in float64, except where the shape forces the Jacobi SVD. A
 coefficient fixed only by rows of low weight w is accurate to about
 u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal
 does not see its loss.

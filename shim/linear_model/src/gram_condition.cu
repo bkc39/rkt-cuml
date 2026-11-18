@@ -423,10 +423,10 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
 }
 
 template <typename T>
-bool checks_conditioning(glm_solver solver, bool alpha_window) {
+bool checks_conditioning(glm_solver solver, bool alpha_window,
+                         bool forced_svd) {
   if (solver.family == glm_family::ols) {
-    return std::is_same_v<T, float> &&
-           solver.algorithm == CUML_LINEAR_MODEL_OLS_SVD_QR;
+    return std::is_same_v<T, float> && !forced_svd;
   }
   return solver.family == glm_family::ridge && alpha_window &&
          solver.algorithm == CUML_LINEAR_MODEL_RIDGE_SVD;
@@ -451,8 +451,8 @@ void require_conditioned(double kappa, glm_solver solver) {
             "fit)"));
 }
 
-template bool checks_conditioning<float>(glm_solver, bool);
-template bool checks_conditioning<double>(glm_solver, bool);
+template bool checks_conditioning<float>(glm_solver, bool, bool);
+template bool checks_conditioning<double>(glm_solver, bool, bool);
 template void require_conditioned<float>(double, glm_solver);
 template void require_conditioned<double>(double, glm_solver);
 template double equilibrated_condition<float>(const raft::handle_t&,

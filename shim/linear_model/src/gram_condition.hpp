@@ -13,7 +13,7 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
                               bool fit_intercept);
 
 template <typename T>
-bool checks_conditioning(glm_solver solver, bool alpha_window);
+bool checks_conditioning(glm_solver solver, bool alpha_window, bool forced_svd);
 
 template <typename T>
 void require_conditioned(double kappa, glm_solver solver);

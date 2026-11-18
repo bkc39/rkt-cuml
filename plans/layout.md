@@ -1600,10 +1600,18 @@ Follow-ups are GitHub issues.
   float64 from X: a lower bound up to double rounding, so the check never
   refuses an X whose true κ′ is under the threshold. It runs before the
   solve, for ridge 'svd only when some kept column is negligible against α′
-  and some is not (the L2-i window), and for every float32 `'svd-qr` fit with
-  α′ = 0. Ridge refuses at u·κ′ ≥ 2^−tolerance_bits ("X is ill-conditioned
-  for this alpha"), 'svd-qr at u·√κ′ ≥ 2^−8 ("X may have collinear
-  columns"). Measured in floating point (p104, n = 60, exact float64 Gram):
+  and some is not (the L2-i window), and for every float32 least-squares
+  fit (α′ = 0, ridge's negligible-α fallback included) whose algorithm the
+  shape does not force to the Jacobi SVD (wide X, one column). Ridge refuses
+  at u·κ′ ≥ 2^−tolerance_bits ("X is ill-conditioned for this alpha"),
+  least squares at u·√κ′ ≥ 2^−8 ("X may have collinear columns"). Before
+  the float32 check covered every algorithm, x₃ = x₁ + x₂ exactly (30 draws,
+  n = 60 / 1000) was accepted by 'svd and 'svd-jacobi on 12 / 22, 'qr on
+  13 / 25 (max |c| 2.2e4 to 6.5e4) and 'auto / 'eig on 0 / 1; now every
+  algorithm refuses all 60. x₃ = x₁ + x₂ + ε·z is never refused by the
+  check: 'svd, 'svd-jacobi, 'qr and 'svd-qr fit 30/30 at ε = 2^−10 and
+  2^−7, while 'auto and 'eig, whose normal equations square κ, are refused
+  by the stationarity check on 27–30 of 30 there and fit 30/30 at ε = 1/4. Measured in floating point (p104, n = 60, exact float64 Gram):
   window cases with exactly collinear wide columns give u·κ′ ≥ 7.99
   (float32) and ≥ 0.35 (float64, where κ′ saturates at double rounding;
   exact ≥ 8), Q2 float32 8.3e-8 to 8.7e-8, nearly collinear float64 columns

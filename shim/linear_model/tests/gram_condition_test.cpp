@@ -161,17 +161,20 @@ TEST(GramCondition, AConstantColumnWithoutAlphaIsInfinite) {
             std::numeric_limits<double>::infinity());
 }
 
-TEST(GramCondition, OnlyFloat32SvdQrAndRidgeSvdInTheWindowAreChecked) {
-  const glm_solver svd_qr{glm_family::ols, CUML_LINEAR_MODEL_OLS_SVD_QR};
-  const glm_solver eig{glm_family::ols, CUML_LINEAR_MODEL_OLS_EIG};
+TEST(GramCondition, Float32OlsUnlessForcedAndRidgeSvdInTheWindowAreChecked) {
   const glm_solver ridge{glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_SVD};
   const glm_solver ridge_eig{glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_EIG};
-  EXPECT_TRUE(checks_conditioning<float>(svd_qr, false));
-  EXPECT_FALSE(checks_conditioning<double>(svd_qr, false));
-  EXPECT_FALSE(checks_conditioning<float>(eig, false));
-  EXPECT_TRUE(checks_conditioning<double>(ridge, true));
-  EXPECT_FALSE(checks_conditioning<double>(ridge, false));
-  EXPECT_FALSE(checks_conditioning<float>(ridge_eig, true));
+  for (const int algorithm :
+       {CUML_LINEAR_MODEL_OLS_SVD, CUML_LINEAR_MODEL_OLS_EIG,
+        CUML_LINEAR_MODEL_OLS_QR, CUML_LINEAR_MODEL_OLS_SVD_QR}) {
+    const glm_solver ols{glm_family::ols, algorithm};
+    EXPECT_TRUE(checks_conditioning<float>(ols, false, false)) << algorithm;
+    EXPECT_FALSE(checks_conditioning<float>(ols, false, true)) << algorithm;
+    EXPECT_FALSE(checks_conditioning<double>(ols, false, false)) << algorithm;
+  }
+  EXPECT_TRUE(checks_conditioning<double>(ridge, true, false));
+  EXPECT_FALSE(checks_conditioning<double>(ridge, false, false));
+  EXPECT_FALSE(checks_conditioning<float>(ridge_eig, true, false));
 }
 
 TEST(GramCondition, RefusesAtTheThresholdNamingWhatToChange) {

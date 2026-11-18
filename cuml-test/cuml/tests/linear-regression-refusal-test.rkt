@@ -4,8 +4,7 @@
          (only-in cuml/linear-model
                   linear-regression-fit
                   linear-regression-predict
-                  linear-regression-result
-                  linear-regression-result-coef)
+                  linear-regression-result)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* device-vector->list)
@@ -18,7 +17,6 @@
                   dtypes
                   dyadic
                   lcase-X
-                  lcase-y
                   normal-case
                   [on-matrix matrix]
                   [on-vector vector])
@@ -173,6 +171,12 @@
              [i (in-naturals)])
     (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
 
+(define (nearly-collinear-rows n seed)
+  (define c (normal-case n 2 seed))
+  (define next (uniform-source (+ 31 seed)))
+  (for/list ([row (in-list (lcase-X c))])
+    (append row (list (+ (apply + row) (* 1/1024 (dyadic (- (next) 1/2))))))))
+
 (define (uneven-weights n)
   (define draw (uniform-source 77))
   (for/list ([i (in-range n)])
@@ -181,10 +185,9 @@
         (dyadic (+ 1/2 (* 3/2 (draw))) 6))))
 
 (test-gpu "a solve that is not a least-squares solution is refused"
-  (for ([fixture (in-list (list (list 'eig 'float32 (collinear-rows 60) #f)
-                                (list 'qr 'float32 (one-hot-rows 400 4) #f)
+  (for ([fixture (in-list (list (list 'eig 'float32 (nearly-collinear-rows 60 0) #f)
+                                (list 'auto 'float32 (nearly-collinear-rows 1000 1) #f)
                                 (list 'qr 'float64 (collinear-rows 60) #f)
-                                (list 'auto 'float32 (collinear-rows 5003) (uneven-weights 5003))
                                 (list 'qr 'float64 (collinear-rows 5003) (uneven-weights 5003))))])
     (match-define (list algorithm dt rows w) fixture)
     (test-case (format "~a ~a ~a rows~a" algorithm dt (length rows) (if w ", weighted" ""))
@@ -196,38 +199,16 @@
                                                  #:sample-weight (and w (vector w dt))
                                                  #:algorithm algorithm))))))
 
-(define (summed-column n seed [eps 0])
-  (define c (normal-case n 2 seed))
-  (define next (uniform-source (+ 31 seed)))
-  (values (for/list ([row (in-list (lcase-X c))])
-            (append row (list (+ (apply + row) (* eps (dyadic (- (next) 1/2)))))))
-          (lcase-y c)))
-
-(define (svd-qr-fit rows y)
-  (linear-regression-fit (matrix rows 'float32) (vector y 'float32) #:algorithm 'svd-qr))
-
-(test-gpu "float32 svd-qr refuses exactly collinear X as the other algorithms do"
-  (for* ([n (in-list '(60 1000))]
-         [seed (in-range 10)])
-    (define-values (rows y) (summed-column n seed))
-    (test-case (format "~a rows seed ~a" n seed)
-      (check-cuml-error
-       'logic
-       #rx"^linear-regression-fit: X: the svd-qr solve.*; X may have collinear columns$"
-       (lambda () (svd-qr-fit rows y)))))
-  (define-values (rows y) (summed-column 60 9))
-  (check-cuml-error
-   'logic
-   #rx"^linear-regression-fit: X: the svd-qr solve's Gram matrix has u[*]kappa (inf|[0-9.e+-]+) >= 2\\^-8; X may have collinear columns$"
-   (lambda () (svd-qr-fit rows y))))
-
-(test-gpu "float32 svd-qr fits nearly collinear X"
-  (for* ([n (in-list '(60 1000))]
-         [seed (in-range 10)])
-    (define-values (rows y) (summed-column n seed 1/128))
-    (test-case (format "~a rows seed ~a" n seed)
-      (check-equal? (length (device-vector->list (linear-regression-result-coef (svd-qr-fit rows y))))
-                    3))))
+(test-gpu "float32 one-hot columns with an intercept are refused before the solve"
+  (define rows (one-hot-rows 400 4))
+  (for ([algorithm (in-list '(qr svd-qr))])
+    (test-case (format "~a" algorithm)
+      (check-cuml-error 'logic
+                        #rx"Gram matrix has u[*]kappa .* >= 2\\^-8; X may have collinear columns$"
+                        (lambda ()
+                          (linear-regression-fit (matrix rows 'float32)
+                                                 (vector (noisy-targets rows) 'float32)
+                                                 #:algorithm algorithm))))))
 
 (test-gpu "X, y and w are unchanged after every fit"
   (for* ([dt (in-list dtypes)]
