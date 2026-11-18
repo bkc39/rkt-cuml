@@ -49,7 +49,8 @@ struct attempt {
 
 template <typename T>
 attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
-                     solve_check check, const fit_options& options);
+                     solve_check check, const fit_options& options,
+                     const std::vector<T>& start = {});
 
 template <typename T>
 std::optional<qn_solution<T>> rescued(const raft::handle_t& handle,

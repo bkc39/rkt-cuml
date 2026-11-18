@@ -416,10 +416,10 @@ sorted distinct labels. @racket[class-weight] scales each row's weight by its cl
 The fit is refused when the solver has not converged; the check bounds the first-order residual, not
 the distance to the optimum. A column constant over the rows of positive weight (zero, without
 @racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
-last bits is refused: centre it. A fit the check would refuse is solved once more on the columns
+last bits is refused: centre it. A fit the check would refuse is solved again on the columns
 centred (with @racket[fit-intercept]) and, under @racket['none], each scaled by its own power of
-two, then mapped back and checked again; @racket[n-iter] counts both solves, and a fit the first
-solve passes is unchanged. Columns on a large offset, such as epoch-second timestamps, fit this
+two, first from zero and then from the first solve's point; each answer is mapped back and checked
+again. @racket[n-iter] counts every solve, and a fit the first solve passes is unchanged. Columns on a large offset, such as epoch-second timestamps, fit this
 way. Penalised columns of widely mixed scale can still be refused at any @racket[max-iter]:
 standardise them. Without @racket[fit-intercept], columns far from zero can be refused short of
 @racket[max-iter]: lower @racket[tol] or centre them. On separable data without a

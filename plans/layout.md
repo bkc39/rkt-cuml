@@ -1959,19 +1959,22 @@ scratch, the source is `cpp/src/glm/qn/`.
   - #127: `label_classes` returns a device y's sorted classes, so a
     class-weight hash on device labels moves O(k) to the host, not y.
   - #126: a cutoff whose kept spreads differ by more than 2^8 advises
-    "standardise the columns". A fit the check refuses is solved once more
-    (`logistic_solve.cpp`, `rescued`): kept columns centred with
+    "standardise the columns". A fit the check refuses is solved again
+    (`logistic_solve.cpp`, `rescued`), from zero and then from the first
+    solve's point mapped into the new coordinates: kept columns centred with
     fit-intercept (means folded into the intercept), each staged by its own
     power of two under `'none` (the loss depends only on Xw), the shared
     exponent otherwise; without fit-intercept only the per-column staging,
     only under `'none`. The answer is mapped back to the first solve's
     coordinates and passes the same check there, or the first refusal
-    stands. n-iter counts both solves. Fits the first solve accepts run
+    stands. n-iter counts every solve. Fits the first solve accepts run
     the same code as before, bitwise. Epoch-second timestamps over a
     minute (offset 1.7e9) now fit. Raw breast-cancer is separable: under
-    `'none` float32 with an intercept and float64 without one fit to
-    K ≤ 1e-7·max(F, 1); float64 with an intercept is still refused at
-    max-iter 4000 (the rescue's F falls slowly toward 0).
+    `'none` all three arms fit to K ≤ 1e-7·max(F, 1). Float64 with an
+    intercept fits only from the warm start (K/F 4.7e-9 at max-iter
+    1000, refused from zero at 4000); float64 without one fits only from
+    zero (the warm start is refused at 1500), so the cold start runs
+    first and a fit it rescues is unchanged.
   - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
     median coefficient error of the 541 restarted fits only 1.49×
     (1.65× over change and line-search stops), short of the 2× bar, at

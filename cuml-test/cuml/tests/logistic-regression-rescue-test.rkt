@@ -49,7 +49,7 @@
   (define set (labelled-set 'breast-cancer "diagnosis" '("id")))
   (define X (lr-case-X (labelled-case set)))
   (define y (lr-case-y (labelled-case set)))
-  (for ([arm (in-list '((float64 #f 1500) (float32 #t 1000)))])
+  (for ([arm (in-list '((float64 #f 1500) (float64 #t 1000) (float32 #t 1000)))])
     (match-define (list dt fi max-iter) arm)
     (test-case (format "~a ~a" dt fi)
       (define r
