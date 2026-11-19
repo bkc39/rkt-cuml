@@ -294,7 +294,10 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   is also refused, "y is constant to round-off and the fit's predictions
   are off by …; lower #:eta0 or #:alpha" ("lower #:eta0" without an l1
   share), when √loss > 2⁻¹⁰·|ȳ| + √floor, loss the unpenalised mean
-  squared error. R² there measures rounding, not the fit: a fit within a
+  squared error. Under none, l2 or elastic net with l1-ratio 0 the
+  objective bound already implies this one (√loss ≤ 5.8·√floor in f64,
+  1.42·√floor in f32), so in practice only l1 and elastic-net fits meet
+  the message. R² there measures rounding, not the fit: a fit within a
   few ε·|ȳ| of ȳ passes at any R² (f32 R² −2.08 at 6.2e-7·|ȳ|, f64 −1.84 at
   4.4e-15·|ȳ|, pinned accepted in `mbsgd-gate-round-off-predictions-test`).
   An l1 fit oscillates about a constant by about eta0·α·r·√d whatever

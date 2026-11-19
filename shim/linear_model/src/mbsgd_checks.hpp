@@ -159,7 +159,10 @@ inline constexpr double gate_round_off_factor = 10;
 // (mean(y²) for the regressor), instead of a multiple of F_start. With it the
 // zero model is b = ȳ, w = 0, and a fit is judged against it by the bounds
 // below: an l1 or elastic-net fit by all three instead of by A, any other by
-// the prediction bound.
+// A and the prediction bound. Under none, l2 or an l1-ratio of 0, A already
+// holds √loss to 5.8·√floor (float64) or 1.42·√floor (float32), far below
+// 2^-10·|ȳ|: A implies the prediction bound there, and in practice only l1
+// and elastic-net fits meet its message.
 template <typename T>
 inline constexpr double gate_round_off_start =
     std::is_same_v<T, float> ? 1 : 32;

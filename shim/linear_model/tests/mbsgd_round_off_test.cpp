@@ -127,6 +127,9 @@ TEST(MbsgdRoundOff, PredictionsOffByMoreThanAShareOfTheConstantAreRefused) {
   }
   for (const int32_t penalty :
        {CUML_LINEAR_MODEL_PENALTY_L2, CUML_LINEAR_MODEL_PENALTY_NONE}) {
+    SCOPED_TRACE(
+        "the function alone: the objective bound keeps an l2 or unpenalised "
+        "fit far below this loss");
     EXPECT_EQ(round_off_prediction_refusal<double>(lasso(penalty), constant,
                                                    std::pow(1.01 * edge, 2))
                   .value_or(""),

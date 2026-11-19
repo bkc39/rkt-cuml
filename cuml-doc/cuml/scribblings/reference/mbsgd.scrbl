@@ -65,7 +65,8 @@ allowance is at most a quarter of the mean of @racket[y]'s squares. At round-off
 @racket[fit-intercept] a regressor under any penalty also raises, advising a lower @racket[eta0]
 (or, under l1 or elastic net, @racket[alpha]), when the root mean square of its prediction error
 exceeds 2@superscript{-10} of the mean of @racket[y] plus round-off; a fit within that passes
-however low its R², which there measures rounding, not the fit. An l1 fit's oscillation about a
+however low its R², which there measures rounding, not the fit. Without an l1 share the objective
+bound already implies this one, so in practice only l1 and elastic-net fits raise it. An l1 fit's oscillation about a
 constant does not shrink with it, so a constant @racket[y] below about 2@superscript{10} times
 @racket[eta0], @racket[alpha] and the square root of the columns (2×10@superscript{-4} at the
 defaults on four standardised columns) raises unless fitted exactly. Above round-off, also raises
