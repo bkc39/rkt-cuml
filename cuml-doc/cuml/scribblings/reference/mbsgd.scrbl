@@ -59,9 +59,9 @@ an allowance for the oscillation about a zero optimum. The allowance grows with 
 growing with the columns beyond 800; when that objective is itself round-off, as for a constant
 @racket[y], at most a quarter of the mean of @racket[y]'s squares. Also raises when the loss
 without the penalty ends above the zero model's by more than the slack and round-off, a fit that
-predicts worse than the mean of @racket[y]. The gate sees only the objective and the loss, so it
-can pass a fit that predicts badly, and refuse one that predicts well on a nearly constant
-@racket[y]. Raises, advising a rescale, before the solve when the zero model's objective of
+predicts worse than the zero model (the mean of @racket[y] with @racket[fit-intercept], 0
+without). The gate sees only the objective and the loss, so it can pass a fit that predicts badly,
+and refuse one that predicts well on a nearly constant @racket[y]. Raises, advising a rescale, before the solve when the zero model's objective of
 @racket[y] is not finite, or when a sum the solver makes in @racket[X]'s dtype could overflow: the
 sum of a column of @racket[X] (rescale @racket[X]), with @racket[fit-intercept] the sum of
 @racket[y] (rescale @racket[y]), and the products of @racket[X] and the centred
