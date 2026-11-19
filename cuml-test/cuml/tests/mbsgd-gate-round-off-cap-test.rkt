@@ -25,7 +25,7 @@
 
 (test-gpu "a constant target's oscillation is capped at a quarter of its mean square"
   (for ([r (in-list constant-rises)])
-    (match-define (list dt penalty alpha eta0 schedule batch _) r)
+    (match-define (list dt penalty alpha row-eta0 schedule batch _) r)
     (law-case (format "~a y = 1.7 ~a alpha ~a ~a batch ~a" dt penalty alpha schedule batch)
       (refused-at-eta0 (lambda (eta0)
                          (regressor-fit constant-rows
@@ -36,7 +36,7 @@
                                         #:eta0 eta0
                                         #:learning-rate schedule
                                         #:batch-size batch))
-                       eta0))))
+                       row-eta0))))
 
 (define (offset-targets offset)
   (for/list ([r (in-list constant-rows)]
@@ -51,8 +51,8 @@
 (test-gpu "a float32 target with a real spread far from 0 is gated as it is at 0"
   (for* ([r (in-list offset-rises)]
          [offset (in-list '(0.0 1e6))])
-    (match-define (list alpha eta0 schedule _) r)
-    (law-case (format "offset ~a l1 alpha ~a eta0 ~a ~a" offset alpha eta0 schedule)
+    (match-define (list alpha row-eta0 schedule _) r)
+    (law-case (format "offset ~a l1 alpha ~a eta0 ~a ~a" offset alpha row-eta0 schedule)
       (refused-at-eta0 (lambda (eta0)
                          (regressor-fit constant-rows
                                         (offset-targets offset)
@@ -61,4 +61,4 @@
                                         #:alpha alpha
                                         #:eta0 eta0
                                         #:learning-rate schedule))
-                       eta0))))
+                       row-eta0))))
