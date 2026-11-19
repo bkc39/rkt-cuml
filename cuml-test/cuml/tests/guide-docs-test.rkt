@@ -56,16 +56,7 @@
          (only-in cuml/scribblings/guide/source page-helpers-source)
          (only-in datasets/core load-dataset-table)
          (only-in racket/function curry)
-         (only-in racket/list
-                  append-map
-                  argmax
-                  count
-                  drop
-                  first
-                  group-by
-                  remove-duplicates
-                  second
-                  take)
+         (only-in racket/list append-map argmax count drop first group-by remove-duplicates take)
          (only-in racket/match match match-define)
          (only-in racket/math exact-round sqr)
          (only-in rackunit
@@ -356,7 +347,8 @@
   (define scaled-fit (pca-fit (wine-scaled)))
   (define ratios (~> scaled-fit pca-result-explained-variance-ratio device-vector->list))
   (check-equal? (map rounded (take ratios 3)) '("0.362" "0.192" "0.111"))
-  (check-equal? (~> ratios cumulative second rounded) "0.554")
+  (match-define (list* _ two-share _) (cumulative ratios))
+  (check-equal? (rounded two-share) "0.554")
   (check-equal? (map (curry components-for ratios) '(0.8 0.9)) '(5 8))
   (check-equal? (take (leading scaled-fit wine-measurements 2) 2)
                 '(("flavanoids" "total-phenols") ("color-intensity" "alcohol"))))

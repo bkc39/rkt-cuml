@@ -8,7 +8,7 @@ if [ $# -gt 0 ]; then
 else
   dirs=(cuml-test cuml-glmnet-test)
 fi
-refused=cadr,caddr,cadddr,third,fourth
+refused=cadr,caddr,cadddr,second,third,fourth,fifth,sixth,seventh,eighth,ninth,tenth
 
 status=0
 hits=$(racket lint/positional.rkt "$refused" "${dirs[@]}") || status=$?

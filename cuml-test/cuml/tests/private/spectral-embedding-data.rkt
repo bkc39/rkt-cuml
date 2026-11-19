@@ -7,7 +7,7 @@
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params)
          (only-in racket/flonum flsingle)
-         (only-in racket/list append* argmax make-list second)
+         (only-in racket/list append* argmax make-list)
          (only-in racket/match match match-define match-lambda)
          (only-in racket/math pi sqr)
          racket/runtime-path
@@ -111,10 +111,10 @@
               #:rows (lambda (rows) (append rows rows))
               #:cols (lambda (cols) (append cols cols))
               #:vals (lambda (_)
-                       (for/lists (firsts seconds #:result (append firsts seconds))
+                       (for/lists (heads tails #:result (append heads tails))
                                   ([part (in-list split)])
-                                  (match-define (list first second) part)
-                                  (values first second)))))
+                                  (match-define (list head tail) part)
+                                  (values head tail)))))
 
 (define (summed-entries g parts)
   (graph-map-vals g (lambda (w) (flsingle (apply + (parts w))))))
@@ -259,8 +259,12 @@
           (bitwise (embedded (embedded-graph g options))))))
 
 (define (check-twins entries)
+  (define cases
+    (map (match-lambda
+           [(list _ twin-case _) twin-case])
+         entries))
   (for ([entry (in-list entries)]
-        [found (in-list (run-cases twin (map second entries)))])
+        [found (in-list (run-cases twin cases))])
     (match-define (list label _ check) entry)
     (test-case label
       (check (hash-ref found 'embedding)))))

@@ -10,7 +10,7 @@
                   kmeans-result-inertia
                   kmeans-score
                   kmeans-transform)
-         (only-in racket/list append* first second)
+         (only-in racket/list append* filter-map)
          (only-in racket/match == match match-define match-lambda)
          (only-in rackunit
                   check-equal?
@@ -187,13 +187,20 @@
                           fits)
                      grids)))
   (define (named verdict)
-    (for/list ([fit (in-list fits)]
-               #:when (eq? (second fit) verdict))
-      (first fit)))
+    (filter-map (match-lambda
+                  [(list name (== verdict) _) name]
+                  [_ #f])
+                fits))
   (printf
    "H13: largest relative centroid, inertia, distance or score deviation ~a; bit-identical: ~a\n"
-   (apply max 0.0 (map first spreads))
-   (andmap second spreads))
+   (apply max
+          0.0
+          (map (match-lambda
+                 [(list deviation _) deviation])
+               spreads))
+   (andmap (match-lambda
+             [(list _ identical?) identical?])
+           spreads))
   (printf "H13: fits that also change between runs at the default batch: ~a\n" (named 'unstable))
   (check-equal? (named 'departed) '()))
 
@@ -218,7 +225,8 @@
       (define start (current-inexact-milliseconds))
       (thunk)
       (- (current-inexact-milliseconds) start)))
-  (second (sort times <)))
+  (match-define (list _ median _) (sort times <))
+  median)
 
 (test-gpu "the batch size is read when the procedure or the estimator is called"
   (define X (blob-data 65536 8 64 7 'float32))

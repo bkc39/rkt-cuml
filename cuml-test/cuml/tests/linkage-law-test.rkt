@@ -1,7 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/list first range remove-duplicates rest second shuffle)
-         (only-in racket/match match-define)
+(require (only-in racket/list first range remove-duplicates rest shuffle)
+         (only-in racket/match match-define match-lambda)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
@@ -101,7 +101,11 @@
       (define fits
         (for/list ([k (in-range 1 41)])
           (fit-lists rows k connectivity)))
-      (check-equal? (length (remove-duplicates (map second fits))) 1)
+      (define children
+        (map (match-lambda
+               [(list _ one) one])
+             fits))
+      (check-equal? (length (remove-duplicates children)) 1)
       (for ([coarse (in-list fits)]
             [fine (in-list (rest fits))])
         (check-true (partition-refines? (first fine) (first coarse)))))))

@@ -27,7 +27,7 @@
    (values ok? output)))
 
 (test-case "a test table read with a positional accessor is refused, with what to use instead"
-  (for ([accessor (in-list '(cadr caddr cadddr third fourth))])
+  (for ([accessor (in-list '(cadr caddr cadddr second third fourth fifth tenth))])
     (define-values (ok? output) (gate-on `((define rows '((a 1 2 3))) (map ,accessor rows))))
     (check-false ok? (symbol->string accessor))
     (check-regexp-match
@@ -45,8 +45,9 @@
                                                              (define my-cadddr 4)
                                                              (define third-row 3))))
   (check-true ok?)
-  (check-regexp-match #rx"no cadr, caddr, cadddr, third, fourth, or list-ref with a literal index"
-                      output))
+  (check-regexp-match
+   #rx"no cadr, caddr, cadddr, second, third, fourth, fifth, sixth, seventh, eighth, ninth, tenth, or list-ref with a literal index"
+   output))
 
 (test-case "list-ref with a literal index is refused, inside another access too"
   (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref (list-ref rows 0) 2))))
@@ -55,6 +56,13 @@
    #rx"table-test[.]rkt:3: list-ref with a literal index: read a test table's rows with match-define"
    output)
   (check-equal? (length (regexp-match* #rx"list-ref with a literal index:" output)) 2))
+
+(test-case "list-ref with a quoted literal index is refused"
+  (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref rows '2))))
+  (check-false ok?)
+  (check-regexp-match
+   #rx"table-test[.]rkt:3: list-ref with a literal index: read a test table's rows with match-define"
+   output))
 
 (test-case "list-ref with a computed index passes"
   (define-values (ok? output)

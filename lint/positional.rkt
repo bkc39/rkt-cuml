@@ -8,7 +8,9 @@
 (provide positional-accesses)
 
 (define (literal-index? one)
-  (exact-nonnegative-integer? (syntax-e one)))
+  (match (syntax->datum one)
+    [(or (? exact-nonnegative-integer?) (list 'quote (? exact-nonnegative-integer?))) #t]
+    [_ #f]))
 
 (define (accesses one refused)
   (cond

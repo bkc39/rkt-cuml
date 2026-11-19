@@ -32,10 +32,10 @@
                  #:weights weights))
 
 (define (wide-pair d)
-  (define tenth (flsingle 0.1))
+  (define small (flsingle 0.1))
   (define half (quotient d 2))
-  (list (cons 1.0 (make-list (- d 1) tenth))
-        (cons 1.0 (append (make-list half (- tenth)) (make-list (- d 1 half) tenth)))))
+  (list (cons 1.0 (make-list (- d 1) small))
+        (cons 1.0 (append (make-list half (- small)) (make-list (- d 1 half) small)))))
 
 (define (wide-pair-fit d factor)
   (match-define (list a b) (wide-pair d))

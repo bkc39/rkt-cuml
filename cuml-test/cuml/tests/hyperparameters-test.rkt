@@ -49,14 +49,14 @@
     (check-equal? (call-with widget-params (list key) changed '()) expected (format "~a" key))))
 
 (test-case "an override of an override is hash-set*, and a base's dependent default stays"
-  (for* ([first (in-list (subsets '(size scale shade label) 2))]
-         [second (in-list (subsets '(size scale shade label) 2))])
-    (define base (call-with widget-params first changed '()))
+  (for* ([inner (in-list (subsets '(size scale shade label) 2))]
+         [outer (in-list (subsets '(size scale shade label) 2))])
+    (define base (call-with widget-params inner changed '()))
     (define over
-      (call-with widget-params second (hasheq 'size 11 'scale 13 'shade 'x 'label "y") (list base)))
+      (call-with widget-params outer (hasheq 'size 11 'scale 13 'shade 'x 'label "y") (list base)))
     (check-equal?
      over
-     (for/fold ([set base]) ([key (in-list second)])
+     (for/fold ([set base]) ([key (in-list outer)])
        (hash-set set key (hash-ref (hasheq 'size 11 'scale 13 'shade 'x 'label "y") key)))))
   (check-equal? (hash-ref (widget-params (widget-params) #:size 10) 'scale) 6))
 
