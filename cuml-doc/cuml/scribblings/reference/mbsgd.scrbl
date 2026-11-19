@@ -54,11 +54,12 @@ standardise it.
 
 Raises, advising a lower @racket[eta0], when the iterate is not finite, when its objective ends
 above the zero model's by more than a slack, widened under l1 or elastic net for oscillation about
-the optimum, or when above round-off its loss without the penalty ends above the zero model's. When
-@racket[y] is constant to round-off, an l1 or elastic-net fit with @racket[fit-intercept] must fit
-the constant: it raises, advising a lower @racket[eta0] or @racket[alpha], when its intercept, a
-coefficient or the error of its predictions exceeds a bound, so a small constant @racket[y] is
-refused at the defaults. Before the solve, raises, advising a rescale, when the zero model's
+the optimum, or when above round-off its loss without the penalty ends above the zero model's; it
+sees only the objective and the loss, so it can pass a fit that predicts badly. When @racket[y] is
+constant to round-off, an l1 or elastic-net fit with @racket[fit-intercept] must fit the constant:
+it raises, advising a lower @racket[eta0] or @racket[alpha], when its intercept, a coefficient or
+the error of its predictions exceeds a bound, so a small constant @racket[y] is refused at the
+defaults. Before the solve, raises, advising a rescale, when the zero model's
 objective is not finite or a sum the solver makes in @racket[X]'s dtype could overflow, and refuses
 an @racket[alpha], @racket[tol], @racket[eta0] or @racket[power-t] that overflows @racket[X]'s
 dtype, an @racket[alpha] or @racket[eta0] that rounds to 0 in it, or an exact @racket[alpha] or
