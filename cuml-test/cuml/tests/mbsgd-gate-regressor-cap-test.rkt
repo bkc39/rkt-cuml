@@ -19,17 +19,16 @@
   (for/list ([t (in-list (reg-target small 5 #:noise 0.5))])
     (* 1e-3 t)))
 
-(define (one-epoch X y dt alpha)
-  (lambda (eta0)
-    (regressor-fit X
-                   y
-                   dt
-                   #:penalty 'elasticnet
-                   #:l1-ratio 0.5
-                   #:alpha alpha
-                   #:eta0 eta0
-                   #:batch-size 512
-                   #:epochs 1)))
+(define ((one-epoch X y dt alpha) eta0)
+  (regressor-fit X
+                 y
+                 dt
+                 #:penalty 'elasticnet
+                 #:l1-ratio 0.5
+                 #:alpha alpha
+                 #:eta0 eta0
+                 #:batch-size 512
+                 #:epochs 1))
 
 (define cap-rows
   `((good ,normal ,normal-targets 10.0 0.01 0.073) (small-y ,small ,small-targets 0.001 1.0 0.61)))
