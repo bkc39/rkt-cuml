@@ -23,15 +23,13 @@
 (test-gpu "a float32 target constant to within 1e-6 passes at the defaults under l1 and elastic net"
   (for ([penalty (in-list '(l1 elasticnet))])
     (law-case (format "float32 ~a" penalty)
-      (check-not-exn (regressor-fit constant-rows near-constant-targets 'float32 #:penalty penalty)))))
+      (check-not-exn
+       (regressor-fit constant-rows near-constant-targets 'float32 #:penalty penalty)))))
 
 (test-gpu "a float64 target constant to within 1e-6 is refused at the defaults under l1 and elastic net"
   (for ([penalty (in-list '(l1 elasticnet))])
     (law-case (format "float64 ~a" penalty)
-      (refused-at-eta0 (lambda (eta0)
-                         (regressor-fit constant-rows
-                                        near-constant-targets
-                                        'float64
-                                        #:penalty penalty
-                                        #:eta0 eta0))
-                       1e-3))))
+      (refused-at-eta0
+       (lambda (eta0)
+         (regressor-fit constant-rows near-constant-targets 'float64 #:penalty penalty #:eta0 eta0))
+       1e-3))))
