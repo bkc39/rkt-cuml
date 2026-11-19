@@ -1687,22 +1687,23 @@ Follow-ups are GitHub issues.
   for fit. Dropping a level or fitting without an intercept fits under
   float32 'qr within 7.5e-7 of the least-squares predictions; float64 'auto
   gives the minimum-norm fit within 6.4e-14. Nearly collinear X
-  (ε = 1/128, 1/4; κ the Gram's, as `solution-kappa` reports it) fits
-  within 11.5·u·κ (QR and SVD paths) of the exact solve, pinned at 32.
+  (ε = 1/128, 1/4; κ(X) = √κ(Gram), as `solution-kappa` reports it) fits
+  within 11.5·u·κ(X) (QR and SVD paths) of the exact solve, pinned at 32.
   'auto and 'eig solve the normal equations, so their error grows as
-  u·κ(Gram)². Over the p13 sweep (ε = 1/2 to 1/1024, n = 20 to 5000, 420
-  draws per ε, dtype and algorithm, 10080 fits) the worst error/(u·κ²),
-  float32:
+  u·κ(Gram) = u·κ(X)². Over the p13 sweep (ε = 1/2 to 1/1024, n = 20 to
+  5000, 420 draws per ε, dtype and algorithm, 10080 fits) the worst
+  error/(u·κ(X)²), float32:
 
   | ε | 1/2 | 1/4 | 1/8 | 1/16 | 1/64 | 1/1024 |
   |---|---|---|---|---|---|---|
   | worst | 1.79 | 2.04 | 2.21 | 2.69 | 2.58 | 0.19 |
-  | at κ | 21.8 | 41.8 | 72.2 | 117.9 | 562.9 | (2 fit) |
+  | at κ(X) | 21.8 | 41.8 | 72.2 | 117.9 | 562.9 | (2 fit) |
 
   ('auto and 'eig agree; at 1/64, 155 fit and 265 are refused). The test
-  pins share·u·κ² with share 27/5, twice the worst; a 2.5× smaller share
-  fails it (ε = 1/16, n = 1000). Float64 reaches 7.7 at ε ≥ 1/64 and 40.3
-  at 1/1024 (κ 10764) and is not pinned. x₂ = x₁ + 3 is
+  pins 27/5·u·κ(X)², with κ(X) = √κ(Gram) as `solution-kappa` reports it,
+  twice the worst; a 2.5× smaller share fails it (ε = 1/16, n = 1000).
+  Float64 is uncovered (#145): it reaches 7.7·u·κ(X)² at ε ≥ 1/64 and 40.3
+  at 1/1024 (κ(X) 10764), and no test pins it. x₂ = x₁ + 3 is
   refused with an intercept and fits without. Measured in floating point
   (p104, n = 60, exact float64 Gram): window cases with exactly collinear
   wide columns give u·κ′ ≥ 7.99 (float32) and ≥ 0.35 (float64, where κ′
