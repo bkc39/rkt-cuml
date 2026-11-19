@@ -198,8 +198,15 @@
     ['when
      `([,lhs (=> ,failure) #:when (procedure? ,name) 'failure] [,lhs 'pattern] [_ 'unmatched])]))
 
-(define when-reads
-  '((([(list a) (=> next) #:when (positive? a) a] [_ 0])
+(define failure-reads
+  '((([(list a ...) (=> next) a] [_ 0]) ([(list b ...) (=> next) b] [_ 0]) (5))
+    (([(list a ...) (=> next) #:when (pair? a) a] [_ 0])
+     ([(list b ...) (=> next) #:when (pair? b) b] [_ 0])
+     (5))
+    (([(list k ...) (=> next) k] [_ 0]) ([(list j ...) (=> next) k] [_ 0]) formal)
+    (([(or (list a) a) (=> next) a] [_ 0]) ([(or (list b) b) (=> next) b] [_ 0]) 5)
+    (([(list-no-order a) (=> next) a] [_ 0]) ([(list-no-order b) (=> next) b] [_ 0]) 5)
+    (([(list a) (=> next) #:when (positive? a) a] [_ 0])
      ([(list b) (=> next) #:when (positive? b) b] [_ 0])
      5)
     (([(list k) (=> k) #:when (number? k) k] [_ 0]) ([(list j) (=> k) #:when (number? j) j] [_ 0]) 5)
@@ -278,10 +285,10 @@
                                            name
                                            name
                                            position)))))
-  (for ([row (in-list when-reads)]
+  (for ([row (in-list failure-reads)]
         [index (in-naturals)])
     (match-define (list one other copied) row)
-    (test-case (format "the copy check reads ~a #:when read ~a's pattern variables as Racket does"
+    (test-case (format "the copy check reads ~a failure-id row ~a's pattern variables as Racket does"
                        head
                        index)
       (check-equal? (alpha-copy? (procedure 'k one) (procedure 'k other))

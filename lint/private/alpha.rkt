@@ -237,12 +237,12 @@
          (cons (if several?
                    normal
                    (car normal))
-               (clause-body env inner (append-map direct-pattern-names each-pattern) forms))]
+               (clause-body inner (append-map direct-pattern-names each-pattern) forms))]
         [_ clause])))
-  (define (clause-body env inner names forms)
+  (define (clause-body inner names forms)
     (match forms
       [(failure-forms id more)
-       (define failing (bind env (list id)))
+       (define failing (bind inner (list id)))
        (define scope
          (for/fold ([scope failing]) ([name (in-list names)])
            (hash-set scope name (ref inner name))))
