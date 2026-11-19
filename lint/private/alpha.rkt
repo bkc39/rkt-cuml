@@ -213,6 +213,11 @@
                    (car normal))
                (body inner forms))]
         [_ clause])))
+  (define (guarded env items normal-test)
+    (for/list ([clause (in-list (proper items))])
+      (match clause
+        [(cons test forms) (cons (normal-test test) (body env forms))]
+        [_ clause])))
   (define (let-form env head rest)
     (match rest
       [(list* (? symbol? loop) (? list? bindings) forms)
@@ -332,6 +337,20 @@
                     'match-let*)
                 (let-form env head rest)]
                [(? for-head?) (for-form env head rest)]
+               [(or 'when 'unless)
+                (match rest
+                  [(cons test forms) (cons (expr env test) (body env forms))]
+                  [_ (each env rest)])]
+               ['cond (guarded env rest (lambda (test) (expr env test)))]
+               ['case
+                (match rest
+                  [(cons subject items) (cons (expr env subject) (guarded env items values))]
+                  [_ (each env rest)])]
+               [(or 'parameterize 'parameterize* 'with-handlers 'with-handlers*)
+                (match rest
+                  [(cons (? list? bindings) forms)
+                   (cons (map (lambda (one) (each-form env one)) bindings) (body env forms))]
+                  [_ (each env rest)])]
                [_ (each env rest)]))]
       [(? pair?) (each env datum)]
       [_ datum]))
