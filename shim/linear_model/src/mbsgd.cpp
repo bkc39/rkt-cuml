@@ -155,6 +155,9 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
             o, base, static_cast<double>(intercept), largest)) {
       throw logic_error(*refusal);
     }
+    if (const auto refusal = round_off_prediction_refusal<T>(o, base, loss)) {
+      throw logic_error(*refusal);
+    }
     if (const auto refusal = loss_refusal<T>(base, loss, o.eta0)) {
       throw logic_error(*refusal);
     }

@@ -7,7 +7,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 header=${1:-shim/linear_model/src/mbsgd_checks.hpp}
 module=${2:-cuml-test/cuml/tests/private/mbsgd-gate-data.rkt}
-names=(round_off_coef_steps round_off_intercept_share)
+names=(round_off_coef_steps round_off_intercept_share round_off_prediction_share)
 
 status=0
 for name in "${names[@]}"; do

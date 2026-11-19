@@ -23,11 +23,13 @@
          loss-r2
          lost-at-eta0
          off-constant-at-eta0
+         off-predictions-at-eta0
          refused-at-eta0
          regressor-fit
          rose
          round-off-coef-steps
          round-off-intercept-share
+         round-off-prediction-share
          wide-problem)
 
 (define ((risen what) eta0)
@@ -39,9 +41,13 @@
 
 (define round-off-intercept-share 1e-6)
 (define round-off-coef-steps 2)
+(define round-off-prediction-share 0.0009765625)
 
 (define off-constant
   #px"^y is constant to round-off and (a coefficient of the fit reaches|the fit's intercept is off by) [0-9.e+-]+; lower #:eta0 or #:alpha$")
+
+(define off-predictions
+  #px"^y is constant to round-off and the fit's predictions are off by [0-9.e+-]+; lower #:eta0 or #:alpha$")
 
 (define rose (risen "objective"))
 (define loss-rose (risen "loss"))
@@ -64,6 +70,7 @@
 (define refused-at-eta0 (refused-by rose))
 (define lost-at-eta0 (refused-by loss-rose))
 (define off-constant-at-eta0 (refused-by (lambda (_) off-constant)))
+(define off-predictions-at-eta0 (refused-by (lambda (_) off-predictions)))
 
 (define (loss-r2 fit)
   (match (regexp-match #px"the loss rose from ([0-9.e+-]+) to ([0-9.e+-]+);"

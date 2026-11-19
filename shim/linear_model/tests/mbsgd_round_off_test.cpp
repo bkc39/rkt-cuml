@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <format>
 #include <utility>
@@ -12,6 +13,7 @@ namespace {
 
 using cumlrkt::glm::mbsgd::baseline;
 using cumlrkt::glm::mbsgd::l1_allowance;
+using cumlrkt::glm::mbsgd::round_off_prediction_refusal;
 using cumlrkt::glm::mbsgd::round_off_refusal;
 using cumlrkt::glm::mbsgd::sgd_options;
 
@@ -104,6 +106,56 @@ TEST(MbsgdRoundOff, TheBoundsJudgeOnlyAnL1FitOfAConstantWithAnIntercept) {
                    .has_value());
   EXPECT_TRUE(round_off_refusal<double>(lasso(CUML_LINEAR_MODEL_PENALTY_L1),
                                         spread, far, far)
+                  .has_value());
+}
+
+TEST(MbsgdRoundOff, PredictionsOffByMoreThanAShareOfTheConstantAreRefused) {
+  const double edge = (c / 1024) + std::sqrt(y_floor);
+  for (const int32_t penalty :
+       {CUML_LINEAR_MODEL_PENALTY_L1, CUML_LINEAR_MODEL_PENALTY_ELASTICNET}) {
+    const sgd_options o = lasso(penalty);
+    EXPECT_FALSE(round_off_prediction_refusal<double>(o, constant,
+                                                      std::pow(0.99 * edge, 2))
+                     .has_value());
+    EXPECT_EQ(
+        round_off_prediction_refusal<double>(o, constant,
+                                             std::pow(1.01 * edge, 2))
+            .value_or(""),
+        std::format("y is constant to round-off and the fit's predictions are "
+                    "off by {:.6g}; lower #:eta0 or #:alpha",
+                    1.01 * edge));
+  }
+  for (const int32_t penalty :
+       {CUML_LINEAR_MODEL_PENALTY_L2, CUML_LINEAR_MODEL_PENALTY_NONE}) {
+    EXPECT_EQ(round_off_prediction_refusal<double>(lasso(penalty), constant,
+                                                   std::pow(1.01 * edge, 2))
+                  .value_or(""),
+              std::format("y is constant to round-off and the fit's "
+                          "predictions are off by {:.6g}; lower #:eta0",
+                          1.01 * edge));
+  }
+}
+
+TEST(MbsgdRoundOff, ThePredictionBoundJudgesOnlyAFitWithAnInterceptAtRoundOff) {
+  const double far = 1;
+  EXPECT_FALSE(
+      round_off_prediction_refusal<double>(
+          without_intercept(lasso(CUML_LINEAR_MODEL_PENALTY_L2)), constant, far)
+          .has_value());
+  baseline spread = constant;
+  spread.start = y_floor * past_f64_round_off;
+  EXPECT_FALSE(round_off_prediction_refusal<double>(
+                   lasso(CUML_LINEAR_MODEL_PENALTY_L2), spread, far)
+                   .has_value());
+  EXPECT_TRUE(round_off_prediction_refusal<double>(
+                  lasso(CUML_LINEAR_MODEL_PENALTY_L2), constant, far)
+                  .has_value());
+  const baseline zero{.start = 0, .floor = 0, .uncentred = 0, .centre = 0};
+  EXPECT_FALSE(round_off_prediction_refusal<float>(
+                   lasso(CUML_LINEAR_MODEL_PENALTY_L1), zero, 0)
+                   .has_value());
+  EXPECT_TRUE(round_off_prediction_refusal<float>(
+                  lasso(CUML_LINEAR_MODEL_PENALTY_L1), zero, 1e-30)
                   .has_value());
 }
 

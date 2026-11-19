@@ -2100,7 +2100,9 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   b = ȳ, w = 0 instead, refused ("y is constant to round-off and ...;
   lower #:eta0 or #:alpha") unless every |w| ≤ 2·eta0·α·r and |b − ȳ| ≤
   1e-6·|ȳ| (r3; a cap of .25·mean(y²) uncentred there passed a fit off the
-  constant by up to about ȳ/2). A and both caps scale with y², so the
+  constant by up to about ȳ/2), and any regressor with fit-intercept at
+  round-off is refused when √loss > 2⁻¹⁰·|ȳ| + √floor (r4b, F10-R
+  round-off). A and both caps scale with y², so the
   caps are y-scale-invariant, and they keep A finite for any finite
   F_start and mean(y²) (uncapped, A is inf in float64 above α ≈ 1e154 and
   passed any finite fit; uncapped at round-off with no other check, a
@@ -2306,6 +2308,30 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   mbsgd-gate-round-off-test; #141). No round-off multiple bounds these
   refusals: they stop where the oscillation's rise, 2.1e-11 to 3.6e-11 here,
   falls inside .25·F_start.
+  r4b (H-A, H-B): at round-off with fit-intercept every regressor, under
+  any penalty, is also refused when its prediction error √loss exceeds
+  2⁻¹⁰·|ȳ| + √floor ("the fit's predictions are off by …"). r4's
+  loss ≤ F_start·1.025 + floor refused 7 of the 19 round-off-test rows: an
+  exact constant has F_start ≈ 0 while l1 leaves |w| ≈ eta0·α·r, a loss
+  of 3e-14 at 6.2e-7·|ȳ| (f32 y = 0.3). At round-off the measure is the
+  error relative to the constant. The share lies between that 6.2e-7 and
+  0.040 (y = 1.7 l1 α .51 eta0 .1, r2; the intercept bound refuses it
+  too), 2.6 octaves above their geometric middle. On zero-mean and
+  standardised X, where b = ȳ whatever w and only the coefficient bound
+  acted, it refuses 60 constant-std fits 0ba2ed9 passed (y = 1.7, l1 and
+  elastic net, both dtypes, 1.03e-3·|ȳ| up to 6.5e4·|ȳ|; e.g. l1 α 10 and
+  100 at eta0 .1, .57 to 6.5) and passes the 76 at most 9.66e-4·|ȳ|. No
+  other probe row moves: the 19 round-off-test rows, F10-W's 16,
+  constant-q (worst accepted 7.2e-4·|ȳ|, y ≡ 0 32/32), constant-mid
+  (its one accepted fit off the constant, f64 y = 1e6 l1 α 3e4 eta0 .1
+  invscaling, is at 3.75e-5·|ȳ| and still passes), repro-h1, h1-wide
+  and ordinary (768/768). H-B is accepted by ruling: R² at round-off
+  measures rounding, not the fit. h1-wide's accepted fits with R² < −.05
+  are all at round-off, within 6.0e-7·|ȳ| in f32 (27, F_start ≤ .96
+  floors) and 6.5e-15·|ȳ| in f64 (25, ≤ 31.7 floors); y = 1e6 + .36·x₁ +
+  .072·e (f32, R² −2.08, 6.2e-7·|ȳ| = 5.2·ε·|ȳ|) and an f64 fit
+  at R² −1.84 (4.4e-15·|ȳ| = 20·ε·|ȳ|) are pinned accepted
+  (mbsgd-gate-round-off-predictions-test).
   Near the floor the loss guard (r3) refuses y = 1e6 + .5·x₁ + .1·e
   (f32, 1.73 floors) l1 α 1 eta0 .05 (R² −.14) and α 2 eta0 .02 (R²
   −.097), which the old + floor passed; it passes s .45 α 1 eta0 .02 (R²

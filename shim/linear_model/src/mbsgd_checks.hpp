@@ -157,11 +157,14 @@ inline constexpr double gate_round_off_factor = 10;
 // that many floors is round-off: the zero model fits y. Without fit-intercept
 // A is capped at a share of the uncentred start, the zero model's loss
 // (mean(y²) for the regressor), instead of a multiple of F_start. With it the
-// zero model is b = ȳ, w = 0, and an l1 or elastic-net fit is judged against
-// it by the two bounds below instead of by A.
+// zero model is b = ȳ, w = 0, and a fit is judged against it by the bounds
+// below: an l1 or elastic-net fit by all three instead of by A, any other by
+// the prediction bound.
 template <typename T>
 inline constexpr double gate_round_off_start =
     std::is_same_v<T, float> ? 1 : 32;
+// The Racket tests restate the three round_off_ shares and steps below as
+// literals; scripts/gate-constants.sh fails when they differ.
 // A coordinate whose optimum is 0 moves by the penalty's step eta·α·r, at
 // most eta0·α·r under every schedule, and by the loss gradient, which at
 // round-off is y's rounding times x: it crosses 0 by at most one step, and
@@ -172,6 +175,16 @@ inline constexpr double round_off_coef_steps = 2;
 // most log2(n)/2·ε: within 8.4·ε for n up to 2^15.8 (worst 1.4e-7, F10-R
 // round-off). x̄·w shrinks with eta0 and alpha, as the refusal advises.
 inline constexpr double round_off_intercept_share = 1e-6;
+// At round-off with fit-intercept the zero model b = ȳ, w = 0 predicts y to
+// within √floor and R² measures rounding, not the fit: a fit under any
+// penalty is refused when its prediction error √loss exceeds
+// round_off_prediction_share·|ȳ| + √floor. The share lies between the
+// largest error of a fit of a constant at the defaults, 6.2e-7·|ȳ| (float32
+// l1 y = 0.3), and the smallest of a fit that must be refused, 0.040·|ȳ|
+// (y = 1.7, l1 α .51 eta0 .1). 2^-10 is 1,570 times the first and a 41st of
+// the second, 2.6 octaves above their geometric middle 2^-12.6; it passes a
+// near-constant fit within a few ulps whatever its R² (F10-R round-off).
+inline constexpr double round_off_prediction_share = 0.0009765625;
 // sgdFit sums in X's dtype: X's columns and y for the centring means, and the
 // products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).
 // Each bound must stay solver_headroom below the dtype's largest value. The
@@ -216,7 +229,8 @@ bool fits_a_constant(const sgd_options& o, const baseline& base,
 // no more, a rise of about 2·k·eta0·(alpha·r)^2. eta0 bounds the step under
 // every schedule. It is capped at a multiple of start, or of the uncentred
 // start at round-off, so a large eta0 or alpha cannot hide divergence. A fit
-// of a constant y is bounded by round_off_refusal instead.
+// of a constant y is bounded by round_off_refusal and
+// round_off_prediction_refusal instead.
 template <typename T>
 double l1_allowance(const sgd_options& o, int64_t d, const baseline& base,
                     bool regressor) {
@@ -310,6 +324,24 @@ std::optional<std::string> round_off_refusal(const sgd_options& o,
         intercept - c);
   }
   return std::nullopt;
+}
+
+template <typename T>
+std::optional<std::string> round_off_prediction_refusal(const sgd_options& o,
+                                                        const baseline& base,
+                                                        double loss) {
+  if (o.fit_intercept == 0 || !at_round_off<T>(base)) {
+    return std::nullopt;
+  }
+  const double off = std::sqrt(loss);
+  if (off <= (round_off_prediction_share * std::abs(base.centre)) +
+                 std::sqrt(base.floor)) {
+    return std::nullopt;
+  }
+  return std::format(
+      "y is constant to round-off and the fit's predictions are off by "
+      "{:.6g}; {}",
+      off, l1_share(o) > 0 ? "lower #:eta0 or #:alpha" : "lower #:eta0");
 }
 
 template <typename T>
