@@ -401,7 +401,13 @@ Its times on a loaded host (#128), the first four past the 120 s default, so ski
 `no-positional-access` (`lint/positional.rkt`) refuses `cadr`, `caddr`, `cadddr`,
 `third`, `fourth` and `list-ref` with a literal index under `cuml-test` and
 `cuml-glmnet-test`, outside comments and strings: read a test table's rows with
-`match-define` or `match-lambda`; a computed index stays allowed. Resyntax does
+`match-define` or `match-lambda`; a computed index stays allowed; its flake
+check runs the script under the flake's racket (`racketGate`). The
+`racket-review` flake check builds the package build's Racket home
+(`installRacketHome`), Resyntax with its catalog dependencies
+(`resyntaxSources` in `nix/racket-tools.nix`, at the devshell's
+`resyntaxRev`) and the compiled cuml packages before `scripts/review.sh`,
+because the copy check expands every compared file's requires. Resyntax does
 not visit a module's top level as a body, so `who-pair-to-define/who` fixes
 pairs in internal definition contexts and the `review` lint refuses them at
 module level.
