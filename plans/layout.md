@@ -1601,39 +1601,58 @@ Follow-ups are GitHub issues.
   per 64 blocks (one staging thread per element), summed in float64, and a
   float32 `Ssyevd` of that Gram G̃ gives eigenpairs (μ_j, v_j) (float64
   `Dsyevd` cost about 8× the fit at 8000×2000 and added nothing: the bound
-  comes from the float64 quotients). The window is every v_j with
-  μ_j ≤ μ₁ + 16·ε_G, ε_G = 2·√(1024·d)·u₃₂, with no cap. What it must
-  capture: with E = G̃ − A′, A′'s smallest eigenvector z has a share
-  |v_jᵀz| ≤ ‖Ez‖/(μ_j − λ_min) in v_j (Davis–Kahan), and the Ritz value over
-  the window exceeds λ_min by about Σ_out μ_j·(v_jᵀz)², so every v_j that
-  the Gram's error could carry down to λ_min belongs inside, however many
-  there are. The bound: each entry of E is a 1024-term float32 dot product
-  of unit columns, in error by about √1024·u₃₂ under the probabilistic
-  rounding model (Higham and Mary; the worst case, 1024·u₃₂, needs aligned
-  roundings), and a symmetric d×d matrix of such errors has
-  ‖E‖₂ ≈ 2·√d times that (the semicircle edge), which is ε_G. The reach of
-  16·ε_G leaves the measured ‖Ez‖ (|μ₁| on exactly singular X, at most
-  1.6e-6 at d = 43, ε_G = 2.5e-5) more than 2^8 below it, so each
-  eigenvector left out carries under 2^−8 of z, and the correction step
-  below removes that share to second order. Only how much of λ_min the
-  check finds depends on ε_G; the result is a lower bound on κ′ whatever
-  the window holds. A′V for the window and the top vector is formed in one
-  pass of two float64 kernels over X (a projection per row and vector, a
-  column sum per column and vector), then H = VᵀA′V and S = VᵀV; the
+  comes from the float64 quotients). The spectrum's error is
+  ε = ε_G + ε_eig. ε_G = 2·√(1024·d)·u₃₂ covers G̃'s entries: each is a
+  1024-term float32 dot product of unit columns, in error by about
+  √1024·u₃₂ under the probabilistic rounding model (Higham and Mary; the
+  worst case, 1024·u₃₂, needs aligned roundings), and a symmetric d×d matrix
+  of such errors has ‖E‖₂ ≈ 2·√d times that (the semicircle edge).
+  ε_eig = c_eig·√d·u₃₂·μ_max covers `Ssyevd` itself: the computed pairs are
+  exact for G̃ + F, ‖F‖₂ ≤ p(d)·u₃₂·‖G̃‖₂ (Householder tridiagonalisation
+  and divide and conquer are backward stable; p(d) ≈ √d under the same
+  rounding model; cuSOLVER documents no bound). c_eig = 16
+  (`eigen_error_factor`) is twice the largest ‖F‖ measured as
+  max_j ‖G̃v_j − μ_j v_j‖ + μ_max·‖VᵀV − I‖ in float64 (both norms
+  spectral), 7.6·√d·u₃₂·μ_max, over factor Grams (x_j = B·f + e_j,
+  B = 0, 3, 10, 40, exact x₂ = x₀ + x₁ − x₃, n = 8000) and correlated ones
+  (x_j = f + s·z_j, s = 0.05, 0.3, n = 20000) at d = 100, 500, 1000, 2000;
+  eigenvalue errors were at most 1.2·√d·u₃₂·μ_max. At 8000×2000, B = 10
+  (λ_max ≈ 1980) ε_eig is 0.085 against ε_G = 1.7e-4, which is the term r2
+  lacked (p18). The check then decides in three steps. **Certify:** when
+  μ₁ > ε, Weyl gives κ′ ≤ (μ_max + ε)/(μ₁ − ε), and when twice that is under
+  the refusal threshold X is accepted with no float64 work (the usual case:
+  Gaussian and correlated 1e6×100 both stop here). **Window:** otherwise it
+  is every v_j with μ_j ≤ μ₁ + 16·ε (the reach). With A′ the exact
+  equilibrated Gram and z its smallest eigenvector, z has a share
+  |v_jᵀz| ≤ ε/(μ_j − λ_min) in v_j (Davis–Kahan), and the Ritz value over
+  the window exceeds λ_min by about Σ_out μ_j·(v_jᵀz)², so the part of z
+  outside the window has norm at most ε/(15·ε) = 1/15 (μ_j − λ_min ≥ 15·ε
+  there), and the correction step below removes that share to second
+  order. **Exact:** the float64 Gram is formed instead
+  (blocked `Dsyrk` over float64 row blocks, κ′ the ratio of its extreme
+  `Dsyevd` eigenvalues) when the window has no gap at its edge
+  (μ_{w+1} < 2·(μ₁ + reach): the edge cuts a cluster, and a v_j just outside
+  can hold as much of z as one inside), when μ₁ < −ε (outside the error
+  model), or when the window's pass costs at least the exact Gram. Both
+  terms fix p18 on their own: with ε_G alone the window was 11 to 17 vectors
+  whose edge cut the bulk (μ₂ ≈ 0.0025, μ_{w+1} ≈ 0.0027 against an edge of
+  0.0027), so the gap rule sends it to the exact Gram; with ε_eig the reach
+  is 1.35 and the window is the whole bulk, 1999 of 2000, past the cost
+  rule. Otherwise A′V for the window and the top vector is formed by two
+  float64 kernels over X (a projection per row and vector, a column sum per
+  column and vector), in chunks of 8 vectors (`pass_chunk`), so the pass
+  keeps one n×8 float64 buffer live; then H = VᵀA′V and S = VᵀV. The
   smallest eigenvalue of the pencil (H, S) (`Dsygvd`, so V need not be
   orthonormal) is the Ritz value, and the top vector's quotient is the
-  largest. When μ₁ ≤ 16·ε_G, one correction step refines the Ritz vector
+  largest. When μ₁ ≤ reach, one correction step refines the Ritz vector
   against the eigenvectors outside the window (one more single-vector
-  pass), and the smaller of the two quotients is used; past that,
-  λ_min ≥ μ₁ − ‖E‖ keeps u·√κ′ far under the threshold and the step is
-  skipped. When the window holds a quarter of the columns or more (always
-  for d ≤ 4), the pass costs as much as the exact Gram (4·n·d·w flops
-  against n·d² for `Dsyrk`), so the float64 Gram is formed instead
-  (blocked `Dsyrk` over float64 row blocks) and κ′ is the ratio of its
-  extreme `Dsyevd` eigenvalues, exact up to double rounding. Ritz values
-  interlace, so every path stays ≥ λ_min, and κ′ is a lower bound up to
-  double rounding: the check never refuses an X whose true κ′ is under the
-  threshold. Without the Ritz step (one vector), exact x₃ = x₁ + x₂ beside a
+  pass), and the smaller of the two quotients is used. Ritz values
+  interlace, so the Ritz value is ≥ λ_min and the top quotient ≤ λ_max, and
+  κ′ is a lower bound in every refined path; on the exact path κ′/κ can
+  exceed 1 by about √n·u₆₄·κ (the float64 Gram's own rounding, relative to
+  λ_min). The certified path returns the upper bound and accepts, so the
+  check never refuses an X whose true κ′ is under the threshold.
+  Without the Ritz step (one vector), exact x₃ = x₁ + x₂ beside a
   near pair x₅ = x₄ + ε·z (ε = 2^−12, 2^−13; n = 1000, 5000; 8 draws; 'qr
   and 'svd-qr) passed the Gram check on 34 of 64 fits (31 then refused by
   the stationarity check, 3 accepted with |c| ≈ 3e4); with it all 64 are
@@ -1641,10 +1660,14 @@ Follow-ups are GitHub issues.
   (n = 5000, 4 draws), 632e662's 16-vector cap let 24 of the test's 56 fits
   through the Gram check (k = 16 to 30, 120 more independent columns or
   none), and the reviewer's probe saw 7 of 192 accepted with |c| up to
-  4.6e4; now every one is refused by it, k = 8 to 30 through the exact Gram
-  (a window of k + 1 ≥ d/4) and k = 17, 30 beside 120 independent columns
-  through the Ritz window. The pass keeps one n×(w + 1) float64 buffer
-  live. It runs before the solve, for
+  4.6e4; now every one is refused by it. The gtests assert the path and
+  window the routine chose: k near pairs beside 120 independent columns
+  take the Ritz window of k + 1, and collinearity beside an unseparated
+  cluster takes the exact Gram. Every column x_j = 10·f + e_j
+  at 8000×2000 with exact x₂ = x₀ + x₁ − x₃ (4 draws, 'qr and 'svd-qr)
+  passed the Gram check at cac8734 and 632e662 (8 of 8: 2 accepted, 6
+  refused by the stationarity check); now all 8 are refused by it. It runs
+  before the solve, for
   ridge 'svd only when some kept column is negligible against α′ and some
   is not (the L2-i window), and for float32 least squares under 'qr and
   'svd-qr only (α′ = 0), except wide X or one kept column, which
@@ -1665,9 +1688,21 @@ Follow-ups are GitHub issues.
   float32 'qr within 7.5e-7 of the least-squares predictions; float64 'auto
   gives the minimum-norm fit within 6.4e-14. Nearly collinear X
   (ε = 1/128, 1/4; κ the Gram's, as `solution-kappa` reports it) fits
-  within 11.5·u·κ (QR and SVD paths) and 54.1·u·κ ('auto, 'eig, worst at
-  κ = 42) of the exact solve; the tests pin 32 and 109, the latter twice
-  the worst. x₂ = x₁ + 3 is
+  within 11.5·u·κ (QR and SVD paths) of the exact solve, pinned at 32.
+  'auto and 'eig solve the normal equations, so their error grows as
+  u·κ(Gram)². Over the p13 sweep (ε = 1/2 to 1/1024, n = 20 to 5000, 420
+  draws per ε, dtype and algorithm, 10080 fits) the worst error/(u·κ²),
+  float32:
+
+  | ε | 1/2 | 1/4 | 1/8 | 1/16 | 1/64 | 1/1024 |
+  |---|---|---|---|---|---|---|
+  | worst | 1.79 | 2.04 | 2.21 | 2.69 | 2.58 | 0.19 |
+  | at κ | 21.8 | 41.8 | 72.2 | 117.9 | 562.9 | (2 fit) |
+
+  ('auto and 'eig agree; at 1/64, 155 fit and 265 are refused). The test
+  pins share·u·κ² with share 27/5, twice the worst; a 2.5× smaller share
+  fails it (ε = 1/16, n = 1000). Float64 reaches 7.7 at ε ≥ 1/64 and 40.3
+  at 1/1024 (κ 10764) and is not pinned. x₂ = x₁ + 3 is
   refused with an intercept and fits without. Measured in floating point
   (p104, n = 60, exact float64 Gram): window cases with exactly collinear
   wide columns give u·κ′ ≥ 7.99 (float32) and ≥ 0.35 (float64, where κ′
@@ -1683,23 +1718,29 @@ Follow-ups are GitHub issues.
   For 'svd-qr the free detector |X̃b|/|Db| from the residual check does not
   separate (exactly collinear float32 X reaches u/q 3.7e-5, x₃ = x₁ + x₂ +
   2^−10·z reaches 1.3e-5). Cost, float32 'qr, RTX 3090 Ti shared, medians
-  of 3 after a warm-up:
+  of 5 after a warm-up; the check alone is timed by a build that stamps
+  each stage after a device sync, and "without" is a build whose check is
+  off:
 
-  | shape | check | fit with | fit without |
-  |---|---|---|---|
-  | 1e6×100 | 12.3 ms | 159.5 ms | 146.8 ms |
-  | 1e5×10 | 1.3 ms | 7.1 ms | 3.0 ms |
-  | 8000×2000 | 90.0 ms | 130.2 ms | 26.8 ms |
+  | shape | check | fit with | fit without | path |
+  |---|---|---|---|---|
+  | 1e6×100 Gaussian | 7.5 ms | 153.4 ms | 145.9 ms | certified |
+  | 1e6×100, x_j = f + 0.05·z_j | 7.4 ms | 153.1 ms | 146.0 ms | certified |
+  | 1e5×10 | 0.5 ms | 3.1 ms | 2.3 ms | certified |
+  | 8000×2000 | 86.3 ms | 111.9 ms | 26.3 ms | certified |
 
-  At 1e6×100 the check is 8.4% of the unchecked fit (window 1 of 100:
-  moments 2.5, blocked Gram 4.2, `Ssyevd` 1.3, the window pass 4.5, the
-  pencil 0.5; no correction step). At 1e5×10 a fixed cost of about 1 ms is
-  accepted; a small-d host solve would remove most of it. At 8000×2000
-  (#140) the check is 3.4× the unchecked fit: `Ssyevd` 62 ms, the blocked
-  Gram 21 ms, the window pass (3 of 2000) 2 ms and the pencil 2 ms. As
-  `cublasDgemm` over float64 row blocks, the window pass cost 3.9 ms plus
-  2.9 ms per further vector at 1e6×100; the two fused kernels take 4.5 ms
-  for two vectors.
+  At 1e6×100 the check is 5% of the unchecked fit, Gaussian or
+  correlated: moments 2.3, blocked Gram 4.0, `Ssyevd` 1.2. At 1e5×10 the
+  fit difference over medians of 41 runs is 0.3 to 0.7 ms between runs,
+  against 0.5 ms for the check alone: the gap is run-to-run noise, not a
+  fixed cost. At 8000×2000 (#140) the check is 3.3× the unchecked fit:
+  `Ssyevd` with vectors 64.5 ms and the blocked Gram 17.4 ms. The cost
+  model's constants come from the same stamped build with every path
+  forced (exact Gram and Ritz windows 1, 8, 32 at each shape): the exact
+  `Dsyrk` takes 300 ms at 1e6×100 and 309 ms at 1e6×20, so it is bound by
+  rows; `Dsyevd` takes 41 ms at d = 1000 and 146 ms at d = 2000; a Ritz
+  vector costs 0.48 ms at 8000×2000 and 2.1 ms at 1e6×100. Collinear data
+  at 8000×2000 takes the exact path, about 370 ms.
 - **L2-k, float32 'eig on a Gram singular to the dtype (L3r, #111).**
   Breast-cancer (569×29, texture-mean on raw X, column sds 0.0026 to 569,
   intercept): XᵀWX has λ_max 2.5e8 and λ_min 4.0e-4, u·κ₀ = 3.8e4, and 19 of
