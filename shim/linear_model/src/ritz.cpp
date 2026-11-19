@@ -11,30 +11,20 @@ namespace cumlrkt::glm::ritz {
 namespace {
 
 constexpr int gap_bits = 20;
+constexpr double float32_roundoff = 0x1p-24;
+constexpr double semicircle_edge = 2.0;
+constexpr double window_reach = 16.0;
+constexpr int64_t gram_share = 4;
+
+double gram_error(int64_t d) {
+  return semicircle_edge * std::sqrt(static_cast<double>(gram_block_rows * d)) *
+         float32_roundoff;
+}
 
 }  // namespace
 
 double dot(const double* a, const double* b, int64_t d) {
   return std::transform_reduce(a, a + d, b, 0.0);
-}
-
-std::vector<double> orthonormal(const std::vector<double>& vectors, int64_t d,
-                                int64_t k) {
-  std::vector<double> v(vectors.begin(), vectors.begin() + (k * d));
-  for (int64_t j = 0; j < k; ++j) {
-    double* vj = v.data() + (j * d);
-    for (int pass = 0; pass < 2; ++pass) {
-      for (int64_t i = 0; i < j; ++i) {
-        const double* vi = v.data() + (i * d);
-        const double c = dot(vi, vj, d);
-        std::transform(vj, vj + d, vi, vj,
-                       [c](double a, double b) { return a - (c * b); });
-      }
-    }
-    const double norm = std::sqrt(dot(vj, vj, d));
-    std::transform(vj, vj + d, vj, [norm](double a) { return a / norm; });
-  }
-  return v;
 }
 
 std::vector<double> combined(const std::vector<double>& columns, int64_t d,
@@ -46,6 +36,32 @@ std::vector<double> combined(const std::vector<double>& columns, int64_t d,
     }
   }
   return y;
+}
+
+std::vector<double> symmetric_block(const std::vector<double>& m, int64_t c,
+                                    int64_t k) {
+  std::vector<double> out(k * k);
+  for (int64_t j = 0; j < k; ++j) {
+    for (int64_t i = 0; i < k; ++i) {
+      out[(j * k) + i] = 0.5 * (m[(j * c) + i] + m[(i * c) + j]);
+    }
+  }
+  return out;
+}
+
+double reach_of(int64_t d) {
+  return window_reach * gram_error(d);
+}
+
+int64_t window_of(const std::vector<double>& values, int64_t d) {
+  const double reach = values.front() + reach_of(d);
+  return std::max<int64_t>(1, std::ranges::count_if(values, [reach](double l) {
+                             return l <= reach;
+                           }));
+}
+
+bool exact_gram_cheaper(int64_t window, int64_t d) {
+  return gram_share * window >= d;
 }
 
 std::vector<double> refined(const eigen_pairs& e, int64_t window,

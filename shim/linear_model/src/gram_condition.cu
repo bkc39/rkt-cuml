@@ -1,5 +1,4 @@
 #include <cublas_v2.h>
-#include <cusolverDn.h>
 #include <thrust/functional.h>
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/iterator/discard_iterator.h>
@@ -14,10 +13,8 @@
 #include <limits>
 #include <optional>
 #include <raft/core/cublas_macros.hpp>
-#include <raft/core/cusolver_macros.hpp>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cublas_handle.hpp>
-#include <raft/core/resource/cusolver_dn_handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/exec_policy.hpp>
 #include <type_traits>
@@ -32,6 +29,7 @@
 #include "glm_staging_device.hpp"
 #include "gram_condition.hpp"
 #include "ritz.hpp"
+#include "symmetric_eigen.hpp"
 
 namespace cumlrkt::glm {
 
@@ -40,18 +38,24 @@ namespace {
 using ritz::combined;
 using ritz::dot;
 using ritz::eigen_pairs;
-using ritz::orthonormal;
+using ritz::exact_gram_cheaper;
+using ritz::reach_of;
 using ritz::refined;
 using ritz::ritz_pair;
+using ritz::symmetric_block;
+using ritz::window_of;
 
-constexpr int64_t block_rows = 1024;
+constexpr int64_t block_rows = ritz::gram_block_rows;
 constexpr int64_t most_blocks = 64;
 constexpr int64_t block_floats = int64_t{1} << 22;
 constexpr int64_t column_parts = 1024;
+constexpr double infinite = std::numeric_limits<double>::infinity();
 
 struct part_of {
+  int64_t parts;
+
   __device__ int64_t operator()(int64_t o) const {
-    return o / column_parts;
+    return o / parts;
   }
 };
 
@@ -89,31 +93,63 @@ struct weighted_square {
   }
 };
 
-template <typename T>
+template <typename T, typename U>
 struct equilibrated_rows {
   const T* x;
   const T* w;
   const double* mean;
   const double* scale;
   int64_t n;
-  int64_t d;
   int64_t start;
   int64_t rows;
-  float* out;
+  U* out;
 
-  __device__ void operator()(int64_t r) const {
-    const int64_t i = start + r;
+  __device__ void operator()(int64_t o) const {
+    const int64_t k = o / rows;
+    const int64_t i = start + o - (k * rows);
     if (i >= n) {
-      for (int64_t k = 0; k < d; ++k) {
-        out[(k * rows) + r] = 0.0F;
-      }
+      out[o] = U{0};
       return;
     }
     const double root = w == nullptr ? 1.0 : sqrt(static_cast<double>(w[i]));
+    out[o] = static_cast<U>(root * scale[k] *
+                            (static_cast<double>(x[(k * n) + i]) - mean[k]));
+  }
+};
+
+template <typename T>
+struct projected_rows {
+  const T* x;
+  const T* w;
+  const double* mean;
+  const double* u;
+  int64_t n;
+  int64_t d;
+  double* z;
+
+  __device__ void operator()(int64_t o) const {
+    const int64_t j = o / n;
+    const int64_t i = o - (j * n);
+    double s = 0.0;
     for (int64_t k = 0; k < d; ++k) {
-      out[(k * rows) + r] = static_cast<float>(
-          root * scale[k] * (static_cast<double>(x[(k * n) + i]) - mean[k]));
+      s = fma(static_cast<double>(x[(k * n) + i]) - mean[k], u[(j * d) + k], s);
     }
+    z[o] = (w == nullptr ? 1.0 : static_cast<double>(w[i])) * s;
+  }
+};
+
+template <typename T>
+struct weighted_product {
+  const T* x;
+  const double* mean;
+  const double* z;
+  int64_t n;
+  int64_t d;
+
+  __device__ double operator()(int64_t o, int64_t i) const {
+    const int64_t j = o / d;
+    const int64_t k = o - (j * d);
+    return (static_cast<double>(x[(k * n) + i]) - mean[k]) * z[(j * n) + i];
   }
 };
 
@@ -141,58 +177,17 @@ struct added_into {
   }
 };
 
-template <typename T>
-struct projected_rows {
-  const T* x;
-  const double* mean;
-  const double* u;
-  int64_t n;
-  int64_t d;
-  double* z;
-
-  __device__ void operator()(int64_t i) const {
-    double s = 0.0;
-    for (int64_t k = 0; k < d; ++k) {
-      s = fma(static_cast<double>(x[(k * n) + i]) - mean[k], u[k], s);
-    }
-    z[i] = s;
-  }
-};
-
-template <typename T>
-struct weighted_square_of {
-  const double* z;
-  const T* w;
-
-  __device__ double operator()(int64_t i) const {
-    return (w == nullptr ? 1.0 : static_cast<double>(w[i])) * z[i] * z[i];
-  }
-};
-
-template <typename T>
-struct weighted_product {
-  const T* x;
-  const T* w;
-  const double* mean;
-  const double* z;
-  int64_t n;
-
-  __device__ double operator()(int64_t k, int64_t i) const {
-    const double v = static_cast<double>(x[(k * n) + i]) - mean[k];
-    return (w == nullptr ? 1.0 : static_cast<double>(w[i])) * v * z[i];
-  }
-};
-
 template <typename F>
 struct partial_sums {
   F entry;
   int64_t n;
+  int64_t parts;
   double* out;
 
   __device__ void operator()(int64_t o) const {
-    const int64_t k = o / column_parts;
+    const int64_t k = o / parts;
     double s = 0.0;
-    for (int64_t i = o - (k * column_parts); i < n; i += column_parts) {
+    for (int64_t i = o - (k * parts); i < n; i += parts) {
       s += entry(k, i);
     }
     out[o] = s;
@@ -203,14 +198,15 @@ template <typename F>
 buffer<double> column_sums(const raft::handle_t& handle, F entry, int64_t n,
                            int64_t d) {
   const rmm::cuda_stream_view stream = stream_of(handle);
-  buffer<double> parts = scratch<double>(d * column_parts, stream);
-  each(handle, d * column_parts, partial_sums<F>{entry, n, parts.data()});
+  const int64_t count = std::clamp(block_floats / d, int64_t{1}, column_parts);
+  buffer<double> parts = scratch<double>(d * count, stream);
+  each(handle, d * count, partial_sums<F>{entry, n, count, parts.data()});
   const thrust::counting_iterator<int64_t> cells(0);
   buffer<double> sums = scratch<double>(d, stream);
   thrust::reduce_by_key(
       rmm::exec_policy(stream),
-      thrust::make_transform_iterator(cells, part_of{}),
-      thrust::make_transform_iterator(cells + (d * column_parts), part_of{}),
+      thrust::make_transform_iterator(cells, part_of{count}),
+      thrust::make_transform_iterator(cells + (d * count), part_of{count}),
       parts.begin(), thrust::make_discard_iterator(), sums.begin());
   return sums;
 }
@@ -233,159 +229,157 @@ buffer<double> column_means(const raft::handle_t& handle, const T* x,
 }
 
 template <typename T>
-std::vector<double> lower_gram(const raft::handle_t& handle, const T* x,
-                               const T* w, const double* mean,
-                               const double* scale, int64_t n, int64_t d) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const int64_t cells = d * d;
-  buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
-  const int64_t blocks =
-      std::min({most_blocks, std::max(int64_t{1}, block_floats / cells),
-                (n + block_rows - 1) / block_rows});
-  const int64_t rows = blocks * block_rows;
-  buffer<float> block = scratch<float>(rows * d, stream);
-  buffer<float> parts = scratch<float>(blocks * cells, stream);
-  cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
-  RAFT_CUBLAS_TRY(cublasSetStream(cublas, stream.value()));
-  const float one = 1.0F;
-  const float zero = 0.0F;
-  const auto dim = static_cast<int>(d);
-  for (int64_t start = 0; start < n; start += rows) {
-    const int64_t count =
-        std::min(blocks, (n - start + block_rows - 1) / block_rows);
-    each(handle, count * block_rows,
-         equilibrated_rows<T>{x, w, mean, scale, n, d, start, rows,
-                              block.data()});
-    RAFT_CUBLAS_TRY(cublasSgemmStridedBatched(
-        cublas, CUBLAS_OP_T, CUBLAS_OP_N, dim, dim,
-        static_cast<int>(block_rows), &one, block.data(),
-        static_cast<int>(rows), block_rows, block.data(),
-        static_cast<int>(rows), block_rows, &zero, parts.data(), dim, cells,
-        static_cast<int>(count)));
-    each(handle, cells, added_into{parts.data(), count, cells, gram.data()});
-  }
-  return to_host(gram, stream);
-}
-
-constexpr int gram_error_bits = 14;
-constexpr int64_t most_ritz = 16;
-
-template <typename S>
-std::optional<eigen_pairs> eigen_of(const raft::handle_t& handle,
-                                    const std::vector<S>& m, int64_t d) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  buffer<S> a = to_device(m, stream);
-  buffer<S> values = scratch<S>(d, stream);
-  cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
-  RAFT_CUSOLVER_TRY(cusolverDnSetStream(solver, stream.value()));
-  const auto dim = static_cast<int>(d);
-  constexpr auto mode = CUSOLVER_EIG_MODE_VECTOR;
-  constexpr auto fill = CUBLAS_FILL_MODE_LOWER;
-  int lwork = 0;
-  if constexpr (std::is_same_v<S, float>) {
-    RAFT_CUSOLVER_TRY(cusolverDnSsyevd_bufferSize(
-        solver, mode, fill, dim, a.data(), dim, values.data(), &lwork));
-  } else {
-    RAFT_CUSOLVER_TRY(cusolverDnDsyevd_bufferSize(
-        solver, mode, fill, dim, a.data(), dim, values.data(), &lwork));
-  }
-  buffer<S> work = scratch<S>(lwork, stream);
-  buffer<int> info = scratch<int>(1, stream);
-  if constexpr (std::is_same_v<S, float>) {
-    RAFT_CUSOLVER_TRY(cusolverDnSsyevd(solver, mode, fill, dim, a.data(), dim,
-                                       values.data(), work.data(), lwork,
-                                       info.data()));
-  } else {
-    RAFT_CUSOLVER_TRY(cusolverDnDsyevd(solver, mode, fill, dim, a.data(), dim,
-                                       values.data(), work.data(), lwork,
-                                       info.data()));
-  }
-  if (to_host(info, stream)[0] != 0) {
-    return std::nullopt;
-  }
-  const std::vector<S> l = to_host(values, stream);
-  const std::vector<S> v = to_host(a, stream);
-  return eigen_pairs{{l.begin(), l.end()}, {v.begin(), v.end()}};
-}
-
-template <typename T>
-struct quotients {
+struct equilibration {
   const raft::handle_t& handle;
   const T* x;
   const T* w;
   const buffer<double>& mean;
+  const buffer<double>& scales;
   const std::vector<double>& scale;
   int64_t n;
   int64_t d;
   double alpha;
 
-  [[nodiscard]] std::vector<double> scaled(const double* v) const {
-    std::vector<double> u(d);
-    for (int64_t k = 0; k < d; ++k) {
-      u[k] = v[k] * scale[k];
+  template <typename U, typename F>
+  void each_block(int64_t rows, F step) const {
+    buffer<U> block = scratch<U>(rows * d, stream_of(handle));
+    for (int64_t start = 0; start < n; start += rows) {
+      each(handle, rows * d,
+           equilibrated_rows<T, U>{x, w, mean.data(), scales.data(), n, start,
+                                   rows, block.data()});
+      step(block.data(), start);
     }
-    return u;
-  }
-
-  [[nodiscard]] buffer<double> project(const std::vector<double>& u) const {
-    const rmm::cuda_stream_view stream = stream_of(handle);
-    const buffer<double> on_device = to_device(u, stream);
-    buffer<double> z = scratch<double>(n, stream);
-    each(handle, n,
-         projected_rows<T>{x, mean.data(), on_device.data(), n, d, z.data()});
-    return z;
-  }
-
-  [[nodiscard]] double quotient(const double* v) const {
-    const std::vector<double> u = scaled(v);
-    const buffer<double> z = project(u);
-    const thrust::counting_iterator<int64_t> rows(0);
-    return thrust::transform_reduce(rmm::exec_policy(stream_of(handle)), rows,
-                                    rows + n,
-                                    weighted_square_of<T>{z.data(), w}, 0.0,
-                                    thrust::plus<double>{}) +
-           (alpha * dot(u.data(), u.data(), d));
-  }
-
-  [[nodiscard]] std::vector<double> applied(const double* v) const {
-    const std::vector<double> u = scaled(v);
-    const buffer<double> z = project(u);
-    std::vector<double> r = to_host(
-        column_sums(handle, weighted_product<T>{x, w, mean.data(), z.data(), n},
-                    n, d),
-        stream_of(handle));
-    for (int64_t k = 0; k < d; ++k) {
-      r[k] = scale[k] * (r[k] + (alpha * u[k]));
-    }
-    return r;
   }
 };
 
+cublasHandle_t cublas_on(const raft::handle_t& handle) {
+  cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
+  RAFT_CUBLAS_TRY(cublasSetStream(cublas, stream_of(handle).value()));
+  return cublas;
+}
+
 template <typename T>
-std::optional<ritz_pair> smallest_ritz(const quotients<T>& q,
-                                       const eigen_pairs& e, int64_t window) {
+std::vector<double> lower_gram(const equilibration<T>& q) {
+  const rmm::cuda_stream_view stream = stream_of(q.handle);
+  const int64_t cells = q.d * q.d;
+  buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
+  const int64_t blocks =
+      std::min({most_blocks, std::max(int64_t{1}, block_floats / cells),
+                (q.n + block_rows - 1) / block_rows});
+  const int64_t rows = blocks * block_rows;
+  buffer<float> parts = scratch<float>(blocks * cells, stream);
+  cublasHandle_t cublas = cublas_on(q.handle);
+  const float one = 1.0F;
+  const float zero = 0.0F;
+  const auto dim = static_cast<int>(q.d);
+  q.template each_block<float>(rows, [&](const float* block, int64_t start) {
+    const int64_t count =
+        std::min(blocks, (q.n - start + block_rows - 1) / block_rows);
+    RAFT_CUBLAS_TRY(cublasSgemmStridedBatched(
+        cublas, CUBLAS_OP_T, CUBLAS_OP_N, dim, dim,
+        static_cast<int>(block_rows), &one, block, static_cast<int>(rows),
+        block_rows, block, static_cast<int>(rows), block_rows, &zero,
+        parts.data(), dim, cells, static_cast<int>(count)));
+    each(q.handle, cells, added_into{parts.data(), count, cells, gram.data()});
+  });
+  return to_host(gram, stream);
+}
+
+template <typename T>
+std::vector<double> applied(const equilibration<T>& q,
+                            const std::vector<double>& v, int64_t c) {
+  const rmm::cuda_stream_view stream = stream_of(q.handle);
   const int64_t d = q.d;
-  const std::vector<double> v = orthonormal(e.vectors, d, window);
-  std::vector<double> av(window * d);
-  for (int64_t j = 0; j < window; ++j) {
-    const std::vector<double> r = q.applied(v.data() + (j * d));
-    std::ranges::copy(r, av.begin() + (j * d));
+  std::vector<double> u(v.size());
+  for (int64_t o = 0; o < d * c; ++o) {
+    u[o] = v[o] * q.scale[o % d];
   }
-  std::vector<double> h(window * window);
-  for (int64_t i = 0; i < window; ++i) {
-    for (int64_t j = 0; j < window; ++j) {
-      h[(j * window) + i] =
-          0.5 * (dot(v.data() + (i * d), av.data() + (j * d), d) +
-                 dot(v.data() + (j * d), av.data() + (i * d), d));
-    }
+  const buffer<double> on_device = to_device(u, stream);
+  buffer<double> z = scratch<double>(q.n * c, stream);
+  each(q.handle, q.n * c,
+       projected_rows<T>{q.x, q.w, q.mean.data(), on_device.data(), q.n, d,
+                         z.data()});
+  std::vector<double> out = to_host(
+      column_sums(q.handle,
+                  weighted_product<T>{q.x, q.mean.data(), z.data(), q.n, d},
+                  q.n, d * c),
+      stream);
+  for (int64_t o = 0; o < d * c; ++o) {
+    out[o] = q.scale[o % d] * (out[o] + (q.alpha * u[o]));
   }
-  const std::optional<eigen_pairs> small = eigen_of(q.handle, h, window);
+  return out;
+}
+
+std::vector<double> crossed(const raft::handle_t& handle,
+                            const std::vector<double>& a,
+                            const std::vector<double>& b, int64_t d,
+                            int64_t c) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  const buffer<double> da = to_device(a, stream);
+  const buffer<double> db = to_device(b, stream);
+  buffer<double> out = scratch<double>(c * c, stream);
+  const double one = 1.0;
+  const double zero = 0.0;
+  const auto [k, m] = std::pair{static_cast<int>(d), static_cast<int>(c)};
+  RAFT_CUBLAS_TRY(cublasDgemm(cublas_on(handle), CUBLAS_OP_T, CUBLAS_OP_N, m, m,
+                              k, &one, da.data(), k, db.data(), k, &zero,
+                              out.data(), m));
+  return to_host(out, stream);
+}
+
+template <typename T>
+double exact_condition(const equilibration<T>& q) {
+  const rmm::cuda_stream_view stream = stream_of(q.handle);
+  const int64_t d = q.d;
+  const int64_t rows = std::min(q.n, std::max(int64_t{1}, block_floats / d));
+  buffer<double> g = to_device(std::vector<double>(d * d, 0.0), stream);
+  cublasHandle_t cublas = cublas_on(q.handle);
+  const double one = 1.0;
+  q.template each_block<double>(rows, [&](const double* b, int64_t) {
+    RAFT_CUBLAS_TRY(cublasDsyrk(cublas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
+                                static_cast<int>(d), static_cast<int>(rows),
+                                &one, b, static_cast<int>(rows), &one, g.data(),
+                                static_cast<int>(d)));
+  });
+  std::vector<double> m = to_host(g, stream);
+  for (int64_t k = 0; k < d; ++k) {
+    m[(k * d) + k] += q.alpha * q.scale[k] * q.scale[k];
+  }
+  const std::optional<eigen_pairs> e = eigen_of(q.handle, m, d, false);
+  if (!e || !(e->values.front() > 0)) {
+    return infinite;
+  }
+  return e->values.back() / e->values.front();
+}
+
+template <typename T>
+double ritz_condition(const equilibration<T>& q, const eigen_pairs& e,
+                      int64_t window) {
+  const int64_t d = q.d;
+  const int64_t c = window + 1;
+  std::vector<double> basis(e.vectors.begin(),
+                            e.vectors.begin() + (window * d));
+  basis.insert(basis.end(), e.vectors.end() - d, e.vectors.end());
+  const std::vector<double> av = applied(q, basis, c);
+  const std::vector<double> h = crossed(q.handle, basis, av, d, c);
+  const std::vector<double> s = crossed(q.handle, basis, basis, d, c);
+  const std::optional<eigen_pairs> small =
+      pencil_of(q.handle, symmetric_block(h, c, window),
+                symmetric_block(s, c, window), window);
   if (!small) {
-    return std::nullopt;
+    return infinite;
   }
-  const double* c = small->vectors.data();
-  return ritz_pair{small->values.front(), combined(v, d, c, window),
-                   combined(av, d, c, window)};
+  const double* y = small->vectors.data();
+  const ritz_pair p{small->values.front(), combined(basis, d, y, window),
+                    combined(av, d, y, window)};
+  const double largest = h.back() / s.back();
+  if (e.values.front() > reach_of(d)) {
+    return p.value > 0 ? largest / p.value : infinite;
+  }
+  const std::vector<double> v = refined(e, window, p, d);
+  const std::vector<double> rv = applied(q, v, 1);
+  const double smallest = std::min(p.value, dot(v.data(), rv.data(), d));
+  return smallest > 0 ? largest / smallest : infinite;
 }
 
 }  // namespace
@@ -396,7 +390,6 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
                               bool fit_intercept) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const auto a = static_cast<double>(alpha);
-  constexpr double infinite = std::numeric_limits<double>::infinity();
   const buffer<double> mean = column_means(handle, x, w, n, d, fit_intercept);
   const std::vector<double> spread = to_host(
       column_sums(handle, weighted_square<T>{x, w, mean.data(), n}, n, d),
@@ -408,34 +401,22 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
   std::ranges::transform(spread, scale.begin(),
                          [a](double s) { return 1.0 / std::sqrt(s + a); });
   const buffer<double> scales = to_device(scale, stream);
-  const std::vector<double> gram =
-      lower_gram(handle, x, w, mean.data(), scales.data(), n, d);
+  const equilibration<T> q{handle, x, w, mean, scales, scale, n, d, a};
+  if (exact_gram_cheaper(1, d)) {
+    return exact_condition(q);
+  }
+  const std::vector<double> gram = lower_gram(q);
   std::vector<float> m(gram.begin(), gram.end());
   for (int64_t k = 0; k < d; ++k) {
     m[(k * d) + k] += static_cast<float>(a * scale[k] * scale[k]);
   }
-  const std::optional<eigen_pairs> e = eigen_of(handle, m, d);
+  const std::optional<eigen_pairs> e = eigen_of(handle, m, d, true);
   if (!e) {
     return infinite;
   }
-  const quotients<T> q{handle, x, w, mean, scale, n, d, a};
-  const double largest = q.quotient(
-      orthonormal(std::vector<double>(e->vectors.end() - d, e->vectors.end()),
-                  d, 1)
-          .data());
-  const double reach =
-      e->values.front() + std::ldexp(e->values.back(), -gram_error_bits);
-  const int64_t window = std::clamp<int64_t>(
-      std::ranges::count_if(e->values,
-                            [reach](double l) { return l <= reach; }),
-      1, std::min(most_ritz, d));
-  const std::optional<ritz_pair> p = smallest_ritz(q, *e, window);
-  if (!p) {
-    return infinite;
-  }
-  const double smallest =
-      std::min(p->value, q.quotient(refined(*e, window, *p, d).data()));
-  return smallest > 0 ? largest / smallest : infinite;
+  const int64_t window = window_of(e->values, d);
+  return exact_gram_cheaper(window, d) ? exact_condition(q)
+                                       : ritz_condition(q, *e, window);
 }
 
 template <typename T>

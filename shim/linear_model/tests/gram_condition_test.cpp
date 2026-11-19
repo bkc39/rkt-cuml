@@ -14,6 +14,7 @@
 #include "glm_staging.hpp"
 #include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
+#include "ritz.hpp"
 
 namespace {
 
@@ -22,6 +23,8 @@ using cumlrkt::glm::equilibrated_condition;
 using cumlrkt::glm::glm_family;
 using cumlrkt::glm::glm_solver;
 using cumlrkt::glm::require_conditioned;
+using cumlrkt::glm::ritz::exact_gram_cheaper;
+using cumlrkt::glm::ritz::window_of;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
 
@@ -94,6 +97,53 @@ columns summed_beside_a_near_pair(int64_t n, int64_t salt, double eps) {
     c.x[(3 * n) + i] = scrambled(i, salt + third_salt);
     c.x[(4 * n) + i] =
         c.x[(3 * n) + i] + (eps * scrambled(i, salt + fourth_salt));
+  }
+  return c;
+}
+
+constexpr uint64_t lcg_multiplier = 6364136223846793005ULL;
+constexpr uint64_t lcg_increment = 1442695040888963407ULL;
+constexpr int lcg_shift = 33;
+constexpr int64_t many_rows = 5000;
+constexpr int64_t many_pairs = 30;
+constexpr int64_t spare_columns = 120;
+constexpr int64_t many_salts = 8;
+constexpr double many_eps = 0x1p-12;
+
+std::vector<double> integers(int64_t n, uint64_t salt) {
+  std::vector<double> v(n);
+  uint64_t s = (salt * lcg_increment) + 1;
+  for (double& x : v) {
+    s = (s * lcg_multiplier) + lcg_increment;
+    x = static_cast<double>((s >> lcg_shift) % draw_modulus) - draw_centre;
+  }
+  return v;
+}
+
+columns summed_beside_near_pairs(int64_t n, int64_t pairs, int64_t spare,
+                                 uint64_t salt) {
+  std::vector<std::vector<double>> cols{integers(n, salt),
+                                        integers(n, salt + 1)};
+  std::vector<double> sum(n);
+  for (int64_t i = 0; i < n; ++i) {
+    sum[i] = cols[0][i] + cols[1][i];
+  }
+  cols.push_back(sum);
+  for (int64_t j = 0; j < pairs + spare; ++j) {
+    const uint64_t at = salt + (2 * (static_cast<uint64_t>(j) + 1));
+    std::vector<double> x = integers(n, at);
+    cols.push_back(x);
+    if (j < pairs) {
+      const std::vector<double> z = integers(n, at + 1);
+      for (int64_t i = 0; i < n; ++i) {
+        x[i] += many_eps * z[i];
+      }
+      cols.push_back(x);
+    }
+  }
+  columns c{{}, n, static_cast<int64_t>(cols.size())};
+  for (const std::vector<double>& col : cols) {
+    c.x.insert(c.x.end(), col.begin(), col.end());
   }
   return c;
 }
@@ -193,6 +243,32 @@ TEST(GramCondition, ExactCollinearityBesideANearPairIsPastTheThreshold) {
       }
     }
   }
+}
+
+TEST(GramCondition, ManyNearPairsBesideExactCollinearityArePastTheThreshold) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (const int64_t spare : {int64_t{0}, spare_columns}) {
+    for (uint64_t salt = 0; salt < many_salts; ++salt) {
+      const columns c =
+          summed_beside_near_pairs(many_rows, many_pairs, spare, salt * 1000);
+      EXPECT_EQ(exact_gram_cheaper(many_pairs + 1, c.d), spare == 0) << c.d;
+      EXPECT_GT(condition_of<float>(res, c, {}, 0.0, true), 0x1p32)
+          << c.d << " " << salt;
+    }
+  }
+}
+
+TEST(GramCondition, TheWindowHoldsEveryEigenvalueWithinReach) {
+  constexpr int64_t d = 200;
+  constexpr int64_t near = 40;
+  std::vector<double> values(d, 1.0);
+  for (int64_t j = 0; j < near; ++j) {
+    values[j] = 0x1p-30 * static_cast<double>(j);
+  }
+  EXPECT_EQ(window_of(values, d), near);
+  EXPECT_FALSE(exact_gram_cheaper(near, d));
+  EXPECT_TRUE(exact_gram_cheaper(near, near * 4));
 }
 
 TEST(GramCondition, ZeroWeightRowsDoNotCount) {
