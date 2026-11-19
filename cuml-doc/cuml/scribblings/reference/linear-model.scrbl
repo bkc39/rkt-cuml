@@ -416,12 +416,11 @@ sorted distinct labels. @racket[class-weight] scales each row's weight by its cl
 The fit is refused when the solver has not converged: the check bounds the first-order residual, not
 the distance to the optimum. A column constant over the rows of positive weight (zero, without
 @racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
-last bits is refused: centre it. With @racket[fit-intercept] or under @racket['none], a refused fit
-is solved again in the iterations left on columns centred with @racket[fit-intercept] and rescaled
-under @racket['none], and kept if it passes; a passing first solve is unchanged. @racket[n-iter]
-counts every solve, at most @racket[max-iter]. Refusals say to raise @racket[max-iter], standardise
-columns spread 2@superscript{8} apart, or lower @racket[tol], centre X or fit an intercept. Unpenalised
-separable fits grow until the solver stops. Large fits do not repeat bitwise.
+last bits is refused: centre it. A refused fit is solved again in the iterations left, on columns
+centred with @racket[fit-intercept] and rescaled under @racket['none], and kept if it passes.
+@racket[n-iter] counts every solve, at most @racket[max-iter]. Refusals say to raise it, standardise
+columns spread 2@superscript{8} apart, or lower @racket[tol], centre X or fit an intercept.
+Unpenalised separable fits grow until the solver stops. Large fits do not repeat bitwise.
 @examples[#:eval ev #:label #f
 (logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
 (eval:error (logistic-regression-fit Xc yc #:C 0))
@@ -450,7 +449,8 @@ The class probabilities, in X's dtype.}
           [result logistic-regression-result?] [X device-matrix?]
           [#:resources resources device-resources? (current-device-resources)])
          device-matrix?]{
-Their logarithms, computed directly. Unlike Python cuML's, they stay finite where a probability underflows.}
+Their logarithms, computed directly. Unlike Python cuML's, they stay finite where a probability
+underflows.}
 
 @defproc[(logistic-regression-params [base (or/c #f hash?) #f]
                                      [#:penalty penalty (or/c 'l1 'l2 'elasticnet 'none) 'l2]
