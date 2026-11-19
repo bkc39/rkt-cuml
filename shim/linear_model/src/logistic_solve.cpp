@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "cumlrkt/linear_model.h"
+#include "cumlrkt/rows.hpp"
 #include "cumlrkt/support.hpp"
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
@@ -42,6 +43,33 @@ ML::GLM::qn_params qn_params_of(const fit_options& o, int64_t k, penalties p) {
   q.fit_intercept = o.fit_intercept;
   q.penalty_normalized = o.normalized;
   return q;
+}
+
+template <typename T>
+qn_solution<T> qn_solved(const raft::handle_t& handle, T* x, T* y, T* w,
+                         const qn_shape& shape, penalties pen,
+                         const fit_options& options,
+                         const std::vector<T>& start) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  buffer<T> params =
+      start.empty()
+          ? zeroed<T>((shape.p + (shape.fit_intercept ? 1 : 0)) * shape.k,
+                      stream)
+          : to_device(start, stream);
+  T objective{0};
+  int n_iter = 0;
+  ML::GLM::qnFit<T, int>(
+      handle, qn_params_of(options, shape.classes, pen), x, false, y,
+      static_cast<int>(shape.m), static_cast<int>(shape.p),
+      static_cast<int>(shape.classes), params.data(), &objective, &n_iter, w);
+  settle(handle);
+  return {std::move(params), n_iter};
+}
+
+template <typename T>
+bool all_finite(const buffer<T>& params, rmm::cuda_stream_view stream) {
+  return first_non_finite(params.data(), static_cast<int64_t>(params.size()),
+                          stream) < 0;
 }
 
 template <typename T>
@@ -125,25 +153,15 @@ template <typename T>
 attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
                      solve_check check, const fit_options& options,
                      const std::vector<T>& start) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const qn_shape& shape = check.shape;
-  buffer<T> params =
-      start.empty()
-          ? zeroed<T>((shape.p + (shape.fit_intercept ? 1 : 0)) * shape.k,
-                      stream)
-          : to_device(start, stream);
-  T objective{0};
-  int n_iter = 0;
-  ML::GLM::qnFit<T, int>(
-      handle, qn_params_of(options, shape.classes, check.pen), x, false, y,
-      static_cast<int>(shape.m), static_cast<int>(shape.p),
-      static_cast<int>(shape.classes), params.data(), &objective, &n_iter, w);
-  settle(handle);
-  require_finite_solution(params.data(), static_cast<int64_t>(params.size()),
-                          stream);
-  check.n_iter = n_iter;
-  const resolution r = checked<T>(handle, x, y, w, params, options, check);
-  return {{std::move(params), n_iter}, r, std::move(check)};
+  qn_solution<T> solution =
+      qn_solved<T>(handle, x, y, w, check.shape, check.pen, options, start);
+  require_finite_solution(solution.params.data(),
+                          static_cast<int64_t>(solution.params.size()),
+                          stream_of(handle));
+  check.n_iter = solution.n_iter;
+  const resolution r =
+      checked<T>(handle, x, y, w, solution.params, options, check);
+  return {std::move(solution), r, std::move(check)};
 }
 
 template <typename T>
@@ -159,11 +177,6 @@ std::optional<qn_solution<T>> rescued(
   const qn_shape& shape = st.shape;
   const rescue_plan plan =
       plan_of<T>(stats, st.kept, st.shift, per_column, shape.m);
-  solve_check check = plain.check;
-  for (int64_t q = 0; q < shape.p; ++q) {
-    check.sigma[q] = std::ldexp(check.sigma[q], plan.shift[q] - st.shift);
-    check.mean[q] = 0.0;
-  }
   const std::vector<T> cold;
   const std::vector<T> warm = mapped_forward(
       to_host(plain.solution.params, stream), plan, st.shift, shape);
@@ -177,16 +190,23 @@ std::optional<qn_solution<T>> rescued(
   }
   solve_check total = plain.check;
   for (const std::vector<T>* start : {&cold, &warm}) {
-    const attempt<T> rescue = attempted<T>(
-        handle, copy.data(), st.y.data(), st.weights(), check, options, *start);
-    total.n_iter += rescue.solution.n_iter;
-    buffer<T> params =
-        to_device(mapped_back(to_host(rescue.solution.params, stream), plan,
-                              st.shift, shape),
-                  stream);
-    require_finite_solution(params.data(), static_cast<int64_t>(params.size()),
-                            stream);
-    if (checked<T>(handle, st.x(), st.y.data(), st.weights(), params, options,
+    fit_options budget = options;
+    budget.max_iter = options.max_iter;
+    if (budget.max_iter < 1) {
+      break;
+    }
+    const qn_solution<T> rescue =
+        qn_solved<T>(handle, copy.data(), st.y.data(), st.weights(), shape,
+                     plain.check.pen, budget, *start);
+    total.n_iter += rescue.n_iter;
+    if (!all_finite(rescue.params, stream)) {
+      continue;
+    }
+    buffer<T> params = to_device(
+        mapped_back(to_host(rescue.params, stream), plan, st.shift, shape),
+        stream);
+    if (all_finite(params, stream) &&
+        checked<T>(handle, st.x(), st.y.data(), st.weights(), params, options,
                    total)
             .resolved()) {
       return qn_solution<T>{std::move(params), total.n_iter};
