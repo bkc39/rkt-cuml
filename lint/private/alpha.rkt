@@ -242,15 +242,21 @@
        (list* normal (body inner forms))]
       [_ (each env rest)]))
   (define (for-clauses env items)
-    (for/fold ([normal '()]
-               [scope env]
-               #:result (values (reverse normal) scope))
-              ([one (in-list items)])
-      (match one
-        [(list target sequence)
-         (define bound (bind scope (clause-ids one)))
-         (values (cons (list (each bound target) (expr scope sequence)) normal) bound)]
-        [_ (values (cons (expr scope one) normal) scope)])))
+    (match items
+      [(list* (? keyword? key) form rest)
+       (define guard (expr env form))
+       (define-values (normal inner) (for-clauses env rest))
+       (values (list* key guard normal) inner)]
+      [(cons (and one (list target sequence)) rest)
+       (define bound (bind env (clause-ids one)))
+       (define clause (list (each bound target) (expr env sequence)))
+       (define-values (normal inner) (for-clauses bound rest))
+       (values (cons clause normal) inner)]
+      [(cons one rest)
+       (define item (expr env one))
+       (define-values (normal inner) (for-clauses env rest))
+       (values (cons item normal) inner)]
+      [_ (values '() env)]))
   (define (expr env datum)
     (match datum
       [(? symbol?) (ref env datum)]

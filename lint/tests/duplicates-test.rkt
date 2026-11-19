@@ -355,7 +355,37 @@
                          (* 2 w))
                        (define (f s)
                          (match-define (struct* sol ([bias w])) s)
-                         (* 2 w)))))])
+                         (* 2 w)))
+                      ("a for clause's #:when guard is an expression, not a binding"
+                       #f
+                       (define (f xs)
+                         (for/list ([x (in-list xs)] #:when (even? x)) x))
+                       (define (g xs)
+                         (for/list ([x (in-list xs)] #:when (odd? x)) x)))
+                      ("a for clause's #:unless guard is an expression, not a binding"
+                       #f
+                       (define (f xss)
+                         (for/list ([xs (in-list xss)] #:unless (null? xs)) xs))
+                       (define (g xss)
+                         (for/list ([xs (in-list xss)] #:unless (pair? xs)) xs)))
+                      ("a for clause's #:break guard is an expression, not a binding"
+                       #f
+                       (define (f xs)
+                         (for/list ([x (in-list xs)] #:break (positive? x)) x))
+                       (define (g xs)
+                         (for/list ([x (in-list xs)] #:break (negative? x)) x)))
+                      ("a for clause's #:do body is an expression, not a binding"
+                       #f
+                       (define (f xs)
+                         (for ([x (in-list xs)] #:do [(displayln x) (newline)]) x))
+                       (define (g xs)
+                         (for ([x (in-list xs)] #:do [(write x) (newline)]) x)))
+                      ("a for loop with a guard, its variables renamed, is a copy"
+                       #t
+                       (define (evens xs)
+                         (for/list ([x (in-list xs)] #:when (even? x)) x))
+                       (define (keep ys)
+                         (for/list ([y (in-list ys)] #:when (even? y)) y)))))])
   (match-define (list title copy? one other) row)
   (test-case title
     (check-equal? (copied? one other) copy?)))
