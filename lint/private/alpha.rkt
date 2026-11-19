@@ -1,14 +1,17 @@
 #lang racket/base
 
 (require (for-syntax racket/base)
-         (only-in racket/list append-map)
-         (only-in racket/match define-match-expander match)
+         (only-in racket/list append-map split-at)
+         (only-in racket/match define-match-expander match match*)
          (only-in "patterns.rkt"
                   binding-clauses
                   clause-ids
                   ellipsis?
                   fold-head?
                   for-head?
+                  lhs-patterns
+                  match-form
+                  match-layout
                   pattern-head
                   pattern-names
                   proper
@@ -22,8 +25,7 @@
     #'(or 'lambda
           'λ
           'case-lambda
-          'match-lambda
-          'match-lambda*
+          (? procedure-form?)
           'const
           'curry
           'curryr
@@ -34,6 +36,14 @@
           'disjoin
           'thunk
           'thunk*)))
+
+(define (procedure-form? head)
+  (match (match-form head)
+    [(match-layout '() _ 'clause) #t]
+    [_ #f]))
+
+(define (lhs-names layout lhs)
+  (append-map pattern-names (lhs-patterns layout lhs)))
 
 (define (definition-root head)
   (match head
@@ -56,8 +66,10 @@
         (list (definition-root head))]
        [(list* (or 'define 'define/contract) (? symbol? name) _) (list name)]
        [(list* 'define-values (? list? names) _) (filter symbol? names)]
-       [(list* 'match-define pattern _) (pattern-names pattern)]
-       [(list* 'match-define-values (? list? patterns) _) (append-map pattern-names patterns)]
+       [(list* (app match-form (and layout (match-layout _ _ 'definition))) lhs _)
+        (lhs-names layout lhs)]
+       [(list* (app match-form (match-layout '(head) _ _)) (? pair? head) _)
+        (list (definition-root head))]
        [_ '()]))
    forms))
 
@@ -126,9 +138,9 @@
       [(list* (and definer (or 'define 'define/contract 'define-values)) target rest)
        #:when (not (hash-ref env definer #f))
        (list* (ref env definer) (each env target) (each env rest))]
-      [(list* (and definer (or 'match-define 'match-define-values)) patterns rest)
+      [(cons (and definer (app match-form (? values layout))) rest)
        #:when (not (hash-ref env definer #f))
-       (list* (ref env definer) (normal-pattern env patterns) (each env rest))]
+       (cons (ref env definer) (match-form-normal env layout rest))]
       [_ (expr env form)]))
   (define (normal-pattern env datum)
     (define (normal one)
@@ -182,6 +194,30 @@
       [(cons (? keyword? key) rest) (cons key (hash-entries env rest))]
       [(list* key one rest) (list* (expr env key) (normal-pattern env one) (hash-entries env rest))]
       [_ entries]))
+  (define (normal-lhs env layout lhs)
+    (match* (layout lhs)
+      [((match-layout _ 'several _) (? list?)) (map (lambda (one) (normal-pattern env one)) lhs)]
+      [((match-layout _ 'several _) _) lhs]
+      [(_ _) (normal-pattern env lhs)]))
+  (define (match-form-normal env layout rest)
+    (match* (layout rest)
+      [((match-layout '(head) _ _) (cons (? pair? head) items))
+       (define-values (normal inner) (definition-head env head))
+       (cons normal (clauses inner items #:several? #t))]
+      [((match-layout before patterns 'clause) _)
+       #:when (and (list? rest) (<= (length before) (length rest)))
+       (define-values (leading items) (split-at rest (length before)))
+       (append (map (lambda (one) (expr env one)) leading)
+               (clauses env items #:several? (eq? patterns 'several)))]
+      [((match-layout _ _ 'definition) (cons lhs forms)) (cons (normal-lhs env layout lhs) (each env forms))]
+      [((match-layout _ _ (and scope (or 'parallel 'sequential 'recursive))) _)
+       (let-form env
+                 rest
+                 #:sequential? (memq scope '(sequential recursive))
+                 #:recursive? (eq? scope 'recursive)
+                 #:names (lambda (one) (lhs-names layout (car one)))
+                 #:target (lambda (bound one) (normal-lhs bound layout (car one))))]
+      [(_ _) (each env rest)]))
   (define (clauses env items #:several? [several? #f])
     (for/list ([clause (in-list (proper items))])
       (match clause
@@ -202,35 +238,27 @@
       (match clause
         [(cons test forms) (cons (normal-test test) (body env forms))]
         [_ clause])))
-  (define (let-form env head rest)
+  (define (let-form env
+                    rest
+                    #:named? [named? #f]
+                    #:sequential? sequential?
+                    #:recursive? recursive?
+                    #:names [names clause-ids]
+                    #:target [target
+                              (lambda (bound one)
+                                (each bound
+                                      (if (pair? one)
+                                          (car one)
+                                          one)))])
     (match rest
       [(list* (? symbol? loop) (? list? bindings) forms)
-       #:when (eq? head 'let)
+       #:when named?
        (define inits (map (lambda (one) (each env (cdr one))) (filter pair? bindings)))
        (define inner (bind (bind env (list loop)) (append-map clause-ids bindings)))
        (list* (ref inner loop)
               (map (lambda (one init) (cons (each inner (car one)) init)) bindings inits)
               (body inner forms))]
       [(list* (? list? bindings) forms)
-       (define sequential?
-         (memq head
-               '(let* let*-values
-                  letrec
-                  letrec*
-                  letrec-values
-                  match-let*)))
-       (define recursive?
-         (memq head
-               '(letrec letrec*
-                  letrec-values)))
-       (define matching?
-         (memq head
-               '(match-let match-let*
-                  )))
-       (define names
-         (if matching?
-             (lambda (one) (pattern-names (car one)))
-             clause-ids))
        (define all
          (if recursive?
              (bind env (append-map names bindings))
@@ -249,14 +277,7 @@
              (if recursive?
                  scope
                  (bind scope (names one))))
-           (define target
-             (if matching?
-                 (normal-pattern bound (car one))
-                 (each bound
-                       (if (pair? one)
-                           (car one)
-                           one))))
-           (values (cons (cons target init) normal) bound)))
+           (values (cons (cons (target bound one) init) normal) bound)))
        (list* normal (body inner forms))]
       [_ (each env rest)]))
   (define (for-form env head rest)
@@ -309,22 +330,13 @@
                      (define-values (normal inner) (formals env items))
                      (cons normal (body inner forms))]
                     [_ clause]))]
-               [(or 'match 'match*)
-                (match rest
-                  [(cons subject items)
-                   (cons (expr env subject) (clauses env items #:several? (eq? head 'match*)))]
-                  [_ (each env rest)])]
-               [(or 'match-lambda 'match-lambda*) (clauses env rest)]
-               [(or 'let
-                    'let*
-                    'letrec
-                    'letrec*
-                    'let-values
-                    'let*-values
-                    'letrec-values
-                    'match-let
-                    'match-let*)
-                (let-form env head rest)]
+               [(app match-form (? values layout)) (match-form-normal env layout rest)]
+               [(or 'let 'let* 'letrec 'letrec* 'let-values 'let*-values 'letrec-values)
+                (let-form env
+                          rest
+                          #:named? (eq? head 'let)
+                          #:sequential? (memq head '(let* let*-values letrec letrec* letrec-values))
+                          #:recursive? (memq head '(letrec letrec* letrec-values)))]
                [(? for-head?) (for-form env head rest)]
                [(or 'when 'unless)
                 (match rest

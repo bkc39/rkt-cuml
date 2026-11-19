@@ -1,19 +1,103 @@
 #lang racket/base
 
 (require (for-syntax racket/base)
-         (only-in racket/list append-map)
-         (only-in racket/match define-match-expander match))
+         (only-in racket/list append-map split-at)
+         (only-in racket/match define-match-expander match match* match-define))
 
 (provide binding-clauses
          clause-ids
          ellipsis?
          fold-head?
          for-head?
+         lhs-patterns
+         match-form
+         match-form-parts
+         match-forms
+         (struct-out match-layout)
+         (struct-out match-parts)
          pattern-head
          pattern-names
          proper
          quasi-map
          unquoted-parts)
+
+(struct match-layout (before patterns scope) #:transparent)
+
+(struct match-parts (leading groups tail) #:transparent)
+
+(define match-forms
+  (let ([one-per-clause (lambda before (match-layout before 'one 'clause))]
+        [several-per-clause (lambda before (match-layout before 'several 'clause))])
+    (hasheq 'match
+            (one-per-clause 'expression)
+            'match/derived
+            (one-per-clause 'expression 'expression)
+            'match*
+            (several-per-clause 'expressions)
+            'match*/derived
+            (several-per-clause 'expressions 'expression)
+            'match/values
+            (several-per-clause 'expression)
+            'match-lambda
+            (one-per-clause)
+            'match-λ
+            (one-per-clause)
+            'match-lambda*
+            (one-per-clause)
+            'match-λ*
+            (one-per-clause)
+            'match-lambda**
+            (several-per-clause)
+            'match-λ**
+            (several-per-clause)
+            'define/match
+            (several-per-clause 'head)
+            'match-let
+            (match-layout '() 'one 'parallel)
+            'match-let*
+            (match-layout '() 'one 'sequential)
+            'match-letrec
+            (match-layout '() 'one 'recursive)
+            'match-let-values
+            (match-layout '() 'several 'parallel)
+            'match-let*-values
+            (match-layout '() 'several 'sequential)
+            'match-letrec-values
+            (match-layout '() 'several 'recursive)
+            'match-define
+            (match-layout '() 'one 'definition)
+            'match-define-values
+            (match-layout '() 'several 'definition))))
+
+(define (match-form head)
+  (and (symbol? head) (hash-ref match-forms head #f)))
+
+(define (datum-list one)
+  (and (list? one) one))
+
+(define (lhs-patterns layout lhs [as-list datum-list])
+  (if (eq? (match-layout-patterns layout) 'several)
+      (or (as-list lhs) '())
+      (list lhs)))
+
+(define (match-form-parts layout items [as-list datum-list])
+  (match-define (match-layout before _ scope) layout)
+  (define (group one)
+    (match (as-list one)
+      [(cons lhs rest) (cons (lhs-patterns layout lhs as-list) rest)]
+      [_ (list '() one)]))
+  (define-values (leading more)
+    (if (and (list? items) (<= (length before) (length items)))
+        (split-at items (length before))
+        (values #f #f)))
+  (match* (leading scope more)
+    [(#f _ _) #f]
+    [(_ 'clause _) (match-parts leading (map group more) '())]
+    [(_ 'definition (cons lhs rest))
+     (match-parts leading (list (cons (lhs-patterns layout lhs as-list) rest)) '())]
+    [(_ 'definition _) #f]
+    [(_ _ (cons (app as-list (? list? bindings)) body)) (match-parts leading (map group bindings) body)]
+    [(_ _ _) #f]))
 
 (define-match-expander pattern-head
   (lambda (_stx)

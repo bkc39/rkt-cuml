@@ -163,6 +163,64 @@
     (check-regexp-match #rx"table-test[.]rkt:[0-9]+: (second|cadr): read a test table's rows"
                         output)))
 
+(for ([use (in-list '((define/match (f v)
+                        [((struct span ((app second x) _))) x])
+                      (define/match (f v)
+                        [((struct span ((? second) _))) 1])
+                      (define/match (f v)
+                        [(`(a `(b ,(app second x)))) x])
+                      (define f
+                        (match-lambda**
+                         [((struct span ((app second x) _))) x]))
+                      (define f
+                        (match-lambda**
+                         [(`(a `(b ,(app second x)))) x]))
+                      (define f
+                        (match-λ
+                         [(struct span ((app second x) _)) x]))
+                      (define f
+                        (match-λ*
+                         [(list (struct span ((app second x) _))) x]))
+                      (define f
+                        (match-λ**
+                         [((struct span ((app second x) _))) x]))
+                      (define (f v)
+                        (match-letrec ([(struct span ((app second x) _)) v])
+                          x))
+                      (define (f v)
+                        (match-let-values ([((struct span ((app second x) _))) (values v)])
+                          x))
+                      (define (f v)
+                        (match-let*-values ([((struct span ((app second x) _))) (values v)])
+                          x))
+                      (define (f v)
+                        (match-letrec-values ([((struct span ((app second x) _))) (values v)])
+                          x))
+                      (define (f v)
+                        (match/values (values v)
+                          [((struct span ((app second x) _))) x]))
+                      (define (f v)
+                        (match/derived v
+                                       v
+                                       [(struct span ((app second x) _)) x]))
+                      (define (f v)
+                        (match*/derived (v)
+                                        v
+                                        [((struct span ((app second x) _))) x]))
+                      (define (f v)
+                        (let ()
+                          (match-define (struct span ((app second x) _)) v)
+                          x))))])
+  (test-case (format "a pattern in any racket/match form, or in a form the lint does not know, is read: ~s"
+                     use)
+    (define-values (ok? output)
+      (gate-on `((require racket/list
+                          racket/match)
+                 (struct span (lo hi))
+                 ,use)))
+    (check-false ok? output)
+    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))
+
 (test-case "a quasipattern's literal neither binds the name nor reads it, so only the body's accessor is refused"
   (define-values (ok? output)
     (gate-on '((require racket/list

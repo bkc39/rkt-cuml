@@ -9,6 +9,10 @@
                   clause-ids
                   fold-head?
                   for-head?
+                  match-form
+                  match-form-parts
+                  match-layout
+                  match-parts
                   pattern-names
                   unquoted-parts))
 
@@ -38,17 +42,14 @@
 (define (clause-names clauses)
   (append-map clause-ids (binding-clauses clauses)))
 
-(define (match-clause-names clauses several?)
-  (append-map (lambda (clause)
-                (match clause
-                  [(cons (? list? patterns) _)
-                   #:when several?
-                   (append-map pattern-names patterns)]
-                  [(cons pattern _) (pattern-names pattern)]
-                  [_ '()]))
-              (if (list? clauses)
-                  clauses
-                  '())))
+(define (match-form-names layout items)
+  (match (match-form-parts layout items)
+    [(match-parts leading groups _)
+     (append (match* (layout leading)
+               [((match-layout (list 'head) _ _) (list head)) (head-names head)]
+               [(_ _) '()])
+             (append-map (lambda (group) (append-map pattern-names (car group))) groups))]
+    [#f '()]))
 
 (define (bound-names datum)
   (match datum
@@ -70,17 +71,8 @@
      (append (list loop) (clause-names clauses) (bound-names clauses) (bound-names rest))]
     [(list* (or 'let 'let* 'letrec 'letrec* 'let-values 'let*-values 'letrec-values) clauses rest)
      (append (clause-names clauses) (bound-names clauses) (bound-names rest))]
-    [(list* 'match-define pattern rest) (append (pattern-names pattern) (bound-names rest))]
-    [(list* 'match-define-values (? list? patterns) rest)
-     (append (append-map pattern-names patterns) (bound-names rest))]
-    [(list* (and head (or 'match 'match*)) subject clauses)
-     (append (match-clause-names clauses (eq? head 'match*))
-             (bound-names subject)
-             (bound-names clauses))]
-    [(list* (or 'match-lambda 'match-lambda*) clauses)
-     (append (match-clause-names clauses #f) (bound-names clauses))]
-    [(list* (or 'match-let 'match-let*) clauses rest)
-     (append (match-clause-names clauses #f) (bound-names clauses) (bound-names rest))]
+    [(cons (app match-form (? values layout)) items)
+     (append (match-form-names layout items) (bound-names items))]
     [(list* (? fold-head?) (? list? accumulators) (? list? clauses) rest)
      (append (clause-names accumulators)
              (clause-names clauses)
@@ -127,28 +119,17 @@
     [(_ _) #f]))
 
 (define (match-accesses head items refused)
-  (define (clause-accesses clause several?)
-    (match (syntax->list clause)
-      [(cons patterns rest)
-       (append (match (and several? (syntax->list patterns))
-                 [(? list? each) (append-map (lambda (one) (pattern-accesses one refused)) each)]
-                 [#f (pattern-accesses patterns refused)])
-               (accesses rest refused))]
-      [_ (accesses clause refused)]))
-  (define (each-clause clauses several?)
-    (append-map (lambda (clause) (clause-accesses clause several?)) clauses))
-  (match* (head items)
-    [((or 'match 'match*) (list* _ subject clauses))
-     (append (accesses subject refused) (each-clause clauses (eq? head 'match*)))]
-    [((or 'match-lambda 'match-lambda*) (cons _ clauses)) (each-clause clauses #f)]
-    [((or 'match-let 'match-let*) (list* _ (app syntax->list (? list? bindings)) body))
-     (append (each-clause bindings #f) (accesses body refused))]
-    [('match-define (list* _ pattern rest))
-     (append (pattern-accesses pattern refused) (accesses rest refused))]
-    [('match-define-values (list* _ (app syntax->list (? list? patterns)) rest))
-     (append (append-map (lambda (one) (pattern-accesses one refused)) patterns)
-             (accesses rest refused))]
-    [(_ _) #f]))
+  (match (match (match-form head)
+           [#f #f]
+           [layout (match-form-parts layout (cdr items) syntax->list)])
+    [(match-parts leading groups tail)
+     (append (accesses leading refused)
+             (append-map (lambda (group)
+                           (append (append-map (lambda (one) (pattern-accesses one refused)) (car group))
+                                   (accesses (cdr group) refused)))
+                         groups)
+             (accesses tail refused))]
+    [#f #f]))
 
 (define (pattern-accesses one refused)
   (define items (syntax->list one))
