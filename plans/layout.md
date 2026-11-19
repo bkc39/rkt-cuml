@@ -1590,7 +1590,8 @@ Follow-ups are GitHub issues.
   Q2 is unchanged: float32 'eig refused at 0.385 and 0.203, 'svd accepted at
   4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
 - **L2-l, the window refusal (#104) and float32 'qr / 'svd-qr (#102).** One
-  device routine (`linear_model/src/gram_condition.cu`) bounds κ′, the
+  device routine (`linear_model/src/gram_condition.cu`, its host Ritz
+  helpers in `ritz.cpp`) bounds κ′, the
   condition number of D⁻¹(X̃ᵀWX̃ + α′I)D⁻¹ with D² = σ′_j² + α′ (X̃ the staged
   X centred with float64 means under fit-intercept, uncentred without), from
   below, without a float64 copy of X. The Scribble states only the contract;
