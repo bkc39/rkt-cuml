@@ -7,12 +7,15 @@
          (only-in "blob-data.rkt" uniform-source))
 
 (provide accuracy
+         anchored-r2-ulps
          integer-weights
          label-cases
+         light-spread-r2
          mse
          on
          r2
          rows
+         swamped
          vec
          weights-of)
 
@@ -38,6 +41,14 @@
 
 (define (accuracy a b [w #f] #:true [at 'int32] #:pred [bt at] #:weight [wt 'float64])
   (accuracy-score (vec a at) (vec b bt) #:sample-weight (weights-of w wt)))
+
+(define swamped
+  (let ([y '(2.596792935118996e-113 2.590663465894096e-113)])
+    (list y (list (car y) 0.0) '(2.687389544376786e232 2.452974414517411e173))))
+
+(define light-spread-r2 "-178637.99")
+
+(define anchored-r2-ulps 2)
 
 (define int32-palette '(-1 0 1 2 7 2147483647 -2147483647 -2147483648))
 

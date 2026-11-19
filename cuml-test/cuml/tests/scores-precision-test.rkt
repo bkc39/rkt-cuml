@@ -1,17 +1,17 @@
 #lang racket/base
 
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
-         (only-in math/flonum flsum flvector->list)
+         (only-in math/flonum flstep flsum flulp-error flvector->list)
          (only-in racket/flonum for/flvector in-flvector)
          (only-in racket/list make-list remove-duplicates)
          (only-in racket/match match-define)
          (only-in racket/math sqr)
-         (only-in rackunit check-= check-equal? check-true)
+         (only-in rackunit check-= check-equal? check-false check-true)
          (only-in raft device-vector->flvector flvector->device-vector list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
-         (only-in "private/metrics-data.rkt" exact-mse exact-r2 r2-bound r2-gap)
-         (only-in "private/scores-data.rkt" mse r2))
+         (only-in "private/metrics-data.rkt" exact-mse exact-r2)
+         (only-in "private/scores-data.rkt" anchored-r2-ulps light-spread-r2 mse r2 swamped))
 
 (define n (expt 10 6))
 
@@ -167,9 +167,9 @@
                   (format "error n = ~a" count))))
 
 (test-gpu "a heavy sample's rounded mean does not swamp a light sample's spread"
-  (define y '(2.596792935118996e-113 2.590663465894096e-113))
-  (define p (list (car y) 0.0))
-  (define w '(2.687389544376786e232 2.452974414517411e173))
+  (match-define (list y p w) swamped)
   (define exact (exact-r2 y p w))
-  (check-equal? (real->decimal-string exact 2) "-178637.99")
-  (check-true (<= (r2-gap (r2 y p w) exact) r2-bound)))
+  (define ours (r2 y p w))
+  (check-equal? (real->decimal-string exact 2) light-spread-r2)
+  (check-true (<= (flulp-error ours exact) anchored-r2-ulps))
+  (check-false (<= (flulp-error (flstep ours 4) exact) anchored-r2-ulps)))
