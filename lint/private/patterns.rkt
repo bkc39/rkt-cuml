@@ -6,6 +6,7 @@
 
 (provide binding-clauses
          clause-ids
+         direct-pattern-names
          ellipsis?
          failure-forms
          fold-head?
@@ -157,28 +158,99 @@
     [_ '()]))
 
 (define (pattern-names pattern)
+  (bound-names pattern #f))
+
+(define (direct-pattern-names pattern)
+  (bound-names pattern #t))
+
+(define (before-repeat patterns)
+  (match patterns
+    [(list* _ (? ellipsis?) _) '()]
+    [(cons one rest) (cons one (before-repeat rest))]
+    [_ '()]))
+
+(define (wildcard-repeat? patterns)
+  (match patterns
+    [(list before ... '_ (? ellipsis?) after ...) (not (ormap ellipsis? (append before after)))]
+    [_ #f]))
+
+(define (literal? datum)
+  (for/or ([kind? (in-list (list boolean? bytes? char? keyword? number? regexp? string?))])
+    (kind? datum)))
+
+(define (literal-key? key)
+  (match key
+    [(list 'quote (or (? symbol?) (? literal?))) #t]
+    [_ (literal? key)]))
+
+(define (literal-keyed-patterns entries)
+  (match entries
+    [(list (list (? literal-key?) patterns) ...) patterns]
+    [_ '()]))
+
+(define (spliced-repeat? pattern)
+  (match pattern
+    [(or (? symbol?) (list 'var _)) #t]
+    [(cons (or 'list 'list-rest 'list*) patterns) (ormap ellipsis? (proper patterns))]
+    [(list 'quasiquote (? list? template)) (ormap ellipsis? template)]
+    [_ #f]))
+
+(define (template-names template)
+  (match template
+    [(list 'unquote pattern) (direct-pattern-names pattern)]
+    [(cons (list 'unquote-splicing pattern) rest)
+     (append (direct-pattern-names pattern)
+             (if (spliced-repeat? pattern)
+                 '()
+                 (template-names rest)))]
+    [(list* _ (? ellipsis?) _) '()]
+    [(cons one rest) (append (template-names one) (template-names rest))]
+    [(? vector?) (template-names (vector->list template))]
+    [(? box?) (template-names (unbox template))]
+    [(app prefab-struct-key (? values)) (template-names (cdr (vector->list (struct->vector template))))]
+    [_ '()]))
+
+(define (bound-names pattern direct?)
+  (define (again one)
+    (bound-names one direct?))
+  (define (repeated patterns)
+    (if direct?
+        (before-repeat patterns)
+        patterns))
   (match pattern
     [(or '_ (? ellipsis?)) '()]
     [(? symbol? name) (list name)]
     [(list 'var (? symbol? name)) (list name)]
     [(cons (or 'quote '== 'not) _) '()]
-    [(cons 'quasiquote template) (append-map pattern-names (unquoted-parts template #:pattern? #t))]
-    [(list* (or '? 'app 'regexp 'pregexp) _ patterns) (append-map pattern-names (proper patterns))]
-    [(list 'struct _ (? list? patterns)) (append-map pattern-names patterns)]
+    [(cons (or 'or 'list-no-order) _)
+     #:when direct?
+     '()]
+    [(cons 'quasiquote template)
+     (if direct?
+         (template-names template)
+         (append-map again (unquoted-parts template #:pattern? #t)))]
+    [(list* (or '? 'app 'regexp 'pregexp) _ patterns) (append-map again (proper patterns))]
+    [(list 'struct _ (? list? patterns)) (append-map again patterns)]
     [(list 'struct _ _) '()]
     [(list 'struct* _ (? list? fields))
      (append-map (lambda (field)
                    (match field
-                     [(list _ pattern) (pattern-names pattern)]
+                     [(list _ pattern) (again pattern)]
                      [_ '()]))
                  fields)]
-    [(cons 'hash entries) (append-map pattern-names (hash-patterns (proper entries)))]
-    [(cons 'hash* entries) (append-map pattern-names (hash*-patterns (proper entries)))]
+    [(cons 'hash entries) (append-map again (hash-patterns (proper entries)))]
+    [(cons 'hash* entries) (append-map again (hash*-patterns (proper entries)))]
     [(cons 'hash-table entries)
-     (append-map (lambda (entry) (append-map pattern-names (proper entry))) (proper entries))]
-    [(cons (pattern-head) patterns) (append-map pattern-names (proper patterns))]
-    [(cons (? symbol?) fields) (append-map pattern-names (proper fields))]
-    [(? pair?) (append-map pattern-names (proper pattern))]
+     #:when direct?
+     (append-map again (literal-keyed-patterns entries))]
+    [(cons 'hash-table entries)
+     (append-map (lambda (entry) (append-map again (proper entry))) (proper entries))]
+    [(cons 'vector (? wildcard-repeat? patterns)) (append-map again patterns)]
+    [(cons (or 'list 'list-rest 'list* 'mlist 'vector) patterns)
+     (append-map again (repeated (proper patterns)))]
+    [(cons (pattern-head) patterns) (append-map again (proper patterns))]
+    [(cons (? symbol?) fields) (append-map again (proper fields))]
+    [(? pair?) (append-map again (proper pattern))]
     [_ '()]))
 
 (define (clause-ids clause)

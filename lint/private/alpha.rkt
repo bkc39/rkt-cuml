@@ -6,6 +6,7 @@
          (only-in "patterns.rkt"
                   binding-clauses
                   clause-ids
+                  direct-pattern-names
                   ellipsis?
                   failure-forms
                   fold-head?
@@ -236,7 +237,7 @@
          (cons (if several?
                    normal
                    (car normal))
-               (clause-body env inner names forms))]
+               (clause-body env inner (append-map direct-pattern-names each-pattern) forms))]
         [_ clause])))
   (define (clause-body env inner names forms)
     (match forms
