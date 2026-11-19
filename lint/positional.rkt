@@ -104,9 +104,9 @@
     [(eq? head 'quote) '()]
     [(eq? head 'quasiquote)
      (append-map (lambda (inner) (accesses inner refused)) (unquoted-parts (cdr items)))]
-    [(struct-options head items)
+    [(struct-parts head items)
      =>
-     (lambda (options) (accesses options refused))]
+     (lambda (parts) (accesses parts refused))]
     [(and (eq? head 'list-ref)
           (match items
             [(list _ _ (? literal-index?)) #t]
@@ -117,10 +117,16 @@
     [(vector? one) (append-map (lambda (item) (accesses item refused)) (vector->list one))]
     [else '()]))
 
-(define (struct-options head items)
+(define (struct-parts head items)
   (match* (head items)
     [('struct (list* _ (? identifier?) (? identifier?) (? syntax?) options)) options]
     [((or 'struct 'define-struct) (list* _ _ (? syntax?) options)) options]
+    [('struct* (list _ id (app syntax->list (? list? fields))))
+     (cons id
+           (for/list ([field (in-list fields)])
+             (match (syntax->list field)
+               [(list _ pattern) pattern]
+               [_ field])))]
     [(_ _) #f]))
 
 (define (file-accesses file refused)
