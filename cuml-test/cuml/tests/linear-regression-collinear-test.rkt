@@ -33,7 +33,7 @@
 (define near-draws 8)
 (define near-gaps (list (expt 2 -12) (expt 2 -13)))
 (define qr-share 32)
-(define normal-equations-share 109)
+(define normal-equations-share 27/5)
 (define prediction-bound (expt 2 -7))
 (define wide-bound (expt 2 -20))
 
@@ -132,19 +132,21 @@
                       (* qr-share (unit-roundoff 'float32) (solution-kappa oracle)))))))
 
 (define share-rows
-  `((auto 1/4 ,normal-equations-share) (eig 1/4 ,normal-equations-share)
-                                       (svd 1/128 ,qr-share)
-                                       (svd-jacobi 1/128 ,qr-share)
-                                       (qr 1/128 ,qr-share)
-                                       (svd-qr 1/128 ,qr-share)))
+  `((auto 1/4 ,normal-equations-share 2) (auto 1/16 ,normal-equations-share 2)
+                                         (eig 1/4 ,normal-equations-share 2)
+                                         (eig 1/16 ,normal-equations-share 2)
+                                         (svd 1/128 ,qr-share 1)
+                                         (svd-jacobi 1/128 ,qr-share 1)
+                                         (qr 1/128 ,qr-share 1)
+                                         (svd-qr 1/128 ,qr-share 1)))
 
-(test-gpu "every float32 algorithm fits nearly collinear X within its share of u kappa"
+(test-gpu "every float32 algorithm fits nearly collinear X within its share of u kappa^p"
   (for* ([row (in-list share-rows)]
          [n (in-list sizes)]
          [seed (in-range draws)])
-    (match-define (list algorithm eps share) row)
+    (match-define (list algorithm eps share power) row)
     (define c (summed-case n seed eps))
     (define oracle (oracle-lstsq (lcase-X c) (lcase-y c) #f #t))
     (test-case (format "~a ~a" algorithm (lcase-name c))
       (check-true (<= (relative-gap (coef-of (fit-with algorithm c)) oracle)
-                      (* share (unit-roundoff 'float32) (solution-kappa oracle)))))))
+                      (* share (unit-roundoff 'float32) (expt (solution-kappa oracle) power)))))))
