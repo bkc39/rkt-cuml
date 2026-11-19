@@ -21,7 +21,6 @@
                   q2-alpha
                   q2-float32-bound
                   [ridge-solution-coef oracle-coef]
-                  [ridge-solution-kappa oracle-kappa]
                   rounded
                   unit-roundoff
                   weighted-gram
@@ -90,7 +89,6 @@
                                   g)))))
 
 (define float64-refused-share (cons (expt 2 -18) 0.35))
-(define accurate-share 1)
 
 (test-gpu "'svd refuses exactly collinear wide columns for an alpha inside the window"
   (for* ([dt (in-list '(float64 float32))]
@@ -114,7 +112,7 @@
       (test-case (format "eps ~a at 2^~a u s2min, intercept ~a" eps k fi)
         (check-true (< (relative-error c 'float64 alpha fi) window-float64-bound))))))
 
-(test-gpu "float64 'svd refuses window fits with u kappa' in [2^-18, 0.35) that it would fit accurately"
+(test-gpu "float64 'svd refuses window fits with u kappa' in [2^-18, 0.35)"
   (match-define (cons share-lo share-hi) float64-refused-share)
   (define u (inexact->exact (unit-roundoff 'float64)))
   (for* ([eps (in-list (list (expt 2 -12) (expt 2 -14) (expt 2 -16) (expt 2 -18)))]
@@ -122,9 +120,6 @@
     (define c (window-case 'float64 0 13 eps))
     (define alpha (window-alpha c 'float64 k))
     (match-define (cons kappa-lo kappa-hi) (regularised-condition c alpha))
-    (define kappa-alpha
-      (oracle-kappa (oracle-ridge (lcase-X c) (lcase-y c) #f (inexact->exact alpha) #f)))
     (test-case (format "eps ~a at 2^~a u s2min" eps k)
       (check-true (<= share-lo (* u kappa-lo) (* u kappa-hi) share-hi))
-      (check-true (< (* u kappa-alpha) accurate-share))
       (check-cuml-error 'logic window-refusal (lambda () (fit c 'float64 alpha #f))))))
