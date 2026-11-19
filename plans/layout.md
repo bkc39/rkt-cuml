@@ -1979,11 +1979,21 @@ scratch, the source is `cpp/src/glm/qn/`.
     default max-iter in both dtypes for every penalty (R2 again); under
     `'none` it fits to K <= 1e-7 max(F, 1) given room: float64 with an
     intercept at 20000 (n-iter 11717), without one at 6000 (4084),
-    float32 with one at 6000 (2322-3134). At max-iter 4000, l2 at C 0.01
-    is accepted within S4's cap (f64 4.4e-4, f32 1.7e-4); the first
-    solve alone accepts f64 l1 and elastic net there at 7.1e-2 and
-    4.9e-2 from the float64 optimum, over S4's 3e-2, and the rescue
-    sometimes accepts f32 l1 at 1.3e-1, over 8e-2 (open).
+    float32 with one at 6000 (2322-3134).
+  - Raw breast-cancer's accepted fits depend on max-iter, so their caps
+    do too: S4's caps hold at the default max-iter, and above it each
+    capped arm has its own cap, twice the worst gap to the float64
+    optimum over its runs (24 f64, 48 f32), a regression pin, not an
+    acceptance rule (r1b ruling). The check is the contract; the first
+    solve is Python cuML's bit for bit, so its fits stand. Gaps (worst,
+    cap; share refused): l1 at max-iter 4000, f64 7.07e-2, 1.5e-1, 0/24
+    (the first solve, every run the same); f32 1.32e-1, 2.7e-1, 17/48;
+    elastic net at 4000, f64 4.88e-2, 1e-1, 0/24; f32 8.06e-2, 1.7e-1,
+    37/48; l2 at C 0.01, f64 at 4000 4.41e-4, 9e-4, 0/24; f32 at 4000
+    1.77e-3, 3.6e-3, 6/48; f32 at 1000 8.06e-4, 1.7e-3, 30/48. A
+    float32 arm is refused (the cutoff's message) or accepted within its
+    cap, and each has done both; any other error fails it. At max-iter
+    1000 every other penalised arm is refused in 24 of 24 runs.
   - The float32 standardised breast-cancer l1 fit does not repeat: 40
     runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
     between 5.0e-3 and 1.42e-2; `float32-gap-bounds` is per penalty, twice
