@@ -20,12 +20,12 @@ constexpr double residual_factor = 64;
 constexpr double mixed_spread_ratio = 0x1p8;
 
 const char* cutoff_advice(const solve_check& c, const fit_options& o) {
+  if (c.n_iter >= o.max_iter) {
+    return "raise max-iter";
+  }
   const auto [narrowest, widest] = std::ranges::minmax(c.sigma);
   if (widest > mixed_spread_ratio * narrowest) {
     return "standardise the columns";
-  }
-  if (c.n_iter >= o.max_iter) {
-    return "raise max-iter";
   }
   return c.shape.fit_intercept ? "lower tol, or centre X"
                                : "lower tol, centre X, or fit an intercept";

@@ -12,7 +12,12 @@
          (only-in raft device-vector->list device-vector? list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" on-matrix on-vector)
-         (only-in "private/logistic-data.rkt" scaled-rows unequal-weights-message)
+         (only-in "private/logistic-data.rkt"
+                  blob-case
+                  lr-case-X
+                  lr-case-y
+                  scaled-rows
+                  unequal-weights-message)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
@@ -25,7 +30,10 @@
 
 (define mixed-spread-cutoff
   (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
-                         "after 1 iterations \\(max-iter 1, tol 1e-04\\); standardise the columns$")))
+                         "after [0-9]+ iterations \\(max-iter 1000, tol 1e-04\\); "
+                         "standardise the columns$")))
+
+(define mixed-three (blob-case "mixed three" 90 3 3 8 #:scales '(1/256 1 256)))
 
 (define (tiny-last rows factor)
   (map (match-lambda
@@ -217,9 +225,13 @@
               (on-vector '(0 0 0 1 1 1) 'int32)
               #:penalty 'none)))
    (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))
-   (row "an iteration cutoff on columns of spreads 2^8 apart names standardising"
+   (row "an iteration cutoff on columns of spreads 2^8 apart says raise max-iter"
+        one-iteration-cutoff
+        (lambda () (go (on-matrix (tiny-last grid 1000)) y #:max-iter 1)))
+   (row "a cutoff short of max-iter on columns of spreads 2^8 apart names standardising"
         mixed-spread-cutoff
-        (lambda () (go (on-matrix (tiny-last grid 1000)) y #:max-iter 1)))))
+        (lambda ()
+          (go (on-matrix (lr-case-X mixed-three) 'float64) (on-vector (lr-case-y mixed-three) 'int32))))))
 
 (test-gpu "logistic-regression-fit refuses each row, the earlier fault first"
   (for ([r (in-list (append (racket-rows logistic-regression-fit)
