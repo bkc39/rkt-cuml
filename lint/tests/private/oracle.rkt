@@ -63,11 +63,10 @@
   (expansion-binders `(match-lambda
                         [,pattern (binders ,@(remove-duplicates (symbols pattern)))])))
 
-(define (free-key side)
-  (lambda (name)
-    (if (shared-name? name)
-        name
-        (format "~a@~a" name side))))
+(define ((free-key side) name)
+  (if (shared-name? name)
+      name
+      (format "~a@~a" name side)))
 
 (define (alpha-copy? one other)
   (equal? (alpha-normal one (procedure-name one) (free-key "one"))
