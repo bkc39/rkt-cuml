@@ -68,6 +68,7 @@ template <typename T>
 struct rescue {
   std::optional<qn_solution<T>> solution;
   int n_iter;
+  std::optional<resolution> last;
 };
 
 template <typename T>

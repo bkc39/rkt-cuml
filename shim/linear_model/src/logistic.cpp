@@ -262,7 +262,7 @@ qn_solution<T> solve(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   if (!second.solution) {
     solve_check spent = plain.check;
     spent.n_iter = second.n_iter;
-    refuse_cutoff(plain.r, options, spent);
+    refuse_cutoff(second.last.value_or(plain.r), options, spent);
   }
   return std::move(*second.solution);
 }

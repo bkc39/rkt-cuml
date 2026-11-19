@@ -49,9 +49,9 @@
       (match-define (residual K _ bound) (residual-at r X y penalty 1e-4))
       (check-true (<= K bound) (format "K ~a bound ~a" (exact->inexact K) (exact->inexact bound))))))
 
-(test-gpu "a rescue that spends max-iter says raise max-iter"
+(test-gpu "a rescue that spends max-iter names its last attempt's residual and says raise max-iter"
   (define-values (X y) (stamps 60.0 5))
-  (check-exn #rx"after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
+  (check-exn #rx"residual 0\\.0031397[0-9]* above the bound 0\\.0011177[0-9]* after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
              (lambda ()
                (logistic-regression-fit (on-matrix X 'float64)
                                         (on-vector y 'int32)

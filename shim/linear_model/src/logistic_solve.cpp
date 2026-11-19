@@ -172,7 +172,7 @@ rescue<T> rescued(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   const bool per_column = options.penalty == CUML_LINEAR_MODEL_PENALTY_NONE;
   if ((!options.fit_intercept && !per_column) ||
       plain.solution.n_iter >= options.max_iter) {
-    return {std::nullopt, plain.solution.n_iter};
+    return {std::nullopt, plain.solution.n_iter, std::nullopt};
   }
   const rmm::cuda_stream_view stream = stream_of(handle);
   const qn_shape& shape = st.shape;
@@ -190,6 +190,7 @@ rescue<T> rescued(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                           means.data(), copy.data());
   }
   solve_check total = plain.check;
+  std::optional<resolution> last;
   for (const std::vector<T>* start : {&cold, &warm}) {
     fit_options budget = options;
     budget.max_iter = options.max_iter - total.n_iter;
@@ -206,14 +207,17 @@ rescue<T> rescued(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     buffer<T> params = to_device(
         mapped_back(to_host(tried.params, stream), plan, st.shift, shape),
         stream);
-    if (all_finite(params, stream) &&
-        checked<T>(handle, st.x(), st.y.data(), st.weights(), params, options,
-                   total)
-            .resolved()) {
-      return {qn_solution<T>{std::move(params), total.n_iter}, total.n_iter};
+    if (!all_finite(params, stream)) {
+      continue;
+    }
+    last = checked<T>(handle, st.x(), st.y.data(), st.weights(), params,
+                      options, total);
+    if (last->resolved()) {
+      return {qn_solution<T>{std::move(params), total.n_iter}, total.n_iter,
+              last};
     }
   }
-  return {std::nullopt, total.n_iter};
+  return {std::nullopt, total.n_iter, last};
 }
 
 template qn_solution<float> qn_solved<float>(const raft::handle_t&, float*,

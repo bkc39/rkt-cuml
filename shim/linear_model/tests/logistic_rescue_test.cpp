@@ -54,6 +54,7 @@ struct outcome {
   int n_iter;
   std::vector<std::vector<double>> starts;
   std::vector<int> budgets;
+  std::optional<double> last_worst;
 };
 
 outcome rescued_with(bool cold_spends_the_budget) {
@@ -94,7 +95,7 @@ outcome rescued_with(bool cold_spends_the_budget) {
       {to_device(std::vector<double>(params, 0.0), stream), first_iterations},
       {first_worst, first_bound, 0.0},
       check};
-  outcome out{false, 0, {}, {}};
+  outcome out{false, 0, {}, {}, std::nullopt};
   const qn_solver<double> solve = [&](const raft::handle_t&, double*, double*,
                                       double*, const qn_shape&, penalties,
                                       const fit_options& budget,
@@ -111,6 +112,9 @@ outcome rescued_with(bool cold_spends_the_budget) {
       row_selection{nullptr, rows}, stats, st, plain, options, solve);
   out.rescued = r.solution.has_value();
   out.n_iter = r.n_iter;
+  if (r.last) {
+    out.last_worst = r.last->worst;
+  }
   return out;
 }
 
@@ -138,6 +142,15 @@ TEST(LogisticRescue, AColdAttemptThatSpendsTheBudgetSkipsTheWarmOne) {
   ASSERT_EQ(out.starts.size(), 1U);
   EXPECT_EQ(out.budgets, std::vector<int>{max_iter - first_iterations});
   EXPECT_EQ(out.n_iter, max_iter);
+  EXPECT_FALSE(out.last_worst.has_value());
+}
+
+TEST(LogisticRescue, AFailedRescueKeepsItsLastFiniteAttemptsResidual) {
+  CUMLRKT_REQUIRE_GPU();
+  const outcome out = rescued_with(false);
+  EXPECT_FALSE(out.rescued);
+  ASSERT_TRUE(out.last_worst.has_value());
+  EXPECT_NE(*out.last_worst, first_worst);
 }
 
 }  // namespace
