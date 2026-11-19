@@ -414,12 +414,12 @@ integral numbers on the device, or a list of reals, strings or symbols; @racket[
 sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
 
 The fit is refused when the solver has not converged: the check bounds the first-order residual, not
-the error. A column constant over the rows of positive weight (zero, without @racket[fit-intercept])
-gets coefficient 0; with @racket[fit-intercept], one that varies only in its last bits is refused:
-centre it. With @racket[fit-intercept] or under @racket['none], a refused fit is solved again on
-rescaled columns in the iterations left and kept if it passes; a fit the first solve passes is
-unchanged. @racket[n-iter] counts every solve, at most @racket[max-iter]. Refusals say to raise
-@racket[max-iter], standardise columns spread 2@superscript{8} apart, or lower @racket[tol] or
+the distance to the optimum. A column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
+last bits is refused: centre it. With @racket[fit-intercept] or under @racket['none], a refused fit
+is solved again on rescaled columns in the iterations left and kept if it passes; a passing first
+solve is unchanged. @racket[n-iter] counts every solve, at most @racket[max-iter]. Refusals say to
+raise @racket[max-iter], standardise columns spread 2@superscript{8} apart, or lower @racket[tol] or
 centre X. Unpenalised separable fits grow until the solver stops. Large fits do not repeat bitwise.
 @examples[#:eval ev #:label #f
 (logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
