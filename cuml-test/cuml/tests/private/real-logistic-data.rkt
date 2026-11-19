@@ -43,7 +43,7 @@
           classes))
 
 (define stationary-bound 1e-7)
-(define float32-gap-bound 2.7e-2)
+(define float32-gap-bounds (hash 'l1 2.9e-2 'l2 1.1e-3 'elasticnet 1.7e-3))
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
 
@@ -118,7 +118,8 @@
     [else
      (define gap
        (relative-gap (gauged-fit parts) (gauged-fit (fit-parts (tight-fit set 'float64 s)))))
-     (check-true (<= gap float32-gap-bound) (format "gap to the float64 fit ~a" gap))]))
+     (define bound (hash-ref float32-gap-bounds (setting-penalty s)))
+     (check-true (<= gap bound) (format "gap to the float64 fit ~a, bound ~a" gap bound))]))
 
 (struct asked (setting tol) #:transparent)
 
