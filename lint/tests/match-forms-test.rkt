@@ -165,78 +165,119 @@
       (check-false (alpha-copy? original (procedure 'q 'z (if binder? 'q 'z)))
                    "the right-hand side read the other way"))))
 
-(define (clause-answer head layout clauses)
+(define (argument-list? head layout)
+  (and (null? (match-layout-before layout))
+       (not (several? layout))
+       (equal? (racket-value `(,(clause-form head layout '([x x])) 'probe)) '(probe))))
+
+(define (clause-answer head layout clauses value)
   (define form (clause-form head layout clauses))
   (racket-value `((lambda (k v)
-                    ,(match (match-layout-before layout)
-                       [(or '() '(head))
+                    ,(match* ((match-layout-before layout) (argument-list? head layout))
+                       [(_ #t) `(apply ,form v)]
+                       [((or '() '(head)) _)
                         `(,form v
                                 ,@(if (several? layout)
                                       '(v)
                                       '()))]
-                       [_ form]))
+                       [(_ _) form]))
                   'formal
-                  1)))
+                  ',value)))
+
+(define shadowing-patterns
+  '((k k (5)) ((list k) k (5))
+              ((list k ...) k (5 6))
+              ((list a k ...) a (5 6))
+              ((or (list k) (vector k)) k (5))
+              ((list-no-order 5 k) k (5 6))
+              ((list k ..1) k (5))))
+
+(define (shadowing-sample lhs failure name position)
+  (match position
+    ['body `([,lhs (=> ,failure) (if (procedure? ,name) 'failure 'pattern)] [_ 'unmatched])]
+    ['when `([,lhs (=> ,failure) #:when (procedure? ,name) 'failure] [,lhs 'pattern] [_ 'unmatched])]))
+
+(define when-reads
+  '((([(list a) (=> next) #:when (positive? a) a] [_ 0]) ([(list b) (=> next) #:when (positive? b) b]
+                                                          [_ 0])
+                                                         5)
+    (([(list k) (=> k) #:when (number? k) k] [_ 0]) ([(list j) (=> k) #:when (number? j) j] [_ 0]) 5)
+    (([(list k) (=> k) #:when (number? k) 1] [_ 0]) ([(list j) (=> k) #:when (number? k) 1] [_ 0]) 0)
+    (([(list k ...) (=> k) #:when (list? k) k] [_ 0]) ([(list j ...) (=> k) #:when (list? j) j] [_ 0])
+                                                      (5))
+    (([(list k ...) (=> k) #:when (list? k) 1] [_ 0]) ([(list j ...) (=> k) #:when (list? k) 1] [_ 0])
+                                                      0)))
 
 (for ([head (in-list forms)]
       #:when (clause? (hash-ref match-forms head)))
   (define layout (hash-ref match-forms head))
   (define (lhs pattern)
     (clause-lhs layout pattern))
+  (define (each-lhs clauses)
+    (for/list ([clause (in-list clauses)])
+      (match clause
+        [(cons pattern forms) (cons (lhs pattern) forms)])))
   (define (procedure formal clauses)
-    `(define (g ,@(if formal
-                      (list formal)
-                      '())
-                v)
-       ,(clause-form head layout clauses)))
-  (define (copy-as-racket-says? copy? one other message)
-    (check-equal? (alpha-copy? one other) copy? message))
+    `(define (g ,formal v)
+       ,(clause-form head layout (each-lhs clauses))))
+  (define (answer clauses value)
+    (clause-answer head layout (each-lhs clauses) value))
+  (define (check-scope sample value copy-when one other)
+    (define found (answer sample value))
+    (check-not-false (memq found '(formal failure pattern)) "the sample matches")
+    (match-define (list one-message one-formal one-clauses) one)
+    (match-define (list other-message other-formal other-clauses) other)
+    (check-equal? (alpha-copy? (procedure 'k sample) (procedure one-formal one-clauses))
+                  (eq? found copy-when)
+                  one-message)
+    (check-equal? (alpha-copy? (procedure 'k sample) (procedure other-formal other-clauses))
+                  (not (eq? found copy-when))
+                  other-message))
   (test-case (format "the copy check scopes a ~a pattern outside its clause's failure id" head)
-    (define formal?
-      (eq? (clause-answer head
-                          layout
-                          `([,(lhs '(? (lambda (x) (eq? k 'formal)))) (=> k) 'formal] [,(lhs '_)
-                                                                                       'failure]))
-           'formal))
-    (define (probe formal read)
-      (procedure formal `([,(lhs `(? ,read)) (=> k) 1] [,(lhs '_) 2])))
-    (copy-as-racket-says? formal? (probe 'k 'k) (probe 'z 'z) "the formal renamed with its read")
-    (copy-as-racket-says? (not formal?) (probe 'k 'k) (probe 'z 'k) "the formal renamed alone"))
+    (define (sample read)
+      `([(? (lambda (x) (eq? ,read 'formal))) (=> k) 'formal] [_ 'failure]))
+    (check-scope (sample 'k)
+                 '(1)
+                 'formal
+                 (list "the formal renamed with its read" 'z (sample 'z))
+                 (list "the formal renamed alone" 'z (sample 'k))))
   (test-case (format "the copy check scopes a ~a failure id inside its own clause" head)
-    (define formal? (eq? (clause-answer head layout `([,(lhs '_) (=> k) (k)] [,(lhs '_) k])) 'formal))
-    (define (probe formal read)
-      (procedure formal `([,(lhs '_) (=> k) (k)] [,(lhs '_) ,read])))
-    (copy-as-racket-says? formal? (probe 'k 'k) (probe 'z 'z) "the formal renamed with its read")
-    (copy-as-racket-says? (not formal?) (probe 'k 'k) (probe 'z 'k) "the formal renamed alone"))
+    (define (sample read)
+      `([_ (=> k) (k)] [_ (if (eq? ,read 'formal) 'formal 'failure)]))
+    (check-scope (sample 'k)
+                 '(1)
+                 'formal
+                 (list "the formal renamed with its read" 'z (sample 'z))
+                 (list "the formal renamed alone" 'z (sample 'k))))
   (test-case (format "the copy check reads a ~a #:when after the failure id as Racket does" head)
-    (define failure?
-      (eq? (clause-answer head
-                          layout
-                          `([,(lhs '_) (=> k) #:when (procedure? k) 'failure] [,(lhs '_) 'formal]))
-           'failure))
-    (define (probe failure read)
-      (procedure #f `([,(lhs '(list a)) (=> ,failure) #:when (procedure? ,read) a] [,(lhs '_) 1])))
-    (copy-as-racket-says? failure?
-                          (probe 'k 'k)
-                          (probe 'j 'j)
-                          "the failure id renamed with its read"))
-  (define (shadowing binder failure)
-    (procedure #f `([,(lhs `(list ,binder)) (=> ,failure) (add1 k)])))
-  (for ([renamed (in-list '(failure pattern))])
-    (test-case (format "the copy check lets a ~a pattern variable shadow a failure id: ~a renamed"
+    (define (sample failure read)
+      `([_ (=> ,failure) #:when (procedure? ,read) 'failure] [_ 'formal]))
+    (check-scope (sample 'k 'k)
+                 '(1)
+                 'failure
+                 (list "the failure id renamed with its read" 'k (sample 'j 'j))
+                 (list "the failure id renamed alone" 'k (sample 'j 'k))))
+  (for* ([row (in-list shadowing-patterns)]
+         [position (in-list '(body when))])
+    (match-define (list pattern name value) row)
+    (test-case (format "the copy check lets a ~a pattern ~s's ~a win over a failure id in the ~a as Racket does"
                        head
-                       renamed)
-      (define pattern?
-        (eq? (clause-answer head layout `([,(lhs 'k) (=> k) (if (procedure? k) 'failure 'pattern)]))
-             'pattern))
-      (match renamed
-        ['failure
-         (copy-as-racket-says? pattern? (shadowing 'k 'k) (shadowing 'k 'j) "the failure id renamed")]
-        ['pattern
-         (copy-as-racket-says? (not pattern?)
-                               (shadowing 'k 'k)
-                               (shadowing 'j 'k)
-                               "the pattern variable renamed")]))))
+                       pattern
+                       name
+                       position)
+      (check-scope (shadowing-sample pattern name name position)
+                   value
+                   'pattern
+                   (list "the failure id renamed" 'k (shadowing-sample pattern 'j name position))
+                   (list "the pattern variable renamed"
+                         'k
+                         (shadowing-sample (rename pattern (list (cons name 'j))) name name position)))))
+  (for ([row (in-list when-reads)]
+        [index (in-naturals)])
+    (match-define (list one other copied) row)
+    (test-case (format "the copy check reads ~a #:when read ~a's pattern variables as Racket does" head index)
+      (check-equal? (alpha-copy? (procedure 'k one) (procedure 'k other))
+                    (equal? (answer one '(5)) copied)))))
 
 (test-case "no-positional-access reads every form's patterns from the table"
   (with-temporary-directory
