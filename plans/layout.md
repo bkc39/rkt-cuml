@@ -1982,7 +1982,7 @@ scratch, the source is `cpp/src/glm/qn/`.
     default max-iter (n-iter 14-25). Raw breast-cancer is refused at the
     default max-iter in both dtypes for every penalty (R2 again) but
     one: float32 l2 at C 0.01 is accepted in about 2 runs in 5 (18 of
-    48, and 5 of 12 in the r2 re-review), within its cap; under
+    48, and 5 of 12 in the r1 re-review), within its cap; under
     `'none` it fits to K <= 1e-7 max(F, 1) given room: float64 with an
     intercept at 20000 (n-iter 11717), without one at 6000 (4084),
     float32 with one at 6000 (2322-3134).
