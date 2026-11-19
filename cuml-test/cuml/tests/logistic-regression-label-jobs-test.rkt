@@ -4,6 +4,7 @@
          (only-in cuml/linear-model/private/labels current-label-classes-job)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
+         (only-in raft device-matrix device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" on-matrix on-vector))
 
@@ -32,3 +33,10 @@
     (test-case (format "class-weight ~a" cw)
       (check-equal? (outcome-and-jobs (lambda () (logistic-regression-fit X y #:class-weight cw)))
                     (list outcome jobs)))))
+
+(test-gpu "device labels: zero rows with a class-weight hash refused before a label-classes job"
+  (define X (device-matrix 0 1 #:dtype 'float32))
+  (define y (device-vector 0 #:dtype 'int32))
+  (check-equal? (outcome-and-jobs (lambda ()
+                                    (logistic-regression-fit X y #:class-weight (hash 0 1.0))))
+                '("logistic-regression-fit: X: expected at least 2 rows, got 0" 0)))

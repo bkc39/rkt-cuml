@@ -24,6 +24,7 @@
          y-kind/who)
 
 (define label-dtypes '(int32 int64 float32 float64))
+(define shim-min-rows 2)
 (define current-label-classes-job
   (make-parameter cuml-linear-model-label-classes-job #f 'current-label-classes-job))
 
@@ -143,6 +144,7 @@
      (values y
              #f
              (and (class-weighted? who rows y cw)
+                  (>= rows shim-min-rows)
                   (class-weight-view who real-labels (device-classes who y resources) cw resources)))]
     [_
      (define-values (classes codes) (host-labels who kind y))
