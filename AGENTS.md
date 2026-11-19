@@ -291,7 +291,8 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   b = ȳ, w = 0: it is refused, "y is constant to round-off and ...; lower
   #:eta0 or #:alpha", unless every |w| ≤ 2·eta0·α·r and |b − ȳ| ≤
   1e-6·|ȳ| (`round_off_coef_steps`, `round_off_intercept_share`, which the
-  Racket tests read from `mbsgd_checks.hpp`). An infinite objective is
+  Racket tests restate as literals in `mbsgd-gate-data.rkt`; the
+  `gate-constants` gate fails when they differ from `mbsgd_checks.hpp`). An infinite objective is
   refused whatever A. Above round-off a regressor whose loss without the
   penalty ends above F_start·1.025 + min(floor, .025·F_start), a fit worse
   than the zero model (with an intercept, in-sample R² below −.025 −
@@ -369,8 +370,8 @@ wait below 30 GB available. Never two shim builds at once.
 
 ### Gates
 
-native, format, no-syntax-rule, no-raw-malloc, no-noqa, gpu-suite-signals, layout,
-pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
+native, format, no-syntax-rule, no-raw-malloc, no-noqa, gpu-suite-signals,
+gate-constants, layout, pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
 (`racket <plugin>/hooks/gate.rkt . all`), and `push-gates` is the pre-push
