@@ -216,11 +216,11 @@
     (define-values (m _) (probe-model #:release (release-logging tag)))
     m)
   (define before (settled))
-  (define earlier (model 'earlier))
-  (define later (model 'later))
-  (exit-by earlier later)
-  (check-true (native-model-released? earlier))
-  (check-true (native-model-released? later))
+  (define first (model 'first))
+  (define second (model 'second))
+  (exit-by first second)
+  (check-true (native-model-released? first))
+  (check-true (native-model-released? second))
   (check-equal? (counts-released (since before)) 2)
   (list (sync/timeout 0 order) (sync/timeout 0 order) (sync/timeout 0 order)))
 
@@ -243,7 +243,7 @@
                      "with-native-models: cannot re-enter its body after its resources were released"
                      g))
  (for ([exit-by (list normal raising escaping yielding)])
-   (check-equal? (released-in-order exit-by) '(later earlier #f) (format "~a" exit-by))))
+   (check-equal? (released-in-order exit-by) '(second first #f) (format "~a" exit-by))))
 
 (test-model-probe
  "a failed release leaves the model live, and a later one succeeds"

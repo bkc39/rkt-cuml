@@ -111,10 +111,10 @@
               #:rows (lambda (rows) (append rows rows))
               #:cols (lambda (cols) (append cols cols))
               #:vals (lambda (_)
-                       (for/lists (heads tails #:result (append heads tails))
+                       (for/lists (firsts seconds #:result (append firsts seconds))
                                   ([part (in-list split)])
-                                  (match-define (list head tail) part)
-                                  (values head tail)))))
+                                  (match-define (list first second) part)
+                                  (values first second)))))
 
 (define (summed-entries g parts)
   (graph-map-vals g (lambda (w) (flsingle (apply + (parts w))))))

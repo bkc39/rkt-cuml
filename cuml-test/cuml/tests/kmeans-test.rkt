@@ -70,9 +70,9 @@
         (check-true (<= 0 n-iter 50))))))
 
 (define (margin-ok? x row centroids tolerance)
-  (match-define (list* best runner-up _) (sort row <))
+  (match-define (list* best second _) (sort row <))
   (define scale (max 1.0 (+ (norm2 x) (apply max (map norm2 centroids)))))
-  (> (- runner-up best) (* tolerance scale)))
+  (> (- second best) (* tolerance scale)))
 
 (test-gpu "law C: predict, score and transform agree with the fit that made the centroids"
   (for* ([dt (in-list dtypes)]

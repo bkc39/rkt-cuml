@@ -73,3 +73,45 @@
 (test-case "an accessor named in a comment or a string is not a use"
   (define-values (ok? output) (gate-on-file (call-with-input-file comments-fixture port->string)))
   (check-true ok? output))
+
+(test-case "list-ref with a quasiquoted literal index is refused"
+  (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref rows `2))))
+  (check-false ok?)
+  (check-regexp-match
+   #rx"table-test[.]rkt:3: list-ref with a literal index: read a test table's rows with match-define"
+   output))
+
+(for ([use (in-list '(((require racket/list) (define (scaled xs)
+                                                (define tenth 0.1)
+                                                (map (lambda (x) (* x tenth)) xs)))
+                      ((define units '(second minute hour)))
+                      ((define (timeout n)
+                         (list n 'second)))
+                      ((define header '(first second)))
+                      ((define (pair-sum p)
+                         (let-values ([(first second) (values (car p) (cdr p))])
+                           (+ first second))))
+                      ((define (weighted second xs)
+                         (map (lambda (x) (* x second)) xs)))
+                      ((define (row n)
+                         `(second ,n)))
+                      ((define (pairs xs)
+                         (for*/list ([first (in-list xs)]
+                                     [second (in-list xs)])
+                           (cons first second))))
+                      ((require racket/match) (define (gap row)
+                                                (match-define (list* best second _) row)
+                                                (- second best)))))])
+  (test-case (format "a name the file binds, or quoted data, is not an access: ~s" use)
+    (define-values (ok? output) (gate-on use))
+    (check-true ok? output)))
+
+(test-case "racket/list's accessor is refused beside quoted data, and inside an unquote"
+  (for ([forms (in-list '(((require racket/list) (define units '(second minute))
+                                                 (define (f xs)
+                                                   (second xs)))
+                          ((require racket/list) (define (f xs)
+                                                   `(row ,(second xs))))))])
+    (define-values (ok? output) (gate-on forms))
+    (check-false ok? output)
+    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))

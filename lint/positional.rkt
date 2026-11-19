@@ -9,16 +9,96 @@
 
 (define (literal-index? one)
   (match (syntax->datum one)
-    [(or (? exact-nonnegative-integer?) (list 'quote (? exact-nonnegative-integer?))) #t]
+    [(or (? exact-nonnegative-integer?)
+         (list (or 'quote 'quasiquote) (? exact-nonnegative-integer?)))
+     #t]
     [_ #f]))
 
+(define (formal-names formals)
+  (match formals
+    [(? symbol? rest) (list rest)]
+    [(cons (? keyword?) more) (formal-names more)]
+    [(cons (? symbol? one) more) (cons one (formal-names more))]
+    [(cons (list (? symbol? one) _) more) (cons one (formal-names more))]
+    [(cons _ more) (formal-names more)]
+    [_ '()]))
+
+(define (head-names head)
+  (match head
+    [(cons (? symbol? name) formals) (cons name (formal-names formals))]
+    [(cons (? pair? inner) formals) (append (head-names inner) (formal-names formals))]
+    [_ '()]))
+
+(define (clause-names clauses)
+  (append-map (lambda (clause)
+                (match clause
+                  [(list (? symbol? name) _) (list name)]
+                  [(list (? list? names) _) (filter symbol? names)]
+                  [_ '()]))
+              (if (list? clauses)
+                  clauses
+                  '())))
+
+(define (bound-names datum)
+  (match datum
+    [(cons (or 'quote 'quasiquote) _) '()]
+    [(list* (or 'define 'define-values) target rest)
+     (append (match target
+               [(? symbol? name) (list name)]
+               [(? pair?) (head-names target)]
+               [_ '()])
+             (bound-names rest))]
+    [(list* (or 'lambda 'λ) formals rest) (append (formal-names formals) (bound-names rest))]
+    [(list* 'case-lambda clauses)
+     (append-map (lambda (clause)
+                   (match clause
+                     [(cons formals rest) (append (formal-names formals) (bound-names rest))]
+                     [_ '()]))
+                 clauses)]
+    [(list* 'let (? symbol? loop) clauses rest)
+     (append (list loop) (clause-names clauses) (bound-names clauses) (bound-names rest))]
+    [(list* (or 'let 'let* 'letrec 'letrec* 'let-values 'let*-values 'letrec-values) clauses rest)
+     (append (clause-names clauses) (bound-names clauses) (bound-names rest))]
+    [(list* (or 'match-define 'match-define-values) pattern rest)
+     (append (pattern-names pattern) (bound-names rest))]
+    [(list* (? fold-head?) (? list? accumulators) (? list? clauses) rest)
+     (append (clause-names accumulators)
+             (clause-names clauses)
+             (bound-names accumulators)
+             (bound-names clauses)
+             (bound-names rest))]
+    [(list* (? for-head?) (? list? clauses) rest)
+     (append (clause-names clauses) (bound-names clauses) (bound-names rest))]
+    [(cons a d) (append (bound-names a) (bound-names d))]
+    [_ '()]))
+
+(define (for-head? head)
+  (and (symbol? head) (regexp-match? #rx"^for[*]?(/|$)" (symbol->string head))))
+
+(define (fold-head? head)
+  (and (for-head? head) (regexp-match? #rx"/(fold|foldr|lists)$" (symbol->string head))))
+
+(define (pattern-names pattern)
+  (match pattern
+    [(? symbol? name) (list name)]
+    [(cons (or 'quote 'quasiquote) _) '()]
+    [(cons a d) (append (pattern-names a) (pattern-names d))]
+    [_ '()]))
+
 (define (accesses one refused)
+  (define items (and (syntax? one) (syntax->list one)))
+  (define head
+    (match items
+      [(cons (? identifier? head) _) (syntax-e head)]
+      [_ #f]))
   (cond
     [(and (identifier? one) (memq (syntax-e one) refused))
      (list (cons (syntax-e one) (syntax-line one)))]
-    [(and (syntax? one)
-          (match (syntax->list one)
-            [(list (? identifier? head) _ (? literal-index?)) (eq? (syntax-e head) 'list-ref)]
+    [(eq? head 'quote) '()]
+    [(eq? head 'quasiquote) (unquoted (cdr items) refused)]
+    [(and (eq? head 'list-ref)
+          (match items
+            [(list _ _ (? literal-index?)) #t]
             [_ #f]))
      (cons (cons 'list-ref (syntax-line one)) (accesses (syntax-e one) refused))]
     [(syntax? one) (accesses (syntax-e one) refused)]
@@ -26,10 +106,26 @@
     [(vector? one) (append-map (lambda (item) (accesses item refused)) (vector->list one))]
     [else '()]))
 
+(define (unquoted one refused)
+  (match (if (syntax? one)
+             (syntax-e one)
+             one)
+    [(list (? identifier? head) inner)
+     #:when (memq (syntax-e head) '(unquote unquote-splicing))
+     (accesses inner refused)]
+    [(cons a d) (append (unquoted a refused) (unquoted d refused))]
+    [(? vector? items) (append-map (lambda (item) (unquoted item refused)) (vector->list items))]
+    [_ '()]))
+
+(define (file-accesses file refused)
+  (define module (read-module file))
+  (define own (bound-names (syntax->datum module)))
+  (accesses module (filter (lambda (name) (not (memq name own))) refused)))
+
 (define (positional-accesses roots refused)
   (for*/list ([root (in-list roots)]
               [file (in-list (sort (find-files rkt? root) string<? #:key path->string))]
-              [found (in-list (accesses (read-module file) refused))])
+              [found (in-list (file-accesses file refused))])
     (list file (cdr found) (car found))))
 
 (module+ main
