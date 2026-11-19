@@ -2,9 +2,14 @@
 
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstdint>
+#include <raft/core/handle.hpp>
 #include <vector>
 
+#include "block_gram.hpp"
+#include "cumlrkt/support.hpp"
+#include "glm_staging_device.hpp"
 #include "gram_condition.hpp"
 #include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
@@ -12,8 +17,13 @@
 
 namespace {
 
+using cumlrkt::stream_of;
+using cumlrkt::glm::block_rows_of;
 using cumlrkt::glm::condition_estimate;
 using cumlrkt::glm::equilibrated_condition;
+using cumlrkt::glm::narrow_block_grams;
+using cumlrkt::glm::to_device;
+using cumlrkt::glm::to_host;
 using cumlrkt::glm::ritz::gram_bound;
 using cumlrkt::glm::ritz::gram_error;
 using cumlrkt::glm::ritz::gram_path;
@@ -35,6 +45,8 @@ constexpr int64_t hadamard_rows = 1024;
 constexpr double hadamard_loading = 0x1p16;
 constexpr int hadamard_spread_bits = 10;
 constexpr int64_t wide_columns = 100;
+constexpr int64_t kernel_blocks = 2;
+constexpr double rounding_lean = 0x1.fcp-18;
 
 struct design {
   std::vector<double> x;
@@ -120,6 +132,34 @@ TEST(GramError, AHadamardPairPastTheThresholdIsRefused) {
     for (const bool fit_intercept : {false, true}) {
       expect_refused(res, hadamard_pair(spread_bits), fit_intercept);
     }
+  }
+}
+
+TEST(GramError, TheNarrowKernelStaysWithinItsRunBound) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const raft::handle_t& handle = raftrkt::handle_of(res.handle);
+  const int64_t rows = kernel_blocks * cumlrkt::glm::ritz::gram_block_rows;
+  const auto c = static_cast<float>(std::sqrt(1.0 + rounding_lean));
+  const double square = static_cast<double>(c) * static_cast<double>(c);
+  const auto x = to_device(std::vector<float>(rows, c), stream_of(handle));
+  const auto zero = to_device(std::vector<double>{0.0}, stream_of(handle));
+  const auto one = to_device(std::vector<double>{1.0}, stream_of(handle));
+  auto parts =
+      to_device(std::vector<double>(kernel_blocks, 0.0), stream_of(handle));
+  narrow_block_grams<float>(
+      stream_of(handle),
+      block_rows_of<float>{x.data(), nullptr, zero.data(), one.data(), rows, 1},
+      0, kernel_blocks, parts.data());
+  const double exact =
+      square * static_cast<double>(cumlrkt::glm::ritz::gram_block_rows);
+  const double bound = gram_error(
+      {.runs = cumlrkt::glm::ritz::gram_block_rows / gram_run_rows(1),
+       .run_rows = gram_run_rows(1),
+       .trace = exact,
+       .diagonal = 0.0});
+  for (const double part : to_host(parts, stream_of(handle))) {
+    EXPECT_LE(std::abs(part - exact), bound);
   }
 }
 
