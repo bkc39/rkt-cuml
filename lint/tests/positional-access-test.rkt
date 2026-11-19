@@ -82,8 +82,8 @@
    output))
 
 (for ([use (in-list '(((require racket/list) (define (scaled xs)
-                                                (define tenth 0.1)
-                                                (map (lambda (x) (* x tenth)) xs)))
+                                               (define tenth 0.1)
+                                               (map (lambda (x) (* x tenth)) xs)))
                       ((define units '(second minute hour)))
                       ((define (timeout n)
                          (list n 'second)))

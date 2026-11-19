@@ -114,7 +114,7 @@
                                                 (submod "a.rkt" test helpers)))])
   (test-case (format "a file that requires its own submodule by ~a reads that submodule's names" way)
     (check-equal? (copies-in `(("a.rkt" ,forms) ("b.rkt" ((require ,path) (define (g)
-                                                                             (h))))))
+                                                                            (h))))))
                   '(2))))
 
 (test-case "only module paths are anchored, not the strings a filter reads"
@@ -153,43 +153,42 @@
                                                               (define (f xs)
                                                                 (first xs))))))))))
 
-(for ([refused (in-list '(("a user require transformer"
-                           (("req.rkt" ((require (for-syntax racket/base racket/require-transform))
-                                        (provide my-in)
-                                        (define-syntax my-in
-                                          (make-require-transformer (lambda (stx)
-                                                                      (syntax-case stx ()
-                                                                        [(_ path) (expand-import #'path)]))))))
-                            ("a.rkt" ((require "req.rkt"
-                                               (my-in "c.rkt"))
-                                      (define (f xs)
-                                        (first xs)))))
-                           "(my-in \"c.rkt\")")
-                          ("path-up"
-                           (("a.rkt" ((require racket/require
-                                               (path-up "c.rkt"))
-                                      (define (f xs)
-                                        (first xs)))))
-                           "(path-up \"c.rkt\")")
-                          ("relative-in"
-                           (("sub/x.rkt" ((provide)))
-                            ("a.rkt" ((require (relative-in "sub/x.rkt" "c.rkt"))
-                                      (define (f xs)
-                                        (first xs)))))
-                           "(relative-in \"sub/x.rkt\" \"c.rkt\")")))])
+(for ([refused
+       (in-list
+        '(("a user require transformer"
+           (("req.rkt" ((require (for-syntax racket/base
+                                             racket/require-transform))
+                        (provide my-in)
+                        (define-syntax my-in
+                          (make-require-transformer (lambda (stx)
+                                                      (syntax-case stx ()
+                                                        [(_ path) (expand-import #'path)]))))))
+            ("a.rkt" ((require "req.rkt"
+                               (my-in "c.rkt"))
+                      (define (f xs)
+                        (first xs)))))
+           "(my-in \"c.rkt\")")
+          ("path-up" (("a.rkt" ((require racket/require
+                                         (path-up "c.rkt"))
+                                (define (f xs)
+                                  (first xs)))))
+                     "(path-up \"c.rkt\")")
+          ("relative-in" (("sub/x.rkt" ((provide)))
+                          ("a.rkt" ((require (relative-in "sub/x.rkt" "c.rkt")) (define (f xs)
+                                                                                  (first xs)))))
+                         "(relative-in \"sub/x.rkt\" \"c.rkt\")")))])
   (match-define (list form files culprit) refused)
   (test-case (format "a relative path inside ~a fails the lint loudly, naming the require" form)
-    (check-exn (lambda (failure)
-                 (and (exn:fail? failure)
-                      (regexp-match? #rx"a[.]rkt: cannot resolve the names it imports"
-                                     (exn-message failure))
-                      (regexp-match? (regexp-quote (format "fix ~a" culprit)) (exn-message failure))
-                      (regexp-match? #rx"a form the lint cannot anchor to its file"
-                                     (exn-message failure))))
-               (lambda ()
-                 (copies-in `(("c.rkt" ((provide first) (define (first xs)
-                                                          xs)))
-                              ,@files))))))
+    (check-exn
+     (lambda (failure)
+       (and (exn:fail? failure)
+            (regexp-match? #rx"a[.]rkt: cannot resolve the names it imports" (exn-message failure))
+            (regexp-match? (regexp-quote (format "fix ~a" culprit)) (exn-message failure))
+            (regexp-match? #rx"a form the lint cannot anchor to its file" (exn-message failure))))
+     (lambda ()
+       (copies-in `(("c.rkt" ((provide first) (define (first xs)
+                                                xs)))
+                    ,@files))))))
 
 (test-case "a module+ that imports the same binding its file already imports is read"
   (check-equal? (copies-in '(("a.rkt" ((require racket/list) (module+ test

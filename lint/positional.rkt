@@ -9,8 +9,7 @@
 
 (define (literal-index? one)
   (match (syntax->datum one)
-    [(or (? exact-nonnegative-integer?)
-         (list (or 'quote 'quasiquote) (? exact-nonnegative-integer?)))
+    [(or (? exact-nonnegative-integer?) (list (or 'quote 'quasiquote) (? exact-nonnegative-integer?)))
      #t]
     [_ #f]))
 
