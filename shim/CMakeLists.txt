@@ -104,7 +104,7 @@ cumlrkt_family(linear_model
           linear_model/src/glm_fit.cpp linear_model/src/linear_regression.cpp
           linear_model/src/ridge.cpp linear_model/src/ridge_staging.cpp
           linear_model/src/gram_condition.cu linear_model/src/ritz.cpp
-          linear_model/src/conditioning.cpp
+          linear_model/src/block_gram.cu linear_model/src/conditioning.cpp
           linear_model/src/spectrum_enclosure.cpp
           linear_model/src/symmetric_eigen.cpp
           linear_model/src/fit_checks.cpp linear_model/src/predict.cpp
@@ -130,7 +130,7 @@ cumlrkt_family(linear_model
         linear_model/src/ridge_staging.cpp
         linear_model/src/gram_condition.cu
         linear_model/src/ritz.cpp
-        linear_model/src/conditioning.cpp
+        linear_model/src/block_gram.cu linear_model/src/conditioning.cpp
         linear_model/src/spectrum_enclosure.cpp
         linear_model/src/symmetric_eigen.cpp
         linear_model/src/glm_staging.cpp

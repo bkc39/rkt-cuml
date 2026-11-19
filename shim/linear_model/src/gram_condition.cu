@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+#include "block_gram.hpp"
 #include "cumlrkt/device.cuh"
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/scale.hpp"
@@ -268,7 +269,30 @@ cublasHandle_t cublas_on(const raft::handle_t& handle) {
 }
 
 template <typename T>
+std::vector<double> narrow_gram(const equilibration<T>& q) {
+  const rmm::cuda_stream_view stream = stream_of(q.handle);
+  const int64_t cells = q.d * q.d;
+  buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
+  const int64_t total = (q.n + block_rows - 1) / block_rows;
+  const int64_t blocks = std::min(total, block_floats / cells);
+  buffer<float> parts = scratch<float>(blocks * cells, stream);
+  const block_rows_of<T> rows{q.x, q.w, q.mean.data(), q.scales.data(), q.n,
+                              q.d};
+  for (int64_t first = 0; first < total; first += blocks) {
+    const int64_t count = std::min(blocks, total - first);
+    narrow_block_grams(stream, rows, first, count, parts.data());
+    const buffer<double> sums =
+        column_sums(q.handle, block_part{parts.data(), cells}, count, cells);
+    each(q.handle, cells, added_into{sums.data(), gram.data()});
+  }
+  return to_host(gram, stream);
+}
+
+template <typename T>
 std::vector<double> lower_gram(const equilibration<T>& q) {
+  if (q.d <= narrow_gram_columns) {
+    return narrow_gram(q);
+  }
   const rmm::cuda_stream_view stream = stream_of(q.handle);
   const int64_t cells = q.d * q.d;
   buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
