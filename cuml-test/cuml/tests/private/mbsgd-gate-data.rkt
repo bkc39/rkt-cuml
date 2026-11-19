@@ -15,6 +15,9 @@
          check-classifier-rise
          check-constant-batch-one
          constant-rows
+         gate-floor-share
+         gate-round-off-factor
+         gate-round-off-start
          grid
          grid-rows
          grid-targets
@@ -39,6 +42,9 @@
                          (regexp-quote eta0)
                          "\\)$")))
 
+(define gate-floor-share 1e-12)
+(define gate-round-off-factor 10)
+(define gate-round-off-start '((float32 . 1) (float64 . 32)))
 (define round-off-intercept-share 1e-6)
 (define round-off-coef-steps 2)
 (define round-off-prediction-share 0.0009765625)

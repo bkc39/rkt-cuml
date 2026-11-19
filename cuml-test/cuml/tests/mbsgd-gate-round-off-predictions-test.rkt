@@ -5,13 +5,16 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in racket/math sqr)
-         (only-in rackunit check-true)
+         (only-in rackunit check)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case)
          (only-in "private/mbsgd-data.rkt" normal-rows)
          (only-in "private/mbsgd-gate-data.rkt"
                   constant-rows
+                  gate-floor-share
+                  gate-round-off-factor
+                  gate-round-off-start
                   off-predictions-at-eta0
                   regressor-fit
                   round-off-prediction-share))
@@ -53,14 +56,20 @@
                         #:eta0 eta0))
        0.1))))
 
-(define (relative-error fit X y)
+(define (mean-square xs)
+  (mean (map sqr xs)))
+
+(define (residuals fit X y)
   (define w (device-vector->list (mbsgd-regressor-result-coef fit)))
   (define b (mbsgd-regressor-result-intercept fit))
-  (define residuals
-    (for/list ([r (in-list X)]
-               [t (in-list y)])
-      (- t b (apply + (map * r w)))))
-  (/ (sqrt (mean (map sqr residuals))) (abs (mean y))))
+  (for/list ([r (in-list X)]
+             [t (in-list y)])
+    (- t b (apply + (map * r w)))))
+
+(define (dtype-epsilon dt)
+  (if (eq? dt 'float32)
+      (expt 2.0 -23)
+      (expt 2.0 -52)))
 
 (define (near-constant-target dt rows noise offset s)
   (for/list ([r (in-list rows)]
@@ -71,14 +80,22 @@
         v)))
 
 (define within-ulps
-  '((float32 200 3 9 1e6 0.36 1.44 6.23e-7)
-    (float64 50 53 59 1e10 2.6626230610492523e-5 1.065049224419701e-4 4.44e-15)))
+  '((float32 200 3 9 1e6 0.36 1.44)
+    (float64 50 53 59 1e10 2.6626230610492523e-5 1.065049224419701e-4)))
 
 (test-gpu "a fit at round-off within a share of the constant passes however low its R²"
   (for ([r (in-list within-ulps)])
-    (match-define (list dt n x-seed e-seed offset s alpha relative) r)
-    (law-case (format "~a n ~a y = ~a + ~a·x₁ + noise, relative error ~a" dt n offset s relative)
+    (match-define (list dt n x-seed e-seed offset s alpha) r)
+    (law-case (format "~a n ~a y = ~a + ~a·x₁ + noise" dt n offset s)
       (define X (normal-rows n 4 x-seed))
       (define y (near-constant-target dt X (normal-rows n 1 e-seed) offset s))
-      (define fit ((regressor-fit X y dt #:penalty 'l1 #:alpha alpha #:eta0 0.2)))
-      (check-true (<= (relative-error fit X y) (* 2 relative) round-off-prediction-share)))))
+      (define centre (mean y))
+      (define start (mean-square (map (lambda (t) (- t centre)) y)))
+      (define round-off-floor
+        (+ (* gate-floor-share start)
+           (* gate-round-off-factor (sqr (dtype-epsilon dt)) (mean-square y))))
+      (define loss
+        (mean-square (residuals ((regressor-fit X y dt #:penalty 'l1 #:alpha alpha #:eta0 0.2)) X y)))
+      (check < (- 1 (/ loss start)) -1)
+      (check <= start (* (cdr (assq dt gate-round-off-start)) round-off-floor))
+      (check <= (/ (sqrt loss) (abs centre)) round-off-prediction-share))))

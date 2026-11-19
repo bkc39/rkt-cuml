@@ -163,8 +163,9 @@ inline constexpr double gate_round_off_factor = 10;
 template <typename T>
 inline constexpr double gate_round_off_start =
     std::is_same_v<T, float> ? 1 : 32;
-// The Racket tests restate the three round_off_ shares and steps below as
-// literals; scripts/gate-constants.sh fails when they differ.
+// The Racket tests restate gate_floor_share, gate_round_off_factor and
+// gate_round_off_start above and the three round_off_ shares and steps below
+// as literals; scripts/gate-constants.sh fails when they differ.
 // A coordinate whose optimum is 0 moves by the penalty's step eta·α·r, at
 // most eta0·α·r under every schedule, and by the loss gradient, which at
 // round-off is y's rounding times x: it crosses 0 by at most one step, and
