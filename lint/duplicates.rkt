@@ -48,12 +48,13 @@
     [(cons (? symbol? name) _) name]
     [(cons inner _) (head-name inner)]))
 
-(define (requires-of forms)
-  (filter (lambda (form)
-            (match (syntax->datum form)
-              [(cons 'require _) #t]
-              [_ #f]))
-          forms))
+(define (requires-of here forms)
+  (for*/list ([form (in-list forms)]
+              [datum (in-value (syntax->datum form))]
+              #:when (match datum
+                       [(cons 'require _) #t]
+                       [_ #f]))
+    (list here datum)))
 
 (define (module-scopes stx)
   (match (syntax-e stx)
@@ -62,21 +63,21 @@
        (match (syntax-e body)
          [(cons _ forms) forms]
          [_ '()]))
-     (define top (scope (syntax->datum language) (requires-of forms) forms))
+     (define top (scope (syntax->datum language) (requires-of '() forms) forms))
      (cons top (append-map (lambda (form) (submodule-scopes top form)) forms))]
     [_ '()]))
 
 (define (submodule-scopes top form)
   (match (syntax-e form)
-    [(list* (app syntax-e (or 'module+ 'module*)) _ (app syntax-e #f) forms)
-     (list (scope (scope-language top) (append (scope-requires top) (requires-of forms)) forms))]
-    [(list* (app syntax-e 'module*) _ language forms)
-     (list (scope (syntax->datum language) (requires-of forms) forms))]
-    [(list* (app syntax-e 'module+) _ forms)
-     (list (scope (scope-language top) (append (scope-requires top) (requires-of forms)) forms))]
-    [(list* (app syntax-e 'module) _ language forms)
-     (list (scope (syntax->datum language) (requires-of forms) forms))]
+    [(list* (app syntax-e (or 'module+ 'module*)) (app syntax-e name) (app syntax-e #f) forms)
+     (list (inheriting top name forms))]
+    [(list* (app syntax-e (or 'module* 'module)) (app syntax-e name) language forms)
+     (list (scope (syntax->datum language) (requires-of (list name) forms) forms))]
+    [(list* (app syntax-e 'module+) (app syntax-e name) forms) (list (inheriting top name forms))]
     [_ '()]))
+
+(define (inheriting top name forms)
+  (scope (scope-language top) (append (scope-requires top) (requires-of (list name) forms)) forms))
 
 (define (definitions-in file)
   (define scopes (module-scopes (read-module file)))
@@ -101,8 +102,7 @@
   (define resolve #f)
   (lambda (symbol)
     (unless resolve
-      (set! resolve
-            (import-resolver file (scope-language one) (map syntax->datum (scope-requires one)))))
+      (set! resolve (import-resolver file (scope-language one) (scope-requires one))))
     (resolve symbol)))
 
 (define (site<? a b)

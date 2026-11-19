@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/port with-output-to-string)
+(require (only-in racket/match match-define)
+         (only-in racket/port with-output-to-string)
          racket/runtime-path
          (only-in racket/system system*)
          (only-in rackunit check-equal? check-exn check-regexp-match check-true test-case)
@@ -24,7 +25,7 @@
                 (define resolve
                   (import-resolver (build-path root "a.rkt")
                                    'racket/base
-                                   '((require (only-in "c.rkt" first)))))
+                                   '((() (require (only-in "c.rkt" first))))))
                 (if (equal? (resolve 'first) (format "~s:first" (build-path root "c.rkt"))) 0 1))))
     (provide stale-count)
     (module+ test
@@ -75,3 +76,82 @@
                      (regexp-match? (regexp-quote "fix (only-in \"missing.rkt\" first)")
                                     (exn-message failure))))
               (lambda () (copied-definitions-in (list root))))))
+
+(define (copies-in files)
+  (with-temporary-directory (root "imports-cases-~a")
+                            (for ([module (in-list files)])
+                              (match-define (list name forms) module)
+                              (write-module (build-path root name) "#lang racket/base" forms))
+                            (for/list ([group (in-list (copied-definitions-in (list root)))])
+                              (length group))))
+
+(define helpers
+  '(module helpers racket/base
+     (provide h)
+     (define (h)
+       1)))
+
+(for ([way (in-list '("'m" "(submod \".\" m)"
+                           "(submod \"..\" m) in module+ main"
+                           "(submod \".\" m) in module+ test"))]
+      [forms (in-list `((,helpers (require 'helpers)
+                                  (define (f)
+                                    (h)))
+                        (,helpers (require (submod "." helpers))
+                                  (define (f)
+                                    (h)))
+                        (,helpers (module+ main
+                                    (require (submod ".." helpers))
+                                    (define (f)
+                                      (h))))
+                        ((module+ test
+                           ,helpers
+                           (require (only-in (submod "." helpers) h))
+                           (define (f)
+                             (h))))))])
+  (test-case (format "a file that requires its own submodule by ~a is read through the file" way)
+    (check-equal? (copies-in `(("a.rkt" ,forms))) '())))
+
+(test-case "an own submodule's names resolve to that submodule"
+  (check-equal? (copies-in `(("a.rkt" (,helpers (require 'helpers)
+                                                (define (f)
+                                                  (h))))
+                             ("b.rkt" ((require (submod "a.rkt" helpers)) (define (g)
+                                                                            (h))))))
+                '(2)))
+
+(test-case "only module paths are anchored, not the strings a filter reads"
+  (check-equal? (copies-in '(("c.rkt" ((provide first) (define (first xs)
+                                                         xs)))
+                             ("a.rkt" ((require racket/require
+                                                (for-syntax racket/base
+                                                            (only-in racket/string string-prefix?))
+                                                (filtered-in (lambda (name)
+                                                               (and (string-prefix? name "fir") name))
+                                                             "c.rkt"))
+                                       (define (f xs)
+                                         (first xs))))
+                             ("b.rkt" ((require (only-in "c.rkt" first)) (define (g xs)
+                                                                           (first xs))))))
+                '(2)))
+
+(test-case "the strings of a multi-in join to module paths before they are anchored"
+  (check-equal? (copies-in '(("c.rkt" ((provide first) (define (first xs)
+                                                         xs)))
+                             ("a.rkt" ((require racket/require
+                                                (multi-in "." ("c.rkt")))
+                                       (define (f xs)
+                                         (first xs))))
+                             ("b.rkt" ((require (only-in "c.rkt" first)) (define (g xs)
+                                                                           (first xs))))))
+                '(2)))
+
+(test-case "a module+ that imports a name its file already imports fails the lint loudly"
+  (check-exn #rx"a[.]rkt: cannot resolve the names it imports"
+             (lambda ()
+               (copies-in '(("c.rkt" ((provide first) (define (first xs)
+                                                        xs)))
+                            ("a.rkt" ((require racket/list) (module+ test
+                                                              (require (only-in "c.rkt" first))
+                                                              (define (f xs)
+                                                                (first xs))))))))))
