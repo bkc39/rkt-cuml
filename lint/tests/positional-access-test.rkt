@@ -139,17 +139,22 @@
                        (struct span (first last))
                        (define (f s)
                          (match-define (struct* span ([first (app second x)])) s)
-                         x))
-                      ((require racket/list
-                                racket/match)
-                       (define (f row)
-                         (match-define `(x second ,y) row)
-                         (second y)))))])
-  (test-case (format "a guard, a result, or a pattern's operator or literal is an access: ~s" use)
+                         x))))])
+  (test-case (format "a guard, a result, or a pattern's operator is an access: ~s" use)
     (define-values (ok? output) (gate-on use))
     (check-false ok? output)
     (check-regexp-match #rx"table-test[.]rkt:[0-9]+: (second|cadr): read a test table's rows"
                         output)))
+
+(test-case "a quasipattern's literal neither binds the name nor reads it, so only the body's accessor is refused"
+  (define-values (ok? output)
+    (gate-on '((require racket/list
+                        racket/match)
+               (define (f row)
+                 (match-define `(x second ,y) row)
+                 (second y)))))
+  (check-false ok? output)
+  (check-equal? (length (regexp-match* #rx"second:" output)) 1 output))
 
 (for ([use (in-list '(((require racket/match) (define (gap row)
                                                 (match row
