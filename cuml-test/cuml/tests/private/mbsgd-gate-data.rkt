@@ -2,7 +2,9 @@
 
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in racket/list make-list)
+         (only-in racket/match match)
          (only-in rackunit check-not-exn)
+         (only-in "cuml-error.rkt" raised)
          (only-in "linear-data.rkt" law-case on-matrix on-vector)
          (only-in "mbsgd-data.rkt" blob-rows normal-rows reg-target)
          (only-in "refusal-rows.rkt" check-row row))
@@ -18,6 +20,7 @@
          grid-targets
          grid-y
          labels
+         loss-r2
          lost-at-eta0
          refused-at-eta0
          regressor-fit
@@ -56,6 +59,11 @@
 
 (define refused-at-eta0 (refused-by rose))
 (define lost-at-eta0 (refused-by loss-rose))
+
+(define (loss-r2 fit)
+  (match (regexp-match #px"the loss rose from ([0-9.e+-]+) to ([0-9.e+-]+);"
+                       (exn-message (raised fit)))
+    [(list _ start end) (- 1 (/ (string->number end) (string->number start)))]))
 
 (define constant-rows (normal-rows 300 4 3))
 

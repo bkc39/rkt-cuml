@@ -452,6 +452,12 @@ TEST(MbsgdGate, ARegressorLossAboveTheZeroModelsIsRefused) {
   const baseline base{.start = 1.5, .floor = 1e-3, .uncentred = 4};
   EXPECT_FALSE(
       loss_refusal<double>(base, (1.5 * 1.025) + 0.99e-3, 1e-3).has_value());
+  EXPECT_TRUE(
+      loss_refusal<double>(base, (1.5 * 1.025) + 1.01e-3, 1e-3).has_value());
+  const baseline near_floor{.start = 1.5, .floor = 1, .uncentred = 4};
+  EXPECT_FALSE(loss_refusal<float>(near_floor, 1.574, 1e-3).has_value());
+  EXPECT_EQ(loss_refusal<float>(near_floor, 1.576, 1e-3).value_or(""),
+            "the loss rose from 1.5 to 1.576; lower #:eta0 (now 0.001)");
   EXPECT_EQ(loss_refusal<double>(base, 2.1, 1e-3).value_or(""),
             "the loss rose from 1.5 to 2.1; lower #:eta0 (now 0.001)");
   EXPECT_EQ(loss_refusal<double>(base, nan, 1e-3).value_or(""),

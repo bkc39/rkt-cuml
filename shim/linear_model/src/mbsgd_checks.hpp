@@ -126,6 +126,15 @@ inline void require_two_classes(int64_t k) {
   }
 }
 
+// The loss guard refuses a regressor whose loss ends above start·(1 + slack)
+// plus the floor, at most slack·start: worse than the zero model, with an
+// intercept R² below −.025 − min(floor/start, .025), at worst −.05. Storing
+// the fit's intercept b in the dtype moves it by at most ε/2·|b| ≈ ε/2·|ȳ|,
+// which raises the loss by at most (ε/2·ȳ)², a fortieth of the floor's
+// round-off term 10·ε²·mean(y²): at most floor/40 < start/40 = slack·start
+// wherever the guard applies, above round-off (start > floor). The floor's
+// share admits the float32 y = 1.7 + 1e-6·e elastic net, 2.6 floors above
+// round-off, whose loss ends at 1.0251·start (F10-R round-off).
 inline constexpr double gate_slack = 0.025;
 inline constexpr double gate_l1_factor = 3.5;
 inline constexpr double gate_l1_cap = 4;
@@ -258,7 +267,8 @@ template <typename T>
 std::optional<std::string> loss_refusal(const baseline& base, double loss,
                                         double eta0) {
   if (at_round_off<T>(base) ||
-      loss <= (base.start * (1 + gate_slack)) + base.floor) {
+      loss <= (base.start * (1 + gate_slack)) +
+                  std::min(base.floor, gate_slack * base.start)) {
     return std::nullopt;
   }
   return std::format(
