@@ -46,27 +46,6 @@ ML::GLM::qn_params qn_params_of(const fit_options& o, int64_t k, penalties p) {
 }
 
 template <typename T>
-qn_solution<T> qn_solved(const raft::handle_t& handle, T* x, T* y, T* w,
-                         const qn_shape& shape, penalties pen,
-                         const fit_options& options,
-                         const std::vector<T>& start) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  buffer<T> params =
-      start.empty()
-          ? zeroed<T>((shape.p + (shape.fit_intercept ? 1 : 0)) * shape.k,
-                      stream)
-          : to_device(start, stream);
-  T objective{0};
-  int n_iter = 0;
-  ML::GLM::qnFit<T, int>(
-      handle, qn_params_of(options, shape.classes, pen), x, false, y,
-      static_cast<int>(shape.m), static_cast<int>(shape.p),
-      static_cast<int>(shape.classes), params.data(), &objective, &n_iter, w);
-  settle(handle);
-  return {std::move(params), n_iter};
-}
-
-template <typename T>
 bool all_finite(const buffer<T>& params, rmm::cuda_stream_view stream) {
   return first_non_finite(params.data(), static_cast<int64_t>(params.size()),
                           stream) < 0;
@@ -150,6 +129,27 @@ std::vector<T> mapped_back(const std::vector<T>& rescue,
 }  // namespace
 
 template <typename T>
+qn_solution<T> qn_solved(const raft::handle_t& handle, T* x, T* y, T* w,
+                         const qn_shape& shape, penalties pen,
+                         const fit_options& options,
+                         const std::vector<T>& start) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  buffer<T> params =
+      start.empty()
+          ? zeroed<T>((shape.p + (shape.fit_intercept ? 1 : 0)) * shape.k,
+                      stream)
+          : to_device(start, stream);
+  T objective{0};
+  int n_iter = 0;
+  ML::GLM::qnFit<T, int>(
+      handle, qn_params_of(options, shape.classes, pen), x, false, y,
+      static_cast<int>(shape.m), static_cast<int>(shape.p),
+      static_cast<int>(shape.classes), params.data(), &objective, &n_iter, w);
+  settle(handle);
+  return {std::move(params), n_iter};
+}
+
+template <typename T>
 attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
                      solve_check check, const fit_options& options,
                      const std::vector<T>& start) {
@@ -168,7 +168,8 @@ template <typename T>
 std::optional<qn_solution<T>> rescued(
     const raft::handle_t& handle, const matrix<T, int64_t>& x,
     row_selection rows, const column_stats& stats, staged_fit<T>& st,
-    const attempt<T>& plain, const fit_options& options) {
+    const attempt<T>& plain, const fit_options& options,
+    const qn_solver<T>& solve) {
   const bool per_column = options.penalty == CUML_LINEAR_MODEL_PENALTY_NONE;
   if ((!options.fit_intercept && !per_column) ||
       plain.solution.n_iter >= options.max_iter) {
@@ -197,8 +198,8 @@ std::optional<qn_solution<T>> rescued(
       break;
     }
     const qn_solution<T> rescue =
-        qn_solved<T>(handle, copy.data(), st.y.data(), st.weights(), shape,
-                     plain.check.pen, budget, *start);
+        solve(handle, copy.data(), st.y.data(), st.weights(), shape,
+              plain.check.pen, budget, *start);
     total.n_iter += rescue.n_iter;
     if (!all_finite(rescue.params, stream)) {
       continue;
@@ -216,6 +217,10 @@ std::optional<qn_solution<T>> rescued(
   return std::nullopt;
 }
 
+template qn_solution<float> qn_solved<float>(const raft::handle_t&, float*,
+                                             float*, float*, const qn_shape&,
+                                             penalties, const fit_options&,
+                                             const std::vector<float>&);
 template attempt<float> attempted<float>(const raft::handle_t&, float*, float*,
                                          float*, solve_check,
                                          const fit_options&,
@@ -223,7 +228,12 @@ template attempt<float> attempted<float>(const raft::handle_t&, float*, float*,
 template std::optional<qn_solution<float>> rescued<float>(
     const raft::handle_t&, const matrix<float, int64_t>&, row_selection,
     const column_stats&, staged_fit<float>&, const attempt<float>&,
-    const fit_options&);
+    const fit_options&, const qn_solver<float>&);
+template qn_solution<double> qn_solved<double>(const raft::handle_t&, double*,
+                                               double*, double*,
+                                               const qn_shape&, penalties,
+                                               const fit_options&,
+                                               const std::vector<double>&);
 template attempt<double> attempted<double>(const raft::handle_t&, double*,
                                            double*, double*, solve_check,
                                            const fit_options&,
@@ -231,6 +241,6 @@ template attempt<double> attempted<double>(const raft::handle_t&, double*,
 template std::optional<qn_solution<double>> rescued<double>(
     const raft::handle_t&, const matrix<double, int64_t>&, row_selection,
     const column_stats&, staged_fit<double>&, const attempt<double>&,
-    const fit_options&);
+    const fit_options&, const qn_solver<double>&);
 
 }  // namespace cumlrkt::glm::logistic

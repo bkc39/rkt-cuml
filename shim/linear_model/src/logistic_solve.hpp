@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <raft/core/handle.hpp>
 #include <vector>
@@ -48,6 +49,17 @@ struct attempt {
 };
 
 template <typename T>
+qn_solution<T> qn_solved(const raft::handle_t& handle, T* x, T* y, T* w,
+                         const qn_shape& shape, penalties pen,
+                         const fit_options& options,
+                         const std::vector<T>& start);
+
+template <typename T>
+using qn_solver = std::function<qn_solution<T>(
+    const raft::handle_t&, T*, T*, T*, const qn_shape&, penalties,
+    const fit_options&, const std::vector<T>&)>;
+
+template <typename T>
 attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
                      solve_check check, const fit_options& options,
                      const std::vector<T>& start = {});
@@ -56,6 +68,7 @@ template <typename T>
 std::optional<qn_solution<T>> rescued(
     const raft::handle_t& handle, const matrix<T, int64_t>& x,
     row_selection rows, const column_stats& stats, staged_fit<T>& st,
-    const attempt<T>& plain, const fit_options& options);
+    const attempt<T>& plain, const fit_options& options,
+    const qn_solver<T>& solve = qn_solved<T>);
 
 }  // namespace cumlrkt::glm::logistic

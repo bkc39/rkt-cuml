@@ -121,6 +121,10 @@ cumlrkt_family(linear_model
         linear_model/src/cd_staging.cpp linear_model/src/cd_device.cu
         linear_model/tests/linear_model_refusal_test.cpp
         linear_model/tests/logistic_checks_test.cpp
+        linear_model/tests/logistic_rescue_test.cpp
+        linear_model/src/logistic_solve.cpp
+        linear_model/src/logistic_resolve.cpp
+        linear_model/src/logistic_device.cu
         linear_model/tests/mbsgd_checks_test.cpp
         linear_model/tests/ridge_staging_test.cpp
         linear_model/src/ridge_staging.cpp
@@ -131,7 +135,8 @@ cumlrkt_family(linear_model
 )
 target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver)
 if(TARGET cumlrkt_linear_model_tests)
-  target_link_libraries(cumlrkt_linear_model_tests PRIVATE CUDA::cusolver)
+  target_link_libraries(cumlrkt_linear_model_tests
+    PRIVATE CUDA::cusolver cuml_runtime)
 endif()
 
 cumlrkt_family(manifold
