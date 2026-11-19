@@ -190,3 +190,12 @@
                  (copies-in `(("c.rkt" ((provide first) (define (first xs)
                                                           xs)))
                               ,@files))))))
+
+(test-case "a module+ that imports the same binding its file already imports is read"
+  (check-equal? (copies-in '(("a.rkt" ((require racket/list) (module+ test
+                                                               (require (only-in racket/list first))
+                                                               (define (f xs)
+                                                                 (first xs)))))
+                             ("b.rkt" ((require racket/list) (define (g xs)
+                                                               (first xs))))))
+                '(2)))
