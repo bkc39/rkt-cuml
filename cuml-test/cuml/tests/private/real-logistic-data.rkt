@@ -220,13 +220,30 @@
       (define r
         (with-handlers ([exn:fail? refused-fit])
           (raw-fit dt s max-iter)))
-      (define gap (and r (relative-gap (gauged-fit (fit-parts r)) (gauged-fit optimum))))
-      (check-true (if gap
-                      (<= gap cap)
-                      (eq? outcome 'either))
-                  (if gap
-                      (format "coef gap to the optimum ~a (cap ~a)" gap cap)
-                      "refused, but this arm has only ever been accepted"))))
+      (define parts (and r (fit-parts r)))
+      (define gap (and parts (relative-gap (gauged-fit parts) (gauged-fit optimum))))
+      (cond
+        [(not gap)
+         (check-true (eq? outcome 'either) "refused, but this arm has only ever been accepted")]
+        [cap (check-true (<= gap cap) (format "coef gap to the optimum ~a (cap ~a)" gap cap))]
+        [else
+         (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
+         (match-define (residual K _ bound)
+           (residual-of (lr-case-X c)
+                        (lr-case-y c)
+                        #f
+                        coef
+                        intercept
+                        #:penalty penalty
+                        #:C C
+                        #:l1-ratio l1-ratio
+                        #:tol default-tol
+                        #:dtype dt))
+         (check-true (rational? gap) (format "coef gap to the optimum ~a" gap))
+         (check-true (<= K bound)
+                     (format "accepted at residual ~a, bound ~a"
+                             (exact->inexact K)
+                             (exact->inexact bound)))])))
   (for ([arm (in-list refused)])
     (match-define (list dt penalty C l1-ratio max-iter) arm)
     (test-case (format "refused ~a" arm)

@@ -1994,16 +1994,20 @@ scratch, the source is `cpp/src/glm/qn/`.
     solve is Python cuML's bit for bit, so its fits stand. Gaps (worst,
     cap; share refused): l1 at max-iter 4000, f64 7.07e-2, 1.5e-1, 0/24
     (the first solve, every run the same); f32 1.32e-1, 2.7e-1, 87/248;
-    elastic net at 4000, f64 4.88e-2, 1e-1, 0/24; f32 1.47e-1, 3e-1,
-    197/248; l2 at C 0.01, f64 at 4000 4.41e-4, 9e-4, 0/24; f32 at 4000
+    elastic net at 4000, f64 4.88e-2, 1e-1, 0/24; f32 1.47e-1, no cap,
+    325/398; l2 at C 0.01, f64 at 4000 4.41e-4, 9e-4, 0/24; f32 at 4000
     1.77e-3, 3.6e-3, 6/48; f32 at 1000 8.06e-4, 1.7e-3, 30/48. The
     float32 elastic-net tail grows with the runs: its worst was 1.17e-2
-    over the first 24, 8.06e-2 over 48 and 1.47e-1 over 248 (the r2
-    re-review's 200 more), so its cap may need raising again. The
-    float64 arms have only been accepted, so each must be accepted
-    within its cap and a refusal fails it; a float32 arm is refused (the
-    cutoff's message) or accepted within its cap, and each has done
-    both; any other error fails either kind. At max-iter 1000 every
+    over the first 24, 8.06e-2 over 48 and 1.47e-1 over 248 (the r1
+    re-review's 200 more); the r2 re-review's 150 more were refused 128
+    times, worst 8.06e-2. A cap on a tail that keeps growing rules out
+    no regression, so that arm has none (r3 ruling): an accepted fit
+    has a finite gap and the oracle's float32 residual (`residual-of`)
+    within the check's own bound. The float64 arms have only been
+    accepted, so each must be accepted within its cap and a refusal
+    fails it; a float32 arm is refused (the cutoff's message) or
+    accepted within its cap or that bound, and each has done both; any
+    other error fails either kind. At max-iter 1000 every
     other penalised arm is refused in 24 of 24 runs.
   - The float32 standardised breast-cancer l1 fit does not repeat: 40
     runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
