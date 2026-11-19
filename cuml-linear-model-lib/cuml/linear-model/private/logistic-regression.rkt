@@ -170,7 +170,7 @@
   (define kind (y-kind/who who y))
   (define settings (qn-settings/who who (bound-params logistic-regression-params)))
   (define w (weight-view who sample-weight))
-  (define-values (y-view classes weights) (fit-labels/who who kind y class-weight resources))
+  (define-values (y-view classes weights) (fit-labels/who who kind X y class-weight resources))
   (define out (deposit-for/who who resources))
   (define n-iter (fit-job who resources X y-view w weights out settings))
   (match-define (list coef intercept device-classes) (deposit->list out))

@@ -5,7 +5,7 @@
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/list filter-not remove-duplicates)
          (only-in racket/match match match-define)
-         (only-in raft device-vector->list device-vector? dtype list->device-vector)
+         (only-in raft device-vector->list device-vector? dtype list->device-vector shape)
          (only-in raft/unsafe deposit->list)
          (only-in "native.rkt"
                   cuml-linear-model-label-classes-job
@@ -119,23 +119,38 @@
   (match-define (list classes) (deposit->list out))
   (device-vector->list classes))
 
-(define (class-weight-view who kind classes cw resources)
-  (and
-   (hash? cw)
-   (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources)))
+(define (y-length y)
+  (match y
+    [(? list?) (length y)]
+    [(app shape (list n)) n]))
 
-(define/who (fit-labels who kind y cw resources)
+(define (class-weight-view who kind X y classes-of cw resources)
+  (match-define (list rows _) (shape X))
+  (cond
+    [(not (hash? cw)) #f]
+    [(not (= (y-length y) rows)) (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y))]
+    [else
+     (list->device-vector (host-weights who kind (classes-of) cw)
+                          #:dtype 'float64
+                          #:resources resources)]))
+
+(define/who (fit-labels who kind X y cw resources)
   (match kind
     [(? device-kind?)
      (values y
              #f
-             (and (hash? cw)
-                  (class-weight-view who real-labels (device-classes who y resources) cw resources)))]
+             (class-weight-view who
+                                real-labels
+                                X
+                                y
+                                (lambda () (device-classes who y resources))
+                                cw
+                                resources))]
     [_
      (define-values (classes codes) (host-labels who kind y))
      (values (list->device-vector codes #:dtype 'int32 #:resources resources)
              classes
-             (class-weight-view who kind classes cw resources))]))
+             (class-weight-view who kind X y (lambda () classes) cw resources))]))
 
 (define (class-view kind classes resources)
   (match kind

@@ -129,6 +129,13 @@
         "X: expected row-major, got col-major 6x3"
         (lambda () (go (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major) y)))
    (row "y length" "y: expected 6 elements, got 5" (lambda () (go X (on-vector '(0 1 0 1 1) 'int32))))
+   (row "y length before a NaN label, with a class-weight hash"
+        "y: expected 6 elements, got 5"
+        (lambda ()
+          (go X (on-vector (list 0.0 +nan.0 1.0 0.0 1.0) 'float64) #:class-weight (hash 0 2 1 1))))
+   (row "y length before a missing class, with a class-weight hash on a list"
+        "y: expected 6 elements, got 5"
+        (lambda () (go X '(0 1 0 1 7) #:class-weight (hash 0 2 1 1))))
    (row "non-integral label"
         "y: expected integral class labels, got 1.5"
         (lambda () (go X (on-vector '(0 1 0 1.5 1 0)))))
