@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/list remove-duplicates)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in "linear-data.rkt" dtypes)
          (only-in "logistic-data.rkt"
                   blob-case
@@ -49,7 +49,7 @@
   (length (remove-duplicates (lr-case-y c))))
 
 (define (repeatable? r)
-  (match-define (twin-trial dt c s _) r)
+  (match-define (struct* twin-trial ([dt dt] (case c) [setting s])) r)
   (not (and (eq? dt 'float32) (> (classes-of c) 2) (memq (setting-penalty s) '(l1 elasticnet)))))
 
 (define (row-fit r)

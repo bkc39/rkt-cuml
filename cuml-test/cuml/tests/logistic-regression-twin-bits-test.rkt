@@ -4,7 +4,7 @@
                   logistic-regression-decision-function
                   logistic-regression-predict
                   logistic-regression-predict-proba)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
@@ -42,7 +42,7 @@
 (test-twin "a repeatable fit is Python cuML's bit for bit"
   (for-each-twin
    (lambda (r theirs)
-     (match-define (twin-trial dt c _ _) r)
+     (match-define (struct* twin-trial ([dt dt] (case c))) r)
      (define X (on-matrix (lr-case-X c) dt))
      (define k (classes-of c))
      (define proba

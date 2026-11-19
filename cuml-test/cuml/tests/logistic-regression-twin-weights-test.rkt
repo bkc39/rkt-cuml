@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/list filter-not)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? test-case)
          (only-in "private/linear-data.rkt" dtypes)
          (only-in "private/logistic-data.rkt"
@@ -38,13 +38,13 @@
     (twin-trial dt summing-to-n s #t)))
 
 (define (tight-request r)
-  (match-define (twin-trial dt _ _ _) r)
+  (match-define (struct* twin-trial ([dt dt])) r)
   (request r #:op "cuml-fit" #:tol (tight-tol dt) #:max-iter tight-max-iter))
 
 (test-twin "weights summing to n fit as Python cuML's bit for bit"
   (for-each-twin
    (lambda (r theirs)
-     (match-define (twin-trial dt _ s _) r)
+     (match-define (struct* twin-trial ([dt dt] [setting s])) r)
      (test-case (format "~a ~a" dt (setting-penalty s))
        (define ours
          (fit-parts (setting-fit summing-to-n dt s #:tol (tight-tol dt) #:max-iter tight-max-iter)))
