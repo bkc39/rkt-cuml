@@ -6,6 +6,7 @@
          (only-in "patterns.rkt"
                   binding-clauses
                   clause-ids
+                  ellipsis?
                   fold-head?
                   for-head?
                   pattern-head
@@ -130,35 +131,58 @@
        (list* (ref env definer) (normal-pattern env patterns) (each env rest))]
       [_ (expr env form)]))
   (define (normal-pattern env datum)
+    (define (normal one)
+      (normal-pattern env one))
     (match datum
-      [(or '_ '... '..1 '___) datum]
+      [(or '_ (? ellipsis?)) datum]
       [(? symbol?) (ref env datum)]
       [(cons 'quote _) datum]
-      [(cons 'quasiquote template)
-       (cons 'quasiquote
-             (quasi-map template (lambda (inner) (normal-pattern env inner)) #:pattern? #t))]
-      [(list* (and head (or '? 'app '== 'regexp 'pregexp)) predicate patterns)
-       (list* head
-              (expr env predicate)
-              (map (lambda (one) (normal-pattern env one)) (proper patterns)))]
+      [(cons 'quasiquote template) (cons 'quasiquote (quasi-map template normal #:pattern? #t))]
+      [(cons '== exprs) (cons '== (map (lambda (one) (expr env one)) (proper exprs)))]
+      [(list* (and head (or '? 'app 'regexp 'pregexp)) predicate patterns)
+       (list* head (expr env predicate) (map normal (proper patterns)))]
       [(list 'struct* id (? list? fields))
        (list 'struct*
              (ref env id)
              (for/list ([field (in-list fields)])
                (match field
-                 [(list name one) (list name (normal-pattern env one))]
+                 [(list name one) (list name (normal one))]
                  [_ field])))]
-      [(list 'struct id (? list? patterns))
-       (list 'struct (ref env id) (map (lambda (one) (normal-pattern env one)) patterns))]
+      [(list 'struct id (? list? patterns)) (list 'struct (ref env id) (map normal patterns))]
+      [(list 'struct id other) (list 'struct (ref env id) other)]
+      [(cons 'hash entries) (cons 'hash (hash-entries env (proper entries)))]
+      [(cons 'hash* entries)
+       (cons 'hash*
+             (for/list ([entry (in-list (proper entries))])
+               (match entry
+                 [(list* key one options)
+                  (list* (expr env key)
+                         (normal one)
+                         (map (lambda (option)
+                                (if (keyword? option)
+                                    option
+                                    (expr env option)))
+                              (proper options)))]
+                 [_ entry])))]
+      [(cons 'hash-table entries)
+       (cons 'hash-table
+             (for/list ([entry (in-list (proper entries))])
+               (if (pair? entry)
+                   (map normal (proper entry))
+                   entry)))]
       [(cons 'not patterns)
        (define inner (bind env (append-map pattern-names (proper patterns))))
        (cons 'not (map (lambda (one) (normal-pattern inner one)) (proper patterns)))]
-      [(cons (and head (pattern-head)) patterns)
-       (cons head (map (lambda (one) (normal-pattern env one)) (proper patterns)))]
-      [(cons (? symbol? head) patterns)
-       (cons (ref env head) (map (lambda (one) (normal-pattern env one)) (proper patterns)))]
-      [(? pair?) (map (lambda (one) (normal-pattern env one)) (proper datum))]
+      [(cons (and head (pattern-head)) patterns) (cons head (map normal (proper patterns)))]
+      [(cons (? symbol? head) patterns) (cons (ref env head) (map normal (proper patterns)))]
+      [(? pair?) (map normal (proper datum))]
       [_ datum]))
+  (define (hash-entries env entries)
+    (match entries
+      [(list* '#:rest one rest) (list* '#:rest (normal-pattern env one) rest)]
+      [(cons (? keyword? key) rest) (cons key (hash-entries env rest))]
+      [(list* key one rest) (list* (expr env key) (normal-pattern env one) (hash-entries env rest))]
+      [_ entries]))
   (define (clauses env items #:several? [several? #f])
     (for/list ([clause (in-list (proper items))])
       (match clause

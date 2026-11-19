@@ -6,6 +6,7 @@
 
 (provide binding-clauses
          clause-ids
+         ellipsis?
          fold-head?
          for-head?
          pattern-head
@@ -21,13 +22,13 @@
           'list-rest
           'list-no-order
           'cons
+          'mcons
           'vector
           'box
           'and
           'or
           'not
-          'hash-table
-          'struct*)))
+          'var)))
 
 (define (for-head? head)
   (and (symbol? head) (regexp-match? #rx"^for[*]?(/|$)" (symbol->string head))))
@@ -76,20 +77,43 @@
              #:pattern? pattern?)
   (reverse parts))
 
+(define (ellipsis? datum)
+  (and (symbol? datum)
+       (regexp-match? #px"^(?:[.]{3}|_{3}|(?:[.]{2}|_{2})[0-9]+)$" (symbol->string datum))))
+
+(define (hash-patterns entries)
+  (match entries
+    [(list* '#:rest pattern _) (list pattern)]
+    [(cons (? keyword?) rest) (hash-patterns rest)]
+    [(list* _ pattern rest) (cons pattern (hash-patterns rest))]
+    [_ '()]))
+
+(define (hash*-patterns entries)
+  (match entries
+    [(list* '#:rest pattern _) (list pattern)]
+    [(cons (list* _ pattern _) rest) (cons pattern (hash*-patterns rest))]
+    [(cons _ rest) (hash*-patterns rest)]
+    [_ '()]))
+
 (define (pattern-names pattern)
   (match pattern
-    [(or '_ '... '..1 '___) '()]
+    [(or '_ (? ellipsis?)) '()]
     [(? symbol? name) (list name)]
     [(cons (or 'quote '== 'not) _) '()]
     [(cons 'quasiquote template) (append-map pattern-names (unquoted-parts template #:pattern? #t))]
     [(list* (or '? 'app 'regexp 'pregexp) _ patterns) (append-map pattern-names (proper patterns))]
     [(list 'struct _ (? list? patterns)) (append-map pattern-names patterns)]
+    [(list 'struct _ _) '()]
     [(list 'struct* _ (? list? fields))
      (append-map (lambda (field)
                    (match field
                      [(list _ pattern) (pattern-names pattern)]
                      [_ '()]))
                  fields)]
+    [(cons 'hash entries) (append-map pattern-names (hash-patterns (proper entries)))]
+    [(cons 'hash* entries) (append-map pattern-names (hash*-patterns (proper entries)))]
+    [(cons 'hash-table entries)
+     (append-map (lambda (entry) (append-map pattern-names (proper entry))) (proper entries))]
     [(cons (pattern-head) patterns) (append-map pattern-names (proper patterns))]
     [(cons (? symbol?) fields) (append-map pattern-names (proper fields))]
     [(? pair?) (append-map pattern-names (proper pattern))]
