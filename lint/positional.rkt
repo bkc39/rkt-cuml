@@ -74,7 +74,9 @@
     [(list* 'match-define-values (? list? patterns) rest)
      (append (append-map pattern-names patterns) (bound-names rest))]
     [(list* (and head (or 'match 'match*)) subject clauses)
-     (append (match-clause-names clauses (eq? head 'match*)) (bound-names subject) (bound-names clauses))]
+     (append (match-clause-names clauses (eq? head 'match*))
+             (bound-names subject)
+             (bound-names clauses))]
     [(list* (or 'match-lambda 'match-lambda*) clauses)
      (append (match-clause-names clauses #f) (bound-names clauses))]
     [(list* (or 'match-let 'match-let*) clauses rest)
@@ -102,7 +104,9 @@
     [(eq? head 'quote) '()]
     [(eq? head 'quasiquote)
      (append-map (lambda (inner) (accesses inner refused)) (unquoted-parts (cdr items)))]
-    [(struct-options head items) => (lambda (options) (accesses options refused))]
+    [(struct-options head items)
+     =>
+     (lambda (options) (accesses options refused))]
     [(and (eq? head 'list-ref)
           (match items
             [(list _ _ (? literal-index?)) #t]

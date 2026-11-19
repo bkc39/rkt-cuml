@@ -129,16 +129,21 @@
                                                           #:result (second acc))
                                                          ([r rows])
                                                  (cons r acc))))
-                      ((require racket/list racket/match) (define (f rows)
-                                                            (match-define (list (app second x)) rows)
-                                                            x))
-                      ((require racket/list racket/match) (define (f row)
-                                                            (match-define `(x second ,y) row)
-                                                            (second y)))))])
+                      ((require racket/list
+                                racket/match)
+                       (define (f rows)
+                         (match-define (list (app second x)) rows)
+                         x))
+                      ((require racket/list
+                                racket/match)
+                       (define (f row)
+                         (match-define `(x second ,y) row)
+                         (second y)))))])
   (test-case (format "a guard, a result, or a pattern's operator or literal is an access: ~s" use)
     (define-values (ok? output) (gate-on use))
     (check-false ok? output)
-    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: (second|cadr): read a test table's rows" output)))
+    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: (second|cadr): read a test table's rows"
+                        output)))
 
 (for ([use (in-list '(((require racket/match) (define (gap row)
                                                 (match row
@@ -182,11 +187,13 @@
 
 (test-case "racket/list's accessor is refused beside a match that binds another name"
   (define-values (ok? output)
-    (gate-on '((require racket/list racket/match) (define (gap row)
-                                                    (match row
-                                                      [(list best worst) (- worst best)]))
-                                                  (define (g xs)
-                                                    (second xs)))))
+    (gate-on '((require racket/list
+                        racket/match)
+               (define (gap row)
+                 (match row
+                   [(list best worst) (- worst best)]))
+               (define (g xs)
+                 (second xs)))))
   (check-false ok? output)
   (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
 
@@ -199,13 +206,15 @@
 (for ([use (in-list '(((require racket/list) (define (tmpl xs)
                                                `(a `(b ,,(second xs)))))
                       ((require racket/list) (define (tmpl xs)
-                                               `#&,(second xs)))
+                                               `#&
+                                               ,(second xs)))
                       ((require racket/list) (define (tmpl xs)
                                                `#hash((a . ,(second xs)))))
                       ((require racket/list) (define (tmpl xs)
                                                `#s(row ,(second xs))))))])
-  (test-case (format "an unquote at depth one, or inside a box, hash table or prefab struct, is an access: ~s"
-                     use)
+  (test-case (format
+              "an unquote at depth one, or inside a box, hash table or prefab struct, is an access: ~s"
+              use)
     (define-values (ok? output) (gate-on use))
     (check-false ok? output)
     (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))

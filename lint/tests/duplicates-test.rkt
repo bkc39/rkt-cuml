@@ -179,14 +179,12 @@
                 '(("a.rkt:3: tag" "b.rkt:3: tag"))))
 
 (test-case "a definition inside a form the lint does not know is renamed over that form"
-  (check-equal? (copies '(("a.rkt" ((require (only-in "c.rkt" with-scratch)) (define (f xs)
-                                                                               (with-scratch "x"
-                                                                                             (define total (apply + xs))
-                                                                                             total))))
-                          ("b.rkt" ((require (only-in "c.rkt" with-scratch)) (define (f ys)
-                                                                               (with-scratch "x"
-                                                                                             (define sum (apply + ys))
-                                                                                             sum))))
+  (check-equal? (copies '(("a.rkt" ((require (only-in "c.rkt" with-scratch))
+                                    (define (f xs)
+                                      (with-scratch "x" (define total (apply + xs)) total))))
+                          ("b.rkt" ((require (only-in "c.rkt" with-scratch))
+                                    (define (f ys)
+                                      (with-scratch "x" (define sum (apply + ys)) sum))))
                           ("c.rkt" ((provide with-scratch) (define with-scratch list)))))
                 '(("a.rkt:3: f" "b.rkt:3: f"))))
 
