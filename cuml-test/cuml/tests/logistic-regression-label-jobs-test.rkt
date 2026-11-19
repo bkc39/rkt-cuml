@@ -34,9 +34,27 @@
       (check-equal? (outcome-and-jobs (lambda () (logistic-regression-fit X y #:class-weight cw)))
                     (list outcome jobs)))))
 
-(test-gpu "device labels: zero rows with a class-weight hash refused before a label-classes job"
-  (define X (device-matrix 0 1 #:dtype 'float32))
-  (define y (device-vector 0 #:dtype 'int32))
-  (check-equal? (outcome-and-jobs (lambda ()
-                                    (logistic-regression-fit X y #:class-weight (hash 0 1.0))))
-                '("logistic-regression-fit: X: expected at least 2 rows, got 0" 0)))
+(define boundary-rows
+  `((0 () ,(hash 0 1.0) "logistic-regression-fit: X: expected at least 2 rows, got 0" 0)
+    (1 (5)
+       ,(hash 0 1.0)
+       "logistic-regression-fit: class-weight: classes (5) are not in class-weight"
+       1)
+    (2 (0 1) ,(hash 0 1.0 1 5.0) "accepted" 1)))
+
+(test-gpu "device labels: a class-weight hash on 0, 1 and 2 rows"
+  (for ([row (in-list boundary-rows)])
+    (match-define (list n ys cw outcome jobs) row)
+    (test-case (format "~a rows" n)
+      (define X
+        (if (zero? n)
+            (device-matrix 0 1 #:dtype 'float32)
+            (on-matrix (for/list ([i (in-range n)])
+                         (list (exact->inexact i)))
+                       'float32)))
+      (define y
+        (if (zero? n)
+            (device-vector 0 #:dtype 'int32)
+            (on-vector ys 'int32)))
+      (check-equal? (outcome-and-jobs (lambda () (logistic-regression-fit X y #:class-weight cw)))
+                    (list outcome jobs)))))
