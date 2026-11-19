@@ -23,7 +23,7 @@
 (test-twin "float32 multiclass OWL-QN: near Python cuML's"
   (for-each-twin
    (lambda (r theirs)
-     (match-define (struct* twin-trial ([dt dt] [case c])) r)
+     (match-define (struct* twin-trial ([dt dt] (case c))) r)
      (test-case (row-name r)
        (define gap (relative-gap (fit-flat (fit-parts (row-fit r))) (fit-flat (their-fit theirs dt))))
        (check-true (<= gap (owl-qn-gap-bound c)) (format "gap ~a" gap))))
