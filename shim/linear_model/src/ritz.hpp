@@ -66,8 +66,8 @@ std::vector<double> symmetric_block(const std::vector<double>& m, int64_t c,
 
 int64_t gram_run_rows(int64_t d);
 
-gram_bound bound_of(const std::vector<double>& spread,
-                    const std::vector<double>& scale, double alpha, int64_t n);
+gram_bound bound_of(int64_t n, const std::vector<double>& spread,
+                    const std::vector<double>& scale, double alpha);
 
 double gram_error(gram_bound b);
 
@@ -82,11 +82,11 @@ std::optional<spectrum_interval> enclosure(const std::vector<double>& values,
 
 bool exact_gram_cheaper(int64_t vectors, gram_shape shape);
 
-bool enclosure_pays(const std::vector<double>& values, const gram_plan& plan,
-                    gram_shape shape, double limit, double gram);
+bool enclosure_pays(const std::vector<double>& values, double gram,
+                    const gram_plan& plan, gram_shape shape, double limit);
 
-gram_plan plan_of(const std::vector<double>& values, gram_shape shape,
-                  double limit, double gram);
+gram_plan plan_of(const std::vector<double>& values, double gram,
+                  gram_shape shape, double limit);
 
 std::vector<double> refined(const eigen_pairs& e, int64_t window,
                             const ritz_pair& p, int64_t d);

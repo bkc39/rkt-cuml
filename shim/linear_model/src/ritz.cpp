@@ -118,8 +118,8 @@ int64_t gram_run_rows(int64_t d) {
                              gram_block_rows);
 }
 
-gram_bound bound_of(const std::vector<double>& spread,
-                    const std::vector<double>& scale, double alpha, int64_t n) {
+gram_bound bound_of(int64_t n, const std::vector<double>& spread,
+                    const std::vector<double>& scale, double alpha) {
   const auto d = static_cast<int64_t>(spread.size());
   const int64_t m = gram_run_rows(d);
   const double summed =
@@ -204,8 +204,8 @@ bool exact_gram_cheaper(int64_t vectors, gram_shape shape) {
   return pass_cost_ns(vectors, shape) >= exact_ns(shape);
 }
 
-bool enclosure_pays(const std::vector<double>& values, const gram_plan& plan,
-                    gram_shape shape, double limit, double gram) {
+bool enclosure_pays(const std::vector<double>& values, double gram,
+                    const gram_plan& plan, gram_shape shape, double limit) {
   const double reach = gram + expected_residual(values);
 
   if (!certified_kappa({values.front() - reach, values.back() + reach},
@@ -224,8 +224,8 @@ bool enclosure_pays(const std::vector<double>& values, const gram_plan& plan,
   return cost < saved;
 }
 
-gram_plan plan_of(const std::vector<double>& values, gram_shape shape,
-                  double limit, double gram) {
+gram_plan plan_of(const std::vector<double>& values, double gram,
+                  gram_shape shape, double limit) {
   const int64_t d = shape.columns;
   const double error = spectrum_error(values, gram);
   const double low = values.front();

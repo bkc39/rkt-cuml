@@ -83,51 +83,51 @@ std::vector<double> spectrum(spectrum_of f) {
 
 TEST(GramPlan, AWellSeparatedSpectrumIsCertifiedWithoutRefining) {
   const std::vector<double> values = spectrum({.near = 1, .low = 0x1p-4});
-  const auto plan = plan_of(values, plan_shape, 0x1p32, unit_error(plan_shape));
+  const auto plan = plan_of(values, unit_error(plan_shape), plan_shape, 0x1p32);
   EXPECT_EQ(plan.path, gram_path::certified);
   EXPECT_GT(plan.kappa, 1.0 / 0x1p-4);
   EXPECT_LT(plan.kappa, (1.0 / 0x1p-4) * (1 + 0x1p-2));
-  EXPECT_EQ(plan_of(values, plan_shape, 0.0, unit_error(plan_shape)).path,
+  EXPECT_EQ(plan_of(values, unit_error(plan_shape), plan_shape, 0.0).path,
             gram_path::ritz);
   EXPECT_EQ(
-      plan_of(values, plan_shape, plan.kappa, unit_error(plan_shape)).path,
+      plan_of(values, unit_error(plan_shape), plan_shape, plan.kappa).path,
       gram_path::ritz);
   EXPECT_EQ(
-      plan_of(values, plan_shape, 1.5 * plan.kappa, unit_error(plan_shape))
+      plan_of(values, unit_error(plan_shape), plan_shape, 1.5 * plan.kappa)
           .path,
       gram_path::ritz);
 }
 
 TEST(GramPlan, TheWindowHoldsEveryEigenvalueWithinReach) {
   const std::vector<double> values = spectrum({.near = plan_near});
-  const auto plan = plan_of(values, plan_shape, 0x1p32, unit_error(plan_shape));
+  const auto plan = plan_of(values, unit_error(plan_shape), plan_shape, 0x1p32);
   EXPECT_EQ(plan.path, gram_path::ritz);
   EXPECT_EQ(plan.window, plan_near);
   EXPECT_LT(near_step * plan_near, plan.reach);
 }
 
 TEST(GramPlan, NoGapAtTheWindowsEdgeTakesTheExactGram) {
-  const auto edge = plan_of(spectrum({.near = plan_near}), plan_shape, 0x1p32,
-                            unit_error(plan_shape))
+  const auto edge = plan_of(spectrum({.near = plan_near}),
+                            unit_error(plan_shape), plan_shape, 0x1p32)
                         .reach;
   for (const double next : {1.5 * edge, 1.99 * edge}) {
     const auto plan = plan_of(spectrum({.near = plan_near, .next = next}),
-                              plan_shape, 0x1p32, unit_error(plan_shape));
+                              unit_error(plan_shape), plan_shape, 0x1p32);
     EXPECT_EQ(plan.path, gram_path::exact) << next / edge;
     EXPECT_EQ(plan.window, plan_near) << next / edge;
   }
   const auto below = plan_of(spectrum({.near = plan_near, .low = -edge}),
-                             plan_shape, 0x1p32, unit_error(plan_shape));
+                             unit_error(plan_shape), plan_shape, 0x1p32);
   EXPECT_EQ(below.path, gram_path::exact);
   EXPECT_EQ(plan_of(spectrum({.near = plan_near, .next = 2.01 * edge}),
-                    plan_shape, 0x1p32, unit_error(plan_shape))
+                    unit_error(plan_shape), plan_shape, 0x1p32)
                 .path,
             gram_path::ritz);
 }
 
 TEST(GramPlan, AWindowThatCostsMoreThanTheExactGramTakesIt) {
-  const auto wide = plan_of(spectrum({.near = plan_wide}), plan_shape, 0x1p32,
-                            unit_error(plan_shape));
+  const auto wide = plan_of(spectrum({.near = plan_wide}),
+                            unit_error(plan_shape), plan_shape, 0x1p32);
   EXPECT_EQ(wide.path, gram_path::exact);
   EXPECT_EQ(wide.window, plan_wide);
   EXPECT_TRUE(exact_gram_cheaper(plan_wide + 1, plan_shape));
@@ -286,11 +286,11 @@ void expect_certified_by_residuals(const resources& res, uint64_t salt) {
     ADD_FAILURE() << salt;
     return;
   }
-  const auto plan = plan_of(e->values, correlated_shape, 0x1p32,
-                            unit_error(correlated_shape));
+  const auto plan = plan_of(e->values, unit_error(correlated_shape),
+                            correlated_shape, 0x1p32);
   EXPECT_NE(plan.path, gram_path::certified) << salt;
-  EXPECT_TRUE(enclosure_pays(e->values, plan, correlated_shape, 0x1p32,
-                             unit_error(correlated_shape)))
+  EXPECT_TRUE(enclosure_pays(e->values, unit_error(correlated_shape), plan,
+                             correlated_shape, 0x1p32))
       << salt;
   const std::optional<spectrum_interval> s =
       enclosed_spectrum(handle, g, *e, d);

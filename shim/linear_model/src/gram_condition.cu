@@ -433,8 +433,8 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
   if (!e) {
     return {exact_condition(q), gram_path::exact, d};
   }
-  const double error = ritz::gram_error(ritz::bound_of(spread, scale, a, n));
-  const gram_plan plan = plan_of(e->values, {n, d}, limit, error);
+  const double error = ritz::gram_error(ritz::bound_of(n, spread, scale, a));
+  const gram_plan plan = plan_of(e->values, error, {n, d}, limit);
   if (const auto k =
           enclosed_kappa(handle, m, *e, plan, {n, d}, limit, error)) {
     return {*k,
@@ -442,7 +442,7 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
             0};
   }
   const gram_plan window = plan.path == gram_path::certified
-                               ? plan_of(e->values, {n, d}, 0.0, error)
+                               ? plan_of(e->values, error, {n, d}, 0.0)
                                : plan;
   if (window.path == gram_path::ritz) {
     return {ritz_condition(q, *e, window), window.path, window.window};

@@ -150,7 +150,7 @@ std::optional<double> enclosed_kappa(const raft::handle_t& handle,
                                      ritz::gram_shape shape, double limit,
                                      double gram) {
   const int64_t d = shape.columns;
-  if (!ritz::enclosure_pays(e.values, plan, shape, limit, gram)) {
+  if (!ritz::enclosure_pays(e.values, gram, plan, shape, limit)) {
     return std::nullopt;
   }
   const std::optional<ritz::spectrum_interval> s =
