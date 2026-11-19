@@ -139,7 +139,6 @@
   (test-case (format "~a scopes its bindings as Racket evaluates them" head)
     (check-equal? (match-layout-scope layout) (racket-scope head layout)))
   (for ([backward? (in-list '(#f #t))])
-    (define binder? (reads-binder? head layout backward?))
     (define (procedure formal binder read)
       `(define g
          ,(scope-sample head
@@ -152,6 +151,7 @@
     (test-case (format "the copy check reads a ~a right-hand side ~a its binder as Racket does"
                        head
                        (if backward? "before" "after"))
+      (define binder? (reads-binder? head layout backward?))
       (check-true (alpha-copy? original (procedure 'z 'a (if binder? 'a 'z))) "the formal renamed")
       (check-true (alpha-copy? original (procedure 'a 'y (if binder? 'y 'a))) "the binder renamed")
       (check-false (alpha-copy? original (procedure 'q 'z (if binder? 'q 'z)))
