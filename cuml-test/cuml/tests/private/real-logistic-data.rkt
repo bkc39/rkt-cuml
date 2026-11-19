@@ -45,7 +45,15 @@
 
 (define stationary-bound 1e-7)
 (define raw-stationary-bound 1e-5)
-(define float32-gap-bounds (hash 'l1 2.9e-2 'l2 1.1e-3 'elasticnet 1.7e-3))
+(struct gap-check (fits bound))
+(define float32-l2-median-gap-bound 1.6e-4)
+(define float32-gap-checks
+  (hash 'l1
+        (gap-check 1 2.9e-2)
+        'l2
+        (gap-check 5 float32-l2-median-gap-bound)
+        'elasticnet
+        (gap-check 1 1.7e-3)))
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
 
@@ -99,9 +107,8 @@
   (define classes (list->vector (labelled-classes set)))
   (map (lambda (i) (vector-ref classes i)) (hash-ref theirs 'predict)))
 
-(define (check-optimum set dt s r #:stationary [stationary stationary-bound])
+(define (check-optimum set dt s parts #:stationary [stationary stationary-bound])
   (match-define (struct* labelled ((case c))) set)
-  (define parts (fit-parts r))
   (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
   (cond
     [(eq? dt 'float64)
@@ -118,10 +125,15 @@
      (check-true (<= K (* stationary (max F 1)))
                  (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
     [else
-     (define gap
-       (relative-gap (gauged-fit parts) (gauged-fit (fit-parts (tight-fit set 'float64 s)))))
-     (define bound (hash-ref float32-gap-bounds (setting-penalty s)))
-     (check-true (<= gap bound) (format "gap to the float64 fit ~a, bound ~a" gap bound))]))
+     (match-define (gap-check fits bound) (hash-ref float32-gap-checks (setting-penalty s)))
+     (define optimum (gauged-fit (fit-parts (tight-fit set 'float64 s))))
+     (define repeats
+       (for/list ([_ (in-range (sub1 fits))])
+         (fit-parts (tight-fit set dt s))))
+     (define gaps (map (lambda (f) (relative-gap (gauged-fit f) optimum)) (cons parts repeats)))
+     (define gap (list-ref (sort gaps <) (quotient fits 2)))
+     (check-true (<= gap bound)
+                 (format "median gap to the float64 fit of ~a fits ~a, bound ~a" fits gap bound))]))
 
 (struct asked (setting tol) #:transparent)
 
@@ -147,7 +159,7 @@
   (for ([s (in-list settings)])
     (test-case (format "~a ~a" dt (setting-penalty s))
       (define r (tight-fit set dt s))
-      (check-optimum set dt s r)
+      (check-optimum set dt s (fit-parts r))
       (when (tight? s)
         (define gap
           (relative-gap (gauged-fit (fit-parts r))
@@ -195,7 +207,7 @@
                s
                (lambda ()
                  (define optimum (tight-fit set 'float64 s))
-                 (check-optimum set 'float64 s optimum #:stationary raw-stationary-bound)
+                 (check-optimum set 'float64 s (fit-parts optimum) #:stationary raw-stationary-bound)
                  optimum)))
   (for ([arm (in-list capped)])
     (match-define (list dt penalty C l1-ratio max-iter cap) arm)
