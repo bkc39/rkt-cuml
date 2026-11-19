@@ -165,11 +165,10 @@ attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
 }
 
 template <typename T>
-rescue<T> rescued(
-    const raft::handle_t& handle, const matrix<T, int64_t>& x,
-    row_selection rows, const column_stats& stats, staged_fit<T>& st,
-    const attempt<T>& plain, const fit_options& options,
-    const qn_solver<T>& solve) {
+rescue<T> rescued(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                  row_selection rows, const column_stats& stats,
+                  staged_fit<T>& st, const attempt<T>& plain,
+                  const fit_options& options, const qn_solver<T>& solve) {
   const bool per_column = options.penalty == CUML_LINEAR_MODEL_PENALTY_NONE;
   if ((!options.fit_intercept && !per_column) ||
       plain.solution.n_iter >= options.max_iter) {
@@ -225,10 +224,12 @@ template attempt<float> attempted<float>(const raft::handle_t&, float*, float*,
                                          float*, solve_check,
                                          const fit_options&,
                                          const std::vector<float>&);
-template rescue<float> rescued<float>(
-    const raft::handle_t&, const matrix<float, int64_t>&, row_selection,
-    const column_stats&, staged_fit<float>&, const attempt<float>&,
-    const fit_options&, const qn_solver<float>&);
+template rescue<float> rescued<float>(const raft::handle_t&,
+                                      const matrix<float, int64_t>&,
+                                      row_selection, const column_stats&,
+                                      staged_fit<float>&, const attempt<float>&,
+                                      const fit_options&,
+                                      const qn_solver<float>&);
 template qn_solution<double> qn_solved<double>(const raft::handle_t&, double*,
                                                double*, double*,
                                                const qn_shape&, penalties,

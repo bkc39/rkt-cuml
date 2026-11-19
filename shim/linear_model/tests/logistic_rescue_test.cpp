@@ -95,21 +95,20 @@ outcome rescued_with(bool cold_spends_the_budget) {
       {first_worst, first_bound, 0.0},
       check};
   outcome out{false, 0, {}, {}};
-  const qn_solver<double> solve =
-      [&](const raft::handle_t&, double*, double*, double*, const qn_shape&,
-          penalties, const fit_options& budget,
-          const std::vector<double>& start) {
-        out.starts.push_back(start);
-        out.budgets.push_back(budget.max_iter);
-        return qn_solution<double>{
-            to_device(std::vector<double>(params, start.empty() ? nan : 0.0),
-                      stream),
-            cold_spends_the_budget ? budget.max_iter : 1};
-      };
-  const rescue<double> r =
-      rescued<double>(handle, matrix<double, int64_t>{data, rows, 1},
-                      row_selection{nullptr, rows}, stats, st, plain, options,
-                      solve);
+  const qn_solver<double> solve = [&](const raft::handle_t&, double*, double*,
+                                      double*, const qn_shape&, penalties,
+                                      const fit_options& budget,
+                                      const std::vector<double>& start) {
+    out.starts.push_back(start);
+    out.budgets.push_back(budget.max_iter);
+    return qn_solution<double>{
+        to_device(std::vector<double>(params, start.empty() ? nan : 0.0),
+                  stream),
+        cold_spends_the_budget ? budget.max_iter : 1};
+  };
+  const rescue<double> r = rescued<double>(
+      handle, matrix<double, int64_t>{data, rows, 1},
+      row_selection{nullptr, rows}, stats, st, plain, options, solve);
   out.rescued = r.solution.has_value();
   out.n_iter = r.n_iter;
   return out;
@@ -127,9 +126,8 @@ TEST(LogisticRescue, NonFiniteColdAttemptStillRunsTheWarmAttempt) {
 TEST(LogisticRescue, EachAttemptGetsTheIterationsLeft) {
   CUMLRKT_REQUIRE_GPU();
   const outcome out = rescued_with(false);
-  EXPECT_EQ(out.budgets,
-            (std::vector<int>{max_iter - first_iterations,
-                              max_iter - first_iterations - 1}));
+  EXPECT_EQ(out.budgets, (std::vector<int>{max_iter - first_iterations,
+                                           max_iter - first_iterations - 1}));
   EXPECT_EQ(out.n_iter, first_iterations + 2);
 }
 

@@ -71,10 +71,10 @@ struct rescue {
 };
 
 template <typename T>
-rescue<T> rescued(
-    const raft::handle_t& handle, const matrix<T, int64_t>& x,
-    row_selection rows, const column_stats& stats, staged_fit<T>& st,
-    const attempt<T>& plain, const fit_options& options,
-    const qn_solver<T>& solve = qn_solved<T>);
+rescue<T> rescued(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                  row_selection rows, const column_stats& stats,
+                  staged_fit<T>& st, const attempt<T>& plain,
+                  const fit_options& options,
+                  const qn_solver<T>& solve = qn_solved<T>);
 
 }  // namespace cumlrkt::glm::logistic
