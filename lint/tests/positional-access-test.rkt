@@ -139,7 +139,24 @@
                        (struct span (first last))
                        (define (f s)
                          (match-define (struct* span ([first (app second x)])) s)
-                         x))))])
+                         x))
+                      ((require racket/list
+                                racket/match)
+                       (struct span (lo hi))
+                       (define (f v)
+                         (match v
+                           [(struct span ((app second x) _)) x])))
+                      ((require racket/list
+                                racket/match)
+                       (struct span (lo hi))
+                       (define (f v)
+                         (match v
+                           [(struct span ((? (lambda (r) (second r))) _)) 1])))
+                      ((require racket/list
+                                racket/match)
+                       (define (f v)
+                         (match v
+                           [`(a `(b ,(app second x))) x])))))])
   (test-case (format "a guard, a result, or a pattern's operator is an access: ~s" use)
     (define-values (ok? output) (gate-on use))
     (check-false ok? output)
@@ -198,7 +215,10 @@
               ((require racket/match) (struct span (first second))
                                       (define (f s)
                                         (match-define (struct* span ([first a] [second b])) s)
-                                        (- b a)))))])
+                                        (- b a)))
+              ((require racket/match) (define (f h)
+                                        (match h
+                                          [(hash-table (second v) ...) (map cons second v)])))))])
   (test-case (format "a match pattern or a struct field that binds the name is not an access: ~s" use)
     (define-values (ok? output) (gate-on use))
     (check-true ok? output)))

@@ -92,21 +92,24 @@
     [(cons a d) (append (bound-names a) (bound-names d))]
     [_ '()]))
 
+(define (head-of items)
+  (match items
+    [(cons (? identifier? head) _) (syntax-e head)]
+    [_ #f]))
+
 (define (accesses one refused)
   (define items (and (syntax? one) (syntax->list one)))
-  (define head
-    (match items
-      [(cons (? identifier? head) _) (syntax-e head)]
-      [_ #f]))
+  (define head (head-of items))
   (cond
     [(and (identifier? one) (memq (syntax-e one) refused))
      (list (cons (syntax-e one) (syntax-line one)))]
     [(eq? head 'quote) '()]
     [(eq? head 'quasiquote)
      (append-map (lambda (inner) (accesses inner refused)) (unquoted-parts (cdr items)))]
-    [(struct-parts head items)
+    [(match-accesses head items refused)]
+    [(struct-options head items)
      =>
-     (lambda (parts) (accesses parts refused))]
+     (lambda (options) (accesses options refused))]
     [(and (eq? head 'list-ref)
           (match items
             [(list _ _ (? literal-index?)) #t]
@@ -117,17 +120,54 @@
     [(vector? one) (append-map (lambda (item) (accesses item refused)) (vector->list one))]
     [else '()]))
 
-(define (struct-parts head items)
+(define (struct-options head items)
   (match* (head items)
     [('struct (list* _ (? identifier?) (? identifier?) (? syntax?) options)) options]
     [((or 'struct 'define-struct) (list* _ _ (? syntax?) options)) options]
-    [('struct* (list _ id (app syntax->list (? list? fields))))
-     (cons id
-           (for/list ([field (in-list fields)])
+    [(_ _) #f]))
+
+(define (match-accesses head items refused)
+  (define (clause-accesses clause several?)
+    (match (syntax->list clause)
+      [(cons patterns rest)
+       (append (match (and several? (syntax->list patterns))
+                 [(? list? each) (append-map (lambda (one) (pattern-accesses one refused)) each)]
+                 [#f (pattern-accesses patterns refused)])
+               (accesses rest refused))]
+      [_ (accesses clause refused)]))
+  (define (each-clause clauses several?)
+    (append-map (lambda (clause) (clause-accesses clause several?)) clauses))
+  (match* (head items)
+    [((or 'match 'match*) (list* _ subject clauses))
+     (append (accesses subject refused) (each-clause clauses (eq? head 'match*)))]
+    [((or 'match-lambda 'match-lambda*) (cons _ clauses)) (each-clause clauses #f)]
+    [((or 'match-let 'match-let*) (list* _ (app syntax->list (? list? bindings)) body))
+     (append (each-clause bindings #f) (accesses body refused))]
+    [('match-define (list* _ pattern rest))
+     (append (pattern-accesses pattern refused) (accesses rest refused))]
+    [('match-define-values (list* _ (app syntax->list (? list? patterns)) rest))
+     (append (append-map (lambda (one) (pattern-accesses one refused)) patterns)
+             (accesses rest refused))]
+    [(_ _) #f]))
+
+(define (pattern-accesses one refused)
+  (define items (syntax->list one))
+  (define (each patterns)
+    (append-map (lambda (pattern) (pattern-accesses pattern refused)) patterns))
+  (match* ((head-of items) items)
+    [('quote _) '()]
+    [('quasiquote (cons _ template)) (each (unquoted-parts template #:pattern? #t))]
+    [((or '? 'app 'regexp 'pregexp) (list* _ operator patterns))
+     (append (accesses operator refused) (each patterns))]
+    [('== (cons _ operands)) (accesses operands refused)]
+    [('struct (list _ _ (app syntax->list (? list? patterns)))) (each patterns)]
+    [('struct* (list _ _ (app syntax->list (? list? fields))))
+     (each (for/list ([field (in-list fields)])
              (match (syntax->list field)
                [(list _ pattern) pattern]
                [_ field])))]
-    [(_ _) #f]))
+    [(_ (? list?)) (each items)]
+    [(_ _) (accesses one refused)]))
 
 (define (file-accesses file refused)
   (define module (read-module file))
