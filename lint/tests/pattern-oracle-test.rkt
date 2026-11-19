@@ -29,6 +29,7 @@
                             (quote (a b))
                             'x
                             (var x)
+                            (var _)
                             (== car eq?)
                             (list a b)
                             (list a ...)

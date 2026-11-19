@@ -170,6 +170,7 @@
                (if (pair? entry)
                    (map normal (proper entry))
                    entry)))]
+      [(list 'var (? symbol? id)) (list 'var (ref env id))]
       [(cons 'not patterns)
        (define inner (bind env (append-map pattern-names (proper patterns))))
        (cons 'not (map (lambda (one) (normal-pattern inner one)) (proper patterns)))]

@@ -172,6 +172,7 @@
   (match pattern
     [(or '_ (? ellipsis?)) '()]
     [(? symbol? name) (list name)]
+    [(list 'var (? symbol? name)) (list name)]
     [(cons (or 'quote '== 'not) _) '()]
     [(cons 'quasiquote template) (append-map pattern-names (unquoted-parts template #:pattern? #t))]
     [(list* (or '? 'app 'regexp 'pregexp) _ patterns) (append-map pattern-names (proper patterns))]
