@@ -12,7 +12,6 @@
 #include <cstdint>
 #include <format>
 #include <limits>
-#include <numeric>
 #include <optional>
 #include <raft/core/cublas_macros.hpp>
 #include <raft/core/cusolver_macros.hpp>
@@ -32,10 +31,18 @@
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
 #include "gram_condition.hpp"
+#include "ritz.hpp"
 
 namespace cumlrkt::glm {
 
 namespace {
+
+using ritz::combined;
+using ritz::dot;
+using ritz::eigen_pairs;
+using ritz::orthonormal;
+using ritz::refined;
+using ritz::ritz_pair;
 
 constexpr int64_t block_rows = 1024;
 constexpr int64_t most_blocks = 64;
@@ -263,11 +270,6 @@ std::vector<double> lower_gram(const raft::handle_t& handle, const T* x,
 constexpr int gram_error_bits = 14;
 constexpr int64_t most_ritz = 16;
 
-struct eigen_pairs {
-  std::vector<double> values;
-  std::vector<double> vectors;
-};
-
 template <typename S>
 std::optional<eigen_pairs> eigen_of(const raft::handle_t& handle,
                                     const std::vector<S>& m, int64_t d) {
@@ -304,40 +306,6 @@ std::optional<eigen_pairs> eigen_of(const raft::handle_t& handle,
   const std::vector<S> l = to_host(values, stream);
   const std::vector<S> v = to_host(a, stream);
   return eigen_pairs{{l.begin(), l.end()}, {v.begin(), v.end()}};
-}
-
-double dot(const double* a, const double* b, int64_t d) {
-  return std::transform_reduce(a, a + d, b, 0.0);
-}
-
-std::vector<double> orthonormal(const std::vector<double>& vectors, int64_t d,
-                                int64_t k) {
-  std::vector<double> v(vectors.begin(), vectors.begin() + (k * d));
-  for (int64_t j = 0; j < k; ++j) {
-    double* vj = v.data() + (j * d);
-    for (int pass = 0; pass < 2; ++pass) {
-      for (int64_t i = 0; i < j; ++i) {
-        const double* vi = v.data() + (i * d);
-        const double c = dot(vi, vj, d);
-        std::transform(vj, vj + d, vi, vj,
-                       [c](double a, double b) { return a - (c * b); });
-      }
-    }
-    const double norm = std::sqrt(dot(vj, vj, d));
-    std::transform(vj, vj + d, vj, [norm](double a) { return a / norm; });
-  }
-  return v;
-}
-
-std::vector<double> combined(const std::vector<double>& columns,
-                             const double* c, int64_t d, int64_t k) {
-  std::vector<double> y(d, 0.0);
-  for (int64_t j = 0; j < k; ++j) {
-    for (int64_t i = 0; i < d; ++i) {
-      y[i] += c[j] * columns[(j * d) + i];
-    }
-  }
-  return y;
 }
 
 template <typename T>
@@ -393,12 +361,6 @@ struct quotients {
   }
 };
 
-struct ritz_pair {
-  double value;
-  std::vector<double> vector;
-  std::vector<double> applied;
-};
-
 template <typename T>
 std::optional<ritz_pair> smallest_ritz(const quotients<T>& q,
                                        const eigen_pairs& e, int64_t window) {
@@ -422,31 +384,8 @@ std::optional<ritz_pair> smallest_ritz(const quotients<T>& q,
     return std::nullopt;
   }
   const double* c = small->vectors.data();
-  return ritz_pair{small->values.front(), combined(v, c, d, window),
-                   combined(av, c, d, window)};
-}
-
-std::vector<double> refined(const eigen_pairs& e, const ritz_pair& p,
-                            int64_t window, int64_t d) {
-  const double gap = std::ldexp(e.values.back(), -20);
-  std::vector<double> v = p.vector;
-  for (int64_t j = window; j < d; ++j) {
-    const double apart = e.values[j] - p.value;
-    if (!(apart > gap)) {
-      continue;
-    }
-    const double* vj = e.vectors.data() + (j * d);
-    double c = 0.0;
-    for (int64_t k = 0; k < d; ++k) {
-      c += vj[k] * (p.applied[k] - (p.value * p.vector[k]));
-    }
-    for (int64_t k = 0; k < d; ++k) {
-      v[k] -= vj[k] * c / apart;
-    }
-  }
-  const double norm = std::sqrt(dot(v.data(), v.data(), d));
-  std::ranges::transform(v, v.begin(), [norm](double x) { return x / norm; });
-  return v;
+  return ritz_pair{small->values.front(), combined(v, d, c, window),
+                   combined(av, d, c, window)};
 }
 
 }  // namespace
@@ -495,7 +434,7 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
     return infinite;
   }
   const double smallest =
-      std::min(p->value, q.quotient(refined(*e, *p, window, d).data()));
+      std::min(p->value, q.quotient(refined(*e, window, *p, d).data()));
   return smallest > 0 ? largest / smallest : infinite;
 }
 
