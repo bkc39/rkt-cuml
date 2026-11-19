@@ -10,10 +10,13 @@ namespace cumlrkt::glm {
 namespace {
 
 constexpr int tile_rows = 256;
+constexpr int run_rows = ritz::narrow_run_rows;
 constexpr int64_t block_rows = ritz::gram_block_rows;
+static_assert(tile_rows % run_rows == 0);
+static_assert(block_rows % tile_rows == 0);
 
 template <typename T>
-__global__ void narrow_grams(block_rows_of<T> r, int64_t first, float* parts) {
+__global__ void narrow_grams(block_rows_of<T> r, int64_t first, double* parts) {
   __shared__ float tile[tile_rows * narrow_gram_columns];
   const int64_t d = r.d;
   const int64_t cells = d * d;
@@ -21,7 +24,7 @@ __global__ void narrow_grams(block_rows_of<T> r, int64_t first, float* parts) {
   const int64_t column = t / d;
   const int64_t row = t - (column * d);
   const int64_t begin = (first + blockIdx.x) * block_rows;
-  float s = 0.0F;
+  double total = 0.0;
   for (int64_t start = begin; start < begin + block_rows; start += tile_rows) {
     const int64_t i = start + t;
     for (int64_t k = 0; k < d; ++k) {
@@ -37,14 +40,18 @@ __global__ void narrow_grams(block_rows_of<T> r, int64_t first, float* parts) {
     }
     __syncthreads();
     if (t < cells) {
-      for (int p = 0; p < tile_rows; ++p) {
-        s = fmaf(tile[(p * d) + row], tile[(p * d) + column], s);
+      for (int run = 0; run < tile_rows; run += run_rows) {
+        float s = 0.0F;
+        for (int p = run; p < run + run_rows; ++p) {
+          s = fmaf(tile[(p * d) + row], tile[(p * d) + column], s);
+        }
+        total += static_cast<double>(s);
       }
     }
     __syncthreads();
   }
   if (t < cells) {
-    parts[(blockIdx.x * cells) + t] = s;
+    parts[(blockIdx.x * cells) + t] = total;
   }
 }
 
@@ -52,7 +59,7 @@ __global__ void narrow_grams(block_rows_of<T> r, int64_t first, float* parts) {
 
 template <typename T>
 void narrow_block_grams(rmm::cuda_stream_view stream, block_rows_of<T> rows,
-                        int64_t first, int64_t count, float* parts) {
+                        int64_t first, int64_t count, double* parts) {
   narrow_grams<T>
       <<<static_cast<unsigned>(count), tile_rows, 0, stream.value()>>>(
           rows, first, parts);
@@ -61,9 +68,9 @@ void narrow_block_grams(rmm::cuda_stream_view stream, block_rows_of<T> rows,
 
 template void narrow_block_grams<float>(rmm::cuda_stream_view,
                                         block_rows_of<float>, int64_t, int64_t,
-                                        float*);
+                                        double*);
 template void narrow_block_grams<double>(rmm::cuda_stream_view,
                                          block_rows_of<double>, int64_t,
-                                         int64_t, float*);
+                                         int64_t, double*);
 
 }  // namespace cumlrkt::glm

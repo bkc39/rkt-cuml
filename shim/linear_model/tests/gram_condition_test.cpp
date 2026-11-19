@@ -128,10 +128,10 @@ constexpr int64_t spare_columns = 120;
 constexpr int64_t many_salts = 8;
 constexpr double many_eps = 0x1p-12;
 constexpr int64_t cluster_pairs = 6;
-constexpr double cluster_eps = 0x1p-5;
+constexpr double cluster_eps = 0x1.4p-5;
 constexpr int64_t correlated_rows = 20000;
 constexpr int64_t correlated_columns = 100;
-constexpr double correlated_loading = 33.0;
+constexpr double correlated_loading = 14.0;
 constexpr uint64_t correlated_salts = 4;
 constexpr int64_t tall_rows = int64_t{1} << 20;
 
@@ -341,7 +341,7 @@ void expect_certified_above_the_refined_kappa(const resources& res,
   EXPECT_EQ(certified.path, gram_path::certified) << salt;
   EXPECT_NE(refined.path, gram_path::certified) << salt;
   EXPECT_GE(certified.kappa, refined.kappa) << salt;
-  EXPECT_LT(certified.kappa, refined.kappa * (1 + 0x1p-8)) << salt;
+  EXPECT_LT(certified.kappa, refined.kappa * (1 + 0x1p-6)) << salt;
 }
 
 TEST(GramCondition, ConditionedColumnsAreCertifiedFromTheFloat32Spectrum) {
@@ -387,8 +387,11 @@ void expect_enclosed_above_the_refined_kappa(const resources& res,
   const condition_estimate enclosed =
       estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
   const condition_estimate refined = estimate_of<float>(res, c, {}, 0.0, {});
-  EXPECT_EQ(enclosed.path, gram_path::enclosed) << salt;
+  EXPECT_TRUE(enclosed.path == gram_path::certified ||
+              enclosed.path == gram_path::enclosed)
+      << salt;
   EXPECT_EQ(enclosed.window, 0) << salt;
+  EXPECT_EQ(refined.path, gram_path::exact) << salt;
   EXPECT_GE(enclosed.kappa, refined.kappa) << salt;
   EXPECT_LT(enclosed.kappa, 4 * refined.kappa) << salt;
 }

@@ -21,6 +21,7 @@ std::optional<double> enclosed_kappa(const raft::handle_t& handle,
                                      const std::vector<float>& m,
                                      const ritz::eigen_pairs& e,
                                      const ritz::gram_plan& plan,
-                                     ritz::gram_shape shape, double limit);
+                                     ritz::gram_shape shape, double limit,
+                                     double gram);
 
 }  // namespace cumlrkt::glm

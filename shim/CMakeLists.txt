@@ -127,6 +127,8 @@ cumlrkt_family(linear_model
         linear_model/tests/ridge_staging_test.cpp
         linear_model/tests/gram_condition_test.cpp
         linear_model/tests/ritz_plan_test.cpp
+        linear_model/tests/gram_error_test.cpp
+        linear_model/tests/column_sums_test.cu
         linear_model/src/ridge_staging.cpp
         linear_model/src/gram_condition.cu
         linear_model/src/ritz.cpp

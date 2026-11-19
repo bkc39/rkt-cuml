@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "block_gram.hpp"
+#include "column_sums.cuh"
 #include "cumlrkt/device.cuh"
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/scale.hpp"
@@ -50,16 +51,7 @@ using ritz::symmetric_block;
 constexpr int64_t block_rows = ritz::gram_block_rows;
 constexpr int64_t staged_floats = int64_t{1} << 23;
 constexpr int64_t block_floats = int64_t{1} << 22;
-constexpr int64_t part_rows = 256;
 constexpr double infinite = std::numeric_limits<double>::infinity();
-
-struct part_of {
-  int64_t parts;
-
-  __device__ int64_t operator()(int64_t o) const {
-    return o / parts;
-  }
-};
 
 template <typename T>
 struct weight_of {
@@ -164,8 +156,9 @@ struct divided_by {
   }
 };
 
+template <typename P>
 struct block_part {
-  const float* parts;
+  const P* parts;
   int64_t cells;
 
   __device__ double operator()(int64_t o, int64_t b) const {
@@ -181,44 +174,6 @@ struct added_into {
     gram[o] += sums[o];
   }
 };
-
-template <typename F>
-struct partial_sums {
-  F entry;
-  int64_t n;
-  int64_t parts;
-  double* out;
-
-  __device__ void operator()(int64_t o) const {
-    const int64_t k = o / parts;
-    double s = 0.0;
-    for (int64_t i = o - (k * parts); i < n; i += parts) {
-      s += entry(k, i);
-    }
-    out[o] = s;
-  }
-};
-
-template <typename F>
-buffer<double> column_sums(const raft::handle_t& handle, F entry, int64_t n,
-                           int64_t d) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const int64_t count = std::clamp((n + part_rows - 1) / part_rows, int64_t{1},
-                                   std::max(int64_t{1}, block_floats / d));
-  buffer<double> parts = scratch<double>(d * count, stream);
-  each(handle, d * count, partial_sums<F>{entry, n, count, parts.data()});
-  if (count == 1) {
-    return parts;
-  }
-  const thrust::counting_iterator<int64_t> cells(0);
-  buffer<double> sums = scratch<double>(d, stream);
-  thrust::reduce_by_key(
-      rmm::exec_policy(stream),
-      thrust::make_transform_iterator(cells, part_of{count}),
-      thrust::make_transform_iterator(cells + (d * count), part_of{count}),
-      parts.begin(), thrust::make_discard_iterator(), sums.begin());
-  return sums;
-}
 
 template <typename T>
 buffer<double> column_means(const raft::handle_t& handle, const T* x,
@@ -268,6 +223,25 @@ cublasHandle_t cublas_on(const raft::handle_t& handle) {
   return cublas;
 }
 
+class pedantic_math {
+ public:
+  explicit pedantic_math(cublasHandle_t cublas) : cublas_(cublas) {
+    RAFT_CUBLAS_TRY(cublasGetMathMode(cublas_, &mode_));
+    RAFT_CUBLAS_TRY(cublasSetMathMode(cublas_, CUBLAS_PEDANTIC_MATH));
+  }
+  pedantic_math(const pedantic_math&) = delete;
+  pedantic_math& operator=(const pedantic_math&) = delete;
+  pedantic_math(pedantic_math&&) = delete;
+  pedantic_math& operator=(pedantic_math&&) = delete;
+  ~pedantic_math() {
+    cublasSetMathMode(cublas_, mode_);
+  }
+
+ private:
+  cublasHandle_t cublas_;
+  cublasMath_t mode_ = CUBLAS_DEFAULT_MATH;
+};
+
 template <typename T>
 std::vector<double> narrow_gram(const equilibration<T>& q) {
   const rmm::cuda_stream_view stream = stream_of(q.handle);
@@ -275,14 +249,14 @@ std::vector<double> narrow_gram(const equilibration<T>& q) {
   buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
   const int64_t total = (q.n + block_rows - 1) / block_rows;
   const int64_t blocks = std::min(total, block_floats / cells);
-  buffer<float> parts = scratch<float>(blocks * cells, stream);
+  buffer<double> parts = scratch<double>(blocks * cells, stream);
   const block_rows_of<T> rows{q.x, q.w, q.mean.data(), q.scales.data(),
                               q.n, q.d};
   for (int64_t first = 0; first < total; first += blocks) {
     const int64_t count = std::min(blocks, total - first);
     narrow_block_grams(stream, rows, first, count, parts.data());
-    const buffer<double> sums =
-        column_sums(q.handle, block_part{parts.data(), cells}, count, cells);
+    const buffer<double> sums = column_sums(
+        q.handle, block_part<double>{parts.data(), cells}, count, cells);
     each(q.handle, cells, added_into{sums.data(), gram.data()});
   }
   return to_host(gram, stream);
@@ -296,26 +270,25 @@ std::vector<double> lower_gram(const equilibration<T>& q) {
   const rmm::cuda_stream_view stream = stream_of(q.handle);
   const int64_t cells = q.d * q.d;
   buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
-  const int64_t blocks =
-      std::min({std::max(int64_t{1}, staged_floats / (block_rows * q.d)),
-                std::max(int64_t{1}, block_floats / cells),
-                (q.n + block_rows - 1) / block_rows});
-  const int64_t rows = blocks * block_rows;
+  const int64_t run = ritz::gram_run_rows(q.d);
+  const int64_t blocks = std::min(
+      {std::max(int64_t{1}, staged_floats / (run * q.d)),
+       std::max(int64_t{1}, block_floats / cells), (q.n + run - 1) / run});
+  const int64_t rows = blocks * run;
   buffer<float> parts = scratch<float>(blocks * cells, stream);
   cublasHandle_t cublas = cublas_on(q.handle);
+  const pedantic_math pedantic(cublas);
   const float one = 1.0F;
   const float zero = 0.0F;
   const auto dim = static_cast<int>(q.d);
   q.template each_block<float>(rows, [&](const float* block, int64_t start) {
-    const int64_t count =
-        std::min(blocks, (q.n - start + block_rows - 1) / block_rows);
+    const int64_t count = std::min(blocks, (q.n - start + run - 1) / run);
     RAFT_CUBLAS_TRY(cublasSgemmStridedBatched(
-        cublas, CUBLAS_OP_T, CUBLAS_OP_N, dim, dim,
-        static_cast<int>(block_rows), &one, block, static_cast<int>(rows),
-        block_rows, block, static_cast<int>(rows), block_rows, &zero,
-        parts.data(), dim, cells, static_cast<int>(count)));
-    const buffer<double> sums =
-        column_sums(q.handle, block_part{parts.data(), cells}, count, cells);
+        cublas, CUBLAS_OP_T, CUBLAS_OP_N, dim, dim, static_cast<int>(run), &one,
+        block, static_cast<int>(rows), run, block, static_cast<int>(rows), run,
+        &zero, parts.data(), dim, cells, static_cast<int>(count)));
+    const buffer<double> sums = column_sums(
+        q.handle, block_part<float>{parts.data(), cells}, count, cells);
     each(q.handle, cells, added_into{sums.data(), gram.data()});
   });
   return to_host(gram, stream);
@@ -460,21 +433,21 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
   if (!e) {
     return {exact_condition(q), gram_path::exact, d};
   }
-  const gram_plan plan = plan_of(e->values, {n, d}, limit);
-  if (const auto k = enclosed_kappa(handle, m, *e, plan, {n, d}, limit)) {
-    return {*k, gram_path::enclosed, 0};
+  const double error = ritz::gram_error(ritz::bound_of(spread, scale, a, n));
+  const gram_plan plan = plan_of(e->values, {n, d}, limit, error);
+  if (const auto k =
+          enclosed_kappa(handle, m, *e, plan, {n, d}, limit, error)) {
+    return {*k,
+            plan.path == gram_path::certified ? plan.path : gram_path::enclosed,
+            0};
   }
-  switch (plan.path) {
-    case gram_path::certified:
-      return {plan.kappa, plan.path, 0};
-    case gram_path::ritz:
-      return {ritz_condition(q, *e, plan), plan.path, plan.window};
-    case gram_path::none:
-    case gram_path::enclosed:
-    case gram_path::exact:
-      break;
+  const gram_plan window = plan.path == gram_path::certified
+                               ? plan_of(e->values, {n, d}, 0.0, error)
+                               : plan;
+  if (window.path == gram_path::ritz) {
+    return {ritz_condition(q, *e, window), window.path, window.window};
   }
-  return {exact_condition(q), gram_path::exact, plan.window};
+  return {exact_condition(q), gram_path::exact, window.window};
 }
 
 template condition_estimate equilibrated_condition<float>(const raft::handle_t&,
