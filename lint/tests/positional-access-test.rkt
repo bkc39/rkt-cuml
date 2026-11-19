@@ -191,6 +191,8 @@
                                           (- second best))))
               ((struct span (first second)) (define (len s)
                                               (- (span-second s) (span-first s))))
+              ((struct span (first [second #:mutable])) (define (len s)
+                                                          (- (span-second s) (span-first s))))
               ((define (f p)
                  (define-values (first second) (values (car p) (cdr p)))
                  (+ first second)))
