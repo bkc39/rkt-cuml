@@ -385,7 +385,19 @@
                        (define (evens xs)
                          (for/list ([x (in-list xs)] #:when (even? x)) x))
                        (define (keep ys)
-                         (for/list ([y (in-list ys)] #:when (even? y)) y)))))])
+                         (for/list ([y (in-list ys)] #:when (even? y)) y)))
+                      ("an unquote inside a nested quasiquote is data"
+                       #f
+                       (define (f a)
+                         `(x `(y ,a)))
+                       (define (g b)
+                         `(x `(y ,b))))
+                      ("an unquote of an unquote inside a nested quasiquote is renamed"
+                       #t
+                       (define (f a)
+                         `(x `(y ,,a)))
+                       (define (g b)
+                         `(x `(y ,,b))))))])
   (match-define (list title copy? one other) row)
   (test-case title
     (check-equal? (copied? one other) copy?)))
