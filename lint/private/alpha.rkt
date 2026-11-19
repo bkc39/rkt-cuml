@@ -163,18 +163,7 @@
       [(list 'struct id (? list? patterns)) (list 'struct (ref env id) (map normal patterns))]
       [(list 'struct id other) (list 'struct (ref env id) other)]
       [(cons 'hash entries) (cons 'hash (hash-entries env (proper entries)))]
-      [(cons 'hash* entries)
-       (cons 'hash*
-             (for/list ([entry (in-list (proper entries))])
-               (match entry
-                 [(list* key one options)
-                  (list* (expr env key)
-                         (normal one)
-                         (for/list ([option (in-list (proper options))])
-                           (if (keyword? option)
-                               option
-                               (expr env option))))]
-                 [_ entry])))]
+      [(cons 'hash* entries) (cons 'hash* (hash*-entries env (proper entries)))]
       [(cons 'hash-table entries)
        (cons 'hash-table
              (for/list ([entry (in-list (proper entries))])
@@ -193,6 +182,19 @@
       [(list* '#:rest one rest) (list* '#:rest (normal-pattern env one) rest)]
       [(cons (? keyword? key) rest) (cons key (hash-entries env rest))]
       [(list* key one rest) (list* (expr env key) (normal-pattern env one) (hash-entries env rest))]
+      [_ entries]))
+  (define (hash*-entries env entries)
+    (match entries
+      [(list* '#:rest one rest) (list* '#:rest (normal-pattern env one) rest)]
+      [(cons (list* key one options) rest)
+       (cons (list* (expr env key)
+                    (normal-pattern env one)
+                    (for/list ([option (in-list (proper options))])
+                      (if (keyword? option)
+                          option
+                          (expr env option))))
+             (hash*-entries env rest))]
+      [(cons other rest) (cons other (hash*-entries env rest))]
       [_ entries]))
   (define (normal-lhs env layout lhs)
     (match* (layout lhs)

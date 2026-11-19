@@ -1,37 +1,19 @@
 #lang racket/base
 
-(require (only-in racket/list append-map remove-duplicates)
+(require (only-in racket/match match-define)
          (only-in racket/set list->seteq)
-         (only-in rackunit check-equal? test-case)
-         (only-in "../private/patterns.rkt" pattern-names))
+         (only-in rackunit check-equal? check-false check-true test-case)
+         (only-in "../private/patterns.rkt" pattern-names)
+         (only-in "private/oracle.rkt" alpha-copy? racket-binders rename))
 
-(define oracle-namespace (make-base-namespace))
+(define (procedure pattern names)
+  `(define (f subject)
+     (match subject
+       [,pattern (list ,@names)])))
 
-(define (symbols datum)
-  (cond
-    [(symbol? datum) (list datum)]
-    [(pair? datum) (append (symbols (car datum)) (symbols (cdr datum)))]
-    [(vector? datum) (append-map symbols (vector->list datum))]
-    [(box? datum) (symbols (unbox datum))]
-    [(prefab-struct-key datum) (append-map symbols (cdr (vector->list (struct->vector datum))))]
-    [else '()]))
-
-(define (racket-binders pattern)
-  (define candidates (remove-duplicates (symbols pattern)))
-  (with-handlers ([(lambda (raised) (and (pair? raised) (eq? (car raised) 'binders))) cdr])
-    (parameterize ([current-namespace oracle-namespace])
-      (expand `(module oracle racket/base
-                 (require racket/match
-                          (for-syntax racket/base))
-                 (struct point (a b))
-                 (define-syntax (binders stx)
-                   (raise (cons 'binders
-                                (for/list ([id (in-list (cdr (syntax->list stx)))]
-                                           #:when (eq? (identifier-binding id) 'lexical))
-                                  (syntax-e id)))))
-                 (match-lambda
-                   [,pattern (binders ,@candidates)]))))
-    (error 'racket-binders "the probe in the body of ~s never expanded" pattern)))
+(define (renamed names)
+  (for/list ([name (in-list names)])
+    (cons name (string->symbol (format "~a-renamed" name)))))
 
 (test-case "the oracle tells a binder from a reference"
   (check-equal? (racket-binders '(app car (? number? n))) '(n))
@@ -81,6 +63,9 @@
                             (hash* ["a" x] ["b" y #:default 0])
                             (hash* ["a" x] #:closed)
                             (hash* [car x #:default cdr] #:rest r)
+                            (hash* ["a" x] #:rest r)
+                            (hash* ["a" x] ["b" y] #:closed)
+                            (hash "a" x #:closed)
                             (hash-table (k v))
                             (hash-table ("a" x) (k v))
                             (hash-table (k v) ...)
@@ -109,6 +94,18 @@
                             (and a (not b))
                             (app car x)
                             (app (lambda (v) (values v v)) a b)
+                            (app (lambda (v) (values v v v)) a (list b) _)
+                            (app car)
+                            (? (lambda (v) #t) z)
+                            (? number? a b)
+                            (and (or a a) (not (not b)))
+                            (or (and a b) (and b a))
+                            (cons a (list-rest b c))
+                            (vector a ___ b)
+                            (hash-table (k v) (k2 v2) ...)
+                            (regexp #rx#"a(b)" (list _ x))
+                            (pregexp #px#"a(b)" (list whole x))
+                            (list 'a `(b ,c))
                             (? number?)
                             (? number? n)
                             (? pair? (cons a b))
@@ -127,5 +124,20 @@
                             `(x `(y ,a))
                             `(x `(y ,@(list a b)))
                             `(x `(y `(z ,a)))))])
+  (define binders (racket-binders pattern))
   (test-case (format "~s binds what racket/match binds" pattern)
-    (check-equal? (list->seteq (pattern-names pattern)) (list->seteq (racket-binders pattern)))))
+    (check-equal? (list->seteq (pattern-names pattern)) (list->seteq binders)))
+  (test-case (format "~s with racket/match's binders renamed is a copy" pattern)
+    (define one (procedure pattern binders))
+    (check-true (alpha-copy? one (rename one (renamed binders))))))
+
+(for ([row (in-list '(((app car x) car cdr) ((? number? n) number? string?)
+                                            ((hash car x cdr (list y z)) cdr caar)
+                                            ((== car eq?) eq? equal?)
+                                            ((struct* point ([a x])) a b)
+                                            ((list a ..3) ..3 ..4)
+                                            ((regexp #rx"a(b)" (list _ x)) regexp pregexp)))])
+  (match-define (list pattern name other) row)
+  (test-case (format "~s with ~a renamed is not a copy" pattern name)
+    (define one (procedure pattern (racket-binders pattern)))
+    (check-false (alpha-copy? one (rename one (list (cons name other)))))))
