@@ -5,15 +5,15 @@
          (only-in datasets/core dataset-table-columns dataset-table-names load-dataset-table)
          (only-in racket/file file->value)
          (only-in racket/list remove-duplicates)
-         (only-in racket/match match-define struct*)
+         (only-in racket/match match match-define struct*)
          racket/runtime-path
-         (only-in rackunit check-equal? check-exn check-true test-case)
+         (only-in rackunit check-eq? check-equal? check-exn check-true test-case)
          (only-in threading ~>)
          (only-in "linear-data.rkt" columns-of on-matrix)
          (only-in "linear-twin-data.rkt" decoded)
          (only-in "logistic-data.rkt"
                   correct
-                  cutoff-message
+                  cutoff-exn?
                   default-tol
                   default-tol-cap
                   fit-parts
@@ -23,6 +23,8 @@
                   lr-case-X
                   lr-case-y
                   lr-fit
+                  lr-fit-coef
+                  lr-fit-intercept
                   relative-gap
                   setting
                   setting-C
@@ -30,7 +32,7 @@
                   setting-penalty
                   tight-max-iter
                   tight-tol)
-         (only-in "logistic-oracle.rkt" residual residual-of)
+         (only-in "logistic-oracle.rkt" residual residual-bound residual-gradient residual-of)
          (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
 
 (provide (struct-out labelled)
@@ -39,10 +41,14 @@
          check-raw-rescued
          check-score
          check-sklearn-optimum
+         check-stationary
          labelled-set
+         raw-breast-cancer
          raw-optima-path
          raw-optima-settings
+         residual-at
          standardised
+         stationary-bound
          tight-fit)
 
 (struct labelled
@@ -51,12 +57,12 @@
 
 (define stationary-bound 1e-7)
 (define raw-stationary-bound 1e-5)
-(struct gap-check (fits rank bound))
-(define float32-l2-second-smallest-gap-bound 1.6e-4)
+(struct gap-check (fits statistic bound))
+(define statistic-ranks (hash 'smallest 0 'second-smallest 1))
 (define float32-gap-checks
-  (hash 'l1 (gap-check 1 0 2.9e-2)
-        'l2 (gap-check 5 1 float32-l2-second-smallest-gap-bound)
-        'elasticnet (gap-check 1 0 1.7e-3)))
+  (hash 'l1 (gap-check 1 'smallest 2.9e-2)
+        'l2 (gap-check 5 'second-smallest 1.6e-4)
+        'elasticnet (gap-check 1 'smallest 1.7e-3)))
 (define raw-optima-settings
   (list (setting 'l1 1.0 #f) (setting 'elasticnet 1.0 0.5) (setting 'l2 0.01 #f)))
 (define-runtime-path raw-optima-path "raw-logistic-optima.rktd")
@@ -100,6 +106,8 @@
             labels
             classes))
 
+(define raw-breast-cancer (labelled-set 'breast-cancer "diagnosis" '("id")))
+
 (define (tight-fit set dt s)
   (logistic-regression-fit (on-matrix (lr-case-X (labelled-case set)) dt)
                            (labelled-labels set)
@@ -118,7 +126,7 @@
   (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
   (cond
     [(eq? dt 'float64)
-     (match-define (residual K F _)
+     (define r
        (residual-of (lr-case-X c)
                     (lr-case-y c)
                     #f
@@ -128,22 +136,19 @@
                     #:C (setting-C s)
                     #:l1-ratio (setting-l1-ratio s)
                     #:tol (tight-tol 'float64)))
-     (check-true (<= K (* stationary (max F 1)))
-                 (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
+     (check-stationary r stationary)]
     [else
-     (match-define (gap-check fits rank bound) (hash-ref float32-gap-checks (setting-penalty s)))
+     (match-define (struct* gap-check ([fits fits] [statistic statistic] [bound bound]))
+       (hash-ref float32-gap-checks (setting-penalty s)))
      (define optimum (gauged-fit (fit-parts (tight-fit set 'float64 s))))
      (define repeats
        (for/list ([_ (in-range (sub1 fits))])
          (fit-parts (tight-fit set dt s))))
      (define gaps (map (lambda (f) (relative-gap (gauged-fit f) optimum)) (cons parts repeats)))
-     (define gap (list-ref (sort gaps <) rank))
-     (check-true (<= gap bound)
-                 (format "gap ~a of ~a fits, smallest first, to the float64 fit ~a, bound ~a"
-                         (add1 rank)
-                         fits
-                         gap
-                         bound))]))
+     (define gap (list-ref (sort gaps <) (hash-ref statistic-ranks statistic)))
+     (check-true
+      (<= gap bound)
+      (format "~a gap of ~a fits to the float64 fit ~a, bound ~a" statistic fits gap bound))]))
 
 (struct asked (setting tol) #:transparent)
 
@@ -194,59 +199,98 @@
 
 (define (check-raw-refusal set dt)
   (match-define (struct* labelled ((case c) [labels labels])) set)
-  (check-exn cutoff-message (lambda () (logistic-regression-fit (on-matrix (lr-case-X c) dt) labels)))
+  (check-exn cutoff-exn? (lambda () (logistic-regression-fit (on-matrix (lr-case-X c) dt) labels)))
   (match-define (list python oracle) (python-and-oracle c dt))
   (check-python-off-optimum python oracle dt))
 
-(define (check-raw-rescued set capped refused)
+(struct arm (dtype setting max-iter outcome cap) #:transparent)
+
+(define (arm-of row)
+  (match row
+    [(list dt (list penalty C l1-ratio) max-iter outcome cap)
+     (arm dt (setting penalty C l1-ratio) max-iter outcome cap)]
+    [(list dt (list penalty C l1-ratio) max-iter)
+     (arm dt (setting penalty C l1-ratio) max-iter 'refused #f)]))
+
+(define (arm-name a)
+  (match-define (struct* arm ([dtype dt] [setting s] [max-iter max-iter] [outcome outcome])) a)
+  (match-define (setting penalty C l1-ratio) s)
+  (format "~a ~a C ~a l1-ratio ~a at max-iter ~a: ~a" dt penalty C l1-ratio max-iter outcome))
+
+(define (raw-fit set a)
   (match-define (struct* labelled ((case c) [labels labels])) set)
-  (define (raw-fit dt s max-iter)
-    (logistic-regression-fit (on-matrix (lr-case-X c) dt)
-                             labels
-                             #:penalty (setting-penalty s)
-                             #:C (setting-C s)
-                             #:l1-ratio (setting-l1-ratio s)
-                             #:max-iter max-iter))
-  (define (refused-fit e)
-    (unless (regexp-match? cutoff-message (exn-message e))
-      (raise e))
-    #f)
-  (define optima (raw-optima))
-  (for ([arm (in-list capped)])
-    (match-define (list dt penalty C l1-ratio max-iter outcome cap) arm)
-    (define s (setting penalty C l1-ratio))
-    (test-case (format "~a near the optimum ~a" outcome arm)
-      (define optimum (hash-ref optima s))
-      (define r
-        (with-handlers ([exn:fail? refused-fit])
-          (raw-fit dt s max-iter)))
-      (define parts (and r (fit-parts r)))
-      (define gap (and parts (relative-gap (gauged-fit parts) (gauged-fit optimum))))
-      (cond
-        [(not gap)
-         (check-true (eq? outcome 'either) "refused, but this arm has only ever been accepted")]
-        [cap (check-true (<= gap cap) (format "coef gap to the optimum ~a (cap ~a)" gap cap))]
-        [else
-         (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
-         (match-define (residual K _ bound)
-           (residual-of (lr-case-X c)
+  (match-define (struct* arm ([dtype dt] [setting s] [max-iter max-iter])) a)
+  (logistic-regression-fit (on-matrix (lr-case-X c) dt)
+                           labels
+                           #:penalty (setting-penalty s)
+                           #:C (setting-C s)
+                           #:l1-ratio (setting-l1-ratio s)
+                           #:max-iter max-iter))
+
+(define (residual-at r
+                     X
+                     y
+                     #:penalty [penalty 'l2]
+                     #:C [C 1.0]
+                     #:l1-ratio [l1-ratio #f]
+                     #:fit-intercept [fi #t]
+                     #:dtype [dt 'float64])
+  (define parts (fit-parts r))
+  (residual-of X
+               y
+               #f
+               (lr-fit-coef parts)
+               (lr-fit-intercept parts)
+               #:penalty penalty
+               #:C C
+               #:l1-ratio l1-ratio
+               #:fit-intercept fi
+               #:tol default-tol
+               #:dtype dt))
+
+(define (check-stationary res [stationary stationary-bound])
+  (match-define (residual K F _) res)
+  (check-true (<= K (* stationary (max F 1)))
+              (format "K ~a F ~a" (exact->inexact K) (exact->inexact F))))
+
+(define (check-capped-arm set optima a)
+  (match-define (struct* labelled ((case c))) set)
+  (match-define (struct* arm ([dtype dt] [setting s] [outcome outcome] [cap cap])) a)
+  (match-define (setting penalty C l1-ratio) s)
+  (test-case (arm-name a)
+    (define r
+      (with-handlers ([cutoff-exn? (lambda (_) #f)])
+        (raw-fit set a)))
+    (define gap (and r (relative-gap (gauged-fit (fit-parts r)) (gauged-fit (hash-ref optima s)))))
+    (define res
+      (and r
+           (not cap)
+           (residual-at r
+                        (lr-case-X c)
                         (lr-case-y c)
-                        #f
-                        coef
-                        intercept
                         #:penalty penalty
                         #:C C
                         #:l1-ratio l1-ratio
-                        #:tol default-tol
-                        #:dtype dt))
-         (check-true (rational? gap) (format "coef gap to the optimum ~a" gap))
-         (check-true
-          (<= K bound)
-          (format "accepted at residual ~a, bound ~a" (exact->inexact K) (exact->inexact bound)))])))
-  (for ([arm (in-list refused)])
-    (match-define (list dt penalty C l1-ratio max-iter) arm)
-    (test-case (format "refused ~a" arm)
-      (check-exn cutoff-message (lambda () (raw-fit dt (setting penalty C l1-ratio) max-iter))))))
+                        #:dtype dt)))
+    (cond
+      [(not gap) (check-eq? outcome 'either "refused, but this arm has only ever been accepted")]
+      [cap (check-true (<= gap cap) (format "coef gap to the optimum ~a (cap ~a)" gap cap))]
+      [else
+       (check-true (<= (residual-gradient res) (residual-bound res))
+                   (format "accepted at residual ~a, bound ~a"
+                           (exact->inexact (residual-gradient res))
+                           (exact->inexact (residual-bound res))))])))
+
+(define (check-refused-arm set a)
+  (test-case (arm-name a)
+    (check-exn cutoff-exn? (lambda () (raw-fit set a)))))
+
+(define (check-raw-rescued set capped refused)
+  (define optima (raw-optima))
+  (for ([row (in-list capped)])
+    (check-capped-arm set optima (arm-of row)))
+  (for ([row (in-list refused)])
+    (check-refused-arm set (arm-of row))))
 
 (define (raw-optima)
   (for/hash ([entry (in-list (file->value raw-optima-path))])

@@ -6,7 +6,7 @@
 
 (define settings (list (setting 'l2 1.0 #f) (setting 'l1 1.0 #f) (setting 'elasticnet 1.0 0.5)))
 
-(test-twin "float32: standardised breast-cancer fits near the float64 fit and as accurate as sklearn's"
+(test-twin "float32 standardised: near the float64 fit, as accurate as sklearn"
   (check-sklearn-optimum (labelled-set 'breast-cancer "diagnosis" '("id") #:standardise? #t)
                          'float32
                          settings))

@@ -9,7 +9,7 @@
          (only-in "private/linear-data.rkt" dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
                   blob-case
-                  cutoff-message
+                  cutoff-exn?
                   decision-label
                   default-setting
                   default-tol
@@ -51,8 +51,7 @@
 
 (define (fit-or-refusal t)
   (match-define (trial c dt s max-iter tol) t)
-  (with-handlers ([(lambda (e) (and (exn:fail? e) (regexp-match? cutoff-message (exn-message e))))
-                   (lambda (_) #f)])
+  (with-handlers ([cutoff-exn? (lambda (_) #f)])
     (setting-fit c dt s #:max-iter max-iter #:tol tol)))
 
 (define (residual-at c parts s tol)
@@ -113,7 +112,7 @@
   (for ([dt (in-list dtypes)]
         [theirs (in-list (logistic-twin-results requests))])
     (test-case (symbol->string dt)
-      (check-exn cutoff-message (lambda () (setting-fit hard-cutoff dt default-setting #:max-iter 1)))
+      (check-exn cutoff-exn? (lambda () (setting-fit hard-cutoff dt default-setting #:max-iter 1)))
       (match-define (residual K _ bound)
         (residual-at hard-cutoff (their-fit theirs dt) default-setting default-tol))
       (check-true (> K bound) (format "K ~a bound ~a" K bound)))))
