@@ -58,12 +58,14 @@ coefficient 0. With more non-constant columns than rows of positive weight, less
 The fit is refused when the residual's weighted inner product with some column, centred under
 @racket[fit-intercept], exceeds 2@superscript{-8} (float32) or 2@superscript{-18} (float64) times
 that column's weighted spread times @racket[y]'s, as with collinear columns in float32, where
-float64 often fits. Float32 @racket['qr] and @racket['svd-qr] refuse X with collinear columns,
-centred under @racket[fit-intercept], before the solve, such as a full one-hot design with an
-intercept: drop a level, pass @racket[#:fit-intercept #f], or use float64 @racket['auto]. On exactly
-collinear X, float32 @racket['svd] and @racket['svd-jacobi] return a fit that is not the
-minimum-norm one. A coefficient fixed only by rows of low weight w is accurate to about
-u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal does not see its loss.
+float64 often fits. Unless X is wide (above) or has one non-constant column, float32 @racket['qr]
+and @racket['svd-qr] also refuse X before the solve when a lower bound on κ′, the condition number
+of X's Gram matrix with columns centred under @racket[fit-intercept] and scaled to unit spread,
+gives u·√κ′ ≥ 2@superscript{-8}, u being the dtype's unit roundoff, as with a full one-hot design
+with an intercept: drop a level, pass @racket[#:fit-intercept #f], or use float64 @racket['auto]. On
+exactly collinear X, float32 @racket['svd] and @racket['svd-jacobi] do not give the minimum-norm
+fit. A coefficient fixed only by rows of low weight w is accurate to about u·√(w@subscript{max}/w),
+a loss the refusal does not see.
 
 Weighted fits with an intercept can differ in the last bits between runs from about 2000 rows, as in
 Python cuML; unweighted fits, and fits without an intercept, repeat bitwise. @racket[X], @racket[y]
@@ -108,12 +110,11 @@ The hyperparameters of @racket[linear-regression-fit] and
                             [#:resources resources (or/c #f device-resources?) #f])
          linear-regression?]{
 An unfitted linear regression with the hyperparameters
-@racket[(linear-regression-params params ...)]: an estimator, a predictor
-and a scorer. @racket[fit] is @racket[linear-regression-fit] and needs
-@racket[y]; @racket[predict] is @racket[linear-regression-predict];
-@racket[score] is @racket[r2-score] of @racket[y] against the predictions,
-weighted by @racket[sample-weight]; in float32 it can count a row whose
-weight @racket[fit] counted as zero. Errors name the generic.
+@racket[(linear-regression-params params ...)]: an estimator, a predictor and a scorer. @racket[fit]
+is @racket[linear-regression-fit] and needs @racket[y]; @racket[predict] is
+@racket[linear-regression-predict]; @racket[score] is @racket[r2-score] of @racket[y] against the
+predictions, weighted by @racket[sample-weight]; in float32 it can count a row whose weight
+@racket[fit] counted as zero. Errors name the generic.
 @examples[#:eval ev #:label #f
 (define e (fit (linear-regression) X y))
 (real->decimal-string (score e X y) 6)
@@ -213,10 +214,9 @@ The hyperparameters of @racket[ridge-fit] and @racket[ridge], as @racket[kmeans-
                 [#:fit-intercept fit-intercept boolean? #t]
                 [#:resources resources (or/c #f device-resources?) #f])
          ridge?]{
-An unfitted ridge regression with the hyperparameters
-@racket[(ridge-params params ...)], as @racket[linear-regression]: @racket[fit] is
-@racket[ridge-fit] and needs @racket[y], @racket[predict] is @racket[ridge-predict],
-and @racket[score] is the weighted @racket[r2-score].
+An unfitted ridge regression with the hyperparameters @racket[(ridge-params params ...)], as
+@racket[linear-regression]: @racket[fit] is @racket[ridge-fit] and needs @racket[y],
+@racket[predict] is @racket[ridge-predict], and @racket[score] is the weighted @racket[r2-score].
 @examples[#:eval ev #:label #f
 (real->decimal-string (score (fit (ridge #:alpha 0.5) X y) X y) 6)
 (eval:error (fit (ridge) X))

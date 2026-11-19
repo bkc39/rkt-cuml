@@ -35,6 +35,7 @@
 (define qr-share 32)
 (define normal-equations-share 4)
 (define prediction-bound (expt 2 -7))
+(define wide-bound (expt 2 -20))
 
 (define (fit-with algorithm c #:fit-intercept [fi #t])
   (linear-regression-fit (matrix (lcase-X c) 'float32)
@@ -113,6 +114,12 @@
                (fit-with algorithm c))
         [(? string? message) (check-true (regexp-match? not-least-squares message) message)]
         [fit (check-true (< (prediction-gap c fit) prediction-bound))]))))
+
+(test-gpu "float32 'qr and 'svd-qr fit wide X by the Jacobi SVD without the Gram check"
+  (define c (lcase "4 by 5" '((1 0 2 1 3) (0 3 1 4 1) (4 1 0 2 2) (2 2 5 0 1)) '(1 2 3 4) #f))
+  (for ([algorithm (in-list '(qr svd-qr))])
+    (test-case (format "~a ~a" algorithm (lcase-name c))
+      (check-true (< (prediction-gap c (fit-with algorithm c)) wide-bound)))))
 
 (test-gpu "columns collinear only after centring are refused with an intercept and fit without"
   (for* ([algorithm (in-list '(qr svd-qr))]
