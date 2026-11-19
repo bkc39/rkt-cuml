@@ -15,11 +15,8 @@
                     setting-penalty
                     tight-max-iter
                     tight-tol)
-           (only-in "real-logistic-data.rkt"
-                    raw-breast-cancer
-                    raw-optima-path
-                    raw-optima-settings
-                    tight-fit))
+           (only-in "raw-breast-cancer.rkt" raw-breast-cancer)
+           (only-in "real-logistic-data.rkt" raw-optima-path raw-optima-settings tight-fit))
   (define described
     (string-trim (with-output-to-string (lambda () (system "git describe --always --dirty")))))
   (define fits

@@ -1,7 +1,8 @@
 #lang racket/base
 
 (require (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/real-logistic-data.rkt" check-raw-rescued raw-breast-cancer))
+         (only-in "private/raw-breast-cancer.rkt" raw-breast-cancer)
+         (only-in "private/real-logistic-data.rkt" check-raw-rescued))
 
 (define float64-elasticnet-cap 1e-1)
 

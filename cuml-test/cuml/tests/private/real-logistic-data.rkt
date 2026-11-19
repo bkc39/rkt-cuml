@@ -21,10 +21,7 @@
                   gauged-sklearn
                   lr-case
                   lr-case-X
-                  lr-case-y
                   lr-fit
-                  lr-fit-coef
-                  lr-fit-intercept
                   relative-gap
                   setting
                   setting-C
@@ -41,9 +38,9 @@
          check-raw-rescued
          check-score
          check-sklearn-optimum
+         case-residual
          check-stationary
          labelled-set
-         raw-breast-cancer
          raw-optima-path
          raw-optima-settings
          residual-at
@@ -106,8 +103,6 @@
             labels
             classes))
 
-(define raw-breast-cancer (labelled-set 'breast-cancer "diagnosis" '("id")))
-
 (define (tight-fit set dt s)
   (logistic-regression-fit (on-matrix (lr-case-X (labelled-case set)) dt)
                            (labelled-labels set)
@@ -123,20 +118,9 @@
 
 (define (check-optimum set dt s parts #:stationary [stationary stationary-bound])
   (match-define (struct* labelled ((case c))) set)
-  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
   (cond
     [(eq? dt 'float64)
-     (define r
-       (residual-of (lr-case-X c)
-                    (lr-case-y c)
-                    #f
-                    coef
-                    intercept
-                    #:penalty (setting-penalty s)
-                    #:C (setting-C s)
-                    #:l1-ratio (setting-l1-ratio s)
-                    #:tol (tight-tol 'float64)))
-     (check-stationary r stationary)]
+     (check-stationary (case-residual c parts s #:tol (tight-tol 'float64)) stationary)]
     [else
      (match-define (struct* gap-check ([fits fits] [statistic statistic] [bound bound]))
        (hash-ref float32-gap-checks (setting-penalty s)))
@@ -227,26 +211,32 @@
                            #:l1-ratio (setting-l1-ratio s)
                            #:max-iter max-iter))
 
-(define (residual-at r
-                     X
-                     y
-                     #:penalty [penalty 'l2]
-                     #:C [C 1.0]
-                     #:l1-ratio [l1-ratio #f]
-                     #:fit-intercept [fi #t]
-                     #:dtype [dt 'float64])
-  (define parts (fit-parts r))
+(define (case-residual c
+                       parts
+                       s
+                       #:tol [tol default-tol]
+                       #:fit-intercept [fi #t]
+                       #:dtype [dt 'float64])
+  (match-define (struct* lr-case ([X X] [y y] [w w])) c)
+  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
+  (match-define (setting penalty C l1-ratio) s)
   (residual-of X
                y
-               #f
-               (lr-fit-coef parts)
-               (lr-fit-intercept parts)
+               w
+               coef
+               intercept
                #:penalty penalty
                #:C C
                #:l1-ratio l1-ratio
                #:fit-intercept fi
-               #:tol default-tol
+               #:tol tol
                #:dtype dt))
+
+(define (residual-at r X y #:penalty [penalty 'l2] #:fit-intercept [fi #t])
+  (case-residual (lr-case "residual-at" X y #f)
+                 (fit-parts r)
+                 (setting penalty 1.0 #f)
+                 #:fit-intercept fi))
 
 (define (check-stationary res [stationary stationary-bound])
   (match-define (residual K F _) res)
@@ -256,22 +246,12 @@
 (define (check-capped-arm set optima a)
   (match-define (struct* labelled ((case c))) set)
   (match-define (struct* arm ([dtype dt] [setting s] [outcome outcome] [cap cap])) a)
-  (match-define (setting penalty C l1-ratio) s)
   (test-case (arm-name a)
     (define r
       (with-handlers ([cutoff-exn? (lambda (_) #f)])
         (raw-fit set a)))
     (define gap (and r (relative-gap (gauged-fit (fit-parts r)) (gauged-fit (hash-ref optima s)))))
-    (define res
-      (and r
-           (not cap)
-           (residual-at r
-                        (lr-case-X c)
-                        (lr-case-y c)
-                        #:penalty penalty
-                        #:C C
-                        #:l1-ratio l1-ratio
-                        #:dtype dt)))
+    (define res (and r (not cap) (case-residual c (fit-parts r) s #:dtype dt)))
     (cond
       [(not gap) (check-eq? outcome 'either "refused, but this arm has only ever been accepted")]
       [cap (check-true (<= gap cap) (format "coef gap to the optimum ~a (cap ~a)" gap cap))]

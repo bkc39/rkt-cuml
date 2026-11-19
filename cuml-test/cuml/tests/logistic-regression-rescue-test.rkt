@@ -8,11 +8,11 @@
          (only-in "private/linear-data.rkt" on-matrix on-vector)
          (only-in "private/logistic-data.rkt" lr-case-X lr-case-y)
          (only-in "private/logistic-oracle.rkt" residual)
+         (only-in "private/raw-breast-cancer.rkt" raw-breast-cancer)
          (only-in "private/real-logistic-data.rkt"
                   check-stationary
                   labelled-case
                   labelled-labels
-                  raw-breast-cancer
                   residual-at))
 
 (define raw-breast-cancer-arms '((float64 #f 6000) (float32 #t 6000) (float64 #t 20000)))
