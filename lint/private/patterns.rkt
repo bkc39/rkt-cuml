@@ -171,7 +171,9 @@
 
 (define (wildcard-repeat? patterns)
   (match patterns
-    [(list before ... '_ (? ellipsis?) after ...) (not (ormap ellipsis? (append before after)))]
+    [(list* '_ (? ellipsis?) rest) (not (ormap ellipsis? rest))]
+    [(cons (? ellipsis?) _) #f]
+    [(cons _ rest) (wildcard-repeat? rest)]
     [_ #f]))
 
 (define (literal? datum)
@@ -185,8 +187,11 @@
 
 (define (literal-keyed-patterns entries)
   (match entries
-    [(list (list (? literal-key?) patterns) ...) patterns]
-    [_ '()]))
+    ['() '()]
+    [(cons (list (? literal-key?) pattern) rest)
+     (define patterns (literal-keyed-patterns rest))
+     (and patterns (cons pattern patterns))]
+    [_ #f]))
 
 (define (spliced-repeat? pattern)
   (match pattern
@@ -243,7 +248,7 @@
     [(cons 'hash* entries) (append-map again (hash*-patterns (proper entries)))]
     [(cons 'hash-table entries)
      #:when direct?
-     (append-map again (literal-keyed-patterns entries))]
+     (append-map again (or (literal-keyed-patterns (proper entries)) '()))]
     [(cons 'hash-table entries)
      (append-map (lambda (entry) (append-map again (proper entry))) (proper entries))]
     [(cons 'vector (? wildcard-repeat? patterns)) (append-map again patterns)]
