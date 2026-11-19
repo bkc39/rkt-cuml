@@ -221,8 +221,8 @@ TEST(GramPlan, TheSpectrumErrorCoversSsyevdsResiduals) {
   const resources res;
   const raft::handle_t& handle = raftrkt::handle_of(res.handle);
   for (const double loading : {3.0, 10.0}) {
-    const std::vector<float> g = equilibrated_gram(
-        factor_columns_of(loading), factor_rows, factor_columns);
+    const std::vector<float> g = equilibrated_gram(factor_columns_of(loading),
+                                                   factor_rows, factor_columns);
     const std::optional<eigen_pairs> e =
         eigen_of(handle, g, factor_columns, true);
     if (!e.has_value()) {
@@ -234,8 +234,9 @@ TEST(GramPlan, TheSpectrumErrorCoversSsyevdsResiduals) {
     EXPECT_LT(m.residual + (std::abs(pairs.values.back()) * m.orthogonality),
               spectrum_error(pairs.values, factor_columns) / 2)
         << loading;
-    EXPECT_GE(enclosure_norms_of(handle, g, pairs, factor_columns).orthogonality,
-              m.orthogonality)
+    EXPECT_GE(
+        enclosure_norms_of(handle, g, pairs, factor_columns).orthogonality,
+        m.orthogonality)
         << loading;
   }
 }
@@ -267,7 +268,8 @@ void expect_certified_by_residuals(const resources& res, uint64_t salt) {
   EXPECT_NE(plan.path, gram_path::certified) << salt;
   EXPECT_TRUE(enclosure_pays(e->values, plan, correlated_shape, 0x1p32))
       << salt;
-  const std::optional<spectrum_interval> s = enclosed_spectrum(handle, g, *e, d);
+  const std::optional<spectrum_interval> s =
+      enclosed_spectrum(handle, g, *e, d);
   if (!s) {
     ADD_FAILURE() << salt;
     return;
@@ -304,14 +306,13 @@ TEST(GramPlan, ASkewBasisCannotHideAnEigenvalue) {
 TEST(GramPlan, ZeroComputedResidualsStillCoverTheirOwnRounding) {
   const double matrix = std::sqrt(5.0);
   const double basis = std::sqrt(2.0);
-  const std::optional<spectrum_interval> s =
-      enclosure({1.0, 2.0},
-                {.symmetric = 0.0,
-                 .orthogonality = 0.0,
-                 .matrix = matrix,
-                 .basis = basis,
-                 .product = matrix},
-                2);
+  const std::optional<spectrum_interval> s = enclosure({1.0, 2.0},
+                                                       {.symmetric = 0.0,
+                                                        .orthogonality = 0.0,
+                                                        .matrix = matrix,
+                                                        .basis = basis,
+                                                        .product = matrix},
+                                                       2);
   const double rounding = 2 * 0x1p-53 * basis * ((basis * matrix) + matrix);
   ASSERT_TRUE(s.has_value());
   EXPECT_LE(s->low, 1.0 - rounding);

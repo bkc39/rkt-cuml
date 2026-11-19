@@ -70,7 +70,8 @@ ritz::enclosure_norms enclosure_norms_of(const raft::handle_t& handle,
                               p.data(), k));
   RAFT_CUBLAS_TRY(cublasDgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, k, k, k, &one,
                               v.data(), k, p.data(), k, &zero, h.data(), k));
-  RAFT_CUBLAS_TRY(cublasDaxpy(cublas, k, &minus, mu.data(), 1, h.data(), k + 1));
+  RAFT_CUBLAS_TRY(
+      cublasDaxpy(cublas, k, &minus, mu.data(), 1, h.data(), k + 1));
   RAFT_CUBLAS_TRY(cublasDgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, k, k, k, &one,
                               v.data(), k, v.data(), k, &zero, w.data(), k));
   RAFT_CUBLAS_TRY(

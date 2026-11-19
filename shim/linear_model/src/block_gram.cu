@@ -1,8 +1,7 @@
-#include "block_gram.hpp"
-
 #include <cstdint>
 #include <rmm/cuda_stream_view.hpp>
 
+#include "block_gram.hpp"
 #include "cumlrkt/support.hpp"
 #include "ritz.hpp"
 
@@ -14,8 +13,7 @@ constexpr int tile_rows = 256;
 constexpr int64_t block_rows = ritz::gram_block_rows;
 
 template <typename T>
-__global__ void narrow_grams(block_rows_of<T> r, int64_t first,
-                             float* parts) {
+__global__ void narrow_grams(block_rows_of<T> r, int64_t first, float* parts) {
   __shared__ float tile[tile_rows * narrow_gram_columns];
   const int64_t d = r.d;
   const int64_t cells = d * d;
@@ -31,9 +29,9 @@ __global__ void narrow_grams(block_rows_of<T> r, int64_t first,
       if (i < r.n) {
         const double root =
             r.w == nullptr ? 1.0 : sqrt(static_cast<double>(r.w[i]));
-        v = static_cast<float>(root * r.scale[k] *
-                               (static_cast<double>(r.x[(k * r.n) + i]) -
-                                r.mean[k]));
+        v = static_cast<float>(
+            root * r.scale[k] *
+            (static_cast<double>(r.x[(k * r.n) + i]) - r.mean[k]));
       }
       tile[(t * d) + k] = v;
     }
@@ -55,14 +53,15 @@ __global__ void narrow_grams(block_rows_of<T> r, int64_t first,
 template <typename T>
 void narrow_block_grams(rmm::cuda_stream_view stream, block_rows_of<T> rows,
                         int64_t first, int64_t count, float* parts) {
-  narrow_grams<T><<<static_cast<unsigned>(count), tile_rows, 0,
-                    stream.value()>>>(rows, first, parts);
+  narrow_grams<T>
+      <<<static_cast<unsigned>(count), tile_rows, 0, stream.value()>>>(
+          rows, first, parts);
   raftrkt::cuda_check(cudaGetLastError(), "narrow_grams");
 }
 
 template void narrow_block_grams<float>(rmm::cuda_stream_view,
-                                        block_rows_of<float>, int64_t,
-                                        int64_t, float*);
+                                        block_rows_of<float>, int64_t, int64_t,
+                                        float*);
 template void narrow_block_grams<double>(rmm::cuda_stream_view,
                                          block_rows_of<double>, int64_t,
                                          int64_t, float*);

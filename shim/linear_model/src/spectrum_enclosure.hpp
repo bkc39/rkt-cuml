@@ -11,8 +11,7 @@ namespace cumlrkt::glm {
 
 ritz::enclosure_norms enclosure_norms_of(const raft::handle_t& handle,
                                          const std::vector<float>& m,
-                                         const ritz::eigen_pairs& e,
-                                         int64_t d);
+                                         const ritz::eigen_pairs& e, int64_t d);
 
 std::optional<ritz::spectrum_interval> enclosed_spectrum(
     const raft::handle_t& handle, const std::vector<float>& m,

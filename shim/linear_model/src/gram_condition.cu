@@ -276,8 +276,8 @@ std::vector<double> narrow_gram(const equilibration<T>& q) {
   const int64_t total = (q.n + block_rows - 1) / block_rows;
   const int64_t blocks = std::min(total, block_floats / cells);
   buffer<float> parts = scratch<float>(blocks * cells, stream);
-  const block_rows_of<T> rows{q.x, q.w, q.mean.data(), q.scales.data(), q.n,
-                              q.d};
+  const block_rows_of<T> rows{q.x, q.w, q.mean.data(), q.scales.data(),
+                              q.n, q.d};
   for (int64_t first = 0; first < total; first += blocks) {
     const int64_t count = std::min(blocks, total - first);
     narrow_block_grams(stream, rows, first, count, parts.data());

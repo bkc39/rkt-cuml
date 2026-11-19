@@ -124,8 +124,7 @@ std::optional<spectrum_interval> enclosure(const std::vector<double>& values,
   }
   const double symmetric =
       (r.symmetric * norms * (1.0 + rounding(1.0))) +
-      (products * basis *
-       ((basis * r.matrix * norms) + (r.product * norms)));
+      (products * basis * ((basis * r.matrix * norms) + (r.product * norms)));
   const double error = symmetric * (1.0 + rounding(enclosure_steps));
   const double low = values.front() - error;
   const double high = values.back() + error;

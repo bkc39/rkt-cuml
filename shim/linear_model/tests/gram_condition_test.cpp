@@ -369,7 +369,8 @@ columns correlated(draw_stream d, int64_t width) {
   const std::vector<double> f = integers(d);
   columns c{{}, d.n, width};
   for (int64_t j = 0; j < width; ++j) {
-    std::vector<double> x = integers({d.n, d.salt + 1 + static_cast<uint64_t>(j)});
+    std::vector<double> x =
+        integers({d.n, d.salt + 1 + static_cast<uint64_t>(j)});
     for (int64_t i = 0; i < d.n; ++i) {
       x[i] += correlated_loading * f[i];
     }
