@@ -66,7 +66,7 @@
                   layout
                   (list (if failure
                             `[,lhs (=> ,failure) ,body]
-                            `[,lhs ,body])))]
+                            (list lhs body))))]
     ['definition
      `(let ()
         (,head ,lhs ,(sample-value layout))
