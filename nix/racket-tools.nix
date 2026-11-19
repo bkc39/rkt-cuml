@@ -3,9 +3,11 @@
 # source for the package). `.fmt.rkt` uses fmt's
 # internals, so a bump of fmt or pretty-expressive is a deliberate change:
 # move the rev, update the hash, and re-check `.fmt.rkt` against the new fmt.
-# resyntaxSources is Resyntax at resyntaxRev with its catalog dependencies at
-# the commits the devshell's install resolved: only the racket-review check
-# installs it, so the copy check can expand scripts/resyntax-rules*.rkt.
+# resyntaxSources is Resyntax at resyntaxRev, which the devshell installs too,
+# and its five catalog dependencies pinned for this check alone: the devshell
+# resolves them with --update-deps, so the two can drift. Only the
+# racket-review check installs it, so the copy check can expand
+# scripts/resyntax-rules*.rkt.
 {
   stdenv,
   runCommand,
