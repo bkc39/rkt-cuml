@@ -81,8 +81,7 @@
     [(or '_ '... '..1 '___) '()]
     [(? symbol? name) (list name)]
     [(cons (or 'quote '== 'not) _) '()]
-    [(cons 'quasiquote template)
-     (append-map pattern-names (unquoted-parts template #:pattern? #t))]
+    [(cons 'quasiquote template) (append-map pattern-names (unquoted-parts template #:pattern? #t))]
     [(list* (or '? 'app 'regexp 'pregexp) _ patterns) (append-map pattern-names (proper patterns))]
     [(list 'struct _ (? list? patterns)) (append-map pattern-names patterns)]
     [(list 'struct* _ (? list? fields))
