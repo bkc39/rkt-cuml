@@ -152,9 +152,12 @@
                                       (list (cons name other)))))))
 
 (for ([name (in-list '(key fallback))])
-  (test-case (format "a hash* pattern whose ~a reads a formal, with the formal renamed, is a copy" name)
+  (test-case (format "a hash* pattern whose ~a reads a formal, with the formal renamed, is a copy"
+                     name)
     (define one
       `(define (f subject key fallback)
          (match subject
            [(hash* [key x #:default fallback]) (list x)])))
-    (check-true (alpha-copy? one (rename one (renamed (list name)))))))
+    (check-true (alpha-copy? one
+                             (rename one
+                                     (renamed (list name)))))))

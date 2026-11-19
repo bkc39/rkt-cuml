@@ -92,20 +92,17 @@
                    `(lambda (v w) ,(sample head layout '(list a) '(binders a c k list) #:failure 'k)))
                   (sample-binders layout)))
   (test-case (format "the copy check renames a ~a pattern's binders" head)
-    (check-true (alpha-copy? `(define (g v)
-                                ,(sample head
-                                         layout
-                                         '(list a)
-                                         `(list ,@(sample-binders layout))
-                                         #:failure 'k))
-                             `(define (g v)
-                                ,(sample head
-                                         layout
-                                         '(list b)
-                                         `(list ,@(rename (sample-binders layout)
-                                                          '((a . b) (c . d) (k . j))))
-                                         #:other 'd
-                                         #:failure 'j))))))
+    (check-true (alpha-copy?
+                 `(define (g v)
+                    ,(sample head layout '(list a) `(list ,@(sample-binders layout)) #:failure 'k))
+                 `(define (g v)
+                    ,(sample head
+                             layout
+                             '(list b)
+                             `(list ,@(rename (sample-binders layout)
+                                              '((a . b) (c . d) (k . j))))
+                             #:other 'd
+                             #:failure 'j))))))
 
 (define (scope-sample head layout #:backward? backward? #:formal formal #:binder binder #:read read)
   (define (lhs name)
@@ -117,12 +114,16 @@
         `([,(lhs 'b) (lambda () ,read)] [,(lhs binder) 1])
         `([,(lhs binder) 1] [,(lhs 'b) ,read])))
   `(lambda (,formal)
-     (,head ,bindings (list ,binder ,(if backward? '(b) 'b)))))
+     (,head ,bindings
+            (list ,binder
+                  ,(if backward?
+                       '(b)
+                       'b)))))
 
 (define (reads-binder? head layout backward?)
   (match-define (list _ seen)
-    (racket-value `(,(scope-sample head layout #:backward? backward? #:formal 'a #:binder 'a #:read 'a)
-                    2)))
+    (racket-value
+     `(,(scope-sample head layout #:backward? backward? #:formal 'a #:binder 'a #:read 'a) 2)))
   (eqv? seen 1))
 
 (define (racket-scope head layout)
@@ -141,7 +142,12 @@
     (define binder? (reads-binder? head layout backward?))
     (define (procedure formal binder read)
       `(define g
-         ,(scope-sample head layout #:backward? backward? #:formal formal #:binder binder #:read read)))
+         ,(scope-sample head
+                        layout
+                        #:backward? backward?
+                        #:formal formal
+                        #:binder binder
+                        #:read read)))
     (define original (procedure 'a 'a 'a))
     (test-case (format "the copy check reads a ~a right-hand side ~a its binder as Racket does"
                        head
@@ -184,9 +190,7 @@
    (for ([one (in-list files)])
      (match-define (list head refused binds fails) one)
      (check-not-false (member refused found) (format "~a: (app second a) is refused" head))
-     (check-equal? (member binds found)
-                   #f
-                   (format "~a: a pattern variable named second binds" head))
+     (check-equal? (member binds found) #f (format "~a: a pattern variable named second binds" head))
      (check-equal? (and (member fails found) #t)
                    (not (clause? (hash-ref match-forms head)))
                    (format "~a: a failure id named second binds, and only a clause has one" head)))))
