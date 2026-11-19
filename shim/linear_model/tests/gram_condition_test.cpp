@@ -122,6 +122,7 @@ constexpr uint64_t lcg_multiplier = 6364136223846793005ULL;
 constexpr uint64_t lcg_increment = 1442695040888963407ULL;
 constexpr int lcg_shift = 33;
 constexpr int64_t many_rows = 5000;
+constexpr int64_t ritz_rows = 20000;
 constexpr int64_t many_pairs = 30;
 constexpr int64_t spare_columns = 120;
 constexpr int64_t many_salts = 8;
@@ -292,7 +293,7 @@ TEST(GramCondition, ExactCollinearityBesideANearPairIsPastTheThreshold) {
 void expect_refused_through_the_window(const resources& res, int64_t spare,
                                        uint64_t salt) {
   const columns c =
-      summed_beside_near_pairs({many_rows, salt * 1000}, {many_pairs, spare});
+      summed_beside_near_pairs({ritz_rows, salt * 1000}, {many_pairs, spare});
   const condition_estimate e =
       estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
   EXPECT_EQ(e.path, gram_path::ritz) << c.d << " " << salt;
@@ -312,7 +313,7 @@ TEST(GramCondition, ManyNearPairsBesideExactCollinearityArePastTheThreshold) {
 
 void expect_chunks_match_one_pass(const resources& res, uint64_t salt) {
   const columns c =
-      beside_near_pairs({many_rows, salt * 1000}, {many_pairs, spare_columns});
+      beside_near_pairs({ritz_rows, salt * 1000}, {many_pairs, spare_columns});
   const condition_estimate chunked =
       estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
   const condition_estimate single =

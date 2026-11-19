@@ -20,14 +20,15 @@ constexpr double eigen_error_factor = 16.0;
 constexpr double window_reach = 16.0;
 constexpr double edge_gap = 2.0;
 constexpr double certified_margin = 2.0;
-constexpr double pass_ns = 0.022;
-constexpr double row_ns = 300.0;
-constexpr double syrk_ns = 0.0035;
-constexpr double eigen_square_ns = 20.0;
-constexpr double eigen_column_ns = 32000.0;
-constexpr double enclosure_cube_ns = 0.01;
-constexpr double enclosure_square_ns = 3.0;
-constexpr double enclosure_ns = 200000.0;
+constexpr double pass_ns = 0.0208;
+constexpr double vector_square_ns = 0.077;
+constexpr double vector_ns = 98000.0;
+constexpr double row_ns = 305.0;
+constexpr double syrk_ns = 0.0022;
+constexpr double eigen_cube_ns = 0.021;
+constexpr double enclosure_cube_ns = 0.0085;
+constexpr double enclosure_square_ns = 11.3;
+constexpr double enclosure_ns = 126000.0;
 constexpr double enclosure_steps = 16.0;
 constexpr int outward_ulps = 4;
 constexpr double half = 0.5;
@@ -53,12 +54,15 @@ double exact_ns(gram_shape shape) {
   const auto rows = static_cast<double>(shape.rows);
   const auto cols = static_cast<double>(shape.columns);
   return (row_ns * rows) + (syrk_ns * rows * cols * cols) +
-         (eigen_square_ns * cols * cols) + (eigen_column_ns * cols);
+         (eigen_cube_ns * cols * cols * cols);
 }
 
 double pass_cost_ns(int64_t vectors, gram_shape shape) {
-  return pass_ns * static_cast<double>(vectors) *
-         static_cast<double>(shape.rows) * static_cast<double>(shape.columns);
+  const auto rows = static_cast<double>(shape.rows);
+  const auto cols = static_cast<double>(shape.columns);
+  return static_cast<double>(vectors) *
+         ((pass_ns * rows * cols) + (vector_square_ns * cols * cols) +
+          vector_ns);
 }
 
 }  // namespace
