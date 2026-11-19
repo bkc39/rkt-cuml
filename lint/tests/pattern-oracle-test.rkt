@@ -141,10 +141,20 @@
                                             ((== car eq?) eq? equal?)
                                             ((struct* point ([a x])) a b)
                                             ((list a ..3) ..3 ..4)
-                                            ((regexp #rx"a(b)" (list _ x)) regexp pregexp)))])
+                                            ((regexp #rx"a(b)" (list _ x)) regexp pregexp)
+                                            ((point a b) point pt)
+                                            ((== car eq?) car cdr)))])
   (match-define (list pattern name other) row)
   (test-case (format "~s with ~a renamed is not a copy" pattern name)
     (define one (procedure pattern (racket-binders pattern)))
     (check-false (alpha-copy? one
                               (rename one
                                       (list (cons name other)))))))
+
+(for ([name (in-list '(key fallback))])
+  (test-case (format "a hash* pattern whose ~a reads a formal, with the formal renamed, is a copy" name)
+    (define one
+      `(define (f subject key fallback)
+         (match subject
+           [(hash* [key x #:default fallback]) (list x)])))
+    (check-true (alpha-copy? one (rename one (renamed (list name)))))))
