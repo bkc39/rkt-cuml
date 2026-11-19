@@ -48,6 +48,21 @@ constexpr double mean = 1.5;
 constexpr double largest = 3.0;
 constexpr double first_worst = 1.0;
 constexpr double first_bound = 1e-3;
+constexpr double zero_start_worst = 0.25;
+
+enum class returned { non_finite, zeros, other };
+
+std::vector<double> returned_params(returned r) {
+  switch (r) {
+    case returned::non_finite:
+      return std::vector<double>(params, nan);
+    case returned::zeros:
+      return std::vector<double>(params, 0.0);
+    case returned::other:
+      return {0.5, -0.75};
+  }
+  return {};
+}
 
 struct outcome {
   bool rescued;
@@ -57,7 +72,8 @@ struct outcome {
   std::optional<double> last_worst;
 };
 
-outcome rescued_with(bool cold_spends_the_budget) {
+outcome rescued_with(returned cold, returned warm,
+                     bool cold_spends_the_budget = false) {
   const resources res;
   const raft::handle_t& handle = raftrkt::handle_of(res.handle);
   const auto stream = cumlrkt::stream_of(handle);
@@ -103,8 +119,7 @@ outcome rescued_with(bool cold_spends_the_budget) {
     out.starts.push_back(start);
     out.budgets.push_back(budget.max_iter);
     return qn_solution<double>{
-        to_device(std::vector<double>(params, start.empty() ? nan : 0.0),
-                  stream),
+        to_device(returned_params(start.empty() ? cold : warm), stream),
         cold_spends_the_budget ? budget.max_iter : 1};
   };
   const rescue<double> r = rescued<double>(
@@ -120,7 +135,7 @@ outcome rescued_with(bool cold_spends_the_budget) {
 
 TEST(LogisticRescue, NonFiniteColdAttemptStillRunsTheWarmAttempt) {
   CUMLRKT_REQUIRE_GPU();
-  const outcome out = rescued_with(false);
+  const outcome out = rescued_with(returned::non_finite, returned::zeros);
   EXPECT_FALSE(out.rescued);
   ASSERT_EQ(out.starts.size(), 2U);
   EXPECT_TRUE(out.starts[0].empty());
@@ -129,7 +144,7 @@ TEST(LogisticRescue, NonFiniteColdAttemptStillRunsTheWarmAttempt) {
 
 TEST(LogisticRescue, EachAttemptGetsTheIterationsLeft) {
   CUMLRKT_REQUIRE_GPU();
-  const outcome out = rescued_with(false);
+  const outcome out = rescued_with(returned::non_finite, returned::zeros);
   EXPECT_EQ(out.budgets, (std::vector<int>{max_iter - first_iterations,
                                            max_iter - first_iterations - 1}));
   EXPECT_EQ(out.n_iter, first_iterations + 2);
@@ -137,7 +152,7 @@ TEST(LogisticRescue, EachAttemptGetsTheIterationsLeft) {
 
 TEST(LogisticRescue, AColdAttemptThatSpendsTheBudgetSkipsTheWarmOne) {
   CUMLRKT_REQUIRE_GPU();
-  const outcome out = rescued_with(true);
+  const outcome out = rescued_with(returned::non_finite, returned::zeros, true);
   EXPECT_FALSE(out.rescued);
   ASSERT_EQ(out.starts.size(), 1U);
   EXPECT_EQ(out.budgets, std::vector<int>{max_iter - first_iterations});
@@ -147,10 +162,32 @@ TEST(LogisticRescue, AColdAttemptThatSpendsTheBudgetSkipsTheWarmOne) {
 
 TEST(LogisticRescue, AFailedRescueKeepsItsLastFiniteAttemptsResidual) {
   CUMLRKT_REQUIRE_GPU();
-  const outcome out = rescued_with(false);
+  const outcome out = rescued_with(returned::non_finite, returned::zeros);
   EXPECT_FALSE(out.rescued);
   EXPECT_TRUE(out.last_worst.has_value());
   EXPECT_NE(out.last_worst, std::optional<double>{first_worst});
+}
+
+TEST(LogisticRescue, ANonFiniteWarmAttemptKeepsTheColdAttemptsResidual) {
+  CUMLRKT_REQUIRE_GPU();
+  const outcome out = rescued_with(returned::zeros, returned::non_finite);
+  EXPECT_FALSE(out.rescued);
+  ASSERT_EQ(out.starts.size(), 2U);
+  ASSERT_TRUE(out.last_worst.has_value());
+  EXPECT_DOUBLE_EQ(out.last_worst.value_or(nan), zero_start_worst);
+}
+
+TEST(LogisticRescue, TwoFiniteAttemptsKeepTheWarmAttemptsResidual) {
+  CUMLRKT_REQUIRE_GPU();
+  const outcome warm_only =
+      rescued_with(returned::non_finite, returned::other);
+  const outcome both = rescued_with(returned::zeros, returned::other);
+  EXPECT_FALSE(both.rescued);
+  ASSERT_TRUE(warm_only.last_worst.has_value());
+  ASSERT_TRUE(both.last_worst.has_value());
+  EXPECT_NE(warm_only.last_worst.value_or(nan), zero_start_worst);
+  EXPECT_DOUBLE_EQ(both.last_worst.value_or(nan),
+                   warm_only.last_worst.value_or(nan));
 }
 
 }  // namespace
