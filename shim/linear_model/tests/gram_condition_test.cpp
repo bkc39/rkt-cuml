@@ -46,9 +46,25 @@ double condition_of(const resources& res, const columns& c,
       c.d, static_cast<T>(alpha), fit_intercept);
 }
 
+constexpr int64_t draw_step = 37;
+constexpr int64_t draw_offset = 11;
+constexpr int64_t draw_modulus = 23;
+constexpr double draw_centre = 11.0;
+constexpr int64_t scramble_divisor = 5;
+constexpr int64_t pair_count = 5;
+constexpr int64_t second_salt = 20;
+constexpr int64_t third_salt = 40;
+constexpr int64_t fourth_salt = 60;
+constexpr int64_t salts = 8;
+constexpr int64_t weighted_rows = 61;
+constexpr int64_t last_row = weighted_rows - 1;
+constexpr double outlier = 5.0;
+
 double draw(int64_t i, int64_t salt) {
-  return static_cast<double>(((i * (37 + (2 * salt))) + (11 * salt)) % 23) -
-         11.0;
+  return static_cast<double>(
+             ((i * (draw_step + (2 * salt))) + (draw_offset * salt)) %
+             draw_modulus) -
+         draw_centre;
 }
 
 columns summed(int64_t n, double eps) {
@@ -62,20 +78,22 @@ columns summed(int64_t n, double eps) {
 }
 
 double scrambled(int64_t i, int64_t salt) {
-  return static_cast<double>(
-             ((i * (37 + (2 * salt))) + (11 * salt) + ((i * i) / (5 + salt))) %
-             23) -
-         11.0;
+  return static_cast<double>(((i * (draw_step + (2 * salt))) +
+                              (draw_offset * salt) +
+                              ((i * i) / (scramble_divisor + salt))) %
+                             draw_modulus) -
+         draw_centre;
 }
 
 columns summed_beside_a_near_pair(int64_t n, int64_t salt, double eps) {
-  columns c{std::vector<double>(n * 5), n, 5};
+  columns c{std::vector<double>(n * pair_count), n, pair_count};
   for (int64_t i = 0; i < n; ++i) {
     c.x[i] = scrambled(i, salt);
-    c.x[n + i] = scrambled(i, salt + 20);
+    c.x[n + i] = scrambled(i, salt + second_salt);
     c.x[(2 * n) + i] = c.x[i] + c.x[n + i];
-    c.x[(3 * n) + i] = scrambled(i, salt + 40);
-    c.x[(4 * n) + i] = c.x[(3 * n) + i] + (eps * scrambled(i, salt + 60));
+    c.x[(3 * n) + i] = scrambled(i, salt + third_salt);
+    c.x[(4 * n) + i] =
+        c.x[(3 * n) + i] + (eps * scrambled(i, salt + fourth_salt));
   }
   return c;
 }
@@ -166,7 +184,7 @@ TEST(GramCondition, ExactCollinearityBesideANearPairIsPastTheThreshold) {
   const resources res;
   for (const int64_t n : {int64_t{1000}, int64_t{5000}}) {
     for (const double eps : {0x1p-12, 0x1p-13}) {
-      for (int64_t salt = 0; salt < 8; ++salt) {
+      for (int64_t salt = 0; salt < salts; ++salt) {
         EXPECT_GT(
             condition_of<float>(res, summed_beside_a_near_pair(n, salt, eps),
                                 {}, 0.0, true),
@@ -180,11 +198,11 @@ TEST(GramCondition, ExactCollinearityBesideANearPairIsPastTheThreshold) {
 TEST(GramCondition, ZeroWeightRowsDoNotCount) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  columns c = summed(61, 0);
-  c.x[(2 * 61) + 60] += 5;
-  std::vector<double> w(61, 1.0);
+  columns c = summed(weighted_rows, 0);
+  c.x[(2 * weighted_rows) + last_row] += outlier;
+  std::vector<double> w(weighted_rows, 1.0);
   EXPECT_LT(condition_of<float>(res, c, w, 0.0, true), 0x1p24);
-  w[60] = 0.0;
+  w[last_row] = 0.0;
   EXPECT_GT(condition_of<float>(res, c, w, 0.0, true), 0x1p40);
 }
 
@@ -196,17 +214,21 @@ TEST(GramCondition, AConstantColumnWithoutAlphaIsInfinite) {
             std::numeric_limits<double>::infinity());
 }
 
+void expect_ols_checked_only_under_float32_qr(int algorithm) {
+  const glm_solver ols{glm_family::ols, algorithm};
+  const bool qr = algorithm == CUML_LINEAR_MODEL_OLS_QR ||
+                  algorithm == CUML_LINEAR_MODEL_OLS_SVD_QR;
+  EXPECT_EQ(checks_conditioning<float>(ols, false), qr) << algorithm;
+  EXPECT_FALSE(checks_conditioning<double>(ols, false)) << algorithm;
+}
+
 TEST(GramCondition, OnlyFloat32QrSvdQrAndRidgeSvdInTheWindowAreChecked) {
   const glm_solver ridge{glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_SVD};
   const glm_solver ridge_eig{glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_EIG};
   for (const int algorithm :
        {CUML_LINEAR_MODEL_OLS_SVD, CUML_LINEAR_MODEL_OLS_EIG,
         CUML_LINEAR_MODEL_OLS_QR, CUML_LINEAR_MODEL_OLS_SVD_QR}) {
-    const glm_solver ols{glm_family::ols, algorithm};
-    const bool qr = algorithm == CUML_LINEAR_MODEL_OLS_QR ||
-                    algorithm == CUML_LINEAR_MODEL_OLS_SVD_QR;
-    EXPECT_EQ(checks_conditioning<float>(ols, false), qr) << algorithm;
-    EXPECT_FALSE(checks_conditioning<double>(ols, false)) << algorithm;
+    expect_ols_checked_only_under_float32_qr(algorithm);
   }
   EXPECT_TRUE(checks_conditioning<double>(ridge, true));
   EXPECT_FALSE(checks_conditioning<double>(ridge, false));
