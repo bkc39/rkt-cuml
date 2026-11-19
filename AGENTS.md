@@ -286,12 +286,17 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   0.25·max(1, k/800)·F_start for the regressor under l1 or elastic-net;
   where F_start ≤ m·floor, m 32 in float64 and 1 in float32 (round-off: a
   constant y, whatever its mean's rounding), A is at most 0.25·mean(y²),
-  the zero model's loss without an intercept. So A is finite for any
-  finite F_start and mean(y²), and an infinite objective is refused
-  whatever A. Above round-off a regressor whose loss without the penalty
-  ends above F_start·1.025 + floor, a fit worse than the zero model, is
-  refused with "the loss rose ...; lower #:eta0" (L5-d, F10-C, F10-R,
-  F10-W). Before the solve, with
+  the zero model's loss without an intercept. With fit-intercept a
+  regressor's l1 or elastic-net fit at round-off is instead judged against
+  b = ȳ, w = 0: it is refused, "y is constant to round-off and ...; lower
+  #:eta0 or #:alpha", unless every |w| ≤ 2·eta0·α·r and |b − ȳ| ≤
+  1e-6·|ȳ| (`round_off_coef_steps`, `round_off_intercept_share`, which the
+  Racket tests read from `mbsgd_checks.hpp`). An infinite objective is
+  refused whatever A. Above round-off a regressor whose loss without the
+  penalty ends above F_start·1.025 + min(floor, .025·F_start), a fit worse
+  than the zero model (with an intercept, in-sample R² below −.025 −
+  min(floor/F_start, .025), at worst −.05), is refused with "the loss rose
+  ...; lower #:eta0" (L5-d, F10-C, F10-R, F10-W). Before the solve, with
   the sums the solver makes in X's dtype bounded in double: a y whose
   F_start or floor is not finite, or with fit-intercept whose Σ|y| exceeds
   a quarter of the dtype's largest value, is refused with "rescale y"; an

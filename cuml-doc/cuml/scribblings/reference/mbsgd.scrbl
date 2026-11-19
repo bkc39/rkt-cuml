@@ -56,11 +56,14 @@ Raises, advising a lower @racket[eta0], when the iterate is not finite or its ob
 the zero model's by more than a small slack, round-off of @racket[y], and, under l1 or elastic net,
 an allowance for the oscillation about a zero optimum. The allowance grows with the columns,
 @racket[eta0] and @racket[alpha] but is at most a quarter of the zero model's objective, a multiple
-growing with the columns beyond 800; when that objective is itself round-off, as for a constant
-@racket[y], at most a quarter of the mean of @racket[y]'s squares. Also raises when the loss
-without the penalty ends above the zero model's by more than the slack and round-off, a fit that
-predicts worse than the zero model (the mean of @racket[y] with @racket[fit-intercept], 0
-without). The gate sees only the objective and the loss, so it can pass a fit that predicts badly,
+growing with the columns beyond 800. When that objective is itself round-off, as for a constant
+@racket[y], an l1 or elastic-net regressor with @racket[fit-intercept] must instead fit the
+constant: raises, advising a lower @racket[eta0] or @racket[alpha], unless its intercept is within
+a millionth of the mean of @racket[y] and every coefficient within two penalty steps
+(@racket[eta0] times @racket[alpha] times the l1 share) of 0; without @racket[fit-intercept] the
+allowance is at most a quarter of the mean of @racket[y]'s squares. Also raises when the loss
+without the penalty ends above the zero model's by more than the slack and, near round-off, up to as
+much again, a fit that predicts worse than the zero model (the mean of @racket[y] with @racket[fit-intercept], 0 without). The gate sees only the objective and the loss, so it can pass a fit that predicts badly,
 and refuse one that predicts well on a nearly constant @racket[y]. Raises, advising a rescale, before the solve when the zero model's objective of
 @racket[y] is not finite, or when a sum the solver makes in @racket[X]'s dtype could overflow: the
 sum of a column of @racket[X] (rescale @racket[X]), with @racket[fit-intercept] the sum of

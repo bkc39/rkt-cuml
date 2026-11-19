@@ -2094,12 +2094,19 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   makes A large enough to hide divergence (ratios to 3,721 at eta0 1,
   F10-C). The regressor's A is capped at 0.25·max(1, k/800)·F_start
   (#134, F10-R, F10-W), and where F_start is round-off (F_start ≤ m·floor,
-  m 32 in float64 and 1 in float32, F10-R round-off) at 0.25·mean(y²), the
-  zero model's loss without an intercept: A and both bounds scale with y²,
-  so the caps are y-scale-invariant, and they keep A finite for any finite
+  m 32 in float64 and 1 in float32, F10-R round-off) without fit-intercept
+  at 0.25·mean(y²), the zero model's loss there; with fit-intercept an l1
+  or elastic-net regressor at round-off is judged against the zero model
+  b = ȳ, w = 0 instead, refused ("y is constant to round-off and ...;
+  lower #:eta0 or #:alpha") unless every |w| ≤ 2·eta0·α·r and |b − ȳ| ≤
+  1e-6·|ȳ| (r3; a cap of .25·mean(y²) uncentred there passed a fit off the
+  constant by up to about ȳ/2). A and both caps scale with y², so the
+  caps are y-scale-invariant, and they keep A finite for any finite
   F_start and mean(y²) (uncapped, A is inf in float64 above α ≈ 1e154 and
-  passed any finite fit; uncapped at round-off, a constant y = 1.7 passed
-  at prediction RMSE up to 9.8e146). F10-R separates its good
+  passed any finite fit; uncapped at round-off with no other check, a
+  constant y = 1.7 passed at prediction RMSE up to 9.8e146); a fit of a
+  constant has the two bounds instead, which hold for no diverging fit.
+  F10-R separates its good
   fits (largest need 0.0734·F_start) from its bad ones (smallest 0.606).
   The largest rise a good classifier fit needs at the default eta0 is
   breast cancer log l1 α 10, ratio 3.21, inside the capped limit of
@@ -2115,9 +2122,14 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   The gate catches blow-ups and fits ending above F_start·1.025 + A + floor, A at
   most 4·F_start for the classifier and as above for the regressor under
   l1 or elastic-net. Above round-off it also refuses a regressor whose
-  loss without the penalty ends above F_start·1.025 + floor, a fit worse
-  than the zero model (with an intercept, in-sample R² below about
-  −.025), "the loss rose from … to …; lower #:eta0" (F10-W r2). It
+  loss without the penalty ends above F_start·1.025 + min(floor,
+  .025·F_start), a fit worse than the zero model (with an intercept,
+  in-sample R² below −.025 − min(floor/F_start, .025), at worst −.05),
+  "the loss rose from … to …; lower #:eta0" (F10-W r2; r3 capped the
+  floor's share, whose + floor admitted R² down to −(.025 + floor/F_start),
+  about −1 at float32's round-off edge: storing b in the dtype raises the
+  loss by at most floor/40 < .025·F_start, inside the slack, and the share
+  is kept for the f32 near-constant elastic net, F10-R round-off). It
   passes a fit at or below those which predicts badly
   (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
   blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
@@ -2250,8 +2262,8 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   300×5, y × .01, l1 α 1 (g 8.12, passes at eta0 2e-5). The accepted rows
   reach g .266 (2 rows, seed 1261). The lowest eta0 a refused row needs is
   1e-6 (seeds 1002, 1187), the highest 5e-4.
-  Each refused small-n row's g is data in that test's table (the same in
-  f32 and f64 to 3 figures: .314 to 3,330). By predictions, 36 of its 52
+  The refused small-n rows' g is the same in f32 and f64 to 3 figures
+  (.314 to 3,330). By predictions, 36 of its 52
   refused fits have in-sample R² within .02 of the optimum's: their g is
   large because α·|w|₁ of the oscillation is large next to a tiny
   F_start, not because they predict badly. They stay refused (r1 ruling).
@@ -2269,6 +2281,14 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   is capped at .25·mean(y²), the zero model's loss without an intercept:
   r1 left it uncapped, and y = 1.7 passed l1 α 100 eta0 .1 at prediction
   RMSE 10.9, α 1e150 at 9.8e146, and bs 1 invscaling eta0 1 at .17 (r2).
+  r3: with fit-intercept that cap passed y = 1.7 l1 α .51 eta0 .3 off the
+  constant by .0018 (and up to about ȳ/2 at larger α·eta0), so such a fit
+  is now judged by the two bounds below, which refuse it in both dtypes;
+  every row above is refused by them too. They hold for l1-ratio .001 to
+  .15 at the defaults (max |w| .95 steps throughout). On X whose column
+  means are exactly 0, b = ȳ whatever w, so only the coefficient bound
+  acts: it passes l1 α .51 eta0 .6 one batch at max |w| .42 (2·eta0·α·r =
+  .61) and refuses eta0 .72 at .75.
   Every constant 0.3, 1.7, 1e6 under l1 and elastic net passes at the
   defaults in both dtypes with |b − y| ≤ 1e-6·|y| (worst 1.4e-7, the f32
   rounding of 0.3) and every |w| ≤ 2·eta0·α·r (worst .95·eta0·α·r), over X
@@ -2276,8 +2296,16 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   1e-4): F_start 1.08e-12, 2.6 f32 floors, so f32 is now above round-off.
   Under l1 it is refused (g 33.2, R² −.078 against the optimum's 0: it
   predicts worse than the zero model); under elastic net it passes the
-  cap and the loss guard (R² −.026, loss 1.024·F_start, inside the
-  slack). f64 is refused under l1 (g 33.4, R² −.054) and elastic net (g
+  cap and the loss guard (loss 1.0251·F_start, R² −.025, inside the
+  slack plus the floor's share). m = 1 refuses the default f32 l1 fit of
+  y = 1.7 + s·e or 1.7 + s·x₁ wherever F_start is 1 to 32 floors
+  (reviewer probe near-constant-f32: s 1e-6 and 2e-6, 2.3 to 10.5
+  floors, all "objective rose"; pinned in mbsgd-gate-round-off-test; #141).
+  Near the floor the loss guard (r3) refuses y = 1e6 + .5·x₁ + .1·e
+  (f32, 1.73 floors) l1 α 1 eta0 .05 (R² −.14) and α 2 eta0 .02 (R²
+  −.097), which the old + floor passed; it passes s .45 α 1 eta0 .02 (R²
+  −.032, 1.39 floors) and s .42 α 1 eta0 .05 (R² −.027, 1.22 floors),
+  inside −.05. f64 is refused under l1 (g 33.4, R² −.054) and elastic net (g
   .42, R² −.003, inside .02 of the optimum's 0; #141). No round-off
   multiple reaches f64 (it would need ~7e17). At 1e-5·e and 1e-4·e
   both dtypes pass.
