@@ -1596,21 +1596,62 @@ Follow-ups are GitHub issues.
   condition number of D⁻¹(X̃ᵀWX̃ + α′I)D⁻¹ with D² = σ′_j² + α′ (X̃ the staged
   X centred with float64 means under fit-intercept, uncentred without), from
   below, without a float64 copy of X. The Scribble states only the contract;
-  this is the mechanism. The equilibrated (unit-norm) rows are rounded to
-  float32 1024-row blocks whose Grams one strided-batched `cublasSgemm` forms
-  per 64 blocks (one staging thread per element), summed in float64, and a
-  float32 `Ssyevd` of that Gram G̃ gives eigenpairs (μ_j, v_j) (float64
-  `Dsyevd` cost about 8× the fit at 8000×2000 and added nothing: the bound
-  comes from the float64 quotients). The spectrum's error is
-  ε = ε_G + ε_eig. ε_G = 2·√(1024·d)·u₃₂ covers G̃'s entries: each is a
-  1024-term float32 dot product of unit columns, in error by about
-  √1024·u₃₂ under the probabilistic rounding model (Higham and Mary; the
-  worst case, 1024·u₃₂, needs aligned roundings), and a symmetric d×d matrix
-  of such errors has ‖E‖₂ ≈ 2·√d times that (the semicircle edge).
+  this is the mechanism. The equilibrated rows Z (z_ik = √w_i·s_k·(x_ik − μ_k),
+  s_k = 1/√(σ′_k² + α′), formed in float64 and rounded once to float32)
+  are multiplied in float32 runs of at most m rows (`gram_run_rows`), and
+  each run's sum is added into float64. At d ≤ 16 one shared-memory pass
+  over X (`block_gram.cu`) flushes each thread's float32 sum every
+  m = 32 rows (`narrow_run_rows`); above it a strided-batched
+  `cublasSgemm` (pedantic math) runs over m-row batches with
+  m = clamp(2·bit_ceil(d), 64, 1024): 256 at d = 100, 1024 from d = 512.
+  The run length is measured: at 1e6×100 the check takes 23.4, 14.7, 10.6,
+  8.8 and 7.6 ms at m = 32, 64, 128, 256 and 1024 (an Sgemm batch writes
+  d²/m floats per row), and at d ≤ 16 the flush is free (1e7×10: 4.6 ms
+  against 4.4). G̃ is that Gram rounded to float32, α′s_k² added in float32
+  on its diagonal, and a float32 `Ssyevd` of G̃ gives eigenpairs
+  (μ_j, v_j) (float64 `Dsyevd` cost about 8× the fit at 8000×2000).
+  **ε_G is a proven bound on ‖G̃ − G‖₂**, G the exact Gram of the stored X
+  under the check's own μ and s, plus α′S². By Higham's inner-product
+  bound (Accuracy and Stability of Numerical Algorithms, 2nd ed., §3.1,
+  (3.5): |fl(xᵀy) − xᵀy| ≤ γ_m·|x|ᵀ|y| in any evaluation order,
+  γ_k = k·u/(1 − k·u)) each run is within γ_m(u₃₂) of the exact sum of
+  its float32 products, and by the summation bound (§4.2, (4.4), any
+  order) the float64 sum of R = ⌈n/m⌉ + 1 runs is within γ_R(u₆₄) of the
+  sum of their magnitudes. With δ = (1 + u₃₂)(1 + γ₅(u₆₄)) − 1 for the
+  staging (four float64 operations and the float32 cast) and u₃₂ for G̃'s
+  float32 rounding, every entry has
+  |G̃ − G|_ij ≤ c·(|Z|ᵀ|Z|)_ij + [i = j]·δ_α·(1 + c)·G_ii, where
+  c = (1 + u₃₂)(1 + γ_R)(1 + γ_m)(1 + δ)² − 1 and
+  δ_α = (1 + u₃₂)²(1 + γ₂(u₆₄)) − 1 covers α′s_k² and the float32 add.
+  The spectral norm is monotone on non-negative matrices (Horn and
+  Johnson, Thm 8.1.18) and ‖|Z|ᵀ|Z|‖₂ = ‖|Z|‖₂² ≤ ‖Z‖_F² = Σ_k s_k²σ′_k²,
+  which the column moments already give (each σ′_k² divided by
+  1 − γ_{n+3} for its own float64 sum). So
+  ε_G = c·Σ_k s_k²σ′_k² + δ_α·(1 + c)·max_k G_kk, times 1 + γ_32 for the
+  host arithmetic (`bound_of` and `gram_error` in `ritz.cpp`), about
+  (m + 5)·u₃₂·d: 2.2e-6·d at d ≤ 16, 1.5e-5·d at d = 100. r4's
+  2·√(1024·d)·u₃₂ assumed independent roundings; aligned ones beat it, and
+  it certified two dummies beside a ones column (no intercept, n = 23379
+  and 57115), ±1 columns summing to zero (d = 4, n = 4596 and 4818) and a
+  Hadamard pair at κ = 2³³ (n = 1024), all exactly or nearly singular;
+  the `GramError` gtests pin each as refused, and each fails at d884e9e.
+  r4's soundness table may have loaded a stale library (its script staged
+  a saved copy, not the head build); the r5 re-runs read the loaded
+  library's sha256 from `/proc/self/maps` (8ae043ed, the head build):
+
+  | probe | inputs | accepted at κ ≥ 2³² |
+  |---|---|---|
+  | structured nulls (gtest) | dummies, signs, Hadamard pairs: 335 | 0 |
+  | p11 known κ | 344 at κ ≥ 2³², 40 below (all 40 fit) | 0 |
+  | p20 one-hot, spread, factor | 256, 180, 600 | 0 |
+  | p18 factor, 8000×2000 | B = 3 to 40, 40 fits | 0 |
+  | p12 sweep, graded, factor | 488, 90, 32 | 0 |
+  | one-hot, k = 2 to 50 (gtest) | n to 1e6, intercept or k levels and ones: 60 | 0 |
+
   ε_eig = c_eig·√d·u₃₂·μ_max covers `Ssyevd` itself: the computed pairs are
   exact for G̃ + F, ‖F‖₂ ≤ p(d)·u₃₂·‖G̃‖₂ (Householder tridiagonalisation
-  and divide and conquer are backward stable; p(d) ≈ √d under the same
-  rounding model; cuSOLVER documents no bound). c_eig = 16
+  and divide and conquer are backward stable; cuSOLVER documents no
+  p(d)). c_eig = 16
   (`eigen_error_factor`) is twice the largest ‖F‖ measured as
   max_j ‖G̃v_j − μ_j v_j‖ + μ_max·‖VᵀV − I‖ in float64 (both norms
   spectral), 7.6·√d·u₃₂·μ_max, over factor Grams (x_j = B·f + e_j,
@@ -1618,15 +1659,22 @@ Follow-ups are GitHub issues.
   (x_j = f + s·z_j, s = 0.05, 0.3, n = 20000) at d = 100, 500, 1000, 2000;
   eigenvalue errors were at most 1.2·√d·u₃₂·μ_max. At 8000×2000, B = 10
   (λ_max ≈ 1980) ε_eig is 0.085 against ε_G = 1.7e-4, which is the term r2
-  lacked (p18). The check then decides in four steps. **Certify:** when
-  μ₁ > ε, Weyl gives κ′ ≤ (μ_max + ε)/(μ₁ − ε), and when twice that is under
-  the refusal threshold X is accepted with no float64 work (Gaussian
-  1e6×100 stops here). ε_eig scales with μ_max, so on correlated columns
-  (x_j = f + s·z_j, μ_max ≈ d, μ₁ ≈ s²) it hides μ₁ for s ≤ 0.03 at
-  d = 100. **Enclose:** then, when ε_G alone would leave the bound under
-  the threshold and the cost model prices the pass under the path the
-  plan takes, the computed pairs are checked a posteriori
-  (`spectrum_enclosure.cpp`, path `enclosed`). In float64, from G̃ (the
+  lacked (p18). ε_eig is measured, not proven, so it only plans: it sets the a-priori
+  label and the window's reach, and never accepts. The check then decides
+  in four steps. **Certify:** when μ₁ > ε = ε_G + ε_eig and twice
+  (μ_max + ε)/(μ₁ − ε) is under the refusal threshold the plan is
+  `certified`, and the enclosure below must prove it; nothing is accepted
+  without it. **Enclose:** the enclosure runs when the plan certifies, or
+  when ε_G plus the expected residual would certify and its cost is under
+  the path the plan takes (`spectrum_enclosure.cpp`, path `enclosed`).
+  The expected residual is 0.5·d·u₃₂·μ_max (`expected_residual`):
+  ‖Ê‖_F/(d·u₃₂·μ_max) measured 0.04 to 0.2 on x_j = f + s·z_j at 1e6×100,
+  1.1 on integer factor draws at 20000×100 and 0.7 to 3.5 on Gaussian X at
+  d = 10 to 1000; it binds only where μ₁ is near ε_G, the correlated
+  shapes, so a prefilter that rejects them would send certifiable X to a
+  window of 99 vectors. A failed enclosure costs its own time: 0.13 ms at
+  d = 10 on the device, 0.25 ms at d = 100, 20.6 ms at d = 1000; at
+  d ≤ 16 its products run on the host. In float64, from G̃ (the
   lower triangle `Ssyevd` read), V and M = diag(μ): P = G̃V (`Dsymm`),
   Ê = VᵀP − M and Ŵ = VᵀV − I (`Dgemm`). E = VᵀG̃V − M is the symmetric
   residual, VᵀR + (VᵀV − I)·M with R = G̃V − VM; formed whole, its
@@ -1645,10 +1693,11 @@ Follow-ups are GitHub issues.
   divisor flips for a negative bound), each rounded outward by 4 ulps;
   Weyl with ε_G bounds κ′ by (λ_max + ε_G)/(λ_min − ε_G), certified when
   twice that is under the threshold. It needs nothing of `Ssyevd` beyond
-  the pairs it returned. The gtests pin a correlated Gram it certifies and
-  the a-priori term does not, a skew basis whose small residual would hide
-  λ_max = 3 without η, and zero computed residuals that still carry their
-  rounding term. **Window:** otherwise it
+  the pairs it returned, so an acceptance rests on Weyl's inequality with
+  the proven ε_G, Higham's Thm 3.5 for the residual's rounding, and
+  Ostrowski's theorem. The gtests pin a correlated Gram it certifies, a
+  skew basis whose small residual would hide λ_max = 3 without η, and zero
+  computed residuals that still carry their rounding term. **Window:** otherwise it
   is every v_j with μ_j ≤ μ₁ + 16·ε (the reach). With A′ the exact
   equilibrated Gram and z its smallest eigenvector, z has a share
   |v_jᵀz| ≤ ε/(μ_j − λ_min) in v_j (Davis–Kahan), and the Ritz value over
@@ -1677,8 +1726,13 @@ Follow-ups are GitHub issues.
   interlace, so the Ritz value is ≥ λ_min and the top quotient ≤ λ_max, and
   κ′ is a lower bound in every refined path; on the exact path κ′/κ can
   exceed 1 by about √n·u₆₄·κ (the float64 Gram's own rounding, relative to
-  λ_min). The certified path returns the upper bound and accepts, so the
-  check never refuses an X whose true κ′ is under the threshold.
+  λ_min). The certified and enclosed paths return the proven upper bound
+  and accept, so the check never refuses an X whose true κ′ is under the
+  threshold. What each acceptance rests on: certified and enclosed, the
+  enclosure with the proven ε_G (a proof); Ritz, a float64 Ritz value
+  (a lower bound on κ′) whose window holds z by Davis–Kahan with
+  ε = ε_G + ε_eig, ε_eig measured; exact, `Dsyevd` of the float64 Gram,
+  within √n·u₆₄·κ of κ′.
   Without the Ritz step (one vector), exact x₃ = x₁ + x₂ beside a
   near pair x₅ = x₄ + ε·z (ε = 2^−12, 2^−13; n = 1000, 5000; 8 draws; 'qr
   and 'svd-qr) passed the Gram check on 34 of 64 fits (31 then refused by
@@ -1745,34 +1799,38 @@ Follow-ups are GitHub issues.
   solve.
   For 'svd-qr the free detector |X̃b|/|Db| from the residual check does not
   separate (exactly collinear float32 X reaches u/q 3.7e-5, x₃ = x₁ + x₂ +
-  2^−10·z reaches 1.3e-5). Cost, float32 'qr, RTX 3090 Ti shared, medians
-  of 5 after a warm-up; the check alone is timed by a build that stamps
-  each stage after a device sync, and "without" is a build whose check is
-  off. x_j = f + s·z_j is the correlated family; "with" is the stamped
-  build at 1e6×100 and 2e5×1000, the plain build elsewhere:
+  2^−10·z reaches 1.3e-5). Cost with the proven ε_G (r5), float32, RTX
+  3090 Ti shared, medians of 5 after a warm-up: "check" is
+  `equilibrated_condition` alone, timed in a local gtest after a device
+  sync; "without" is r4's fit with the check off (the fit is unchanged), so
+  "added" is check/without. x_j = f + s·z_j is the correlated family:
 
-  | shape | check | fit with | fit without | added | path |
-  |---|---|---|---|---|---|
-  | 1e7×2 | 1.5 ms | 23.9 ms | 22.5 ms | 6.3% | certified |
-  | 1e7×10 | 4.4 ms | 31.8 ms | 28.0 ms | 13.5% | certified |
-  | 1e6×2 | 0.9 ms | 8.4 ms | 7.8 ms | 7.3% | certified |
-  | 1e6×10 | 1.2 ms | 19.4 ms | 17.7 ms | 9.8% | certified |
-  | 1e5×10 | 0.7 ms | 3.1 ms | 2.3 ms | 31% | certified |
-  | 1e6×100 Gaussian | 7.6 ms | 153.8 ms | 145.8 ms | 5.5% | certified |
-  | 1e6×100, s = 0.01 | 7.6 ms | 153.8 ms | 146.4 ms | 5.1% | enclosed |
-  | 1e6×100, s = 0.02 | 7.7 ms | 154.6 ms | 160.9 ms | −3.9% | enclosed |
-  | 1e6×100, s = 0.03 | 7.3 ms | 153.2 ms | 145.9 ms | 5.0% | enclosed |
-  | 1e6×100, s = 0.05 | 7.1 ms | 153.5 ms | 146.8 ms | 4.6% | certified |
-  | 2e5×1000 | 48.2 ms | 365.1 ms | 316.7 ms | 15.3% | certified |
-  | 8000×2000 (r3) | 86.3 ms | 111.9 ms | 26.3 ms | 325% | certified |
+  | shape | check | without | added | path |
+  |---|---|---|---|---|
+  | 1e7×2 | 1.4 ms | 22.5 ms | 6.2% | certified |
+  | 1e7×10 | 4.9 ms | 28.0 ms | 17% | certified |
+  | 1e6×2 | 0.85 ms | 7.8 ms | 11% | certified |
+  | 1e6×10 | 1.2 ms | 17.7 ms | 6.7% | certified |
+  | 1e5×10 | 0.68 ms | 2.3 ms | 29% | certified |
+  | 1e6×100 Gaussian | 9.3 ms | 145.8 ms | 6.3% | certified |
+  | 1e6×100, s = 0.01 | 223 ms | 146.4 ms | 153% | Ritz, 99 vectors |
+  | 1e6×100, s = 0.03 | 222 ms | 145.9 ms | 152% | Ritz, 99 vectors |
+  | 1e6×100, s = 0.05 | 8.7 ms | 146.8 ms | 5.9% | enclosed |
+  | 2e5×1000 | 70.3 ms | 316.7 ms | 22% | certified |
+  | 1e6×10 one-hot, 9 of 10 levels, intercept | 0.90 ms | | | certified |
+  | 1e6×10 one-hot, all 10 levels, intercept | 2.0 ms | | | Ritz, refused |
 
-  The unchecked s = 0.02 median is an outlier above the checked one; the
-  check alone is 5.3% of it. At 1e6×100 the check is 5% of the unchecked
-  fit at every s: moments 2.3, blocked Gram 4.0, `Ssyevd` 1.2, and the
-  enclosure 0.3 where it runs (s ≤ 0.03, where the a-priori plan was a
-  99-vector window). At d ≤ 16 the Gram is one shared-memory pass over X
+  The proven ε_G at d = 100 is about 1.5e-3 of the trace, above λ_min
+  at s = 0.01 and 0.03, so no certificate or enclosure exists and the plan takes a
+  99-vector Ritz window, which its model prices under the exact Gram
+  (305 ms, `Dsyrk` over float64 blocks); the bar fails there by design.
+  1e6×100 Gaussian rises from 7.6 to 9.3 ms (256-row Sgemm batches, the
+  enclosure 0.2 ms), 2e5×1000 from 48.2 to 70.3 ms (the enclosure, 16.4 ms
+  at d = 1000, now proves every certified fit), 1e7×10 from 4.4 to 4.9 ms.
+  r4's measurements: at 1e6×100 the stages were moments 2.3, blocked Gram
+  4.0, `Ssyevd` 1.2. At d ≤ 16 the Gram is one shared-memory pass over X
   (`block_gram.cu`), 1.9 ms at 1e7×10 against 4.5 ms for the strided
-  `Sgemm`; 1e7×10 still misses the 10% bar because the moments are a
+  `Sgemm`; 1e7×10 misses the 10% bar because the moments are a
   float64 pass over X (2.3 ms, the card's float64 rate is 1/64 of float32).
   At 1e5×10 the fit difference over medians of 41 runs is 0.3 to 0.7 ms
   between runs, against 0.7 ms for the check alone. At 2e5×1000 and
