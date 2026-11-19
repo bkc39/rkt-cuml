@@ -10,6 +10,7 @@
 
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
+#include "mbsgd_magnitudes.hpp"
 
 namespace cumlrkt::glm::mbsgd {
 
@@ -124,12 +125,31 @@ inline void require_two_classes(int64_t k) {
   }
 }
 
+// A y equal to a constant c up to ±1 ulp has F_start ≤ ((1 + e)·ε·c)², e the
+// error of the mean in units of ε·|c|: below 1e-8 for float32 (the mean is
+// taken in double) and at most about log2(n)/2 ≤ 16 for float64 (a tree sum of
+// at most 2^31 terms). 17² < gate_round_off_start·gate_round_off_factor, so an
+// F_start at or below gate_round_off_start floors is round-off, and the caps
+// on A, multiples of F_start, apply only above it.
 inline constexpr double gate_slack = 0.025;
 inline constexpr double gate_l1_factor = 3.5;
 inline constexpr double gate_l1_cap = 4;
 inline constexpr double gate_l1_regressor_cap = 0.25;
+// The oscillation's penalty grows with k while F_start does not, so above
+// gate_l1_regressor_columns coefficients the regressor's cap grows with k:
+// wide lassos whose predictions match the optimum's needed a cap of up to
+// 0.25·k/875 (F10-W), and no fit with k at most 800, where every F10-R
+// refusal lies, moves.
+inline constexpr double gate_l1_regressor_columns = 800;
 inline constexpr double gate_floor_share = 1e-12;
 inline constexpr double gate_round_off_factor = 10;
+inline constexpr double gate_round_off_start = 32;
+// sgdFit sums in X's dtype: X's columns and y for the centring means, and the
+// products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).
+// Each bound must stay solver_headroom below the dtype's largest value. The
+// product bound sums the whole of y, so with batch-size below n it is
+// stricter than the solver needs.
+inline constexpr double solver_headroom = 4;
 
 inline double l1_share(const sgd_options& o) {
   switch (o.penalty) {
@@ -145,14 +165,20 @@ inline double l1_share(const sgd_options& o) {
 // At a zero optimum l1 SGD oscillates, each coordinate moving about
 // eta0·alpha·r: the penalty rises by alpha·r·|w|_1 and the loss can fall by
 // no more, a rise of about 2·k·eta0·(alpha·r)^2. eta0 bounds the step under
-// every schedule. It is capped at a multiple of start, so a large eta0 or
-// alpha cannot hide divergence and the allowance stays finite.
+// every schedule. Above round-off it is capped at a multiple of start, so a
+// large eta0 or alpha cannot hide divergence.
 inline double l1_allowance(const sgd_options& o, int64_t d, double start,
-                           bool regressor) {
+                           double floor, bool regressor) {
   const auto k = static_cast<double>(d + (o.fit_intercept != 0 ? 1 : 0));
   const double a = o.alpha * l1_share(o);
   const double allowance = gate_l1_factor * k * o.eta0 * a * a;
-  const double cap = regressor ? gate_l1_regressor_cap : gate_l1_cap;
+  if (start <= gate_round_off_start * floor) {
+    return allowance;
+  }
+  const double cap =
+      regressor
+          ? gate_l1_regressor_cap * std::max(1.0, k / gate_l1_regressor_columns)
+          : gate_l1_cap;
   return std::min(allowance, cap * start);
 }
 
@@ -174,19 +200,20 @@ inline std::optional<std::string> scale_refusal(double start, double floor) {
   return std::nullopt;
 }
 
-inline constexpr double solver_headroom = 4;
-
-// sgdFit sums in y's dtype: y itself for the centring mean, and the
-// products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).
-// Their bounds must stay a solver_headroom below the dtype's largest value.
 template <typename T>
-std::optional<std::string> solver_scale_refusal(double x_largest,
+std::optional<std::string> solver_scale_refusal(const magnitudes& x,
                                                 double residual_mass,
                                                 double y_mass, bool centred) {
   const double limit = std::numeric_limits<T>::max() / solver_headroom;
-  const double reach = centred ? 2 * x_largest : x_largest;
-  if (!(reach * residual_mass <= limit) || (centred && !(y_mass <= limit))) {
+  if (centred && !(x.heaviest_column <= limit)) {
+    return "X is too large for the solver's sums; rescale X";
+  }
+  if (centred && !(y_mass <= limit)) {
     return "y is too large to check the fit; rescale y";
+  }
+  const double reach = centred ? 2 * x.largest : x.largest;
+  if (!(reach * residual_mass <= limit)) {
+    return "X·(y − ȳ) is too large for the solver's sums; rescale X or y";
   }
   return std::nullopt;
 }
@@ -198,7 +225,7 @@ inline std::optional<std::string> gate_refusal(bool finite, double start,
     return std::format("the solution is not finite; lower #:eta0 (now {})",
                        printed(eta0));
   }
-  if (!(end <= (start * (1 + gate_slack)) + allowance)) {
+  if (!std::isfinite(end) || !(end <= (start * (1 + gate_slack)) + allowance)) {
     return std::format(
         "the objective rose from {:.6g} to {:.6g}; lower #:eta0 (now {})",
         start, end, printed(eta0));

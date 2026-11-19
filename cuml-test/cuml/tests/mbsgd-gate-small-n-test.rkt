@@ -1,40 +1,39 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+(require (only-in cuml/linear-model mbsgd-classifier-fit)
+         (only-in racket/match match-define)
          (only-in rackunit check-not-exn)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target)
-         (only-in "private/mbsgd-gate-data.rkt" rose)
-         (only-in "private/refusal-rows.rkt" check-row row))
+         (only-in "private/mbsgd-gate-data.rkt" refused-at-eta0 regressor-fit))
 
-(define refused-eta0
-  '#hash((1002 . 1e-6)
-         (1039 . 5e-4)
-         (1113 . 2e-5)
-         (1150 . 5e-4)
-         (1187 . 1e-6)
-         (1224 . 1e-4)
-         (1335 . 1e-4)
-         (1520 . 5e-5)
-         (1557 . 5e-4)
-         (1594 . 1e-5)
-         (1631 . 2e-5)
-         (1668 . 1e-4)
-         (1705 . 1e-5)
-         (1077 . 2e-5)
-         (1114 . 5e-4)
-         (1225 . 1e-4)
-         (1262 . 2e-4)
-         (1410 . 2e-4)
-         (1447 . 1e-4)
-         (1521 . 5e-4)
-         (1558 . 5e-4)
-         (1595 . 1e-5)
-         (1632 . 5e-5)
-         (1706 . 2e-5)
-         (204 . 2e-4)
-         (206 . 5e-4)))
+(define small-n-refusals
+  '((204 2e-4 0.612) (206 5e-4 0.607)
+                     (1002 1e-6 714)
+                     (1039 5e-4 0.481)
+                     (1077 2e-5 5.7)
+                     (1113 2e-5 7.29)
+                     (1114 5e-4 0.322)
+                     (1150 5e-4 0.314)
+                     (1187 1e-6 3330)
+                     (1224 1e-4 2.28)
+                     (1225 1e-4 1.86)
+                     (1262 2e-4 1.08)
+                     (1335 1e-4 3.02)
+                     (1410 2e-4 0.576)
+                     (1447 1e-4 1.55)
+                     (1520 5e-5 4.13)
+                     (1521 5e-4 0.458)
+                     (1557 5e-4 0.4)
+                     (1558 5e-4 0.405)
+                     (1594 1e-5 20.0)
+                     (1595 1e-5 15.9)
+                     (1631 2e-5 7.53)
+                     (1632 5e-5 3.62)
+                     (1668 1e-4 1.72)
+                     (1705 1e-5 9.16)
+                     (1706 2e-5 4.83)))
 
 (test-gpu "an l1 alpha 10 classifier fit on 2 to 10 rows of 3 columns passes at the defaults"
   (for* ([dt (in-list dtypes)]
@@ -46,25 +45,40 @@
          (lambda ()
            (mbsgd-classifier-fit (on-matrix X dt) y #:loss loss #:penalty 'l1 #:alpha 10)))))))
 
-(test-gpu "an l1 alpha 10 regressor fit on 2 to 10 rows of 3 columns, 20 seeds at 2 and 3, passes at the defaults or is refused and passes at a lower eta0"
+(define (small-n-seeds n)
+  (if (<= n 3)
+      (for/list ([s (in-range 20)])
+        (+ 1000 (* 37 s) n))
+      (list (+ 200 n))))
+
+(define (small-n-fit dt n seed)
+  (define R (normal-rows n 3 seed))
+  (lambda (eta0) (regressor-fit R (reg-target R seed) dt #:penalty 'l1 #:alpha 10 #:eta0 eta0)))
+
+(define (refusal-of seed)
+  (assv seed small-n-refusals))
+
+(test-gpu "an l1 alpha 10 regressor fit on 2 to 10 rows of 3 columns outside the refusal table passes at the defaults"
   (for* ([dt (in-list dtypes)]
          [n (in-list '(2 3 4 6 10))]
-         [seed (in-list (if (<= n 3)
-                            (for/list ([s (in-range 20)])
-                              (+ 1000 (* 37 s) n))
-                            (list (+ 200 n))))])
-    (define R (normal-rows n 3 seed))
-    (define (fit eta0)
-      (lambda ()
-        (mbsgd-regressor-fit (on-matrix R dt)
-                             (on-vector (reg-target R seed) dt)
-                             #:penalty 'l1
-                             #:alpha 10
-                             #:eta0 eta0)))
-    (define lower (hash-ref refused-eta0 seed #f))
+         [seed (in-list (small-n-seeds n))]
+         #:unless (refusal-of seed))
     (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
-      (cond
-        [lower
-         (check-row "mbsgd-regressor-fit" (row "eta0 0.001" (rose "0.001") (fit 1e-3)))
-         (check-not-exn (fit lower))]
-        [else (check-not-exn (fit 1e-3))]))))
+      (check-not-exn ((small-n-fit dt n seed) 1e-3)))))
+
+(test-gpu "an l1 alpha 10 regressor fit in the refusal table is refused at the defaults"
+  (for* ([dt (in-list dtypes)]
+         [n (in-list '(2 3 4 6 10))]
+         [seed (in-list (small-n-seeds n))]
+         #:when (refusal-of seed))
+    (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
+      (refused-at-eta0 (small-n-fit dt n seed) 1e-3))))
+
+(test-gpu "an l1 alpha 10 regressor fit in the refusal table passes at its table eta0"
+  (for* ([dt (in-list dtypes)]
+         [n (in-list '(2 3 4 6 10))]
+         [seed (in-list (small-n-seeds n))]
+         #:when (refusal-of seed))
+    (match-define (list _ eta0 _) (refusal-of seed))
+    (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
+      (check-not-exn ((small-n-fit dt n seed) eta0)))))

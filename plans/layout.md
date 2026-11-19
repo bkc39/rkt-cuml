@@ -1970,11 +1970,12 @@ scratch, the source is `cpp/src/glm/qn/`.
   row-major (house `rows_of`, as L1–L3), so the twins run row-major
   and col-major X is a refusal row; float32 multiclass fits under l1
   or elasticnet repeat on neither side at 150–200 rows, so those rows
-  compare within 3e-3 and the rest stay bit for bit. The bound is twice
-  the worst of #133's repeat study: 50 fits a side of each such row
+  compare within a bound per class count (three classes 2.04e-4, five
+  2.98e-3) and the rest stay bit for bit. Each bound is twice the worst
+  of its rows in #133's repeat study: 50 fits a side of each such row
   under a `-j 4` load, every pair of ours and Python's (2,500 a row),
   worst 1.49e-3 (five classes, elasticnet, no intercept; 303 pairs above
-  S3's old 1e-3), three classes at most 1.0e-4; 3 of our 400 fits
+  S3's old 1e-3), three classes at most 1.02e-4; 3 of our 400 fits
   logged a failed line search (five classes, l1: n-iter 58, 34 and 36
   against 63 and 38), Python's n-iter has 3 such outliers there, and
   none is in the worst pair. R1 and R3:
@@ -2219,9 +2220,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   (3.4× the largest good, 2.4× below the smallest bad) refuses 2,148 fits
   accepted uncapped (0 good, 1,710 bad, 438 neither); eta0/10 clears 784,
   /100 458 more, /1000 170, lower 34, and 702 are at the grid's eta0 floor
-  1e-4. Caveat: the good side is near-tautological (g < .1 gives need < .1
-  when F_opt ≤ F_start); the bad side is measured, not derived, and a
-  learnable problem could rise less than .25·F_start and still fit badly.
+  1e-4 (cap since r1: .25·max(1, k/800), F10-W). Caveat: the good side is tautological. A fit the cap refuses ends
+  above 1.275·F_start (the slack and the cap), and F_opt ≤ F_start because
+  the zero model is a candidate, so every cap refusal has g > .275 and no
+  good fit (g < .1) can be one. The bad side is measured, not derived: a
+  learnable problem could rise less than .25·F_start and still fit badly,
+  and a fit whose g is large only because the l1 oscillation's penalty is
+  large next to F_start can predict as well as the optimum (F10-W).
   The cap bounds what A can hide; it does not certify the fit. The cap
   refuses no test row with g < .1. Its new refusals among them, each refused
   at the defaults in f32 and f64 alike and passing at a lower eta0, are now
@@ -2232,6 +2237,44 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   300×5, y × .01, l1 α 1 (g 8.12, passes at eta0 2e-5). The accepted rows
   reach g .266 (2 rows, seed 1261). The lowest eta0 a refused row needs is
   1e-6 (seeds 1002, 1187), the highest 5e-4.
+  Each refused small-n row's g is data in that test's table (the same in
+  f32 and f64 to 3 figures: .314 to 3,330). By predictions, 36 of its 52
+  refused fits have in-sample R² within .02 of the optimum's: their g is
+  large because α·|w|₁ of the oscillation is large next to a tiny
+  F_start, not because they predict badly. They stay refused (r1 ruling).
+- **F10-R round-off** (r1). A constant y under l1 or elastic net has
+  F_start of 0 to an ulp² of y (the mean's rounding: 0.3 f64 3.1e-33,
+  1e6 f64 1.4e-20), so a quarter of it refused the oscillation at the
+  defaults (rise 3.8e-11 under l1 α 1e-4). The cap now applies only
+  above 32 floors: a constant within ±1 ulp has F_start ≤ ((1 + e)·ε·y)²,
+  e the mean's error in ε·|y| (< 1e-8 for f32, whose mean is in double;
+  ≤ log2(n)/2 ≤ 16 for an f64 tree sum), and 17² < 32·10. Every constant
+  0.3, 1.7, 1e6 under l1 and elastic net at α 1e-4 and 1 now passes in
+  both dtypes. Near-constant y = 1.7 + 1e-6·e (300×4, defaults α 1e-4):
+  F_start 1.08e-12; f32 now passes (F_start ≤ 32 floors = 1.3e-11); f64
+  is still refused under l1 (g 33.4, need 33.4, rise ≈ 3.6e-11 of
+  oscillation penalty) and elastic net (g .42, need .39). Their
+  predictions are within 1.8e-7 and 1.6e-8 RMS of the optimum's (σ_y
+  1e-6): in-sample R² −.054 under l1, outside .02 of the optimum's 0,
+  and −.003 under elastic net, inside it. No round-off multiple reaches it (it would need ~7e17);
+  only a cap tied to the oscillation's scale would, which is A itself.
+  At 1e-5·e (F_start 1.1e-10) both dtypes pass.
+- **F10-W wide lasso** (r1; n 200, d 500 to 8,000, y = x₁ + x₂ + x₃ +
+  .5·e, l1 and elastic net .15 at α .1 and 1, eta0 1e-3, 1e-4, 1e-5, f32
+  and f64, 3 seeds, 360 fits; and at eta0 3e-3 to .1, 1 seed, 96 fits).
+  At the defaults the .25 cap refused 16 fits, all l1 α 1 at d ≥ 2,000
+  (g .50 to 2.35), every one with R² within .02 of the optimum's or
+  better: the oscillation's penalty, ∝ k·eta0·α², outgrows F_start. A
+  tenth of eta0 passes them but predicts worse within the default epochs
+  (d 2,000 R² .43 against .64). The cap is now .25·max(1, k/800), k the
+  coefficients: it leaves every fit with k ≤ 800 as it was (every F10-R
+  and test row has k ≤ 11), and the largest k₀ in .25·k/k₀ that passes
+  every matching default fit is 875 (d 2,000 seed 21, need .572).
+  Separation over both sets, by d (accepted max g / refused min g):
+  2,000 .74 / 1.53, 4,000 1.10 / 3.28, 8,000 2.35 / 7.45; the refused
+  are at eta0 ≥ 3e-3, and every fit with R² < 0 (smallest g 9.46, d
+  8,000 eta0 3e-3) stays refused. No fit the new cap accepts and the
+  old refused predicts worse than R² − .02.
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
   as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
   .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:

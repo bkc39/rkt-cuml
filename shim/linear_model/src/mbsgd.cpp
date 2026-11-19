@@ -114,10 +114,14 @@ void require_solver_scale(const raft::handle_t& handle,
                           const sgd_options& o) {
   const bool centred = o.fit_intercept != 0;
   const double centre = centred ? mean_of<T>(handle, y, x.n) : 0.0;
+  const double residual_mass =
+      magnitudes_of<T>(handle, y, x.n, 1, centre).heaviest_column;
+  const double y_mass =
+      centred ? magnitudes_of<T>(handle, y, x.n, 1, 0.0).heaviest_column
+              : residual_mass;
   if (const auto refusal = solver_scale_refusal<T>(
-          largest_magnitude<T>(handle, x.data, x.n * x.d),
-          magnitude_sum<T>(handle, y, x.n, centre),
-          magnitude_sum<T>(handle, y, x.n, 0.0), centred)) {
+          magnitudes_of<T>(handle, x.data, x.n, x.d, 0.0), residual_mass,
+          y_mass, centred)) {
     throw logic_error(*refusal);
   }
 }
@@ -138,7 +142,7 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   double end = 0;
   double allowance = 0;
   if (finite) {
-    allowance = l1_allowance(o, x.d, start, regressor) + base.floor;
+    allowance = l1_allowance(o, x.d, start, base.floor, regressor) + base.floor;
     std::vector<double> wd(w.begin(), w.end());
     end = mean_loss<T>(handle, x.data, y, coef, static_cast<double>(intercept),
                        shape) +

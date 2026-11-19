@@ -283,10 +283,16 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
   a constant y. The gate catches blow-ups and fits ending above
   F_start·1.025 + A, A at most 4·F_start for the classifier and
-  0.25·F_start for the regressor under l1 or elastic-net, so A is finite
-  for any finite F_start (L5-d, F10-C, F10-R). A y whose F_start or floor
-  is not finite, or whose sums in the solver's dtype could overflow
-  (#135), is refused before the solve with "rescale y".
+  0.25·max(1, k/800)·F_start for the regressor under l1 or elastic-net,
+  so A is finite for any finite F_start (L5-d, F10-C, F10-R, F10-W). Where F_start ≤ 32·floor
+  (round-off: a constant y, whatever its mean's rounding) A is uncapped,
+  and an infinite objective is refused whatever A. Before the solve, with
+  the sums the solver makes in X's dtype bounded in double: a y whose
+  F_start or floor is not finite, or with fit-intercept whose Σ|y| exceeds
+  a quarter of the dtype's largest value, is refused with "rescale y"; an
+  X column whose Σ|x| does, with fit-intercept, with "rescale X"; and
+  m·Σ|y − ȳ| above it (m = max|x|, doubled with fit-intercept) with
+  "rescale X or y", a bound stricter than needed when batch-size < n.
 - *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains
   on -1/+1; the `'log` and `'hinge` intercepts are a penalised ones column
   in the copy; predict thresholds the decision at 0 (`'log`, `'hinge`) or
