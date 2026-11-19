@@ -1955,6 +1955,93 @@ scratch, the source is `cpp/src/glm/qn/`.
 - **L4-p.** Raw breast-cancer is refused (R2): Python cuML's point there is
   off the float64 oracle by more than S4's cap (measured 0.98 f64, 0.99
   f32, against 3e-2 and 8e-2).
+- **Close-out B1 (#127, #126, #125, 2026-11-18).**
+  - #127: `label_classes` returns a device y's sorted classes, so a
+    class-weight hash on device labels moves O(k) to the host, not y.
+    The host-bytes test counts the Racket heap only
+    (`current-memory-use 'cumulative`): a host copy of y made inside the
+    shim, in malloc'd or pinned memory, would not show in it.
+  - #126: a cutoff whose kept spreads differ by more than 2^8 advises
+    "standardise the columns". With fit-intercept or under `'none`, a
+    fit the check refuses is solved again (`logistic_solve.cpp`,
+    `rescued`), from zero and then from the first solve's point mapped
+    into the new coordinates: kept columns centred with fit-intercept
+    (means folded into the intercept), each staged by its own power of two
+    under `'none` (the loss depends only on Xw), the shared exponent
+    otherwise; without fit-intercept only the per-column staging, only
+    under `'none`. The answer is mapped back to the first solve's
+    coordinates and passes the same check there, or the fit is refused.
+    The rescue's solves share the one max-iter budget, so n-iter
+    counts every solve and is at most max-iter (Python's `n_iter_`). A
+    first solve that reaches max-iter and fails the check is not
+    rescued; its refusal says "raise max-iter". A failed rescue's
+    refusal names its last finite attempt's residual and bound (the first
+    solve's when none was finite), and the iterations of every solve, so
+    a rescue that spends the budget also says "raise max-iter". Fits the first solve accepts run the same code as before,
+    bitwise.
+    Epoch-second timestamps over a minute (offset 1.7e9) fit at the
+    default max-iter (n-iter 14-25). Raw breast-cancer is refused at the
+    default max-iter in both dtypes for every penalty (R2 again) but
+    one: float32 l2 at C 0.01 is accepted in about 2 runs in 5 (18 of
+    48, and 5 of 12 in the r1 re-review), within its cap; under
+    `'none` it fits to K <= 1e-7 max(F, 1) given room: float64 with an
+    intercept at 20000 (n-iter 11717), without one at 6000 (4084),
+    float32 with one at 6000 (2322-3134).
+  - Raw breast-cancer's accepted fits depend on max-iter, so their caps
+    do too: S4's caps hold at the default max-iter, and above it each
+    capped arm has its own cap, twice the worst gap to the float64
+    optimum over its runs (24 f64, 48 f32), a regression pin, not an
+    acceptance rule (r1b ruling). The check is the contract; the first
+    solve is Python cuML's bit for bit, so its fits stand. Gaps (worst,
+    cap; share refused): l1 at max-iter 4000, f64 7.07e-2, 1.5e-1, 0/24
+    (the first solve, every run the same); f32 1.32e-1, 2.7e-1, 87/248;
+    elastic net at 4000, f64 4.88e-2, 1e-1, 0/24; f32 1.47e-1, no cap,
+    325/398; l2 at C 0.01, f64 at 4000 4.41e-4, 9e-4, 0/24; f32 at 4000
+    1.77e-3, 3.6e-3, 6/48; f32 at 1000 8.06e-4, 1.7e-3, 30/48. The
+    float32 elastic-net tail grows with the runs: its worst was 1.17e-2
+    over the first 24, 8.06e-2 over 48 and 1.47e-1 over 248 (the r1
+    re-review's 200 more); the r2 re-review's 150 more were refused 128
+    times, worst 8.06e-2. A cap on a tail that keeps growing rules out
+    no regression, so that arm has none (r3 ruling): an accepted fit
+    has a finite gap and the oracle's float32 residual (`residual-of`)
+    within the check's own bound. The float64 arms have only been
+    accepted, so each must be accepted within its cap and a refusal
+    fails it; a float32 arm is refused (the cutoff's message) or
+    accepted within its cap or that bound, and each has done both; any
+    other error fails either kind. At max-iter 1000 every
+    other penalised arm is refused in 24 of 24 runs.
+  - The float32 standardised breast-cancer l1 fit does not repeat: 40
+    runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
+    between 5.0e-3 and 1.42e-2; `float32-gap-checks` is per penalty. l1
+    (2.9e-2) and elastic net (1.7e-3) are one fit, twice the worst of 40
+    runs. l2 is the second-smallest gap of 5 fits (r1c ruling: one run,
+    2.2e-5 to 6.2e-4, cannot pin a 10x regression; r3 ruling: a median
+    of 5 fails about 2% of runs), at 1.6e-4. One fit is above 1.6e-4 in
+    69 of 500 runs (r1c's 200 and the r2 re-review's 300); the
+    second-smallest is above it only when 4 of 5 are, 0.16% of runs at
+    that rate (0.37% at its 95% upper bound). Over the 488 sliding
+    windows of 5, the worst second-smallest is 1.93e-4 (1 window above
+    1.6e-4) and the smallest 2.75e-5, so a 10x regression (2.75e-4 or
+    more) fails. Elastic net's gaps have two modes (about
+    1.5e-4 and 8.05e-4, 47 of 100 draws at the upper), so neither one fit
+    nor a median of 5 pins a 10x regression of the lower one: its bound
+    pins a regression only relative to the upper mode. Accepted as is
+    (r2 ruling); what selects the mode is #142.
+    The logistic twin file and the float32 breast-cancer file are split so
+    each runs in about 25 s at `--timeout 45`.
+  - The capped arms' float64 optima (l1 and elastic net at C 1, l2 at
+    C 0.01) are pinned in `private/raw-logistic-optima.rktd` (our qn solver,
+    tol 1e-10; l1 24919 and elastic net 22726 iterations, 12 to 60 s each
+    by host load), not refitted per run;
+    sklearn's saga at tol 1e-10 is off stationarity there (K/F 3e-2 after
+    5 minutes), so it cannot be the pin. A GPU-suite test checks each
+    pinned optimum to K <= 1e-5 max(F, 1) (the oracle's MPFR is not in the
+    nix sandbox).
+  - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
+    median coefficient error of the 541 restarted fits only 1.49×
+    (1.65× over change and line-search stops), short of the 2× bar, at
+    0.16× the fit's iterations; each restart stops on the change test
+    again (issuecomment-6985014426).
 - **Deviations accepted.** Missing classes weigh 1 (L4-r); house wording
   for the y length, negative weights, zero weight sum and #24; a
   column-reach cap in place of `shared_cap`; Racket refusals raise

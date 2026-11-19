@@ -126,6 +126,14 @@ CUMLRKT_API int cuml_linear_model_label_encode(void* handle, const rr_view* y,
 CUMLRKT_API void cuml_linear_model_label_encode_job(void* args, size_t args_len,
                                                     rr_job_outcome* outcome);
 
+/* y holds class labels as for logistic_regression_fit. Region 0 of out is the
+   k sorted classes in y's dtype. */
+CUMLRKT_API int cuml_linear_model_label_classes(void* handle, const rr_view* y,
+                                                rr_deposit* out);
+CUMLRKT_API void cuml_linear_model_label_classes_job(void* args,
+                                                     size_t args_len,
+                                                     rr_job_outcome* outcome);
+
 /* Region 0: coef (p, X's dtype); 1: intercept (1). */
 CUMLRKT_API int cuml_linear_model_mbsgd_regressor_fit(
     void* handle, const rr_view* x, const rr_view* y, rr_deposit* out,
