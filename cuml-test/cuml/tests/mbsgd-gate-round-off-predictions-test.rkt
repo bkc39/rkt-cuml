@@ -56,6 +56,13 @@
                         #:eta0 eta0))
        0.1))))
 
+(test-gpu "a small constant's fit at the defaults is refused by its predictions"
+  (law-case "float64 standardised y = 1.1e-4 l1"
+    (off-predictions-at-eta0
+     (lambda (eta0)
+       (regressor-fit standardised-rows (make-list 300 1.1e-4) 'float64 #:penalty 'l1 #:eta0 eta0))
+     0.001)))
+
 (define (mean-square xs)
   (mean (map sqr xs)))
 

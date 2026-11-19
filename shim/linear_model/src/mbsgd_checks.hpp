@@ -180,11 +180,17 @@ inline constexpr double round_off_intercept_share = 1e-6;
 // within √floor and R² measures rounding, not the fit: a fit under any
 // penalty is refused when its prediction error √loss exceeds
 // round_off_prediction_share·|ȳ| + √floor. The share lies between the
-// largest error of a fit of a constant at the defaults, 6.2e-7·|ȳ| (float32
-// l1 y = 0.3), and the smallest of a fit that must be refused, 0.040·|ȳ|
-// (y = 1.7, l1 α .51 eta0 .1). 2^-10 is 1,570 times the first and a 41st of
-// the second, 2.6 octaves above their geometric middle 2^-12.6; it passes a
-// near-constant fit within a few ulps whatever its R² (F10-R round-off).
+// largest error of a fit of a constant at the defaults with |ȳ| ≥ 0.3,
+// 6.2e-7·|ȳ| (float32 l1 y = 0.3), and the smallest of a fit that must be
+// refused, 0.040·|ȳ| (y = 1.7, l1 α .51 eta0 .1, r2; the intercept bound
+// refuses it first). The smallest pinned row only this bound refuses is
+// zero-mean elastic net α 1 eta0 .1, at 9.9e-3·|ȳ|. 2^-10 is 1,570 times the
+// first and a 41st of the second, 2.6 octaves above their geometric middle
+// 2^-12.6; it passes a near-constant fit within a few ulps whatever its R²
+// (F10-R round-off). The oscillation of a constant's l1 fit has an absolute
+// size, about eta0·α·r·√d, so a constant with |ȳ| below about
+// 2^10·eta0·α·r·√d, 2e-4 at the defaults on standardised X with d = 4, is
+// refused unless the fit is exact.
 inline constexpr double round_off_prediction_share = 0.0009765625;
 // sgdFit sums in X's dtype: X's columns and y for the centring means, and the
 // products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).

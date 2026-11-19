@@ -297,6 +297,10 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   squared error. R² there measures rounding, not the fit: a fit within a
   few ε·|ȳ| of ȳ passes at any R² (f32 R² −2.08 at 6.2e-7·|ȳ|, f64 −1.84 at
   4.4e-15·|ȳ|, pinned accepted in `mbsgd-gate-round-off-predictions-test`).
+  An l1 fit oscillates about a constant by about eta0·α·r·√d whatever
+  |ȳ|, so below |ȳ| ≈ 2¹⁰·eta0·α·r·√d (2e-4 at the defaults on
+  standardised X, d = 4) an inexactly fitted constant is refused by this
+  bound (f64 y ≡ 1.1e-4 pinned refused there).
   The Racket tests restate `gate_floor_share`, `gate_round_off_factor`,
   `gate_round_off_start` (per dtype), `round_off_coef_steps`,
   `round_off_intercept_share` and `round_off_prediction_share` as literals
