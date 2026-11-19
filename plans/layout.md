@@ -1591,8 +1591,8 @@ Follow-ups are GitHub issues.
   4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
 - **L2-l, the window refusal (#104) and float32 'qr / 'svd-qr (#102).** One
   device routine (`linear_model/src/gram_condition.cu`, its host Ritz
-  helpers in `ritz.cpp`, its cuSOLVER calls in `symmetric_eigen.cpp`)
-  bounds κ′, the
+  helpers in `ritz.cpp`, its cuSOLVER calls in `symmetric_eigen.cpp`, its
+  policy in `conditioning.cpp`) bounds κ′, the
   condition number of D⁻¹(X̃ᵀWX̃ + α′I)D⁻¹ with D² = σ′_j² + α′ (X̃ the staged
   X centred with float64 means under fit-intercept, uncentred without), from
   below, without a float64 copy of X. The Scribble states only the contract;
@@ -1618,10 +1618,37 @@ Follow-ups are GitHub issues.
   (x_j = f + s·z_j, s = 0.05, 0.3, n = 20000) at d = 100, 500, 1000, 2000;
   eigenvalue errors were at most 1.2·√d·u₃₂·μ_max. At 8000×2000, B = 10
   (λ_max ≈ 1980) ε_eig is 0.085 against ε_G = 1.7e-4, which is the term r2
-  lacked (p18). The check then decides in three steps. **Certify:** when
+  lacked (p18). The check then decides in four steps. **Certify:** when
   μ₁ > ε, Weyl gives κ′ ≤ (μ_max + ε)/(μ₁ − ε), and when twice that is under
-  the refusal threshold X is accepted with no float64 work (the usual case:
-  Gaussian and correlated 1e6×100 both stop here). **Window:** otherwise it
+  the refusal threshold X is accepted with no float64 work (Gaussian
+  1e6×100 stops here). ε_eig scales with μ_max, so on correlated columns
+  (x_j = f + s·z_j, μ_max ≈ d, μ₁ ≈ s²) it hides μ₁ for s ≤ 0.03 at
+  d = 100. **Enclose:** then, when ε_G alone would leave the bound under
+  the threshold and the cost model prices the pass under the path the
+  plan takes, the computed pairs are checked a posteriori
+  (`spectrum_enclosure.cpp`, path `enclosed`). In float64, from G̃ (the
+  lower triangle `Ssyevd` read), V and M = diag(μ): P = G̃V (`Dsymm`),
+  Ê = VᵀP − M and Ŵ = VᵀV − I (`Dgemm`). E = VᵀG̃V − M is the symmetric
+  residual, VᵀR + (VᵀV − I)·M with R = G̃V − VM; formed whole, its
+  (VᵀV − I)·M part cancels against VᵀR (d = 100, s = 0.03: ‖Ê‖_F is
+  5.1·√d·u₃₂·μ_max, ‖R‖₂ + μ_max·‖VᵀV − I‖₂ is 4.1, and the same with
+  Frobenius norms 14.2). With γ_k = k·u₆₄/(1 − k·u₆₄) and
+  |fl(AB) − AB| ≤ γ_k·|A||B| for inner dimension k in any summation order
+  (Higham, Thm 3.5), ‖E − Ê‖_F ≤ γ_1‖Ê‖_F + γ_d‖V‖_F(‖V‖_F‖G̃‖_F + ‖P‖_F)
+  and ‖W − Ŵ‖_F ≤ γ_1‖Ŵ‖_F + γ_d‖V‖_F², each computed norm enlarged by
+  1 + γ_{d²+2}; Frobenius over spectral gives e ≥ ‖E‖₂ and
+  η ≥ ‖VᵀV − I‖₂. Weyl's inequality (Horn and Johnson, Thm 4.3.1) puts the
+  eigenvalues of VᵀG̃V within e of the μ_j in order, and Ostrowski's
+  theorem (Horn and Johnson, Thm 4.5.9) gives
+  λ_j(VᵀG̃V) = θ_j·λ_j(G̃), θ_j ∈ [1 − η, 1 + η], when η < 1. So
+  λ_min(G̃) ≥ (μ₁ − e)/(1 + η) and λ_max(G̃) ≤ (μ_max + e)/(1 − η) (the
+  divisor flips for a negative bound), each rounded outward by 4 ulps;
+  Weyl with ε_G bounds κ′ by (λ_max + ε_G)/(λ_min − ε_G), certified when
+  twice that is under the threshold. It needs nothing of `Ssyevd` beyond
+  the pairs it returned. The gtests pin a correlated Gram it certifies and
+  the a-priori term does not, a skew basis whose small residual would hide
+  λ_max = 3 without η, and zero computed residuals that still carry their
+  rounding term. **Window:** otherwise it
   is every v_j with μ_j ≤ μ₁ + 16·ε (the reach). With A′ the exact
   equilibrated Gram and z its smallest eigenvector, z has a share
   |v_jᵀz| ≤ ε/(μ_j − λ_min) in v_j (Davis–Kahan), and the Ritz value over
@@ -1721,27 +1748,60 @@ Follow-ups are GitHub issues.
   2^−10·z reaches 1.3e-5). Cost, float32 'qr, RTX 3090 Ti shared, medians
   of 5 after a warm-up; the check alone is timed by a build that stamps
   each stage after a device sync, and "without" is a build whose check is
-  off:
+  off. x_j = f + s·z_j is the correlated family; "with" is the stamped
+  build at 1e6×100 and 2e5×1000, the plain build elsewhere:
 
-  | shape | check | fit with | fit without | path |
+  | shape | check | fit with | fit without | added | path |
+  |---|---|---|---|---|---|
+  | 1e7×2 | 1.5 ms | 23.9 ms | 22.5 ms | 6.3% | certified |
+  | 1e7×10 | 4.4 ms | 31.8 ms | 28.0 ms | 13.5% | certified |
+  | 1e6×2 | 0.9 ms | 8.4 ms | 7.8 ms | 7.3% | certified |
+  | 1e6×10 | 1.2 ms | 19.4 ms | 17.7 ms | 9.8% | certified |
+  | 1e5×10 | 0.7 ms | 3.1 ms | 2.3 ms | 31% | certified |
+  | 1e6×100 Gaussian | 7.6 ms | 153.8 ms | 145.8 ms | 5.5% | certified |
+  | 1e6×100, s = 0.01 | 7.6 ms | 153.8 ms | 146.4 ms | 5.1% | enclosed |
+  | 1e6×100, s = 0.02 | 7.7 ms | 154.6 ms | 160.9 ms | −3.9% | enclosed |
+  | 1e6×100, s = 0.03 | 7.3 ms | 153.2 ms | 145.9 ms | 5.0% | enclosed |
+  | 1e6×100, s = 0.05 | 7.1 ms | 153.5 ms | 146.8 ms | 4.6% | certified |
+  | 2e5×1000 | 48.2 ms | 365.1 ms | 316.7 ms | 15.3% | certified |
+  | 8000×2000 (r3) | 86.3 ms | 111.9 ms | 26.3 ms | 325% | certified |
+
+  The unchecked s = 0.02 median is an outlier above the checked one; the
+  check alone is 5.3% of it. At 1e6×100 the check is 5% of the unchecked
+  fit at every s: moments 2.3, blocked Gram 4.0, `Ssyevd` 1.2, and the
+  enclosure 0.3 where it runs (s ≤ 0.03, where the a-priori plan was a
+  99-vector window). At d ≤ 16 the Gram is one shared-memory pass over X
+  (`block_gram.cu`), 1.9 ms at 1e7×10 against 4.5 ms for the strided
+  `Sgemm`; 1e7×10 still misses the 10% bar because the moments are a
+  float64 pass over X (2.3 ms, the card's float64 rate is 1/64 of float32).
+  At 1e5×10 the fit difference over medians of 41 runs is 0.3 to 0.7 ms
+  between runs, against 0.7 ms for the check alone. At 2e5×1000 and
+  8000×2000 (#140) `Ssyevd` with vectors and the blocked Gram dominate
+  (2e5×1000: Gram 31.3, `Ssyevd` 11.9). The cost model is fitted to the
+  stamped build with every path forced (`ritz.cpp`); each forced timing
+  is within 10% of it:
+
+  | path | model | shape | measured | model |
   |---|---|---|---|---|
-  | 1e6×100 Gaussian | 7.5 ms | 153.4 ms | 145.9 ms | certified |
-  | 1e6×100, x_j = f + 0.05·z_j | 7.4 ms | 153.1 ms | 146.0 ms | certified |
-  | 1e5×10 | 0.5 ms | 3.1 ms | 2.3 ms | certified |
-  | 8000×2000 | 86.3 ms | 111.9 ms | 26.3 ms | certified |
+  | exact | 305·n + 0.0022·n·d² + 0.021·d³ ns | 1e6×100 | 300.7 ms | +8.8% |
+  | | | 1e6×20 | 310.0 ms | −1.3% |
+  | | | 8000×2000 | 240.9 ms | 0.0% |
+  | | | 2e5×1000 | 525.8 ms | −0.7% |
+  | | | 1e5×10 | 32.5 ms | −6.1% |
+  | | | 1e7×2 | 3112 ms | −2.0% |
+  | Ritz, v vectors | v·(0.0208·n·d + 0.077·d² + 98000) ns | 1e6×100, v = 2 | 4.64 ms | −6.1% |
+  | | | 1e6×100, v = 9 | 19.3 ms | +1.4% |
+  | | | 1e6×100, v = 33 | 69.5 ms | +3.5% |
+  | | | 1e6×20, v = 9 | 4.62 ms | +0.1% |
+  | | | 8000×2000, v = 9 | 6.65 ms | 0.0% |
+  | | | 2e5×1000, v = 9 | 38.7 ms | +0.8% |
+  | enclosure | 0.0085·d³ + 11.3·d² + 126000 ns | d = 10 | 0.128 ms | −0.7% |
+  | | | d = 100 | 0.243 ms | +1.9% |
+  | | | d = 1000 | 20.6 ms | −3.3% |
+  | | | d = 2000 | 111.4 ms | +1.7% |
 
-  At 1e6×100 the check is 5% of the unchecked fit, Gaussian or
-  correlated: moments 2.3, blocked Gram 4.0, `Ssyevd` 1.2. At 1e5×10 the
-  fit difference over medians of 41 runs is 0.3 to 0.7 ms between runs,
-  against 0.5 ms for the check alone: the gap is run-to-run noise, not a
-  fixed cost. At 8000×2000 (#140) the check is 3.3× the unchecked fit:
-  `Ssyevd` with vectors 64.5 ms and the blocked Gram 17.4 ms. The cost
-  model's constants come from the same stamped build with every path
-  forced (exact Gram and Ritz windows 1, 8, 32 at each shape): the exact
-  `Dsyrk` takes 300 ms at 1e6×100 and 309 ms at 1e6×20, so it is bound by
-  rows; `Dsyevd` takes 41 ms at d = 1000 and 146 ms at d = 2000; a Ritz
-  vector costs 0.48 ms at 8000×2000 and 2.1 ms at 1e6×100. Collinear data
-  at 8000×2000 takes the exact path, about 370 ms.
+  The exact path is bound by rows at d ≤ 100 (300 ms at 1e6×100 and at
+  1e6×20), by `Dsyrk` at 2e5×1000 and by `Dsyevd` at 8000×2000.
 - **L2-k, float32 'eig on a Gram singular to the dtype (L3r, #111).**
   Breast-cancer (569×29, texture-mean on raw X, column sds 0.0026 to 569,
   intercept): XᵀWX has λ_max 2.5e8 and λ_min 4.0e-4, u·κ₀ = 3.8e4, and 19 of
