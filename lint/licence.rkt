@@ -90,7 +90,8 @@
                #:break (keyword? (syntax-e argument)))
       (syntax-e argument)))
   (match strings
-    [(cons (? string? file) (? (lambda (parts) (andmap string? parts)) collections))
+    [(cons (? string? file) collections)
+     #:when (andmap string? collections)
      (named stx (string-join (append collections (list file)) "/"))]
     [_ '()]))
 

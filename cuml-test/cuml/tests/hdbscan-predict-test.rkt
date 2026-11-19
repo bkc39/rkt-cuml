@@ -82,8 +82,8 @@
   (define-values (front back) (split-at (alternate (dataset 'b10) 1) 75))
   (define whole (predicted result (list*->device-matrix (append front back) #:dtype 'float32)))
   (match-define (list first-half second-half)
-    (map (lambda (rows) (predicted result (list*->device-matrix rows #:dtype 'float32)))
-         (list front back)))
+    (for/list ([rows (in-list (list front back))])
+      (predicted result (list*->device-matrix rows #:dtype 'float32))))
   (check-equal? whole (map append first-half second-half)))
 
 (define (argmax-index row)
