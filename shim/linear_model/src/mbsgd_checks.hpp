@@ -154,12 +154,24 @@ inline constexpr double gate_round_off_factor = 10;
 // e ≤ n·2^-53/ε ≤ 2 for n ≤ 2^31 even summed in sequence, and 3² < 10: a
 // multiple of 1, which admits a spread of at most √10·ε·|ȳ|. float64:
 // e ≤ log2(n)/2 ≤ 16 for a tree sum, and 17² < 32·10. An F_start at or below
-// that many floors is round-off: the zero model fits y, and A is capped at a
-// share of the uncentred start, the zero model's loss without an intercept
-// (mean(y²) for the regressor), instead of a multiple of F_start.
+// that many floors is round-off: the zero model fits y. Without fit-intercept
+// A is capped at a share of the uncentred start, the zero model's loss
+// (mean(y²) for the regressor), instead of a multiple of F_start. With it the
+// zero model is b = ȳ, w = 0, and an l1 or elastic-net fit is judged against
+// it by the two bounds below instead of by A.
 template <typename T>
 inline constexpr double gate_round_off_start =
     std::is_same_v<T, float> ? 1 : 32;
+// A coordinate whose optimum is 0 moves by the penalty's step eta·α·r, at
+// most eta0·α·r under every schedule, and by the loss gradient, which at
+// round-off is y's rounding times x: it crosses 0 by at most one step, and
+// one more covers the round-off (worst .95 steps, F10-R round-off).
+inline constexpr double round_off_coef_steps = 2;
+// cuML returns b = ȳ_T − x̄·w, ȳ_T the mean of y in the dtype. A float32
+// constant's rounding is ε/2 ≈ 6e-8 of |ȳ|, and a tree-summed mean adds at
+// most log2(n)/2·ε: within 8.4·ε for n up to 2^15.8 (worst 1.4e-7, F10-R
+// round-off). x̄·w shrinks with eta0 and alpha, as the refusal advises.
+inline constexpr double round_off_intercept_share = 1e-6;
 // sgdFit sums in X's dtype: X's columns and y for the centring means, and the
 // products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).
 // Each bound must stay solver_headroom below the dtype's largest value. The
@@ -184,6 +196,7 @@ struct baseline {
   double start;
   double floor;
   double uncentred;
+  double centre = 0;
 };
 
 template <typename T>
@@ -191,17 +204,28 @@ bool at_round_off(const baseline& base) {
   return base.start <= gate_round_off_start<T> * base.floor;
 }
 
+template <typename T>
+bool fits_a_constant(const sgd_options& o, const baseline& base,
+                     bool regressor) {
+  return regressor && o.fit_intercept != 0 && l1_share(o) > 0 &&
+         at_round_off<T>(base);
+}
+
 // At a zero optimum l1 SGD oscillates, each coordinate moving about
 // eta0·alpha·r: the penalty rises by alpha·r·|w|_1 and the loss can fall by
 // no more, a rise of about 2·k·eta0·(alpha·r)^2. eta0 bounds the step under
 // every schedule. It is capped at a multiple of start, or of the uncentred
-// start at round-off, so a large eta0 or alpha cannot hide divergence.
+// start at round-off, so a large eta0 or alpha cannot hide divergence. A fit
+// of a constant y is bounded by round_off_refusal instead.
 template <typename T>
 double l1_allowance(const sgd_options& o, int64_t d, const baseline& base,
                     bool regressor) {
   const auto k = static_cast<double>(d + (o.fit_intercept != 0 ? 1 : 0));
   const double a = o.alpha * l1_share(o);
   const double allowance = gate_l1_factor * k * o.eta0 * a * a;
+  if (fits_a_constant<T>(o, base, regressor)) {
+    return allowance;
+  }
   if (at_round_off<T>(base)) {
     return std::min(allowance, gate_l1_regressor_cap * base.uncentred);
   }
@@ -259,6 +283,31 @@ inline std::optional<std::string> gate_refusal(bool finite, double start,
     return std::format(
         "the objective rose from {:.6g} to {:.6g}; lower #:eta0 (now {})",
         start, end, printed(eta0));
+  }
+  return std::nullopt;
+}
+
+template <typename T>
+std::optional<std::string> round_off_refusal(const sgd_options& o,
+                                             const baseline& base,
+                                             double intercept,
+                                             double largest_coef) {
+  if (!fits_a_constant<T>(o, base, true)) {
+    return std::nullopt;
+  }
+  const double step = o.eta0 * o.alpha * l1_share(o);
+  if (!(largest_coef <= round_off_coef_steps * step)) {
+    return std::format(
+        "y is constant to round-off and a coefficient of the fit reaches "
+        "{:.6g}; lower #:eta0 or #:alpha",
+        largest_coef);
+  }
+  const double c = base.centre;
+  if (!(std::abs(intercept - c) <= round_off_intercept_share * std::abs(c))) {
+    return std::format(
+        "y is constant to round-off and the fit's intercept is off by {:.6g}; "
+        "lower #:eta0 or #:alpha",
+        intercept - c);
   }
   return std::nullopt;
 }

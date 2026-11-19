@@ -100,7 +100,7 @@ baseline baseline_of(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   if (const auto refusal = scale_refusal(start, floor)) {
     throw logic_error(*refusal);
   }
-  return {start, floor, mean_square};
+  return {start, floor, mean_square, b0};
 }
 
 template <typename T>
@@ -147,6 +147,14 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     throw logic_error(*refusal);
   }
   if (regressor) {
+    double largest = 0;
+    for (const T v : w) {
+      largest = std::max(largest, std::abs(static_cast<double>(v)));
+    }
+    if (const auto refusal = round_off_refusal<T>(
+            o, base, static_cast<double>(intercept), largest)) {
+      throw logic_error(*refusal);
+    }
     if (const auto refusal = loss_refusal<T>(base, loss, o.eta0)) {
       throw logic_error(*refusal);
     }

@@ -1,8 +1,11 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+(require (for-syntax racket/base)
+         (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+         (only-in racket/file file->string)
          (only-in racket/list make-list)
          (only-in racket/match match)
+         (only-in racket/runtime-path define-runtime-path)
          (only-in rackunit check-not-exn)
          (only-in "cuml-error.rkt" raised)
          (only-in "linear-data.rkt" law-case on-matrix on-vector)
@@ -22,6 +25,7 @@
          labels
          loss-r2
          lost-at-eta0
+         off-constant-at-eta0
          refused-at-eta0
          regressor-fit
          rose
@@ -36,8 +40,18 @@
                          (regexp-quote eta0)
                          "\\)$")))
 
-(define round-off-intercept-share 1e-6)
-(define round-off-coef-steps 2)
+(define-runtime-path checks-header "../../../../shim/linear_model/src/mbsgd_checks.hpp")
+
+(define (shim-constant name)
+  (match (regexp-match (pregexp (string-append "inline constexpr double " name " = ([0-9.e+-]+);"))
+                       (file->string checks-header))
+    [(list _ value) (string->number value)]))
+
+(define round-off-intercept-share (shim-constant "round_off_intercept_share"))
+(define round-off-coef-steps (shim-constant "round_off_coef_steps"))
+
+(define off-constant
+  #px"^y is constant to round-off and (a coefficient of the fit reaches|the fit's intercept is off by) [0-9.e+-]+; lower #:eta0 or #:alpha$")
 
 (define rose (risen "objective"))
 (define loss-rose (risen "loss"))
@@ -59,6 +73,7 @@
 
 (define refused-at-eta0 (refused-by rose))
 (define lost-at-eta0 (refused-by loss-rose))
+(define off-constant-at-eta0 (refused-by (lambda (_) off-constant)))
 
 (define (loss-r2 fit)
   (match (regexp-match #px"the loss rose from ([0-9.e+-]+) to ([0-9.e+-]+);"
@@ -69,16 +84,16 @@
 
 (define (check-constant-batch-one dt)
   (law-case (format "~a y = 1.7 l1 alpha 100 invscaling batch 1" dt)
-    (refused-at-eta0 (lambda (eta0)
-                       (regressor-fit constant-rows
-                                      (make-list 300 1.7)
-                                      dt
-                                      #:penalty 'l1
-                                      #:alpha 100
-                                      #:eta0 eta0
-                                      #:learning-rate 'invscaling
-                                      #:batch-size 1))
-                     1)))
+    (off-constant-at-eta0 (lambda (eta0)
+                            (regressor-fit constant-rows
+                                           (make-list 300 1.7)
+                                           dt
+                                           #:penalty 'l1
+                                           #:alpha 100
+                                           #:eta0 eta0
+                                           #:learning-rate 'invscaling
+                                           #:batch-size 1))
+                          1)))
 
 (define (wide-problem n d)
   (define rows (normal-rows n d 11))

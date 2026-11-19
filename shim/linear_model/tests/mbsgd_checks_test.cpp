@@ -406,14 +406,16 @@ TEST(MbsgdGate, TheRoundOffMultipleIs32FloorsInFloat64AndOneInFloat32) {
   EXPECT_FALSE(at_round_off<float>({floor * 1.01, floor, 1}));
 }
 
-TEST(MbsgdGate, ARoundOffStartCapsTheL1AllowanceAtAQuarterOfTheUncentredStart) {
+TEST(
+    MbsgdGate,
+    ARoundOffStartWithoutAnInterceptCapsTheL1AllowanceAtAQuarterOfMeanYSquared) {
   using cumlrkt::glm::mbsgd::l1_allowance;
   const sgd_options o = with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
                                       .alpha = 100,
                                       .l1_ratio = 0.15,
-                                      .fit_intercept = 1,
+                                      .fit_intercept = 0,
                                       .eta0 = 0.1});
-  const double a = 3.5 * 5 * 0.1 * 1e4;
+  const double a = 3.5 * 4 * 0.1 * 1e4;
   const double floor = 4e-13;
   const double uncentred = 2.89;
   for (const bool regressor : {true, false}) {
