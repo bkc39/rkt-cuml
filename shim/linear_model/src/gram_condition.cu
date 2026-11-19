@@ -29,6 +29,7 @@
 #include "glm_staging_device.hpp"
 #include "gram_condition.hpp"
 #include "ritz.hpp"
+#include "spectrum_enclosure.hpp"
 #include "symmetric_eigen.hpp"
 
 namespace cumlrkt::glm {
@@ -46,9 +47,9 @@ using ritz::ritz_pair;
 using ritz::symmetric_block;
 
 constexpr int64_t block_rows = ritz::gram_block_rows;
-constexpr int64_t most_blocks = 64;
+constexpr int64_t staged_floats = int64_t{1} << 23;
 constexpr int64_t block_floats = int64_t{1} << 22;
-constexpr int64_t column_parts = 1024;
+constexpr int64_t part_rows = 256;
 constexpr double infinite = std::numeric_limits<double>::infinity();
 
 struct part_of {
@@ -162,18 +163,21 @@ struct divided_by {
   }
 };
 
-struct added_into {
+struct block_part {
   const float* parts;
-  int64_t count;
   int64_t cells;
+
+  __device__ double operator()(int64_t o, int64_t b) const {
+    return static_cast<double>(parts[(b * cells) + o]);
+  }
+};
+
+struct added_into {
+  const double* sums;
   double* gram;
 
   __device__ void operator()(int64_t o) const {
-    double s = gram[o];
-    for (int64_t b = 0; b < count; ++b) {
-      s += static_cast<double>(parts[(b * cells) + o]);
-    }
-    gram[o] = s;
+    gram[o] += sums[o];
   }
 };
 
@@ -198,9 +202,13 @@ template <typename F>
 buffer<double> column_sums(const raft::handle_t& handle, F entry, int64_t n,
                            int64_t d) {
   const rmm::cuda_stream_view stream = stream_of(handle);
-  const int64_t count = std::clamp(block_floats / d, int64_t{1}, column_parts);
+  const int64_t count = std::clamp((n + part_rows - 1) / part_rows, int64_t{1},
+                                   std::max(int64_t{1}, block_floats / d));
   buffer<double> parts = scratch<double>(d * count, stream);
   each(handle, d * count, partial_sums<F>{entry, n, count, parts.data()});
+  if (count == 1) {
+    return parts;
+  }
   const thrust::counting_iterator<int64_t> cells(0);
   buffer<double> sums = scratch<double>(d, stream);
   thrust::reduce_by_key(
@@ -265,7 +273,8 @@ std::vector<double> lower_gram(const equilibration<T>& q) {
   const int64_t cells = q.d * q.d;
   buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
   const int64_t blocks =
-      std::min({most_blocks, std::max(int64_t{1}, block_floats / cells),
+      std::min({std::max(int64_t{1}, staged_floats / (block_rows * q.d)),
+                std::max(int64_t{1}, block_floats / cells),
                 (q.n + block_rows - 1) / block_rows});
   const int64_t rows = blocks * block_rows;
   buffer<float> parts = scratch<float>(blocks * cells, stream);
@@ -281,7 +290,9 @@ std::vector<double> lower_gram(const equilibration<T>& q) {
         static_cast<int>(block_rows), &one, block, static_cast<int>(rows),
         block_rows, block, static_cast<int>(rows), block_rows, &zero,
         parts.data(), dim, cells, static_cast<int>(count)));
-    each(q.handle, cells, added_into{parts.data(), count, cells, gram.data()});
+    const buffer<double> sums =
+        column_sums(q.handle, block_part{parts.data(), cells}, count, cells);
+    each(q.handle, cells, added_into{sums.data(), gram.data()});
   });
   return to_host(gram, stream);
 }
@@ -401,6 +412,7 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
                                           int64_t d, T alpha,
                                           bool fit_intercept, double limit,
                                           int64_t chunk) {
+  require_some("chunk", "vector", chunk);
   const rmm::cuda_stream_view stream = stream_of(handle);
   const auto a = static_cast<double>(alpha);
   const buffer<double> mean = column_means(handle, x, w, n, d, fit_intercept);
@@ -408,7 +420,7 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
       column_sums(handle, weighted_square<T>{x, w, mean.data(), n}, n, d),
       stream);
   if (std::ranges::any_of(spread, [a](double s) { return !(s + a > 0); })) {
-    return {infinite, gram_path::exact, d};
+    return {infinite, gram_path::none, 0};
   }
   std::vector<double> scale(d);
   std::ranges::transform(spread, scale.begin(),
@@ -425,58 +437,22 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
     return {exact_condition(q), gram_path::exact, d};
   }
   const gram_plan plan = plan_of(e->values, {n, d}, limit);
+  if (const auto k = enclosed_kappa(handle, m, *e, plan, {n, d}, limit)) {
+    return {*k, gram_path::enclosed, 0};
+  }
   switch (plan.path) {
     case gram_path::certified:
       return {plan.kappa, plan.path, 0};
     case gram_path::ritz:
       return {ritz_condition(q, *e, plan), plan.path, plan.window};
+    case gram_path::none:
+    case gram_path::enclosed:
     case gram_path::exact:
       break;
   }
   return {exact_condition(q), gram_path::exact, plan.window};
 }
 
-template <typename T>
-double kappa_limit(glm_solver solver) {
-  const double bound = std::ldexp(1.0, -tolerance_bits<T>) / unit_roundoff<T>;
-  return solver.family == glm_family::ols ? bound * bound : bound;
-}
-
-template <typename T>
-bool checks_conditioning(glm_solver solver, bool alpha_window) {
-  if (solver.family == glm_family::ols) {
-    return std::is_same_v<T, float> &&
-           (solver.algorithm == CUML_LINEAR_MODEL_OLS_QR ||
-            solver.algorithm == CUML_LINEAR_MODEL_OLS_SVD_QR);
-  }
-  return solver.family == glm_family::ridge && alpha_window &&
-         solver.algorithm == CUML_LINEAR_MODEL_RIDGE_SVD;
-}
-
-template <typename T>
-void require_conditioned(double kappa, glm_solver solver) {
-  const bool ols = solver.family == glm_family::ols;
-  const double share = unit_roundoff<T> * (ols ? std::sqrt(kappa) : kappa);
-  if (share < std::ldexp(1.0, -tolerance_bits<T>)) {
-    return;
-  }
-  throw logic_error(std::format(
-      "X: the {} solve's {} has u*kappa {} >= 2^-{}; {}", solver_name(solver),
-      ols ? "X" : "regularised Gram matrix", printed(share), tolerance_bits<T>,
-      ols ? "X may have collinear columns"
-      : std::is_same_v<T, float>
-          ? "X is ill-conditioned for this alpha (float64 or a larger "
-            "alpha may fit)"
-          : "X is ill-conditioned for this alpha (a larger alpha may "
-            "fit)"));
-}
-
-template bool checks_conditioning<float>(glm_solver, bool);
-template bool checks_conditioning<double>(glm_solver, bool);
-template void require_conditioned<float>(double, glm_solver);
-template void require_conditioned<double>(double, glm_solver);
-template double kappa_limit<float>(glm_solver);
-template double kappa_limit<double>(glm_solver);
 template condition_estimate equilibrated_condition<float>(const raft::handle_t&,
                                                           const float*,
                                                           const float*, int64_t,

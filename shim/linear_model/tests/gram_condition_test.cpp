@@ -128,6 +128,11 @@ constexpr int64_t many_salts = 8;
 constexpr double many_eps = 0x1p-12;
 constexpr int64_t cluster_pairs = 6;
 constexpr double cluster_eps = 0x1p-5;
+constexpr int64_t correlated_rows = 20000;
+constexpr int64_t correlated_columns = 100;
+constexpr double correlated_loading = 33.0;
+constexpr uint64_t correlated_salts = 4;
+constexpr int64_t tall_rows = int64_t{1} << 20;
 
 struct draw_stream {
   int64_t n;
@@ -360,6 +365,61 @@ TEST(GramCondition, CollinearityBesideAnUnseparatedClusterTakesTheExactGram) {
   }
 }
 
+columns correlated(draw_stream d, int64_t width) {
+  const std::vector<double> f = integers(d);
+  columns c{{}, d.n, width};
+  for (int64_t j = 0; j < width; ++j) {
+    std::vector<double> x = integers({d.n, d.salt + 1 + static_cast<uint64_t>(j)});
+    for (int64_t i = 0; i < d.n; ++i) {
+      x[i] += correlated_loading * f[i];
+    }
+    c.x.insert(c.x.end(), x.begin(), x.end());
+  }
+  return c;
+}
+
+TEST(GramCondition, CorrelatedColumnsAreCertifiedByTheirResiduals) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (uint64_t salt = 0; salt < correlated_salts; ++salt) {
+    const columns c =
+        correlated({correlated_rows, salt * 1000}, correlated_columns);
+    const condition_estimate enclosed =
+        estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
+    const condition_estimate refined = estimate_of<float>(res, c, {}, 0.0, {});
+    EXPECT_EQ(enclosed.path, gram_path::enclosed) << salt;
+    EXPECT_EQ(enclosed.window, 0) << salt;
+    EXPECT_GE(enclosed.kappa, refined.kappa) << salt;
+    EXPECT_LT(enclosed.kappa, 4 * refined.kappa) << salt;
+  }
+}
+
+TEST(GramCondition, ManyBlocksAddUpToOneGram) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (uint64_t salt = 0; salt < correlated_salts; ++salt) {
+    const columns c = beside_near_pairs({tall_rows, salt * 1000}, {0, 2});
+    const condition_estimate certified =
+        estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
+    const condition_estimate exact = estimate_of<float>(res, c, {}, 0.0, {});
+    EXPECT_EQ(certified.path, gram_path::certified) << salt;
+    EXPECT_EQ(exact.path, gram_path::exact) << salt;
+    EXPECT_GE(certified.kappa, exact.kappa) << salt;
+    EXPECT_LT(certified.kappa, exact.kappa * (1 + 0x1p-8)) << salt;
+  }
+}
+
+TEST(GramCondition, AChunkOfNoVectorsIsRefused) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  try {
+    estimate_of<float>(res, summed(weighted_rows, 1), {}, 0.0, {.chunk = 0});
+    ADD_FAILURE() << "accepted";
+  } catch (const cumlrkt::logic_error& e) {
+    EXPECT_STREQ(e.what(), "chunk: expected at least 1 vector, got 0");
+  }
+}
+
 TEST(GramCondition, ZeroWeightRowsDoNotCount) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -375,8 +435,10 @@ TEST(GramCondition, AConstantColumnWithoutAlphaIsInfinite) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   const columns c{{2, 2, 2, 2, 1, 2, 3, 4}, 4, 2};
-  EXPECT_EQ(condition_of<double>(res, c, {}, 0.0, true),
-            std::numeric_limits<double>::infinity());
+  const condition_estimate e = estimate_of<double>(res, c, {}, 0.0, {});
+  EXPECT_EQ(e.kappa, std::numeric_limits<double>::infinity());
+  EXPECT_EQ(e.path, gram_path::none);
+  EXPECT_EQ(e.window, 0);
 }
 
 void expect_ols_checked_only_under_float32_qr(int algorithm) {
