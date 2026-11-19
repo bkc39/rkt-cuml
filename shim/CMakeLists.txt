@@ -36,6 +36,7 @@ find_package(raftrkt CONFIG REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_library(CUML_LIBRARY NAMES cuml REQUIRED)
 find_path(CUML_INCLUDE_DIR cuml/version_config.hpp REQUIRED)
+find_path(CUML_SOURCE_DIR glm/qn/qn.cuh REQUIRED)
 
 add_library(cuml_runtime SHARED IMPORTED)
 set_target_properties(cuml_runtime PROPERTIES
@@ -114,6 +115,7 @@ cumlrkt_family(linear_model
           linear_model/src/logistic_resolve.cpp
           linear_model/src/logistic_solve.cpp
           linear_model/src/logistic_weights.cpp
+          linear_model/src/logistic_softmax.cu
           linear_model/src/mbsgd.cpp linear_model/src/mbsgd_device.cu
           common/src/labels.cu
   TESTS linear_model/tests/glm_staging_test.cpp
@@ -125,6 +127,8 @@ cumlrkt_family(linear_model
         linear_model/src/logistic_solve.cpp
         linear_model/src/logistic_resolve.cpp
         linear_model/src/logistic_device.cu
+        linear_model/src/logistic_softmax.cu
+        linear_model/tests/logistic_softmax_test.cpp
         linear_model/tests/mbsgd_checks_test.cpp
         linear_model/tests/mbsgd_round_off_test.cpp
         linear_model/tests/ridge_staging_test.cpp
@@ -135,9 +139,12 @@ cumlrkt_family(linear_model
         linear_model/src/fit_checks.cpp common/src/rows.cu
 )
 target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver)
+target_include_directories(cumlrkt_linear_model SYSTEM PRIVATE ${CUML_SOURCE_DIR})
 if(TARGET cumlrkt_linear_model_tests)
   target_link_libraries(cumlrkt_linear_model_tests
     PRIVATE CUDA::cusolver cuml_runtime)
+  target_include_directories(cumlrkt_linear_model_tests SYSTEM PRIVATE
+    ${CUML_SOURCE_DIR})
 endif()
 
 cumlrkt_family(manifold
