@@ -21,7 +21,8 @@
                     raw-optima-settings
                     tight-fit))
   (define set (labelled-set 'breast-cancer "diagnosis" '("id")))
-  (define commit (string-trim (with-output-to-string (lambda () (system "git rev-parse HEAD")))))
+  (define described
+    (string-trim (with-output-to-string (lambda () (system "git describe --always --dirty")))))
   (define entries
     (for/list ([s (in-list raw-optima-settings)])
       (define f (fit-parts (tight-fit set 'float64 s)))
@@ -38,9 +39,9 @@
                      ";; Written by `racket private/raw-logistic-optima.rkt` on a GPU host:\n"
                      ";; cuML's qn solver through logistic-regression-fit, dtype float64,\n"
                      ";; tol ~a, max-iter ~a,\n"
-                     ";; at commit ~a.\n"
+                     ";; at ~a (git describe --always --dirty).\n"
                      ";; Each entry: ((penalty C l1-ratio) coef-rows intercepts).\n")
       (tight-tol 'float64)
       tight-max-iter
-      commit)
+      described)
      (pretty-write entries))))
