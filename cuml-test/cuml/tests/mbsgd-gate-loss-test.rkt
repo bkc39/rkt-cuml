@@ -5,17 +5,17 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" law-case)
          (only-in "private/mbsgd-gate-data.rkt"
+                  at-eta0
                   loss-r2
                   lost-at-eta0
                   refused-at-eta0
-                  regressor-fit
                   wide-problem))
 
 (define-values (twelve twelve-targets) (wide-problem 12 8000))
 (define-values (ten ten-targets) (wide-problem 10 8000))
 
-(define ((wide-lasso X y dt alpha) eta0)
-  (regressor-fit X y dt #:penalty 'l1 #:alpha alpha #:eta0 eta0 #:random-state 1))
+(define (wide-lasso X y dt alpha)
+  (at-eta0 X y dt #:penalty 'l1 #:alpha alpha #:random-state 1))
 
 (define worse-than-zero
   `((float32 ,twelve ,twelve-targets 12 0.6 -0.394) (float64 ,twelve ,twelve-targets 12 0.6 -0.383)

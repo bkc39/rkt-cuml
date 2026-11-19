@@ -3,19 +3,15 @@
 (require (only-in racket/list make-list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" law-case)
-         (only-in "private/mbsgd-data.rkt" normal-rows)
-         (only-in "private/mbsgd-gate-data.rkt" constant-rows regressor-fit wide-problem)
+         (only-in "private/mbsgd-gate-data.rkt"
+                  constant-rows
+                  linear-targets
+                  regressor-fit
+                  wide-problem
+                  zero-mean-rows)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define-values (twelve twelve-targets) (wide-problem 12 8000))
-
-(define offset-targets
-  (for/list ([r (in-list constant-rows)]
-             [e (in-list (map car (normal-rows 300 1 9)))])
-    (+ (* 1.5 (car r)) (* 0.5 e))))
-
-(define zero-mean-rows
-  (let ([half (normal-rows 150 4 3)]) (append half (map (lambda (r) (map - r)) half))))
 
 (define constant (make-list 300 1.7))
 
@@ -24,7 +20,7 @@
    (row "objective: float32 l1 alpha 100, eta0 0.1"
         "the objective rose from 2.34519 to 1979.87; lower #:eta0 (now 0.1)"
         (regressor-fit constant-rows
-                       offset-targets
+                       (linear-targets 0 1.5 0.5)
                        'float32
                        #:penalty 'l1
                        #:alpha 100

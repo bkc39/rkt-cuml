@@ -5,7 +5,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
          (only-in "private/mbsgd-data.rkt" learning-rates penalties reg-target)
-         (only-in "private/mbsgd-gate-data.rkt" grid-rows grid-targets refused-at-eta0 regressor-fit))
+         (only-in "private/mbsgd-gate-data.rkt" at-eta0 grid-rows grid-targets refused-at-eta0))
 
 (test-gpu "no documented case is refused by the gate"
   (for* ([dt (in-list dtypes)]
@@ -28,7 +28,7 @@
     (* 0.01 t)))
 
 (define (small-y-fit dt)
-  (lambda (eta0) (regressor-fit grid-rows small-targets dt #:penalty 'l1 #:alpha 1 #:eta0 eta0)))
+  (at-eta0 grid-rows small-targets dt #:penalty 'l1 #:alpha 1))
 
 (test-gpu "a regressor l1 alpha 1 fit on y scaled by 0.01 is refused at eta0 1e-3"
   (for ([dt (in-list dtypes)])

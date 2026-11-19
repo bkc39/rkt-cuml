@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
-         (only-in racket/list make-list)
+         (only-in racket/list make-list take)
          (only-in racket/match match)
          (only-in rackunit check-not-exn)
          (only-in "cuml-error.rkt" raised)
@@ -10,10 +10,12 @@
          (only-in "refusal-rows.rkt" check-row row))
 
 (provide alternating
+         at-eta0
          blobs
          check-classifier-lower
          check-classifier-rise
          check-constant-batch-one
+         classifier-fit
          constant-rows
          gate-floor-share
          gate-round-off-factor
@@ -23,6 +25,7 @@
          grid-targets
          grid-y
          labels
+         linear-targets
          loss-r2
          lost-at-eta0
          off-constant-at-eta0
@@ -33,7 +36,9 @@
          round-off-coef-steps
          round-off-intercept-share
          round-off-prediction-share
-         wide-problem)
+         unit-noise
+         wide-problem
+         zero-mean-rows)
 
 (define ((risen what) eta0)
   (regexp (string-append "^the "
@@ -69,6 +74,16 @@
      (lambda ()
        (keyword-apply mbsgd-regressor-fit kws vals (list (on-matrix X dt) (on-vector y dt)))))))
 
+(define at-eta0
+  (make-keyword-procedure (lambda (kws vals X y dt)
+                            (lambda (eta0)
+                              (keyword-apply regressor-fit kws vals (list X y dt) #:eta0 eta0)))))
+
+(define classifier-fit
+  (make-keyword-procedure
+   (lambda (kws vals X y dt)
+     (lambda () (keyword-apply mbsgd-classifier-fit kws vals (list (on-matrix X dt) y))))))
+
 (define ((refused-by message) fit eta0)
   (check-row "mbsgd-regressor-fit"
              (row (format "eta0 ~a" (printed eta0)) (message (printed eta0)) (fit eta0))))
@@ -84,18 +99,25 @@
     [(list _ start end) (- 1 (/ (string->number end) (string->number start)))]))
 
 (define constant-rows (normal-rows 300 4 3))
+(define unit-noise (map car (normal-rows 300 1 9)))
+
+(define zero-mean-rows
+  (let ([half (normal-rows 150 4 3)]) (append half (map (lambda (r) (map - r)) half))))
+
+(define (linear-targets offset slope noise)
+  (for/list ([r (in-list constant-rows)]
+             [e (in-list unit-noise)])
+    (+ offset (* slope (car r)) (* noise e))))
 
 (define (check-constant-batch-one dt)
   (law-case (format "~a y = 1.7 l1 alpha 100 invscaling batch 1" dt)
-    (off-constant-at-eta0 (lambda (eta0)
-                            (regressor-fit constant-rows
-                                           (make-list 300 1.7)
-                                           dt
-                                           #:penalty 'l1
-                                           #:alpha 100
-                                           #:eta0 eta0
-                                           #:learning-rate 'invscaling
-                                           #:batch-size 1))
+    (off-constant-at-eta0 (at-eta0 constant-rows
+                                   (make-list 300 1.7)
+                                   dt
+                                   #:penalty 'l1
+                                   #:alpha 100
+                                   #:learning-rate 'invscaling
+                                   #:batch-size 1)
                           1)))
 
 (define (wide-problem n d)
@@ -103,7 +125,7 @@
   (values rows
           (for/list ([r (in-list rows)]
                      [e (in-list (normal-rows n 1 12))])
-            (+ (car r) (cadr r) (caddr r) (* 0.5 (car e))))))
+            (+ (apply + (take r 3)) (* 0.5 (car e))))))
 
 (define (alternating count v)
   (for/list ([i (in-range count)])
@@ -116,22 +138,16 @@
 
 (define-values (blobs labels) (blob-rows 512 6 43))
 
-(define (classifier-fit loss eta0)
-  (lambda ()
-    (mbsgd-classifier-fit (on-matrix blobs)
-                          labels
-                          #:loss loss
-                          #:batch-size 1
-                          #:alpha 10
-                          #:eta0 eta0)))
+(define (blob-fit loss eta0)
+  (classifier-fit blobs labels 'float64 #:loss loss #:batch-size 1 #:alpha 10 #:eta0 eta0))
 
 (define (check-classifier-rise loss)
   (law-case (format "~a classifier refused at eta0 0.05" loss)
-    (check-row "mbsgd-classifier-fit" (row "eta0 0.05" (rose "0.05") (classifier-fit loss 0.05)))))
+    (check-row "mbsgd-classifier-fit" (row "eta0 0.05" (rose "0.05") (blob-fit loss 0.05)))))
 
 (define (check-classifier-lower loss)
   (law-case (format "~a classifier passes at eta0 0.01" loss)
-    (check-not-exn (classifier-fit loss 0.01))))
+    (check-not-exn (blob-fit loss 0.01))))
 
 (define grid-rows (normal-rows 300 5 21))
 (define grid-targets (reg-target grid-rows 21))

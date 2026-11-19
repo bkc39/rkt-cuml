@@ -7,13 +7,14 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case)
-         (only-in "private/mbsgd-data.rkt" normal-rows)
          (only-in "private/mbsgd-gate-data.rkt"
+                  at-eta0
                   constant-rows
                   refused-at-eta0
                   regressor-fit
                   round-off-coef-steps
-                  round-off-intercept-share))
+                  round-off-intercept-share
+                  unit-noise))
 
 (define (fits-the-constant? fit c share)
   (and (<= (abs (- (mbsgd-regressor-result-intercept fit) c)) (* round-off-intercept-share (abs c)))
@@ -31,11 +32,9 @@
                    value
                    share)))))
 
-(define offset-noise (map car (normal-rows 300 1 9)))
-
 (define (near-constant-targets kind s)
   (for/list ([r (in-list constant-rows)]
-             [e (in-list offset-noise)])
+             [e (in-list unit-noise)])
     (+ 1.7
        (* s
           (if (eq? kind 'noise)
@@ -57,10 +56,5 @@
   (for ([r (in-list near-constant-refusals)])
     (match-define (list dt penalty kind s) r)
     (law-case (format "~a ~a ~a ~a" dt penalty kind s)
-      (refused-at-eta0 (lambda (eta0)
-                         (regressor-fit constant-rows
-                                        (near-constant-targets kind s)
-                                        dt
-                                        #:penalty penalty
-                                        #:eta0 eta0))
+      (refused-at-eta0 (at-eta0 constant-rows (near-constant-targets kind s) dt #:penalty penalty)
                        1e-3))))

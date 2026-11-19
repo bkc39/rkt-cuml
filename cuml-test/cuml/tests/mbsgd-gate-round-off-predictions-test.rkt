@@ -1,29 +1,25 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model mbsgd-regressor-result-coef mbsgd-regressor-result-intercept)
-         (only-in racket/flonum flsingle)
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case)
+         (only-in "private/linear-data.rkt" dtypes law-case rounded unit-roundoff)
          (only-in "private/mbsgd-data.rkt" normal-rows)
          (only-in "private/mbsgd-gate-data.rkt"
+                  at-eta0
                   constant-rows
                   gate-floor-share
                   gate-round-off-factor
                   gate-round-off-start
                   off-predictions-at-eta0
                   regressor-fit
-                  round-off-prediction-share))
-
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
-
-(define half (normal-rows 150 4 3))
-(define zero-mean-rows (append half (map (lambda (r) (map - r)) half)))
+                  round-off-prediction-share
+                  zero-mean-rows)
+         (only-in "private/metrics-data.rkt" mean))
 
 (define standardised-rows
   (let* ([columns (apply map list constant-rows)]
@@ -35,33 +31,24 @@
       (map (lambda (v m s) (/ (- v m) s)) r means sds))))
 
 (define off-the-constant
-  '((zero-mean l1 10.0) (zero-mean l1 100.0)
-                        (zero-mean elasticnet 1.0)
-                        (standardised l1 1.0)
-                        (standardised l1 10.0)
-                        (standardised l1 100.0)))
+  `((zero-mean ,zero-mean-rows l1 10.0) (zero-mean ,zero-mean-rows l1 100.0)
+                                        (zero-mean ,zero-mean-rows elasticnet 1.0)
+                                        (standardised ,standardised-rows l1 1.0)
+                                        (standardised ,standardised-rows l1 10.0)
+                                        (standardised ,standardised-rows l1 100.0)))
 
 (test-gpu "a constant target's fit whose predictions are off by more than a share of it is refused"
   (for* ([dt (in-list dtypes)]
          [r (in-list off-the-constant)])
-    (match-define (list xs penalty alpha) r)
-    (law-case (format "~a ~a y = 1.7 ~a alpha ~a" dt xs penalty alpha)
-      (off-predictions-at-eta0
-       (lambda (eta0)
-         (regressor-fit (if (eq? xs 'zero-mean) zero-mean-rows standardised-rows)
-                        (make-list 300 1.7)
-                        dt
-                        #:penalty penalty
-                        #:alpha alpha
-                        #:eta0 eta0))
-       0.1))))
+    (match-define (list name X penalty alpha) r)
+    (law-case (format "~a ~a y = 1.7 ~a alpha ~a" dt name penalty alpha)
+      (off-predictions-at-eta0 (at-eta0 X (make-list 300 1.7) dt #:penalty penalty #:alpha alpha)
+                               0.1))))
 
 (test-gpu "a small constant's fit at the defaults is refused by its predictions"
   (law-case "float64 standardised y = 1.1e-4 l1"
-    (off-predictions-at-eta0
-     (lambda (eta0)
-       (regressor-fit standardised-rows (make-list 300 1.1e-4) 'float64 #:penalty 'l1 #:eta0 eta0))
-     0.001)))
+    (off-predictions-at-eta0 (at-eta0 standardised-rows (make-list 300 1.1e-4) 'float64 #:penalty 'l1)
+                             0.001)))
 
 (define (mean-square xs)
   (mean (map sqr xs)))
@@ -73,18 +60,10 @@
              [t (in-list y)])
     (- t b (apply + (map * r w)))))
 
-(define (dtype-epsilon dt)
-  (if (eq? dt 'float32)
-      (expt 2.0 -23)
-      (expt 2.0 -52)))
-
 (define (near-constant-target dt rows noise offset s)
   (for/list ([r (in-list rows)]
              [e (in-list noise)])
-    (define v (+ offset (* s (car r)) (* 0.2 s (car e))))
-    (if (eq? dt 'float32)
-        (flsingle v)
-        v)))
+    (rounded dt (+ offset (* s (car r)) (* 0.2 s (car e))))))
 
 (define within-ulps
   '((float32 200 3 9 1e6 0.36 1.44)
@@ -100,7 +79,7 @@
       (define start (mean-square (map (lambda (t) (- t centre)) y)))
       (define round-off-floor
         (+ (* gate-floor-share start)
-           (* gate-round-off-factor (sqr (dtype-epsilon dt)) (mean-square y))))
+           (* gate-round-off-factor (sqr (* 2 (unit-roundoff dt))) (mean-square y))))
       (define loss
         (mean-square (residuals ((regressor-fit X y dt #:penalty 'l1 #:alpha alpha #:eta0 0.2)) X y)))
       (check < (- 1 (/ loss start)) -1)

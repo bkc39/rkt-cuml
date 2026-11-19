@@ -1,12 +1,17 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model mbsgd-classifier-fit)
-         (only-in racket/match match-define)
+(require (only-in racket/list filter-not partition)
+         (only-in racket/match match-define match-lambda)
          (only-in rackunit check-= check-not-exn)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
+         (only-in "private/linear-data.rkt" dtypes law-case)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target)
-         (only-in "private/mbsgd-gate-data.rkt" loss-r2 lost-at-eta0 refused-at-eta0 regressor-fit))
+         (only-in "private/mbsgd-gate-data.rkt"
+                  at-eta0
+                  classifier-fit
+                  loss-r2
+                  lost-at-eta0
+                  refused-at-eta0))
 
 (define small-n-refusals
   '((204 2e-4) (206 5e-4)
@@ -41,9 +46,7 @@
     (define-values (X y) (blob-rows n 3 (+ 100 n)))
     (for ([loss (in-list '(log hinge squared-loss))])
       (law-case (format "~a ~a classifier on ~a rows" dt loss n)
-        (check-not-exn
-         (lambda ()
-           (mbsgd-classifier-fit (on-matrix X dt) y #:loss loss #:penalty 'l1 #:alpha 10)))))))
+        (check-not-exn (classifier-fit X y dt #:loss loss #:penalty 'l1 #:alpha 10))))))
 
 (define (small-n-seeds n)
   (if (<= n 3)
@@ -53,21 +56,29 @@
 
 (define (small-n-fit dt n seed)
   (define R (normal-rows n 3 seed))
-  (lambda (eta0) (regressor-fit R (reg-target R seed) dt #:penalty 'l1 #:alpha 10 #:eta0 eta0)))
-
-(define (refusal-of seed)
-  (assv seed small-n-refusals))
+  (at-eta0 R (reg-target R seed) dt #:penalty 'l1 #:alpha 10))
 
 (define small-n-losses '((1076 5e-4 -0.027)))
 
-(define (loss-of seed)
-  (assv seed small-n-losses))
+(define small-n-trials
+  (for*/list ([n (in-list '(2 3 4 6 10))]
+              [seed (in-list (small-n-seeds n))])
+    (list n seed)))
+
+(define-values (refused-trials unrefused-trials)
+  (partition (match-lambda
+               [(list _ seed) (assv seed small-n-refusals)])
+             small-n-trials))
+
+(define passing-trials
+  (filter-not (match-lambda
+                [(list _ seed) (assv seed small-n-losses)])
+              unrefused-trials))
 
 (test-gpu "an l1 alpha 10 regressor fit on 2 to 10 rows of 3 columns outside the refusal table passes at the defaults"
   (for* ([dt (in-list dtypes)]
-         [n (in-list '(2 3 4 6 10))]
-         [seed (in-list (small-n-seeds n))]
-         #:unless (or (refusal-of seed) (loss-of seed)))
+         [t (in-list passing-trials)])
+    (match-define (list n seed) t)
     (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
       (check-not-exn ((small-n-fit dt n seed) 1e-3)))))
 
@@ -88,17 +99,15 @@
 
 (test-gpu "an l1 alpha 10 regressor fit in the refusal table is refused at the defaults"
   (for* ([dt (in-list dtypes)]
-         [n (in-list '(2 3 4 6 10))]
-         [seed (in-list (small-n-seeds n))]
-         #:when (refusal-of seed))
+         [t (in-list refused-trials)])
+    (match-define (list n seed) t)
     (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
       (refused-at-eta0 (small-n-fit dt n seed) 1e-3))))
 
 (test-gpu "an l1 alpha 10 regressor fit in the refusal table passes at its table eta0"
   (for* ([dt (in-list dtypes)]
-         [n (in-list '(2 3 4 6 10))]
-         [seed (in-list (small-n-seeds n))]
-         #:when (refusal-of seed))
-    (match-define (list _ eta0) (refusal-of seed))
+         [t (in-list refused-trials)])
+    (match-define (list n seed) t)
+    (match-define (list _ eta0) (assv seed small-n-refusals))
     (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
       (check-not-exn ((small-n-fit dt n seed) eta0)))))

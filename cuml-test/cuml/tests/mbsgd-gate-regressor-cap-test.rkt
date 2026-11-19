@@ -6,6 +6,7 @@
          (only-in "private/linear-data.rkt" dtypes law-case)
          (only-in "private/mbsgd-data.rkt" normal-rows reg-target)
          (only-in "private/mbsgd-gate-data.rkt"
+                  at-eta0
                   grid
                   grid-y
                   refused-at-eta0
@@ -19,32 +20,22 @@
   (for/list ([t (in-list (reg-target small 5 #:noise 0.5))])
     (* 1e-3 t)))
 
-(define ((one-epoch X y dt alpha) eta0)
-  (regressor-fit X
-                 y
-                 dt
-                 #:penalty 'elasticnet
-                 #:l1-ratio 0.5
-                 #:alpha alpha
-                 #:eta0 eta0
-                 #:batch-size 512
-                 #:epochs 1))
+(define (one-epoch X y dt alpha)
+  (at-eta0 X y dt #:penalty 'elasticnet #:l1-ratio 0.5 #:alpha alpha #:batch-size 512 #:epochs 1))
 
-(define cap-rows
-  `((good ,normal ,normal-targets 10.0 0.01) (small-y ,small ,small-targets 0.001 1.0)))
+(define cap-passes `((good ,normal ,normal-targets 10.0 0.01)))
+(define cap-refusals `((small-y ,small ,small-targets 0.001 1.0)))
 
 (test-gpu "a fit needing less than a quarter of the zero model's objective passes"
   (for* ([dt (in-list dtypes)]
-         [r (in-list cap-rows)]
-         #:when (eq? (car r) 'good))
+         [r (in-list cap-passes)])
     (match-define (list name X y alpha eta0) r)
     (law-case (format "~a ~a" dt name)
       (check-not-exn ((one-epoch X y dt alpha) eta0)))))
 
 (test-gpu "a fit needing more than a quarter of the zero model's objective is refused"
   (for* ([dt (in-list dtypes)]
-         [r (in-list cap-rows)]
-         #:unless (eq? (car r) 'good))
+         [r (in-list cap-refusals)])
     (match-define (list name X y alpha eta0) r)
     (law-case (format "~a ~a" dt name)
       (refused-at-eta0 (one-epoch X y dt alpha) eta0))))
@@ -59,13 +50,8 @@
 (test-gpu "a wide lasso rising past the widened cap is refused although it beats the zero model"
   (for ([dt (in-list dtypes)])
     (law-case (format "~a 200 rows, 4000 columns, l1 alpha 1" dt)
-      (refused-at-eta0 (lambda (eta0)
-                         (regressor-fit wide wide-targets dt #:penalty 'l1 #:alpha 1 #:eta0 eta0))
-                       3e-3))))
+      (refused-at-eta0 (at-eta0 wide wide-targets dt #:penalty 'l1 #:alpha 1) 3e-3))))
 
 (test-gpu "an alpha whose uncapped allowance overflows double is still gated"
   (law-case "l1 alpha 1e200"
-    (refused-at-eta0
-     (lambda (eta0)
-       (regressor-fit grid grid-y 'float64 #:penalty 'l1 #:alpha 1e200 #:eta0 eta0 #:epochs 1))
-     1e-3)))
+    (refused-at-eta0 (at-eta0 grid grid-y 'float64 #:penalty 'l1 #:alpha 1e200 #:epochs 1) 1e-3)))
