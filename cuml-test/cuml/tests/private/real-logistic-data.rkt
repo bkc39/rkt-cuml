@@ -51,12 +51,12 @@
 
 (define stationary-bound 1e-7)
 (define raw-stationary-bound 1e-5)
-(struct gap-check (fits bound))
-(define float32-l2-median-gap-bound 1.6e-4)
+(struct gap-check (fits rank bound))
+(define float32-l2-second-smallest-gap-bound 1.6e-4)
 (define float32-gap-checks
-  (hash 'l1 (gap-check 1 2.9e-2)
-        'l2 (gap-check 5 float32-l2-median-gap-bound)
-        'elasticnet (gap-check 1 1.7e-3)))
+  (hash 'l1 (gap-check 1 0 2.9e-2)
+        'l2 (gap-check 5 1 float32-l2-second-smallest-gap-bound)
+        'elasticnet (gap-check 1 0 1.7e-3)))
 (define raw-optima-settings
   (list (setting 'l1 1.0 #f) (setting 'elasticnet 1.0 0.5) (setting 'l2 0.01 #f)))
 (define-runtime-path raw-optima-path "raw-logistic-optima.rktd")
@@ -131,15 +131,19 @@
      (check-true (<= K (* stationary (max F 1)))
                  (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
     [else
-     (match-define (gap-check fits bound) (hash-ref float32-gap-checks (setting-penalty s)))
+     (match-define (gap-check fits rank bound) (hash-ref float32-gap-checks (setting-penalty s)))
      (define optimum (gauged-fit (fit-parts (tight-fit set 'float64 s))))
      (define repeats
        (for/list ([_ (in-range (sub1 fits))])
          (fit-parts (tight-fit set dt s))))
      (define gaps (map (lambda (f) (relative-gap (gauged-fit f) optimum)) (cons parts repeats)))
-     (define gap (list-ref (sort gaps <) (quotient fits 2)))
+     (define gap (list-ref (sort gaps <) rank))
      (check-true (<= gap bound)
-                 (format "median gap to the float64 fit of ~a fits ~a, bound ~a" fits gap bound))]))
+                 (format "gap ~a of ~a fits, smallest first, to the float64 fit ~a, bound ~a"
+                         (add1 rank)
+                         fits
+                         gap
+                         bound))]))
 
 (struct asked (setting tol) #:transparent)
 

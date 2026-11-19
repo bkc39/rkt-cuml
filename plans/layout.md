@@ -2009,9 +2009,15 @@ scratch, the source is `cpp/src/glm/qn/`.
     runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
     between 5.0e-3 and 1.42e-2; `float32-gap-checks` is per penalty. l1
     (2.9e-2) and elastic net (1.7e-3) are one fit, twice the worst of 40
-    runs. l2 is the median of 5 fits (r1c ruling: one run, 2.2e-5 to
-    6.2e-4, cannot pin a 10x regression), at 1.6e-4, twice the worst median
-    (7.6e-5) of 40 groups of 5. Elastic net's gaps have two modes (about
+    runs. l2 is the second-smallest gap of 5 fits (r1c ruling: one run,
+    2.2e-5 to 6.2e-4, cannot pin a 10x regression; r3 ruling: a median
+    of 5 fails about 2% of runs), at 1.6e-4. One fit is above 1.6e-4 in
+    69 of 500 runs (r1c's 200 and the r2 re-review's 300); the
+    second-smallest is above it only when 4 of 5 are, 0.16% of runs at
+    that rate (0.37% at its 95% upper bound). Over the 488 sliding
+    windows of 5, the worst second-smallest is 1.93e-4 (1 window above
+    1.6e-4) and the smallest 2.75e-5, so a 10x regression (2.75e-4 or
+    more) fails. Elastic net's gaps have two modes (about
     1.5e-4 and 8.05e-4, 47 of 100 draws at the upper), so neither one fit
     nor a median of 5 pins a 10x regression of the lower one: its bound
     pins a regression only relative to the upper mode. Accepted as is
