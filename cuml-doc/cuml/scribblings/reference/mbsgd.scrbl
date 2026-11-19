@@ -52,36 +52,16 @@ Minimises the mean squared error plus @racket[alpha] times the squared l2 norm, 
 epoch. The result is the last iterate, not an optimum: steps depend on the scale of @racket[X], so
 standardise it.
 
-Raises, advising a lower @racket[eta0], when the iterate is not finite or its objective ends above
-the zero model's by more than a small slack, round-off of @racket[y], and, under l1 or elastic net,
-an allowance for the oscillation about a zero optimum. The allowance grows with the columns,
-@racket[eta0] and @racket[alpha] but is at most a quarter of the zero model's objective, a multiple
-growing with the columns beyond 800. When that objective is itself round-off, as for a constant
-@racket[y], an l1 or elastic-net regressor with @racket[fit-intercept] must instead fit the
-constant: raises, advising a lower @racket[eta0] or @racket[alpha], unless its intercept is within
-a millionth of the mean of @racket[y] and every coefficient within two penalty steps
-(@racket[eta0] times @racket[alpha] times the l1 share) of 0; without @racket[fit-intercept] the
-allowance is at most a quarter of the mean of @racket[y]'s squares. At round-off with
-@racket[fit-intercept] a regressor under any penalty also raises, advising a lower @racket[eta0]
-(or, under l1 or elastic net, @racket[alpha]), when the root mean square of its prediction error
-exceeds 2@superscript{-10} of the mean of @racket[y] plus round-off; a fit within that passes
-however low its R², which there measures rounding, not the fit. Without an l1 share the objective
-bound already implies this one, so in practice only l1 and elastic-net fits raise it. An l1 fit's oscillation about a
-constant does not shrink with it, so a constant @racket[y] below about 2@superscript{10} times
-@racket[eta0], @racket[alpha] and the square root of the columns (2×10@superscript{-4} at the
-defaults on four standardised columns) raises unless fitted exactly. Above round-off, also raises
-when the loss without the penalty ends above the zero model's by more than the slack and, near
-round-off, up to as much again, a fit that predicts worse than the zero model (the mean of
-@racket[y] with @racket[fit-intercept], 0 without). The gate sees only the objective, the loss and,
-at round-off, the intercept, coefficient and prediction bounds, so it can pass a fit that predicts badly, and
-refuse one that predicts well on a nearly constant @racket[y]. Raises, advising a rescale, before the solve when the zero model's objective of
-@racket[y] is not finite, or when a sum the solver makes in @racket[X]'s dtype could overflow: the
-sum of a column of @racket[X] (rescale @racket[X]), with @racket[fit-intercept] the sum of
-@racket[y] (rescale @racket[y]), and the products of @racket[X] and the centred
-@racket[y] in the gradient (rescale either; this bound is stricter than the solver needs when
-@racket[batch-size] is below the rows). Also refused before the solve: an
-@racket[alpha], @racket[tol], @racket[eta0] or @racket[power-t] that overflows @racket[X]'s dtype,
-an @racket[alpha] or @racket[eta0] that rounds to 0 in it, or an exact @racket[alpha] or
+Raises, advising a lower @racket[eta0], when the iterate is not finite, when its objective ends
+above the zero model's by more than a slack, widened under l1 or elastic net for oscillation about
+the optimum, or when above round-off its loss without the penalty ends above the zero model's. When
+@racket[y] is constant to round-off, an l1 or elastic-net fit with @racket[fit-intercept] must fit
+the constant: it raises, advising a lower @racket[eta0] or @racket[alpha], when its intercept, a
+coefficient or the error of its predictions exceeds a bound, so a small constant @racket[y] is
+refused at the defaults. Before the solve, raises, advising a rescale, when the zero model's
+objective is not finite or a sum the solver makes in @racket[X]'s dtype could overflow, and refuses
+an @racket[alpha], @racket[tol], @racket[eta0] or @racket[power-t] that overflows @racket[X]'s
+dtype, an @racket[alpha] or @racket[eta0] that rounds to 0 in it, or an exact @racket[alpha] or
 @racket[eta0] that rounds to 0.0. With @racket[random-state] an integer and @racket[shuffle], rows
 are first permuted by that seed; @racket[#f] is cuML's fixed order. @racket[X] and @racket[y] are
 not modified.
