@@ -4,8 +4,9 @@
          (only-in racket/match match-define)
          (only-in rackunit check-not-exn test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" on-vector)
          (only-in "private/elastic-net-data.rkt" apply-keywords)
-         (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/linear-data.rkt" on-matrix)
          (only-in "private/mbsgd-data.rkt" normal-rows reg-target)
          (only-in "private/refusal-rows.rkt" check-row row))
 

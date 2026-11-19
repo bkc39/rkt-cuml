@@ -16,7 +16,7 @@
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "common-data.rkt" columns-of)
+         (only-in "common-data.rkt" columns-of on-vector)
          (only-in "exact-algebra.rkt"
                   condition
                   dot
@@ -54,7 +54,6 @@
          max-abs
          normal-case
          on-matrix
-         on-vector
          oracle-lstsq
          oracle-ridge
          ridge-oracles
@@ -123,9 +122,6 @@
 
 (define (on-matrix rows [dtype 'float64])
   (list*->device-matrix rows #:dtype dtype))
-
-(define (on-vector xs [dtype 'float64])
-  (and xs (list->device-vector xs #:dtype dtype)))
 
 (define (case-result c dt #:algorithm [a 'auto] #:fit-intercept [fi #t])
   (linear-regression-fit (on-matrix (lcase-X c) dt)

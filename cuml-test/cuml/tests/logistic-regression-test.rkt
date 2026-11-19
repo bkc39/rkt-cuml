@@ -31,8 +31,8 @@
                   list->device-vector
                   shape)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" unit-roundoff)
-         (only-in "private/linear-data.rkt" dtypes on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector unit-roundoff)
+         (only-in "private/linear-data.rkt" dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
                   argmax-index
                   blob-case

@@ -7,7 +7,7 @@
          (only-in raft device-matrix device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" unit-roundoff)
+         (only-in "private/common-data.rkt" [on-vector vector] unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/linear-data.rkt"
                   check-law
@@ -24,7 +24,6 @@
                   oracle-ridge
                   ridge-solution
                   rounded
-                  [on-vector vector]
                   weighted-spread)
          (only-in "private/linear-refusal-rows.rkt"
                   grid

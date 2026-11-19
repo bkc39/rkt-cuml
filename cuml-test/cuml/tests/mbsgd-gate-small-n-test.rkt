@@ -3,7 +3,8 @@
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in rackunit check-not-exn)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target))
 
 (test-gpu "an l1 alpha 10 fit on 2 to 10 rows of 3 columns, 20 seeds at 2 and 3, passes at the defaults"

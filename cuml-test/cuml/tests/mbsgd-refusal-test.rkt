@@ -11,9 +11,10 @@
          (only-in rackunit check-equal? check-exn check-not-exn check-pred test-case)
          (only-in raft device-matrix list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" on-vector)
          (only-in "private/elastic-net-data.rkt" apply-keywords)
          (only-in "private/estimator-data.rkt" keyword-of)
-         (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/linear-data.rkt" on-matrix)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))

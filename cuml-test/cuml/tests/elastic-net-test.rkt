@@ -15,7 +15,7 @@
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" unit-roundoff)
+         (only-in "private/common-data.rkt" on-vector unit-roundoff)
          (only-in "private/elastic-net-data.rkt"
                   correlated-case
                   en-case-fit
@@ -36,7 +36,6 @@
                   lcase-y
                   max-abs
                   on-matrix
-                  on-vector
                   remove-at
                   weights-or-ones))
 

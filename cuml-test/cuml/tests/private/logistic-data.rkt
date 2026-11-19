@@ -9,8 +9,8 @@
          (only-in racket/match match match-define struct*)
          (only-in raft device-matrix->list* device-vector->list device-vector?)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "common-data.rkt" columns-of mean scaled-rows)
-         (only-in "linear-data.rkt" by-dtype dyadic on-matrix on-vector))
+         (only-in "common-data.rkt" columns-of mean on-vector scaled-rows)
+         (only-in "linear-data.rkt" by-dtype dyadic on-matrix))
 
 (provide (struct-out lr-case)
          (struct-out lr-fit)

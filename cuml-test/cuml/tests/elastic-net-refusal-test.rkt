@@ -15,7 +15,7 @@
          (only-in raft device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source)
-         (only-in "private/common-data.rkt" unit-roundoff)
+         (only-in "private/common-data.rkt" [on-vector vector] unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/elastic-net-data.rkt"
                   apply-keywords
@@ -48,8 +48,7 @@
                   [on-matrix matrix]
                   max-abs
                   scaled-case
-                  scaled-columns
-                  [on-vector vector])
+                  scaled-columns)
          (only-in "private/linear-refusal-rows.rkt" grid shared-fit-rows targets)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 

@@ -4,11 +4,11 @@
          (only-in racket/list take)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in "private/common-data.rkt" relative)
+         (only-in "private/common-data.rkt" on-vector relative)
          (only-in "private/metrics-data.rkt" regression-cases regression-pair)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/scaler-data.rkt" rows-of)
-         (only-in "private/scores-data.rkt" on weights-of)
+         (only-in "private/scores-data.rkt" on)
          (only-in "private/scores-twin-data.rkt" case-of checked-twin-results))
 
 (define (vector-cases)
@@ -50,7 +50,7 @@
                [theirs (in-list results)])
       (match-define (list name dt y p w) c)
       (match-define (hash-table ('sklearn sk) ('cuml cu)) theirs)
-      (define ours (score (on y dt) (on p dt) #:sample-weight (weights-of w)))
+      (define ours (score (on y dt) (on p dt) #:sample-weight (on-vector w)))
       (define sk-gap (gap ours sk))
       (define cu-gap (gap ours cu))
       (test-case name

@@ -15,8 +15,8 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list device-vector? dtype list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" host)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" host on-vector)
+         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows clf-parts)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 

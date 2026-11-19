@@ -3,7 +3,8 @@
 (require (only-in racket/list range)
          (only-in racket/match match-define)
          (only-in raft device-matrix)
-         (only-in "linear-data.rkt" [on-matrix matrix] [on-vector vector])
+         (only-in "common-data.rkt" [on-vector vector])
+         (only-in "linear-data.rkt" [on-matrix matrix])
          (only-in "refusal-rows.rkt" row))
 
 (provide grid

@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in racket/math pi sqr)
-         (only-in raft device-vector->list device-vector?))
+         (only-in raft device-vector->list device-vector? list->device-vector))
 
 (provide bits-of
          columns-of
@@ -13,6 +13,7 @@
          least-magnitude
          mean
          noise
+         on-vector
          pick
          relative
          repeat-each
@@ -98,3 +99,6 @@
             ([x (in-list xs)]
              [y (in-list ys)])
     (max w (abs (- x y)))))
+
+(define (on-vector xs [dtype 'float64])
+  (and xs (list->device-vector xs #:dtype dtype)))

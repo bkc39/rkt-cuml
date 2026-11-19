@@ -12,7 +12,7 @@
          (only-in raft device-vector->list dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" unit-roundoff)
+         (only-in "private/common-data.rkt" on-vector unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   case-fit
@@ -28,7 +28,6 @@
                   lcase-y
                   normal-case
                   on-matrix
-                  on-vector
                   power-spread-case
                   power-spread-gone
                   remove-at

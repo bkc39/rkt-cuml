@@ -10,7 +10,7 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "common-data.rkt" columns-of flonum-exact unit-roundoff)
+         (only-in "common-data.rkt" columns-of flonum-exact on-vector unit-roundoff)
          (only-in "cuml-error.rkt" check-cuml-error)
          (only-in "elastic-net-data.rkt"
                   apply-keywords
@@ -45,7 +45,6 @@
                   lcase-y
                   max-abs
                   on-matrix
-                  on-vector
                   ridge-solve
                   rounded-case
                   solution)

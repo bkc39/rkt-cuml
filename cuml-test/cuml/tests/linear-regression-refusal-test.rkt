@@ -10,13 +10,9 @@
          (only-in raft device-matrix device-matrix->list* device-vector device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" uniform-source)
+         (only-in "private/common-data.rkt" [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/linear-data.rkt"
-                  algorithms
-                  dtypes
-                  dyadic
-                  [on-matrix matrix]
-                  [on-vector vector])
+         (only-in "private/linear-data.rkt" algorithms dtypes dyadic [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt"
                   grid
                   overflow-X

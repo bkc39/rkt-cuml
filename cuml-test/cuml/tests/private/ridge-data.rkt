@@ -5,7 +5,7 @@
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
-         (only-in "common-data.rkt" columns-of unit-roundoff)
+         (only-in "common-data.rkt" columns-of on-vector unit-roundoff)
          (only-in "linear-data.rkt"
                   check-law-case
                   dtypes
@@ -18,7 +18,6 @@
                   lcase-y
                   max-abs
                   on-matrix
-                  on-vector
                   ridge-oracles
                   ridge-solution
                   weighted-spread

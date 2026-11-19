@@ -3,7 +3,8 @@
 (require (only-in cuml/linear-model mbsgd-regressor-fit)
          (only-in rackunit check-not-exn)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/mbsgd-data.rkt" learning-rates penalties reg-target)
          (only-in "private/mbsgd-gate-data.rkt" grid-rows grid-targets))
 

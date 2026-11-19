@@ -11,8 +11,8 @@
          (only-in rackunit check-equal? check-exn check-not-false test-case)
          (only-in raft device-vector->list device-vector? list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" host scaled-rows)
-         (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/common-data.rkt" host on-vector scaled-rows)
+         (only-in "private/linear-data.rkt" on-matrix)
          (only-in "private/logistic-data.rkt" unequal-weights-message)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
