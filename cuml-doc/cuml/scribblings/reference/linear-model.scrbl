@@ -46,30 +46,28 @@ weights are at least 0 with a positive sum. A zero weight deletes its row, and s
 at most 2@superscript{−150}·4@superscript{k} (float32) or 2@superscript{−1075}·4@superscript{k}
 (float64), 4@superscript{k} being the largest weight's power of two rounded up to a power of 4.
 
-@racket['auto] and @racket['eig] solve the normal equations, @racket['svd]
-and @racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation
-and @racket['svd-qr] a QR-based SVD; each column, @racket[y] and the weights
-are first scaled by powers of two.
+@racket['auto] and @racket['eig] solve the normal equations, @racket['svd] and @racket['svd-jacobi]
+use a Jacobi SVD, @racket['qr] a QR factorisation and @racket['svd-qr] a QR-based SVD; each column,
+@racket[y] and the weights are first scaled by powers of two.
 
-A column constant over the rows of positive weight (zero, without
-@racket[fit-intercept]) gets coefficient 0. With more non-constant columns
-than rows of positive weight, less one for @racket[fit-intercept], the Jacobi
-SVD gives the minimum-norm fit, except in float32 with
-@racket[fit-intercept], where the fit interpolates @racket[y] but generally
-is not minimum-norm.
+A column constant over the rows of positive weight (zero, without @racket[fit-intercept]) gets
+coefficient 0. With more non-constant columns than rows of positive weight, less one for
+@racket[fit-intercept], the Jacobi SVD gives the minimum-norm fit, except in float32 with
+@racket[fit-intercept], where the fit interpolates @racket[y] but generally is not minimum-norm.
 
-The fit is refused when the residual's weighted inner product with some
-centred column exceeds 2@superscript{-8} (float32) or 2@superscript{-18}
-(float64) times that column's weighted spread times @racket[y]'s, as with
-collinear columns in float32, where float64 often fits. Float32 fits under every @racket[algorithm] are also refused, before the solve, when u·κ ≥ 2@superscript{-8}, κ the condition number of the centred, weighted X with unit-norm columns, bounded below in float64, except where the shape forces the Jacobi SVD. A
-coefficient fixed only by rows of low weight w is accurate to about
-u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal
-does not see its loss.
+The fit is refused when the residual's weighted inner product with some column, centred under
+@racket[fit-intercept], exceeds 2@superscript{-8} (float32) or 2@superscript{-18} (float64) times
+that column's weighted spread times @racket[y]'s, as with collinear columns in float32, where
+float64 often fits. Float32 @racket['qr] and @racket['svd-qr] refuse X with collinear columns,
+centred under @racket[fit-intercept], before the solve, such as a full one-hot design with an
+intercept: drop a level, pass @racket[#:fit-intercept #f], or use float64 @racket['auto]. On exactly
+collinear X, float32 @racket['svd] and @racket['svd-jacobi] return a fit that is not the
+minimum-norm one. A coefficient fixed only by rows of low weight w is accurate to about
+u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal does not see its loss.
 
-Weighted fits with an intercept can differ in the last bits between runs
-from about 2000 rows, as in Python cuML; unweighted fits, and fits without an
-intercept, repeat bitwise. @racket[X], @racket[y] and @racket[sample-weight]
-are not modified.
+Weighted fits with an intercept can differ in the last bits between runs from about 2000 rows, as in
+Python cuML; unweighted fits, and fits without an intercept, repeat bitwise. @racket[X], @racket[y]
+and @racket[sample-weight] are not modified.
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 1) (1 1) (2 1) (3 1)) #:dtype 'float64))
 (define yc (list->device-vector '(1 3 5 7) #:dtype 'float64))
@@ -169,18 +167,20 @@ dtype's unit roundoff, is below rounding and is taken as 0: that fit is
 @racket['eig]), refusals included. A column constant over the rows of positive
 weight (zero, without @racket[fit-intercept]) gets coefficient 0.
 
-The fit is refused when the solve is not a ridge solution, as when X is
-ill-conditioned for @racket[alpha] (@racket['svd], float64 or a larger
-@racket[alpha] may fit), and when @racket[alpha] scaled with X passes the dtype's
-range. The coefficients are accurate to about u·κ@subscript{α} relative to the
-largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
-(λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the
-eigenvalues λ of XᵀWX on the varying columns, X centred as above. With @racket[alpha] above u times the narrowest column's spread and at most u times the widest's, @racket['svd] is refused before the solve when u·κ′ ≥ 2@superscript{-8} (float32) or 2@superscript{-18} (float64), κ′ the condition number of D⁻¹(XᵀWX + @racket[alpha]·I)D⁻¹, D² its diagonal, bounded below in float64; in float64 this also refuses some fits that @racket['svd] would return accurately. Elsewhere, where u·κ@subscript{α} is 1 or more, as
-with columns of very different scales or nearly collinear columns, either solver
-may refuse the fit as ill-conditioned or return it wrong. @racket['auto] and
-@racket['eig] can also lose accuracy whatever @racket[alpha] is when XᵀWX has
-eigenvalues below u·λ@subscript{max} (u·κ@subscript{0} ≥ 1), as in Python cuML;
-@racket['svd] does not. @tt{plans/layout.md} (L2-j, L2-k) has the measurements.
+The fit is refused when the solve is not a ridge solution, as when X is ill-conditioned for
+@racket[alpha] (@racket['svd], float64 or a larger @racket[alpha] may fit), and when @racket[alpha]
+scaled with X passes the dtype's range. The coefficients are accurate to about u·κ@subscript{α}
+relative to the largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
+(λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the eigenvalues λ of
+XᵀWX on the varying columns, X centred as above. With @racket[alpha] above u times the narrowest
+column's spread and at most u times the widest's, @racket['svd] refuses X that is ill-conditioned
+for @racket[alpha] before the solve; a larger @racket[alpha], or float64 for float32 X, may fit. In
+float64 this also refuses some fits that @racket['svd] would return accurately. Elsewhere, where
+u·κ@subscript{α} is 1 or more, as with columns of very different scales or nearly collinear columns,
+either solver may refuse the fit as ill-conditioned or return it wrong. @racket['auto] and
+@racket['eig] can also lose accuracy whatever @racket[alpha] is when XᵀWX has eigenvalues below
+u·λ@subscript{max} (u·κ@subscript{0} ≥ 1), as in Python cuML; @racket['svd] does not.
+@tt{plans/layout.md} (L2-j to L2-l) has the measurements.
 
 Fits repeat as @racket[linear-regression-fit]'s, and @racket[X], @racket[y] and
 @racket[sample-weight] are not modified.
