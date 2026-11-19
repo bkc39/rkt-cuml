@@ -289,9 +289,9 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   the zero model's loss without an intercept. With fit-intercept a
   regressor's l1 or elastic-net fit at round-off is instead judged against
   b = ȳ, w = 0: it is refused, "y is constant to round-off and ...; lower
-  #:eta0 or #:alpha", unless every |w| ≤ 2·eta0·α·r and |b − ȳ| ≤
-  1e-6·|ȳ|. At round-off with fit-intercept a regressor under any penalty
-  is also refused, "y is constant to round-off and the fit's predictions
+  #:eta0 or #:alpha", unless every |w| ≤ 2·eta0·α·r, two penalty steps,
+  and |b − ȳ| ≤ 1e-6·|ȳ|. At round-off with fit-intercept a regressor
+  under any penalty is also refused, "y is constant to round-off and the fit's predictions
   are off by …; lower #:eta0 or #:alpha" ("lower #:eta0" without an l1
   share), when √loss > 2⁻¹⁰·|ȳ| + √floor, loss the unpenalised mean
   squared error. Under none, l2 or elastic net with l1-ratio 0 the

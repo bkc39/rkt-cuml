@@ -2098,9 +2098,9 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   at 0.25·mean(y²), the zero model's loss there; with fit-intercept an l1
   or elastic-net regressor at round-off is judged against the zero model
   b = ȳ, w = 0 instead, refused ("y is constant to round-off and ...;
-  lower #:eta0 or #:alpha") unless every |w| ≤ 2·eta0·α·r and |b − ȳ| ≤
-  1e-6·|ȳ| (r3; a cap of .25·mean(y²) uncentred there passed a fit off the
-  constant by up to about ȳ/2), and any regressor with fit-intercept at
+  lower #:eta0 or #:alpha") unless every |w| ≤ 2·eta0·α·r, two penalty
+  steps, and |b − ȳ| ≤ 1e-6·|ȳ| (r3; a cap of .25·mean(y²) uncentred
+  there passed a fit off the constant by up to about ȳ/2), and any regressor with fit-intercept at
   round-off is refused when √loss > 2⁻¹⁰·|ȳ| + √floor (r4b, F10-R
   round-off). A and both caps scale with y², so the
   caps are y-scale-invariant, and they keep A finite for any finite
