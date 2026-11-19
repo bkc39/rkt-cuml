@@ -1962,21 +1962,22 @@ scratch, the source is `cpp/src/glm/qn/`.
     (`current-memory-use 'cumulative`): a host copy of y made inside the
     shim, in malloc'd or pinned memory, would not show in it.
   - #126: a cutoff whose kept spreads differ by more than 2^8 advises
-    "standardise the columns". A fit the check refuses is solved again
-    (`logistic_solve.cpp`, `rescued`), from zero and then from the first
-    solve's point mapped into the new coordinates: kept columns centred with
-    fit-intercept (means folded into the intercept), each staged by its own
-    power of two under `'none` (the loss depends only on Xw), the shared
-    exponent otherwise; without fit-intercept only the per-column staging,
-    only under `'none`. The answer is mapped back to the first solve's
-    coordinates and passes the same check there, or the first refusal
-    stands. The rescue's solves share the one max-iter budget, so n-iter
+    "standardise the columns". With fit-intercept or under `'none`, a
+    fit the check refuses is solved again (`logistic_solve.cpp`,
+    `rescued`), from zero and then from the first solve's point mapped
+    into the new coordinates: kept columns centred with fit-intercept
+    (means folded into the intercept), each staged by its own power of two
+    under `'none` (the loss depends only on Xw), the shared exponent
+    otherwise; without fit-intercept only the per-column staging, only
+    under `'none`. The answer is mapped back to the first solve's
+    coordinates and passes the same check there, or the fit is refused.
+    The rescue's solves share the one max-iter budget, so n-iter
     counts every solve and is at most max-iter (Python's `n_iter_`). A
     first solve that reaches max-iter and fails the check is not
     rescued; its refusal says "raise max-iter". A failed rescue's
-    refusal names the first solve's residual and the iterations of every
-    solve, so a rescue that spends the budget also says "raise
-    max-iter". Fits the first solve accepts run the same code as before,
+    refusal names its last finite attempt's residual and bound (the first
+    solve's when none was finite), and the iterations of every solve, so
+    a rescue that spends the budget also says "raise max-iter". Fits the first solve accepts run the same code as before,
     bitwise.
     Epoch-second timestamps over a minute (offset 1.7e9) fit at the
     default max-iter (n-iter 14-25). Raw breast-cancer is refused at the
