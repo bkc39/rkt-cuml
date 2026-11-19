@@ -49,8 +49,10 @@ constexpr double largest = 3.0;
 constexpr double first_worst = 1.0;
 constexpr double first_bound = 1e-3;
 constexpr double zero_start_worst = 0.25;
+constexpr double other_coef = 0.5;
+constexpr double other_intercept = -0.75;
 
-enum class returned { non_finite, zeros, other };
+enum class returned : std::uint8_t { non_finite, zeros, other };
 
 std::vector<double> returned_params(returned r) {
   switch (r) {
@@ -59,7 +61,7 @@ std::vector<double> returned_params(returned r) {
     case returned::zeros:
       return std::vector<double>(params, 0.0);
     case returned::other:
-      return {0.5, -0.75};
+      return {other_coef, other_intercept};
   }
   return {};
 }
@@ -179,8 +181,7 @@ TEST(LogisticRescue, ANonFiniteWarmAttemptKeepsTheColdAttemptsResidual) {
 
 TEST(LogisticRescue, TwoFiniteAttemptsKeepTheWarmAttemptsResidual) {
   CUMLRKT_REQUIRE_GPU();
-  const outcome warm_only =
-      rescued_with(returned::non_finite, returned::other);
+  const outcome warm_only = rescued_with(returned::non_finite, returned::other);
   const outcome both = rescued_with(returned::zeros, returned::other);
   EXPECT_FALSE(both.rescued);
   ASSERT_TRUE(warm_only.last_worst.has_value());
