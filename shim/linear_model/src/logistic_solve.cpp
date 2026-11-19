@@ -165,7 +165,7 @@ attempt<T> attempted(const raft::handle_t& handle, T* x, T* y, T* w,
 }
 
 template <typename T>
-std::optional<qn_solution<T>> rescued(
+rescue<T> rescued(
     const raft::handle_t& handle, const matrix<T, int64_t>& x,
     row_selection rows, const column_stats& stats, staged_fit<T>& st,
     const attempt<T>& plain, const fit_options& options,
@@ -173,7 +173,7 @@ std::optional<qn_solution<T>> rescued(
   const bool per_column = options.penalty == CUML_LINEAR_MODEL_PENALTY_NONE;
   if ((!options.fit_intercept && !per_column) ||
       plain.solution.n_iter >= options.max_iter) {
-    return std::nullopt;
+    return {std::nullopt, plain.solution.n_iter};
   }
   const rmm::cuda_stream_view stream = stream_of(handle);
   const qn_shape& shape = st.shape;
@@ -197,24 +197,24 @@ std::optional<qn_solution<T>> rescued(
     if (budget.max_iter < 1) {
       break;
     }
-    const qn_solution<T> rescue =
+    const qn_solution<T> tried =
         solve(handle, copy.data(), st.y.data(), st.weights(), shape,
               plain.check.pen, budget, *start);
-    total.n_iter += rescue.n_iter;
-    if (!all_finite(rescue.params, stream)) {
+    total.n_iter += tried.n_iter;
+    if (!all_finite(tried.params, stream)) {
       continue;
     }
     buffer<T> params = to_device(
-        mapped_back(to_host(rescue.params, stream), plan, st.shift, shape),
+        mapped_back(to_host(tried.params, stream), plan, st.shift, shape),
         stream);
     if (all_finite(params, stream) &&
         checked<T>(handle, st.x(), st.y.data(), st.weights(), params, options,
                    total)
             .resolved()) {
-      return qn_solution<T>{std::move(params), total.n_iter};
+      return {qn_solution<T>{std::move(params), total.n_iter}, total.n_iter};
     }
   }
-  return std::nullopt;
+  return {std::nullopt, total.n_iter};
 }
 
 template qn_solution<float> qn_solved<float>(const raft::handle_t&, float*,
@@ -225,7 +225,7 @@ template attempt<float> attempted<float>(const raft::handle_t&, float*, float*,
                                          float*, solve_check,
                                          const fit_options&,
                                          const std::vector<float>&);
-template std::optional<qn_solution<float>> rescued<float>(
+template rescue<float> rescued<float>(
     const raft::handle_t&, const matrix<float, int64_t>&, row_selection,
     const column_stats&, staged_fit<float>&, const attempt<float>&,
     const fit_options&, const qn_solver<float>&);
@@ -238,7 +238,7 @@ template attempt<double> attempted<double>(const raft::handle_t&, double*,
                                            double*, double*, solve_check,
                                            const fit_options&,
                                            const std::vector<double>&);
-template std::optional<qn_solution<double>> rescued<double>(
+template rescue<double> rescued<double>(
     const raft::handle_t&, const matrix<double, int64_t>&, row_selection,
     const column_stats&, staged_fit<double>&, const attempt<double>&,
     const fit_options&, const qn_solver<double>&);

@@ -258,12 +258,13 @@ qn_solution<T> solve(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   if (plain.r.resolved()) {
     return std::move(plain.solution);
   }
-  std::optional<qn_solution<T>> rescue =
-      rescued<T>(handle, x, rows, stats, st, plain, options);
-  if (!rescue) {
-    refuse_cutoff(plain.r, options, plain.check);
+  rescue<T> second = rescued<T>(handle, x, rows, stats, st, plain, options);
+  if (!second.solution) {
+    solve_check spent = plain.check;
+    spent.n_iter = second.n_iter;
+    refuse_cutoff(plain.r, options, spent);
   }
-  return std::move(*rescue);
+  return std::move(*second.solution);
 }
 
 template <typename T>

@@ -4,7 +4,6 @@
 #include <limits>
 #include <optional>
 #include <raft/core/handle.hpp>
-#include <string>
 #include <vector>
 
 #include "cumlrkt/linear_model.h"
@@ -30,7 +29,7 @@ using cumlrkt::glm::logistic::penalties;
 using cumlrkt::glm::logistic::qn_shape;
 using cumlrkt::glm::logistic::qn_solution;
 using cumlrkt::glm::logistic::qn_solver;
-using cumlrkt::glm::logistic::refuse_cutoff;
+using cumlrkt::glm::logistic::rescue;
 using cumlrkt::glm::logistic::rescued;
 using cumlrkt::glm::logistic::solve_check;
 using cumlrkt::glm::logistic::staged_fit;
@@ -50,18 +49,14 @@ constexpr double largest = 3.0;
 constexpr double first_worst = 1.0;
 constexpr double first_bound = 1e-3;
 
-std::string first_refusal(const attempt<double>& plain,
-                          const fit_options& options) {
-  try {
-    refuse_cutoff(plain.r, options, plain.check);
-  } catch (const cumlrkt::logic_error& e) {
-    return e.what();
-  }
-  return "accepted";
-}
+struct outcome {
+  bool rescued;
+  int n_iter;
+  std::vector<std::vector<double>> starts;
+  std::vector<int> budgets;
+};
 
-TEST(LogisticRescue, NonFiniteColdAttemptKeepsTheFirstRefusal) {
-  CUMLRKT_REQUIRE_GPU();
+outcome rescued_with(bool cold_spends_the_budget) {
   const resources res;
   const raft::handle_t& handle = raftrkt::handle_of(res.handle);
   const auto stream = cumlrkt::stream_of(handle);
@@ -99,30 +94,52 @@ TEST(LogisticRescue, NonFiniteColdAttemptKeepsTheFirstRefusal) {
       {to_device(std::vector<double>(params, 0.0), stream), first_iterations},
       {first_worst, first_bound, 0.0},
       check};
-  std::vector<std::vector<double>> starts;
+  outcome out{false, 0, {}, {}};
   const qn_solver<double> solve =
       [&](const raft::handle_t&, double*, double*, double*, const qn_shape&,
-          penalties, const fit_options&, const std::vector<double>& start) {
-        starts.push_back(start);
+          penalties, const fit_options& budget,
+          const std::vector<double>& start) {
+        out.starts.push_back(start);
+        out.budgets.push_back(budget.max_iter);
         return qn_solution<double>{
             to_device(std::vector<double>(params, start.empty() ? nan : 0.0),
                       stream),
-            1};
+            cold_spends_the_budget ? budget.max_iter : 1};
       };
-  std::string outcome = "accepted";
-  try {
-    if (!rescued<double>(handle, matrix<double, int64_t>{data, rows, 1},
-                         row_selection{nullptr, rows}, stats, st, plain,
-                         options, solve)) {
-      refuse_cutoff(plain.r, options, plain.check);
-    }
-  } catch (const cumlrkt::logic_error& e) {
-    outcome = e.what();
-  }
-  EXPECT_EQ(outcome, first_refusal(plain, options));
-  ASSERT_EQ(starts.size(), 2U);
-  EXPECT_TRUE(starts[0].empty());
-  EXPECT_EQ(starts[1].size(), static_cast<std::size_t>(params));
+  const rescue<double> r =
+      rescued<double>(handle, matrix<double, int64_t>{data, rows, 1},
+                      row_selection{nullptr, rows}, stats, st, plain, options,
+                      solve);
+  out.rescued = r.solution.has_value();
+  out.n_iter = r.n_iter;
+  return out;
+}
+
+TEST(LogisticRescue, NonFiniteColdAttemptStillRunsTheWarmAttempt) {
+  CUMLRKT_REQUIRE_GPU();
+  const outcome out = rescued_with(false);
+  EXPECT_FALSE(out.rescued);
+  ASSERT_EQ(out.starts.size(), 2U);
+  EXPECT_TRUE(out.starts[0].empty());
+  EXPECT_EQ(out.starts[1].size(), static_cast<std::size_t>(params));
+}
+
+TEST(LogisticRescue, EachAttemptGetsTheIterationsLeft) {
+  CUMLRKT_REQUIRE_GPU();
+  const outcome out = rescued_with(false);
+  EXPECT_EQ(out.budgets,
+            (std::vector<int>{max_iter - first_iterations,
+                              max_iter - first_iterations - 1}));
+  EXPECT_EQ(out.n_iter, first_iterations + 2);
+}
+
+TEST(LogisticRescue, AColdAttemptThatSpendsTheBudgetSkipsTheWarmOne) {
+  CUMLRKT_REQUIRE_GPU();
+  const outcome out = rescued_with(true);
+  EXPECT_FALSE(out.rescued);
+  ASSERT_EQ(out.starts.size(), 1U);
+  EXPECT_EQ(out.budgets, std::vector<int>{max_iter - first_iterations});
+  EXPECT_EQ(out.n_iter, max_iter);
 }
 
 }  // namespace

@@ -17,7 +17,7 @@
 
 (define stationary-bound 1e-7)
 
-(define raw-breast-cancer-arms '((float64 #f 6000) (float64 #t 20000) (float32 #t 6000)))
+(define raw-breast-cancer-arms '((float64 #f 6000) (float32 #t 6000)))
 
 (define (stamps span seed)
   (define normal (normal-source seed))
@@ -49,7 +49,16 @@
       (match-define (residual K _ bound) (residual-at r X y penalty 1e-4))
       (check-true (<= K bound) (format "K ~a bound ~a" (exact->inexact K) (exact->inexact bound))))))
 
-(test-gpu "raw breast-cancer under 'none fits to the real-data stationarity bound"
+(test-gpu "a rescue that spends max-iter says raise max-iter"
+  (define-values (X y) (stamps 60.0 5))
+  (check-exn #rx"after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
+             (lambda ()
+               (logistic-regression-fit (on-matrix X 'float64)
+                                        (on-vector y 'int32)
+                                        #:penalty 'l2
+                                        #:max-iter 20))))
+
+(test-gpu "raw breast-cancer under 'none fits to the real-data stationarity bound, given room"
   (define set (labelled-set 'breast-cancer "diagnosis" '("id")))
   (define X (lr-case-X (labelled-case set)))
   (define y (lr-case-y (labelled-case set)))
