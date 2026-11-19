@@ -56,10 +56,9 @@
 
 (test-gpu "a rescue that spends max-iter names its last attempt's residual and says raise max-iter"
   (define-values (X y) (stamps 60.0 5))
-  (match-define
-    (regexp
-     #rx"residual ([^ ]+) above the bound ([^ ]+) after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
-     (list _ K bound))
+  (match-define (regexp
+                 #rx"residual ([^ ]+) above the bound ([^ ]+) after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
+                 (list _ K bound))
     (refusal (lambda ()
                (logistic-regression-fit (on-matrix X 'float64)
                                         (on-vector y 'int32)
@@ -100,9 +99,9 @@
   (define set (labelled-set 'breast-cancer "diagnosis" '("id")))
   (define X (on-matrix (lr-case-X (labelled-case set)) 'float64))
   (define (iterations fi)
-    (match-define
-      (regexp #rx"after ([0-9]+) iterations \\(max-iter 4000, tol 1e-04\\); standardise the columns$"
-              (list _ n))
+    (match-define (regexp
+                   #rx"after ([0-9]+) iterations \\(max-iter 4000, tol 1e-04\\); standardise the columns$"
+                   (list _ n))
       (refusal (lambda ()
                  (logistic-regression-fit X
                                           (labelled-labels set)
