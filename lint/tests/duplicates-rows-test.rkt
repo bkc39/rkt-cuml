@@ -153,14 +153,13 @@
                                                             (define (g s)
                                                               (match s
                                                                 [(regexp #rx"(.)" (list _ b)) b])))
-          ("a quasipattern binds an unquoted name inside a nested quasiquote"
-           #t
-           (define (f row)
-             (match row
-               [`(k `(,v)) v]))
-           (define (g row)
-             (match row
-               [`(k `(,w)) w])))
+          ("a quasipattern binds an unquoted name inside a nested quasiquote" #t
+                                                                              (define (f row)
+                                                                                (match row
+                                                                                  [`(k `(,v)) v]))
+                                                                              (define (g row)
+                                                                                (match row
+                                                                                  [`(k `(,w)) w])))
           ("a repeat count is compared as written, not renamed" #f
                                                                 (define (f v)
                                                                   (match v
