@@ -7,6 +7,7 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <type_traits>
 
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
@@ -125,12 +126,6 @@ inline void require_two_classes(int64_t k) {
   }
 }
 
-// A y equal to a constant c up to ±1 ulp has F_start ≤ ((1 + e)·ε·c)², e the
-// error of the mean in units of ε·|c|: below 1e-8 for float32 (the mean is
-// taken in double) and at most about log2(n)/2 ≤ 16 for float64 (a tree sum of
-// at most 2^31 terms). 17² < gate_round_off_start·gate_round_off_factor, so an
-// F_start at or below gate_round_off_start floors is round-off, and the caps
-// on A, multiples of F_start, apply only above it.
 inline constexpr double gate_slack = 0.025;
 inline constexpr double gate_l1_factor = 3.5;
 inline constexpr double gate_l1_cap = 4;
@@ -139,11 +134,23 @@ inline constexpr double gate_l1_regressor_cap = 0.25;
 // gate_l1_regressor_columns coefficients the regressor's cap grows with k:
 // wide lassos whose predictions match the optimum's needed a cap of up to
 // 0.25·k/875 (F10-W), and no fit with k at most 800, where every F10-R
-// refusal lies, moves.
+// refusal lies, moves. The loss guard keeps a widened cap from passing a fit
+// that predicts worse than the zero model.
 inline constexpr double gate_l1_regressor_columns = 800;
 inline constexpr double gate_floor_share = 1e-12;
 inline constexpr double gate_round_off_factor = 10;
-inline constexpr double gate_round_off_start = 32;
+// A y equal to a constant c up to ±1 ulp has F_start ≤ ((1 + e)·ε·c)², e the
+// error of the mean in units of ε·|c|, and the floor's round-off term is
+// gate_round_off_factor·ε²·c². float32: the mean is summed in double, so
+// e ≤ n·2^-53/ε ≤ 2 for n ≤ 2^31 even summed in sequence, and 3² < 10: a
+// multiple of 1, which admits a spread of at most √10·ε·|ȳ|. float64:
+// e ≤ log2(n)/2 ≤ 16 for a tree sum, and 17² < 32·10. An F_start at or below
+// that many floors is round-off: the zero model fits y, and A is capped at a
+// share of the uncentred start, the zero model's loss without an intercept
+// (mean(y²) for the regressor), instead of a multiple of F_start.
+template <typename T>
+inline constexpr double gate_round_off_start =
+    std::is_same_v<T, float> ? 1 : 32;
 // sgdFit sums in X's dtype: X's columns and y for the centring means, and the
 // products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).
 // Each bound must stay solver_headroom below the dtype's largest value. The
@@ -162,24 +169,36 @@ inline double l1_share(const sgd_options& o) {
   }
 }
 
+struct baseline {
+  double start;
+  double floor;
+  double uncentred;
+};
+
+template <typename T>
+bool at_round_off(const baseline& base) {
+  return base.start <= gate_round_off_start<T> * base.floor;
+}
+
 // At a zero optimum l1 SGD oscillates, each coordinate moving about
 // eta0·alpha·r: the penalty rises by alpha·r·|w|_1 and the loss can fall by
 // no more, a rise of about 2·k·eta0·(alpha·r)^2. eta0 bounds the step under
-// every schedule. Above round-off it is capped at a multiple of start, so a
-// large eta0 or alpha cannot hide divergence.
-inline double l1_allowance(const sgd_options& o, int64_t d, double start,
-                           double floor, bool regressor) {
+// every schedule. It is capped at a multiple of start, or of the uncentred
+// start at round-off, so a large eta0 or alpha cannot hide divergence.
+template <typename T>
+double l1_allowance(const sgd_options& o, int64_t d, const baseline& base,
+                    bool regressor) {
   const auto k = static_cast<double>(d + (o.fit_intercept != 0 ? 1 : 0));
   const double a = o.alpha * l1_share(o);
   const double allowance = gate_l1_factor * k * o.eta0 * a * a;
-  if (start <= gate_round_off_start * floor) {
-    return allowance;
+  if (at_round_off<T>(base)) {
+    return std::min(allowance, gate_l1_regressor_cap * base.uncentred);
   }
   const double cap =
       regressor
           ? gate_l1_regressor_cap * std::max(1.0, k / gate_l1_regressor_columns)
           : gate_l1_cap;
-  return std::min(allowance, cap * start);
+  return std::min(allowance, cap * base.start);
 }
 
 inline double classifier_floor(double start) {
@@ -231,6 +250,18 @@ inline std::optional<std::string> gate_refusal(bool finite, double start,
         start, end, printed(eta0));
   }
   return std::nullopt;
+}
+
+template <typename T>
+std::optional<std::string> loss_refusal(const baseline& base, double loss,
+                                        double eta0) {
+  if (at_round_off<T>(base) ||
+      loss <= (base.start * (1 + gate_slack)) + base.floor) {
+    return std::nullopt;
+  }
+  return std::format(
+      "the loss rose from {:.6g} to {:.6g}; lower #:eta0 (now {})", base.start,
+      loss, printed(eta0));
 }
 
 }  // namespace cumlrkt::glm::mbsgd

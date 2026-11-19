@@ -5,7 +5,12 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case)
          (only-in "private/mbsgd-data.rkt" normal-rows reg-target)
-         (only-in "private/mbsgd-gate-data.rkt" grid grid-y refused-at-eta0 regressor-fit))
+         (only-in "private/mbsgd-gate-data.rkt"
+                  grid
+                  grid-y
+                  refused-at-eta0
+                  regressor-fit
+                  wide-problem))
 
 (define normal (normal-rows 512 6 3))
 (define normal-targets (reg-target normal 3 #:noise 0.5))
@@ -45,16 +50,22 @@
     (law-case (format "~a ~a" dt name)
       (refused-at-eta0 (one-epoch X y dt alpha) eta0))))
 
-(define wide (normal-rows 200 4000 11))
-(define wide-targets
-  (for/list ([r (in-list wide)]
-             [e (in-list (normal-rows 200 1 12))])
-    (+ (car r) (cadr r) (caddr r) (* 0.5 (car e)))))
+(define-values (wide wide-targets) (wide-problem 200 4000))
 
 (test-gpu "a wide lasso whose oscillation outgrows a quarter of the zero model's objective passes"
   (for ([dt (in-list dtypes)])
     (law-case (format "~a 200 rows, 4000 columns, l1 alpha 1" dt)
       (check-not-exn (regressor-fit wide wide-targets dt #:penalty 'l1 #:alpha 1)))))
+
+(define wide-rises '((float32 0.582 3.09) (float64 0.592 3.04)))
+
+(test-gpu "a wide lasso rising past the widened cap is refused although it beats the zero model"
+  (for ([r (in-list wide-rises)])
+    (match-define (list dt _ _) r)
+    (law-case (format "~a 200 rows, 4000 columns, l1 alpha 1" dt)
+      (refused-at-eta0 (lambda (eta0)
+                         (regressor-fit wide wide-targets dt #:penalty 'l1 #:alpha 1 #:eta0 eta0))
+                       3e-3))))
 
 (test-gpu "an alpha whose uncapped allowance overflows double is still gated"
   (law-case "l1 alpha 1e200"

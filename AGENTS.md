@@ -283,10 +283,15 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
   a constant y. The gate catches blow-ups and fits ending above
   F_start·1.025 + A, A at most 4·F_start for the classifier and
-  0.25·max(1, k/800)·F_start for the regressor under l1 or elastic-net,
-  so A is finite for any finite F_start (L5-d, F10-C, F10-R, F10-W). Where F_start ≤ 32·floor
-  (round-off: a constant y, whatever its mean's rounding) A is uncapped,
-  and an infinite objective is refused whatever A. Before the solve, with
+  0.25·max(1, k/800)·F_start for the regressor under l1 or elastic-net;
+  where F_start ≤ m·floor, m 32 in float64 and 1 in float32 (round-off: a
+  constant y, whatever its mean's rounding), A is at most 0.25·mean(y²),
+  the zero model's loss without an intercept. So A is finite for any
+  finite F_start and mean(y²), and an infinite objective is refused
+  whatever A. Above round-off a regressor whose loss without the penalty
+  ends above F_start·1.025 + floor, a fit worse than the zero model, is
+  refused with "the loss rose ...; lower #:eta0" (L5-d, F10-C, F10-R,
+  F10-W). Before the solve, with
   the sums the solver makes in X's dtype bounded in double: a y whose
   F_start or floor is not finite, or with fit-intercept whose Σ|y| exceeds
   a quarter of the dtype's largest value, is refused with "rescale y"; an

@@ -56,12 +56,15 @@ Raises, advising a lower @racket[eta0], when the iterate is not finite or its ob
 the zero model's by more than a small slack, round-off of @racket[y], and, under l1 or elastic net,
 an allowance for the oscillation about a zero optimum. The allowance grows with the columns,
 @racket[eta0] and @racket[alpha] but is at most a quarter of the zero model's objective, a multiple
-growing with the columns beyond 800, unless that objective is itself round-off, as for a constant
-@racket[y]. The gate sees only the objective, so it can pass a fit that predicts badly, and refuse
-one that predicts well on a nearly constant @racket[y]. Raises, advising a rescale, before the solve when the
-zero model's objective of @racket[y] is not finite, or when a sum the solver makes in @racket[X]'s
-dtype could overflow: with @racket[fit-intercept] the sum of a column of @racket[X] (rescale
-@racket[X]) or of @racket[y] (rescale @racket[y]), and the products of @racket[X] and the centred
+growing with the columns beyond 800; when that objective is itself round-off, as for a constant
+@racket[y], at most a quarter of the mean of @racket[y]'s squares. Also raises when the loss
+without the penalty ends above the zero model's by more than the slack and round-off, a fit that
+predicts worse than the mean of @racket[y]. The gate sees only the objective and the loss, so it
+can pass a fit that predicts badly, and refuse one that predicts well on a nearly constant
+@racket[y]. Raises, advising a rescale, before the solve when the zero model's objective of
+@racket[y] is not finite, or when a sum the solver makes in @racket[X]'s dtype could overflow:
+with @racket[fit-intercept] the sum of a column of @racket[X] (rescale @racket[X]) or of
+@racket[y] (rescale @racket[y]), and the products of @racket[X] and the centred
 @racket[y] in the gradient (rescale either; this bound is stricter than the solver needs when
 @racket[batch-size] is below the rows). Also refused before the solve: an
 @racket[alpha], @racket[tol], @racket[eta0] or @racket[power-t] that overflows @racket[X]'s dtype,

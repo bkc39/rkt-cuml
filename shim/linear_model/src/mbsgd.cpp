@@ -80,11 +80,6 @@ double penalty_of(const std::vector<double>& w, const sgd_options& o) {
   }
 }
 
-struct baseline {
-  double start;
-  double floor;
-};
-
 template <typename T>
 baseline baseline_of(const raft::handle_t& handle, const matrix<T, int64_t>& x,
                      const T* y, const sgd_options& o, bool ones,
@@ -97,15 +92,15 @@ baseline baseline_of(const raft::handle_t& handle, const matrix<T, int64_t>& x,
   const double b0 = centred ? mean_of<T>(handle, y, x.n) : 0.0;
   const buffer<T> zero = zeroed<T>(cols, stream);
   const double start = mean_loss<T>(handle, x.data, y, zero.data(), b0, shape);
-  const double floor =
-      regressor
-          ? regressor_floor<T>(
-                start, mean_loss<T>(handle, x.data, y, zero.data(), 0.0, shape))
-          : classifier_floor(start);
+  const double mean_square =
+      regressor ? mean_loss<T>(handle, x.data, y, zero.data(), 0.0, shape)
+                : start;
+  const double floor = regressor ? regressor_floor<T>(start, mean_square)
+                                 : classifier_floor(start);
   if (const auto refusal = scale_refusal(start, floor)) {
     throw logic_error(*refusal);
   }
-  return {start, floor};
+  return {start, floor, mean_square};
 }
 
 template <typename T>
@@ -138,19 +133,23 @@ void require_improved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
       std::ranges::all_of(w, [](T v) { return std::isfinite(v); }) &&
       std::isfinite(intercept);
   const objective_shape shape{x.n, x.d, ones, o.loss};
-  const double start = base.start;
+  double loss = 0;
   double end = 0;
   double allowance = 0;
   if (finite) {
-    allowance = l1_allowance(o, x.d, start, base.floor, regressor) + base.floor;
-    std::vector<double> wd(w.begin(), w.end());
-    end = mean_loss<T>(handle, x.data, y, coef, static_cast<double>(intercept),
-                       shape) +
-          penalty_of(wd, o);
+    allowance = l1_allowance<T>(o, x.d, base, regressor) + base.floor;
+    loss = mean_loss<T>(handle, x.data, y, coef, static_cast<double>(intercept),
+                        shape);
+    end = loss + penalty_of(std::vector<double>(w.begin(), w.end()), o);
   }
   if (const auto refusal =
-          gate_refusal(finite, start, end, allowance, o.eta0)) {
+          gate_refusal(finite, base.start, end, allowance, o.eta0)) {
     throw logic_error(*refusal);
+  }
+  if (regressor) {
+    if (const auto refusal = loss_refusal<T>(base, loss, o.eta0)) {
+      throw logic_error(*refusal);
+    }
   }
 }
 

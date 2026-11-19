@@ -2092,10 +2092,14 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. The
   classifier's A is capped at 4·F_start (fix r1e): uncapped, a large eta0
   makes A large enough to hide divergence (ratios to 3,721 at eta0 1,
-  F10-C). The regressor's A is capped at 0.25·F_start (#134, F10-R): A
-  and F_start both scale with y², so the cap is y-scale-invariant, and it
-  keeps A finite for any finite F_start (uncapped, A is inf in float64
-  above α ≈ 1e154 and passed any finite fit). F10-R separates its good
+  F10-C). The regressor's A is capped at 0.25·max(1, k/800)·F_start
+  (#134, F10-R, F10-W), and where F_start is round-off (F_start ≤ m·floor,
+  m 32 in float64 and 1 in float32, F10-R round-off) at 0.25·mean(y²), the
+  zero model's loss without an intercept: A and both bounds scale with y²,
+  so the caps are y-scale-invariant, and they keep A finite for any finite
+  F_start and mean(y²) (uncapped, A is inf in float64 above α ≈ 1e154 and
+  passed any finite fit; uncapped at round-off, a constant y = 1.7 passed
+  at prediction RMSE up to 9.8e146). F10-R separates its good
   fits (largest need 0.0734·F_start) from its bad ones (smallest 0.606).
   The largest rise a good classifier fit needs at the default eta0 is
   breast cancer log l1 α 10, ratio 3.21, inside the capped limit of
@@ -2108,9 +2112,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   setting the review found at chance above the zero model except one that
   A admits at eta0 1, and refuses no good fit at the default eta0; it
   refuses 10 good fits at eta0 .01, which no constant s can avoid (F10-C).
-  The gate catches blow-ups and fits ending above F_start·1.025 + A, A at
-  most 4·F_start for the classifier and 0.25·F_start for the regressor
-  under l1 or elastic-net; it passes a fit at or below that which predicts badly
+  The gate catches blow-ups and fits ending above F_start·1.025 + A + floor, A at
+  most 4·F_start for the classifier and as above for the regressor under
+  l1 or elastic-net. Above round-off it also refuses a regressor whose
+  loss without the penalty ends above F_start·1.025 + floor, a fit worse
+  than the zero model (with an intercept, in-sample R² below about
+  −.025), "the loss rose from … to …; lower #:eta0" (F10-W r2). It
+  passes a fit at or below those which predicts badly
   (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
   blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
   refusals advise lowering eta0, and print both values to 6 significant
@@ -2242,23 +2250,32 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   refused fits have in-sample R² within .02 of the optimum's: their g is
   large because α·|w|₁ of the oscillation is large next to a tiny
   F_start, not because they predict badly. They stay refused (r1 ruling).
-- **F10-R round-off** (r1). A constant y under l1 or elastic net has
+- **F10-R round-off** (r1, r2). A constant y under l1 or elastic net has
   F_start of 0 to an ulp² of y (the mean's rounding: 0.3 f64 3.1e-33,
   1e6 f64 1.4e-20), so a quarter of it refused the oscillation at the
-  defaults (rise 3.8e-11 under l1 α 1e-4). The cap now applies only
-  above 32 floors: a constant within ±1 ulp has F_start ≤ ((1 + e)·ε·y)²,
-  e the mean's error in ε·|y| (< 1e-8 for f32, whose mean is in double;
-  ≤ log2(n)/2 ≤ 16 for an f64 tree sum), and 17² < 32·10. Every constant
-  0.3, 1.7, 1e6 under l1 and elastic net at α 1e-4 and 1 now passes in
-  both dtypes. Near-constant y = 1.7 + 1e-6·e (300×4, defaults α 1e-4):
-  F_start 1.08e-12; f32 now passes (F_start ≤ 32 floors = 1.3e-11); f64
-  is still refused under l1 (g 33.4, need 33.4, rise ≈ 3.6e-11 of
-  oscillation penalty) and elastic net (g .42, need .39). Their
-  predictions are within 1.8e-7 and 1.6e-8 RMS of the optimum's (σ_y
-  1e-6): in-sample R² −.054 under l1, outside .02 of the optimum's 0,
-  and −.003 under elastic net, inside it. No round-off multiple reaches it (it would need ~7e17);
-  only a cap tied to the oscillation's scale would, which is A itself.
-  At 1e-5·e (F_start 1.1e-10) both dtypes pass.
+  defaults (rise 3.8e-11 under l1 α 1e-4). Round-off is F_start ≤ m·floor:
+  a constant within ±1 ulp has F_start ≤ ((1 + e)·ε·y)², e the mean's
+  error in ε·|y|; f32's mean is summed in double, so e ≤ n·2⁻⁵³/ε ≤ 2 even
+  in sequence and 3² < 10 gives m = 1; f64's is at most log2(n)/2 ≤ 16 for
+  a tree sum and 17² < 32·10 gives m = 32 (a 3e6-row f64 constant passes,
+  reviewer probe). r1's single m = 32 called up to about 18·ε·|ȳ| of real
+  f32 spread round-off: y = 1e6 + 1.5·x₁ + .5·e (300×4, var 2.35) passed
+  l1 α 100 eta0 .1 at R² −70.8 and α 1e4 at R² −7.2e5 (r2). At round-off A
+  is capped at .25·mean(y²), the zero model's loss without an intercept:
+  r1 left it uncapped, and y = 1.7 passed l1 α 100 eta0 .1 at prediction
+  RMSE 10.9, α 1e150 at 9.8e146, and bs 1 invscaling eta0 1 at .17 (r2).
+  Every constant 0.3, 1.7, 1e6 under l1 and elastic net passes at the
+  defaults in both dtypes with |b − y| ≤ 1e-6·|y| (worst 1.4e-7, the f32
+  rounding of 0.3) and every |w| ≤ 2·eta0·α·r (worst .95·eta0·α·r), over X
+  seeds 3, 5, 7, 13. Near-constant y = 1.7 + 1e-6·e (300×4, defaults α
+  1e-4): F_start 1.08e-12, 2.6 f32 floors, so f32 is now above round-off.
+  Under l1 it is refused (g 33.2, R² −.078 against the optimum's 0: it
+  predicts worse than the zero model); under elastic net it passes the
+  cap and the loss guard (R² −.026, loss 1.024·F_start, inside the
+  slack). f64 is refused under l1 (g 33.4, R² −.054) and elastic net (g
+  .42, R² −.003, inside .02 of the optimum's 0; #141). No round-off
+  multiple reaches f64 (it would need ~7e17). At 1e-5·e and 1e-4·e
+  both dtypes pass.
 - **F10-W wide lasso** (r1; n 200, d 500 to 8,000, y = x₁ + x₂ + x₃ +
   .5·e, l1 and elastic net .15 at α .1 and 1, eta0 1e-3, 1e-4, 1e-5, f32
   and f64, 3 seeds, 360 fits; and at eta0 3e-3 to .1, 1 seed, 96 fits).
@@ -2274,7 +2291,17 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   2,000 .74 / 1.53, 4,000 1.10 / 3.28, 8,000 2.35 / 7.45; the refused
   are at eta0 ≥ 3e-3, and every fit with R² < 0 (smallest g 9.46, d
   8,000 eta0 3e-3) stays refused. No fit the new cap accepts and the
-  old refused predicts worse than R² − .02.
+  old refused predicts worse than R² − .02. r2: validated at n 200 only,
+  the widening passed n 12 × d 8,000 l1 α .6 at R² −.39 and n 10 × d
+  8,000 α .3 (f32) at R² −1.18; the loss guard now refuses those. Rerun
+  at n 10, 12 and 50 (same y, d and penalties, α .1, .3, .6, 1, eta0
+  1e-3 and 1e-4, both dtypes, 3 seeds; n 12 × d 8,000 1 seed; 1,368
+  fits): the widening admits 5 fits with R² < 0, all at d 8,000, n 10
+  and 12 (R² −.41 to −1.18), and the guard refuses each; the other 36
+  fits it admits over n 12 to 200 all have R² within .02 of the
+  optimum's. The guard refuses no other fit, and no plain .25 cap with
+  the guard passes the 16 (the guard only refuses), so the widening
+  stays, with the guard.
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
   as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
   .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:

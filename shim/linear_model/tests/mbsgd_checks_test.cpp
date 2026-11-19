@@ -14,6 +14,7 @@
 
 namespace {
 
+using cumlrkt::glm::mbsgd::baseline;
 using cumlrkt::glm::mbsgd::sgd_options;
 
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
@@ -229,6 +230,10 @@ struct penalty_case {
   double eta0;
 };
 
+baseline above(double start) {
+  return {start, 0, start};
+}
+
 sgd_options with_penalty(const penalty_case& c) {
   sgd_options o = cuml_defaults;
   o.penalty = c.penalty;
@@ -242,46 +247,47 @@ sgd_options with_penalty(const penalty_case& c) {
 TEST(MbsgdGate, TheL1AllowanceIsCKEta0AlphaRSquared) {
   using cumlrkt::glm::mbsgd::l1_allowance;
   const double uncapped = 1e6;
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(
+                       with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
+                                     .alpha = 10,
+                                     .l1_ratio = 0.15,
+                                     .fit_intercept = 1,
+                                     .eta0 = 1e-3}),
+                       3, above(uncapped), false),
+                   3.5 * 4 * 1e-3 * 100);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(
+                       with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
+                                     .alpha = 10,
+                                     .l1_ratio = 0.15,
+                                     .fit_intercept = 0,
+                                     .eta0 = 1e-3}),
+                       3, above(uncapped), false),
+                   3.5 * 3 * 1e-3 * 100);
   EXPECT_DOUBLE_EQ(
-      l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
-                                 .alpha = 10,
-                                 .l1_ratio = 0.15,
-                                 .fit_intercept = 1,
-                                 .eta0 = 1e-3}),
-                   3, uncapped, 0, false),
-      3.5 * 4 * 1e-3 * 100);
-  EXPECT_DOUBLE_EQ(
-      l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
-                                 .alpha = 10,
-                                 .l1_ratio = 0.15,
-                                 .fit_intercept = 0,
-                                 .eta0 = 1e-3}),
-                   3, uncapped, 0, false),
-      3.5 * 3 * 1e-3 * 100);
-  EXPECT_DOUBLE_EQ(
-      l1_allowance(
+      l1_allowance<double>(
           with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_ELASTICNET,
                         .alpha = 2,
                         .l1_ratio = 0.25,
                         .fit_intercept = 1,
                         .eta0 = 0.5}),
-          30, uncapped, 0, false),
+          30, above(uncapped), false),
       3.5 * 31 * 0.5 * 0.25);
-  EXPECT_EQ(l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L2,
-                                       .alpha = 10,
-                                       .l1_ratio = 1,
-                                       .fit_intercept = 1,
-                                       .eta0 = 1}),
-                         3, uncapped, 0, false),
+  EXPECT_EQ(l1_allowance<double>(
+                with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L2,
+                              .alpha = 10,
+                              .l1_ratio = 1,
+                              .fit_intercept = 1,
+                              .eta0 = 1}),
+                3, above(uncapped), false),
             0);
-  EXPECT_EQ(
-      l1_allowance(with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_NONE,
-                                 .alpha = 10,
-                                 .l1_ratio = 1,
-                                 .fit_intercept = 1,
-                                 .eta0 = 1}),
-                   3, uncapped, 0, false),
-      0);
+  EXPECT_EQ(l1_allowance<double>(
+                with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_NONE,
+                              .alpha = 10,
+                              .l1_ratio = 1,
+                              .fit_intercept = 1,
+                              .eta0 = 1}),
+                3, above(uncapped), false),
+            0);
 }
 
 TEST(MbsgdGate, TheL1AllowanceIsCappedAtFourStarts) {
@@ -293,16 +299,18 @@ TEST(MbsgdGate, TheL1AllowanceIsCappedAtFourStarts) {
                                       .fit_intercept = 1,
                                       .eta0 = 1e-3});
   const double a = 3.5 * 4 * 1e-3 * 100;
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, (a / 4) + 1e-4, 0, false), a);
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, (a / 4) - 1e-4, 0, false), a - 4e-4);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 3, above((a / 4) + 1e-4), false), a);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 3, above((a / 4) - 1e-4), false),
+                   a - 4e-4);
   const double start = 0.25;
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, start, 0, false), 1.0);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 3, above(start), false), 1.0);
   EXPECT_FALSE(gate_refusal(true, start, 1.25624,
-                            l1_allowance(o, 3, start, 0, false), 1e-3)
+                            l1_allowance<double>(o, 3, above(start), false),
+                            1e-3)
                    .has_value());
   EXPECT_EQ(
-      gate_refusal(true, start, 1.25626, l1_allowance(o, 3, start, 0, false),
-                   1e-3)
+      gate_refusal(true, start, 1.25626,
+                   l1_allowance<double>(o, 3, above(start), false), 1e-3)
           .value_or(""),
       "the objective rose from 0.25 to 1.25626; lower #:eta0 (now 0.001)");
 }
@@ -315,9 +323,9 @@ TEST(MbsgdGate, TheRegressorL1AllowanceIsCappedAtAQuarterOfTheStart) {
                                       .fit_intercept = 1,
                                       .eta0 = 1e-3});
   const double a = 3.5 * 4 * 1e-3 * 100;
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, a * 8, 0, true), a);
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, a / 8, 0, true), a / 32);
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 3, a / 8, 0, false), a / 2);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 3, above(a * 8), true), a);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 3, above(a / 8), true), a / 32);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 3, above(a / 8), false), a / 2);
 }
 
 TEST(MbsgdGate, AnAlphaWhoseAllowanceOverflowsStaysFinite) {
@@ -329,7 +337,7 @@ TEST(MbsgdGate, AnAlphaWhoseAllowanceOverflowsStaysFinite) {
                                         .l1_ratio = 0.15,
                                         .fit_intercept = 1,
                                         .eta0 = 1e-3});
-    const double allowance = l1_allowance(o, 3, 2.0, 0, regressor);
+    const double allowance = l1_allowance<double>(o, 3, above(2.0), regressor);
     EXPECT_TRUE(std::isfinite(allowance));
     EXPECT_TRUE(gate_refusal(true, 2.0, 1e197, allowance, o.eta0).has_value());
   }
@@ -388,22 +396,75 @@ TEST(MbsgdGate, SumsTheFloat32SolverWouldOverflowAreRefusedByCause) {
   EXPECT_FALSE(solver_scale_refusal<float>(edge, 0, 0, true).has_value());
 }
 
-TEST(MbsgdGate, ARoundOffStartLeavesTheL1AllowanceUncapped) {
-  using cumlrkt::glm::mbsgd::gate_refusal;
+TEST(MbsgdGate, TheRoundOffMultipleIs32FloorsInFloat64AndOneInFloat32) {
+  using cumlrkt::glm::mbsgd::at_round_off;
+  const double floor = 4e-13;
+  EXPECT_TRUE(at_round_off<double>({floor * 32, floor, 1}));
+  EXPECT_FALSE(at_round_off<double>({floor * 32.01, floor, 1}));
+  EXPECT_TRUE(at_round_off<float>({floor, floor, 1}));
+  EXPECT_FALSE(at_round_off<float>({floor * 1.01, floor, 1}));
+}
+
+TEST(MbsgdGate, ARoundOffStartCapsTheL1AllowanceAtAQuarterOfTheUncentredStart) {
   using cumlrkt::glm::mbsgd::l1_allowance;
   const sgd_options o = with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
-                                      .alpha = 1e-4,
+                                      .alpha = 100,
+                                      .l1_ratio = 0.15,
+                                      .fit_intercept = 1,
+                                      .eta0 = 0.1});
+  const double a = 3.5 * 5 * 0.1 * 1e4;
+  const double floor = 4e-13;
+  const double uncentred = 2.89;
+  for (const bool regressor : {true, false}) {
+    EXPECT_DOUBLE_EQ(
+        l1_allowance<double>(o, 4, {floor * 32, floor, uncentred}, regressor),
+        uncentred / 4);
+    EXPECT_DOUBLE_EQ(
+        l1_allowance<float>(o, 4, {floor, floor, uncentred}, regressor),
+        uncentred / 4);
+    EXPECT_DOUBLE_EQ(
+        l1_allowance<double>(o, 4, {floor * 32, floor, a * 8}, regressor), a);
+  }
+  EXPECT_DOUBLE_EQ(
+      l1_allowance<float>(o, 4, {floor * 2, floor, uncentred}, true),
+      floor * 2 / 4);
+}
+
+TEST(MbsgdGate, TheRegressorCapGrowsWithTheCoefficientsAbove800) {
+  using cumlrkt::glm::mbsgd::l1_allowance;
+  const sgd_options o = with_penalty({.penalty = CUML_LINEAR_MODEL_PENALTY_L1,
+                                      .alpha = 1,
                                       .l1_ratio = 0.15,
                                       .fit_intercept = 1,
                                       .eta0 = 1e-3});
-  const double a = 3.5 * 5 * 1e-3 * 1e-8;
-  const double floor = 4e-13;
-  for (const bool regressor : {true, false}) {
-    EXPECT_DOUBLE_EQ(l1_allowance(o, 4, 0, floor, regressor), a);
-    EXPECT_DOUBLE_EQ(l1_allowance(o, 4, floor * 32, floor, regressor), a);
-  }
-  EXPECT_DOUBLE_EQ(l1_allowance(o, 4, floor * 33, floor, true), floor * 33 / 4);
-  EXPECT_FALSE(gate_refusal(true, 0, a, a + floor, o.eta0).has_value());
+  const double start = 3.0;
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 799, above(start), true),
+                   0.25 * start);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 4000, above(start), true),
+                   0.25 * (4001.0 / 800) * start);
+  EXPECT_DOUBLE_EQ(l1_allowance<double>(o, 4000, above(start), false),
+                   4 * start);
+}
+
+TEST(MbsgdGate, ARegressorLossAboveTheZeroModelsIsRefused) {
+  using cumlrkt::glm::mbsgd::loss_refusal;
+  const baseline base{.start = 1.5, .floor = 1e-3, .uncentred = 4};
+  EXPECT_FALSE(
+      loss_refusal<double>(base, (1.5 * 1.025) + 0.99e-3, 1e-3).has_value());
+  EXPECT_EQ(loss_refusal<double>(base, 2.1, 1e-3).value_or(""),
+            "the loss rose from 1.5 to 2.1; lower #:eta0 (now 0.001)");
+  EXPECT_EQ(loss_refusal<double>(base, nan, 1e-3).value_or(""),
+            "the loss rose from 1.5 to nan; lower #:eta0 (now 0.001)");
+}
+
+TEST(MbsgdGate, TheLossGuardDoesNotApplyAtRoundOff) {
+  using cumlrkt::glm::mbsgd::loss_refusal;
+  const baseline constant{.start = 3e-33, .floor = 4e-32, .uncentred = 0.09};
+  EXPECT_FALSE(loss_refusal<double>(constant, 1e-20, 1e-3).has_value());
+  EXPECT_FALSE(
+      loss_refusal<float>({1e-13, 1e-13, 2.89}, 1e-9, 1e-3).has_value());
+  EXPECT_TRUE(
+      loss_refusal<float>({1.1e-13, 1e-13, 2.89}, 1e-9, 1e-3).has_value());
 }
 
 TEST(MbsgdGate, AnInfiniteObjectiveIsRefusedWhateverTheAllowance) {

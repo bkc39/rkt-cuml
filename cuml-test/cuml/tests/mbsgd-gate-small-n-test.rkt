@@ -6,7 +6,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target)
-         (only-in "private/mbsgd-gate-data.rkt" refused-at-eta0 regressor-fit))
+         (only-in "private/mbsgd-gate-data.rkt" lost-at-eta0 refused-at-eta0 regressor-fit))
 
 (define small-n-refusals
   '((204 2e-4 0.612) (206 5e-4 0.607)
@@ -58,13 +58,32 @@
 (define (refusal-of seed)
   (assv seed small-n-refusals))
 
+(define small-n-losses '((1076 5e-4 -0.027)))
+
+(define (loss-of seed)
+  (assv seed small-n-losses))
+
 (test-gpu "an l1 alpha 10 regressor fit on 2 to 10 rows of 3 columns outside the refusal table passes at the defaults"
   (for* ([dt (in-list dtypes)]
          [n (in-list '(2 3 4 6 10))]
          [seed (in-list (small-n-seeds n))]
-         #:unless (refusal-of seed))
+         #:unless (or (refusal-of seed) (loss-of seed)))
     (law-case (format "~a regressor on ~a rows, seed ~a" dt n seed)
       (check-not-exn ((small-n-fit dt n seed) 1e-3)))))
+
+(test-gpu "an l1 alpha 10 regressor fit predicting worse than the zero model is refused at the defaults"
+  (for* ([dt (in-list dtypes)]
+         [r (in-list small-n-losses)])
+    (match-define (list seed _ _) r)
+    (law-case (format "~a regressor on 2 rows, seed ~a" dt seed)
+      (lost-at-eta0 (small-n-fit dt 2 seed) 1e-3))))
+
+(test-gpu "an l1 alpha 10 regressor fit predicting worse than the zero model passes at its table eta0"
+  (for* ([dt (in-list dtypes)]
+         [r (in-list small-n-losses)])
+    (match-define (list seed eta0 _) r)
+    (law-case (format "~a regressor on 2 rows, seed ~a" dt seed)
+      (check-not-exn ((small-n-fit dt 2 seed) eta0)))))
 
 (test-gpu "an l1 alpha 10 regressor fit in the refusal table is refused at the defaults"
   (for* ([dt (in-list dtypes)]

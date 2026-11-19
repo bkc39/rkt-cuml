@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+         (only-in racket/list make-list)
          (only-in rackunit check-not-exn)
          (only-in "linear-data.rkt" law-case on-matrix on-vector)
          (only-in "mbsgd-data.rkt" blob-rows normal-rows reg-target)
@@ -10,19 +11,33 @@
          blobs
          check-classifier-lower
          check-classifier-rise
+         check-constant-batch-one
+         constant-rows
          grid
          grid-rows
          grid-targets
          grid-y
          labels
+         lost-at-eta0
          refused-at-eta0
          regressor-fit
-         rose)
+         rose
+         round-off-coef-steps
+         round-off-intercept-share
+         wide-problem)
 
-(define (rose eta0)
-  (regexp (string-append "^the objective rose from [0-9.e+-]+ to [0-9.e+-]+; lower #:eta0 \\(now "
+(define ((risen what) eta0)
+  (regexp (string-append "^the "
+                         what
+                         " rose from [0-9.e+-]+ to [0-9.e+-]+; lower #:eta0 \\(now "
                          (regexp-quote eta0)
                          "\\)$")))
+
+(define round-off-intercept-share 1e-6)
+(define round-off-coef-steps 2)
+
+(define rose (risen "objective"))
+(define loss-rose (risen "loss"))
 
 (define (printed eta0)
   (number->string (if (integer? eta0)
@@ -35,9 +50,34 @@
      (lambda ()
        (keyword-apply mbsgd-regressor-fit kws vals (list (on-matrix X dt) (on-vector y dt)))))))
 
-(define (refused-at-eta0 fit eta0)
+(define ((refused-by message) fit eta0)
   (check-row "mbsgd-regressor-fit"
-             (row (format "eta0 ~a" (printed eta0)) (rose (printed eta0)) (fit eta0))))
+             (row (format "eta0 ~a" (printed eta0)) (message (printed eta0)) (fit eta0))))
+
+(define refused-at-eta0 (refused-by rose))
+(define lost-at-eta0 (refused-by loss-rose))
+
+(define constant-rows (normal-rows 300 4 3))
+
+(define (check-constant-batch-one dt)
+  (law-case (format "~a y = 1.7 l1 alpha 100 invscaling batch 1" dt)
+    (refused-at-eta0 (lambda (eta0)
+                       (regressor-fit constant-rows
+                                      (make-list 300 1.7)
+                                      dt
+                                      #:penalty 'l1
+                                      #:alpha 100
+                                      #:eta0 eta0
+                                      #:learning-rate 'invscaling
+                                      #:batch-size 1))
+                     1)))
+
+(define (wide-problem n d)
+  (define rows (normal-rows n d 11))
+  (values rows
+          (for/list ([r (in-list rows)]
+                     [e (in-list (normal-rows n 1 12))])
+            (+ (car r) (cadr r) (caddr r) (* 0.5 (car e))))))
 
 (define (alternating count v)
   (for/list ([i (in-range count)])
