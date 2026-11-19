@@ -1996,10 +1996,22 @@ scratch, the source is `cpp/src/glm/qn/`.
     1000 every other penalised arm is refused in 24 of 24 runs.
   - The float32 standardised breast-cancer l1 fit does not repeat: 40
     runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
-    between 5.0e-3 and 1.42e-2; `float32-gap-bounds` is per penalty, twice
-    the worst of 40 runs: l1 2.9e-2, l2 1.1e-3 (worst 5.1e-4), elastic net
-    1.7e-3 (worst 8.0e-4). The logistic twin file and the float32 breast-cancer
-    file are split so each runs in about 25 s at `--timeout 45`.
+    between 5.0e-3 and 1.42e-2; `float32-gap-checks` is per penalty. l1
+    (2.9e-2) and elastic net (1.7e-3) are one fit, twice the worst of 40
+    runs. l2 is the median of 5 fits (r1c ruling: one run, 2.2e-5 to
+    6.2e-4, cannot pin a 10x regression), at 1.6e-4, twice the worst median
+    (7.6e-5) of 40 groups of 5. Elastic net's gaps have two modes (about
+    1.5e-4 and 8.05e-4, half the draws each), so neither one fit nor a
+    median of 5 pins a 10x regression of the lower one.
+    The logistic twin file and the float32 breast-cancer file are split so
+    each runs in about 25 s at `--timeout 45`.
+  - The capped arms' float64 optima (l1 and elastic net at C 1, l2 at
+    C 0.01) are pinned in `private/raw-logistic-optima.rktd` (our qn solver,
+    tol 1e-10; l1 24919 and elastic net 22726 iterations, 12 to 60 s each
+    by host load), not refitted per run;
+    sklearn's saga at tol 1e-10 is off stationarity there (K/F 3e-2 after
+    5 minutes), so it cannot be the pin. A host test checks each pinned
+    optimum to K <= 1e-5 max(F, 1).
   - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
     median coefficient error of the 541 restarted fits only 1.49×
     (1.65× over change and line-search stops), short of the 2× bar, at

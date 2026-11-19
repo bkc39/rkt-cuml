@@ -10,7 +10,4 @@
                             ("kmeans-twin-test.rkt" 180)
                             ("kmeans-batch-test.rkt" 180)
                             ("model-memory-test.rkt" 180)
-                            ("tsne-sklearn-digits-twin-test.rkt" 180)
-                            ("linear-model-real-breast-cancer-logistic-raw-capped-l1-test.rkt" 180)
-                            ("linear-model-real-breast-cancer-logistic-raw-capped-elasticnet-test.rkt"
-                             180)))
+                            ("tsne-sklearn-digits-twin-test.rkt" 180)))

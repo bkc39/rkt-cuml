@@ -3,8 +3,10 @@
 (require (only-in cuml fit logistic-regression score)
          (only-in cuml/linear-model logistic-regression-fit logistic-regression-predict)
          (only-in datasets/core dataset-table-columns dataset-table-names load-dataset-table)
+         (only-in racket/file file->value)
          (only-in racket/list remove-duplicates)
          (only-in racket/match match-define struct*)
+         racket/runtime-path
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in threading ~>)
          (only-in "linear-data.rkt" columns-of on-matrix)
@@ -32,12 +34,16 @@
          (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
 
 (provide (struct-out labelled)
+         check-raw-optima
          check-raw-refusal
          check-raw-rescued
          check-score
          check-sklearn-optimum
          labelled-set
-         standardised)
+         raw-optima-path
+         raw-optima-settings
+         standardised
+         tight-fit)
 
 (struct labelled
         (case labels
@@ -48,12 +54,12 @@
 (struct gap-check (fits bound))
 (define float32-l2-median-gap-bound 1.6e-4)
 (define float32-gap-checks
-  (hash 'l1
-        (gap-check 1 2.9e-2)
-        'l2
-        (gap-check 5 float32-l2-median-gap-bound)
-        'elasticnet
-        (gap-check 1 1.7e-3)))
+  (hash 'l1 (gap-check 1 2.9e-2)
+        'l2 (gap-check 5 float32-l2-median-gap-bound)
+        'elasticnet (gap-check 1 1.7e-3)))
+(define raw-optima-settings
+  (list (setting 'l1 1.0 #f) (setting 'elasticnet 1.0 0.5) (setting 'l2 0.01 #f)))
+(define-runtime-path raw-optima-path "raw-logistic-optima.rktd")
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
 
@@ -201,29 +207,33 @@
     (unless (regexp-match? cutoff-message (exn-message e))
       (raise e))
     #f)
-  (define optima (make-hash))
-  (define (optimum-of s)
-    (hash-ref! optima
-               s
-               (lambda ()
-                 (define optimum (tight-fit set 'float64 s))
-                 (check-optimum set 'float64 s (fit-parts optimum) #:stationary raw-stationary-bound)
-                 optimum)))
+  (define optima (raw-optima))
   (for ([arm (in-list capped)])
     (match-define (list dt penalty C l1-ratio max-iter cap) arm)
     (define s (setting penalty C l1-ratio))
     (test-case (format "refused or near the optimum ~a" arm)
-      (define optimum (optimum-of s))
+      (define optimum (hash-ref optima s))
       (define r
         (with-handlers ([exn:fail? refused-fit])
           (raw-fit dt s max-iter)))
-      (define gap (and r (relative-gap (gauged-fit (fit-parts r)) (gauged-fit (fit-parts optimum)))))
+      (define gap (and r (relative-gap (gauged-fit (fit-parts r)) (gauged-fit optimum))))
       (check-true (or (not gap) (<= gap cap))
                   (format "coef gap to the optimum ~a (cap ~a)" gap cap))))
   (for ([arm (in-list refused)])
     (match-define (list dt penalty C l1-ratio max-iter) arm)
     (test-case (format "refused ~a" arm)
       (check-exn cutoff-message (lambda () (raw-fit dt (setting penalty C l1-ratio) max-iter))))))
+
+(define (raw-optima)
+  (for/hash ([entry (in-list (file->value raw-optima-path))])
+    (match-define (list (list penalty C l1-ratio) coef intercept) entry)
+    (values (setting penalty C l1-ratio) (lr-fit coef intercept #f))))
+
+(define (check-raw-optima set)
+  (define optima (raw-optima))
+  (for ([s (in-list raw-optima-settings)])
+    (test-case (format "the pinned raw optimum ~a is stationary" s)
+      (check-optimum set 'float64 s (hash-ref optima s) #:stationary raw-stationary-bound))))
 
 (define (check-score set)
   (match-define (struct* labelled ((case c) [labels labels])) set)
