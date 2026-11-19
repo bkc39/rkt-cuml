@@ -2010,8 +2010,9 @@ scratch, the source is `cpp/src/glm/qn/`.
     tol 1e-10; l1 24919 and elastic net 22726 iterations, 12 to 60 s each
     by host load), not refitted per run;
     sklearn's saga at tol 1e-10 is off stationarity there (K/F 3e-2 after
-    5 minutes), so it cannot be the pin. A host test checks each pinned
-    optimum to K <= 1e-5 max(F, 1).
+    5 minutes), so it cannot be the pin. A GPU-suite test checks each
+    pinned optimum to K <= 1e-5 max(F, 1) (the oracle's MPFR is not in the
+    nix sandbox).
   - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
     median coefficient error of the 541 restarted fits only 1.49×
     (1.65× over change and line-search stops), short of the 2× bar, at
