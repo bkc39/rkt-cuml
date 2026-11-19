@@ -1971,12 +1971,18 @@ scratch, the source is `cpp/src/glm/qn/`.
     only under `'none`. The answer is mapped back to the first solve's
     coordinates and passes the same check there, or the first refusal
     stands. The rescue's solves share the one max-iter budget, so n-iter
-    counts every solve and is at most max-iter (Python's `n_iter_`); a
-    first solve that reaches max-iter is refused, "raise max-iter". Fits
-    the first solve accepts run the same code as before, bitwise.
+    counts every solve and is at most max-iter (Python's `n_iter_`). A
+    first solve that reaches max-iter and fails the check is not
+    rescued; its refusal says "raise max-iter". A failed rescue's
+    refusal names the first solve's residual and the iterations of every
+    solve, so a rescue that spends the budget also says "raise
+    max-iter". Fits the first solve accepts run the same code as before,
+    bitwise.
     Epoch-second timestamps over a minute (offset 1.7e9) fit at the
     default max-iter (n-iter 14-25). Raw breast-cancer is refused at the
-    default max-iter in both dtypes for every penalty (R2 again); under
+    default max-iter in both dtypes for every penalty (R2 again) but
+    one: float32 l2 at C 0.01 is accepted in about 2 runs in 5 (18 of
+    48, and 5 of 12 in the r2 re-review), within its cap; under
     `'none` it fits to K <= 1e-7 max(F, 1) given room: float64 with an
     intercept at 20000 (n-iter 11717), without one at 6000 (4084),
     float32 with one at 6000 (2322-3134).
@@ -1987,13 +1993,18 @@ scratch, the source is `cpp/src/glm/qn/`.
     acceptance rule (r1b ruling). The check is the contract; the first
     solve is Python cuML's bit for bit, so its fits stand. Gaps (worst,
     cap; share refused): l1 at max-iter 4000, f64 7.07e-2, 1.5e-1, 0/24
-    (the first solve, every run the same); f32 1.32e-1, 2.7e-1, 17/48;
-    elastic net at 4000, f64 4.88e-2, 1e-1, 0/24; f32 8.06e-2, 1.7e-1,
-    37/48; l2 at C 0.01, f64 at 4000 4.41e-4, 9e-4, 0/24; f32 at 4000
-    1.77e-3, 3.6e-3, 6/48; f32 at 1000 8.06e-4, 1.7e-3, 30/48. A
-    float32 arm is refused (the cutoff's message) or accepted within its
-    cap, and each has done both; any other error fails it. At max-iter
-    1000 every other penalised arm is refused in 24 of 24 runs.
+    (the first solve, every run the same); f32 1.32e-1, 2.7e-1, 87/248;
+    elastic net at 4000, f64 4.88e-2, 1e-1, 0/24; f32 1.47e-1, 3e-1,
+    197/248; l2 at C 0.01, f64 at 4000 4.41e-4, 9e-4, 0/24; f32 at 4000
+    1.77e-3, 3.6e-3, 6/48; f32 at 1000 8.06e-4, 1.7e-3, 30/48. The
+    float32 elastic-net tail grows with the runs: its worst was 1.17e-2
+    over the first 24, 8.06e-2 over 48 and 1.47e-1 over 248 (the r2
+    re-review's 200 more), so its cap may need raising again. The
+    float64 arms have only been accepted, so each must be accepted
+    within its cap and a refusal fails it; a float32 arm is refused (the
+    cutoff's message) or accepted within its cap, and each has done
+    both; any other error fails either kind. At max-iter 1000 every
+    other penalised arm is refused in 24 of 24 runs.
   - The float32 standardised breast-cancer l1 fit does not repeat: 40
     runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
     between 5.0e-3 and 1.42e-2; `float32-gap-checks` is per penalty. l1
@@ -2001,8 +2012,10 @@ scratch, the source is `cpp/src/glm/qn/`.
     runs. l2 is the median of 5 fits (r1c ruling: one run, 2.2e-5 to
     6.2e-4, cannot pin a 10x regression), at 1.6e-4, twice the worst median
     (7.6e-5) of 40 groups of 5. Elastic net's gaps have two modes (about
-    1.5e-4 and 8.05e-4, half the draws each), so neither one fit nor a
-    median of 5 pins a 10x regression of the lower one.
+    1.5e-4 and 8.05e-4, 47 of 100 draws at the upper), so neither one fit
+    nor a median of 5 pins a 10x regression of the lower one: its bound
+    pins a regression only relative to the upper mode. Accepted as is
+    (r2 ruling); what selects the mode is #142.
     The logistic twin file and the float32 breast-cancer file are split so
     each runs in about 25 s at `--timeout 45`.
   - The capped arms' float64 optima (l1 and elastic net at C 1, l2 at
