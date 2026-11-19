@@ -5,7 +5,7 @@
                   logistic-regression-result-coef
                   logistic-regression-result-intercept
                   logistic-regression-result-n-iter)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          (only-in rackunit check-exn check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
@@ -38,6 +38,11 @@
                #:penalty penalty
                #:fit-intercept fi
                #:tol tol))
+
+(define (refusal fit)
+  (with-handlers ([exn:fail? exn-message])
+    (fit)
+    "accepted"))
 
 (test-gpu "epoch-second timestamps over a minute fit with an intercept, inside the check's bound"
   (for* ([seed (in-list '(5 6 7))]
@@ -87,3 +92,21 @@
                    (logistic-regression-fit (on-matrix (lr-case-X (labelled-case set)) dt)
                                             (labelled-labels set)
                                             #:penalty 'none))))))
+
+(test-gpu "raw breast-cancer under 'l2 without an intercept is refused without a second solve"
+  (define set (labelled-set 'breast-cancer "diagnosis" '("id")))
+  (define X (on-matrix (lr-case-X (labelled-case set)) 'float64))
+  (define (iterations fi)
+    (match (refusal (lambda ()
+                      (logistic-regression-fit X
+                                               (labelled-labels set)
+                                               #:penalty 'l2
+                                               #:fit-intercept fi
+                                               #:max-iter 4000)))
+      [(regexp #rx"after ([0-9]+) iterations \\(max-iter 4000, tol 1e-04\\); standardise the columns$"
+               (list _ n))
+       (string->number n)]))
+  (define alone (iterations #f))
+  (define rescued (iterations #t))
+  (check-true (< alone 4000) (format "n-iter ~a" alone))
+  (check-true (> rescued alone) (format "n-iter ~a with an intercept, ~a without" rescued alone)))
