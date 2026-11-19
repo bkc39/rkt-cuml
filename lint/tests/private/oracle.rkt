@@ -28,15 +28,20 @@
     [(prefab-struct-key datum) (append-map symbols (cdr (vector->list (struct->vector datum))))]
     [else '()]))
 
-(define (rename datum names)
+(define (rename datum
+                names)
   (let walk ([one datum])
     (cond
-      [(and (symbol? one) (assq one names)) => cdr]
+      [(and (symbol? one) (assq one names))
+       =>
+       cdr]
       [(pair? one) (cons (walk (car one)) (walk (cdr one)))]
       [(vector? one) (list->vector (map walk (vector->list one)))]
       [(box? one) (box (walk (unbox one)))]
       [(prefab-struct-key one)
-       => (lambda (key) (apply make-prefab-struct key (map walk (cdr (vector->list (struct->vector one))))))]
+       =>
+       (lambda (key)
+         (apply make-prefab-struct key (map walk (cdr (vector->list (struct->vector one))))))]
       [else one])))
 
 (define (expansion-binders form)

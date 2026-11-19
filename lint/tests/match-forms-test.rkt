@@ -49,8 +49,9 @@
 (define forms (sort (hash-keys match-forms) symbol<?))
 
 (for ([name (in-list (remove-duplicates match-syntax-exports))])
-  (test-case (format "racket/match's ~a is in the lint's table of pattern forms or named as taking none"
-                     name)
+  (test-case (format
+              "racket/match's ~a is in the lint's table of pattern forms or named as taking none"
+              name)
     (check-not-false (xor (hash-has-key? match-forms name) (memq name not-pattern-forms)))))
 
 (test-case "every form the table or the exclusions name is one racket/match exports"
@@ -63,8 +64,10 @@
     (check-equal? (expansion-binders `(lambda (v) ,(sample head layout '(list a) '(binders a))))
                   '(a)))
   (test-case (format "the copy check renames a ~a pattern's binders" head)
-    (check-true (alpha-copy? `(define (g v) ,(sample head layout '(list a) '(list a)))
-                             `(define (g v) ,(sample head layout '(list b) '(list b)))))))
+    (check-true (alpha-copy? `(define (g v)
+                                ,(sample head layout '(list a) '(list a)))
+                             `(define (g v)
+                                ,(sample head layout '(list b) '(list b)))))))
 
 (test-case "no-positional-access reads every form's patterns from the table"
   (with-temporary-directory
@@ -77,15 +80,21 @@
        (define binds (build-path root (format "form-~a-binds.rkt" index)))
        (write-module refused
                      "#lang racket/base"
-                     `((require racket/list racket/match)
-                       (define (g v) ,(sample head layout '(app second a) 'a))))
+                     `((require racket/list
+                                racket/match)
+                       (define (g v)
+                         ,(sample head layout '(app second a) 'a))))
        (write-module binds
                      "#lang racket/base"
-                     `((require racket/list racket/match)
-                       (define (g v) ,(sample head layout '(list second) 'second))))
+                     `((require racket/list
+                                racket/match)
+                       (define (g v)
+                         ,(sample head layout '(list second) 'second))))
        (list head refused binds)))
    (define found (map car (positional-accesses (list root) '(second))))
    (for ([one (in-list files)])
      (match-define (list head refused binds) one)
      (check-not-false (member refused found) (format "~a: (app second a) is refused" head))
-     (check-equal? (member binds found) #f (format "~a: a pattern variable named second binds" head)))))
+     (check-equal? (member binds found)
+                   #f
+                   (format "~a: a pattern variable named second binds" head)))))

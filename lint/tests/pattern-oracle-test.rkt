@@ -132,7 +132,9 @@
     (check-equal? (list->seteq (pattern-names pattern)) (list->seteq binders)))
   (test-case (format "~s with racket/match's binders renamed is a copy" pattern)
     (define one (procedure pattern binders))
-    (check-true (alpha-copy? one (rename one (renamed binders))))))
+    (check-true (alpha-copy? one
+                             (rename one
+                                     (renamed binders))))))
 
 (for ([row (in-list '(((app car x) car cdr) ((? number? n) number? string?)
                                             ((hash car x cdr (list y z)) cdr caar)
@@ -143,4 +145,6 @@
   (match-define (list pattern name other) row)
   (test-case (format "~s with ~a renamed is not a copy" pattern name)
     (define one (procedure pattern (racket-binders pattern)))
-    (check-false (alpha-copy? one (rename one (list (cons name other)))))))
+    (check-false (alpha-copy? one
+                              (rename one
+                                      (list (cons name other)))))))

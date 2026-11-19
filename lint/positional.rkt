@@ -113,10 +113,11 @@
     [else '()]))
 
 (define (field-spec? one)
-  (or (identifier? one)
-      (match (syntax->list one)
-        [(cons (? identifier?) options) (andmap (lambda (option) (keyword? (syntax-e option))) options)]
-        [_ #f])))
+  (or
+   (identifier? one)
+   (match (syntax->list one)
+     [(cons (? identifier?) options) (andmap (lambda (option) (keyword? (syntax-e option))) options)]
+     [_ #f])))
 
 (define (field-specs? one)
   (match (syntax->list one)
@@ -136,7 +137,8 @@
     [(match-parts leading groups tail)
      (append (accesses leading refused)
              (append-map (lambda (group)
-                           (append (append-map (lambda (one) (pattern-accesses one refused)) (car group))
+                           (append (append-map (lambda (one) (pattern-accesses one refused))
+                                               (car group))
                                    (accesses (cdr group) refused)))
                          groups)
              (accesses tail refused))]

@@ -28,46 +28,26 @@
 (define match-forms
   (let ([one-per-clause (lambda before (match-layout before 'one 'clause))]
         [several-per-clause (lambda before (match-layout before 'several 'clause))])
-    (hasheq 'match
-            (one-per-clause 'expression)
-            'match/derived
-            (one-per-clause 'expression 'expression)
-            'match*
-            (several-per-clause 'expressions)
-            'match*/derived
-            (several-per-clause 'expressions 'expression)
-            'match/values
-            (several-per-clause 'expression)
-            'match-lambda
-            (one-per-clause)
-            'match-λ
-            (one-per-clause)
-            'match-lambda*
-            (one-per-clause)
-            'match-λ*
-            (one-per-clause)
-            'match-lambda**
-            (several-per-clause)
-            'match-λ**
-            (several-per-clause)
-            'define/match
-            (several-per-clause 'head)
-            'match-let
-            (match-layout '() 'one 'parallel)
-            'match-let*
-            (match-layout '() 'one 'sequential)
-            'match-letrec
-            (match-layout '() 'one 'recursive)
-            'match-let-values
-            (match-layout '() 'several 'parallel)
-            'match-let*-values
-            (match-layout '() 'several 'sequential)
-            'match-letrec-values
-            (match-layout '() 'several 'recursive)
-            'match-define
-            (match-layout '() 'one 'definition)
-            'match-define-values
-            (match-layout '() 'several 'definition))))
+    (hasheq 'match (one-per-clause 'expression)
+            'match/derived (one-per-clause 'expression 'expression)
+            'match* (several-per-clause 'expressions)
+            'match*/derived (several-per-clause 'expressions 'expression)
+            'match/values (several-per-clause 'expression)
+            'match-lambda (one-per-clause)
+            'match-λ (one-per-clause)
+            'match-lambda* (one-per-clause)
+            'match-λ* (one-per-clause)
+            'match-lambda** (several-per-clause)
+            'match-λ** (several-per-clause)
+            'define/match (several-per-clause 'head)
+            'match-let (match-layout '() 'one 'parallel)
+            'match-let* (match-layout '() 'one 'sequential)
+            'match-letrec (match-layout '() 'one 'recursive)
+            'match-let-values (match-layout '() 'several 'parallel)
+            'match-let*-values (match-layout '() 'several 'sequential)
+            'match-letrec-values (match-layout '() 'several 'recursive)
+            'match-define (match-layout '() 'one 'definition)
+            'match-define-values (match-layout '() 'several 'definition))))
 
 (define (match-form head)
   (and (symbol? head) (hash-ref match-forms head #f)))
@@ -96,12 +76,14 @@
     [(_ 'definition (cons lhs rest))
      (match-parts leading (list (cons (lhs-patterns layout lhs as-list) rest)) '())]
     [(_ 'definition _) #f]
-    [(_ _ (cons (app as-list (? list? bindings)) body)) (match-parts leading (map group bindings) body)]
+    [(_ _ (cons (app as-list (? list? bindings)) body))
+     (match-parts leading (map group bindings) body)]
     [(_ _ _) #f]))
 
 (define-match-expander pattern-head
   (lambda (_stx)
-    #'(or 'list 'list* 'list-rest 'list-no-order 'mlist 'cons 'mcons 'vector 'box 'and 'or 'not 'var)))
+    #'
+    (or 'list 'list* 'list-rest 'list-no-order 'mlist 'cons 'mcons 'vector 'box 'and 'or 'not 'var)))
 
 (define (for-head? head)
   (and (symbol? head) (regexp-match? #rx"^for[*]?(/|$)" (symbol->string head))))

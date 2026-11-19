@@ -59,19 +59,18 @@
     [_ #f]))
 
 (define (body-names forms)
-  (append-map
-   (lambda (form)
-     (match form
-       [(list* (or 'define 'define/who 'define/contract) (? pair? head) _)
-        (list (definition-root head))]
-       [(list* (or 'define 'define/contract) (? symbol? name) _) (list name)]
-       [(list* 'define-values (? list? names) _) (filter symbol? names)]
-       [(list* (app match-form (and layout (match-layout _ _ 'definition))) lhs _)
-        (lhs-names layout lhs)]
-       [(list* (app match-form (match-layout '(head) _ _)) (? pair? head) _)
-        (list (definition-root head))]
-       [_ '()]))
-   forms))
+  (append-map (lambda (form)
+                (match form
+                  [(list* (or 'define 'define/who 'define/contract) (? pair? head) _)
+                   (list (definition-root head))]
+                  [(list* (or 'define 'define/contract) (? symbol? name) _) (list name)]
+                  [(list* 'define-values (? list? names) _) (filter symbol? names)]
+                  [(list* (app match-form (and layout (match-layout _ _ 'definition))) lhs _)
+                   (lhs-names layout lhs)]
+                  [(list* (app match-form (match-layout '(head) _ _)) (? pair? head) _)
+                   (list (definition-root head))]
+                  [_ '()]))
+              forms))
 
 (define (alpha-normal definition name free-key)
   (define count 0)
@@ -212,7 +211,8 @@
        (define-values (leading items) (split-at rest (length before)))
        (append (map (lambda (one) (expr env one)) leading)
                (clauses env items #:several? (eq? patterns 'several)))]
-      [((match-layout _ _ 'definition) (cons lhs forms)) (cons (normal-lhs env layout lhs) (each env forms))]
+      [((match-layout _ _ 'definition) (cons lhs forms))
+       (cons (normal-lhs env layout lhs) (each env forms))]
       [((match-layout _ _ (and scope (or 'parallel 'sequential 'recursive))) _)
        (let-form env
                  rest
@@ -338,8 +338,14 @@
                 (let-form env
                           rest
                           #:named? (eq? head 'let)
-                          #:sequential? (memq head '(let* let*-values letrec letrec* letrec-values))
-                          #:recursive? (memq head '(letrec letrec* letrec-values)))]
+                          #:sequential? (memq head
+                                              '(let* let*-values
+                                                 letrec
+                                                 letrec*
+                                                 letrec-values))
+                          #:recursive? (memq head
+                                             '(letrec letrec*
+                                                letrec-values)))]
                [(? for-head?) (for-form env head rest)]
                [(or 'when 'unless)
                 (match rest

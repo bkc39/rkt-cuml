@@ -171,19 +171,13 @@
                         [(`(a `(b ,(app second x)))) x])
                       (define f
                         (match-lambda**
-                         [((struct span ((app second x) _))) x]))
+                          [((struct span ((app second x) _))) x]))
                       (define f
                         (match-lambda**
-                         [(`(a `(b ,(app second x)))) x]))
-                      (define f
-                        (match-λ
-                         [(struct span ((app second x) _)) x]))
-                      (define f
-                        (match-λ*
-                         [(list (struct span ((app second x) _))) x]))
-                      (define f
-                        (match-λ**
-                         [((struct span ((app second x) _))) x]))
+                          [(`(a `(b ,(app second x)))) x]))
+                      (define f (match-λ [(struct span ((app second x) _)) x]))
+                      (define f (match-λ* [(list (struct span ((app second x) _))) x]))
+                      (define f (match-λ** [((struct span ((app second x) _))) x]))
                       (define (f v)
                         (match-letrec ([(struct span ((app second x) _)) v])
                           x))
@@ -197,25 +191,20 @@
                         (match-letrec-values ([((struct span ((app second x) _))) (values v)])
                           x))
                       (define (f v)
-                        (match/values (values v)
-                          [((struct span ((app second x) _))) x]))
+                        (match/values (values v) [((struct span ((app second x) _))) x]))
                       (define (f v)
-                        (match/derived v
-                                       v
-                                       [(struct span ((app second x) _)) x]))
+                        (match/derived v v [(struct span ((app second x) _)) x]))
                       (define (f v)
-                        (match*/derived (v)
-                                        v
-                                        [((struct span ((app second x) _))) x]))
+                        (match*/derived (v) v [((struct span ((app second x) _))) x]))
                       (define (f v)
                         (let ()
                           (match-define (struct span ((app second x) _)) v)
                           x))
                       (define (f v)
-                        (my-match v
-                                  [(struct span ((app second x) _)) x]))))])
-  (test-case (format "a pattern in any racket/match form, or in a form the lint does not know, is read: ~s"
-                     use)
+                        (my-match v [(struct span ((app second x) _)) x]))))])
+  (test-case (format
+              "a pattern in any racket/match form, or in a form the lint does not know, is read: ~s"
+              use)
     (define-values (ok? output)
       (gate-on `((require racket/list
                           racket/match)
