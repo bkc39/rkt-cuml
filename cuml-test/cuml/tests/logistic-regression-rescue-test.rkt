@@ -51,12 +51,13 @@
 
 (test-gpu "a rescue that spends max-iter names its last attempt's residual and says raise max-iter"
   (define-values (X y) (stamps 60.0 5))
-  (check-exn #rx"residual 0\\.0031397[0-9]* above the bound 0\\.0011177[0-9]* after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
-             (lambda ()
-               (logistic-regression-fit (on-matrix X 'float64)
-                                        (on-vector y 'int32)
-                                        #:penalty 'l2
-                                        #:max-iter 20))))
+  (check-exn
+   #rx"residual 0\\.0031397[0-9]* above the bound 0\\.0011177[0-9]* after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
+   (lambda ()
+     (logistic-regression-fit (on-matrix X 'float64)
+                              (on-vector y 'int32)
+                              #:penalty 'l2
+                              #:max-iter 20))))
 
 (test-gpu "raw breast-cancer under 'none fits to the real-data stationarity bound, given room"
   (define set (labelled-set 'breast-cancer "diagnosis" '("id")))

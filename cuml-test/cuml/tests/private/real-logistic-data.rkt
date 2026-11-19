@@ -240,10 +240,9 @@
                         #:tol default-tol
                         #:dtype dt))
          (check-true (rational? gap) (format "coef gap to the optimum ~a" gap))
-         (check-true (<= K bound)
-                     (format "accepted at residual ~a, bound ~a"
-                             (exact->inexact K)
-                             (exact->inexact bound)))])))
+         (check-true
+          (<= K bound)
+          (format "accepted at residual ~a, bound ~a" (exact->inexact K) (exact->inexact bound)))])))
   (for ([arm (in-list refused)])
     (match-define (list dt penalty C l1-ratio max-iter) arm)
     (test-case (format "refused ~a" arm)
