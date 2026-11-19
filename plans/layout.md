@@ -1958,6 +1958,9 @@ scratch, the source is `cpp/src/glm/qn/`.
 - **Close-out B1 (#127, #126, #125, 2026-11-18).**
   - #127: `label_classes` returns a device y's sorted classes, so a
     class-weight hash on device labels moves O(k) to the host, not y.
+    The host-bytes test counts the Racket heap only
+    (`current-memory-use 'cumulative`): a host copy of y made inside the
+    shim, in malloc'd or pinned memory, would not show in it.
   - #126: a cutoff whose kept spreads differ by more than 2^8 advises
     "standardise the columns". A fit the check refuses is solved again
     (`logistic_solve.cpp`, `rescued`), from zero and then from the first
@@ -1967,21 +1970,25 @@ scratch, the source is `cpp/src/glm/qn/`.
     exponent otherwise; without fit-intercept only the per-column staging,
     only under `'none`. The answer is mapped back to the first solve's
     coordinates and passes the same check there, or the first refusal
-    stands. n-iter counts every solve. Fits the first solve accepts run
-    the same code as before, bitwise. Epoch-second timestamps over a
-    minute (offset 1.7e9) now fit. Raw breast-cancer is separable: under
-    `'none` all three arms fit to K ≤ 1e-7·max(F, 1). Float64 with an
-    intercept fits only from the warm start (K/F 4.7e-9 at max-iter
-    1000, refused from zero at 4000); float64 without one fits only from
-    zero (the warm start is refused at 1500), so the cold start runs
-    first and a fit it rescues is unchanged. The warm start also fits
-    raw breast-cancer's default float64 fit (l2, C 1; K 5.6e-4 against
-    the check's 6.1e-4, coefficients within S4's 3e-2 of sklearn's), so
-    L4-p's R2 refusal now holds for float32 only.
+    stands. The rescue's solves share the one max-iter budget, so n-iter
+    counts every solve and is at most max-iter (Python's `n_iter_`); a
+    first solve that reaches max-iter is refused, "raise max-iter". Fits
+    the first solve accepts run the same code as before, bitwise.
+    Epoch-second timestamps over a minute (offset 1.7e9) fit at the
+    default max-iter (n-iter 14-25). Raw breast-cancer is refused at the
+    default max-iter in both dtypes for every penalty (R2 again); under
+    `'none` it fits to K <= 1e-7 max(F, 1) given room: float64 with an
+    intercept at 20000 (n-iter 11717), without one at 6000 (4084),
+    float32 with one at 6000 (2322-3134). At max-iter 4000, l2 at C 0.01
+    is accepted within S4's cap (f64 4.4e-4, f32 1.7e-4); the first
+    solve alone accepts f64 l1 and elastic net there at 7.1e-2 and
+    4.9e-2 from the float64 optimum, over S4's 3e-2, and the rescue
+    sometimes accepts f32 l1 at 1.3e-1, over 8e-2 (open).
   - The float32 standardised breast-cancer l1 fit does not repeat: 40
     runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
-    between 5.0e-3 and 1.31e-2 on both, so `float32-gap-bound` is 2.7e-2,
-    twice the worst. The logistic twin file and the float32 breast-cancer
+    between 5.0e-3 and 1.42e-2; `float32-gap-bounds` is per penalty, twice
+    the worst of 40 runs: l1 2.9e-2, l2 1.1e-3 (worst 5.1e-4), elastic net
+    1.7e-3 (worst 8.0e-4). The logistic twin file and the float32 breast-cancer
     file are split so each runs in about 25 s at `--timeout 45`.
   - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
     median coefficient error of the 541 restarted fits only 1.49×

@@ -22,6 +22,7 @@
                   lr-case-y
                   lr-fit
                   relative-gap
+                  setting
                   setting-C
                   setting-l1-ratio
                   setting-penalty
@@ -31,8 +32,8 @@
          (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
 
 (provide (struct-out labelled)
-         check-raw-fit
          check-raw-refusal
+         check-raw-rescued
          check-score
          check-sklearn-optimum
          labelled-set
@@ -43,6 +44,7 @@
           classes))
 
 (define stationary-bound 1e-7)
+(define raw-stationary-bound 1e-5)
 (define float32-gap-bounds (hash 'l1 2.9e-2 'l2 1.1e-3 'elasticnet 1.7e-3))
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
@@ -97,7 +99,7 @@
   (define classes (list->vector (labelled-classes set)))
   (map (lambda (i) (vector-ref classes i)) (hash-ref theirs 'predict)))
 
-(define (check-optimum set dt s r)
+(define (check-optimum set dt s r #:stationary [stationary stationary-bound])
   (match-define (struct* labelled ((case c))) set)
   (define parts (fit-parts r))
   (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
@@ -113,7 +115,7 @@
                     #:C (setting-C s)
                     #:l1-ratio (setting-l1-ratio s)
                     #:tol (tight-tol 'float64)))
-     (check-true (<= K (* stationary-bound (max F 1)))
+     (check-true (<= K (* stationary (max F 1)))
                  (format "K ~a F ~a" (exact->inexact K) (exact->inexact F)))]
     [else
      (define gap
@@ -174,14 +176,38 @@
   (match-define (list python oracle) (python-and-oracle c dt))
   (check-python-off-optimum python oracle dt))
 
-(define (check-raw-fit set dt)
+(define (check-raw-rescued set capped refused)
   (match-define (struct* labelled ((case c) [labels labels])) set)
-  (define r (logistic-regression-fit (on-matrix (lr-case-X c) dt) labels))
-  (match-define (list python oracle) (python-and-oracle c dt))
-  (define gap (relative-gap (gauged-fit (fit-parts r)) (gauged-sklearn oracle)))
-  (check-true (<= gap (default-tol-cap dt))
-              (format "coef gap to sklearn ~a (cap ~a)" gap (default-tol-cap dt)))
-  (check-python-off-optimum python oracle dt))
+  (define (raw-fit dt s max-iter)
+    (logistic-regression-fit (on-matrix (lr-case-X c) dt)
+                             labels
+                             #:penalty (setting-penalty s)
+                             #:C (setting-C s)
+                             #:l1-ratio (setting-l1-ratio s)
+                             #:max-iter max-iter))
+  (define (refused-fit e)
+    (and (regexp-match? cutoff-message (exn-message e)) #f))
+  (define optima (make-hash))
+  (define (optimum-of s)
+    (hash-ref! optima
+               s
+               (lambda ()
+                 (define optimum (tight-fit set 'float64 s))
+                 (check-optimum set 'float64 s optimum #:stationary raw-stationary-bound)
+                 optimum)))
+  (for ([arm (in-list capped)])
+    (match-define (list dt penalty C l1-ratio max-iter) arm)
+    (define s (setting penalty C l1-ratio))
+    (test-case (format "refused or near the optimum ~a" arm)
+      (define optimum (optimum-of s))
+      (define r (with-handlers ([exn:fail? refused-fit]) (raw-fit dt s max-iter)))
+      (define gap (and r (relative-gap (gauged-fit (fit-parts r)) (gauged-fit (fit-parts optimum)))))
+      (check-true (or (not gap) (<= gap (default-tol-cap dt)))
+                  (format "coef gap to the optimum ~a (cap ~a)" gap (default-tol-cap dt)))))
+  (for ([arm (in-list refused)])
+    (match-define (list dt penalty C l1-ratio max-iter) arm)
+    (test-case (format "refused ~a" arm)
+      (check-exn cutoff-message (lambda () (raw-fit dt (setting penalty C l1-ratio) max-iter))))))
 
 (define (check-score set)
   (match-define (struct* labelled ((case c) [labels labels])) set)

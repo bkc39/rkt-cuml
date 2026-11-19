@@ -413,17 +413,14 @@ L-BFGS, OWL-QN with an l1 part; the intercept is not penalised. @racket[y] holds
 integral numbers on the device, or a list of reals, strings or symbols; @racket[classes] are the
 sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
 
-The fit is refused when the solver has not converged; the check bounds the first-order residual, not
-the distance to the optimum. A column constant over the rows of positive weight (zero, without
-@racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
-last bits is refused: centre it. A fit the check would refuse is solved again on the columns
-centred (with @racket[fit-intercept]) and, under @racket['none], each scaled by its own power of
-two, first from zero and then from the first solve's point; each answer is mapped back and checked
-again. @racket[n-iter] counts every solve, and a fit the first solve passes is unchanged. Columns on a large offset, such as epoch-second timestamps, fit this
-way. Penalised columns of widely mixed scale can still be refused at any @racket[max-iter]:
-standardise them. Without @racket[fit-intercept], columns far from zero can be refused short of
-@racket[max-iter]: lower @racket[tol] or centre them. On separable data without a
-penalty the coefficients grow until the solver stops. Large fits do not repeat bitwise.
+The fit is refused when the solver has not converged: the check bounds the first-order residual, not
+the error. A column constant over the rows of positive weight (zero, without @racket[fit-intercept])
+gets coefficient 0; with @racket[fit-intercept], one that varies only in its last bits is refused:
+centre it. With @racket[fit-intercept] or under @racket['none], a refused fit is solved again on
+rescaled columns in the iterations left and kept if it passes; a fit the first solve passes is
+unchanged. @racket[n-iter] counts every solve, at most @racket[max-iter]. Refusals say to raise
+@racket[max-iter], standardise columns spread 2@superscript{8} apart, or lower @racket[tol] or
+centre X. Unpenalised separable fits grow until the solver stops. Large fits do not repeat bitwise.
 @examples[#:eval ev #:label #f
 (logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
 (eval:error (logistic-regression-fit Xc yc #:C 0))

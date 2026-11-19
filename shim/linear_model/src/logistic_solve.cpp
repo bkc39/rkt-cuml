@@ -170,7 +170,8 @@ std::optional<qn_solution<T>> rescued(
     row_selection rows, const column_stats& stats, staged_fit<T>& st,
     const attempt<T>& plain, const fit_options& options) {
   const bool per_column = options.penalty == CUML_LINEAR_MODEL_PENALTY_NONE;
-  if (!options.fit_intercept && !per_column) {
+  if ((!options.fit_intercept && !per_column) ||
+      plain.solution.n_iter >= options.max_iter) {
     return std::nullopt;
   }
   const rmm::cuda_stream_view stream = stream_of(handle);
@@ -191,7 +192,7 @@ std::optional<qn_solution<T>> rescued(
   solve_check total = plain.check;
   for (const std::vector<T>* start : {&cold, &warm}) {
     fit_options budget = options;
-    budget.max_iter = options.max_iter;
+    budget.max_iter = options.max_iter - total.n_iter;
     if (budget.max_iter < 1) {
       break;
     }
