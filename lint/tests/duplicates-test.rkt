@@ -397,7 +397,25 @@
                        (define (f a)
                          `(x `(y ,,a)))
                        (define (g b)
-                         `(x `(y ,,b))))))])
+                         `(x `(y ,,b))))
+                      ("an unquote inside a quasiquoted box, its variable renamed, is a copy"
+                       #t
+                       (define (f a)
+                         `#&,a)
+                       (define (g b)
+                         `#&,b))
+                      ("an unquote inside a quasiquoted hash table, its variable renamed, is a copy"
+                       #t
+                       (define (f a)
+                         `#hash((k . ,a)))
+                       (define (g b)
+                         `#hash((k . ,b))))
+                      ("an unquote inside a quasiquoted prefab struct, its variable renamed, is a copy"
+                       #t
+                       (define (f a)
+                         `#s(row ,a))
+                       (define (g b)
+                         `#s(row ,b)))))])
   (match-define (list title copy? one other) row)
   (test-case title
     (check-equal? (copied? one other) copy?)))
