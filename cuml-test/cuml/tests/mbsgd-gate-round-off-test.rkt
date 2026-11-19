@@ -33,21 +33,34 @@
 
 (define offset-noise (map car (normal-rows 300 1 9)))
 
-(define near-constant-targets
-  (for/list ([e (in-list offset-noise)])
-    (+ 1.7 (* 1e-6 e))))
+(define (near-constant-targets kind s)
+  (for/list ([r (in-list constant-rows)]
+             [e (in-list offset-noise)])
+    (+ 1.7
+       (* s
+          (if (eq? kind 'noise)
+              e
+              (car r))))))
 
 (test-gpu "a float32 target constant to within 1e-6 passes at the defaults under elastic net"
-  (check-not-exn (regressor-fit constant-rows near-constant-targets 'float32 #:penalty 'elasticnet)))
+  (check-not-exn
+   (regressor-fit constant-rows (near-constant-targets 'noise 1e-6) 'float32 #:penalty 'elasticnet)))
 
 (define near-constant-refusals
-  '((float32 l1 33.2 -0.078) (float64 l1 33.4 -0.054) (float64 elasticnet 0.42 -0.003)))
+  '((float32 l1 noise 1e-6) (float64 l1 noise 1e-6)
+                            (float64 elasticnet noise 1e-6)
+                            (float32 l1 noise 2e-6)
+                            (float32 l1 signal 1e-6)
+                            (float32 l1 signal 2e-6)))
 
-(test-gpu "a target constant to within 1e-6 is refused at the defaults where its rise exceeds the cap"
+(test-gpu "a target constant to within a few 1e-6 is refused at the defaults where its rise exceeds the cap"
   (for ([r (in-list near-constant-refusals)])
-    (match-define (list dt penalty _ _) r)
-    (law-case (format "~a ~a" dt penalty)
-      (refused-at-eta0
-       (lambda (eta0)
-         (regressor-fit constant-rows near-constant-targets dt #:penalty penalty #:eta0 eta0))
-       1e-3))))
+    (match-define (list dt penalty kind s) r)
+    (law-case (format "~a ~a ~a ~a" dt penalty kind s)
+      (refused-at-eta0 (lambda (eta0)
+                         (regressor-fit constant-rows
+                                        (near-constant-targets kind s)
+                                        dt
+                                        #:penalty penalty
+                                        #:eta0 eta0))
+                       1e-3))))
