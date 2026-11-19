@@ -15,6 +15,7 @@ constexpr double float32_roundoff = 0x1p-24;
 constexpr double semicircle_edge = 2.0;
 constexpr double window_reach = 16.0;
 constexpr int64_t gram_share = 4;
+constexpr double half = 0.5;
 
 double gram_error(int64_t d) {
   return semicircle_edge * std::sqrt(static_cast<double>(gram_block_rows * d)) *
@@ -43,7 +44,7 @@ std::vector<double> symmetric_block(const std::vector<double>& m, int64_t c,
   std::vector<double> out(k * k);
   for (int64_t j = 0; j < k; ++j) {
     for (int64_t i = 0; i < k; ++i) {
-      out[(j * k) + i] = 0.5 * (m[(j * c) + i] + m[(i * c) + j]);
+      out[(j * k) + i] = half * (m[(j * c) + i] + m[(i * c) + j]);
     }
   }
   return out;

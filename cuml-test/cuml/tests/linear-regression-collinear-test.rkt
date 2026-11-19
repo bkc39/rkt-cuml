@@ -131,12 +131,15 @@
       (check-true (<= (relative-gap (coef-of (fit-with algorithm c #:fit-intercept #f)) oracle)
                       (* qr-share (unit-roundoff 'float32) (solution-kappa oracle)))))))
 
+(define share-rows
+  `((auto 1/4 ,normal-equations-share) (eig 1/4 ,normal-equations-share)
+                                       (svd 1/128 ,qr-share)
+                                       (svd-jacobi 1/128 ,qr-share)
+                                       (qr 1/128 ,qr-share)
+                                       (svd-qr 1/128 ,qr-share)))
+
 (test-gpu "every float32 algorithm fits nearly collinear X within its share of u kappa"
-  (for* ([row (in-list `((auto 1/4 ,normal-equations-share) (eig 1/4 ,normal-equations-share)
-                                                          (svd 1/128 ,qr-share)
-                                                          (svd-jacobi 1/128 ,qr-share)
-                                                          (qr 1/128 ,qr-share)
-                                                          (svd-qr 1/128 ,qr-share)))]
+  (for* ([row (in-list share-rows)]
          [n (in-list sizes)]
          [seed (in-range draws)])
     (match-define (list algorithm eps share) row)

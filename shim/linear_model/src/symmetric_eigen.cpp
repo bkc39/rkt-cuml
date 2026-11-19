@@ -21,11 +21,15 @@ namespace {
 
 constexpr auto fill = CUBLAS_FILL_MODE_LOWER;
 
+void solved(cusolverStatus_t result) {
+  RAFT_CUSOLVER_TRY(result);
+}
+
 template <typename S>
 std::optional<ritz::eigen_pairs> decomposed(rmm::cuda_stream_view stream,
-                                            const buffer<S>& a,
                                             const buffer<S>& values,
-                                            const buffer<int>& info) {
+                                            const buffer<int>& info,
+                                            const buffer<S>& a) {
   if (to_host(info, stream)[0] != 0) {
     return std::nullopt;
   }
@@ -44,30 +48,28 @@ std::optional<ritz::eigen_pairs> eigen_of(const raft::handle_t& handle,
   buffer<S> a = to_device(m, stream);
   buffer<S> values = scratch<S>(d, stream);
   cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
-  RAFT_CUSOLVER_TRY(cusolverDnSetStream(solver, stream.value()));
+  solved(cusolverDnSetStream(solver, stream.value()));
   const auto dim = static_cast<int>(d);
   const auto mode =
       vectors ? CUSOLVER_EIG_MODE_VECTOR : CUSOLVER_EIG_MODE_NOVECTOR;
   int lwork = 0;
   if constexpr (std::is_same_v<S, float>) {
-    RAFT_CUSOLVER_TRY(cusolverDnSsyevd_bufferSize(
-        solver, mode, fill, dim, a.data(), dim, values.data(), &lwork));
+    solved(cusolverDnSsyevd_bufferSize(solver, mode, fill, dim, a.data(), dim,
+                                       values.data(), &lwork));
   } else {
-    RAFT_CUSOLVER_TRY(cusolverDnDsyevd_bufferSize(
-        solver, mode, fill, dim, a.data(), dim, values.data(), &lwork));
+    solved(cusolverDnDsyevd_bufferSize(solver, mode, fill, dim, a.data(), dim,
+                                       values.data(), &lwork));
   }
   buffer<S> work = scratch<S>(lwork, stream);
   buffer<int> info = scratch<int>(1, stream);
   if constexpr (std::is_same_v<S, float>) {
-    RAFT_CUSOLVER_TRY(cusolverDnSsyevd(solver, mode, fill, dim, a.data(), dim,
-                                       values.data(), work.data(), lwork,
-                                       info.data()));
+    solved(cusolverDnSsyevd(solver, mode, fill, dim, a.data(), dim,
+                            values.data(), work.data(), lwork, info.data()));
   } else {
-    RAFT_CUSOLVER_TRY(cusolverDnDsyevd(solver, mode, fill, dim, a.data(), dim,
-                                       values.data(), work.data(), lwork,
-                                       info.data()));
+    solved(cusolverDnDsyevd(solver, mode, fill, dim, a.data(), dim,
+                            values.data(), work.data(), lwork, info.data()));
   }
-  return decomposed(stream, a, values, info);
+  return decomposed(stream, values, info, a);
 }
 
 std::optional<ritz::eigen_pairs> pencil_of(const raft::handle_t& handle,
@@ -79,20 +81,20 @@ std::optional<ritz::eigen_pairs> pencil_of(const raft::handle_t& handle,
   buffer<double> b = to_device(s, stream);
   buffer<double> values = scratch<double>(d, stream);
   cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
-  RAFT_CUSOLVER_TRY(cusolverDnSetStream(solver, stream.value()));
+  solved(cusolverDnSetStream(solver, stream.value()));
   const auto dim = static_cast<int>(d);
   constexpr auto type = CUSOLVER_EIG_TYPE_1;
   constexpr auto mode = CUSOLVER_EIG_MODE_VECTOR;
   int lwork = 0;
-  RAFT_CUSOLVER_TRY(cusolverDnDsygvd_bufferSize(solver, type, mode, fill, dim,
-                                                a.data(), dim, b.data(), dim,
-                                                values.data(), &lwork));
+  solved(cusolverDnDsygvd_bufferSize(solver, type, mode, fill, dim, a.data(),
+                                     dim, b.data(), dim, values.data(),
+                                     &lwork));
   buffer<double> work = scratch<double>(lwork, stream);
   buffer<int> info = scratch<int>(1, stream);
-  RAFT_CUSOLVER_TRY(cusolverDnDsygvd(solver, type, mode, fill, dim, a.data(),
-                                     dim, b.data(), dim, values.data(),
-                                     work.data(), lwork, info.data()));
-  return decomposed(stream, a, values, info);
+  solved(cusolverDnDsygvd(solver, type, mode, fill, dim, a.data(), dim,
+                          b.data(), dim, values.data(), work.data(), lwork,
+                          info.data()));
+  return decomposed(stream, values, info, a);
 }
 
 template std::optional<ritz::eigen_pairs> eigen_of<float>(

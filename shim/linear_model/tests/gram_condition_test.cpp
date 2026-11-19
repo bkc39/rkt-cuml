@@ -109,10 +109,21 @@ constexpr int64_t many_pairs = 30;
 constexpr int64_t spare_columns = 120;
 constexpr int64_t many_salts = 8;
 constexpr double many_eps = 0x1p-12;
+constexpr double near_step = 0x1p-30;
 
-std::vector<double> integers(int64_t n, uint64_t salt) {
-  std::vector<double> v(n);
-  uint64_t s = (salt * lcg_increment) + 1;
+struct draw_stream {
+  int64_t n;
+  uint64_t salt;
+};
+
+struct near_pairs {
+  int64_t pairs;
+  int64_t spare;
+};
+
+std::vector<double> integers(draw_stream d) {
+  std::vector<double> v(d.n);
+  uint64_t s = (d.salt * lcg_increment) + 1;
   for (double& x : v) {
     s = (s * lcg_multiplier) + lcg_increment;
     x = static_cast<double>((s >> lcg_shift) % draw_modulus) - draw_centre;
@@ -120,21 +131,21 @@ std::vector<double> integers(int64_t n, uint64_t salt) {
   return v;
 }
 
-columns summed_beside_near_pairs(int64_t n, int64_t pairs, int64_t spare,
-                                 uint64_t salt) {
-  std::vector<std::vector<double>> cols{integers(n, salt),
-                                        integers(n, salt + 1)};
+columns summed_beside_near_pairs(draw_stream d, near_pairs shape) {
+  const int64_t n = d.n;
+  std::vector<std::vector<double>> cols{integers({n, d.salt}),
+                                        integers({n, d.salt + 1})};
   std::vector<double> sum(n);
   for (int64_t i = 0; i < n; ++i) {
     sum[i] = cols[0][i] + cols[1][i];
   }
   cols.push_back(sum);
-  for (int64_t j = 0; j < pairs + spare; ++j) {
-    const uint64_t at = salt + (2 * (static_cast<uint64_t>(j) + 1));
-    std::vector<double> x = integers(n, at);
+  for (int64_t j = 0; j < shape.pairs + shape.spare; ++j) {
+    const uint64_t at = d.salt + (2 * (static_cast<uint64_t>(j) + 1));
+    std::vector<double> x = integers({n, at});
     cols.push_back(x);
-    if (j < pairs) {
-      const std::vector<double> z = integers(n, at + 1);
+    if (j < shape.pairs) {
+      const std::vector<double> z = integers({n, at + 1});
       for (int64_t i = 0; i < n; ++i) {
         x[i] += many_eps * z[i];
       }
@@ -250,8 +261,8 @@ TEST(GramCondition, ManyNearPairsBesideExactCollinearityArePastTheThreshold) {
   const resources res;
   for (const int64_t spare : {int64_t{0}, spare_columns}) {
     for (uint64_t salt = 0; salt < many_salts; ++salt) {
-      const columns c =
-          summed_beside_near_pairs(many_rows, many_pairs, spare, salt * 1000);
+      const columns c = summed_beside_near_pairs({many_rows, salt * 1000},
+                                                 {many_pairs, spare});
       EXPECT_EQ(exact_gram_cheaper(many_pairs + 1, c.d), spare == 0) << c.d;
       EXPECT_GT(condition_of<float>(res, c, {}, 0.0, true), 0x1p32)
           << c.d << " " << salt;
@@ -264,7 +275,7 @@ TEST(GramCondition, TheWindowHoldsEveryEigenvalueWithinReach) {
   constexpr int64_t near = 40;
   std::vector<double> values(d, 1.0);
   for (int64_t j = 0; j < near; ++j) {
-    values[j] = 0x1p-30 * static_cast<double>(j);
+    values[j] = near_step * static_cast<double>(j);
   }
   EXPECT_EQ(window_of(values, d), near);
   EXPECT_FALSE(exact_gram_cheaper(near, d));
