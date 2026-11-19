@@ -6,6 +6,7 @@
 (provide alpha-copy?
          expansion-binders
          racket-binders
+         racket-value
          rename
          symbols)
 
@@ -58,6 +59,10 @@
                                   (syntax-e id)))))
                  ,form)))
     (error 'expansion-binders "the probe in ~s never expanded" form)))
+
+(define (racket-value form)
+  (parameterize ([current-namespace oracle-namespace])
+    (eval form)))
 
 (define (racket-binders pattern)
   (expansion-binders `(match-lambda
