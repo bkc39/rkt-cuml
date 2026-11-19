@@ -82,7 +82,7 @@
     [(cons (or 'quote 'regexp 'pregexp '==) _) '()]
     [(cons 'quasiquote template) (append-map pattern-names (unquoted-parts template))]
     [(list* (or '? 'app) _ patterns) (append-map pattern-names (proper patterns))]
-    [(list* 'struct* _ (? list? fields))
+    [(list 'struct* _ (? list? fields))
      (append-map (lambda (field)
                    (match field
                      [(list _ pattern) (pattern-names pattern)]

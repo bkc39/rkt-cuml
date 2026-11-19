@@ -140,6 +140,13 @@
        (list* head
               (expr env predicate)
               (map (lambda (one) (normal-pattern env one)) (proper patterns)))]
+      [(list 'struct* id (? list? fields))
+       (list 'struct*
+             (ref env id)
+             (for/list ([field (in-list fields)])
+               (match field
+                 [(list name one) (list name (normal-pattern env one))]
+                 [_ field])))]
       [(cons (and head (pattern-head)) patterns)
        (cons head (map (lambda (one) (normal-pattern env one)) (proper patterns)))]
       [(cons (? symbol? head) patterns)

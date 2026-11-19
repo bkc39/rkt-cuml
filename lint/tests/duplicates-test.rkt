@@ -326,3 +326,36 @@
     (check-equal? (copies `(("a.rkt" ,one) ("b.rkt" ,copy))) '(("a.rkt:2: f" "b.rkt:2: f"))))
   (test-case (format "a definition inside ~a is not bound over its test or bindings" binder)
     (check-equal? (copies `(("a.rkt" ,one) ("b.rkt" ,other))) '())))
+
+(define (copied? one other)
+  (pair? (copies `(("a.rkt" ((require racket/match "c.rkt") ,one))
+                   ("b.rkt" ((require racket/match "c.rkt") ,other))
+                   ("c.rkt" ((provide (struct-out sol)) (struct sol (coef bias))))))))
+
+(for ([row (in-list '(("a struct* pattern copied verbatim is a copy"
+                       #t
+                       (define (f s)
+                         (match-define (struct* sol ([coef w])) s)
+                         (* 2 w))
+                       (define (f s)
+                         (match-define (struct* sol ([coef w])) s)
+                         (* 2 w)))
+                      ("a struct* pattern with its variables renamed is a copy"
+                       #t
+                       (define (f s)
+                         (match-define (struct* sol ([coef w])) s)
+                         (* 2 w))
+                       (define (g t)
+                         (match-define (struct* sol ([coef v])) t)
+                         (* 2 v)))
+                      ("a struct* pattern's field ids compare as written"
+                       #f
+                       (define (f s)
+                         (match-define (struct* sol ([coef w])) s)
+                         (* 2 w))
+                       (define (f s)
+                         (match-define (struct* sol ([bias w])) s)
+                         (* 2 w)))))])
+  (match-define (list title copy? one other) row)
+  (test-case title
+    (check-equal? (copied? one other) copy?)))
