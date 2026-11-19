@@ -29,7 +29,7 @@
                   setting-penalty
                   tight-max-iter
                   tight-tol)
-         (only-in "logistic-oracle.rkt" residual residual-bound residual-gradient residual-of)
+         (only-in "logistic-oracle.rkt" case-residual residual residual-bound residual-gradient)
          (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
 
 (provide (struct-out labelled)
@@ -38,7 +38,6 @@
          check-raw-rescued
          check-score
          check-sklearn-optimum
-         case-residual
          check-stationary
          labelled-set
          raw-optima-path
@@ -210,27 +209,6 @@
                            #:C (setting-C s)
                            #:l1-ratio (setting-l1-ratio s)
                            #:max-iter max-iter))
-
-(define (case-residual c
-                       parts
-                       s
-                       #:tol [tol default-tol]
-                       #:fit-intercept [fi #t]
-                       #:dtype [dt 'float64])
-  (match-define (struct* lr-case ([X X] [y y] [w w])) c)
-  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
-  (match-define (setting penalty C l1-ratio) s)
-  (residual-of X
-               y
-               w
-               coef
-               intercept
-               #:penalty penalty
-               #:C C
-               #:l1-ratio l1-ratio
-               #:fit-intercept fi
-               #:tol tol
-               #:dtype dt))
 
 (define (residual-at r X y #:penalty [penalty 'l2] #:fit-intercept [fi #t])
   (case-residual (lr-case "residual-at" X y #f)

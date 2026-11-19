@@ -25,10 +25,9 @@
                   setting-penalty
                   tight-max-iter
                   tight-tol)
-         (only-in "private/logistic-oracle.rkt" residual)
+         (only-in "private/logistic-oracle.rkt" case-residual residual)
          (only-in "private/logistic-twin-data.rkt" logistic-twin logistic-twin-results their-fit)
-         (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/real-logistic-data.rkt" case-residual))
+         (only-in "private/python-env.rkt" test-twin))
 
 (define small
   (list (blob-case "binary" 64 4 2 41)
