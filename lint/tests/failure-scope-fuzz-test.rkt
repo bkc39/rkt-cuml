@@ -142,7 +142,7 @@
      (node `(cons ,(node-pattern head) ,(node-pattern tail))
            (lambda () `(cons ,((node-value head)) ,((node-value tail)))))]
     [1
-     (node `(,(pick '(list-rest list*)) ,(node-pattern head) ,(node-pattern tail))
+     (node (list (pick '(list-rest list*)) (node-pattern head) (node-pattern tail))
            (lambda () `(list* ,((node-value head)) ,((node-value tail)))))]
     [_ (quasi-node (sub1 depth) #:tail (and (chance 0.5) (spine-tail depth)))]))
 
@@ -225,7 +225,7 @@
            (lambda ()
              (if (chance 0.5)
                  (value)
-                 `(,wrapper ,(value)))))]
+                 (list wrapper (value)))))]
     [9 (node `(app box (box ,pattern)) value)]
     [_ (node `(? values ,(pick names) ,pattern) value)]))
 
@@ -354,11 +354,11 @@
 (define (smallest-by-kind found)
   (for/list ([kind (in-list (remove-duplicates (map car found)))])
     (define same (filter (lambda (one) (equal? (car one) kind)) found))
-    (match (argmin (match-lambda
-                     [(list _ pattern _) (size pattern)])
-                   same)
-      [(list _ pattern (cons failure read))
-       (list kind (length same) 'smallest pattern 'failure-id failure 'read read)])))
+    (match-define (list _ pattern (cons failure read))
+      (argmin (match-lambda
+                [(list _ shape _) (size shape)])
+              same))
+    (list kind (length same) 'smallest pattern 'failure-id failure 'read read)))
 
 (for ([seed (in-list seeds)])
   (test-case (format

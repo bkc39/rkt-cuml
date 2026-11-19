@@ -199,8 +199,8 @@
     [(cons 'quote _) (after)]
     [(list 'quasiquote template) (template-names template after)]
     [(list 'cons head tail) (append (direct-pattern-names head) (spliced-names tail after))]
-    [(cons (or 'list 'list-rest 'list*)
-           (app proper (? (lambda (patterns) (ormap ellipsis? patterns)) patterns)))
+    [(cons (or 'list 'list-rest 'list*) (app proper patterns))
+     #:when (ormap ellipsis? patterns)
      (append-map direct-pattern-names (before-repeat patterns))]
     [(cons 'list patterns) (append (append-map direct-pattern-names (proper patterns)) (after))]
     [(list (or 'list-rest 'list*) tail) (spliced-names tail after)]
