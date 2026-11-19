@@ -5,7 +5,7 @@
                   logistic-regression-result-coef
                   logistic-regression-result-intercept
                   logistic-regression-result-n-iter)
-         (only-in racket/match match match-define)
+         (only-in racket/match match-define)
          (only-in rackunit check-exn check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
@@ -56,15 +56,16 @@
 
 (test-gpu "a rescue that spends max-iter names its last attempt's residual and says raise max-iter"
   (define-values (X y) (stamps 60.0 5))
-  (match (refusal (lambda ()
-                    (logistic-regression-fit (on-matrix X 'float64)
-                                             (on-vector y 'int32)
-                                             #:penalty 'l2
-                                             #:max-iter 20)))
-    [(regexp #rx"residual ([^ ]+) above the bound ([^ ]+) after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
-             (list _ K bound))
-     (check-true (< (string->number bound) (string->number K) 0.05)
-                 (format "K ~a bound ~a" K bound))]))
+  (match-define
+    (regexp
+     #rx"residual ([^ ]+) above the bound ([^ ]+) after 20 iterations \\(max-iter 20, tol 1e-04\\); raise max-iter$"
+     (list _ K bound))
+    (refusal (lambda ()
+               (logistic-regression-fit (on-matrix X 'float64)
+                                        (on-vector y 'int32)
+                                        #:penalty 'l2
+                                        #:max-iter 20))))
+  (check-true (< (string->number bound) (string->number K) 0.05) (format "K ~a bound ~a" K bound)))
 
 (test-gpu "raw breast-cancer under 'none fits to the real-data stationarity bound, given room"
   (define set (labelled-set 'breast-cancer "diagnosis" '("id")))
@@ -99,15 +100,16 @@
   (define set (labelled-set 'breast-cancer "diagnosis" '("id")))
   (define X (on-matrix (lr-case-X (labelled-case set)) 'float64))
   (define (iterations fi)
-    (match (refusal (lambda ()
-                      (logistic-regression-fit X
-                                               (labelled-labels set)
-                                               #:penalty 'l2
-                                               #:fit-intercept fi
-                                               #:max-iter 4000)))
-      [(regexp #rx"after ([0-9]+) iterations \\(max-iter 4000, tol 1e-04\\); standardise the columns$"
-               (list _ n))
-       (string->number n)]))
+    (match-define
+      (regexp #rx"after ([0-9]+) iterations \\(max-iter 4000, tol 1e-04\\); standardise the columns$"
+              (list _ n))
+      (refusal (lambda ()
+                 (logistic-regression-fit X
+                                          (labelled-labels set)
+                                          #:penalty 'l2
+                                          #:fit-intercept fi
+                                          #:max-iter 4000))))
+    (string->number n))
   (define alone (iterations #f))
   (define rescued (iterations #t))
   (check-true (< alone 4000) (format "n-iter ~a" alone))
