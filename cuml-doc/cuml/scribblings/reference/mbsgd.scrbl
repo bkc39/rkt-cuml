@@ -50,16 +50,19 @@ Minimises the mean squared error plus @racket[alpha] times the squared l2 norm, 
 @racket[l1-ratio] of the l1 norm and the rest of the squared l2 norm, by mini-batch SGD on
 @racket[X] as given; the intercept, from centring, is not penalised. @racket[tol] 0 runs every
 epoch. The result is the last iterate, not an optimum: steps depend on the scale of @racket[X], so
-standardise it. Raises when the iterate is not finite or its objective F ends above
-F₀·1.025 + A + 1e-12·F₀ plus round-off, F₀ the zero model's; lower @racket[eta0] then.
-A = 3.5·k·@racket[eta0]·(@racket[alpha]·r)², k the number of columns plus 1 with
-@racket[fit-intercept] and r the l1 share (1, @racket[l1-ratio] or 0), is capped at 4·F₀ for the
-classifier only; the regressor's is uncapped (#134). Round-off is 10·ε²·mean(y²) for the
-regressor in its dtype's machine epsilon ε. The gate sees only the objective, so it passes a fit
-that ends at or below that bound yet predicts badly. A @racket[y] whose F₀ or round-off is not
-finite, float64 |y| above about 1.3e154, or with @racket[fit-intercept] |y − ȳ| above it, is refused before the solve (rescale it). So is an
-@racket[alpha], @racket[tol], @racket[eta0] or @racket[power-t] that overflows @racket[X]'s dtype,
-an @racket[alpha] or @racket[eta0] that rounds to 0 in it, or an exact @racket[alpha] or
+standardise it.
+
+Raises, advising a lower @racket[eta0], when the iterate is not finite, when its objective ends
+above the zero model's by more than a slack, widened under l1 or elastic net for oscillation about
+the optimum, or when above round-off its loss without the penalty ends above the zero model's; it
+sees only the objective and the loss, so it can pass a fit that predicts badly. When @racket[y] is
+constant to round-off, an l1 or elastic-net fit with @racket[fit-intercept] must fit the constant:
+it raises, advising a lower @racket[eta0] or @racket[alpha], when its intercept, a coefficient or
+the error of its predictions exceeds a bound, so a small constant @racket[y] is refused at the
+defaults. Before the solve, raises, advising a rescale, when the zero model's
+objective is not finite or a sum the solver makes in @racket[X]'s dtype could overflow, and refuses
+an @racket[alpha], @racket[tol], @racket[eta0] or @racket[power-t] that overflows @racket[X]'s
+dtype, an @racket[alpha] or @racket[eta0] that rounds to 0 in it, or an exact @racket[alpha] or
 @racket[eta0] that rounds to 0.0. With @racket[random-state] an integer and @racket[shuffle], rows
 are first permuted by that seed; @racket[#f] is cuML's fixed order. @racket[X] and @racket[y] are
 not modified.
@@ -122,7 +125,8 @@ The iterate of @racket[mbsgd-classifier-fit], its two sorted @racket[classes] an
 Two classes only. Fits the hinge loss on -1/+1 codes, or the log loss or squared error on 0/1
 codes, of the sorted @racket[classes]. Under @racket[fit-intercept] the hinge and log fits learn
 the intercept as a penalised coefficient on a column of ones, unlike sklearn's; squared-loss
-centres. The hinge loss's @racket[tol] compares a sum over the rows, as cuML's does. Otherwise as
+centres. The hinge loss's @racket[tol] compares a sum over the rows, as cuML's does. The gate's
+allowance is at most four times the zero model's objective, whatever the columns. Otherwise as
 @racket[mbsgd-regressor-fit].
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 0) (1 0) (0 1) (3 3) (4 3) (3 4)) #:dtype 'float64))
