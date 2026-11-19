@@ -123,7 +123,7 @@
 (define (reads-binder? head layout backward?)
   (match-define (list _ seen)
     (racket-value
-     `(,(scope-sample head layout #:backward? backward? #:formal 'a #:binder 'a #:read 'a) 2)))
+     (list (scope-sample head layout #:backward? backward? #:formal 'a #:binder 'a #:read 'a) 2)))
   (eqv? seen 1))
 
 (define (racket-scope head layout)
