@@ -162,6 +162,22 @@
                                       `(x ,y))))))
                 '(("a.rkt:2: tag" "b.rkt:2: tag"))))
 
+(test-case "a quasiquoted match pattern binds only its unquoted names, so its literals are data"
+  (check-equal? (copies '(("a.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(x ,v) v]))))
+                          ("b.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(y ,v) v]))))))
+                '())
+  (check-equal? (copies '(("a.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(x ,v) v]))))
+                          ("b.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(x ,w) w]))))))
+                '(("a.rkt:3: tag" "b.rkt:3: tag"))))
+
 (for ([binder (in-list '(cond
                           when
                           unless

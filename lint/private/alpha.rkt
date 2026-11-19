@@ -2,7 +2,16 @@
 
 (require (for-syntax racket/base)
          (only-in racket/list append-map)
-         (only-in racket/match define-match-expander match))
+         (only-in racket/match define-match-expander match)
+         (only-in "patterns.rkt"
+                  binding-clauses
+                  clause-ids
+                  fold-head?
+                  for-head?
+                  pattern-head
+                  pattern-names
+                  proper
+                  quasi-map))
 
 (provide alpha-normal
          procedure-name)
@@ -25,24 +34,6 @@
           'thunk
           'thunk*)))
 
-(define-match-expander pattern-head
-  (lambda (_stx)
-    #'(or 'list
-          'list*
-          'list-rest
-          'list-no-order
-          'cons
-          'vector
-          'box
-          'and
-          'or
-          'not
-          'hash-table
-          'struct*)))
-
-(define (for-head? head)
-  (regexp-match? #rx"^for[*]?(/|$)" (symbol->string head)))
-
 (define (definition-root head)
   (match head
     [(cons (? symbol? name) _) name]
@@ -55,42 +46,6 @@
     [(list 'define (? symbol? name) (cons (procedure-head) _)) name]
     [(list 'define/contract (? symbol? name) _ (cons (procedure-head) _)) name]
     [_ #f]))
-
-(define (proper datum)
-  (match datum
-    [(cons a d) (cons a (proper d))]
-    ['() '()]
-    [tail (list tail)]))
-
-(define (pattern-names pattern)
-  (match pattern
-    [(or '_ '... '..1 '___) '()]
-    [(? symbol? name) (list name)]
-    [(cons (or 'quote 'regexp 'pregexp '==) _) '()]
-    [(list* (or '? 'app) _ patterns) (append-map pattern-names (proper patterns))]
-    [(list* 'struct* _ (? list? fields))
-     (append-map (lambda (field)
-                   (match field
-                     [(list _ pattern) (pattern-names pattern)]
-                     [_ '()]))
-                 fields)]
-    [(cons (pattern-head) patterns) (append-map pattern-names (proper patterns))]
-    [(cons (? symbol?) fields) (append-map pattern-names (proper fields))]
-    [(? pair?) (append-map pattern-names (proper pattern))]
-    [_ '()]))
-
-(define (clause-ids clause)
-  (match clause
-    [(list (? symbol? name) _) (list name)]
-    [(list (? list? names) _) (filter symbol? names)]
-    [(? symbol? name) (list name)]
-    [_ '()]))
-
-(define (accumulator-clauses accumulators)
-  (match accumulators
-    [(list* (? keyword?) _ rest) (accumulator-clauses rest)]
-    [(cons one rest) (cons one (accumulator-clauses rest))]
-    [_ '()]))
 
 (define (body-names forms)
   (append-map
@@ -123,15 +78,6 @@
     (match items
       [(cons a d) (cons (expr env a) (each-form env d))]
       [_ (expr env items)]))
-  (define (quasi env datum depth)
-    (match datum
-      [(list (or 'unquote 'unquote-splicing) inner)
-       (if (= depth 1)
-           (list (car datum) (expr env inner))
-           (list (car datum) (quasi env inner (sub1 depth))))]
-      [(list 'quasiquote inner) (list 'quasiquote (quasi env inner (add1 depth)))]
-      [(cons a d) (cons (quasi env a depth) (quasi env d depth))]
-      [_ datum]))
   (define (formals env items)
     (match items
       ['() (values '() env)]
@@ -188,6 +134,8 @@
       [(or '_ '... '..1 '___) datum]
       [(? symbol?) (ref env datum)]
       [(cons (or 'quote 'regexp 'pregexp) _) datum]
+      [(cons 'quasiquote template)
+       (cons 'quasiquote (quasi-map template (lambda (inner) (normal-pattern env inner))))]
       [(list* (and head (or '? 'app '==)) predicate patterns)
        (list* head
               (expr env predicate)
@@ -276,11 +224,10 @@
        (list* normal (body inner forms))]
       [_ (each env rest)]))
   (define (for-form env head rest)
-    (define folds? (regexp-match? #rx"/(fold|foldr|lists)$" (symbol->string head)))
     (match rest
       [(list* accumulators (? list? items) forms)
-       #:when folds?
-       (define accumulated (bind env (append-map clause-ids (accumulator-clauses accumulators))))
+       #:when (fold-head? head)
+       (define accumulated (bind env (append-map clause-ids (binding-clauses accumulators))))
        (define-values (normal inner) (for-clauses accumulated items))
        (list* (each accumulated accumulators) normal (body inner forms))]
       [(list* (? list? items) forms)
@@ -306,7 +253,7 @@
        (cons key
              (match head
                [(or 'quote 'quote-syntax 'syntax) rest]
-               [(or 'quasiquote 'quasisyntax) (quasi env rest 1)]
+               [(or 'quasiquote 'quasisyntax) (quasi-map rest (lambda (inner) (expr env inner)))]
                [(or 'lambda 'λ)
                 (match rest
                   [(cons items forms)

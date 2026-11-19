@@ -3,7 +3,13 @@
 (require (only-in racket/file find-files)
          (only-in racket/list append-map)
          (only-in racket/match match)
-         (only-in "private/modules.rkt" read-module rkt?))
+         (only-in "private/modules.rkt" read-module rkt?)
+         (only-in "private/patterns.rkt"
+                  binding-clauses
+                  clause-ids
+                  fold-head?
+                  for-head?
+                  pattern-names))
 
 (provide positional-accesses)
 
@@ -29,14 +35,7 @@
     [_ '()]))
 
 (define (clause-names clauses)
-  (append-map (lambda (clause)
-                (match clause
-                  [(list (? symbol? name) _) (list name)]
-                  [(list (? list? names) _) (filter symbol? names)]
-                  [_ '()]))
-              (if (list? clauses)
-                  clauses
-                  '())))
+  (append-map clause-ids (binding-clauses clauses)))
 
 (define (bound-names datum)
   (match datum
@@ -58,8 +57,9 @@
      (append (list loop) (clause-names clauses) (bound-names clauses) (bound-names rest))]
     [(list* (or 'let 'let* 'letrec 'letrec* 'let-values 'let*-values 'letrec-values) clauses rest)
      (append (clause-names clauses) (bound-names clauses) (bound-names rest))]
-    [(list* (or 'match-define 'match-define-values) pattern rest)
-     (append (pattern-names pattern) (bound-names rest))]
+    [(list* 'match-define pattern rest) (append (pattern-names pattern) (bound-names rest))]
+    [(list* 'match-define-values (? list? patterns) rest)
+     (append (append-map pattern-names patterns) (bound-names rest))]
     [(list* (? fold-head?) (? list? accumulators) (? list? clauses) rest)
      (append (clause-names accumulators)
              (clause-names clauses)
@@ -69,19 +69,6 @@
     [(list* (? for-head?) (? list? clauses) rest)
      (append (clause-names clauses) (bound-names clauses) (bound-names rest))]
     [(cons a d) (append (bound-names a) (bound-names d))]
-    [_ '()]))
-
-(define (for-head? head)
-  (and (symbol? head) (regexp-match? #rx"^for[*]?(/|$)" (symbol->string head))))
-
-(define (fold-head? head)
-  (and (for-head? head) (regexp-match? #rx"/(fold|foldr|lists)$" (symbol->string head))))
-
-(define (pattern-names pattern)
-  (match pattern
-    [(? symbol? name) (list name)]
-    [(cons (or 'quote 'quasiquote) _) '()]
-    [(cons a d) (append (pattern-names a) (pattern-names d))]
     [_ '()]))
 
 (define (accesses one refused)

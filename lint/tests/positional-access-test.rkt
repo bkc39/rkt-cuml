@@ -115,3 +115,39 @@
     (define-values (ok? output) (gate-on forms))
     (check-false ok? output)
     (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))
+
+(for ([use (in-list '(((require racket/list) (define (keep rows)
+                                               (for/list ([row (in-list rows)]
+                                                          #:when (second row))
+                                                 row)))
+                      ((define (keep rows)
+                         (for/list ([row (in-list rows)]
+                                    #:unless (cadr row))
+                           row)))
+                      ((require racket/list) (define (f rows)
+                                               (for/fold ([acc '()]
+                                                          #:result (second acc))
+                                                         ([r rows])
+                                                 (cons r acc))))
+                      ((require racket/list racket/match) (define (f rows)
+                                                            (match-define (list (app second x)) rows)
+                                                            x))
+                      ((require racket/list racket/match) (define (f row)
+                                                            (match-define `(second ,x) row)
+                                                            (second x)))))])
+  (test-case (format "a guard, a result, or a pattern's operator or literal is an access: ~s" use)
+    (define-values (ok? output) (gate-on use))
+    (check-false ok? output)
+    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: (second|cadr): read a test table's rows" output)))
+
+(test-case "a guard's accessor does not hide the same accessor elsewhere in the file"
+  (define-values (ok? output)
+    (gate-on '((require racket/list) (define (keep rows)
+                                       (for/list ([row (in-list rows)]
+                                                  #:when (second row))
+                                         row))
+                                     (define (col rows)
+                                       (map second rows)))))
+  (check-false ok? output)
+  (check-regexp-match #rx"table-test[.]rkt:3: second: read a test table's rows" output)
+  (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
