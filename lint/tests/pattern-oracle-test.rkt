@@ -74,6 +74,8 @@
                             (hash-table (k v) __2)
                             (cons a b)
                             (mcons a b)
+                            (mlist a b)
+                            (mlist a ...)
                             (box a)
                             (point a b)
                             (point a _)

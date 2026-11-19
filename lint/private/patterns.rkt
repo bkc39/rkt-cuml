@@ -101,7 +101,7 @@
 
 (define-match-expander pattern-head
   (lambda (_stx)
-    #'(or 'list 'list* 'list-rest 'list-no-order 'cons 'mcons 'vector 'box 'and 'or 'not 'var)))
+    #'(or 'list 'list* 'list-rest 'list-no-order 'mlist 'cons 'mcons 'vector 'box 'and 'or 'not 'var)))
 
 (define (for-head? head)
   (and (symbol? head) (regexp-match? #rx"^for[*]?(/|$)" (symbol->string head))))
