@@ -2297,10 +2297,15 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   Under l1 it is refused (g 33.2, R² −.078 against the optimum's 0: it
   predicts worse than the zero model); under elastic net it passes the
   cap and the loss guard (loss 1.0251·F_start, R² −.025, inside the
-  slack plus the floor's share). m = 1 refuses the default f32 l1 fit of
-  y = 1.7 + s·e or 1.7 + s·x₁ wherever F_start is 1 to 32 floors
-  (reviewer probe near-constant-f32: s 1e-6 and 2e-6, 2.3 to 10.5
-  floors, all "objective rose"; pinned in mbsgd-gate-round-off-test; #141).
+  slack plus the floor's share). Above round-off (m = 1) the cap refuses
+  the default f32 l1 fit of y = 1.7 + s·e or 1.7 + s·x₁ from 2.3 floors
+  to 41.9 (noise, s 1e-6 to 4e-6) and to 149.3 (signal, s 1e-6 to 8e-6),
+  all "objective rose"; the noise fit passes at s 8e-6 (167.9 floors, R²
+  −.0017), and elastic net and l2 pass throughout (r2 reviewer probe
+  near-constant-f32; s 1e-6 and 2e-6 pinned in
+  mbsgd-gate-round-off-test; #141). No round-off multiple bounds these
+  refusals: they stop where the oscillation's rise, 2.1e-11 to 3.6e-11 here,
+  falls inside .25·F_start.
   Near the floor the loss guard (r3) refuses y = 1e6 + .5·x₁ + .1·e
   (f32, 1.73 floors) l1 α 1 eta0 .05 (R² −.14) and α 2 eta0 .02 (R²
   −.097), which the old + floor passed; it passes s .45 α 1 eta0 .02 (R²
