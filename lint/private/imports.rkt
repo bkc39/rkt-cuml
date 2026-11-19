@@ -47,12 +47,24 @@
      (list head argument (module-path inner))]
     [(list* (and head (or 'combine-in 'for-syntax 'for-template 'for-label 'subtract-in)) specs)
      (cons head (map module-path specs))]
-    [(list* (and head (or 'for-meta 'only-meta-in 'for-space 'only-space-in 'relative-in))
-            argument
-            specs)
+    [(list* (and head (or 'for-meta 'only-meta-in 'for-space 'only-space-in)) argument specs)
      (list* head argument (map module-path specs))]
     [(list* 'multi-in subs) (multi-in file here subs spec)]
+    [(cons 'relative-in _) (unanchored spec)]
+    [(cons (or 'lib 'planet) _) spec]
+    [(? holds-string?) (unanchored spec)]
     [_ spec]))
+
+(define (holds-string? datum)
+  (match datum
+    [(? string?) #t]
+    [(cons a d) (or (holds-string? a) (holds-string? d))]
+    [_ #f]))
+
+(define (unanchored spec)
+  (error 'copied-definitions
+         "~s names a module by a relative path inside a form the lint cannot anchor to its file"
+         spec))
 
 (define (own-submodule file here path spec)
   (define names
@@ -76,9 +88,10 @@
                                      sub
                                      (list sub)))])
         (and prefix (string? part) (string-append prefix (if (equal? prefix "") "" "/") part)))))
-  (if (andmap string? paths)
-      (cons 'combine-in (map (lambda (one) (anchored file here one)) paths))
-      spec))
+  (cond
+    [(andmap string? paths) (cons 'combine-in (map (lambda (one) (anchored file here one)) paths))]
+    [(holds-string? spec) (unanchored spec)]
+    [else spec]))
 
 (define (expand-probe given language requires)
   (define file (path->complete-path given))
