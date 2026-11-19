@@ -21,7 +21,7 @@
   (define result (thunk))
   (values result (- (current-memory-use 'cumulative) before)))
 
-(test-gpu "a class-weight hash on device labels allocates on the host by classes, not rows"
+(test-gpu "device labels: class weights sized by classes, not rows"
   (define X (on-matrix (map list column) 'float32))
   (define y (on-vector labels 'int32))
   (define (fit cw)

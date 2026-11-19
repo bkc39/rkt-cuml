@@ -124,34 +124,29 @@
     [(? list?) (length y)]
     [(app shape (list n)) n]))
 
-(define (class-weight-view who kind X y classes-of cw resources)
-  (match-define (list rows _) (shape X))
+(define (class-weighted? who rows y cw)
   (cond
     [(not (hash? cw)) #f]
     [(not (= (y-length y) rows))
      (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y))]
-    [else
-     (list->device-vector (host-weights who kind (classes-of) cw)
-                          #:dtype 'float64
-                          #:resources resources)]))
+    [else #t]))
 
-(define/who (fit-labels who kind X y cw resources)
+(define (class-weight-view who kind classes cw resources)
+  (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources))
+
+(define/who (fit-labels who kind rows y cw resources)
   (match kind
     [(? device-kind?)
      (values y
              #f
-             (class-weight-view who
-                                real-labels
-                                X
-                                y
-                                (lambda () (device-classes who y resources))
-                                cw
-                                resources))]
+             (and (class-weighted? who rows y cw)
+                  (class-weight-view who real-labels (device-classes who y resources) cw resources)))]
     [_
      (define-values (classes codes) (host-labels who kind y))
      (values (list->device-vector codes #:dtype 'int32 #:resources resources)
              classes
-             (class-weight-view who kind X y (lambda () classes) cw resources))]))
+             (and (class-weighted? who rows y cw)
+                  (class-weight-view who kind classes cw resources)))]))
 
 (define (class-view kind classes resources)
   (match kind
