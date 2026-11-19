@@ -2,7 +2,7 @@
 ;; Written by `racket private/raw-logistic-optima.rkt` on a GPU host:
 ;; cuML's qn solver through logistic-regression-fit, dtype float64,
 ;; tol 1e-10, max-iter 100000,
-;; at commit b7fa2be50f87738b612390bc04cd5c8a47bc3fd4.
+;; at 7974738 (git describe --always --dirty).
 ;; Each entry: ((penalty C l1-ratio) coef-rows intercepts).
 (((l1 1.0 #f)
   ((0.0
