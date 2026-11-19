@@ -193,23 +193,34 @@
      (and patterns (cons pattern patterns))]
     [_ #f]))
 
-(define (spliced-repeat? pattern)
+(define (spliced-names pattern after)
   (match pattern
-    [(or (? symbol?) (list 'var _)) #t]
-    [(cons (or 'list 'list-rest 'list*) patterns) (ormap ellipsis? (proper patterns))]
-    [(list 'quasiquote (? list? template)) (ormap ellipsis? template)]
-    [_ #f]))
+    [(or (? symbol?) (list 'var _)) '()]
+    [(cons 'quote _) (after)]
+    [(list 'quasiquote template) (template-names template after)]
+    [(list 'cons head tail) (append (direct-pattern-names head) (spliced-names tail after))]
+    [(cons (or 'list 'list-rest 'list*) (app proper (? (lambda (patterns) (ormap ellipsis? patterns)) patterns)))
+     (append-map direct-pattern-names (before-repeat patterns))]
+    [(cons 'list patterns) (append (append-map direct-pattern-names (proper patterns)) (after))]
+    [(list (or 'list-rest 'list*) tail) (spliced-names tail after)]
+    [(list* (and kind (or 'list-rest 'list*)) head more)
+     (append (direct-pattern-names head) (spliced-names (cons kind more) after))]
+    [_ (append (direct-pattern-names pattern) (after))]))
 
-(define (template-names template)
+(define (tail-names pattern after)
+  (if after
+      (spliced-names pattern after)
+      (direct-pattern-names pattern)))
+
+(define (template-names template [after #f])
   (match template
-    [(list 'unquote pattern) (direct-pattern-names pattern)]
+    ['() (if after (after) '())]
+    [(list 'unquote pattern) (tail-names pattern after)]
+    [(list (list 'unquote-splicing pattern)) (tail-names pattern after)]
     [(cons (list 'unquote-splicing pattern) rest)
-     (append (direct-pattern-names pattern)
-             (if (spliced-repeat? pattern)
-                 '()
-                 (template-names rest)))]
+     (spliced-names pattern (lambda () (template-names rest after)))]
     [(list* _ (? ellipsis?) _) '()]
-    [(cons one rest) (append (template-names one) (template-names rest))]
+    [(cons one rest) (append (template-names one) (template-names rest after))]
     [(? vector?) (template-names (vector->list template))]
     [(? box?) (template-names (unbox template))]
     [(app prefab-struct-key (? values))
