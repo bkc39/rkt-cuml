@@ -158,11 +158,10 @@
                  [(list* key one options)
                   (list* (expr env key)
                          (normal one)
-                         (map (lambda (option)
-                                (if (keyword? option)
-                                    option
-                                    (expr env option)))
-                              (proper options)))]
+                         (for/list ([option (in-list (proper options))])
+                           (if (keyword? option)
+                               option
+                               (expr env option))))]
                  [_ entry])))]
       [(cons 'hash-table entries)
        (cons 'hash-table
