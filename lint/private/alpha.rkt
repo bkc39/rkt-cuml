@@ -230,19 +230,23 @@
            (if (and several? (list? patterns))
                patterns
                (list patterns)))
-         (define inner (bind env (append-map pattern-names each-pattern)))
+         (define names (append-map pattern-names each-pattern))
+         (define inner (bind env names))
          (define normal (map (lambda (one) (normal-pattern inner one)) each-pattern))
          (cons (if several?
                    normal
                    (car normal))
-               (clause-body inner forms))]
+               (clause-body env inner names forms))]
         [_ clause])))
-  (define (clause-body env forms)
+  (define (clause-body env inner names forms)
     (match forms
       [(failure-forms id more)
-       (define inner (bind env (list id)))
-       (cons (list '=> (ref inner id)) (body inner more))]
-      [_ (body env forms)]))
+       (define failing (bind env (list id)))
+       (define scope
+         (for/fold ([scope failing]) ([name (in-list names)])
+           (hash-set scope name (ref inner name))))
+       (cons (list '=> (ref failing id)) (body scope more))]
+      [_ (body inner forms)]))
   (define (guarded env items normal-test)
     (for/list ([clause (in-list (proper items))])
       (match clause

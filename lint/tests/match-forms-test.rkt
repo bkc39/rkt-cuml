@@ -9,6 +9,7 @@
          (only-in "../private/patterns.rkt"
                   match-forms
                   match-layout
+                  match-layout-before
                   match-layout-patterns
                   match-layout-scope)
          (only-in "private/oracle.rkt" alpha-copy? expansion-binders racket-value rename))
@@ -30,40 +31,47 @@
 (define (clause? layout)
   (eq? (match-layout-scope layout) 'clause))
 
-(define (sample head layout pattern body #:other [other 'c] #:failure [failure #f])
-  (match-define (match-layout before _ scope) layout)
-  (define lhs
-    (if (several? layout)
-        (list other pattern)
-        pattern))
-  (define value
-    (if (several? layout)
-        '(values v v)
-        'v))
+(define (clause-lhs layout pattern [other 'c])
+  (if (several? layout)
+      (list other pattern)
+      pattern))
+
+(define (sample-value layout)
+  (if (several? layout)
+      '(values v v)
+      'v))
+
+(define (clause-form head layout clauses)
+  (define before (match-layout-before layout))
   (define leading
     (for/list ([one (in-list before)])
       (match* (one (several? layout))
-        [('expression _) value]
+        [('expression _) (sample-value layout)]
         [('expressions #t) '(v v)]
         [('expressions #f) '(v)]
         [('head #t) '(f v w)]
         [('head #f) '(f v)])))
-  (match scope
+  (define form `(,head ,@leading ,@clauses))
+  (if (memq 'head before)
+      `(let ()
+         ,form
+         f)
+      form))
+
+(define (sample head layout pattern body #:other [other 'c] #:failure [failure #f])
+  (define lhs (clause-lhs layout pattern other))
+  (match (match-layout-scope layout)
     ['clause
-     (define form
-       (if failure
-           `(,head ,@leading [,lhs (=> ,failure) ,body])
-           `(,head ,@leading [,lhs ,body])))
-     (if (memq 'head before)
-         `(let ()
-            ,form
-            f)
-         form)]
+     (clause-form head
+                  layout
+                  (list (if failure
+                            `[,lhs (=> ,failure) ,body]
+                            `[,lhs ,body])))]
     ['definition
      `(let ()
-        (,head ,lhs ,value)
+        (,head ,lhs ,(sample-value layout))
         ,body)]
-    [_ `(,head ([,lhs ,value]) ,body)]))
+    [_ `(,head ([,lhs ,(sample-value layout)]) ,body)]))
 
 (define (sample-binders layout)
   (append (if (several? layout)
@@ -156,6 +164,50 @@
       (check-true (alpha-copy? original (procedure 'a 'y (if binder? 'y 'a))) "the binder renamed")
       (check-false (alpha-copy? original (procedure 'q 'z (if binder? 'q 'z)))
                    "the right-hand side read the other way"))))
+
+(define (clause-answer head layout clauses)
+  (define form (clause-form head layout clauses))
+  (racket-value `((lambda (k v)
+                    ,(match (match-layout-before layout)
+                       [(or '() '(head))
+                        `(,form v
+                                ,@(if (several? layout)
+                                      '(v)
+                                      '()))]
+                       [_ form]))
+                  'formal
+                  1)))
+
+(for ([head (in-list forms)]
+      #:when (clause? (hash-ref match-forms head)))
+  (define layout (hash-ref match-forms head))
+  (define (lhs pattern)
+    (clause-lhs layout pattern))
+  (define (procedure formal clauses)
+    `(define (g ,@(if formal
+                      (list formal)
+                      '())
+                v)
+       ,(clause-form head layout clauses)))
+  (define (copy-as-racket-says? copy? one other message)
+    (check-equal? (alpha-copy? one other) copy? message))
+  (define (shadowing binder failure)
+    (procedure #f `([,(lhs `(list ,binder)) (=> ,failure) (add1 k)])))
+  (for ([renamed (in-list '(failure pattern))])
+    (test-case (format "the copy check lets a ~a pattern variable shadow a failure id: ~a renamed"
+                       head
+                       renamed)
+      (define pattern?
+        (eq? (clause-answer head layout `([,(lhs 'k) (=> k) (if (procedure? k) 'failure 'pattern)]))
+             'pattern))
+      (match renamed
+        ['failure
+         (copy-as-racket-says? pattern? (shadowing 'k 'k) (shadowing 'k 'j) "the failure id renamed")]
+        ['pattern
+         (copy-as-racket-says? (not pattern?)
+                               (shadowing 'k 'k)
+                               (shadowing 'j 'k)
+                               "the pattern variable renamed")]))))
 
 (test-case "no-positional-access reads every form's patterns from the table"
   (with-temporary-directory
