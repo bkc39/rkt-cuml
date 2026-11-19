@@ -7,6 +7,7 @@
          (only-in "private/patterns.rkt"
                   binding-clauses
                   clause-ids
+                  failure-forms
                   fold-head?
                   for-head?
                   match-form
@@ -48,8 +49,14 @@
      (append (match* (layout leading)
                [((match-layout (list 'head) _ _) (list head)) (head-names head)]
                [(_ _) '()])
-             (append-map (lambda (group) (append-map pattern-names (car group))) groups))]
+             (append-map (lambda (group) (append-map pattern-names (car group))) groups)
+             (append-map (lambda (group) (failure-names layout (cdr group))) groups))]
     [#f '()]))
+
+(define (failure-names layout forms)
+  (match* (layout forms)
+    [((match-layout _ _ 'clause) (failure-forms id _)) (list id)]
+    [(_ _) '()]))
 
 (define (bound-names datum)
   (match datum

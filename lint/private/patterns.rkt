@@ -7,6 +7,7 @@
 (provide binding-clauses
          clause-ids
          ellipsis?
+         failure-forms
          fold-head?
          for-head?
          lhs-patterns
@@ -79,6 +80,11 @@
     [(_ _ (cons (app as-list (? list? bindings)) body))
      (match-parts leading (map group bindings) body)]
     [(_ _ _) #f]))
+
+(define-match-expander failure-forms
+  (lambda (stx)
+    (syntax-case stx ()
+      [(_ id more) #'(cons (list '=> (? symbol? id)) more)])))
 
 (define-match-expander pattern-head
   (lambda (_stx)

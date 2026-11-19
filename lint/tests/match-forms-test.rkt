@@ -27,7 +27,10 @@
 (define (several? layout)
   (eq? (match-layout-patterns layout) 'several))
 
-(define (sample head layout pattern body #:other [other 'c])
+(define (clause? layout)
+  (eq? (match-layout-scope layout) 'clause))
+
+(define (sample head layout pattern body #:other [other 'c] #:failure [failure #f])
   (match-define (match-layout before _ scope) layout)
   (define lhs
     (if (several? layout)
@@ -47,7 +50,10 @@
         [('head #f) '(f v)])))
   (match scope
     ['clause
-     (define form `(,head ,@leading [,lhs ,body]))
+     (define form
+       (if failure
+           `(,head ,@leading [,lhs (=> ,failure) ,body])
+           `(,head ,@leading [,lhs ,body])))
      (if (memq 'head before)
          `(let ()
             ,form
@@ -60,9 +66,12 @@
     [_ `(,head ([,lhs ,value]) ,body)]))
 
 (define (sample-binders layout)
-  (if (several? layout)
-      '(a c)
-      '(a)))
+  (append (if (several? layout)
+              '(a c)
+              '(a))
+          (if (clause? layout)
+              '(k)
+              '())))
 
 (define forms (sort (hash-keys match-forms) symbol<?))
 
@@ -79,17 +88,24 @@
 (for ([head (in-list forms)])
   (define layout (hash-ref match-forms head))
   (test-case (format "~a binds its patterns where the table says" head)
-    (check-equal? (expansion-binders `(lambda (v w) ,(sample head layout '(list a) '(binders a c list))))
+    (check-equal? (expansion-binders
+                   `(lambda (v w) ,(sample head layout '(list a) '(binders a c k list) #:failure 'k)))
                   (sample-binders layout)))
   (test-case (format "the copy check renames a ~a pattern's binders" head)
     (check-true (alpha-copy? `(define (g v)
-                                ,(sample head layout '(list a) `(list ,@(sample-binders layout))))
+                                ,(sample head
+                                         layout
+                                         '(list a)
+                                         `(list ,@(sample-binders layout))
+                                         #:failure 'k))
                              `(define (g v)
                                 ,(sample head
                                          layout
                                          '(list b)
-                                         `(list ,@(rename (sample-binders layout) '((a . b) (c . d))))
-                                         #:other 'd))))))
+                                         `(list ,@(rename (sample-binders layout)
+                                                          '((a . b) (c . d) (k . j))))
+                                         #:other 'd
+                                         #:failure 'j))))))
 
 (define (scope-sample head layout #:backward? backward? #:formal formal #:binder binder #:read read)
   (define (lhs name)
@@ -144,6 +160,7 @@
        (define layout (hash-ref match-forms head))
        (define refused (build-path root (format "form-~a-refused.rkt" index)))
        (define binds (build-path root (format "form-~a-binds.rkt" index)))
+       (define fails (build-path root (format "form-~a-fails.rkt" index)))
        (write-module refused
                      "#lang racket/base"
                      `((require racket/list
@@ -156,11 +173,20 @@
                                 racket/match)
                        (define (g v)
                          ,(sample head layout '(list second) 'second))))
-       (list head refused binds)))
+       (write-module fails
+                     "#lang racket/base"
+                     `((require racket/list
+                                racket/match)
+                       (define (g v)
+                         ,(sample head layout '(list a) '(list a (second)) #:failure 'second))))
+       (list head refused binds fails)))
    (define found (map car (positional-accesses (list root) '(second))))
    (for ([one (in-list files)])
-     (match-define (list head refused binds) one)
+     (match-define (list head refused binds fails) one)
      (check-not-false (member refused found) (format "~a: (app second a) is refused" head))
      (check-equal? (member binds found)
                    #f
-                   (format "~a: a pattern variable named second binds" head)))))
+                   (format "~a: a pattern variable named second binds" head))
+     (check-equal? (and (member fails found) #t)
+                   (not (clause? (hash-ref match-forms head)))
+                   (format "~a: a failure id named second binds, and only a clause has one" head)))))

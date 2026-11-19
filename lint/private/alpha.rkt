@@ -7,6 +7,7 @@
                   binding-clauses
                   clause-ids
                   ellipsis?
+                  failure-forms
                   fold-head?
                   for-head?
                   lhs-patterns
@@ -234,8 +235,14 @@
          (cons (if several?
                    normal
                    (car normal))
-               (body inner forms))]
+               (clause-body inner forms))]
         [_ clause])))
+  (define (clause-body env forms)
+    (match forms
+      [(failure-forms id more)
+       (define inner (bind env (list id)))
+       (cons (list '=> (ref inner id)) (body inner more))]
+      [_ (body env forms)]))
   (define (guarded env items normal-test)
     (for/list ([clause (in-list (proper items))])
       (match clause
