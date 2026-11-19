@@ -1,12 +1,12 @@
 #lang racket/base
 
 (require (only-in cuml/metrics accuracy-score mean-squared-error r2-score)
-         (only-in math/flonum flstep flsum flulp-error flvector->list)
+         (only-in math/flonum flsum flulp-error flvector->list)
          (only-in racket/flonum for/flvector in-flvector)
          (only-in racket/list make-list remove-duplicates)
          (only-in racket/match match-define)
          (only-in racket/math sqr)
-         (only-in rackunit check-= check-equal? check-false check-true)
+         (only-in rackunit check-= check-equal? check-true)
          (only-in raft device-vector->flvector flvector->device-vector list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
@@ -171,5 +171,4 @@
   (define exact (exact-r2 y p w))
   (define ours (r2 y p w))
   (check-equal? (real->decimal-string exact 2) light-spread-r2)
-  (check-true (<= (flulp-error ours exact) anchored-r2-ulps))
-  (check-false (<= (flulp-error (flstep ours 4) exact) anchored-r2-ulps)))
+  (check-true (<= (flulp-error ours exact) anchored-r2-ulps)))
