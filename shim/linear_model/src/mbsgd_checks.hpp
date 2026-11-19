@@ -12,6 +12,7 @@
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
 #include "mbsgd_magnitudes.hpp"
+#include "min_rows.hpp"
 
 namespace cumlrkt::glm::mbsgd {
 
@@ -105,7 +106,7 @@ void require_sgd_options(const sgd_options& o) {
 }
 
 inline void require_sgd_shape(int64_t n, int64_t d, int64_t y_len) {
-  require_some("X", "row", n, 2);
+  require_some("X", "row", n, min_rows);
   require_some("X", "column", d);
   if (y_len != n) {
     throw logic_error(

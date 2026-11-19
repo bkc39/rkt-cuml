@@ -30,6 +30,7 @@
 #include "logistic_resolve.hpp"
 #include "logistic_solve.hpp"
 #include "logistic_weights.hpp"
+#include "min_rows.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/view.hpp"
 
@@ -332,7 +333,7 @@ int32_t fit_into(const raft::handle_t& handle, const fit_views& views,
                    ? nullptr
                    : raftrkt::vector_data<T, int32_t>(views.sample_weight,
                                                       "sample-weight", x.n);
-  require_some("X", "row", x.n, 2);
+  require_some("X", "row", x.n, min_rows);
   require_some("X", "column", x.d);
   require_index("X", x.n, x.d);
   require_integral(y, x.n, stream);
