@@ -216,8 +216,8 @@
     (clause-lhs layout pattern))
   (define (each-lhs clauses)
     (for/list ([clause (in-list clauses)])
-      (match clause
-        [(cons pattern forms) (cons (lhs pattern) forms)])))
+      (match-define (cons pattern forms) clause)
+      (cons (lhs pattern) forms)))
   (define (procedure formal clauses)
     `(define (g ,formal v)
        ,(clause-form head layout (each-lhs clauses))))
