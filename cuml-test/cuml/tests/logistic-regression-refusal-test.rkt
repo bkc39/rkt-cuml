@@ -238,7 +238,8 @@
    (row "a cutoff short of max-iter on columns of spreads 2^8 apart names standardising"
         mixed-spread-cutoff
         (lambda ()
-          (go (on-matrix (lr-case-X mixed-three) 'float64) (on-vector (lr-case-y mixed-three) 'int32))))))
+          (go (on-matrix (lr-case-X mixed-three) 'float64)
+              (on-vector (lr-case-y mixed-three) 'int32))))))
 
 (test-gpu "logistic-regression-fit refuses each row, the earlier fault first"
   (for ([r (in-list (append (racket-rows logistic-regression-fit)

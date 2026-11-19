@@ -24,10 +24,10 @@
   (define uniform (uniform-source (add1 seed)))
   (for/lists (X y #:result (values X y))
              ([_ (in-range 400)])
-    (define a (normal))
-    (define t (* span (uniform)))
-    (values (list a (+ 1.7e9 t))
-            (if (positive? (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2))) 1 0))))
+             (define a (normal))
+             (define t (* span (uniform)))
+             (values (list a (+ 1.7e9 t))
+                     (if (positive? (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2))) 1 0))))
 
 (define (residual-at r X y penalty tol #:fit-intercept [fi #t])
   (residual-of X

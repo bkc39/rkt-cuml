@@ -58,7 +58,6 @@
        (check-equal? (device-vector->list (logistic-regression-predict fitted X))
                      (hash-ref theirs 'predict)
                      "predict")
-       (define gap
-         (~> (logistic-regression-predict-proba fitted X) flat-matrix (proba-gap proba k)))
+       (define gap (~> (logistic-regression-predict-proba fitted X) flat-matrix (proba-gap proba k)))
        (check-true (<= gap bound) (format "proba gap ~a, ~a of the bound" gap (/ gap bound)))))
    (filter repeatable? rows)))

@@ -128,7 +128,8 @@
   (match-define (list rows _) (shape X))
   (cond
     [(not (hash? cw)) #f]
-    [(not (= (y-length y) rows)) (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y))]
+    [(not (= (y-length y) rows))
+     (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y))]
     [else
      (list->device-vector (host-weights who kind (classes-of) cw)
                           #:dtype 'float64

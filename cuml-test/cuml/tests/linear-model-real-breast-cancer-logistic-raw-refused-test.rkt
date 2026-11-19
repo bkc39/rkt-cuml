@@ -4,11 +4,10 @@
          (only-in "private/real-logistic-data.rkt" check-raw-rescued labelled-set))
 
 (define refused
-  '((float64 l2 0.01 #f 1000)
-    (float64 l1 1.0 #f 1000)
-    (float64 elasticnet 1.0 0.5 1000)
-    (float32 l1 1.0 #f 1000)
-    (float32 elasticnet 1.0 0.5 1000)))
+  '((float64 l2 0.01 #f 1000) (float64 l1 1.0 #f 1000)
+                              (float64 elasticnet 1.0 0.5 1000)
+                              (float32 l1 1.0 #f 1000)
+                              (float32 elasticnet 1.0 0.5 1000)))
 
 (test-gpu "raw breast-cancer: penalised fits are refused at the default max-iter"
   (check-raw-rescued (labelled-set 'breast-cancer "diagnosis" '("id")) '() refused))
