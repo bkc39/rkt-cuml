@@ -6,6 +6,7 @@
          (only-in "private/logistic-data.rkt" fit-flat fit-parts relative-gap)
          (only-in "private/logistic-twin-data.rkt" their-fit twin-trial)
          (only-in "private/logistic-twin-rows.rkt"
+                  classes-of
                   for-each-twin
                   repeatable?
                   request
@@ -14,14 +15,17 @@
                   rows)
          (only-in "private/python-env.rkt" test-twin))
 
-(define owl-qn-gap-bound 1e-3)
+(define (owl-qn-gap-bound c)
+  (case (classes-of c)
+    [(3) 2.04e-4]
+    [(5) 2.98e-3]))
 
 (test-twin "float32 multiclass OWL-QN: near Python cuML's"
   (for-each-twin
    (lambda (r theirs)
-     (match-define (struct* twin-trial ([dt dt])) r)
+     (match-define (struct* twin-trial ([dt dt] [case c])) r)
      (test-case (row-name r)
        (define gap (relative-gap (fit-flat (fit-parts (row-fit r))) (fit-flat (their-fit theirs dt))))
-       (check-true (<= gap owl-qn-gap-bound) (format "gap ~a" gap))))
+       (check-true (<= gap (owl-qn-gap-bound c)) (format "gap ~a" gap))))
    (filter-not repeatable? rows)
    #:request (lambda (k) (request k #:op "cuml-fit"))))

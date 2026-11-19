@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <raft/core/handle.hpp>
 
+#include "mbsgd_magnitudes.hpp"
+
 namespace cumlrkt::glm::mbsgd {
 
 struct objective_shape {
@@ -26,6 +28,10 @@ void code_targets(const raft::handle_t& handle, const int32_t* codes, int64_t n,
 
 template <typename T>
 double mean_of(const raft::handle_t& handle, const T* y, int64_t n);
+
+template <typename T>
+magnitudes magnitudes_of(const raft::handle_t& handle, const T* v, int64_t n,
+                         int64_t d, double centre);
 
 template <typename T>
 double mean_loss(const raft::handle_t& handle, const T* x, const T* y,

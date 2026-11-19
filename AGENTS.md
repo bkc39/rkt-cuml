@@ -282,8 +282,44 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   admits an l1 or elastic-net fit oscillating about a zero optimum. The
   floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
   a constant y. The gate catches blow-ups and fits ending above
-  F_start·1.025 + A, A at most 4·F_start for the classifier under l1 or
-  elastic-net and uncapped for the regressor (#134; L5-d, F10-C).
+  F_start·1.025 + A, A at most 4·F_start for the classifier and
+  0.25·max(1, k/800)·F_start for the regressor under l1 or elastic-net;
+  where F_start ≤ m·floor, m 32 in float64 and 1 in float32 (round-off: a
+  constant y, whatever its mean's rounding), A is at most 0.25·mean(y²),
+  the zero model's loss without an intercept. With fit-intercept a
+  regressor's l1 or elastic-net fit at round-off is instead judged against
+  b = ȳ, w = 0: it is refused, "y is constant to round-off and ...; lower
+  #:eta0 or #:alpha", unless every |w| ≤ 2·eta0·α·r, two penalty steps,
+  and |b − ȳ| ≤ 1e-6·|ȳ|. At round-off with fit-intercept a regressor
+  under any penalty is also refused, "y is constant to round-off and the fit's predictions
+  are off by …; lower #:eta0 or #:alpha" ("lower #:eta0" without an l1
+  share), when √loss > 2⁻¹⁰·|ȳ| + √floor, loss the unpenalised mean
+  squared error. Under none, l2 or elastic net with l1-ratio 0 the
+  objective bound already implies this one (√loss ≤ 5.8·√floor in f64,
+  1.42·√floor in f32), so in practice only l1 and elastic-net fits meet
+  the message. R² there measures rounding, not the fit: a fit within a
+  few ε·|ȳ| of ȳ passes at any R² (f32 R² −2.08 at 6.2e-7·|ȳ|, f64 −1.84 at
+  4.4e-15·|ȳ|, pinned accepted in `mbsgd-gate-round-off-predictions-test`).
+  An l1 fit oscillates about a constant by about eta0·α·r·√d whatever
+  |ȳ|, so below |ȳ| ≈ 2¹⁰·eta0·α·r·√d (2e-4 at the defaults on
+  standardised X, d = 4) an inexactly fitted constant is refused by this
+  bound (f64 y ≡ 1.1e-4 pinned refused there).
+  The Racket tests restate `gate_floor_share`, `gate_round_off_factor`,
+  `gate_round_off_start` (per dtype), `round_off_coef_steps`,
+  `round_off_intercept_share` and `round_off_prediction_share` as literals
+  in `mbsgd-gate-data.rkt`; the `gate-constants` gate fails when they
+  differ from `mbsgd_checks.hpp`. An infinite objective is
+  refused whatever A. Above round-off a regressor whose loss without the
+  penalty ends above F_start·1.025 + min(floor, .025·F_start), a fit worse
+  than the zero model (with an intercept, in-sample R² below −.025 −
+  min(floor/F_start, .025), at worst −.05), is refused with "the loss rose
+  ...; lower #:eta0" (L5-d, F10-C, F10-R, F10-W). Before the solve, with
+  the sums the solver makes in X's dtype bounded in double: a y whose
+  F_start or floor is not finite, or with fit-intercept whose Σ|y| exceeds
+  a quarter of the dtype's largest value, is refused with "rescale y"; an
+  X column whose Σ|x| does, with or without fit-intercept, with "rescale X"; and
+  m·Σ|y − ȳ| above it (m = max|x|, doubled with fit-intercept) with
+  "rescale X or y", a bound stricter than needed when batch-size < n.
 - *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains
   on -1/+1; the `'log` and `'hinge` intercepts are a penalised ones column
   in the copy; predict thresholds the decision at 0 (`'log`, `'hinge`) or
@@ -350,8 +386,8 @@ wait below 30 GB available. Never two shim builds at once.
 
 ### Gates
 
-native, format, no-syntax-rule, no-raw-malloc, no-noqa, gpu-suite-signals, layout,
-pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
+native, format, no-syntax-rule, no-raw-malloc, no-noqa, gpu-suite-signals,
+gate-constants, layout, pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
 (`racket <plugin>/hooks/gate.rkt . all`), and `push-gates` is the pre-push

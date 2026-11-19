@@ -126,6 +126,7 @@ cumlrkt_family(linear_model
         linear_model/src/logistic_resolve.cpp
         linear_model/src/logistic_device.cu
         linear_model/tests/mbsgd_checks_test.cpp
+        linear_model/tests/mbsgd_round_off_test.cpp
         linear_model/tests/ridge_staging_test.cpp
         linear_model/src/ridge_staging.cpp
         linear_model/src/glm_staging.cpp
