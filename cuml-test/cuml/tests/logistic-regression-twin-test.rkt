@@ -133,11 +133,10 @@
       (define gap (proba-gap (flat-matrix (logistic-regression-predict-proba fitted X)) proba k))
       (check-true (<= gap bound) (format "proba gap ~a, ~a of the bound" gap (/ gap bound))))))
 
-(define three-class-owl-qn-gap-bound 2.04e-4)
-(define five-class-owl-qn-gap-bound 2.98e-3)
-
 (define (owl-qn-gap-bound c)
-  (if (= (classes-of c) 3) three-class-owl-qn-gap-bound five-class-owl-qn-gap-bound))
+  (case (classes-of c)
+    [(3) 2.04e-4]
+    [(5) 2.98e-3]))
 
 (test-twin "float32 multiclass OWL-QN fits, which repeat on neither side, are near Python cuML's"
   (define kept (filter-not repeatable? rows))
