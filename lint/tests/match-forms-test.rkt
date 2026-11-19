@@ -191,6 +191,35 @@
        ,(clause-form head layout clauses)))
   (define (copy-as-racket-says? copy? one other message)
     (check-equal? (alpha-copy? one other) copy? message))
+  (test-case (format "the copy check scopes a ~a pattern outside its clause's failure id" head)
+    (define formal?
+      (eq? (clause-answer head
+                          layout
+                          `([,(lhs '(? (lambda (x) (eq? k 'formal)))) (=> k) 'formal] [,(lhs '_)
+                                                                                       'failure]))
+           'formal))
+    (define (probe formal read)
+      (procedure formal `([,(lhs `(? ,read)) (=> k) 1] [,(lhs '_) 2])))
+    (copy-as-racket-says? formal? (probe 'k 'k) (probe 'z 'z) "the formal renamed with its read")
+    (copy-as-racket-says? (not formal?) (probe 'k 'k) (probe 'z 'k) "the formal renamed alone"))
+  (test-case (format "the copy check scopes a ~a failure id inside its own clause" head)
+    (define formal? (eq? (clause-answer head layout `([,(lhs '_) (=> k) (k)] [,(lhs '_) k])) 'formal))
+    (define (probe formal read)
+      (procedure formal `([,(lhs '_) (=> k) (k)] [,(lhs '_) ,read])))
+    (copy-as-racket-says? formal? (probe 'k 'k) (probe 'z 'z) "the formal renamed with its read")
+    (copy-as-racket-says? (not formal?) (probe 'k 'k) (probe 'z 'k) "the formal renamed alone"))
+  (test-case (format "the copy check reads a ~a #:when after the failure id as Racket does" head)
+    (define failure?
+      (eq? (clause-answer head
+                          layout
+                          `([,(lhs '_) (=> k) #:when (procedure? k) 'failure] [,(lhs '_) 'formal]))
+           'failure))
+    (define (probe failure read)
+      (procedure #f `([,(lhs '(list a)) (=> ,failure) #:when (procedure? ,read) a] [,(lhs '_) 1])))
+    (copy-as-racket-says? failure?
+                          (probe 'k 'k)
+                          (probe 'j 'j)
+                          "the failure id renamed with its read"))
   (define (shadowing binder failure)
     (procedure #f `([,(lhs `(list ,binder)) (=> ,failure) (add1 k)])))
   (for ([renamed (in-list '(failure pattern))])
