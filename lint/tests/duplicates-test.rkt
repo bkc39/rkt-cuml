@@ -330,7 +330,10 @@
 (define (copied? one other)
   (pair? (copies `(("a.rkt" ((require racket/match "c.rkt") ,one))
                    ("b.rkt" ((require racket/match "c.rkt") ,other))
-                   ("c.rkt" ((provide (struct-out sol)) (struct sol (coef bias))))))))
+                   ("c.rkt" ((provide (struct-out sol) (struct-out point) (struct-out size))
+                             (struct sol (coef bias))
+                             (struct point (x y))
+                             (struct size (x y))))))))
 
 (for ([row (in-list '(("a struct* pattern copied verbatim is a copy"
                        #t
@@ -415,7 +418,37 @@
                        (define (f a)
                          `#s(row ,a))
                        (define (g b)
-                         `#s(row ,b)))))])
+                         `#s(row ,b)))
+                      ("a legacy struct pattern's struct name is a reference, not a binding"
+                       #f
+                       (define (f v)
+                         (match v [(struct point (x y)) x]))
+                       (define (g v)
+                         (match v [(struct size (x y)) x])))
+                      ("a legacy struct pattern with its variables renamed is a copy"
+                       #t
+                       (define (f v)
+                         (match v [(struct point (x y)) x]))
+                       (define (g v)
+                         (match v [(struct point (a b)) a])))
+                      ("a not pattern binds nothing, so the body reads the formal"
+                       #t
+                       (define (f v x)
+                         (match v [(not x) x] [_ 0]))
+                       (define (g v y)
+                         (match v [(not z) y] [_ 0])))
+                      ("a regexp pattern's sub-pattern binds its names"
+                       #t
+                       (define (f s)
+                         (match s [(regexp #rx"(.)" (list _ a)) a]))
+                       (define (g s)
+                         (match s [(regexp #rx"(.)" (list _ b)) b])))
+                      ("a quasipattern binds an unquoted name inside a nested quasiquote"
+                       #t
+                       (define (f row)
+                         (match row [`(k `(,v)) v]))
+                       (define (g row)
+                         (match row [`(k `(,w)) w])))))])
   (match-define (list title copy? one other) row)
   (test-case title
     (check-equal? (copied? one other) copy?)))

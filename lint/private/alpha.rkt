@@ -133,10 +133,11 @@
     (match datum
       [(or '_ '... '..1 '___) datum]
       [(? symbol?) (ref env datum)]
-      [(cons (or 'quote 'regexp 'pregexp) _) datum]
+      [(cons 'quote _) datum]
       [(cons 'quasiquote template)
-       (cons 'quasiquote (quasi-map template (lambda (inner) (normal-pattern env inner))))]
-      [(list* (and head (or '? 'app '==)) predicate patterns)
+       (cons 'quasiquote
+             (quasi-map template (lambda (inner) (normal-pattern env inner)) #:pattern? #t))]
+      [(list* (and head (or '? 'app '== 'regexp 'pregexp)) predicate patterns)
        (list* head
               (expr env predicate)
               (map (lambda (one) (normal-pattern env one)) (proper patterns)))]
@@ -147,6 +148,11 @@
                (match field
                  [(list name one) (list name (normal-pattern env one))]
                  [_ field])))]
+      [(list 'struct id (? list? patterns))
+       (list 'struct (ref env id) (map (lambda (one) (normal-pattern env one)) patterns))]
+      [(cons 'not patterns)
+       (define inner (bind env (append-map pattern-names (proper patterns))))
+       (cons 'not (map (lambda (one) (normal-pattern inner one)) (proper patterns)))]
       [(cons (and head (pattern-head)) patterns)
        (cons head (map (lambda (one) (normal-pattern env one)) (proper patterns)))]
       [(cons (? symbol? head) patterns)

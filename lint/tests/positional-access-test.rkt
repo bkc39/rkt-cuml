@@ -168,10 +168,39 @@
                       ((define (f p)
                          (let* ([first (car p)]
                                 [second (cdr p)])
-                           (+ first second))))))])
+                           (+ first second))))
+                      ((require racket/match) (define (f s)
+                                                (match s
+                                                  [(regexp #rx"(.)(.)" (list _ first second)) second])))
+                      ((require racket/match) (define (f v)
+                                                (match v
+                                                  [`(k `(,second)) second])))
+                      ((require racket/match) (struct span (lo hi))
+                                              (define (f v)
+                                                (match v
+                                                  [(struct span (lo second)) second])))))])
   (test-case (format "a match pattern or a struct field that binds the name is not an access: ~s" use)
     (define-values (ok? output) (gate-on use))
     (check-true ok? output)))
+
+(for ([use (in-list '(((require racket/list
+                                racket/match)
+                       (define (f v)
+                         (match v
+                           [(not second) 1]))
+                       (define (g rows)
+                         (map second rows)))
+                      ((require racket/list
+                                racket/match)
+                       (define (f v)
+                         (match v
+                           [(struct second (lo hi)) lo]))
+                       (define (g rows)
+                         (map second rows)))))])
+  (test-case (format "a not pattern, or a legacy struct pattern's name, binds nothing: ~s" use)
+    (define-values (ok? output) (gate-on use))
+    (check-false ok? output)
+    (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output)))
 
 (test-case "a guard's accessor does not hide the same accessor elsewhere in the file"
   (define-values (ok? output)

@@ -46,7 +46,7 @@
       (syntax-e one)
       one))
 
-(define (quasi-map template evaluate)
+(define (quasi-map template evaluate #:pattern? [pattern? #f])
   (let walk ([one template]
              [depth 1])
     (define (again item)
@@ -55,7 +55,7 @@
     (match datum
       [(list (app datum-of (and head (or 'unquote 'unquote-splicing))) inner)
        (list head
-             (if (= depth 1)
+             (if (or pattern? (= depth 1))
                  (evaluate inner)
                  (walk inner (sub1 depth))))]
       [(list (app datum-of 'quasiquote) inner) (list 'quasiquote (walk inner (add1 depth)))]
@@ -67,21 +67,24 @@
        (apply make-prefab-struct key (map again (cdr (vector->list (struct->vector datum)))))]
       [_ datum])))
 
-(define (unquoted-parts template)
+(define (unquoted-parts template #:pattern? [pattern? #f])
   (define parts '())
   (quasi-map template
              (lambda (inner)
                (set! parts (cons inner parts))
-               inner))
+               inner)
+             #:pattern? pattern?)
   (reverse parts))
 
 (define (pattern-names pattern)
   (match pattern
     [(or '_ '... '..1 '___) '()]
     [(? symbol? name) (list name)]
-    [(cons (or 'quote 'regexp 'pregexp '==) _) '()]
-    [(cons 'quasiquote template) (append-map pattern-names (unquoted-parts template))]
-    [(list* (or '? 'app) _ patterns) (append-map pattern-names (proper patterns))]
+    [(cons (or 'quote '== 'not) _) '()]
+    [(cons 'quasiquote template)
+     (append-map pattern-names (unquoted-parts template #:pattern? #t))]
+    [(list* (or '? 'app 'regexp 'pregexp) _ patterns) (append-map pattern-names (proper patterns))]
+    [(list 'struct _ (? list? patterns)) (append-map pattern-names patterns)]
     [(list 'struct* _ (? list? fields))
      (append-map (lambda (field)
                    (match field
