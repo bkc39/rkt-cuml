@@ -140,18 +140,6 @@
     (check-false ok? output)
     (check-regexp-match #rx"table-test[.]rkt:[0-9]+: (second|cadr): read a test table's rows" output)))
 
-(test-case "a guard's accessor does not hide the same accessor elsewhere in the file"
-  (define-values (ok? output)
-    (gate-on '((require racket/list) (define (keep rows)
-                                       (for/list ([row (in-list rows)]
-                                                  #:when (second row))
-                                         row))
-                                     (define (col rows)
-                                       (map second rows)))))
-  (check-false ok? output)
-  (check-regexp-match #rx"table-test[.]rkt:3: second: read a test table's rows" output)
-  (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
-
 (for ([use (in-list '(((require racket/match) (define (gap row)
                                                 (match row
                                                   [(list best second) (- second best)])))
@@ -180,6 +168,18 @@
     (define-values (ok? output) (gate-on use))
     (check-true ok? output)))
 
+(test-case "a guard's accessor does not hide the same accessor elsewhere in the file"
+  (define-values (ok? output)
+    (gate-on '((require racket/list) (define (keep rows)
+                                       (for/list ([row (in-list rows)]
+                                                  #:when (second row))
+                                         row))
+                                     (define (col rows)
+                                       (map second rows)))))
+  (check-false ok? output)
+  (check-regexp-match #rx"table-test[.]rkt:3: second: read a test table's rows" output)
+  (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
+
 (test-case "racket/list's accessor is refused beside a match that binds another name"
   (define-values (ok? output)
     (gate-on '((require racket/list racket/match) (define (gap row)
@@ -189,3 +189,23 @@
                                                     (second xs)))))
   (check-false ok? output)
   (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
+
+(test-case "an unquote inside a nested quasiquote is data"
+  (define-values (ok? output)
+    (gate-on '((require racket/list) (define (tmpl xs)
+                                       `(a `(b ,(second xs)))))))
+  (check-true ok? output))
+
+(for ([use (in-list '(((require racket/list) (define (tmpl xs)
+                                               `(a `(b ,,(second xs)))))
+                      ((require racket/list) (define (tmpl xs)
+                                               `#&,(second xs)))
+                      ((require racket/list) (define (tmpl xs)
+                                               `#hash((a . ,(second xs)))))
+                      ((require racket/list) (define (tmpl xs)
+                                               `#s(row ,(second xs))))))])
+  (test-case (format "an unquote at depth one, or inside a box, hash table or prefab struct, is an access: ~s"
+                     use)
+    (define-values (ok? output) (gate-on use))
+    (check-false ok? output)
+    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))

@@ -9,7 +9,8 @@
                   clause-ids
                   fold-head?
                   for-head?
-                  pattern-names))
+                  pattern-names
+                  unquoted-parts))
 
 (provide positional-accesses)
 
@@ -99,7 +100,8 @@
     [(and (identifier? one) (memq (syntax-e one) refused))
      (list (cons (syntax-e one) (syntax-line one)))]
     [(eq? head 'quote) '()]
-    [(eq? head 'quasiquote) (unquoted (cdr items) refused)]
+    [(eq? head 'quasiquote)
+     (append-map (lambda (inner) (accesses inner refused)) (unquoted-parts (cdr items)))]
     [(struct-options head items) => (lambda (options) (accesses options refused))]
     [(and (eq? head 'list-ref)
           (match items
@@ -110,17 +112,6 @@
     [(pair? one) (append (accesses (car one) refused) (accesses (cdr one) refused))]
     [(vector? one) (append-map (lambda (item) (accesses item refused)) (vector->list one))]
     [else '()]))
-
-(define (unquoted one refused)
-  (match (if (syntax? one)
-             (syntax-e one)
-             one)
-    [(list (? identifier? head) inner)
-     #:when (memq (syntax-e head) '(unquote unquote-splicing))
-     (accesses inner refused)]
-    [(cons a d) (append (unquoted a refused) (unquoted d refused))]
-    [(? vector? items) (append-map (lambda (item) (unquoted item refused)) (vector->list items))]
-    [_ '()]))
 
 (define (struct-options head items)
   (match* (head items)
