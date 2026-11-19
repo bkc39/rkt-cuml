@@ -19,14 +19,12 @@ template <typename T>
 fit_plan plan_fit(prepared_fit<T>& prepared, int algorithm) {
   const auto kept = static_cast<int64_t>(prepared.planned.kept.size());
   const bool wide = kept > prepared.positive - (prepared.fit_intercept ? 1 : 0);
-  const bool forced = wide || kept == 1;
   return {
       wide ? uniform(std::move(prepared.planned)) : std::move(prepared.planned),
       prepared.fit_intercept,
-      {glm_family::ols, forced ? CUML_LINEAR_MODEL_OLS_SVD : algorithm},
-      std::move(prepared.counted),
-      false,
-      forced};
+      {glm_family::ols,
+       wide || kept == 1 ? CUML_LINEAR_MODEL_OLS_SVD : algorithm},
+      std::move(prepared.counted)};
 }
 
 }  // namespace

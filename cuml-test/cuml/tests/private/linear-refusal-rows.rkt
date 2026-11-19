@@ -6,13 +6,28 @@
          (only-in "linear-data.rkt" [on-matrix matrix] [on-vector vector])
          (only-in "refusal-rows.rkt" row))
 
-(provide grid
+(provide collinear-refusal
+         grid
+         not-least-squares
          overflow-X
          overflow-y
          shared-fit-rows
          targets
+         window-refusal
          with-cell
          with-element)
+
+(define (collinear-refusal algorithm)
+  (pregexp
+   (format
+    "^linear-regression-fit: X: the ~a solve's X has u[*]kappa (inf|[0-9.e+-]+) >= 2\\^-8; X may have collinear columns$"
+    algorithm)))
+
+(define not-least-squares
+  #rx"^linear-regression-fit: X: the [a-z-]+ solve is not a least-squares solution")
+
+(define window-refusal
+  #rx"^ridge-fit: X: the svd solve's regularised Gram matrix has u[*]kappa (inf|[0-9.e+-]+) >= 2\\^-[0-9]+; X is ill-conditioned for this alpha [(].*a larger alpha may fit[)]$")
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1)))
 (define targets '(1 2 3 4 5))

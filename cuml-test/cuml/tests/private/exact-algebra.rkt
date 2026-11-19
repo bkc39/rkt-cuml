@@ -11,6 +11,7 @@
          eigen-bottom
          eigen-bracket
          eigen-range
+         equilibrated-condition
          integer-scaled
          mat*vec
          min-norm-solve
@@ -329,6 +330,47 @@
 (define (condition G)
   (bracket-condition (outer-bracket G)))
 
+(define equilibrated-nudge (expt 2 -400))
+
+(define (equilibrated-below S t)
+  (let loop ([A (for/list ([row (in-list S)]
+                           [i (in-naturals)])
+                  (for/list ([s (in-list row)]
+                             [j (in-naturals)])
+                    (if (= i j)
+                        (* (- 1 t) s)
+                        s)))]
+             [negative 0])
+    (match A
+      ['() negative]
+      [(cons (cons 0 _) _) (equilibrated-below S (+ t equilibrated-nudge))]
+      [(cons (cons p head) rest)
+       (loop (for/list ([row (in-list rest)])
+               (match-define (cons r tail) row)
+               (map (lambda (a h) (- a (* (/ r p) h))) tail head))
+             (if (positive? p)
+                 negative
+                 (add1 negative)))])))
+
+(define equilibrated-steps 120)
+
+(define (equilibrated-condition S)
+  (define (bracket k)
+    (for/fold ([lo 0]
+               [hi (length S)]
+               #:result (cons lo hi))
+              ([_ (in-range equilibrated-steps)])
+      (define mid (/ (+ lo hi) 2))
+      (if (> (equilibrated-below S mid) k)
+          (values lo mid)
+          (values mid hi))))
+  (match-define (cons bottom-lo bottom-hi) (bracket 0))
+  (match-define (cons top-lo top-hi) (bracket (sub1 (length S))))
+  (cons (/ top-lo bottom-hi)
+        (if (zero? bottom-lo)
+            +inf.0
+            (/ top-hi bottom-lo))))
+
 (define (varying-inner G inner)
   (define kept
     (for/list ([row (in-list G)]
@@ -430,5 +472,8 @@
   (match-define (cons varying-top varying-bottom)
     (varying-inner (diagonal '(4 0 1)) with-constant-inner))
   (check-true (and (<= varying-top 4) (<= 1 varying-bottom (* 1001/1000 1))))
+  (match-define (cons kappa-lo kappa-hi) (equilibrated-condition '((4 1) (1 9))))
+  (check-true (<= kappa-lo 7/5 kappa-hi) "1/6 off the diagonal: (1 + 1/6)/(1 - 1/6)")
+  (check-true (< (- kappa-hi kappa-lo) (expt 2 -100)))
   (check-equal? (varying-inner (diagonal '(0 0)) '(0 . 0)) '(0 . 0))
   (check-equal? (varying-inner (diagonal '(4 1)) 'kept) 'kept))

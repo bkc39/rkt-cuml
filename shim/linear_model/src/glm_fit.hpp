@@ -30,7 +30,6 @@ struct fit_plan {
   glm_solver solver;
   counted_rows counted;
   bool alpha_window = false;
-  bool forced_svd = false;
 };
 
 template <typename T>

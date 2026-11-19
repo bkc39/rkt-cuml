@@ -17,11 +17,13 @@
                   dtypes
                   dyadic
                   lcase-X
-                  normal-case
+                  summed-case
                   [on-matrix matrix]
                   [on-vector vector])
          (only-in "private/linear-refusal-rows.rkt"
+                  collinear-refusal
                   grid
+                  not-least-squares
                   overflow-X
                   overflow-y
                   shared-fit-rows
@@ -152,9 +154,6 @@
                     "predict: linear-regression is not fitted"
                     (lambda () (predict (linear-regression) (matrix grid)))))
 
-(define not-least-squares
-  #rx"^linear-regression-fit: X: the [a-z-]+ solve is not a least-squares solution")
-
 (define (collinear-rows n)
   (for/list ([i (in-range n)])
     (define a (- (modulo (* 37 i) 11) 5))
@@ -172,10 +171,7 @@
     (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
 
 (define (nearly-collinear-rows n seed)
-  (define c (normal-case n 2 seed))
-  (define next (uniform-source (+ 31 seed)))
-  (for/list ([row (in-list (lcase-X c))])
-    (append row (list (+ (apply + row) (* 1/1024 (dyadic (- (next) 1/2))))))))
+  (lcase-X (summed-case n seed 1/1024)))
 
 (define (uneven-weights n)
   (define draw (uniform-source 77))
@@ -184,30 +180,28 @@
         0
         (dyadic (+ 1/2 (* 3/2 (draw))) 6))))
 
-(test-gpu "a solve that is not a least-squares solution is refused"
-  (for ([fixture (in-list (list (list 'eig 'float32 (nearly-collinear-rows 60 0) #f)
-                                (list 'auto 'float32 (nearly-collinear-rows 1000 1) #f)
-                                (list 'qr 'float64 (collinear-rows 60) #f)
-                                (list 'qr 'float64 (collinear-rows 5003) (uneven-weights 5003))))])
-    (match-define (list algorithm dt rows w) fixture)
+(test-gpu "a solve that is not a least-squares solution, or float32 collinear X under 'qr, is refused"
+  (for ([fixture
+         (in-list
+          (list (list 'eig 'float32 (nearly-collinear-rows 60 0) #f not-least-squares)
+                (list 'auto 'float32 (nearly-collinear-rows 1000 1) #f not-least-squares)
+                (list 'auto
+                      'float32
+                      (nearly-collinear-rows 5003 2)
+                      (uneven-weights 5003)
+                      not-least-squares)
+                (list 'qr 'float64 (collinear-rows 60) #f not-least-squares)
+                (list 'qr 'float64 (collinear-rows 5003) (uneven-weights 5003) not-least-squares)
+                (list 'qr 'float32 (one-hot-rows 400 4) #f (collinear-refusal 'qr))
+                (list 'svd-qr 'float32 (one-hot-rows 400 4) #f (collinear-refusal 'svd-qr))))])
+    (match-define (list algorithm dt rows w refusal) fixture)
     (test-case (format "~a ~a ~a rows~a" algorithm dt (length rows) (if w ", weighted" ""))
       (check-cuml-error 'logic
-                        not-least-squares
+                        refusal
                         (lambda ()
                           (linear-regression-fit (matrix rows dt)
                                                  (vector (noisy-targets rows) dt)
                                                  #:sample-weight (and w (vector w dt))
-                                                 #:algorithm algorithm))))))
-
-(test-gpu "float32 one-hot columns with an intercept are refused before the solve"
-  (define rows (one-hot-rows 400 4))
-  (for ([algorithm (in-list '(qr svd-qr))])
-    (test-case (format "~a" algorithm)
-      (check-cuml-error 'logic
-                        #rx"Gram matrix has u[*]kappa .* >= 2\\^-8; X may have collinear columns$"
-                        (lambda ()
-                          (linear-regression-fit (matrix rows 'float32)
-                                                 (vector (noisy-targets rows) 'float32)
                                                  #:algorithm algorithm))))))
 
 (test-gpu "X, y and w are unchanged after every fit"

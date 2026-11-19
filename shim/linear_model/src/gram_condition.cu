@@ -138,23 +138,17 @@ template <typename T>
 struct projected_rows {
   const T* x;
   const double* mean;
-  const double* lo;
-  const double* hi;
+  const double* u;
   int64_t n;
   int64_t d;
-  double* z_lo;
-  double* z_hi;
+  double* z;
 
   __device__ void operator()(int64_t i) const {
-    double s_lo = 0.0;
-    double s_hi = 0.0;
+    double s = 0.0;
     for (int64_t k = 0; k < d; ++k) {
-      const double v = static_cast<double>(x[(k * n) + i]) - mean[k];
-      s_lo = fma(v, lo[k], s_lo);
-      s_hi = fma(v, hi[k], s_hi);
+      s = fma(static_cast<double>(x[(k * n) + i]) - mean[k], u[k], s);
     }
-    z_lo[i] = s_lo;
-    z_hi[i] = s_hi;
+    z[i] = s;
   }
 };
 
@@ -266,33 +260,84 @@ std::vector<double> lower_gram(const raft::handle_t& handle, const T* x,
   return to_host(gram, stream);
 }
 
+constexpr int gram_error_bits = 14;
+constexpr int64_t most_ritz = 16;
+
 struct eigen_pairs {
   std::vector<double> values;
   std::vector<double> vectors;
 };
 
+template <typename S>
 std::optional<eigen_pairs> eigen_of(const raft::handle_t& handle,
-                                    const std::vector<double>& m, int64_t d) {
+                                    const std::vector<S>& m, int64_t d) {
   const rmm::cuda_stream_view stream = stream_of(handle);
-  buffer<double> a = to_device(m, stream);
-  buffer<double> values = scratch<double>(d, stream);
+  buffer<S> a = to_device(m, stream);
+  buffer<S> values = scratch<S>(d, stream);
   cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
   RAFT_CUSOLVER_TRY(cusolverDnSetStream(solver, stream.value()));
+  const auto dim = static_cast<int>(d);
+  constexpr auto mode = CUSOLVER_EIG_MODE_VECTOR;
+  constexpr auto fill = CUBLAS_FILL_MODE_LOWER;
   int lwork = 0;
-  RAFT_CUSOLVER_TRY(cusolverDnDsyevd_bufferSize(
-      solver, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
-      static_cast<int>(d), a.data(), static_cast<int>(d), values.data(),
-      &lwork));
-  buffer<double> work = scratch<double>(lwork, stream);
+  if constexpr (std::is_same_v<S, float>) {
+    RAFT_CUSOLVER_TRY(cusolverDnSsyevd_bufferSize(
+        solver, mode, fill, dim, a.data(), dim, values.data(), &lwork));
+  } else {
+    RAFT_CUSOLVER_TRY(cusolverDnDsyevd_bufferSize(
+        solver, mode, fill, dim, a.data(), dim, values.data(), &lwork));
+  }
+  buffer<S> work = scratch<S>(lwork, stream);
   buffer<int> info = scratch<int>(1, stream);
-  RAFT_CUSOLVER_TRY(
-      cusolverDnDsyevd(solver, CUSOLVER_EIG_MODE_VECTOR, CUBLAS_FILL_MODE_LOWER,
-                       static_cast<int>(d), a.data(), static_cast<int>(d),
-                       values.data(), work.data(), lwork, info.data()));
+  if constexpr (std::is_same_v<S, float>) {
+    RAFT_CUSOLVER_TRY(cusolverDnSsyevd(solver, mode, fill, dim, a.data(), dim,
+                                       values.data(), work.data(), lwork,
+                                       info.data()));
+  } else {
+    RAFT_CUSOLVER_TRY(cusolverDnDsyevd(solver, mode, fill, dim, a.data(), dim,
+                                       values.data(), work.data(), lwork,
+                                       info.data()));
+  }
   if (to_host(info, stream)[0] != 0) {
     return std::nullopt;
   }
-  return eigen_pairs{to_host(values, stream), to_host(a, stream)};
+  const std::vector<S> l = to_host(values, stream);
+  const std::vector<S> v = to_host(a, stream);
+  return eigen_pairs{{l.begin(), l.end()}, {v.begin(), v.end()}};
+}
+
+double dot(const double* a, const double* b, int64_t d) {
+  return std::transform_reduce(a, a + d, b, 0.0);
+}
+
+std::vector<double> orthonormal(const std::vector<double>& vectors, int64_t d,
+                                int64_t k) {
+  std::vector<double> v(vectors.begin(), vectors.begin() + (k * d));
+  for (int64_t j = 0; j < k; ++j) {
+    double* vj = v.data() + (j * d);
+    for (int pass = 0; pass < 2; ++pass) {
+      for (int64_t i = 0; i < j; ++i) {
+        const double* vi = v.data() + (i * d);
+        const double c = dot(vi, vj, d);
+        std::transform(vj, vj + d, vi, vj,
+                       [c](double a, double b) { return a - (c * b); });
+      }
+    }
+    const double norm = std::sqrt(dot(vj, vj, d));
+    std::transform(vj, vj + d, vj, [norm](double a) { return a / norm; });
+  }
+  return v;
+}
+
+std::vector<double> combined(const std::vector<double>& columns,
+                             const double* c, int64_t d, int64_t k) {
+  std::vector<double> y(d, 0.0);
+  for (int64_t j = 0; j < k; ++j) {
+    for (int64_t i = 0; i < d; ++i) {
+      y[i] += c[j] * columns[(j * d) + i];
+    }
+  }
+  return y;
 }
 
 template <typename T>
@@ -306,14 +351,6 @@ struct quotients {
   int64_t d;
   double alpha;
 
-  [[nodiscard]] double penalty(const std::vector<double>& u) const {
-    double p = 0.0;
-    for (const double v : u) {
-      p += alpha * v * v;
-    }
-    return p;
-  }
-
   [[nodiscard]] std::vector<double> scaled(const double* v) const {
     std::vector<double> u(d);
     for (int64_t k = 0; k < d; ++k) {
@@ -322,28 +359,29 @@ struct quotients {
     return u;
   }
 
-  [[nodiscard]] double sum_of(const buffer<double>& z) const {
-    const thrust::counting_iterator<int64_t> rows(0);
-    return thrust::transform_reduce(
-        rmm::exec_policy(stream_of(handle)), rows, rows + n,
-        weighted_square_of<T>{z.data(), w}, 0.0, thrust::plus<double>{});
-  }
-
-  std::pair<buffer<double>, buffer<double>> project(
-      const std::vector<double>& lo, const std::vector<double>& hi) const {
+  [[nodiscard]] buffer<double> project(const std::vector<double>& u) const {
     const rmm::cuda_stream_view stream = stream_of(handle);
-    const buffer<double> l = to_device(lo, stream);
-    const buffer<double> h = to_device(hi, stream);
-    buffer<double> z_lo = scratch<double>(n, stream);
-    buffer<double> z_hi = scratch<double>(n, stream);
+    const buffer<double> on_device = to_device(u, stream);
+    buffer<double> z = scratch<double>(n, stream);
     each(handle, n,
-         projected_rows<T>{x, mean.data(), l.data(), h.data(), n, d,
-                           z_lo.data(), z_hi.data()});
-    return {std::move(z_lo), std::move(z_hi)};
+         projected_rows<T>{x, mean.data(), on_device.data(), n, d, z.data()});
+    return z;
   }
 
-  [[nodiscard]] std::vector<double> applied(
-      const buffer<double>& z, const std::vector<double>& u) const {
+  [[nodiscard]] double quotient(const double* v) const {
+    const std::vector<double> u = scaled(v);
+    const buffer<double> z = project(u);
+    const thrust::counting_iterator<int64_t> rows(0);
+    return thrust::transform_reduce(rmm::exec_policy(stream_of(handle)), rows,
+                                    rows + n,
+                                    weighted_square_of<T>{z.data(), w}, 0.0,
+                                    thrust::plus<double>{}) +
+           (alpha * dot(u.data(), u.data(), d));
+  }
+
+  [[nodiscard]] std::vector<double> applied(const double* v) const {
+    const std::vector<double> u = scaled(v);
+    const buffer<double> z = project(u);
     std::vector<double> r = to_host(
         column_sums(handle, weighted_product<T>{x, w, mean.data(), z.data(), n},
                     n, d),
@@ -355,26 +393,58 @@ struct quotients {
   }
 };
 
-std::vector<double> refined(const eigen_pairs& e, const std::vector<double>& r,
-                            double mu, int64_t d) {
+struct ritz_pair {
+  double value;
+  std::vector<double> vector;
+  std::vector<double> applied;
+};
+
+template <typename T>
+std::optional<ritz_pair> smallest_ritz(const quotients<T>& q,
+                                       const eigen_pairs& e, int64_t window) {
+  const int64_t d = q.d;
+  const std::vector<double> v = orthonormal(e.vectors, d, window);
+  std::vector<double> av(window * d);
+  for (int64_t j = 0; j < window; ++j) {
+    const std::vector<double> r = q.applied(v.data() + (j * d));
+    std::ranges::copy(r, av.begin() + (j * d));
+  }
+  std::vector<double> h(window * window);
+  for (int64_t i = 0; i < window; ++i) {
+    for (int64_t j = 0; j < window; ++j) {
+      h[(j * window) + i] =
+          0.5 * (dot(v.data() + (i * d), av.data() + (j * d), d) +
+                 dot(v.data() + (j * d), av.data() + (i * d), d));
+    }
+  }
+  const std::optional<eigen_pairs> small = eigen_of(q.handle, h, window);
+  if (!small) {
+    return std::nullopt;
+  }
+  const double* c = small->vectors.data();
+  return ritz_pair{small->values.front(), combined(v, c, d, window),
+                   combined(av, c, d, window)};
+}
+
+std::vector<double> refined(const eigen_pairs& e, const ritz_pair& p,
+                            int64_t window, int64_t d) {
   const double gap = std::ldexp(e.values.back(), -20);
-  std::vector<double> v(e.vectors.begin(), e.vectors.begin() + d);
-  for (int64_t j = 1; j < d; ++j) {
-    const double apart = e.values[j] - mu;
+  std::vector<double> v = p.vector;
+  for (int64_t j = window; j < d; ++j) {
+    const double apart = e.values[j] - p.value;
     if (!(apart > gap)) {
       continue;
     }
     const double* vj = e.vectors.data() + (j * d);
     double c = 0.0;
     for (int64_t k = 0; k < d; ++k) {
-      c += vj[k] * (r[k] - (mu * e.vectors[k]));
+      c += vj[k] * (p.applied[k] - (p.value * p.vector[k]));
     }
     for (int64_t k = 0; k < d; ++k) {
       v[k] -= vj[k] * c / apart;
     }
   }
-  const double norm =
-      std::sqrt(std::transform_reduce(v.begin(), v.end(), v.begin(), 0.0));
+  const double norm = std::sqrt(dot(v.data(), v.data(), d));
   std::ranges::transform(v, v.begin(), [norm](double x) { return x / norm; });
   return v;
 }
@@ -399,34 +469,42 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
   std::ranges::transform(spread, scale.begin(),
                          [a](double s) { return 1.0 / std::sqrt(s + a); });
   const buffer<double> scales = to_device(scale, stream);
-  std::vector<double> m =
+  const std::vector<double> gram =
       lower_gram(handle, x, w, mean.data(), scales.data(), n, d);
+  std::vector<float> m(gram.begin(), gram.end());
   for (int64_t k = 0; k < d; ++k) {
-    m[(k * d) + k] += a * scale[k] * scale[k];
+    m[(k * d) + k] += static_cast<float>(a * scale[k] * scale[k]);
   }
   const std::optional<eigen_pairs> e = eigen_of(handle, m, d);
   if (!e) {
     return infinite;
   }
   const quotients<T> q{handle, x, w, mean, scale, n, d, a};
-  const std::vector<double> u_lo = q.scaled(e->vectors.data());
-  const std::vector<double> u_hi = q.scaled(e->vectors.data() + ((d - 1) * d));
-  const auto [z_lo, z_hi] = q.project(u_lo, u_hi);
-  const double largest = q.sum_of(z_hi) + q.penalty(u_hi);
-  const std::vector<double> r = q.applied(z_lo, u_lo);
-  const double mu =
-      std::transform_reduce(r.begin(), r.end(), e->vectors.begin(), 0.0);
-  const std::vector<double> u = q.scaled(refined(*e, r, mu, d).data());
-  const buffer<double> z = std::move(q.project(u, u).first);
-  const double smallest = std::min(mu, q.sum_of(z) + q.penalty(u));
+  const double largest = q.quotient(
+      orthonormal(std::vector<double>(e->vectors.end() - d, e->vectors.end()),
+                  d, 1)
+          .data());
+  const double reach =
+      e->values.front() + std::ldexp(e->values.back(), -gram_error_bits);
+  const int64_t window = std::clamp<int64_t>(
+      std::ranges::count_if(e->values,
+                            [reach](double l) { return l <= reach; }),
+      1, std::min(most_ritz, d));
+  const std::optional<ritz_pair> p = smallest_ritz(q, *e, window);
+  if (!p) {
+    return infinite;
+  }
+  const double smallest =
+      std::min(p->value, q.quotient(refined(*e, *p, window, d).data()));
   return smallest > 0 ? largest / smallest : infinite;
 }
 
 template <typename T>
-bool checks_conditioning(glm_solver solver, bool alpha_window,
-                         bool forced_svd) {
+bool checks_conditioning(glm_solver solver, bool alpha_window) {
   if (solver.family == glm_family::ols) {
-    return std::is_same_v<T, float> && !forced_svd;
+    return std::is_same_v<T, float> &&
+           (solver.algorithm == CUML_LINEAR_MODEL_OLS_QR ||
+            solver.algorithm == CUML_LINEAR_MODEL_OLS_SVD_QR);
   }
   return solver.family == glm_family::ridge && alpha_window &&
          solver.algorithm == CUML_LINEAR_MODEL_RIDGE_SVD;
@@ -440,9 +518,8 @@ void require_conditioned(double kappa, glm_solver solver) {
     return;
   }
   throw logic_error(std::format(
-      "X: the {} solve's {}Gram matrix has u*kappa {} >= 2^-{}; {}",
-      solver_name(solver), ols ? "" : "regularised ", printed(share),
-      tolerance_bits<T>,
+      "X: the {} solve's {} has u*kappa {} >= 2^-{}; {}", solver_name(solver),
+      ols ? "X" : "regularised Gram matrix", printed(share), tolerance_bits<T>,
       ols ? "X may have collinear columns"
       : std::is_same_v<T, float>
           ? "X is ill-conditioned for this alpha (float64 or a larger "
@@ -451,8 +528,8 @@ void require_conditioned(double kappa, glm_solver solver) {
             "fit)"));
 }
 
-template bool checks_conditioning<float>(glm_solver, bool, bool);
-template bool checks_conditioning<double>(glm_solver, bool, bool);
+template bool checks_conditioning<float>(glm_solver, bool);
+template bool checks_conditioning<double>(glm_solver, bool);
 template void require_conditioned<float>(double, glm_solver);
 template void require_conditioned<double>(double, glm_solver);
 template double equilibrated_condition<float>(const raft::handle_t&,

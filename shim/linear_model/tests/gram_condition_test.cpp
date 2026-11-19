@@ -61,6 +61,25 @@ columns summed(int64_t n, double eps) {
   return c;
 }
 
+double scrambled(int64_t i, int64_t salt) {
+  return static_cast<double>(
+             ((i * (37 + (2 * salt))) + (11 * salt) + ((i * i) / (5 + salt))) %
+             23) -
+         11.0;
+}
+
+columns summed_beside_a_near_pair(int64_t n, int64_t salt, double eps) {
+  columns c{std::vector<double>(n * 5), n, 5};
+  for (int64_t i = 0; i < n; ++i) {
+    c.x[i] = scrambled(i, salt);
+    c.x[n + i] = scrambled(i, salt + 20);
+    c.x[(2 * n) + i] = c.x[i] + c.x[n + i];
+    c.x[(3 * n) + i] = scrambled(i, salt + 40);
+    c.x[(4 * n) + i] = c.x[(3 * n) + i] + (eps * scrambled(i, salt + 60));
+  }
+  return c;
+}
+
 columns twins(int64_t n) {
   columns c{std::vector<double>(n * 2), n, 2};
   for (int64_t i = 0; i < n; ++i) {
@@ -142,6 +161,22 @@ TEST(GramCondition, ExactlyCollinearFloat32ColumnsArePastTheThreshold) {
   }
 }
 
+TEST(GramCondition, ExactCollinearityBesideANearPairIsPastTheThreshold) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (const int64_t n : {int64_t{1000}, int64_t{5000}}) {
+    for (const double eps : {0x1p-12, 0x1p-13}) {
+      for (int64_t salt = 0; salt < 8; ++salt) {
+        EXPECT_GT(
+            condition_of<float>(res, summed_beside_a_near_pair(n, salt, eps),
+                                {}, 0.0, true),
+            0x1p32)
+            << n << " " << eps << " " << salt;
+      }
+    }
+  }
+}
+
 TEST(GramCondition, ZeroWeightRowsDoNotCount) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -161,20 +196,21 @@ TEST(GramCondition, AConstantColumnWithoutAlphaIsInfinite) {
             std::numeric_limits<double>::infinity());
 }
 
-TEST(GramCondition, Float32OlsUnlessForcedAndRidgeSvdInTheWindowAreChecked) {
+TEST(GramCondition, OnlyFloat32QrSvdQrAndRidgeSvdInTheWindowAreChecked) {
   const glm_solver ridge{glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_SVD};
   const glm_solver ridge_eig{glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_EIG};
   for (const int algorithm :
        {CUML_LINEAR_MODEL_OLS_SVD, CUML_LINEAR_MODEL_OLS_EIG,
         CUML_LINEAR_MODEL_OLS_QR, CUML_LINEAR_MODEL_OLS_SVD_QR}) {
     const glm_solver ols{glm_family::ols, algorithm};
-    EXPECT_TRUE(checks_conditioning<float>(ols, false, false)) << algorithm;
-    EXPECT_FALSE(checks_conditioning<float>(ols, false, true)) << algorithm;
-    EXPECT_FALSE(checks_conditioning<double>(ols, false, false)) << algorithm;
+    const bool qr = algorithm == CUML_LINEAR_MODEL_OLS_QR ||
+                    algorithm == CUML_LINEAR_MODEL_OLS_SVD_QR;
+    EXPECT_EQ(checks_conditioning<float>(ols, false), qr) << algorithm;
+    EXPECT_FALSE(checks_conditioning<double>(ols, false)) << algorithm;
   }
-  EXPECT_TRUE(checks_conditioning<double>(ridge, true, false));
-  EXPECT_FALSE(checks_conditioning<double>(ridge, false, false));
-  EXPECT_FALSE(checks_conditioning<float>(ridge_eig, true, false));
+  EXPECT_TRUE(checks_conditioning<double>(ridge, true));
+  EXPECT_FALSE(checks_conditioning<double>(ridge, false));
+  EXPECT_FALSE(checks_conditioning<float>(ridge_eig, true));
 }
 
 TEST(GramCondition, RefusesAtTheThresholdNamingWhatToChange) {
@@ -182,7 +218,7 @@ TEST(GramCondition, RefusesAtTheThresholdNamingWhatToChange) {
   const glm_solver ridge{glm_family::ridge, CUML_LINEAR_MODEL_RIDGE_SVD};
   EXPECT_EQ(refusal_of(0x1p31, svd_qr, true), "accepted");
   EXPECT_EQ(refusal_of(0x1p32, svd_qr, true),
-            "X: the svd-qr solve's Gram matrix has u*kappa 0.00390625 >= "
+            "X: the svd-qr solve's X has u*kappa 0.00390625 >= "
             "2^-8; X may have collinear columns");
   EXPECT_EQ(refusal_of(0x1p34, ridge, false), "accepted");
   EXPECT_EQ(refusal_of(0x1p35, ridge, false),

@@ -73,7 +73,7 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   const auto n = static_cast<size_t>(rows.count);
   const auto d = static_cast<size_t>(kept);
   T* const staged_w = w == nullptr ? nullptr : p.w.data();
-  if (checks_conditioning<T>(plan.solver, plan.alpha_window, plan.forced_svd)) {
+  if (checks_conditioning<T>(plan.solver, plan.alpha_window)) {
     require_conditioned<T>(
         equilibrated_condition(handle, p.x.data(), staged_w, rows.count, kept,
                                alpha, plan.fit_intercept),
