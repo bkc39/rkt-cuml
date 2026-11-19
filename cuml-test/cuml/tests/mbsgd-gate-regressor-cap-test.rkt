@@ -31,13 +31,13 @@
                  #:epochs 1))
 
 (define cap-rows
-  `((good ,normal ,normal-targets 10.0 0.01 0.073) (small-y ,small ,small-targets 0.001 1.0 0.61)))
+  `((good ,normal ,normal-targets 10.0 0.01) (small-y ,small ,small-targets 0.001 1.0)))
 
 (test-gpu "a fit needing less than a quarter of the zero model's objective passes"
   (for* ([dt (in-list dtypes)]
          [r (in-list cap-rows)]
          #:when (eq? (car r) 'good))
-    (match-define (list name X y alpha eta0 _) r)
+    (match-define (list name X y alpha eta0) r)
     (law-case (format "~a ~a" dt name)
       (check-not-exn ((one-epoch X y dt alpha) eta0)))))
 
@@ -45,7 +45,7 @@
   (for* ([dt (in-list dtypes)]
          [r (in-list cap-rows)]
          #:unless (eq? (car r) 'good))
-    (match-define (list name X y alpha eta0 _) r)
+    (match-define (list name X y alpha eta0) r)
     (law-case (format "~a ~a" dt name)
       (refused-at-eta0 (one-epoch X y dt alpha) eta0))))
 
@@ -56,11 +56,8 @@
     (law-case (format "~a 200 rows, 4000 columns, l1 alpha 1" dt)
       (check-not-exn (regressor-fit wide wide-targets dt #:penalty 'l1 #:alpha 1)))))
 
-(define wide-rises '((float32 0.582 3.09) (float64 0.592 3.04)))
-
 (test-gpu "a wide lasso rising past the widened cap is refused although it beats the zero model"
-  (for ([r (in-list wide-rises)])
-    (match-define (list dt _ _) r)
+  (for ([dt (in-list dtypes)])
     (law-case (format "~a 200 rows, 4000 columns, l1 alpha 1" dt)
       (refused-at-eta0 (lambda (eta0)
                          (regressor-fit wide wide-targets dt #:penalty 'l1 #:alpha 1 #:eta0 eta0))

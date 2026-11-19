@@ -1,9 +1,11 @@
 #lang racket/base
 
 (require (only-in racket/match match-define)
+         (only-in rackunit check-=)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" law-case)
          (only-in "private/mbsgd-gate-data.rkt"
+                  loss-r2
                   lost-at-eta0
                   refused-at-eta0
                   regressor-fit
@@ -21,9 +23,10 @@
 
 (test-gpu "a wide lasso inside the widened cap whose loss rises past the zero model's is refused"
   (for ([r (in-list worse-than-zero)])
-    (match-define (list dt X y n alpha _) r)
+    (match-define (list dt X y n alpha r2) r)
     (law-case (format "~a ~a rows, 8000 columns, l1 alpha ~a" dt n alpha)
-      (lost-at-eta0 (wide-lasso X y dt alpha) 1e-3))))
+      (lost-at-eta0 (wide-lasso X y dt alpha) 1e-3)
+      (check-= (loss-r2 ((wide-lasso X y dt alpha) 1e-3)) r2 0.01))))
 
 (test-gpu "the same lasso in float64, past the widened cap, is refused by its objective"
   (law-case "float64 10 rows, 8000 columns, l1 alpha 0.3"
