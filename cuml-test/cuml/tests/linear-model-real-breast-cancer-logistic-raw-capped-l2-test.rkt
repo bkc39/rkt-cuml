@@ -8,8 +8,9 @@
 (define float32-l2-4000-cap 3.6e-3)
 
 (define capped
-  `((float32 l2 0.01 #f 1000 ,float32-l2-1000-cap) (float64 l2 0.01 #f 4000 ,float64-l2-4000-cap)
-                                                   (float32 l2 0.01 #f 4000 ,float32-l2-4000-cap)))
+  `((float32 l2 0.01 #f 1000 either ,float32-l2-1000-cap)
+    (float64 l2 0.01 #f 4000 accepted ,float64-l2-4000-cap)
+    (float32 l2 0.01 #f 4000 either ,float32-l2-4000-cap)))
 
-(test-gpu "raw breast-cancer: an l2 fit at C 0.01 is refused or within its cap"
+(test-gpu "raw breast-cancer: an l2 fit at C 0.01 is within its cap, or a float32 one refused"
   (check-raw-rescued (labelled-set 'breast-cancer "diagnosis" '("id")) capped '()))
