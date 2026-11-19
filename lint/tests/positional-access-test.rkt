@@ -151,3 +151,41 @@
   (check-false ok? output)
   (check-regexp-match #rx"table-test[.]rkt:3: second: read a test table's rows" output)
   (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
+
+(for ([use (in-list '(((require racket/match) (define (gap row)
+                                                (match row
+                                                  [(list best second) (- second best)])))
+                      ((require racket/match) (define (gap row other)
+                                                (match* (row other)
+                                                  [((list best second) _) (- second best)])))
+                      ((require racket/match) (define gap
+                                                (match-lambda
+                                                  [(list best second) (- second best)])))
+                      ((require racket/match) (define (gap row)
+                                                (match-let ([(list best second) row])
+                                                  (- second best))))
+                      ((require racket/match) (define (gap row)
+                                                (match-let* ([(list best second) row])
+                                                  (- second best))))
+                      ((struct span (first second)) (define (len s)
+                                                      (- (span-second s) (span-first s))))
+                      ((define (f p)
+                         (define-values (first second) (values (car p) (cdr p)))
+                         (+ first second)))
+                      ((define (f p)
+                         (let* ([first (car p)]
+                                [second (cdr p)])
+                           (+ first second))))))])
+  (test-case (format "a match pattern or a struct field that binds the name is not an access: ~s" use)
+    (define-values (ok? output) (gate-on use))
+    (check-true ok? output)))
+
+(test-case "racket/list's accessor is refused beside a match that binds another name"
+  (define-values (ok? output)
+    (gate-on '((require racket/list racket/match) (define (gap row)
+                                                    (match row
+                                                      [(list best worst) (- worst best)]))
+                                                  (define (g xs)
+                                                    (second xs)))))
+  (check-false ok? output)
+  (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))

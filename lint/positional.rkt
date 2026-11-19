@@ -2,7 +2,7 @@
 
 (require (only-in racket/file find-files)
          (only-in racket/list append-map)
-         (only-in racket/match match)
+         (only-in racket/match match match*)
          (only-in "private/modules.rkt" read-module rkt?)
          (only-in "private/patterns.rkt"
                   binding-clauses
@@ -37,6 +37,18 @@
 (define (clause-names clauses)
   (append-map clause-ids (binding-clauses clauses)))
 
+(define (match-clause-names clauses several?)
+  (append-map (lambda (clause)
+                (match clause
+                  [(cons (? list? patterns) _)
+                   #:when several?
+                   (append-map pattern-names patterns)]
+                  [(cons pattern _) (pattern-names pattern)]
+                  [_ '()]))
+              (if (list? clauses)
+                  clauses
+                  '())))
+
 (define (bound-names datum)
   (match datum
     [(cons (or 'quote 'quasiquote) _) '()]
@@ -60,6 +72,12 @@
     [(list* 'match-define pattern rest) (append (pattern-names pattern) (bound-names rest))]
     [(list* 'match-define-values (? list? patterns) rest)
      (append (append-map pattern-names patterns) (bound-names rest))]
+    [(list* (and head (or 'match 'match*)) subject clauses)
+     (append (match-clause-names clauses (eq? head 'match*)) (bound-names subject) (bound-names clauses))]
+    [(list* (or 'match-lambda 'match-lambda*) clauses)
+     (append (match-clause-names clauses #f) (bound-names clauses))]
+    [(list* (or 'match-let 'match-let*) clauses rest)
+     (append (match-clause-names clauses #f) (bound-names clauses) (bound-names rest))]
     [(list* (? fold-head?) (? list? accumulators) (? list? clauses) rest)
      (append (clause-names accumulators)
              (clause-names clauses)
@@ -82,6 +100,7 @@
      (list (cons (syntax-e one) (syntax-line one)))]
     [(eq? head 'quote) '()]
     [(eq? head 'quasiquote) (unquoted (cdr items) refused)]
+    [(struct-options head items) => (lambda (options) (accesses options refused))]
     [(and (eq? head 'list-ref)
           (match items
             [(list _ _ (? literal-index?)) #t]
@@ -102,6 +121,12 @@
     [(cons a d) (append (unquoted a refused) (unquoted d refused))]
     [(? vector? items) (append-map (lambda (item) (unquoted item refused)) (vector->list items))]
     [_ '()]))
+
+(define (struct-options head items)
+  (match* (head items)
+    [('struct (list* _ (? identifier?) (? identifier?) (? syntax?) options)) options]
+    [((or 'struct 'define-struct) (list* _ _ (? syntax?) options)) options]
+    [(_ _) #f]))
 
 (define (file-accesses file refused)
   (define module (read-module file))
