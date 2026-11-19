@@ -58,10 +58,12 @@
 (define (random-repeat)
   (pick '(... ... ___ ..1 ..2 ..0 __1)))
 
-(define (items depth count #:repeats? [repeats? #t])
+(define (random-items depth count #:repeats? [repeats? #t])
   (for/list ([_ (in-range count)])
     (cons (if (and (= depth 0) (chance 0.3))
-              (if (chance 0.5) wildcard (leaf))
+              (if (chance 0.5)
+                  wildcard
+                  (leaf))
               (generate (sub1 depth)))
           (and repeats? (chance 0.3) (random-repeat)))))
 
@@ -78,11 +80,11 @@
               items))
 
 (define (list-node depth)
-  (define elements (items depth (random 4)))
+  (define elements (random-items depth (random 4)))
   (node `(list ,@(items-pattern elements)) (lambda () `(list ,@(items-values elements)))))
 
 (define (list-rest-node depth)
-  (define elements (items depth (random 3)))
+  (define elements (random-items depth (random 3)))
   (define tail (generate (sub1 depth)))
   (node `(,(pick '(list-rest list*)) ,@(items-pattern elements) ,(node-pattern tail))
         (lambda () `(list* ,@(items-values elements) ,((node-value tail))))))
@@ -90,22 +92,27 @@
 (define (vector-node depth)
   (define elements
     (if (chance 0.3)
-        (append (items depth (random 2) #:repeats? #f)
+        (append (random-items depth (random 2) #:repeats? #f)
                 (list (cons wildcard (random-repeat)))
-                (items depth (random 2) #:repeats? #f))
-        (items depth (random 4))))
+                (random-items depth (random 2) #:repeats? #f))
+        (random-items depth (random 4))))
   (node `(vector ,@(items-pattern elements)) (lambda () `(vector ,@(items-values elements)))))
 
 (define (list-no-order-node depth)
-  (define elements (items depth (add1 (random 3)) #:repeats? #f))
+  (define elements (random-items depth (add1 (random 3)) #:repeats? #f))
   (define repeat (and (chance 0.4) (cons (generate (sub1 depth)) (random-repeat))))
-  (define all (append elements (if repeat (list repeat) '())))
+  (define all
+    (append elements
+            (if repeat
+                (list repeat)
+                '())))
   (node `(list-no-order ,@(items-pattern all)) (lambda () `(list ,@(items-values all)))))
 
 (define (key-node depth)
-  (if (chance 0.5)
-      (let ([key (pick '('x 'y 7 "s"))]) (node key (lambda () key)))
-      (generate (sub1 depth))))
+  (define key (pick '('x 'y 7 "s")))
+  (cond
+    [(chance 0.5) (node key (lambda () key))]
+    [else (generate (sub1 depth))]))
 
 (define (hash-table-node depth)
   (define entries
@@ -113,9 +120,12 @@
       (cons (key-node depth) (generate (sub1 depth)))))
   (node `(hash-table ,@(for/list ([entry (in-list entries)])
                          (list (node-pattern (car entry)) (node-pattern (cdr entry))))
-                     ,@(if (chance 0.25) '(...) '()))
+                     ,@(if (chance 0.25)
+                           '(...)
+                           '()))
         (lambda ()
-          `(hash ,@(append-map (lambda (entry) (list ((node-value (car entry))) ((node-value (cdr entry)))))
+          `(hash ,@(append-map (lambda (entry)
+                                 (list ((node-value (car entry))) ((node-value (cdr entry)))))
                                entries)))))
 
 (define (spine-tail depth)
@@ -128,32 +138,41 @@
   (define head (generate (sub1 depth)))
   (define tail (spine-tail depth))
   (match (random 3)
-    [0 (node `(cons ,(node-pattern head) ,(node-pattern tail))
-             (lambda () `(cons ,((node-value head)) ,((node-value tail)))))]
-    [1 (node `(,(pick '(list-rest list*)) ,(node-pattern head) ,(node-pattern tail))
-             (lambda () `(list* ,((node-value head)) ,((node-value tail)))))]
+    [0
+     (node `(cons ,(node-pattern head) ,(node-pattern tail))
+           (lambda () `(cons ,((node-value head)) ,((node-value tail)))))]
+    [1
+     (node `(,(pick '(list-rest list*)) ,(node-pattern head) ,(node-pattern tail))
+           (lambda () `(list* ,((node-value head)) ,((node-value tail)))))]
     [_ (quasi-node (sub1 depth) #:tail (and (chance 0.5) (spine-tail depth)))]))
 
 (define (element depth)
   (match (random 9)
-    [0 (define one (generate (sub1 depth)))
-       (node (list (list 'unquote (node-pattern one))) (lambda () `(list ,((node-value one)))))]
-    [1 (define one (generate (sub1 depth)))
-       (define repeat (random-repeat))
-       (node (list (list 'unquote (node-pattern one)) repeat)
-             (lambda () `(list ,@(repeated (node-value one) repeat))))]
-    [2 (define name (pick names))
-       (node (list (list 'unquote-splicing name)) (lambda () `(list ,@(repeated leaf-value '..0))))]
-    [3 (define one (list-node (sub1 depth)))
-       (node (list (list 'unquote-splicing (node-pattern one))) (node-value one))]
-    [4 (define one (spine-node depth))
-       (node (list (list 'unquote-splicing (node-pattern one))) (node-value one))]
+    [0
+     (define one (generate (sub1 depth)))
+     (node (list (list 'unquote (node-pattern one))) (lambda () `(list ,((node-value one)))))]
+    [1
+     (define one (generate (sub1 depth)))
+     (define repeat (random-repeat))
+     (node (list (list 'unquote (node-pattern one)) repeat)
+           (lambda () `(list ,@(repeated (node-value one) repeat))))]
+    [2
+     (define name (pick names))
+     (node (list (list 'unquote-splicing name)) (lambda () `(list ,@(repeated leaf-value '..0))))]
+    [3
+     (define one (list-node (sub1 depth)))
+     (node (list (list 'unquote-splicing (node-pattern one))) (node-value one))]
+    [4
+     (define one (spine-node depth))
+     (node (list (list 'unquote-splicing (node-pattern one))) (node-value one))]
     [5 (node '(x) (lambda () ''(x)))]
-    [6 (define one (template (sub1 depth)))
-       (node (list (node-pattern one)) (lambda () `(list ,((node-value one)))))]
-    [_ (define one (template (sub1 depth) #:tail #f))
-       (node (list (list->vector (node-pattern one)))
-             (lambda () `(list (list->vector ,((node-value one))))))]))
+    [6
+     (define one (template (sub1 depth)))
+     (node (list (node-pattern one)) (lambda () `(list ,((node-value one)))))]
+    [_
+     (define one (template (sub1 depth) #:tail #f))
+     (node (list (list->vector (node-pattern one)))
+           (lambda () `(list (list->vector ,((node-value one))))))]))
 
 (define (template depth #:tail [tail (and (chance 0.2) (generate (sub1 depth)))])
   (define elements
@@ -177,8 +196,10 @@
 (define (wrap-node depth)
   (define one (generate (sub1 depth)))
   (define other (generate (sub1 depth)))
-  (define (value) ((node-value one)))
-  (define (other-value) ((node-value other)))
+  (define (value)
+    ((node-value one)))
+  (define (other-value)
+    ((node-value other)))
   (define pattern (node-pattern one))
   (match (random 11)
     [0 (node `(cons ,pattern ,(node-pattern other)) (lambda () `(cons ,(value) ,(other-value))))]
@@ -230,54 +251,67 @@
 
 (define (racket-answers pattern pairs samples)
   (with-handlers ([exn:fail? (lambda (_) #f)])
-    (racket-value
-     `(let ()
-        (struct point (a b) #:transparent)
-        (define (first-match body guard)
-          (for/or ([v (in-list (list ,@samples))])
-            (define answer
-              (with-handlers ([exn:fail? (lambda (_) 'unmatched)])
-                (body 'formal v)))
-            (and (not (eq? answer 'unmatched)) (list answer (guard 'formal v)))))
-        (list ,@(for/list ([pair (in-list pairs)])
-                  (match-define (cons failure read) pair)
-                  `(first-match (lambda (,read v)
-                                  (match v
-                                    [,pattern
-                                     (=> ,failure)
-                                     (cond
-                                       [(procedure? ,read) 'failure]
-                                       [(eq? ,read 'formal) 'formal]
-                                       [else 'pattern])]
-                                    [_ 'unmatched]))
-                                (lambda (,read v)
-                                  (match v
-                                    [,pattern (=> ,failure) #:when (procedure? ,read) 'failure]
-                                    [,pattern (=> ,failure) #:when (eq? ,read 'formal) 'formal]
-                                    [,pattern 'pattern]
-                                    [_ 'unmatched])))))))))
+    (racket-value `(let ()
+                     (struct point (a b) #:transparent)
+                     (define (first-match body guard)
+                       (for/or ([v (in-list (list ,@samples))])
+                         (define answer
+                           (with-handlers ([exn:fail? (lambda (_) 'unmatched)])
+                             (body 'formal v)))
+                         (and (not (eq? answer 'unmatched)) (list answer (guard 'formal v)))))
+                     (list ,@(for/list ([pair (in-list pairs)])
+                               (match-define (cons failure read) pair)
+                               `(first-match (lambda (,read v)
+                                               (match v
+                                                 [,pattern
+                                                  (=> ,failure)
+                                                  (cond
+                                                    [(procedure? ,read) 'failure]
+                                                    [(eq? ,read 'formal) 'formal]
+                                                    [else 'pattern])]
+                                                 [_ 'unmatched]))
+                                             (lambda (,read v)
+                                               (match v
+                                                 [,pattern
+                                                  (=> ,failure)
+                                                  #:when (procedure? ,read)
+                                                  'failure]
+                                                 [,pattern
+                                                  (=> ,failure)
+                                                  #:when (eq? ,read 'formal)
+                                                  'formal]
+                                                 [,pattern 'pattern]
+                                                 [_ 'unmatched])))))))))
 
 (define (lint-answer clause pattern failure read)
-  (define (procedure formal pattern failure read)
+  (define (procedure formal shape id probe)
     `(define (g ,formal v)
        (match v
-         ,(clause pattern failure read))))
+         ,(clause shape id probe))))
   (define one (procedure read pattern failure read))
   (define copies
     (for/list ([kind (in-list '(formal failure pattern))]
                [other (in-list (list (procedure 'z pattern failure 'z)
                                      (procedure read pattern 'z 'z)
-                                     (procedure read (rename pattern (list (cons read 'z))) failure 'z)))]
+                                     (procedure read
+                                                (rename pattern
+                                                        (list (cons read 'z)))
+                                                failure
+                                                'z)))]
                #:when (alpha-copy? one other))
       kind))
   (match copies
     [(list kind) kind]
     [_ (cons 'inconsistent copies)]))
 
+(define (body-clause pattern failure read)
+  `[,pattern (=> ,failure) ,read])
+
+(define (when-clause pattern failure read)
+  `[,pattern (=> ,failure) #:when ,read 0])
+
 (define (lint-answers pattern failure read)
-  (for/list ([clause (in-list (list (lambda (pattern failure read) `[,pattern (=> ,failure) ,read])
-                                    (lambda (pattern failure read)
-                                      `[,pattern (=> ,failure) #:when ,read 0])))])
+  (for/list ([clause (in-list (list body-clause when-clause))])
     (lint-answer clause pattern failure read)))
 
 (define (row-disagreements pattern pair answer)
@@ -297,7 +331,8 @@
         [(< patterns wanted)
          (define one (generate (add1 (random 3))))
          (define pattern (node-pattern one))
-         (define bound (remove-duplicates (filter (lambda (name) (memq name names)) (symbols pattern))))
+         (define bound
+           (remove-duplicates (filter (lambda (name) (memq name names)) (symbols pattern))))
          (define pairs
            (for*/list ([failure (in-list bound)]
                        [read (in-list bound)])
@@ -326,7 +361,8 @@
        (list kind (length same) 'smallest pattern 'failure-id failure 'read read)])))
 
 (for ([seed (in-list seeds)])
-  (test-case (format "the copy check scopes a failure id as Racket does on ~a fuzzed patterns, seed ~a"
-                     wanted
-                     seed)
+  (test-case (format
+              "the copy check scopes a failure id as Racket does on ~a fuzzed patterns, seed ~a"
+              wanted
+              seed)
     (check-equal? (smallest-by-kind (disagreements seed)) '())))
