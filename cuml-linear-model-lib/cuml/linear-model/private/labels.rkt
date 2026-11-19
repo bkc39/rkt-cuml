@@ -12,6 +12,7 @@
                   cuml-linear-model-label-encode-job))
 
 (provide class-view
+         current-label-classes-job
          decode-labels
          device-kind
          device-kind?
@@ -23,6 +24,8 @@
          y-kind/who)
 
 (define label-dtypes '(int32 int64 float32 float64))
+(define current-label-classes-job
+  (make-parameter cuml-linear-model-label-classes-job #f 'current-label-classes-job))
 
 (struct label-kind ())
 (struct list-kind label-kind (member? <? =? key unified?))
@@ -115,7 +118,7 @@
 
 (define (device-classes who y resources)
   (define out (deposit-for/who who resources))
-  (cuml-linear-model-label-classes-job who resources y out)
+  ((current-label-classes-job) who resources y out)
   (match-define (list classes) (deposit->list out))
   (device-vector->list classes))
 
