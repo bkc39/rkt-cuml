@@ -38,12 +38,12 @@ namespace {
 using ritz::combined;
 using ritz::dot;
 using ritz::eigen_pairs;
-using ritz::exact_gram_cheaper;
-using ritz::reach_of;
+using ritz::gram_path;
+using ritz::gram_plan;
+using ritz::plan_of;
 using ritz::refined;
 using ritz::ritz_pair;
 using ritz::symmetric_block;
-using ritz::window_of;
 
 constexpr int64_t block_rows = ritz::gram_block_rows;
 constexpr int64_t most_blocks = 64;
@@ -239,6 +239,7 @@ struct equilibration {
   int64_t n;
   int64_t d;
   double alpha;
+  int64_t chunk;
 
   template <typename U, typename F>
   void each_block(int64_t rows, F step) const {
@@ -294,16 +295,25 @@ std::vector<double> applied(const equilibration<T>& q,
   for (int64_t o = 0; o < d * c; ++o) {
     u[o] = v[o] * q.scale[o % d];
   }
-  const buffer<double> on_device = to_device(u, stream);
-  buffer<double> z = scratch<double>(q.n * c, stream);
-  each(q.handle, q.n * c,
-       projected_rows<T>{q.x, q.w, q.mean.data(), on_device.data(), q.n, d,
-                         z.data()});
-  std::vector<double> out = to_host(
-      column_sums(q.handle,
-                  weighted_product<T>{q.x, q.mean.data(), z.data(), q.n, d},
-                  q.n, d * c),
-      stream);
+  std::vector<double> out;
+  out.reserve(d * c);
+  buffer<double> z = scratch<double>(q.n * std::min(c, q.chunk), stream);
+  for (int64_t first = 0; first < c; first += q.chunk) {
+    const int64_t k = std::min(q.chunk, c - first);
+    const buffer<double> on_device =
+        to_device(std::vector<double>(u.begin() + (first * d),
+                                      u.begin() + ((first + k) * d)),
+                  stream);
+    each(q.handle, q.n * k,
+         projected_rows<T>{q.x, q.w, q.mean.data(), on_device.data(), q.n, d,
+                           z.data()});
+    const std::vector<double> part = to_host(
+        column_sums(q.handle,
+                    weighted_product<T>{q.x, q.mean.data(), z.data(), q.n, d},
+                    q.n, d * k),
+        stream);
+    out.insert(out.end(), part.begin(), part.end());
+  }
   for (int64_t o = 0; o < d * c; ++o) {
     out[o] = q.scale[o % d] * (out[o] + (q.alpha * u[o]));
   }
@@ -354,8 +364,9 @@ double exact_condition(const equilibration<T>& q) {
 
 template <typename T>
 double ritz_condition(const equilibration<T>& q, const eigen_pairs& e,
-                      int64_t window) {
+                      const gram_plan& plan) {
   const int64_t d = q.d;
+  const int64_t window = plan.window;
   const int64_t c = window + 1;
   std::vector<double> basis(e.vectors.begin(),
                             e.vectors.begin() + (window * d));
@@ -373,7 +384,7 @@ double ritz_condition(const equilibration<T>& q, const eigen_pairs& e,
   const ritz_pair p{small->values.front(), combined(basis, d, y, window),
                     combined(av, d, y, window)};
   const double largest = h.back() / s.back();
-  if (e.values.front() > reach_of(d)) {
+  if (e.values.front() > plan.reach) {
     return p.value > 0 ? largest / p.value : infinite;
   }
   const std::vector<double> v = refined(e, window, p, d);
@@ -385,9 +396,11 @@ double ritz_condition(const equilibration<T>& q, const eigen_pairs& e,
 }  // namespace
 
 template <typename T>
-double equilibrated_condition(const raft::handle_t& handle, const T* x,
-                              const T* w, int64_t n, int64_t d, T alpha,
-                              bool fit_intercept) {
+condition_estimate equilibrated_condition(const raft::handle_t& handle,
+                                          const T* x, const T* w, int64_t n,
+                                          int64_t d, T alpha,
+                                          bool fit_intercept, double limit,
+                                          int64_t chunk) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   const auto a = static_cast<double>(alpha);
   const buffer<double> mean = column_means(handle, x, w, n, d, fit_intercept);
@@ -395,16 +408,13 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
       column_sums(handle, weighted_square<T>{x, w, mean.data(), n}, n, d),
       stream);
   if (std::ranges::any_of(spread, [a](double s) { return !(s + a > 0); })) {
-    return infinite;
+    return {infinite, gram_path::exact, d};
   }
   std::vector<double> scale(d);
   std::ranges::transform(spread, scale.begin(),
                          [a](double s) { return 1.0 / std::sqrt(s + a); });
   const buffer<double> scales = to_device(scale, stream);
-  const equilibration<T> q{handle, x, w, mean, scales, scale, n, d, a};
-  if (exact_gram_cheaper(1, d)) {
-    return exact_condition(q);
-  }
+  const equilibration<T> q{handle, x, w, mean, scales, scale, n, d, a, chunk};
   const std::vector<double> gram = lower_gram(q);
   std::vector<float> m(gram.begin(), gram.end());
   for (int64_t k = 0; k < d; ++k) {
@@ -412,11 +422,24 @@ double equilibrated_condition(const raft::handle_t& handle, const T* x,
   }
   const std::optional<eigen_pairs> e = eigen_of(handle, m, d, true);
   if (!e) {
-    return infinite;
+    return {exact_condition(q), gram_path::exact, d};
   }
-  const int64_t window = window_of(e->values, d);
-  return exact_gram_cheaper(window, d) ? exact_condition(q)
-                                       : ritz_condition(q, *e, window);
+  const gram_plan plan = plan_of(e->values, {n, d}, limit);
+  switch (plan.path) {
+    case gram_path::certified:
+      return {plan.kappa, plan.path, 0};
+    case gram_path::ritz:
+      return {ritz_condition(q, *e, plan), plan.path, plan.window};
+    case gram_path::exact:
+      break;
+  }
+  return {exact_condition(q), gram_path::exact, plan.window};
+}
+
+template <typename T>
+double kappa_limit(glm_solver solver) {
+  const double bound = std::ldexp(1.0, -tolerance_bits<T>) / unit_roundoff<T>;
+  return solver.family == glm_family::ols ? bound * bound : bound;
 }
 
 template <typename T>
@@ -452,11 +475,15 @@ template bool checks_conditioning<float>(glm_solver, bool);
 template bool checks_conditioning<double>(glm_solver, bool);
 template void require_conditioned<float>(double, glm_solver);
 template void require_conditioned<double>(double, glm_solver);
-template double equilibrated_condition<float>(const raft::handle_t&,
-                                              const float*, const float*,
-                                              int64_t, int64_t, float, bool);
-template double equilibrated_condition<double>(const raft::handle_t&,
-                                               const double*, const double*,
-                                               int64_t, int64_t, double, bool);
+template double kappa_limit<float>(glm_solver);
+template double kappa_limit<double>(glm_solver);
+template condition_estimate equilibrated_condition<float>(const raft::handle_t&,
+                                                          const float*,
+                                                          const float*, int64_t,
+                                                          int64_t, float, bool,
+                                                          double, int64_t);
+template condition_estimate equilibrated_condition<double>(
+    const raft::handle_t&, const double*, const double*, int64_t, int64_t,
+    double, bool, double, int64_t);
 
 }  // namespace cumlrkt::glm

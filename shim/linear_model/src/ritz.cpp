@@ -13,13 +13,19 @@ namespace {
 constexpr int gap_bits = 20;
 constexpr double float32_roundoff = 0x1p-24;
 constexpr double semicircle_edge = 2.0;
+constexpr double eigen_error_factor = 16.0;
 constexpr double window_reach = 16.0;
-constexpr int64_t gram_share = 4;
+constexpr double edge_gap = 2.0;
+constexpr double certified_margin = 2.0;
+constexpr double pass_ns = 0.022;
+constexpr double row_ns = 300.0;
+constexpr double syrk_ns = 0.0035;
+constexpr double eigen_square_ns = 20.0;
+constexpr double eigen_column_ns = 32000.0;
 constexpr double half = 0.5;
 
-double gram_error(int64_t d) {
-  return semicircle_edge * std::sqrt(static_cast<double>(gram_block_rows * d)) *
-         float32_roundoff;
+double root(int64_t k) {
+  return std::sqrt(static_cast<double>(k));
 }
 
 }  // namespace
@@ -50,19 +56,42 @@ std::vector<double> symmetric_block(const std::vector<double>& m, int64_t c,
   return out;
 }
 
-double reach_of(int64_t d) {
-  return window_reach * gram_error(d);
+double spectrum_error(const std::vector<double>& values, int64_t d) {
+  const double top =
+      std::max(std::abs(values.front()), std::abs(values.back()));
+  return (semicircle_edge * root(gram_block_rows * d) * float32_roundoff) +
+         (eigen_error_factor * root(d) * float32_roundoff * top);
 }
 
-int64_t window_of(const std::vector<double>& values, int64_t d) {
-  const double reach = values.front() + reach_of(d);
-  return std::max<int64_t>(1, std::ranges::count_if(values, [reach](double l) {
-                             return l <= reach;
-                           }));
+bool exact_gram_cheaper(int64_t vectors, gram_shape shape) {
+  const auto rows = static_cast<double>(shape.rows);
+  const auto cols = static_cast<double>(shape.columns);
+  const double gram = (row_ns * rows) + (syrk_ns * rows * cols * cols);
+  const double eigen =
+      (eigen_square_ns * cols * cols) + (eigen_column_ns * cols);
+  return pass_ns * static_cast<double>(vectors) * rows * cols >= gram + eigen;
 }
 
-bool exact_gram_cheaper(int64_t window, int64_t d) {
-  return gram_share * window >= d;
+gram_plan plan_of(const std::vector<double>& values, gram_shape shape,
+                  double limit) {
+  const int64_t d = shape.columns;
+  const double error = spectrum_error(values, d);
+  const double low = values.front();
+  const double top = values.back();
+  const double reach = window_reach * error;
+  if (low > error) {
+    const double upper = (top + error) / (low - error);
+    if (certified_margin * upper < limit) {
+      return {gram_path::certified, 0, reach, upper};
+    }
+  }
+  const double edge = low + reach;
+  const int64_t window = std::max<int64_t>(
+      1, std::ranges::count_if(values, [edge](double l) { return l <= edge; }));
+  const bool gap =
+      window < d && low >= -error && values[window] >= edge_gap * edge;
+  const bool exact = !gap || exact_gram_cheaper(window + 1, shape);
+  return {exact ? gram_path::exact : gram_path::ritz, window, reach, 0.0};
 }
 
 std::vector<double> refined(const eigen_pairs& e, int64_t window,

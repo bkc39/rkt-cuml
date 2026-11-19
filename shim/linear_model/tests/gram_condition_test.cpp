@@ -7,6 +7,7 @@
 #include <limits>
 #include <raft/core/handle.hpp>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cumlrkt/linear_model.h"
@@ -19,12 +20,14 @@
 namespace {
 
 using cumlrkt::glm::checks_conditioning;
+using cumlrkt::glm::condition_estimate;
 using cumlrkt::glm::equilibrated_condition;
 using cumlrkt::glm::glm_family;
 using cumlrkt::glm::glm_solver;
+using cumlrkt::glm::kappa_limit;
 using cumlrkt::glm::require_conditioned;
-using cumlrkt::glm::ritz::exact_gram_cheaper;
-using cumlrkt::glm::ritz::window_of;
+using cumlrkt::glm::ritz::gram_path;
+using cumlrkt::glm::ritz::pass_chunk;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
 
@@ -34,10 +37,16 @@ struct columns {
   int64_t d;
 };
 
+struct request {
+  double limit = 0.0;
+  int64_t chunk = pass_chunk;
+  bool fit_intercept = true;
+};
+
 template <typename T>
-double condition_of(const resources& res, const columns& c,
-                    const std::vector<double>& w, double alpha,
-                    bool fit_intercept) {
+condition_estimate estimate_of(const resources& res, const columns& c,
+                               const std::vector<double>& w, double alpha,
+                               request r) {
   const std::vector<T> host(c.x.begin(), c.x.end());
   const filled<T> x(res, host, {c.n * c.d});
   const std::vector<T> wh(w.begin(), w.end());
@@ -46,7 +55,15 @@ double condition_of(const resources& res, const columns& c,
   return equilibrated_condition<T>(
       raftrkt::handle_of(res.handle), static_cast<const T*>(x.array.view.data),
       w.empty() ? nullptr : static_cast<const T*>(weights.array.view.data), c.n,
-      c.d, static_cast<T>(alpha), fit_intercept);
+      c.d, static_cast<T>(alpha), r.fit_intercept, r.limit, r.chunk);
+}
+
+template <typename T>
+double condition_of(const resources& res, const columns& c,
+                    const std::vector<double>& w, double alpha,
+                    bool fit_intercept) {
+  return estimate_of<T>(res, c, w, alpha, {.fit_intercept = fit_intercept})
+      .kappa;
 }
 
 constexpr int64_t draw_step = 37;
@@ -109,7 +126,8 @@ constexpr int64_t many_pairs = 30;
 constexpr int64_t spare_columns = 120;
 constexpr int64_t many_salts = 8;
 constexpr double many_eps = 0x1p-12;
-constexpr double near_step = 0x1p-30;
+constexpr int64_t cluster_pairs = 6;
+constexpr double cluster_eps = 0x1p-5;
 
 struct draw_stream {
   int64_t n;
@@ -131,15 +149,9 @@ std::vector<double> integers(draw_stream d) {
   return v;
 }
 
-columns summed_beside_near_pairs(draw_stream d, near_pairs shape) {
+columns near_pairs_after(std::vector<std::vector<double>> cols, draw_stream d,
+                         near_pairs shape, double eps) {
   const int64_t n = d.n;
-  std::vector<std::vector<double>> cols{integers({n, d.salt}),
-                                        integers({n, d.salt + 1})};
-  std::vector<double> sum(n);
-  for (int64_t i = 0; i < n; ++i) {
-    sum[i] = cols[0][i] + cols[1][i];
-  }
-  cols.push_back(sum);
   for (int64_t j = 0; j < shape.pairs + shape.spare; ++j) {
     const uint64_t at = d.salt + (2 * (static_cast<uint64_t>(j) + 1));
     std::vector<double> x = integers({n, at});
@@ -147,7 +159,7 @@ columns summed_beside_near_pairs(draw_stream d, near_pairs shape) {
     if (j < shape.pairs) {
       const std::vector<double> z = integers({n, at + 1});
       for (int64_t i = 0; i < n; ++i) {
-        x[i] += many_eps * z[i];
+        x[i] += eps * z[i];
       }
       cols.push_back(x);
     }
@@ -157,6 +169,22 @@ columns summed_beside_near_pairs(draw_stream d, near_pairs shape) {
     c.x.insert(c.x.end(), col.begin(), col.end());
   }
   return c;
+}
+
+columns summed_beside_near_pairs(draw_stream d, near_pairs shape,
+                                 double eps = many_eps) {
+  std::vector<std::vector<double>> cols{integers({d.n, d.salt}),
+                                        integers({d.n, d.salt + 1})};
+  std::vector<double> sum(d.n);
+  for (int64_t i = 0; i < d.n; ++i) {
+    sum[i] = cols[0][i] + cols[1][i];
+  }
+  cols.push_back(sum);
+  return near_pairs_after(std::move(cols), d, shape, eps);
+}
+
+columns beside_near_pairs(draw_stream d, near_pairs shape) {
+  return near_pairs_after({}, d, shape, many_eps);
 }
 
 columns twins(int64_t n) {
@@ -256,30 +284,80 @@ TEST(GramCondition, ExactCollinearityBesideANearPairIsPastTheThreshold) {
   }
 }
 
+void expect_refused_through_the_window(const resources& res, int64_t spare,
+                                       uint64_t salt) {
+  const columns c =
+      summed_beside_near_pairs({many_rows, salt * 1000}, {many_pairs, spare});
+  const condition_estimate e =
+      estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
+  EXPECT_EQ(e.path, gram_path::ritz) << c.d << " " << salt;
+  EXPECT_EQ(e.window, many_pairs + 1) << c.d << " " << salt;
+  EXPECT_GT(e.kappa, 0x1p32) << c.d << " " << salt;
+}
+
 TEST(GramCondition, ManyNearPairsBesideExactCollinearityArePastTheThreshold) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   for (const int64_t spare : {int64_t{0}, spare_columns}) {
     for (uint64_t salt = 0; salt < many_salts; ++salt) {
-      const columns c = summed_beside_near_pairs({many_rows, salt * 1000},
-                                                 {many_pairs, spare});
-      EXPECT_EQ(exact_gram_cheaper(many_pairs + 1, c.d), spare == 0) << c.d;
-      EXPECT_GT(condition_of<float>(res, c, {}, 0.0, true), 0x1p32)
-          << c.d << " " << salt;
+      expect_refused_through_the_window(res, spare, salt);
     }
   }
 }
 
-TEST(GramCondition, TheWindowHoldsEveryEigenvalueWithinReach) {
-  constexpr int64_t d = 200;
-  constexpr int64_t near = 40;
-  std::vector<double> values(d, 1.0);
-  for (int64_t j = 0; j < near; ++j) {
-    values[j] = near_step * static_cast<double>(j);
+void expect_chunks_match_one_pass(const resources& res, uint64_t salt) {
+  const columns c =
+      beside_near_pairs({many_rows, salt * 1000}, {many_pairs, spare_columns});
+  const condition_estimate chunked =
+      estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
+  const condition_estimate single =
+      estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32, .chunk = c.d + 1});
+  EXPECT_EQ(chunked.path, gram_path::ritz) << salt;
+  EXPECT_GT(chunked.window, pass_chunk) << salt;
+  EXPECT_NEAR(chunked.kappa, single.kappa, single.kappa * 0x1p-30) << salt;
+}
+
+TEST(GramCondition, AWindowWiderThanOneChunkMatchesASinglePass) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (uint64_t salt = 0; salt < many_salts; ++salt) {
+    expect_chunks_match_one_pass(res, salt);
   }
-  EXPECT_EQ(window_of(values, d), near);
-  EXPECT_FALSE(exact_gram_cheaper(near, d));
-  EXPECT_TRUE(exact_gram_cheaper(near, near * 4));
+}
+
+void expect_certified_above_the_refined_kappa(const resources& res,
+                                              uint64_t salt) {
+  const columns c =
+      beside_near_pairs({many_rows, salt * 1000}, {0, spare_columns});
+  const condition_estimate certified =
+      estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
+  const condition_estimate refined = estimate_of<float>(res, c, {}, 0.0, {});
+  EXPECT_EQ(certified.path, gram_path::certified) << salt;
+  EXPECT_NE(refined.path, gram_path::certified) << salt;
+  EXPECT_GE(certified.kappa, refined.kappa) << salt;
+  EXPECT_LT(certified.kappa, refined.kappa * (1 + 0x1p-8)) << salt;
+}
+
+TEST(GramCondition, ConditionedColumnsAreCertifiedFromTheFloat32Spectrum) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (uint64_t salt = 0; salt < many_salts; ++salt) {
+    expect_certified_above_the_refined_kappa(res, salt);
+  }
+}
+
+TEST(GramCondition, CollinearityBesideAnUnseparatedClusterTakesTheExactGram) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (uint64_t salt = 0; salt < many_salts; ++salt) {
+    const columns c = summed_beside_near_pairs({many_rows, salt * 1000},
+                                               {cluster_pairs, 0}, cluster_eps);
+    const condition_estimate e =
+        estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
+    EXPECT_EQ(e.path, gram_path::exact) << salt;
+    EXPECT_LT(e.window, c.d - 1) << salt;
+    EXPECT_GT(e.kappa, 0x1p32) << salt;
+  }
 }
 
 TEST(GramCondition, ZeroWeightRowsDoNotCount) {
