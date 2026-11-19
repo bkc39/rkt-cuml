@@ -38,7 +38,8 @@
     (define at (* i columns))
     (flvector-set! xs
                    (+ at 2)
-                   (- (+ (flvector-ref xs at) (flvector-ref xs (+ at 1))) (flvector-ref xs (+ at 3)))))
+                   (- (+ (flvector-ref xs at) (flvector-ref xs (+ at 1)))
+                      (flvector-ref xs (+ at 3)))))
   (define X (device-matrix rows columns #:dtype 'float32))
   (void (write-array! 'factor-columns X (pack-vector 'factor-columns 'float32 (* rows columns) xs)))
   X)
