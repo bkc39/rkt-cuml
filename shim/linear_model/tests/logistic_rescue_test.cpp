@@ -149,8 +149,8 @@ TEST(LogisticRescue, AFailedRescueKeepsItsLastFiniteAttemptsResidual) {
   CUMLRKT_REQUIRE_GPU();
   const outcome out = rescued_with(false);
   EXPECT_FALSE(out.rescued);
-  ASSERT_TRUE(out.last_worst.has_value());
-  EXPECT_NE(*out.last_worst, first_worst);
+  EXPECT_TRUE(out.last_worst.has_value());
+  EXPECT_NE(out.last_worst, std::optional<double>{first_worst});
 }
 
 }  // namespace
