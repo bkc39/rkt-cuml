@@ -52,6 +52,8 @@ constexpr double correlated_loading = 33.0;
 constexpr gram_shape correlated_shape{1000000, correlated_columns};
 constexpr uint64_t correlated_salts = 4;
 constexpr double skew_cosine = 0.6;
+constexpr spectrum_interval missing{std::numeric_limits<double>::infinity(),
+                                    -std::numeric_limits<double>::infinity()};
 
 struct spectrum_of {
   int64_t near;
@@ -149,8 +151,9 @@ std::vector<double> factor_columns_of(double loading) {
   return x;
 }
 
-std::vector<float> equilibrated_gram(std::vector<double> x, int64_t n,
-                                     int64_t d) {
+std::vector<float> equilibrated_gram(std::vector<double> x, gram_shape shape) {
+  const int64_t n = shape.rows;
+  const int64_t d = shape.columns;
   for (int64_t k = 0; k < d; ++k) {
     double* c = x.data() + (k * n);
     double mean = 0.0;
@@ -221,8 +224,8 @@ TEST(GramPlan, TheSpectrumErrorCoversSsyevdsResiduals) {
   const resources res;
   const raft::handle_t& handle = raftrkt::handle_of(res.handle);
   for (const double loading : {3.0, 10.0}) {
-    const std::vector<float> g = equilibrated_gram(factor_columns_of(loading),
-                                                   factor_rows, factor_columns);
+    const std::vector<float> g = equilibrated_gram(
+        factor_columns_of(loading), {factor_rows, factor_columns});
     const std::optional<eigen_pairs> e =
         eigen_of(handle, g, factor_columns, true);
     if (!e.has_value()) {
@@ -256,7 +259,7 @@ void expect_certified_by_residuals(const resources& res, uint64_t salt) {
   const int64_t d = correlated_columns;
   const std::vector<float> g = equilibrated_gram(
       factor_draws({correlated_rows, d, correlated_loading, salt}),
-      correlated_rows, d);
+      {correlated_rows, d});
   const std::optional<eigen_pairs> e = eigen_of(handle, g, d, true);
   const std::optional<eigen_pairs> exact =
       eigen_of(handle, promoted(g, d), d, false);
@@ -298,9 +301,9 @@ TEST(GramPlan, ASkewBasisCannotHideAnEigenvalue) {
   const eigen_pairs e{{1.0, 1.0}, {1.0, 0.0, skew_cosine, sine}};
   const std::optional<spectrum_interval> s =
       enclosed_spectrum(raftrkt::handle_of(res.handle), g, e, 2);
-  ASSERT_TRUE(s.has_value());
-  EXPECT_LE(s->low, 1.0);
-  EXPECT_GE(s->high, 3.0);
+  const spectrum_interval v = s.value_or(missing);
+  EXPECT_LE(v.low, 1.0);
+  EXPECT_GE(v.high, 3.0);
 }
 
 TEST(GramPlan, ZeroComputedResidualsStillCoverTheirOwnRounding) {
@@ -314,9 +317,9 @@ TEST(GramPlan, ZeroComputedResidualsStillCoverTheirOwnRounding) {
                                                         .product = matrix},
                                                        2);
   const double rounding = 2 * 0x1p-53 * basis * ((basis * matrix) + matrix);
-  ASSERT_TRUE(s.has_value());
-  EXPECT_LE(s->low, 1.0 - rounding);
-  EXPECT_GE(s->high, 2.0 + rounding);
+  const spectrum_interval v = s.value_or(missing);
+  EXPECT_LE(v.low, 1.0 - rounding);
+  EXPECT_GE(v.high, 2.0 + rounding);
 }
 
 }  // namespace

@@ -27,6 +27,15 @@ bool checks_conditioning(glm_solver solver, bool alpha_window) {
 }
 
 template <typename T>
+const char* ridge_advice() {
+  return std::is_same_v<T, float>
+             ? "X is ill-conditioned for this alpha (float64 or a larger "
+               "alpha may fit)"
+             : "X is ill-conditioned for this alpha (a larger alpha may "
+               "fit)";
+}
+
+template <typename T>
 void require_conditioned(double kappa, glm_solver solver) {
   const bool ols = solver.family == glm_family::ols;
   const double share = unit_roundoff<T> * (ols ? std::sqrt(kappa) : kappa);
@@ -36,12 +45,7 @@ void require_conditioned(double kappa, glm_solver solver) {
   throw logic_error(std::format(
       "X: the {} solve's {} has u*kappa {} >= 2^-{}; {}", solver_name(solver),
       ols ? "X" : "regularised Gram matrix", printed(share), tolerance_bits<T>,
-      ols ? "X may have collinear columns"
-      : std::is_same_v<T, float>
-          ? "X is ill-conditioned for this alpha (float64 or a larger "
-            "alpha may fit)"
-          : "X is ill-conditioned for this alpha (a larger alpha may "
-            "fit)"));
+      ols ? "X may have collinear columns" : ridge_advice<T>()));
 }
 
 template bool checks_conditioning<float>(glm_solver, bool);

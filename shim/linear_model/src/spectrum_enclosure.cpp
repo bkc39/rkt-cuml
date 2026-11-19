@@ -19,6 +19,12 @@ namespace cumlrkt::glm {
 
 namespace {
 
+constexpr double mirrored = 2.0;
+
+void blas(cublasStatus_t result) {
+  RAFT_CUBLAS_TRY(result);
+}
+
 struct lower_symmetric {
   std::vector<double> matrix;
   double squares;
@@ -30,7 +36,7 @@ lower_symmetric promoted(const std::vector<float>& m, int64_t d) {
     for (int64_t i = j; i < d; ++i) {
       const auto v = static_cast<double>(m[(j * d) + i]);
       a.matrix[(j * d) + i] = v;
-      a.squares += (i == j ? 1.0 : 2.0) * v * v;
+      a.squares += (i == j ? 1.0 : mirrored) * v * v;
     }
   }
   return a;
@@ -38,8 +44,8 @@ lower_symmetric promoted(const std::vector<float>& m, int64_t d) {
 
 double squares(cublasHandle_t cublas, const buffer<double>& x) {
   double s = 0.0;
-  RAFT_CUBLAS_TRY(cublasDdot(cublas, static_cast<int>(x.size()), x.data(), 1,
-                             x.data(), 1, &s));
+  blas(cublasDdot(cublas, static_cast<int>(x.size()), x.data(), 1, x.data(), 1,
+                  &s));
   return s;
 }
 
@@ -51,8 +57,8 @@ ritz::enclosure_norms enclosure_norms_of(const raft::handle_t& handle,
                                          int64_t d) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
-  RAFT_CUBLAS_TRY(cublasSetStream(cublas, stream.value()));
-  RAFT_CUBLAS_TRY(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST));
+  blas(cublasSetStream(cublas, stream.value()));
+  blas(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST));
   const lower_symmetric a = promoted(m, d);
   const buffer<double> g = to_device(a.matrix, stream);
   const buffer<double> v = to_device(e.vectors, stream);
@@ -65,17 +71,14 @@ ritz::enclosure_norms enclosure_norms_of(const raft::handle_t& handle,
   const double one = 1.0;
   const double zero = 0.0;
   const double minus = -1.0;
-  RAFT_CUBLAS_TRY(cublasDsymm(cublas, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_LOWER,
-                              k, k, &one, g.data(), k, v.data(), k, &zero,
-                              p.data(), k));
-  RAFT_CUBLAS_TRY(cublasDgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, k, k, k, &one,
-                              v.data(), k, p.data(), k, &zero, h.data(), k));
-  RAFT_CUBLAS_TRY(
-      cublasDaxpy(cublas, k, &minus, mu.data(), 1, h.data(), k + 1));
-  RAFT_CUBLAS_TRY(cublasDgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, k, k, k, &one,
-                              v.data(), k, v.data(), k, &zero, w.data(), k));
-  RAFT_CUBLAS_TRY(
-      cublasDaxpy(cublas, k, &minus, ones.data(), 1, w.data(), k + 1));
+  blas(cublasDsymm(cublas, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_LOWER, k, k, &one,
+                   g.data(), k, v.data(), k, &zero, p.data(), k));
+  blas(cublasDgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, k, k, k, &one, v.data(), k,
+                   p.data(), k, &zero, h.data(), k));
+  blas(cublasDaxpy(cublas, k, &minus, mu.data(), 1, h.data(), k + 1));
+  blas(cublasDgemm(cublas, CUBLAS_OP_T, CUBLAS_OP_N, k, k, k, &one, v.data(), k,
+                   v.data(), k, &zero, w.data(), k));
+  blas(cublasDaxpy(cublas, k, &minus, ones.data(), 1, w.data(), k + 1));
   return {.symmetric = std::sqrt(squares(cublas, h)),
           .orthogonality = std::sqrt(squares(cublas, w)),
           .matrix = std::sqrt(a.squares),
