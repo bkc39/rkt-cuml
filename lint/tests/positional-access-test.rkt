@@ -210,7 +210,10 @@
                       (define (f v)
                         (let ()
                           (match-define (struct span ((app second x) _)) v)
-                          x))))])
+                          x))
+                      (define (f v)
+                        (my-match v
+                                  [(struct span ((app second x) _)) x]))))])
   (test-case (format "a pattern in any racket/match form, or in a form the lint does not know, is read: ~s"
                      use)
     (define-values (ok? output)

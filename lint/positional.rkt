@@ -112,10 +112,21 @@
     [(vector? one) (append-map (lambda (item) (accesses item refused)) (vector->list one))]
     [else '()]))
 
+(define (field-spec? one)
+  (or (identifier? one)
+      (match (syntax->list one)
+        [(cons (? identifier?) options) (andmap (lambda (option) (keyword? (syntax-e option))) options)]
+        [_ #f])))
+
+(define (field-specs? one)
+  (match (syntax->list one)
+    [(? list? specs) (andmap field-spec? specs)]
+    [#f #f]))
+
 (define (struct-options head items)
   (match* (head items)
-    [('struct (list* _ (? identifier?) (? identifier?) (? syntax?) options)) options]
-    [((or 'struct 'define-struct) (list* _ _ (? syntax?) options)) options]
+    [('struct (list* _ (? identifier?) (? identifier?) (? field-specs?) options)) options]
+    [((or 'struct 'define-struct) (list* _ _ (? field-specs?) options)) options]
     [(_ _) #f]))
 
 (define (match-accesses head items refused)
