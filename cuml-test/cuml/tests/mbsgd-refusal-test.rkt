@@ -184,6 +184,13 @@
                   (mbsgd-regressor-fit (on-matrix near-float32-max-X 'float32)
                                        (on-vector (noise 1e-3) 'float32)
                                        #:eta0 1e-30)))
+           (row "a float32 X whose column sums would overflow without fit-intercept, whatever eta0"
+                "X is too large for the solver's sums; rescale X"
+                (lambda ()
+                  (mbsgd-regressor-fit (on-matrix near-float32-max-X 'float32)
+                                       (on-vector (noise 1e-3) 'float32)
+                                       #:eta0 1e-37
+                                       #:fit-intercept #f)))
            (row "one float32 X entry whose gradient products with y would overflow"
                 "X·(y − ȳ) is too large for the solver's sums; rescale X or y"
                 (lambda ()

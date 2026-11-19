@@ -154,8 +154,10 @@ inline constexpr double gate_round_off_start =
 // sgdFit sums in X's dtype: X's columns and y for the centring means, and the
 // products x·(y - ȳ) of a batch's gradient, X centred (|x - x̄| ≤ 2·max|x|).
 // Each bound must stay solver_headroom below the dtype's largest value. The
-// product bound sums the whole of y, so with batch-size below n it is
-// stricter than the solver needs.
+// column bound holds without fit-intercept too: such a column has
+// max|x| ≥ max/(4n), and a stable step, below 1/max|x|², rounds to 0 in the
+// dtype for any n ≤ 2^31. The product bound sums the whole of y, so with
+// batch-size below n it is stricter than the solver needs.
 inline constexpr double solver_headroom = 4;
 
 inline double l1_share(const sgd_options& o) {
@@ -224,7 +226,7 @@ std::optional<std::string> solver_scale_refusal(const magnitudes& x,
                                                 double residual_mass,
                                                 double y_mass, bool centred) {
   const double limit = std::numeric_limits<T>::max() / solver_headroom;
-  if (centred && !(x.heaviest_column <= limit)) {
+  if (!(x.heaviest_column <= limit)) {
     return "X is too large for the solver's sums; rescale X";
   }
   if (centred && !(y_mass <= limit)) {

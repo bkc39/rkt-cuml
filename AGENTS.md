@@ -295,7 +295,7 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   the sums the solver makes in X's dtype bounded in double: a y whose
   F_start or floor is not finite, or with fit-intercept whose Σ|y| exceeds
   a quarter of the dtype's largest value, is refused with "rescale y"; an
-  X column whose Σ|x| does, with fit-intercept, with "rescale X"; and
+  X column whose Σ|x| does, with or without fit-intercept, with "rescale X"; and
   m·Σ|y − ȳ| above it (m = max|x|, doubled with fit-intercept) with
   "rescale X or y", a bound stricter than needed when batch-size < n.
 - *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains

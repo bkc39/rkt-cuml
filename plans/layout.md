@@ -2139,7 +2139,12 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   X) or, under fit-intercept, Σ|y|, above max/4; ȳ is 0 without
   fit-intercept. Its bound is at least the measured sum, so it refuses at least 2.5×
   below every measured overflow;
-  in float64 it needs m·Σ|y − ȳ| above 4.5e307. Each of alpha, tol, eta0 and power-t is checked
+  in float64 it needs m·Σ|y − ȳ| above 4.5e307. An X column whose Σ|x|
+  exceeds max/4 is refused "rescale X" with or without fit-intercept
+  (r1, r2): without it such a column has max|x| ≥ max/(4n), and a stable
+  step, below 1/max|x|², rounds to 0 in the dtype for any n ≤ 2^31
+  (float32 X ≈ 3e36, no intercept, was refused "lower #:eta0" at every
+  eta0 down to 1e-37). Each of alpha, tol, eta0 and power-t is checked
   against X's dtype right after its own range, in settings order: one
   that overflows it, "alpha: 1e+150 overflows float32", or an alpha or
   eta0 that rounds to 0 in it, "eta0: 1e-50 rounds to 0 in float32"

@@ -62,8 +62,8 @@ without the penalty ends above the zero model's by more than the slack and round
 predicts worse than the mean of @racket[y]. The gate sees only the objective and the loss, so it
 can pass a fit that predicts badly, and refuse one that predicts well on a nearly constant
 @racket[y]. Raises, advising a rescale, before the solve when the zero model's objective of
-@racket[y] is not finite, or when a sum the solver makes in @racket[X]'s dtype could overflow:
-with @racket[fit-intercept] the sum of a column of @racket[X] (rescale @racket[X]) or of
+@racket[y] is not finite, or when a sum the solver makes in @racket[X]'s dtype could overflow: the
+sum of a column of @racket[X] (rescale @racket[X]), with @racket[fit-intercept] the sum of
 @racket[y] (rescale @racket[y]), and the products of @racket[X] and the centred
 @racket[y] in the gradient (rescale either; this bound is stricter than the solver needs when
 @racket[batch-size] is below the rows). Also refused before the solve: an

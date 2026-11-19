@@ -388,7 +388,8 @@ TEST(MbsgdGate, SumsTheFloat32SolverWouldOverflowAreRefusedByCause) {
   const magnitudes heavy{.largest = 1, .heaviest_column = limit * 1.001};
   EXPECT_EQ(solver_scale_refusal<float>(heavy, 0, 0, true).value_or(""),
             rescale_x);
-  EXPECT_FALSE(solver_scale_refusal<float>(heavy, 0, 0, false).has_value());
+  EXPECT_EQ(solver_scale_refusal<float>(heavy, 0, 0, false).value_or(""),
+            rescale_x);
   EXPECT_EQ(
       solver_scale_refusal<float>(heavy, 0, limit * 1.001, true).value_or(""),
       rescale_x);
