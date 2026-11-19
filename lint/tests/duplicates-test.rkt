@@ -161,3 +161,47 @@
                           ("b.rkt" ((define (tag y)
                                       `(x ,y))))))
                 '(("a.rkt:2: tag" "b.rkt:2: tag"))))
+
+(for ([binder (in-list '(cond
+                          when
+                          unless
+                          parameterize))]
+      [pair (in-list '(((define (f xs)
+                          (cond
+                            [(pair? xs)
+                             (define total (apply + xs))
+                             (/ total (length xs))]
+                            [else 0]))
+                        (define (g ys)
+                          (cond
+                            [(pair? ys)
+                             (define sum (apply + ys))
+                             (/ sum (length ys))]
+                            [else 0])))
+                       ((define (f xs)
+                          (when (pair? xs)
+                            (define total (apply + xs))
+                            (/ total (length xs))))
+                        (define (g ys)
+                          (when (pair? ys)
+                            (define sum (apply + ys))
+                            (/ sum (length ys)))))
+                       ((define (f xs)
+                          (unless (null? xs)
+                            (define total (apply + xs))
+                            (/ total (length xs))))
+                        (define (g ys)
+                          (unless (null? ys)
+                            (define sum (apply + ys))
+                            (/ sum (length ys)))))
+                       ((define (f xs)
+                          (parameterize ([current-output-port (current-error-port)])
+                            (define total (apply + xs))
+                            (/ total (length xs))))
+                        (define (g ys)
+                          (parameterize ([current-output-port (current-error-port)])
+                            (define sum (apply + ys))
+                            (/ sum (length ys)))))))])
+  (test-case (format "a definition inside ~a is renamed by scope" binder)
+    (match-define (list one other) pair)
+    (check-equal? (copies `(("a.rkt" (,one)) ("b.rkt" (,other)))) '(("a.rkt:2: f" "b.rkt:2: g")))))

@@ -116,8 +116,12 @@
   (define (ref env one)
     (hash-ref env one (lambda () (free-key one))))
   (define (each env items)
+    (if (and (list? items) (pair? (body-names items)))
+        (body env items)
+        (each-form env items)))
+  (define (each-form env items)
     (match items
-      [(cons a d) (cons (expr env a) (each env d))]
+      [(cons a d) (cons (expr env a) (each-form env d))]
       [_ (expr env items)]))
   (define (quasi env datum depth)
     (match datum
