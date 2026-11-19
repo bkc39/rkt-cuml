@@ -215,14 +215,18 @@
                               (`(,@k ,a) '(5 6) a)
                               (`#(,k ,b) (vector 5 6) k)
                               (`#(,k ...) (vector 5 6) k)
-                              (`#&,k (box 5) k)))])
+                              (`#& ,k (box 5) k)))])
   (match-define (list pattern value name) row)
-  (test-case (format "~s lets ~a win over a failure id of that name as racket/match does" pattern name)
+  (test-case (format "~s lets ~a win over a failure id of that name as racket/match does"
+                     pattern
+                     name)
     (define answer
       (racket-value `(let ()
                        (struct point (a b))
                        (match ,value
-                         [,pattern (=> ,name) (if (procedure? ,name) 'failure 'pattern)]
+                         [,pattern
+                          (=> ,name)
+                          (if (procedure? ,name) 'failure 'pattern)]
                          [_ 'unmatched]))))
     (check-not-false (memq answer '(failure pattern)) "the sample matches")
     (check-equal? (and (memq name (direct-pattern-names pattern)) #t) (eq? answer 'pattern))))

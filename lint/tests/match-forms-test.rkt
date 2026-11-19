@@ -195,12 +195,13 @@
 (define (shadowing-sample lhs failure name position)
   (match position
     ['body `([,lhs (=> ,failure) (if (procedure? ,name) 'failure 'pattern)] [_ 'unmatched])]
-    ['when `([,lhs (=> ,failure) #:when (procedure? ,name) 'failure] [,lhs 'pattern] [_ 'unmatched])]))
+    ['when
+     `([,lhs (=> ,failure) #:when (procedure? ,name) 'failure] [,lhs 'pattern] [_ 'unmatched])]))
 
 (define when-reads
-  '((([(list a) (=> next) #:when (positive? a) a] [_ 0]) ([(list b) (=> next) #:when (positive? b) b]
-                                                          [_ 0])
-                                                         5)
+  '((([(list a) (=> next) #:when (positive? a) a] [_ 0])
+     ([(list b) (=> next) #:when (positive? b) b] [_ 0])
+     5)
     (([(list k) (=> k) #:when (number? k) k] [_ 0]) ([(list j) (=> k) #:when (number? j) j] [_ 0]) 5)
     (([(list k) (=> k) #:when (number? k) 1] [_ 0]) ([(list j) (=> k) #:when (number? k) 1] [_ 0]) 0)
     (([(list k ...) (=> k) #:when (list? k) k] [_ 0]) ([(list j ...) (=> k) #:when (list? j) j] [_ 0])
@@ -260,22 +261,29 @@
   (for* ([row (in-list shadowing-patterns)]
          [position (in-list '(body when))])
     (match-define (list pattern name value) row)
-    (test-case (format "the copy check lets a ~a pattern ~s's ~a win over a failure id in the ~a as Racket does"
-                       head
-                       pattern
-                       name
-                       position)
+    (test-case (format
+                "the copy check lets a ~a pattern ~s's ~a win over a failure id in the ~a as Racket does"
+                head
+                pattern
+                name
+                position)
       (check-scope (shadowing-sample pattern name name position)
                    value
                    'pattern
                    (list "the failure id renamed" 'k (shadowing-sample pattern 'j name position))
                    (list "the pattern variable renamed"
                          'k
-                         (shadowing-sample (rename pattern (list (cons name 'j))) name name position)))))
+                         (shadowing-sample (rename pattern
+                                                   (list (cons name 'j)))
+                                           name
+                                           name
+                                           position)))))
   (for ([row (in-list when-reads)]
         [index (in-naturals)])
     (match-define (list one other copied) row)
-    (test-case (format "the copy check reads ~a #:when read ~a's pattern variables as Racket does" head index)
+    (test-case (format "the copy check reads ~a #:when read ~a's pattern variables as Racket does"
+                       head
+                       index)
       (check-equal? (alpha-copy? (procedure 'k one) (procedure 'k other))
                     (equal? (answer one '(5)) copied)))))
 

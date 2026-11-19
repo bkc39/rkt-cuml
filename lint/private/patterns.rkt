@@ -207,7 +207,8 @@
     [(cons one rest) (append (template-names one) (template-names rest))]
     [(? vector?) (template-names (vector->list template))]
     [(? box?) (template-names (unbox template))]
-    [(app prefab-struct-key (? values)) (template-names (cdr (vector->list (struct->vector template))))]
+    [(app prefab-struct-key (? values))
+     (template-names (cdr (vector->list (struct->vector template))))]
     [_ '()]))
 
 (define (bound-names pattern direct?)
