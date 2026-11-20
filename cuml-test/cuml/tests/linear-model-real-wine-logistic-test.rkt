@@ -1,11 +1,12 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-fit)
-         (only-in racket/list count remove-duplicates)
+         (only-in racket/function curry)
          (only-in racket/match match-define struct*)
          (only-in rackunit check-true test-case)
          (only-in "private/linear-data.rkt" dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
+                  balanced-class-weights
                   default-setting
                   default-tol
                   default-tol-cap
@@ -27,16 +28,11 @@
                   labelled-labels
                   labelled-set))
 
-(define (balanced-weights y)
-  (define n (length y))
-  (define k (length (remove-duplicates y)))
-  (map (lambda (c) (/ n (* k (count (lambda (v) (= v c)) y)))) y))
-
 (define (balanced-twin set)
   (match-define (struct* labelled ((case c))) set)
   (define y (lr-case-y c))
   (setting-twin "sklearn-fit"
-                (lr-case "balanced" (lr-case-X c) y (balanced-weights y))
+                (lr-case "balanced" (lr-case-X c) y (map (curry hash-ref (balanced-class-weights y)) y))
                 'float64
                 default-setting
                 #:tol (tight-tol 'float64)))

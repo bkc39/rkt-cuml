@@ -13,6 +13,7 @@
          (only-in "private/common-data.rkt" on-vector unit-roundoff)
          (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
+                  balanced-class-weights
                   blob-case
                   case-fit
                   case-y
@@ -116,13 +117,10 @@
       (check-equal? moved (scaled-parts plain (expt 2.0 (- a)))))))
 
 (test-gpu "balanced class weights equal the explicit mapping W/(k W_c), bitwise"
-  (define ys (lr-case-y binary))
-  (define classes (sort (remove-duplicates ys) <))
-  (define n (length ys))
   (define mapping
-    (for/hash ([c (in-list classes)])
-      (values c (exact->inexact (/ n (* (length classes) (count-of ys c)))))))
-  (define unweighted (lr-case "unweighted" (lr-case-X binary) ys #f))
+    (for/hash ([(c w) (in-hash (balanced-class-weights (lr-case-y binary)))])
+      (values c (exact->inexact w))))
+  (define unweighted (lr-case "unweighted" (lr-case-X binary) (lr-case-y binary) #f))
   (for ([dt (in-list dtypes)])
     (check-equal? (fit-parts (case-fit unweighted dt #:class-weight 'balanced))
                   (fit-parts (case-fit unweighted dt #:class-weight mapping)))))

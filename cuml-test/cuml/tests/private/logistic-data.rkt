@@ -16,6 +16,7 @@
          (struct-out lr-fit)
          (struct-out setting)
          argmax-index
+         balanced-class-weights
          blob-case
          case-fit
          case-y
@@ -118,6 +119,14 @@
            (map (lambda (row) (cons value row)) (lr-case-X c))
            (lr-case-y c)
            (lr-case-w c)))
+
+(define (balanced-class-weights ys)
+  (define sizes
+    (for/fold ([sizes (hash)]) ([y (in-list ys)])
+      (hash-update sizes y add1 0)))
+  (define k (hash-count sizes))
+  (for/hash ([(c size) (in-hash sizes)])
+    (values c (/ (length ys) (* k size)))))
 
 (define (repeated-rows c counts)
   (define (spread xs)
