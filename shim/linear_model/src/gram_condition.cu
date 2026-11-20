@@ -10,11 +10,8 @@
 #include <cmath>
 #include <cstdint>
 #include <format>
-#include <limits>
 #include <optional>
-#include <raft/core/cublas_macros.hpp>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cublas_handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <rmm/exec_policy.hpp>
 #include <type_traits>
@@ -30,6 +27,7 @@
 #include "glm_staging.hpp"
 #include "glm_staging_device.hpp"
 #include "gram_condition.hpp"
+#include "library_calls.hpp"
 #include "ritz.hpp"
 #include "spectrum_enclosure.hpp"
 #include "symmetric_eigen.hpp"
@@ -43,6 +41,7 @@ using ritz::dot;
 using ritz::eigen_pairs;
 using ritz::gram_path;
 using ritz::gram_plan;
+using ritz::infinite;
 using ritz::plan_of;
 using ritz::refined;
 using ritz::ritz_pair;
@@ -50,7 +49,6 @@ using ritz::symmetric_block;
 
 constexpr int64_t block_rows = ritz::gram_block_rows;
 constexpr int64_t block_floats = ritz::block_floats;
-constexpr double infinite = std::numeric_limits<double>::infinity();
 constexpr double mean_refinement = 8.0;
 
 template <typename T>
@@ -235,12 +233,6 @@ struct equilibration {
   }
 };
 
-cublasHandle_t cublas_on(const raft::handle_t& handle) {
-  cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
-  RAFT_CUBLAS_TRY(cublasSetStream(cublas, stream_of(handle).value()));
-  return cublas;
-}
-
 template <typename T, typename U>
 std::vector<double> batched_gram(const equilibration<T>& q,
                                  ritz::gram_batch batch) {
@@ -335,9 +327,8 @@ std::vector<double> crossed(const raft::handle_t& handle,
   const double one = 1.0;
   const double zero = 0.0;
   const auto [k, m] = std::pair{static_cast<int>(d), static_cast<int>(c)};
-  RAFT_CUBLAS_TRY(cublasDgemm(cublas_on(handle), CUBLAS_OP_T, CUBLAS_OP_N, m, m,
-                              k, &one, da.data(), k, db.data(), k, &zero,
-                              out.data(), m));
+  blas(cublasDgemm(cublas_on(handle), CUBLAS_OP_T, CUBLAS_OP_N, m, m, k, &one,
+                   da.data(), k, db.data(), k, &zero, out.data(), m));
   return to_host(out, stream);
 }
 

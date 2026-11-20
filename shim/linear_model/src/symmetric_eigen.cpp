@@ -4,15 +4,14 @@
 
 #include <cstdint>
 #include <optional>
-#include <raft/core/cusolver_macros.hpp>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cusolver_dn_handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <type_traits>
 #include <vector>
 
 #include "cumlrkt/support.hpp"
 #include "glm_staging_device.hpp"
+#include "library_calls.hpp"
 #include "ritz.hpp"
 
 namespace cumlrkt::glm {
@@ -20,10 +19,6 @@ namespace cumlrkt::glm {
 namespace {
 
 constexpr auto fill = CUBLAS_FILL_MODE_LOWER;
-
-void solved(cusolverStatus_t result) {
-  RAFT_CUSOLVER_TRY(result);
-}
 
 template <typename S>
 std::optional<ritz::eigen_pairs> decomposed(rmm::cuda_stream_view stream,
@@ -47,8 +42,7 @@ std::optional<ritz::eigen_pairs> eigen_of(const raft::handle_t& handle,
   const rmm::cuda_stream_view stream = stream_of(handle);
   buffer<S> a = to_device(m, stream);
   buffer<S> values = scratch<S>(d, stream);
-  cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
-  solved(cusolverDnSetStream(solver, stream.value()));
+  cusolverDnHandle_t solver = cusolver_on(handle);
   const auto dim = static_cast<int>(d);
   const auto mode =
       vectors ? CUSOLVER_EIG_MODE_VECTOR : CUSOLVER_EIG_MODE_NOVECTOR;
@@ -80,8 +74,7 @@ std::optional<ritz::eigen_pairs> pencil_of(const raft::handle_t& handle,
   buffer<double> a = to_device(h, stream);
   buffer<double> b = to_device(s, stream);
   buffer<double> values = scratch<double>(d, stream);
-  cusolverDnHandle_t solver = raft::resource::get_cusolver_dn_handle(handle);
-  solved(cusolverDnSetStream(solver, stream.value()));
+  cusolverDnHandle_t solver = cusolver_on(handle);
   const auto dim = static_cast<int>(d);
   constexpr auto type = CUSOLVER_EIG_TYPE_1;
   constexpr auto mode = CUSOLVER_EIG_MODE_VECTOR;

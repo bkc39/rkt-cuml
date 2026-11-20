@@ -4,7 +4,6 @@
 #include <bit>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <numeric>
 #include <optional>
 #include <vector>
@@ -14,8 +13,6 @@ namespace cumlrkt::glm::ritz {
 namespace {
 
 constexpr int gap_bits = 20;
-constexpr double float32_roundoff = 0x1p-24;
-constexpr double float64_roundoff = 0x1p-53;
 constexpr int64_t wide_run_ratio = 2;
 constexpr int64_t wide_run_rows_min = 64;
 constexpr int64_t square_roundings = 3;
@@ -46,20 +43,9 @@ constexpr double enclosure_ns = 126000.0;
 constexpr double enclosure_steps = 16.0;
 constexpr int outward_ulps = 4;
 constexpr double half = 0.5;
-constexpr double infinite = std::numeric_limits<double>::infinity();
 
 double root(int64_t k) {
   return std::sqrt(static_cast<double>(k));
-}
-
-double rounding(double k) {
-  const double ku = k * float64_roundoff;
-  return ku / (1.0 - ku);
-}
-
-double single_rounding(double k) {
-  const double ku = k * float32_roundoff;
-  return ku / (1.0 - ku);
 }
 
 double compounded(double a, double b) {
@@ -90,6 +76,16 @@ double pass_cost_ns(int64_t vectors, gram_shape shape) {
 }
 
 }  // namespace
+
+double rounding(double k) {
+  const double ku = k * float64_roundoff;
+  return ku / (1.0 - ku);
+}
+
+double single_rounding(double k) {
+  const double ku = k * float32_roundoff;
+  return ku / (1.0 - ku);
+}
 
 double outward(double x, double toward) {
   for (int i = 0; i < outward_ulps; ++i) {

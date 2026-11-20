@@ -1,21 +1,17 @@
 #include "spectrum_enclosure.hpp"
 
-#include <cublas_v2.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <optional>
-#include <raft/core/cublas_macros.hpp>
 #include <raft/core/handle.hpp>
-#include <raft/core/resource/cublas_handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <utility>
 #include <vector>
 
 #include "cumlrkt/support.hpp"
 #include "glm_staging_device.hpp"
+#include "library_calls.hpp"
 #include "ritz.hpp"
 #include "symmetric_eigen.hpp"
 
@@ -23,20 +19,12 @@ namespace cumlrkt::glm {
 
 namespace {
 
+using ritz::infinite;
+using ritz::rounding;
+
 constexpr double mirrored = 2.0;
 constexpr int64_t host_enclosure_columns = 16;
-constexpr double float64_roundoff = 0x1p-53;
 constexpr double host_steps = 16.0;
-constexpr double infinite = std::numeric_limits<double>::infinity();
-
-double rounded(double k) {
-  const double ku = k * float64_roundoff;
-  return ku / (1.0 - ku);
-}
-
-void blas(cublasStatus_t result) {
-  RAFT_CUBLAS_TRY(result);
-}
 
 struct lower_symmetric {
   std::vector<double> matrix;
@@ -141,8 +129,7 @@ ritz::enclosure_norms enclosure_norms_of(const raft::handle_t& handle,
     return host_norms(m, e, d);
   }
   const rmm::cuda_stream_view stream = stream_of(handle);
-  cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
-  blas(cublasSetStream(cublas, stream.value()));
+  cublasHandle_t cublas = cublas_on(handle);
   blas(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST));
   const lower_symmetric a = promoted(m, d);
   const buffer<double> g = to_device(a.matrix, stream);
@@ -198,13 +185,12 @@ std::optional<ritz::spectrum_interval> window_spectrum(
     return std::nullopt;
   }
   const rmm::cuda_stream_view stream = stream_of(handle);
-  cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
-  blas(cublasSetStream(cublas, stream.value()));
+  cublasHandle_t cublas = cublas_on(handle);
   blas(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST));
   const std::vector<double> v(w.basis.begin(), w.basis.begin() + (k * d));
   const std::vector<double> av(w.applied.begin(), w.applied.begin() + (k * d));
-  const double grown = (1.0 + rounded(static_cast<double>((d * k) + 2))) *
-                       (1.0 + rounded(host_steps));
+  const double grown = (1.0 + rounding(static_cast<double>((d * k) + 2))) *
+                       (1.0 + rounding(host_steps));
   const double vf = frobenius(v) * grown;
   const double af = frobenius(av) * grown;
   const double hf = frobenius(h) * grown;
@@ -212,7 +198,7 @@ std::optional<ritz::spectrum_interval> window_spectrum(
   const double eta = t->eta;
   const double shift =
       ((std::sqrt(1.0 + eta) * drift) +
-       (rounded(static_cast<double>(d)) * vf * af) + (rounded(1.0) * hf)) *
+       (rounding(static_cast<double>(d)) * vf * af) + (rounding(1.0) * hf)) *
       grown;
   const double floor = ritz::outward(
       ritz::outward(windowed(hs->low - shift, eta), -infinite) - r.mean,
@@ -220,7 +206,7 @@ std::optional<ritz::spectrum_interval> window_spectrum(
   const double residual =
       std::sqrt(residual_squares(cublas, v, av, h, d, k, stream)) * grown;
   const double coupling = ritz::outward(
-      (((residual + (rounded(static_cast<double>(k + 1)) * (af + (vf * hf)))) +
+      (((residual + (rounding(static_cast<double>(k + 1)) * (af + (vf * hf)))) +
         drift) /
        std::sqrt(1.0 - eta) * grown) +
           r.mean,

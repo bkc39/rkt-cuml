@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
 
@@ -13,6 +14,9 @@ constexpr int64_t pass_chunk = 8;
 constexpr int64_t exact_run_rows = 1024;
 constexpr int64_t staged_floats = int64_t{1} << 23;
 constexpr int64_t block_floats = int64_t{1} << 22;
+constexpr double float32_roundoff = 0x1p-24;
+constexpr double float64_roundoff = 0x1p-53;
+constexpr double infinite = std::numeric_limits<double>::infinity();
 
 enum class gram_path : std::uint8_t { none, certified, enclosed, ritz, exact };
 
@@ -81,6 +85,10 @@ struct ritz_pair {
   std::vector<double> vector;
   std::vector<double> applied;
 };
+
+double rounding(double k);
+
+double single_rounding(double k);
 
 double outward(double x, double toward);
 
