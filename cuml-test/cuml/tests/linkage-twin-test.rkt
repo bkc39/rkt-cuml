@@ -18,7 +18,7 @@
                   permuted-rows
                   result->lists
                   two-far)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
+         (only-in "private/python-env.rkt" test-twin twin-default-params twin-results))
 
 (define-runtime-path twin "python/linkage_twin.py")
 
@@ -77,13 +77,12 @@
 
 (test-twin "single-linkage-fit's labels and children equal cuML's; its tree is scipy's; its cuts sklearn's"
   (define all (runs))
-  (match-define (hash-table ('results results) ('version version))
-    (run-twin twin
-              (hasheq 'cases (append (map (lambda (r) (case-of "fit" r)) all)
-                                     (map (lambda (r) (case-of "scipy" r)) all)
-                                     (map (lambda (r) (case-of "sklearn" r)) all)))))
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
+  (define results
+    (twin-results twin
+                  (append (map (lambda (r) (case-of "fit" r)) all)
+                          (map (lambda (r) (case-of "scipy" r)) all)
+                          (map (lambda (r) (case-of "sklearn" r)) all))
+                  #:expected-cuml libcuml-version))
   (define-values (cuml-results rest) (split-at results (length all)))
   (define-values (scipy-results sklearn-results) (split-at rest (length all)))
   (define outcomes
@@ -130,10 +129,7 @@
           (count outcome-agree? outcomes)))
 
 (test-twin "cuml.AgglomerativeClustering's default parameters are single-linkage-params'"
-  (match-define (hash-table ('results (list theirs)))
-    (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped (twin-params theirs '(handle)))
+  (define mapped (twin-default-params twin '(handle)))
   (define ours (single-linkage-params))
-  (printf "twin params: ~s\n" theirs)
   (check-equal? mapped ours)
   (check-equal? (estimator-params (agglomerative-clustering)) ours))

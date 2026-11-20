@@ -2,17 +2,11 @@
 parameters the Racket side used; sklearn.cluster.DBSCAN fits the cosine
 cases, since cuml 26.08 normalises cosine input by column."""
 
-import json
-import sys
-
 import numpy as np
 from sklearn.cluster import DBSCAN
+from twin_common import host, params_of, run
 
 import cuml
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
 
 
 def fit(case):
@@ -58,18 +52,5 @@ def sklearn_fit(case):
     }
 
 
-def params(case):
-    return cuml.DBSCAN().get_params()
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {"fit": fit, "sklearn_fit": sklearn_fit, "params": params}
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": cuml.__version__}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run({"fit": fit, "sklearn_fit": sklearn_fit, "params": params_of(cuml.DBSCAN)})
