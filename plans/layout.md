@@ -1641,7 +1641,7 @@ Follow-ups are GitHub issues.
   5e-8 for a column of mean 2²⁰ and unit sd over 1e6 rows. The |μ̂_k| term
   is loose when a column is constant but for light rows: X = (0 1; 1 1;
   2 1; 3 5) with weights (3, 3, 3, 2⁻¹⁴⁸) has κ′ ≈ 1, but s₂² ≈ 2¹⁴⁸/16
-  made ε_μ ≈ 1e13 and the check refused it. When ε_μ exceeds ε_G/8, one
+  made ε_μ ≈ 5e14 and the check refused it. When ε_μ exceeds ε_G/8, one
   more float64 pass computes r̂_k = Σw(x_k − μ̂_k); δ_k = r_k/W exactly
   and |r̂_k − r_k| ≤ γ_{n+2}·Σw|x_k − μ̂_k| ≤ γ_{n+2}·√(W·σ′_k²), so
   |δ_k| ≤ (|r̂_k| + γ_{n+2}·√(W·σ′_k²))/W, and the smaller bound is used
@@ -1654,7 +1654,8 @@ Follow-ups are GitHub issues.
   r4's soundness table may have loaded a stale library (its script staged
   a saved copy, not the head build); the r5 and r6 re-runs read the
   loaded library's sha256 from `/proc/self/maps` in every probe process
-  (r6: f59bdee4, the nix build of the head, the same as the staged copy).
+  (r6: fdf24ca1, the nix build of the head, the same as the staged copy;
+  every count below was the same on f59bdee4).
   The gtest probes link a local build of the same sources. Every refusal
   below came from a Rayleigh quotient past the threshold or a failed
   proof, so no proof was asked to refuse:
@@ -1687,8 +1688,8 @@ Follow-ups are GitHub issues.
   B = 0, 3, 10, 40, exact x₂ = x₀ + x₁ − x₃, n = 8000) and correlated ones
   (x_j = f + s·z_j, s = 0.05, 0.3, n = 20000) at d = 100, 500, 1000, 2000;
   eigenvalue errors were at most 1.2·√d·u₃₂·μ_max. At 8000×2000, B = 10
-  (λ_max ≈ 1980) ε_eig is 0.085 against ε_G = 1.7e-4, which is the term r2
-  lacked (p18). ε_eig is measured, not proven, so it only plans: it sets the a-priori
+  (λ_max ≈ 1980) ε_eig is 0.085 against r2's ε_G of 1.7e-4, which is the term r2
+  lacked (p18; the proven ε_G there is 0.12). ε_eig is measured, not proven, so it only plans: it sets the a-priori
   label and the window's reach, and never accepts; nor does any rounding
   model. The check then decides
   in four steps. **Certify:** when μ₁ > ε = ε_G + ε_eig and twice
@@ -1788,7 +1789,8 @@ Follow-ups are GitHub issues.
   (3.5) and (4.4) its error is at most
   ((1 + γ_{m₆₄+10})(1 + γ_R) − 1)·‖Z‖_F² + γ₃·(1 + ·)·max G_kk + ε_μ
   (γ in u₆₄, the 10 for the float64 staging, R = ⌈n/m₆₄⌉ + 1,
-  `exact_error`), about 1.2e-13·d at 1e6 rows. A float64 `Dsyevd` with
+  `exact_error`), about 2.2e-13·d at 1e6 rows (γ₁₀₃₄ compounded with γ_R,
+  R = 978). A float64 `Dsyevd` with
   vectors and the same enclosure bound its spectrum; the exact path
   accepts when twice (λ_max + ε)/(λ_min − ε) is under the threshold, and
   otherwise refuses with the larger of the `Dsyevd` ratio and the
@@ -1896,14 +1898,15 @@ Follow-ups are GitHub issues.
   The fit at 1e7 rows fails in cuSOLVER at r5 and r6 alike, with or
   without the check, so those rows have no fit time. The check's share of
   the fit is check/(fit − check): 51% at s = 0.01 and 0.03 (r5: 152%),
-  22% at 2e5×1000 (#140 stays open, path unchanged), 6% or less elsewhere
-  at 1e6 rows; 1e7×10 (#146) is unchanged at 4.4 ms. s = 0.01 and 0.03
+  22% at 2e5×1000 (#140 stays open, path unchanged), 9% or less elsewhere
+  at 1e6 rows (8.8% at 1e6×2) but for the refused all-levels one-hot
+  (75%, a fit that stops at the check); 1e7×10 (#146) is unchanged at 4.4 ms. s = 0.01 and 0.03
   moved from Ritz to exact and got three times cheaper: the batched
   float64 Gram costs 75 ms at 1e6×100 against 312 ms for r5's blocked
-  `Dsyrk`, so the plan now prices a 99-vector pass (218 ms) above it.
+  `Dsyrk`, so the plan now prices a 99-vector pass (216 ms) above it.
   Before the refit those shapes took the Ritz window and the block bound
   certified them (231 ms, same κ′). The proven ε_G at d = 100 is about
-  1.5e-3 of the trace, above λ_min there, so no certificate or enclosure
+  1.5e-3 (1.5e-5 of the trace), above λ_min there, so no certificate or enclosure
   exists. r4's measurements: at 1e6×100 the stages were moments 2.3,
   blocked Gram 4.0, `Ssyevd` 1.2. At d ≤ 16 the Gram is one shared-memory
   pass over X (`block_gram.cu`), 1.9 ms at 1e7×10 against 4.5 ms for the
