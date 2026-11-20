@@ -13,7 +13,7 @@
 (test-twin "the hyperparameters are cuML-Python's but copy, with two departures"
   (match-define (list theirs) (twin-results (list (hasheq 'op "params"))))
   (define mapped
-    (for/hasheq ([(key value) (in-hash (twin-params theirs '(copy)))])
+    (for/hasheq ([(key value) (in-hash (twin-params theirs #:unbound '(copy)))])
       (values (hash-ref renames key key) value)))
   (check-equal? (hash-ref mapped 'tol) 1e-7)
   (check-equal? (hash-ref mapped 'solver) 'auto)

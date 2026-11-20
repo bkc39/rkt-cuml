@@ -39,7 +39,7 @@
   (match-define (cons first-case _) twin-cases)
   (match-define (list theirs) (twin-results (list (list "params" first-case 'float64 'full))))
   (define mapped
-    (for/hasheq ([(key value) (in-hash (twin-params theirs '(random-state)))])
+    (for/hasheq ([(key value) (in-hash (twin-params theirs #:unbound '(random-state)))])
       (values (hash-ref renames key key) value)))
   (check-equal? (hash-ref mapped 'tol) 1e-7)
   (check-equal? (hash-set mapped 'tol 0.0) (tsvd-params)))

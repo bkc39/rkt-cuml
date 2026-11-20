@@ -114,7 +114,7 @@
 (define (twin-default-params script #:unbound [unbound '()] #:expected-cuml [expected #f])
   (match-define (list theirs)
     (twin-results script (list (hasheq 'op "params")) #:expected-cuml expected))
-  (twin-params theirs unbound))
+  (twin-params theirs #:unbound unbound))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped (force twin-skip) name body ...))
@@ -133,7 +133,7 @@
     [(? string?) (string->symbol (string-replace value "_" "-"))]
     [_ value]))
 
-(define (twin-params theirs unbound)
+(define (twin-params theirs #:unbound [unbound '()])
   (for*/hasheq ([(key value) (in-hash theirs)]
                 [name (in-value (twin-key key))]
                 #:unless (memq name (append unbound-twin-params unbound)))

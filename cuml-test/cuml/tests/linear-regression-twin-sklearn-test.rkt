@@ -118,5 +118,5 @@
 
 (test-twin "the defaults match Python cuML's"
   (match-define (list theirs) (results (list (hasheq 'op "params"))))
-  (check-equal? (twin-params theirs '(copy-X)) (hasheq 'algorithm 'auto 'fit-intercept #t))
+  (check-equal? (twin-params theirs #:unbound '(copy-X)) (hasheq 'algorithm 'auto 'fit-intercept #t))
   (check-equal? (linear-regression-params) (hasheq 'algorithm 'auto 'fit-intercept #t)))
