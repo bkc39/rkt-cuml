@@ -129,7 +129,7 @@
           (count outcome-agree? outcomes)))
 
 (test-twin "cuml.AgglomerativeClustering's default parameters are single-linkage-params'"
-  (define mapped (twin-default-params twin #:unbound '(handle)))
+  (define mapped (twin-default-params twin))
   (define ours (single-linkage-params))
   (check-equal? mapped ours)
   (check-equal? (estimator-params (agglomerative-clustering)) ours))
