@@ -122,7 +122,8 @@ post-solve scans, header-only so the gtests reach them, and
 `spectral_residual.{hpp,cu}` the graph path's eigen-residual and weight span
 (B3-y), compiled into the gtests too. The linear-model family also reads
 cuML's header-only qn solver (`cpp/src/glm/qn/`, the flake's `cumlSrc`, passed
-as `CUML_SOURCE_DIR`): `weighted_softmax.cuh` adapts its softmax loss to read
+as `CUML_SOURCE_DIR`, which `nix develop` exports; configure fails unless its
+`VERSION` is the linked libcuml's): `weighted_softmax.cuh` adapts its softmax loss to read
 the row weights, and `logistic_softmax.{hpp,cu}` runs it under qn's own
 L-BFGS/OWL-QN (`qn_fit`) for a weighted fit of 3 or more classes (#124); every
 other fit calls libcuml's `qnFit`.
@@ -354,7 +355,8 @@ cmake -S shim -B shim/build -G Ninja -DBUILD_TESTING=ON   # the shims' inner loo
 `nix develop` exports `CUML_SHIM_TESTS`, `CUML_SHIM_SANITIZED_TESTS` (the
 gtests built with `-DCUMLRKT_SANITIZE=ON`), `CUML_ASAN_OPTIONS`,
 `CUML_UBSAN_OPTIONS`, `CUML_CUDA_DRIVER_PATH`,
-`CUML_RAPIDS_PREFIX`, `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH`,
+`CUML_RAPIDS_PREFIX`, `CUML_SOURCE_DIR` (cuML's `cpp/src`, for the shims' inner
+loop), `CUML_NATIVE_LIB_PATH`, `RAFT_NATIVE_LIB_PATH`,
 `GLMNET_NATIVE_LIB_PATH` (the glmnet oracle's Fortran library) and
 `RAFT_SHIM_PROBE` (rkt-raft's probe library, which the memory test reads the
 pool through) and `CUML_SHIM_PROBE` (the test-only `libcumlrkt_probe.so`,

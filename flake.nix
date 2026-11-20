@@ -716,6 +716,7 @@
             treefmtEval.config.build.wrapper
           ]
           ++ cudaDevLibs;
+          CUML_SOURCE_DIR = "${cumlSrc}/cpp/src";
           shellHook = inCheckout (
             gpuHook + racketHome + provisionRacket + provisionTools + provisionResyntax
           );

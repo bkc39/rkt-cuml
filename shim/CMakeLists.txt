@@ -36,7 +36,6 @@ find_package(raftrkt CONFIG REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_library(CUML_LIBRARY NAMES cuml REQUIRED)
 find_path(CUML_INCLUDE_DIR cuml/version_config.hpp REQUIRED)
-find_path(CUML_SOURCE_DIR glm/qn/qn.cuh REQUIRED)
 
 add_library(cuml_runtime SHARED IMPORTED)
 set_target_properties(cuml_runtime PROPERTIES
@@ -99,6 +98,32 @@ cumlrkt_family(decomposition
         decomposition/tests/tsvd_refusal_test.cpp
         decomposition/src/pca_device.cu
 )
+
+# The weighted softmax compiles cuML's header-only qn solver, so its source
+# must be the release of the linked libcuml.
+find_path(CUML_SOURCE_DIR glm/qn/qn.cuh HINTS $ENV{CUML_SOURCE_DIR} REQUIRED)
+file(STRINGS "${CUML_INCLUDE_DIR}/cuml/version_config.hpp" cuml_version_defines
+  REGEX "^#define CUML_VERSION_(MAJOR|MINOR|PATCH) ")
+set(cuml_version)
+foreach(part MAJOR MINOR PATCH)
+  string(REGEX MATCH "CUML_VERSION_${part} ([0-9]+)" _ "${cuml_version_defines}")
+  set(n "${CMAKE_MATCH_1}")
+  if(NOT part STREQUAL "MAJOR" AND n LESS 10)
+    set(n "0${n}")
+  endif()
+  list(APPEND cuml_version "${n}")
+endforeach()
+list(JOIN cuml_version "." cuml_version)
+set(cuml_source_version_file "${CUML_SOURCE_DIR}/../../VERSION")
+set(cuml_source_version "none")
+if(EXISTS "${cuml_source_version_file}")
+  file(STRINGS "${cuml_source_version_file}" cuml_source_version LIMIT_COUNT 1)
+endif()
+if(NOT cuml_source_version STREQUAL cuml_version)
+  message(FATAL_ERROR
+    "cuML source ${CUML_SOURCE_DIR} is version ${cuml_source_version}, the "
+    "linked libcuml ${cuml_version}: bump cumlSrc in flake.nix to v${cuml_version}")
+endif()
 
 cumlrkt_family(linear_model
   SOURCES linear_model/src/linear_model.cpp
