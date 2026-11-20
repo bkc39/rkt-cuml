@@ -9,16 +9,9 @@
 
 (define names '(k j n))
 
-(define seeds
-  (cons 20261119
-        (match (getenv "CUML_LINT_FUZZ_SEED")
-          [#f '()]
-          [seed (list (string->number seed))])))
+(define seed 20261119)
 
-(define wanted
-  (match (getenv "CUML_LINT_FUZZ_COUNT")
-    [#f 250]
-    [count (string->number count)]))
+(define wanted 250)
 
 (define (pick choices)
   (list-ref choices (random (length choices))))
@@ -324,13 +317,13 @@
              #:unless (equal? racket lint))
     (list (list position (if (eq? failure read) 'failure-id 'other-name) racket lint) pattern pair)))
 
-(define (disagreements seed)
+(define (disagreements fuzz-seed count)
   (parameterize ([current-pseudo-random-generator (make-pseudo-random-generator)])
-    (random-seed seed)
+    (random-seed fuzz-seed)
     (let loop ([found '()]
                [patterns 0])
       (cond
-        [(< patterns wanted)
+        [(< patterns count)
          (define one (generate (add1 (random 3))))
          (define pattern (node-pattern one))
          (define bound
@@ -362,9 +355,28 @@
               same))
     (list kind (length same) 'smallest pattern 'failure-id failure 'read read)))
 
-(for ([seed (in-list seeds)])
+(define (run fuzz-seed count)
   (test-case (format
               "the copy check scopes a failure id as Racket does on ~a fuzzed patterns, seed ~a"
-              wanted
-              seed)
-    (check-equal? (smallest-by-kind (disagreements seed)) '())))
+              count
+              fuzz-seed)
+    (check-equal? (smallest-by-kind (disagreements fuzz-seed count)) '())))
+
+(module+ test
+  (run seed wanted))
+
+(module+ main
+  (require (only-in racket/cmdline command-line))
+  (define (positive-integer flag text)
+    (match (string->number text)
+      [(? exact-positive-integer? n) n]
+      [_
+       (raise-user-error 'failure-scope-fuzz-test
+                         "~a takes an exact positive integer, such as 3; given: ~a"
+                         flag
+                         text)]))
+  (define fuzz-seed (make-parameter seed))
+  (define fuzz-count (make-parameter wanted))
+  (command-line #:once-each [("--seed") n "random seed" (fuzz-seed (positive-integer "--seed" n))]
+                [("--count") n "patterns to fuzz" (fuzz-count (positive-integer "--count" n))])
+  (run (fuzz-seed) (fuzz-count)))
