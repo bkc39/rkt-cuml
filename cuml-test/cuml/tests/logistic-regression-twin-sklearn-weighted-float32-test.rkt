@@ -3,5 +3,5 @@
 (require (only-in "private/logistic-sklearn-twin.rkt" check-weighted-sklearn-twins)
          (only-in "private/python-env.rkt" test-twin))
 
-(test-twin "float32: weighted multiclass fits are as near sklearn's optimum as cuML's fit of the repeated rows"
+(test-twin "float32: weighted multiclass fits near sklearn's optimum"
   (check-weighted-sklearn-twins 'float32))
