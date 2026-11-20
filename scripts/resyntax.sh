@@ -107,16 +107,18 @@ if [ -n "$key" ] && [ "${RESYNTAX_NO_CACHE:-0}" != 1 ] && [ -e "$cache_dir/$key"
 fi
 
 echo "resyntax: analyzer timeout $timeout_ms ms"
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
 rc=0
-out=$(resyntax analyze "${suite[@]}" "${targets[@]}" --analyzer-timeout "$timeout_ms" 2>&1) || rc=$?
-echo "$out"
-listed=$(unanalysed <<<"$out")
+resyntax analyze "${suite[@]}" "${targets[@]}" --analyzer-timeout "$timeout_ms" >"$log" 2>&1 || rc=$?
+cat "$log"
+listed=$(unanalysed <"$log")
 report_unanalysed "$listed"
 if [ "$rc" -ne 0 ]; then
   echo "resyntax exited $rc without completing the analysis" >&2
   exit 1
 fi
-if grep -qE "resyntax: .*\.rkt:[0-9]+:[0-9]+ \[" <<<"$out"; then
+if grep -qE "resyntax: .*\.rkt:[0-9]+:[0-9]+ \[" "$log"; then
   echo "resyntax found refactoring suggestions; run: resyntax fix ${suite[0]} '${suite[1]}' ${suite[2]} ${targets[*]} --analyzer-timeout $timeout_ms" >&2
   exit 1
 fi
