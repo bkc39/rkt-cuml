@@ -120,5 +120,5 @@
                      device-ids))
 
 (test-twin "the parameters are Python's, but for random-state and build-algo"
-  (check-equal? (twin-default-params twin unbound #:expected-cuml libcuml-version)
+  (check-equal? (twin-default-params twin #:unbound unbound #:expected-cuml libcuml-version)
                 (hash-set* (umap-params) 'random-state #f 'build-algo 'auto)))

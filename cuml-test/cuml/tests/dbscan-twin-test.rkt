@@ -126,6 +126,6 @@
           equal-count))
 
 (test-twin "cuml.DBSCAN's default parameters are dbscan-params'"
-  (define mapped (twin-default-params twin '(algorithm calc-core-sample-indices)))
+  (define mapped (twin-default-params twin #:unbound '(algorithm calc-core-sample-indices)))
   (define ours (hash-remove (dbscan-params) 'out-dtype))
   (check-equal? mapped ours))

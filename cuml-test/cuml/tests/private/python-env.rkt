@@ -103,7 +103,7 @@
       (values key value)))
   (checked-results (run script request) #:expected-cuml expected))
 
-(define (twin-default-params script unbound #:expected-cuml [expected #f])
+(define (twin-default-params script #:unbound [unbound '()] #:expected-cuml [expected #f])
   (match-define (list theirs)
     (twin-results script (list (hasheq 'op "params")) #:expected-cuml expected))
   (twin-params theirs unbound))

@@ -44,5 +44,5 @@
                       handle))
 
 (test-twin "the parameters are Python's, but for random-state and n-neighbors"
-  (check-equal? (twin-default-params twin unbound #:expected-cuml libcuml-version)
+  (check-equal? (twin-default-params twin #:unbound unbound #:expected-cuml libcuml-version)
                 (hash-set* (tsne-params) 'random-state #f 'n-neighbors 90)))
