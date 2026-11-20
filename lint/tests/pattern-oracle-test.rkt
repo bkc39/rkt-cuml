@@ -228,7 +228,11 @@
                               (`(,@'(5) ,k) '(5 6) k)
                               (`#(,k ,b) (vector 5 6) k)
                               (`#(,k ...) (vector 5 6) k)
-                              (`#& ,k (box 5) k)))])
+                              (`#& ,k (box 5) k)
+                              (`#& (,@k ,a) (box '(5 6)) k)
+                              (`#& (,@k ,a) (box '(5 6)) a)
+                              (`#s(pt ,@k ,a) #s(pt 5 6) k)
+                              (`#s(pt ,@k ,a) #s(pt 5 6) a)))])
   (match-define (list pattern value name) row)
   (test-case (format "~s lets ~a win over a failure id of that name as racket/match does"
                      pattern
