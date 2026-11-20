@@ -95,9 +95,8 @@
     [(_ _) #f]))
 
 (define (match-accesses head items refused)
-  (match (match (match-form head)
-           [#f #f]
-           [layout (match-form-parts layout (cdr items) syntax->list)])
+  (define layout (match-form head))
+  (match (and layout (match-form-parts layout (cdr items) syntax->list))
     [(match-parts leading groups tail)
      (append (accesses leading refused)
              (append-map (lambda (group)
