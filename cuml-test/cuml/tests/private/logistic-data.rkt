@@ -34,6 +34,7 @@
          fit-flat
          fit-parts
          flat-matrix
+         gauged-case-fit
          gauged-fit
          gauged-sklearn
          penalty-settings
@@ -228,6 +229,18 @@
                           (centred-columns coef)
                           coef))
              (centred-vector intercept))]))
+
+(define (gauged-case-fit c
+                         #:C [C 1.0]
+                         #:sample-weight [w (on-vector (lr-case-w c) 'float64)]
+                         #:class-weight [class-weight #f])
+  (gauged-fit (fit-parts (case-fit c
+                                   'float64
+                                   #:C C
+                                   #:sample-weight w
+                                   #:class-weight class-weight
+                                   #:tol (tight-tol 'float64)
+                                   #:max-iter tight-max-iter))))
 
 (define (gauged-fit f #:centre-coef? [centre-coef? #t])
   (match-define (struct* lr-fit ([coef coef] [intercept intercept])) f)

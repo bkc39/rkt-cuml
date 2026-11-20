@@ -19,7 +19,7 @@
                   case-y
                   fit-flat
                   fit-parts
-                  gauged-fit
+                  gauged-case-fit
                   lr-case
                   lr-case-X
                   lr-case-name
@@ -194,12 +194,14 @@
 
 (define repeated-gap-bound 1e-6)
 
-(define (check-repeated c counts fit-weighted)
-  (define tol (tight-tol 'float64))
-  (define weighted (fit-parts (fit-weighted tol)))
-  (define spread
-    (fit-parts (case-fit (repeated-rows c counts) 'float64 #:tol tol #:max-iter tight-max-iter)))
-  (define gap (relative-gap (gauged-fit weighted) (gauged-fit spread)))
+(define (check-repeated c
+                        counts
+                        #:C [C 1.0]
+                        #:sample-weight [w (on-vector (lr-case-w c) 'float64)]
+                        #:class-weight [class-weight #f])
+  (define gap
+    (relative-gap (gauged-case-fit c #:C C #:sample-weight w #:class-weight class-weight)
+                  (gauged-case-fit (repeated-rows c counts))))
   (check-true (<= gap repeated-gap-bound) (format "gap ~a" gap)))
 
 (test-gpu "integer class weights fit as repeated rows"
@@ -207,17 +209,10 @@
   (for ([c (in-list (list unweighted-binary three unbalanced-three))]
         [times (in-list (list (hash 0 2 1 3) (hash 0 2 1 2 2 2) (hash 0 1 1 3 2 2)))])
     (test-case (lr-case-name c)
-      (check-repeated
-       c
-       (class-counts c times)
-       (lambda (tol)
-         (case-fit c 'float64 #:class-weight times #:tol tol #:max-iter tight-max-iter))))))
+      (check-repeated c (class-counts c times) #:class-weight times))))
 
 (test-gpu "integer sample weights with three classes fit as repeated rows"
-  (check-repeated row-weighted-three
-                  (lr-case-w row-weighted-three)
-                  (lambda (tol)
-                    (case-fit row-weighted-three 'float64 #:tol tol #:max-iter tight-max-iter))))
+  (check-repeated row-weighted-three (lr-case-w row-weighted-three)))
 
 (define (window-scale-gap-bound dt)
   (by-dtype dt (min (* 8 2e-3) 8e-2) (min (* 8 1e-6) 3e-2)))
