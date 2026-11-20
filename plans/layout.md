@@ -1800,7 +1800,8 @@ scratch, the source is `cpp/src/glm/qn/`.
   n_iter 16 against 9.
 - **F4 softmax weights.** `Softmax::getLossAndDZ` ignores the weights: k = 3
   weighted fits are the unweighted fit bit for bit, 3–6e-2 off the weighted
-  optimum.
+  optimum. Superseded by #124 (close-out B2): the shim's own weighted
+  softmax reads them.
 - **F5 gauge.** Softmax intercepts (always) and coefficients (l1, none) are
   fixed only up to a shift common to the classes: Σb = −0.44 (cuML) against
   0 (oracle, sklearn); centred intercepts agree to 5e-7.
@@ -1883,6 +1884,7 @@ scratch, the source is `cpp/src/glm/qn/`.
   (E6, ruled).
 - **L4-c.** With 3 or more classes the effective weights must be equal on
   every row of positive weight (#23); equal weights fold to unweighted.
+  Superseded by #124 (close-out B2): unequal weights are fitted.
 - **L4-d labels.** Integral device vectors (int32, int64, float32, float64)
   or host lists of reals, strings or symbols, encoded to sorted codes;
   predict gives y's kind back. Host reals are made exact integers once,
@@ -1908,7 +1910,7 @@ scratch, the source is `cpp/src/glm/qn/`.
   `penalty-normalized` the penalty is multiplied by the row count, as in Python
   cuML; `'balanced` weighs class c by W/(k·W_c), and a class missing from a
   class-weight hash weighs 1; with 3 or more classes the weights must be equal
-  on every row (#23); defaults are Python cuML's (scikit-learn's max-iter is 100);
+  on every row (#23; lifted by #124); defaults are Python cuML's (scikit-learn's max-iter is 100);
   "large fits" in the reference means more than a few hundred rows (L4-h).
 - **L4-f′.** No warm restarts in L4.
 - **L4-g.** At max-iter n-iter = max-iter and the check decides.
@@ -2042,6 +2044,39 @@ scratch, the source is `cpp/src/glm/qn/`.
     (1.65× over change and line-search stops), short of the 2× bar, at
     0.16× the fit's iterations; each restart stops on the change test
     again (issuecomment-6985014426).
+- **Close-out B2 (#124, 2026-11-19).** Unequal weights with 3 or more
+  classes are fitted. `weighted_softmax.cuh` adapts cuML 26.08's
+  `glm_softmax.cuh` (lines 33-181): each row's loss term and dZ column
+  are multiplied by its L4-b weight w̃ = w·m/W, so the loss is
+  Σ w̃(lse − η_y)/N and the gradient (linearBwd's /N) is its derivative.
+  `logistic_softmax.cu` runs it under qn's own `qn_fit`
+  (L-BFGS/OWL-QN unchanged), read from the flake's `cumlSrc`; every other
+  fit, unweighted multiclass included, still calls libcuml's `qnFit`.
+  The check's K and the rescue's re-solves read the same w̃.
+  - Reduction: a gtest pins equal weights to cuML's `Softmax` bit for
+    bit, and the loss and gradient to a float64 host reference for
+    k ∈ {2, 3, 7} under unequal weights. The unweighted k=3 fit of
+    `logistic-regression-twin-bits-test` is unchanged bit for bit; at
+    f1f7ced and here its float32 and float64 fits print identically.
+  - S1: integer class weights (k=3, unbalanced classes) and per-row
+    integer sample weights fit as repeated rows within 1e-6.
+  - Twin: sklearn's saga does not converge under sample weights (seed 44,
+    l1, k=3: its K 0.083 against ours 5.6e-8), so the weighted twins
+    give sklearn the equivalent repeated rows. Over seeds 40-51 our
+    weighted fit's gap to it equals libcuml's unweighted fit of those
+    repeated rows (Python cuML's path) to 1e-15 in float64. That gap
+    exceeds T3's 1e-6 even unweighted for l1 and elastic net (float64
+    maxima 2.5e-6 l1 k=5, 5.7e-6 elastic net k=5, 8.4e-6 elastic net
+    k=3; float32 up to 4.4e-3 elastic net k=3, against 3.6e-3 for the
+    repeated rows), so the bound is the repeated rows' gap plus T3.
+  - Wine `'balanced`: raw wine is not stationary at sklearn's tight
+    balanced fit (its K 6.7e-6, ours 8.6e-6; gap 4.2e-4 float64,
+    2.2e-3 float32), so it is held to the default-tol cap; standardised
+    wine is within T3.
+  - Rescue: epoch-second timestamps with three classes and weights
+    1 + (i mod 3) are refused by the first solve (K 0.25 above 6.8e-3)
+    and fitted by the rescue; a rescue that re-solves unweighted fails
+    the check.
 - **Deviations accepted.** Missing classes weigh 1 (L4-r); house wording
   for the y length, negative weights, zero weight sum and #24; a
   column-reach cap in place of `shared_cap`; Racket refusals raise
