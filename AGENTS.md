@@ -393,7 +393,7 @@ wait below 30 GB available. Never two shim builds at once.
 
 ### Gates
 
-native, format, no-syntax-rule, no-raw-malloc, no-noqa, no-positional-access, gpu-suite-signals,
+native, format, no-syntax-rule, no-raw-malloc, no-noqa, no-twin-copies, no-positional-access, gpu-suite-signals,
 gate-constants, layout, pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
@@ -446,7 +446,11 @@ Its times on a loaded host (#128), the first four past the 120 s default, so ski
 `cuml-glmnet-test`, except a name the file binds itself: read a test table's rows with
 `match-define` or `match-lambda`. `lint/tests/positional-access-test.rkt` and
 `pattern-oracle-test.rkt` hold the exact cases, and its flake check runs the
-script under the flake's racket (`racketGate`). The
+script under the flake's racket (`racketGate`).
+`no-twin-copies` refuses, under `cuml-test`, a `def host(` or `json.dump(` in a `.py` file other than
+`python/twin_common.py`, and a quoted `"26.08.00"` or `"1.8.0"` outside `private/python-env.rkt`;
+`scripts/no-twin-copies-test.rkt` runs it on the fixture tree `scripts/fixtures/no-twin-copies`
+(the `test` gate and the `racket` flake check). The
 `racket-review` flake check builds the package build's Racket home
 (`installRacketHome`), Resyntax with its catalog dependencies
 (`resyntaxSources` in `nix/racket-tools.nix`, at the devshell's
