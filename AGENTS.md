@@ -29,7 +29,7 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-decomposition-lib/` | cuml-decomposition-lib | `cuml/decomposition` (`pca-params`, `pca-fit`, `pca-transform`, `pca-inverse-transform`, `pca-fit-transform`, and the `pca-result` struct; `tsvd-params`, `tsvd-fit`, `tsvd-transform`, `tsvd-inverse-transform`, `tsvd-fit-transform`, and the `tsvd-result` struct), `cuml/decomposition/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_decomposition.so`) |
 | `cuml-manifold-lib/` | cuml-manifold-lib | `cuml/manifold` (`umap-params`, `umap-fit`, `umap-transform`, `umap-fit-transform`, the `umap-result` struct, `tsne-params`, `tsne-fit`, `tsne-fit-transform`, the `tsne-result` struct, `spectral-embedding-params`, `spectral-embedding-fit`, `spectral-embedding-fit-graph`, `spectral-embedding-fit-transform` and the `spectral-embedding-result` struct), `cuml/manifold/private/` (the bodies, their `/who` forms, `curve.rkt`'s a, b fit, `support.rkt`'s `drawn-seed`, `finite-real?`, `metric-code`, `rows-of` and `boolean->int` (from `hyperparameters.rkt`), shared by UMAP, t-SNE and spectral embedding, and the loader of `libcumlrkt_manifold.so`) |
 | `cuml-linear-model-lib/` | cuml-linear-model-lib | `cuml/linear-model`: for each of `linear-regression`, `ridge`, `lasso` and `elastic-net`, its `-params` table, `-fit`, `-predict` and `-result` struct; `logistic-regression`'s table, `-fit`, `-decision-function`, `-predict`, `-predict-proba`, `-predict-log-proba` and `-result`; `mbsgd-regressor`'s table, `-fit`, `-predict` and `-result`; `mbsgd-classifier`'s table, `-fit`, `-decision-function`, `-predict` and `-result` |
-| `cuml-linear-model-lib/` (private) | cuml-linear-model-lib | `cuml/linear-model/private/`: the bodies and their `/who` forms; `glm.rkt`'s `glm-predict`, `flag`, `intercept-flag`, `alpha-value`, `real-value` and `bounded-count`, shared by the linear models; `elastic-net.rkt`'s `define-cd-result`, each coordinate-descent result struct with its predict; `labels.rkt`, the label kinds, codes and class views logistic regression and the MBSGD classifier share; `mbsgd.rkt`, both MBSGD estimators over one `sgdFit` job; the loader of `libcumlrkt_linear_model.so` |
+| `cuml-linear-model-lib/` (private) | cuml-linear-model-lib | `cuml/linear-model/private/`: the bodies and their `/who` forms; `glm.rkt`'s `glm-predict`, `flag`, `intercept-flag`, `alpha-value`, `real-value` and `bounded-count`, shared by the linear models; `elastic-net.rkt`'s `define-cd-result`, each coordinate-descent result struct with its predict; `labels.rkt`, the label kinds, codes and class views logistic regression and the MBSGD classifier share (a device y's classes come from the shim's `label_classes`, run only for a class-weight hash on at least one row, so a one-row y meets the same class-weight refusals as a host y before the shim's two-row minimum, `min_rows` in `min_rows.hpp`; tests count those jobs by parameterizing `current-label-classes-job`); `mbsgd.rkt`, both MBSGD estimators over one `sgdFit` job; the loader of `libcumlrkt_linear_model.so` |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` and `define-predictor` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, `spectral-embedding`, `linear-regression`, `ridge`, `lasso`, `elastic-net`, `logistic-regression`, `mbsgd-regressor`, `mbsgd-classifier`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
@@ -282,8 +282,44 @@ For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
   admits an l1 or elastic-net fit oscillating about a zero optimum. The
   floor (1e-12·F_start + 10·ε_T²·mean(y²), classifier 1e-12·F_start) admits
   a constant y. The gate catches blow-ups and fits ending above
-  F_start·1.025 + A, A at most 4·F_start for the classifier under l1 or
-  elastic-net and uncapped for the regressor (#134; L5-d, F10-C).
+  F_start·1.025 + A, A at most 4·F_start for the classifier and
+  0.25·max(1, k/800)·F_start for the regressor under l1 or elastic-net;
+  where F_start ≤ m·floor, m 32 in float64 and 1 in float32 (round-off: a
+  constant y, whatever its mean's rounding), A is at most 0.25·mean(y²),
+  the zero model's loss without an intercept. With fit-intercept a
+  regressor's l1 or elastic-net fit at round-off is instead judged against
+  b = ȳ, w = 0: it is refused, "y is constant to round-off and ...; lower
+  #:eta0 or #:alpha", unless every |w| ≤ 2·eta0·α·r, two penalty steps,
+  and |b − ȳ| ≤ 1e-6·|ȳ|. At round-off with fit-intercept a regressor
+  under any penalty is also refused, "y is constant to round-off and the fit's predictions
+  are off by …; lower #:eta0 or #:alpha" ("lower #:eta0" without an l1
+  share), when √loss > 2⁻¹⁰·|ȳ| + √floor, loss the unpenalised mean
+  squared error. Under none, l2 or elastic net with l1-ratio 0 the
+  objective bound already implies this one (√loss ≤ 5.8·√floor in f64,
+  1.42·√floor in f32), so in practice only l1 and elastic-net fits meet
+  the message. R² there measures rounding, not the fit: a fit within a
+  few ε·|ȳ| of ȳ passes at any R² (f32 R² −2.08 at 6.2e-7·|ȳ|, f64 −1.84 at
+  4.4e-15·|ȳ|, pinned accepted in `mbsgd-gate-round-off-predictions-test`).
+  An l1 fit oscillates about a constant by about eta0·α·r·√d whatever
+  |ȳ|, so below |ȳ| ≈ 2¹⁰·eta0·α·r·√d (2e-4 at the defaults on
+  standardised X, d = 4) an inexactly fitted constant is refused by this
+  bound (f64 y ≡ 1.1e-4 pinned refused there).
+  The Racket tests restate `gate_floor_share`, `gate_round_off_factor`,
+  `gate_round_off_start` (per dtype), `round_off_coef_steps`,
+  `round_off_intercept_share` and `round_off_prediction_share` as literals
+  in `mbsgd-gate-data.rkt`; the `gate-constants` gate fails when they
+  differ from `mbsgd_checks.hpp`. An infinite objective is
+  refused whatever A. Above round-off a regressor whose loss without the
+  penalty ends above F_start·1.025 + min(floor, .025·F_start), a fit worse
+  than the zero model (with an intercept, in-sample R² below −.025 −
+  min(floor/F_start, .025), at worst −.05), is refused with "the loss rose
+  ...; lower #:eta0" (L5-d, F10-C, F10-R, F10-W). Before the solve, with
+  the sums the solver makes in X's dtype bounded in double: a y whose
+  F_start or floor is not finite, or with fit-intercept whose Σ|y| exceeds
+  a quarter of the dtype's largest value, is refused with "rescale y"; an
+  X column whose Σ|x| does, with or without fit-intercept, with "rescale X"; and
+  m·Σ|y − ȳ| above it (m = max|x|, doubled with fit-intercept) with
+  "rescale X or y", a bound stricter than needed when batch-size < n.
 - *mbsgd-labels.* Codes by sorted class, exactly 2 classes; `'hinge` trains
   on -1/+1; the `'log` and `'hinge` intercepts are a penalised ones column
   in the copy; predict thresholds the decision at 0 (`'log`, `'hinge`) or
@@ -350,8 +386,8 @@ wait below 30 GB available. Never two shim builds at once.
 
 ### Gates
 
-native, format, no-syntax-rule, no-raw-malloc, no-noqa, no-positional-access, gpu-suite-signals, layout,
-pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
+native, format, no-syntax-rule, no-raw-malloc, no-noqa, no-positional-access, gpu-suite-signals,
+gate-constants, layout, pkg-deps, review, compile, test, bindings, sanitizers, gpu, resyntax, docs,
 check: `.racket-dev.rktd`
 declares their commands for the racket-dev runner
 (`racket <plugin>/hooks/gate.rkt . all`), and `push-gates` is the pre-push
@@ -463,16 +499,18 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `linear-laws` | `staging-of` (the `staging` the fit solves in, on the shim's pre-scaled weights: each column's and y's power of two, the weights' power of four, which columns are kept, and κ and the outer bracket's ends of the kept, staged columns, L1-e), `centring-gamma` (γ_h of the device x̄, and of the unweighted ȳ, which has the same count, for a case's row count and weighting), `y-centring-gamma` (γ_(h_y) of the device ȳ: raft's strided G + 3 + s when weighted, coalesced s + 2 otherwise; refused above 2²⁹ rows), `check-oracle-laws` and `check-lstsq-fit` (T1 to T4 for one fit in the fit's staged coordinates, each law its own test case; T1 and T3 carry cuML's centring error, through κ̃′ and the capped C1 and C3, and T4 counts every rounding of the intercept's closed form, both with the device means' worst case for the row count, L1-e; `#:coef-centring? #f` drops C1 and `#:cap-scale` scales its Sherman–Morrison cap, for the host tests that need them), `check-prediction-law` |
 | `linear-centring-data` | the helpers `linear-laws-centring-test`, `linear-laws-centring-arms-test` and `linear-laws-centring-weighted-test` share: the float32 emulations of the shim's means (`medium-kernel-mean`, `strided-weighted-mean`, `serial-mean`), `weighted-mean`, the exact solves of a centred or moved problem (`centred-solve`, `moved-solve`), `failed-laws` (the T-laws a fit fails), `consistent`, `check-host-fit`, the bottom-eigenvector perturbations (`staged-bottom-vector`, `mean-radius`, `worst-y-epsilon`, `sherman-morrison-step`, `offset-grid`, `bottom-grid-fit`), `case-weights`, `case-staging` and `exact-norm` |
 | `real-linear-data` | the real-data cases (diabetes, mtcars, wine and breast-cancer from `datasets/core` by response, raw and standardised, unweighted and with seeded integer weights 1 to 4, in each dtype; each a `real-case` of the narrowed `lcase`, its exact `en-problem` and its `eigen-bracket`, made once per process; `real-lcase name arm dt` is one narrowed `lcase` alone; `offset-law-arms` is the offset arms by dtype on which the laws discriminate, L1-e), and their checks against the exact solve: `check-real-lstsq` (every algorithm), `check-real-ridge` (both solvers over the ridge path), `check-real-elastic-net` (lasso, l1-ratio 0.5 and 0.1 over α_max·10^(−3k/5), and zeros just above α_max), `check-real-score` (each estimator's score against the exact R² of its own predictions, within `r2-bound`) and `check-real-refusal` (l1-ratio 0 at the ridge path's start); `test-real-set name` takes `#:dtypes`, `#:arms` (pairs of raw, standardised or `(offset . k)` (every column plus 2^k) and unweighted or weighted) and `#:checks` (lstsq, ridge, elastic-net and score by default, and refusal), so a slow set splits across files |
-| `logistic-data` | the logistic-regression fixtures: `blob-case` (dyadic Gaussian blobs as an `lr-case`), `separable-case`, `with-column`, `scaled-case`, `case-fit`, `setting-fit`, `case-y`; `fit-parts` as an `lr-fit`, `fit-flat`, `coef-flat`, `scaled-parts`, `gauged-fit`, `gauged-sklearn`, `correct`; the shared `setting`s (`default-setting`, `penalty-settings`), `default-tol`, `tight-tol`, `default-tol-cap`, `cutoff-message` and `unequal-weights-message` |
+| `logistic-data` | the logistic-regression fixtures: `blob-case` (dyadic Gaussian blobs as an `lr-case`), `separable-case`, `with-column`, `scaled-case`, `case-fit`, `setting-fit`, `case-y`; `fit-parts` as an `lr-fit`, `fit-flat`, `coef-flat`, `scaled-parts`, `gauged-fit`, `gauged-sklearn`, `correct`; the shared `setting`s (`default-setting`, `penalty-settings`), `default-tol`, `tight-tol`, `default-tol-cap`, `cutoff-message`, `cutoff-exn?` and `unequal-weights-message` |
 | `logistic-twin-data` | `logistic-twin op c dt #:penalty #:C ...` (an `lr-case`'s payload for `python/logistic_regression_twin.py`), `setting-twin`, `logistic-twin-results`, `their-fit`; `twin-trial`, a twin test's row |
-| `logistic-oracle` | `residual-of X y w coef intercept #:penalty #:C #:l1-ratio #:fit-intercept #:tol #:dtype`: the check's residual, objective and bound recomputed in bigfloats from a returned point (without an intercept, each column's residual divided by the smaller of its centred and RMS spreads, as the shim's, once the centred spread is resolved in `dtype`) |
+| `logistic-twin-rows` | the split twin files' shared grid: `rows` (dtype × case × penalty × fit-intercept), `request`, `for-each-twin proc trials #:request` (one Python batch, then `proc` on each trial and its answer), `row-fit`, `row-name`, `repeatable?`, `classes-of`, `float32-binary-bound` |
+| `logistic-oracle` | `residual-of X y w coef intercept #:penalty #:C #:l1-ratio #:fit-intercept #:tol #:dtype`: the check's residual, objective and bound recomputed in bigfloats from a returned point (without an intercept, each column's residual divided by the smaller of its centred and RMS spreads, as the shim's, once the centred spread is resolved in `dtype`), `case-residual c parts s #:tol #:fit-intercept #:dtype` (the oracle residual of an `lr-case`'s fitted parts under a `setting`, the one the logistic tests share) |
 | `logistic-newton` | `newton-coef X y #:lam #:fit-intercept`: the unweighted binary optimum of the mean log-loss plus `lam`/2 times the squared coefficients (the intercept unpenalised), by undamped Newton in float64 from zero (at most 100 steps), for the coefficient gap of a fit |
 | `mbsgd-data` | the MBSGD fixtures: `normal-rows`, `tiled-rows` (distinct rows cycled, for large repeat cases), `reg-target`, `blob-rows` (two Gaussian blobs and their 0/1 labels, by minority share), `with-ones`; `reg-parts` and `clf-parts` (a result as coef list and intercept), `coef-gap`; the grids `penalties`, `learning-rates`, `dtype-penalties` |
 | `mbsgd-gate-data` | the `mbsgd-gate-*` tests' shared fixtures and checks: `grid-rows` and `grid-targets` (300×5 normal rows), `blobs` and `labels` (512×6 blobs), `rose eta0` (the objective-rose refusal's regexp), `check-classifier-rise loss` and `check-classifier-lower loss` (the blobs classifier at α 10, batch 1, refused at eta0 0.05 and passing at 0.01); the gate test is split across those files to keep each under the GPU suite's 45 s `--timeout` |
 | `mbsgd-twin-data` | `reg-fit`, `clf-fit`, `clf-result` (a fit at Python cuML's defaults overridden by a keyword hash), `overridden base more` (one keyword hash over another), `twin-request op dt X settings #:y #:codes #:loss #:seed` (a payload for `python/mbsgd_twin.py`), `mbsgd-twin-results`, `their-parts` |
 | `sgd-replay` | `sgd-replay X y #:loss ... #:n-iter-no-change`: the `sgdFit` schedule (minibatches, learning rates, penalties, the stop rule) on host floats without shuffling, returning a `replay` of coef, intercept, epochs run and the smallest relative margin of any stop test |
 | `real-mbsgd-data` | `diabetes #:standardise?`, `check-diabetes-twin`, `check-diabetes-gap` (the objective gap to the exact ridge optimum at alpha 1e-4), `check-breast-cancer dt` (train accuracy of the documented arms) |
-| `real-logistic-data` | `labelled-set name response excluded #:standardise?` (a `datasets/core` set as a `labelled`), `check-sklearn-optimum`, `check-raw-refusal` (the refusal, and Python cuML's point there off the optimum), `check-score` |
+| `real-logistic-data` | `labelled-set name response excluded #:standardise?` (a `datasets/core` set as a `labelled`; nothing is loaded at require time), `stationary-bound`, `residual-at r X y #:penalty #:fit-intercept` (a result's, over host rows), `check-stationary`, `check-sklearn-optimum`, `check-raw-refusal` (the refusal, and Python cuML's point off the optimum), `check-raw-rescued set capped refused` (capped arms within a cap of the pinned optimum, refused arms by the cutoff), `check-raw-optima` (each pinned optimum stationary), `raw-optima-settings` and `raw-optima-path` (`raw-logistic-optima.rktd`, written by `racket private/raw-logistic-optima.rkt`), `check-score`; float32 l2 takes the second-smallest gap of 5 fits |
+| `raw-breast-cancer` | `raw-breast-cancer`: the unstandardised breast-cancer set as a `labelled`, loaded when this module is required, so only the files that use it require it |
 | `elastic-net-twin-data` | the elastic-net twin's checks over `python/elastic_net_twin.py`: `check-raw-parity` (Python cuML, bit for bit) and `check-sklearn-parity` (scikit-learn, within sklearn-distance) |
 | `linear-refusal-rows` | the refusal rows linear-regression and ridge share: `shared-fit-rows go`, and `grid`, `targets`, `with-cell`, `with-element`, `overflow-X`, `overflow-y` |
 | `tsvd-data` | the truncated SVD fixtures (`normal-fixture`, `offset-fixture`, `duplicate-fixture`, `wide-fixture`, `zeros-fixture`, `twos-fixture`, `tie-fixture`, `law-fixtures`, `normal-rows-of`, and `householder-fixtures` with known spectra, each an `exact`), `tsvd-of` (a result's arrays as host lists in an `svd` struct), `exact-reference` (the float64 SVD's `reference`), `accuracy-problems` (L8's bounds, the failures as strings), `sign-matched` (a reference with each component's sign matched to a fit's, for the tie fixture), and the host oracles `host-transform`, `popvars` and `squared-norm` |

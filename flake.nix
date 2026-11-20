@@ -708,6 +708,7 @@
         no-noqa = grepGate "no-noqa" "no-noqa.sh";
         no-positional-access = racketGate "no-positional-access" "no-positional-access.sh";
         gpu-suite-signals = grepGate "gpu-suite-signals" "gpu-suite-signals.sh";
+        gate-constants = grepGate "gate-constants" "gate-constants.sh";
       };
 
       devShells.${system} = {

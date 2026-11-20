@@ -18,7 +18,8 @@
                   device-matrix?
                   device-vector->list
                   device-vector?
-                  dtype)
+                  dtype
+                  shape)
          (only-in raft/unsafe deposit->list)
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "glm.rkt"
@@ -258,11 +259,11 @@
   (match-define (list coef intercept) (deposit->list out))
   (mbsgd-regressor-result coef (scalar intercept)))
 
-(define (host-codes who kind y resources)
+(define (host-codes who kind rows y resources)
   (cond
     [(device-kind? kind) (values y #f)]
     [else
-     (define-values (codes classes _weights) (fit-labels/who who kind y #f resources))
+     (define-values (codes classes _weights) (fit-labels/who who kind rows y #f resources))
      (unless (= (length classes) 2)
        (logic-error "~a: y: expected exactly 2 classes, got ~a" who (length classes)))
      (values codes classes)]))
@@ -276,7 +277,8 @@
   (define kind (y-kind/who who y))
   (define code (coded who 'loss loss-code loss "one of 'hinge 'log 'squared-loss"))
   (define settings (sgd-settings/who who (bound-params mbsgd-classifier-params) (dtype X)))
-  (define-values (y-view classes) (host-codes who kind y resources))
+  (match-define (list rows _) (shape X))
+  (define-values (y-view classes) (host-codes who kind rows y resources))
   (define out (deposit-for/who who resources))
   (fit-job who resources X y-view out settings #:classifier (list (boolean->int classes) code))
   (match (deposit->list out)

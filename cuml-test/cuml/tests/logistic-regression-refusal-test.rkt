@@ -13,7 +13,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" host on-vector scaled-rows)
          (only-in "private/linear-data.rkt" on-matrix)
-         (only-in "private/logistic-data.rkt" unequal-weights-message)
+         (only-in "private/logistic-data.rkt" blob-case lr-case-X lr-case-y unequal-weights-message)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
@@ -23,6 +23,13 @@
 (define one-iteration-cutoff
   (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
                          "after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter$")))
+
+(define mixed-spread-cutoff
+  (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
+                         "after [0-9]+ iterations \\(max-iter 1000, tol 1e-04\\); "
+                         "standardise the columns$")))
+
+(define mixed-three (blob-case "mixed three" 90 3 3 8 #:scales '(1/256 1 256)))
 
 (define (tiny-last rows factor)
   (map (match-lambda
@@ -118,6 +125,13 @@
         "X: expected row-major, got col-major 6x3"
         (lambda () (go (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major) y)))
    (row "y length" "y: expected 6 elements, got 5" (lambda () (go X (on-vector '(0 1 0 1 1) 'int32))))
+   (row "y length before a NaN label, with a class-weight hash"
+        "y: expected 6 elements, got 5"
+        (lambda ()
+          (go X (on-vector (list 0.0 +nan.0 1.0 0.0 1.0) 'float64) #:class-weight (hash 0 2 1 1))))
+   (row "y length before a missing class, with a class-weight hash on a list"
+        "y: expected 6 elements, got 5"
+        (lambda () (go X '(0 1 0 1 7) #:class-weight (hash 0 2 1 1))))
    (row "non-integral label"
         "y: expected integral class labels, got 1.5"
         (lambda () (go X (on-vector '(0 1 0 1.5 1 0)))))
@@ -213,7 +227,15 @@
           (go (on-matrix (scaled-rows '((1 0) (0 1) (2 1) (3 0) (5 1) (4 0)) (expt 2 -124)) 'float32)
               (on-vector '(0 0 0 1 1 1) 'int32)
               #:penalty 'none)))
-   (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))))
+   (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))
+   (row "an iteration cutoff on columns of spreads 2^8 apart says raise max-iter"
+        one-iteration-cutoff
+        (lambda () (go (on-matrix (tiny-last grid 1000)) y #:max-iter 1)))
+   (row "a cutoff short of max-iter on columns of spreads 2^8 apart names standardising"
+        mixed-spread-cutoff
+        (lambda ()
+          (go (on-matrix (lr-case-X mixed-three) 'float64)
+              (on-vector (lr-case-y mixed-three) 'int32))))))
 
 (test-gpu "logistic-regression-fit refuses each row, the earlier fault first"
   (for ([r (in-list (append (racket-rows logistic-regression-fit)
