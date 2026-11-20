@@ -328,7 +328,10 @@
    (if (null? off-by-one) "none" off-by-one)))
 
 (test-twin "cuml.KMeans's default parameters are the estimator's"
-  (define theirs (twin-default-params twin #:unbound '(device-buffer-samples init-size)))
+  (define theirs
+    (twin-default-params twin
+                         #:expected-cuml libcuml-version
+                         #:unbound '(device-buffer-samples init-size)))
   (define mapped
     (hash-update (hash-remove theirs 'max-samples-per-batch)
                  'random-state
