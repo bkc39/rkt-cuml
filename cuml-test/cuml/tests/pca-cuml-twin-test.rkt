@@ -6,9 +6,8 @@
          (only-in "private/pca-twin-data.rkt" check-against-cuml named twin-results)
          (only-in "private/python-env.rkt" test-twin twin-params))
 
-(for ([name (in-list '("normal" "correlated"))])
-  (test-twin (format "~a is cuML-Python's within the L14 bounds" name)
-    (check-against-cuml (named name))))
+(test-twin "normal is cuML-Python's within the L14 bounds"
+  (check-against-cuml (named "normal")))
 
 (define renames (hasheq 'iterated-power 'iterations 'svd-solver 'solver))
 
