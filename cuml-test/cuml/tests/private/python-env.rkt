@@ -18,7 +18,6 @@
 (provide checked-results
          or-null
          python-cuml-version
-         run-cases
          run-twin
          test-python
          test-twin
@@ -79,9 +78,6 @@
     (unless ok?
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))
-
-(define (run-cases script cases)
-  (hash-ref (run-twin script (hasheq 'cases cases)) 'results))
 
 (define (checked-results answer #:expected-cuml [expected #f])
   (match answer

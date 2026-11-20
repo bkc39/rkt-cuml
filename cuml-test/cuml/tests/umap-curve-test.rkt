@@ -6,7 +6,7 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in "private/common-data.rkt" relative)
-         (only-in "private/python-env.rkt" run-cases test-twin))
+         (only-in "private/python-env.rkt" test-twin twin-results))
 
 (define-runtime-path twin "python/umap_twin.py")
 
@@ -24,10 +24,10 @@
 
 (test-twin "L4a, L4b: a and b are within the bounds of scipy's curve_fit and a precise solver"
   (define found
-    (run-cases twin
-               (for/list ([p (in-list pairs)])
-                 (match-define (cons s m) p)
-                 (hasheq 'op "ab" 'spread s 'min_dist m))))
+    (twin-results twin
+                  (for/list ([p (in-list pairs)])
+                    (match-define (cons s m) p)
+                    (hasheq 'op "ab" 'spread s 'min_dist m))))
   (for ([p (in-list pairs)]
         [theirs (in-list found)])
     (match-define (cons s m) p)
@@ -58,5 +58,6 @@
   (check-true (< (abs (- b 0.89506)) 1e-5)))
 
 (test-twin "scipy's departure at spread 1e-3, min-dist 1e-4 is pinned"
-  (match-define (list theirs) (run-cases twin (list (hasheq 'op "ab" 'spread 1e-3 'min_dist 1e-4))))
+  (match-define (list theirs)
+    (twin-results twin (list (hasheq 'op "ab" 'spread 1e-3 'min_dist 1e-4))))
   (check-true (< (abs (+ (hash-ref theirs 'b) 70.497)) 1e-3)))

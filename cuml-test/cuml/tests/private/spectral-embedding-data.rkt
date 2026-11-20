@@ -17,7 +17,7 @@
          (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
          (only-in "exact-algebra.rkt" dot)
-         (only-in "python-env.rkt" run-cases)
+         (only-in "python-env.rkt" twin-results)
          (only-in "scaler-data.rkt" bits-equal? transpose)
          (only-in "spectral-data.rkt"
                   graph
@@ -264,7 +264,7 @@
            [(list _ twin-case _) twin-case])
          entries))
   (for ([entry (in-list entries)]
-        [found (in-list (run-cases twin cases))])
+        [found (in-list (twin-results twin cases))])
     (match-define (list label _ check) entry)
     (test-case label
       (check (hash-ref found 'embedding)))))

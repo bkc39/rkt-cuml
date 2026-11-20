@@ -6,7 +6,7 @@
          racket/runtime-path
          (only-in rackunit check-equal? check-false check-true test-case)
          (only-in raft device-matrix->list* list->device-vector)
-         (only-in "private/python-env.rkt" run-cases test-twin twin-params)
+         (only-in "private/python-env.rkt" test-twin twin-default-params twin-results)
          (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/umap-data.rkt"
                   far-blobs
@@ -57,11 +57,11 @@
             (hasheq 'init init)
             #:y (list->device-vector y #:dtype 'int32))))
   (define theirs
-    (run-cases twin
-               (for/list ([c (in-list cases)]
-                          [r (in-list runs)])
-                 (match-define (list _ y) c)
-                 (case-of held-out-fit held-out-new (outcome-result r) #:y y))))
+    (twin-results twin
+                  (for/list ([c (in-list cases)]
+                             [r (in-list runs)])
+                    (match-define (list _ y) c)
+                    (case-of held-out-fit held-out-new (outcome-result r) #:y y))))
   (for ([c (in-list cases)]
         [r (in-list runs)]
         [found (in-list theirs)])
@@ -81,10 +81,10 @@
   (define (twin-of y)
     (twin-case overlap result #:y y))
   (match-define (list dense raw)
-    (run-cases twin
-               (list (twin-of (for/list ([i (in-range 600)])
-                                (modulo i 3)))
-                     (twin-of labels))))
+    (twin-results twin
+                  (list (twin-of (for/list ([i (in-range 600)])
+                                   (modulo i 3)))
+                        (twin-of labels))))
   (check-true (bits-equal? embedding (hash-ref dense 'embedding)) "dense codes")
   (check-false (bits-equal? embedding (hash-ref raw 'embedding)) "raw labels"))
 
@@ -94,7 +94,7 @@
 (test-twin "n-neighbors past the row count is Python's clamp, bitwise"
   (define result (umap-fit (fixture-X twelve) #:n-neighbors 20 #:init 'random))
   (define clamped (umap-fit (fixture-X twelve) #:n-neighbors 12 #:init 'random))
-  (match-define (list found) (run-cases twin (list (twin-case twelve result))))
+  (match-define (list found) (twin-results twin (list (twin-case twelve result))))
   (define embedding (device-matrix->list* (umap-result-embedding result)))
   (check-true (bits-equal? embedding (device-matrix->list* (umap-result-embedding clamped))))
   (check-true (bits-equal? embedding (hash-ref found 'embedding)))
@@ -116,6 +116,5 @@
                      device-ids))
 
 (test-twin "the parameters are Python's, but for random-state and build-algo"
-  (match-define (list theirs) (run-cases twin (list (hasheq 'op "params"))))
-  (check-equal? (twin-params theirs unbound)
+  (check-equal? (twin-default-params twin unbound)
                 (hash-set* (umap-params) 'random-state #f 'build-algo 'auto)))

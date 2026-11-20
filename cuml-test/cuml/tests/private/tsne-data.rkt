@@ -17,7 +17,7 @@
          (only-in raft device-matrix->list*)
          (only-in "blob-data.rkt" centred-blobs uniform-source)
          (only-in "estimator-data.rkt" apply-options)
-         (only-in "python-env.rkt" run-cases)
+         (only-in "python-env.rkt" twin-results)
          (only-in "scaler-data.rkt" bits-equal?)
          (only-in "umap-data.rkt" far-blobs finite-rows? fixture fixture-name fixture-rows fixture-X))
 
@@ -96,7 +96,8 @@
 
 (define (check-tsne-parity f configs #:neighbours [k #f])
   (define results (map (lambda (options) (apply-options tsne-fit options (fixture-X f))) configs))
-  (define theirs (run-cases twin (map (lambda (result) (tsne-case f result #:neighbours k)) results)))
+  (define theirs
+    (twin-results twin (map (lambda (result) (tsne-case f result #:neighbours k)) results)))
   (for ([options (in-list configs)]
         [result (in-list results)]
         [found (in-list theirs)])
@@ -125,7 +126,8 @@
 (define (check-sklearn fixtures)
   (define results (map (lambda (f) (tsne-fit (fixture-X f) #:method 'exact)) fixtures))
   (define references
-    (run-cases twin (map (lambda (f result) (tsne-case f result #:op "sklearn")) fixtures results)))
+    (twin-results twin
+                  (map (lambda (f result) (tsne-case f result #:op "sklearn")) fixtures results)))
   (for ([f (in-list fixtures)]
         [result (in-list results)]
         [reference (in-list references)])

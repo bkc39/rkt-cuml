@@ -8,7 +8,7 @@
          (only-in cuml/metrics trustworthiness)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
-         (only-in "private/python-env.rkt" run-cases test-twin)
+         (only-in "private/python-env.rkt" test-twin twin-results)
          (only-in "private/tsne-data.rkt" tsne-case twin wide-blobs)
          (only-in "private/umap-data.rkt" fixture-X))
 
@@ -22,7 +22,7 @@
   (define t (trustworthiness X (tsne-result-embedding result) #:n-neighbors 10))
   (check-true (>= t trust-floor) (format "trustworthiness ~a" t))
   (match-define (list theirs)
-    (run-cases twin (list (tsne-case wide-blobs result #:op "python-default"))))
+    (twin-results twin (list (tsne-case wide-blobs result #:op "python-default"))))
   (check-true (< (hash-ref theirs 'n_iter) 250)
               (format "Python's n_iter ~a" (hash-ref theirs 'n_iter)))
   (check-true (< (hash-ref theirs 'std) 1e-3) (format "Python's std ~a" (hash-ref theirs 'std))))

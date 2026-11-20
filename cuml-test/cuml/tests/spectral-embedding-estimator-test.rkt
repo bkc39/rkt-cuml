@@ -17,13 +17,12 @@
                   spectral-embedding-result-embedding
                   spectral-embedding-result?)
          (only-in racket/list make-list)
-         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" listed printed round-trips)
-         (only-in "private/python-env.rkt" run-cases test-twin twin-params)
+         (only-in "private/python-env.rkt" test-twin twin-default-params)
          (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/spectral-embedding-data.rkt"
                   column-gaps
@@ -105,7 +104,7 @@
   (check-true (<= (apply max (column-gaps one zero)) 1e-4) (format "~a" (column-gaps one zero))))
 
 (test-twin "the parameters are Python's, but for random-state 0 and the function-only keywords"
-  (match-define (list theirs) (run-cases twin (list (hasheq 'op "params"))))
-  (check-equal? (hash-set (twin-params theirs '()) 'random-state 0)
+  (define theirs (twin-default-params twin '()))
+  (check-equal? (hash-set theirs 'random-state 0)
                 (hash-remove (hash-remove (spectral-embedding-params) 'norm-laplacian) 'drop-first)
                 (format "~a" theirs)))
