@@ -17,9 +17,12 @@ namespace {
 using cumlrkt::glm::condition_estimate;
 using cumlrkt::glm::equilibrated_condition;
 using cumlrkt::glm::ritz::block_floor;
+using cumlrkt::glm::ritz::certified_kappa;
 using cumlrkt::glm::ritz::complement_floor;
 using cumlrkt::glm::ritz::enclosure_terms;
 using cumlrkt::glm::ritz::gram_path;
+using cumlrkt::glm::ritz::spectrum_interval;
+using cumlrkt::glm::ritz::widened;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
 
@@ -39,6 +42,9 @@ constexpr int64_t light_rows = 4;
 constexpr double light_kappa = 2.0;
 constexpr std::array<std::array<double, 3>, 4> blocks{
     {{1e-6, 1.0, 1e-4}, {1.0, 1e-6, 1e-4}, {0.5, 0.5, 0.25}, {1e-3, 2.0, 0.0}}};
+constexpr std::array<std::array<double, 2>, 3> rounded_ends{
+    {{1.0, 0x1p-60}, {0x1.8p0, 0x1.8p-58}, {0x1.fffffffffffffp-1, 0x1p-62}}};
+constexpr double third_low = 3.0;
 
 struct design {
   std::vector<double> x;
@@ -98,6 +104,21 @@ TEST(GramProof, TheBlockFloorIsTheTwoByTwosSmallestEigenvalue) {
     EXPECT_LE(floor, exact) << h << " " << b << " " << c;
     EXPECT_GE(floor, exact - (floor_slack * std::abs(exact))) << h << " " << b;
   }
+}
+
+TEST(GramProof, EveryIntervalEndRoundsOutward) {
+  for (const auto& [end, error] : rounded_ends) {
+    const spectrum_interval s = widened({end, end}, error);
+    const long double low = static_cast<long double>(end) - error;
+    const long double high = static_cast<long double>(end) + error;
+    EXPECT_LT(static_cast<long double>(end + error), high) << end;
+    EXPECT_GT(static_cast<long double>(end - error), low) << end;
+    EXPECT_LE(static_cast<long double>(s.low), low) << end << " " << error;
+    EXPECT_GE(static_cast<long double>(s.high), high) << end << " " << error;
+  }
+  const auto k = certified_kappa({third_low, 1.0}, 1.0);
+  ASSERT_TRUE(k.has_value());
+  EXPECT_GE(static_cast<long double>(*k), 1.0L / 3.0L);
 }
 
 TEST(GramProof, TheComplementFloorLeansOnTheBasissSkew) {

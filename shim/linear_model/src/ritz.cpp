@@ -66,13 +66,6 @@ double compounded(double a, double b) {
   return a + b + (a * b);
 }
 
-double outward(double x, double toward) {
-  for (int i = 0; i < outward_ulps; ++i) {
-    x = std::nextafter(x, toward);
-  }
-  return x;
-}
-
 gram_batch batch_of(gram_shape shape, int64_t run) {
   const auto [n, d] = shape;
   return {.run = run,
@@ -97,6 +90,17 @@ double pass_cost_ns(int64_t vectors, gram_shape shape) {
 }
 
 }  // namespace
+
+double outward(double x, double toward) {
+  for (int i = 0; i < outward_ulps; ++i) {
+    x = std::nextafter(x, toward);
+  }
+  return x;
+}
+
+spectrum_interval widened(spectrum_interval s, double error) {
+  return {outward(s.low - error, -infinite), outward(s.high + error, infinite)};
+}
 
 double dot(const double* a, const double* b, int64_t d) {
   return std::transform_reduce(a, a + d, b, 0.0);
@@ -244,7 +248,7 @@ std::optional<double> certified_kappa(spectrum_interval s, double limit) {
   if (!(s.low > 0)) {
     return std::nullopt;
   }
-  const double upper = s.high / s.low;
+  const double upper = outward(s.high / s.low, infinite);
   if (!(certified_margin * upper < limit)) {
     return std::nullopt;
   }
@@ -313,7 +317,7 @@ bool enclosure_pays(const std::vector<double>& values, double gram,
                     const gram_plan& plan, gram_shape shape, double limit) {
   const double reach = gram + expected_residual(values);
 
-  if (!certified_kappa({values.front() - reach, values.back() + reach},
+  if (!certified_kappa(widened({values.front(), values.back()}, reach),
                        limit)) {
     return false;
   }
@@ -336,7 +340,7 @@ gram_plan plan_of(const std::vector<double>& values, double gram,
   const double low = values.front();
   const double top = values.back();
   const double reach = window_reach * error;
-  if (const auto upper = certified_kappa({low - error, top + error}, limit)) {
+  if (const auto upper = certified_kappa(widened({low, top}, error), limit)) {
     return {gram_path::certified, 0, reach, *upper};
   }
   const double edge = low + reach;

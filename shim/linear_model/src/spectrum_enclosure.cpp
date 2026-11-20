@@ -27,7 +27,7 @@ constexpr double mirrored = 2.0;
 constexpr int64_t host_enclosure_columns = 16;
 constexpr double float64_roundoff = 0x1p-53;
 constexpr double host_steps = 16.0;
-constexpr int outward_ulps = 4;
+constexpr double infinite = std::numeric_limits<double>::infinity();
 
 double rounded(double k) {
   const double ku = k * float64_roundoff;
@@ -126,13 +126,6 @@ double residual_squares(cublasHandle_t cublas, const std::vector<double>& v,
   return squares(cublas, r);
 }
 
-double downward(double x) {
-  for (int i = 0; i < outward_ulps; ++i) {
-    x = std::nextafter(x, -std::numeric_limits<double>::infinity());
-  }
-  return x;
-}
-
 double windowed(double low, double eta) {
   return low >= 0 ? low / (1.0 + eta) : low / (1.0 - eta);
 }
@@ -221,17 +214,21 @@ std::optional<ritz::spectrum_interval> window_spectrum(
       ((std::sqrt(1.0 + eta) * drift) +
        (rounded(static_cast<double>(d)) * vf * af) + (rounded(1.0) * hf)) *
       grown;
-  const double floor = downward(windowed(hs->low - shift, eta) - r.mean);
+  const double floor = ritz::outward(
+      ritz::outward(windowed(hs->low - shift, eta), -infinite) - r.mean,
+      -infinite);
   const double residual =
       std::sqrt(residual_squares(cublas, v, av, h, d, k, stream)) * grown;
-  const double coupling =
+  const double coupling = ritz::outward(
       (((residual + (rounded(static_cast<double>(k + 1)) * (af + (vf * hf)))) +
         drift) /
        std::sqrt(1.0 - eta) * grown) +
-      r.mean;
-  const double complement = ritz::complement_floor(e.values, k, *t) - r.gram;
+          r.mean,
+      infinite);
+  const ritz::spectrum_interval outer =
+      ritz::widened({ritz::complement_floor(e.values, k, *t), s->high}, r.gram);
   return ritz::spectrum_interval{
-      ritz::block_floor({floor, complement, coupling}), s->high + r.gram};
+      ritz::block_floor({floor, outer.low, coupling}), outer.high};
 }
 
 std::optional<ritz::spectrum_interval> enclosed_spectrum(
@@ -255,7 +252,7 @@ std::optional<double> enclosed_kappa(const raft::handle_t& handle,
   if (!s) {
     return std::nullopt;
   }
-  return ritz::certified_kappa({s->low - gram, s->high + gram}, limit);
+  return ritz::certified_kappa(ritz::widened(*s, gram), limit);
 }
 
 }  // namespace cumlrkt::glm

@@ -82,6 +82,10 @@ struct ritz_pair {
   std::vector<double> applied;
 };
 
+double outward(double x, double toward);
+
+spectrum_interval widened(spectrum_interval s, double error);
+
 double dot(const double* a, const double* b, int64_t d);
 
 std::vector<double> combined(const std::vector<double>& columns, int64_t d,

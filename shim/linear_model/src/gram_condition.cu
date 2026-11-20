@@ -356,8 +356,7 @@ double exact_condition(const equilibration<T>& q, double error, double limit) {
   const std::optional<ritz::spectrum_interval> s =
       ritz::enclosure(e->values, enclosure_norms_of(q.handle, m, *e, d), d);
   if (s) {
-    if (const auto k =
-            ritz::certified_kappa({s->low - error, s->high + error}, limit)) {
+    if (const auto k = ritz::certified_kappa(ritz::widened(*s, error), limit)) {
       return *k;
     }
   }
