@@ -11,14 +11,18 @@
 #include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
 #include "ritz.hpp"
+#include "spectrum_enclosure.hpp"
 
 namespace {
 
 using cumlrkt::glm::condition_estimate;
 using cumlrkt::glm::equilibrated_condition;
+using cumlrkt::glm::window_errors;
+using cumlrkt::glm::window_spectrum;
 using cumlrkt::glm::ritz::block_floor;
 using cumlrkt::glm::ritz::certified_kappa;
 using cumlrkt::glm::ritz::complement_floor;
+using cumlrkt::glm::ritz::eigen_pairs;
 using cumlrkt::glm::ritz::enclosure_terms;
 using cumlrkt::glm::ritz::gram_path;
 using cumlrkt::glm::ritz::spectrum_interval;
@@ -45,6 +49,17 @@ constexpr std::array<std::array<double, 3>, 4> blocks{
 constexpr std::array<std::array<double, 2>, 3> rounded_ends{
     {{1.0, 0x1p-60}, {0x1.8p0, 0x1.8p-58}, {0x1.fffffffffffffp-1, 0x1p-62}}};
 constexpr double third_low = 3.0;
+constexpr int64_t window_columns = 4;
+constexpr std::array<double, window_columns> window_values{0x1p-7, 1.0, 2.0,
+                                                           3.0};
+constexpr double window_mean = 1e-3;
+constexpr double window_gram = 0.995;
+constexpr double window_slack = 1e-12;
+constexpr int64_t light_heavy_rows = int64_t{1} << 14;
+constexpr double light_pair_eps = 0x1p-12;
+constexpr float light_mean_weight = 0x1p-44F;
+constexpr float light_plain_weight = 0x1p-20F;
+constexpr double light_value = 5.0;
 
 struct design {
   std::vector<double> x;
@@ -176,6 +191,108 @@ TEST(GramProof, TheExactPathAcceptsOnlyOnItsEnclosure) {
       res, near_pair({tall_rows, pair_columns, near_eps}), refusal_kappa);
   EXPECT_LT(static_cast<double>(pair_kappa(near_eps)), refusal_kappa);
   EXPECT_EQ(e.path, gram_path::exact);
+  EXPECT_GE(e.kappa, refusal_kappa);
+}
+
+struct window_case {
+  std::vector<float> gram;
+  eigen_pairs pairs;
+  std::vector<double> basis;
+  std::vector<double> applied;
+  std::vector<double> crossed;
+};
+
+window_case diagonal_window() {
+  const int64_t d = window_columns;
+  window_case w{std::vector<float>(d * d, 0.0F),
+                {{window_values.begin(), window_values.end()},
+                 std::vector<double>(d * d, 0.0)},
+                std::vector<double>(2 * d, 0.0),
+                std::vector<double>(2 * d, 0.0),
+                {window_values.front(), 0.0, 0.0, window_values.back()}};
+  for (int64_t k = 0; k < d; ++k) {
+    w.gram[(k * d) + k] = static_cast<float>(window_values.at(k));
+    w.pairs.vectors[(k * d) + k] = 1.0;
+  }
+  w.basis[0] = 1.0;
+  w.basis[(2 * d) - 1] = 1.0;
+  w.applied[0] = window_values.front();
+  w.applied[(2 * d) - 1] = window_values.back();
+  return w;
+}
+
+spectrum_interval window_of(const resources& res, const window_case& w,
+                            window_errors r) {
+  const auto s =
+      window_spectrum(raftrkt::handle_of(res.handle), w.gram, w.pairs,
+                      {w.basis, w.applied, w.crossed, 1, 2}, r);
+  EXPECT_TRUE(s.has_value());
+  return s.value_or(spectrum_interval{0.0, 0.0});
+}
+
+TEST(GramProof, TheWindowBoundTakesEachErrorFromItsOwnTerm) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const window_case w = diagonal_window();
+  const double h = window_values.front();
+  const double beta = window_values.at(1);
+  const auto mean =
+      static_cast<double>(two_by_two(h - window_mean, beta, window_mean));
+  const spectrum_interval m = window_of(res, w, {0.0, 0.0, window_mean});
+  EXPECT_LE(m.low, mean);
+  EXPECT_GE(m.low, mean - window_slack);
+  const auto gram = static_cast<double>(two_by_two(h, beta - window_gram, 0));
+  const spectrum_interval g = window_of(res, w, {window_gram, 0.0, 0.0});
+  EXPECT_LE(g.low, gram);
+  EXPECT_GE(g.low, gram - window_slack);
+  EXPECT_GE(g.high, window_values.back() + window_gram);
+}
+
+struct light_column {
+  design x;
+  std::vector<float> w;
+};
+
+light_column light_pair(float weight) {
+  const int64_t n = light_heavy_rows + 1;
+  light_column c{{std::vector<double>(n * 3, 0.0), n, 3},
+                 std::vector<float>(n, 1.0F)};
+  for (int64_t i = 0; i < light_heavy_rows; ++i) {
+    c.x.x[i] = hadamard(i, 1);
+    c.x.x[n + i] = hadamard(i, 1) + (light_pair_eps * hadamard(i, 2));
+    c.x.x[(2 * n) + i] = 1.0;
+  }
+  c.x.x[(3 * n) - 1] = light_value;
+  c.w.back() = weight;
+  return c;
+}
+
+condition_estimate weighted_estimate(const resources& res,
+                                     const light_column& c) {
+  const std::vector<float> host(c.x.x.begin(), c.x.x.end());
+  const filled<float> x(res, host, {c.x.n * c.x.d});
+  const filled<float> w(res, c.w, {c.x.n});
+  return equilibrated_condition<float>(
+      raftrkt::handle_of(res.handle),
+      static_cast<const float*>(x.array.view.data),
+      static_cast<const float*>(w.array.view.data), c.x.n, c.x.d, 0.0F, true,
+      refusal_kappa);
+}
+
+TEST(GramProof, ALightColumnsMeanBoundPastLambdaMinStopsTheRitzProof) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const auto kappa = static_cast<double>(pair_kappa(light_pair_eps));
+  const condition_estimate plain =
+      weighted_estimate(res, light_pair(light_plain_weight));
+  EXPECT_EQ(plain.path, gram_path::ritz);
+  EXPECT_EQ(plain.window, 1);
+  EXPECT_GE(plain.kappa, kappa);
+  EXPECT_LT(plain.kappa, kappa * (1 + bound_slack));
+  const condition_estimate e =
+      weighted_estimate(res, light_pair(light_mean_weight));
+  EXPECT_EQ(e.path, gram_path::exact);
+  EXPECT_EQ(e.window, 1);
   EXPECT_GE(e.kappa, refusal_kappa);
 }
 

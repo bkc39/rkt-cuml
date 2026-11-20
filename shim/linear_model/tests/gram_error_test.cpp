@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -54,7 +55,7 @@ constexpr int64_t wide_columns = 100;
 constexpr int64_t kernel_blocks = 2;
 constexpr double rounding_lean = 0x1.fcp-18;
 constexpr double wide_lean = 0x1.fcp-16;
-constexpr int64_t wide_kernel_columns = 17;
+constexpr std::array<int64_t, 2> wide_kernel_columns{17, 512};
 constexpr int64_t mean_rows = 1000000;
 constexpr double mean_offset = 0x1p20;
 
@@ -173,11 +174,8 @@ TEST(GramError, TheNarrowKernelStaysWithinItsRunBound) {
   }
 }
 
-TEST(GramError, TheWideKernelStaysWithinItsRunBound) {
-  CUMLRKT_REQUIRE_GPU();
-  const resources res;
+void expect_wide_runs_within_their_bound(const resources& res, int64_t d) {
   const raft::handle_t& handle = raftrkt::handle_of(res.handle);
-  const int64_t d = wide_kernel_columns;
   const int64_t m = gram_run_rows(d);
   const gram_batch batch =
       wide_batch({kernel_blocks * cumlrkt::glm::ritz::gram_block_rows, d});
@@ -194,8 +192,20 @@ TEST(GramError, TheWideKernelStaysWithinItsRunBound) {
   const double exact = square * static_cast<double>(m);
   const double bound =
       gram_error({.runs = 1, .run_rows = m, .trace = exact, .diagonal = 0.0});
+  double worst = 0.0;
   for (const float part : to_host(parts, stream_of(handle))) {
-    EXPECT_LE(std::abs(static_cast<double>(part) - exact), bound);
+    worst = std::max(worst, std::abs(static_cast<double>(part) - exact));
+  }
+  EXPECT_LE(worst, bound) << d;
+}
+
+TEST(GramError, TheWideKernelStaysWithinItsRunBound) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  EXPECT_EQ(gram_run_rows(wide_kernel_columns.back()),
+            cumlrkt::glm::ritz::gram_block_rows);
+  for (const int64_t d : wide_kernel_columns) {
+    expect_wide_runs_within_their_bound(res, d);
   }
 }
 

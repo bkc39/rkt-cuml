@@ -1778,7 +1778,15 @@ Follow-ups are GitHub issues.
     ‖A′V_w − V_wH_w‖_F (one `Dgemm`, plus γ_{w+1} of its terms) plus
     ‖F‖, over √(1 − η).
   ε_μ is taken from h and added to c; the upper end is G̃'s enclosure plus
-  ε_G. The Ritz path accepts when twice their ratio is under the
+  ε_G. Every end an error is added to or taken from (h, β, c, the upper
+  end, the enclosed and exact intervals widened by ε_G) and the ratio
+  returned as κ′'s bound are rounded outward by 4 ulps (`outward` and
+  `widened` in `ritz.cpp`), so no end rests on round-to-nearest (gtest:
+  1 + 2⁻⁶⁰ rounds to 1). β never sets the floor end to end: the gap rule
+  puts μ_{w+1} at 2·(μ₁ + 16·ε) ≥ 32·ε_G, so a gtest of `window_spectrum`
+  on a diagonal G̃ pins its − ε_G (and h's − ε_μ, c's + ε_μ); a light row
+  (weight 2⁻⁴⁴) beside a near pair at κ′ = 2²⁶ makes ε_μ ≈ 8·λ_min, and the
+  Ritz proof fails and goes exact (accepted on Ritz at weight 2⁻²⁰). The Ritz path accepts when twice their ratio is under the
   threshold and otherwise goes exact. The c² term is second order: on a
   near pair beside two orthogonal columns (2¹⁴ rows, κ′ = 2²²) the bound is
   within 2⁻¹⁰ of κ′ (gtest). It fails where ‖F‖ reaches λ_min, about
