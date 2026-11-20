@@ -4,7 +4,11 @@
                      (only-in syntax/parse/pre expr id))
          (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters
+                  boolean->int
+                  bound-params
+                  define-codes
+                  define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
@@ -14,7 +18,8 @@
                   device-matrix?
                   device-vector->list
                   device-vector?
-                  dtype)
+                  dtype
+                  shape)
          (only-in raft/unsafe deposit->list)
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "glm.rkt"
@@ -182,7 +187,7 @@
                                             [n-iter-no-change n-iter-no-change]
                                             [random-state random-state]))
     settings)
-  (define seeded (if random-state 1 0))
+  (define seeded (boolean->int random-state))
   (define seed (or random-state 0))
   (match classifier
     [#f
@@ -254,11 +259,11 @@
   (match-define (list coef intercept) (deposit->list out))
   (mbsgd-regressor-result coef (scalar intercept)))
 
-(define (host-codes who kind y resources)
+(define (host-codes who kind rows y resources)
   (cond
     [(device-kind? kind) (values y #f)]
     [else
-     (define-values (codes classes _weights) (fit-labels/who who kind y #f resources))
+     (define-values (codes classes _weights) (fit-labels/who who kind rows y #f resources))
      (unless (= (length classes) 2)
        (logic-error "~a: y: expected exactly 2 classes, got ~a" who (length classes)))
      (values codes classes)]))
@@ -272,9 +277,10 @@
   (define kind (y-kind/who who y))
   (define code (coded who 'loss loss-code loss "one of 'hinge 'log 'squared-loss"))
   (define settings (sgd-settings/who who (bound-params mbsgd-classifier-params) (dtype X)))
-  (define-values (y-view classes) (host-codes who kind y resources))
+  (match-define (list rows _) (shape X))
+  (define-values (y-view classes) (host-codes who kind rows y resources))
   (define out (deposit-for/who who resources))
-  (fit-job who resources X y-view out settings #:classifier (list (if classes 1 0) code))
+  (fit-job who resources X y-view out settings #:classifier (list (boolean->int classes) code))
   (match (deposit->list out)
     [(list coef intercept) (mbsgd-classifier-result coef (scalar intercept) classes kind loss)]
     [(list coef intercept device-classes)

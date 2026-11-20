@@ -1,17 +1,21 @@
 #lang racket/base
 
 (require (only-in cuml/metrics silhouette-samples silhouette-score)
-         (only-in racket/list make-list)
+         (only-in racket/list last make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list dtype list*->device-matrix)
+         (only-in raft
+                  device-matrix->list*
+                  device-vector->list
+                  dtype
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" mean worst)
          (only-in "private/metrics-data.rkt"
                   bijection
                   four-blocks
                   four-blocks-labels
-                  labels-of
-                  mean
                   monotone-maps
                   overlap
                   overlap-labels
@@ -21,8 +25,7 @@
                   three-groups-labels
                   tolerance
                   wide-labels
-                  wide-rows
-                  worst))
+                  wide-rows))
 
 (define metrics '(euclidean sqeuclidean manhattan cosine chebyshev))
 (define float-dtypes '(float32 float64))
@@ -33,10 +36,11 @@
   (values (overlap dt #:each each) (overlap-labels #:each each)))
 
 (define (samples X ys #:dtype [ldt 'int32] #:metric [metric 'euclidean] #:chunk-size [chunk 40000])
-  (device-vector->list (silhouette-samples X (labels-of ys ldt) #:metric metric #:chunk-size chunk)))
+  (device-vector->list
+   (silhouette-samples X (list->device-vector ys #:dtype ldt) #:metric metric #:chunk-size chunk)))
 
 (define (score X ys #:dtype [ldt 'int32] #:metric [metric 'euclidean] #:chunk-size [chunk 40000])
-  (silhouette-score X (labels-of ys ldt) #:metric metric #:chunk-size chunk))
+  (silhouette-score X (list->device-vector ys #:dtype ldt) #:metric metric #:chunk-size chunk))
 
 (define (check-close what got expected bound)
   (check-true (<= (abs (- got expected)) bound)
@@ -47,7 +51,7 @@
          [metric (in-list metrics)])
     (test-case (format "~a ~a" dt metric)
       (define-values (X ys) (fixture dt))
-      (define v (silhouette-samples X (labels-of ys 'int32) #:metric metric))
+      (define v (silhouette-samples X (list->device-vector ys #:dtype 'int32) #:metric metric))
       (define s (device-vector->list v))
       (check-equal? (dtype v) dt)
       (check-equal? (length s) n)
@@ -103,7 +107,7 @@
   (for ([dt (in-list float-dtypes)])
     (define X (list*->device-matrix (append three-groups '((30 30))) #:dtype dt))
     (define s (samples X (append three-groups-labels '(3))))
-    (check-equal? (list-ref s 10) 0.0)))
+    (check-equal? (last s) 0.0)))
 
 (test-gpu "SL3: relabelling, monotone or not, keeps the score and the samples"
   (for ([dt (in-list float-dtypes)])

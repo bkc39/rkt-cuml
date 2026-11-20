@@ -5,23 +5,21 @@
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
+         (only-in "common-data.rkt" columns-of on-vector unit-roundoff)
          (only-in "linear-data.rkt"
                   check-law-case
-                  columns-of
                   dtypes
                   exact-fit
                   gap
                   host-cosine
+                  lcase-X
                   lcase-name
                   lcase-w
-                  lcase-X
                   lcase-y
                   max-abs
                   on-matrix
-                  on-vector
                   ridge-oracles
                   ridge-solution
-                  unit-roundoff
                   weighted-spread
                   weights-or-ones))
 

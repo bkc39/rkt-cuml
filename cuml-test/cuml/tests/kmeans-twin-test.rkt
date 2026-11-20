@@ -10,25 +10,24 @@
                   kmeans-score
                   kmeans-transform)
          (only-in cuml/cluster/private/native libcuml-version)
-         (only-in json json-null)
          (only-in racket/list take)
          (only-in racket/match match match* match-define)
          ;; whole-module: define-runtime-path needs bindings only-in strips
          racket/runtime-path
          (only-in rackunit check-equal? check-not-equal? check-true test-case)
+         (only-in raft list*->device-matrix list->device-vector)
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   close?
+                  deviation
                   dtypes
                   host
                   host-vector
-                  mat
                   norm2
                   scaled-close?
                   string-inits
-                  tolerance
-                  vec)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
+                  tolerance)
+         (only-in "private/python-env.rkt" or-null run-twin test-twin twin-params))
 
 (define-runtime-path twin "python/kmeans_twin.py")
 
@@ -97,9 +96,6 @@
     ['overlapping (blob-data (spec-n s) (spec-d s) (spec-k s) 42 (spec-dt s) #:std 4.0)]
     [_ (blob-data (spec-n s) (spec-d s) (spec-k s) (+ (spec-seed s) 100) (spec-dt s))]))
 
-(define (or-null v)
-  (or v (json-null)))
-
 (struct run (spec X init-rows w result))
 
 (define (racket-fit s)
@@ -110,7 +106,7 @@
     (kmeans-fit X
                 #:n-clusters (spec-k s)
                 #:init (if init-rows
-                           (mat init-rows (spec-dt s))
+                           (list*->device-matrix init-rows #:dtype (spec-dt s))
                            (spec-init s))
                 #:random-state (spec-seed s)
                 #:max-iter (option s 'max-iter 300)
@@ -118,7 +114,7 @@
                 #:n-init (option s 'n-init 'auto)
                 #:oversampling-factor (option s 'oversampling-factor 2.0)
                 #:max-samples-per-batch (option s 'max-samples-per-batch 32768)
-                #:sample-weight (and w (vec w (spec-dt s)))))
+                #:sample-weight (and w (list->device-vector w #:dtype (spec-dt s)))))
   (run s X init-rows w result))
 
 (define (fit-case r)
@@ -145,7 +141,7 @@
   (match-define (run s _ _ _ (kmeans-result C _ _ _)) r)
   (define Y (blob-data 200 (spec-d s) (spec-k s) (+ (spec-seed s) 200) (spec-dt s)))
   (define w (weights 200))
-  (define wv (vec w (spec-dt s)))
+  (define wv (list->device-vector w #:dtype (spec-dt s)))
   (applied s
            Y
            C
@@ -162,14 +158,11 @@
           'centroids (host (applied-C a))
           'sample_weight (applied-w a)))
 
-(define (relative-deviation actual expected)
-  (/ (abs (- actual expected)) (max 1.0 (abs expected))))
-
 (define (max-deviation actual-rows expected-rows)
   (for*/fold ([m 0.0])
              ([(a-row e-row) (in-parallel (in-list actual-rows) (in-list expected-rows))]
               [(a e) (in-parallel (in-list a-row) (in-list e-row))])
-    (max m (relative-deviation a e))))
+    (max m (deviation a e))))
 
 (struct fitted (labels centroids inertia n-iter))
 
@@ -203,7 +196,7 @@
   (define their-centroids (hash-ref theirs 'centroids))
   (define iter-gap (abs (- n-iter (hash-ref theirs 'n_iter))))
   (define ari (hash-ref theirs 'ari))
-  (define inertia-deviation (relative-deviation inertia (hash-ref theirs 'inertia)))
+  (define inertia-deviation (deviation inertia (hash-ref theirs 'inertia)))
   (define matched-deviation
     (paired-deviation centroids labels (hash-ref theirs 'labels) their-centroids))
   (define exact-iter? (and (eq? (spec-init s) 'array) (memv (option s 'max-iter 300) '(0 1))))

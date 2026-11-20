@@ -5,10 +5,10 @@
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" uniform-source)
+         (only-in "private/common-data.rkt" columns-of unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   check-law
-                  columns-of
                   dtypes
                   dyadic
                   exact-fit
@@ -25,8 +25,7 @@
                   max-abs
                   oracle-lstsq
                   rounded-case
-                  solution
-                  unit-roundoff))
+                  solution))
 
 (define (fit-case c dt a)
   (fit-of (lcase-X c) (lcase-y c) (lcase-w c) dt #:algorithm a))

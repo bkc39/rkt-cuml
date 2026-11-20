@@ -4,8 +4,9 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
-         (only-in raft device-matrix->list* dtype shape)
+         (only-in raft device-matrix->list* dtype list->device-vector list*->device-matrix shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" pick)
          (only-in "private/dbscan-data.rkt"
                   distance-matrix
                   fitted-lists
@@ -15,12 +16,9 @@
                   grid-weighted-core
                   grid-weights
                   integer-grid
-                  mat
-                  pick
                   result->lists
                   seeded
-                  structure-problems
-                  vec)
+                  structure-problems)
          (only-in "private/kmeans-data.rkt" dtypes))
 
 (define out-dtypes '(int32 int64))
@@ -34,7 +32,7 @@
   (for* ([dt (in-list dtypes)]
          [out (in-list out-dtypes)])
     (test-case (format "~a ~a" dt out)
-      (define X (mat grid-rows dt))
+      (define X (list*->device-matrix grid-rows #:dtype dt))
       (match-define (dbscan-result labels core)
         (dbscan-fit X #:eps 2 #:min-samples 4 #:out-dtype out))
       (check-equal? (result->lists (dbscan-result labels core)) (list grid-labels grid-core))
@@ -45,11 +43,13 @@
                       #:eps 2
                       #:min-samples 4
                       #:out-dtype out
-                      #:sample-weight (vec grid-weights dt)))
+                      #:sample-weight (list->device-vector grid-weights #:dtype dt)))
       (check-equal? weighted-core grid-weighted-core)
-      (check-equal?
-       (fit-lists (mat (distance-matrix grid-rows) dt) #:eps 2 #:min-samples 4 #:metric 'precomputed)
-       (list grid-labels grid-core)))))
+      (check-equal? (fit-lists (list*->device-matrix (distance-matrix grid-rows) #:dtype dt)
+                               #:eps 2
+                               #:min-samples 4
+                               #:metric 'precomputed)
+                    (list grid-labels grid-core)))))
 
 (define (unround-cloud n d seed)
   (seeded seed
@@ -64,12 +64,12 @@
     (test-case (symbol->string dt)
       (for ([metric (in-list '(euclidean cosine))]
             [eps (in-list '(20 0.01))])
-        (define X (mat rows dt))
+        (define X (list*->device-matrix rows #:dtype dt))
         (define before (device-matrix->list* X))
         (dbscan-fit X #:eps eps #:min-samples 3 #:metric metric #:max-mbytes-per-batch 1)
         (dbscan-fit X #:eps eps #:min-samples 3 #:metric metric)
         (check-equal? (device-matrix->list* X) before (format "~a" metric)))
-      (define D (mat (distance-matrix (integer-grid 200 2 30 3)) dt))
+      (define D (list*->device-matrix (distance-matrix (integer-grid 200 2 30 3)) #:dtype dt))
       (define before (device-matrix->list* D))
       (dbscan-fit D #:eps 2.5 #:min-samples 3 #:metric 'precomputed)
       (check-equal? (device-matrix->list* D) before "precomputed"))))
@@ -78,7 +78,7 @@
   (define rows (integer-grid 500 2 25 9))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (define X (mat rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (match-define (dbscan-result labels core)
         (dbscan-fit X #:eps 1.5 #:min-samples 4 #:out-dtype 'int64))
       (check-equal? (list (dtype labels) (dtype core)) '(int64 int64))
@@ -87,17 +87,20 @@
 
 (test-gpu "a distance equal to eps is a neighbour"
   (for ([dt (in-list dtypes)])
-    (check-equal? (fit-lists (mat '((0) (1) (2) (3) (4)) dt) #:eps 1 #:min-samples 3)
-                  '((0 0 0 0 0) (1 2 3)))))
+    (check-equal?
+     (fit-lists (list*->device-matrix '((0) (1) (2) (3) (4)) #:dtype dt) #:eps 1 #:min-samples 3)
+     '((0 0 0 0 0) (1 2 3)))))
 
 (test-gpu "min-samples 1 makes every row core, and one row is its own cluster or noise"
   (for* ([dt (in-list dtypes)]
          [out (in-list out-dtypes)])
     (test-case (format "~a ~a" dt out)
-      (check-equal?
-       (fitted-lists (mat '((0) (1) (5) (6) (10)) dt) #:eps 1 #:min-samples 1 #:out-dtype out)
-       '((0 0 1 1 2) (0 1 2 3 4)))
-      (define one (mat '((3)) dt))
+      (check-equal? (fitted-lists (list*->device-matrix '((0) (1) (5) (6) (10)) #:dtype dt)
+                                  #:eps 1
+                                  #:min-samples 1
+                                  #:out-dtype out)
+                    '((0 0 1 1 2) (0 1 2 3 4)))
+      (define one (list*->device-matrix '((3)) #:dtype dt))
       (check-equal? (fitted-lists one #:min-samples 1 #:out-dtype out) '((0) (0)))
       (match-define (dbscan-result labels core) (dbscan-fit one #:min-samples 2 #:out-dtype out))
       (check-equal? (result->lists (dbscan-result labels core)) '((-1) ()))
@@ -138,26 +141,29 @@
          [bad (in-list '(+nan.0 +inf.0 -inf.0))])
     (test-case (format "~a ~a ~a" dt metric bad)
       (define eps (if (eq? metric 'cosine) 0.001 1.5))
-      (check-isolated (fit-lists (mat rows dt) #:eps eps #:min-samples 3 #:metric metric)
-                      (fitted-lists (mat (insert-at rows k (list bad 1)) dt)
-                                    #:eps eps
-                                    #:min-samples 3
-                                    #:metric metric)
-                      k)))
+      (check-isolated
+       (fit-lists (list*->device-matrix rows #:dtype dt) #:eps eps #:min-samples 3 #:metric metric)
+       (fitted-lists (list*->device-matrix (insert-at rows k (list bad 1)) #:dtype dt)
+                     #:eps eps
+                     #:min-samples 3
+                     #:metric metric)
+       k)))
   (for* ([dt (in-list dtypes)]
          [bad (in-list '(+nan.0 +inf.0))])
     (test-case (format "~a precomputed ~a" dt bad)
-      (check-isolated
-       (fit-lists (mat (distance-matrix rows) dt) #:eps 1.5 #:min-samples 3 #:metric 'precomputed)
-       (fitted-lists (mat (precomputed-with rows k bad) dt)
-                     #:eps 1.5
-                     #:min-samples 3
-                     #:metric 'precomputed)
-       k))))
+      (check-isolated (fit-lists (list*->device-matrix (distance-matrix rows) #:dtype dt)
+                                 #:eps 1.5
+                                 #:min-samples 3
+                                 #:metric 'precomputed)
+                      (fitted-lists (list*->device-matrix (precomputed-with rows k bad) #:dtype dt)
+                                    #:eps 1.5
+                                    #:min-samples 3
+                                    #:metric 'precomputed)
+                      k))))
 
 (test-gpu "core indices ascend, labels run from -1 to k - 1, numbered by smallest core index"
   (for ([seed (in-range 1 6)])
-    (define X (mat (integer-grid 400 2 30 seed) 'float32))
+    (define X (list*->device-matrix (integer-grid 400 2 30 seed) #:dtype 'float32))
     (for ([eps (in-list '(1 1.5 2.5))]
           [min-samples (in-list '(2 4 7))])
       (match-define (list labels _) (fit-lists X #:eps eps #:min-samples min-samples))

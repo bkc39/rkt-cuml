@@ -5,11 +5,14 @@
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/list filter-not remove-duplicates)
          (only-in racket/match match match-define)
-         (only-in raft device-vector->list device-vector? dtype list->device-vector)
+         (only-in raft device-vector->list device-vector? dtype list->device-vector shape)
          (only-in raft/unsafe deposit->list)
-         (only-in "native.rkt" cuml-linear-model-label-encode-job))
+         (only-in "native.rkt"
+                  cuml-linear-model-label-classes-job
+                  cuml-linear-model-label-encode-job))
 
 (provide class-view
+         current-label-classes-job
          decode-labels
          device-kind
          device-kind?
@@ -21,6 +24,8 @@
          y-kind/who)
 
 (define label-dtypes '(int32 int64 float32 float64))
+(define current-label-classes-job
+  (make-parameter cuml-linear-model-label-classes-job #f 'current-label-classes-job))
 
 (struct label-kind ())
 (struct list-kind label-kind (member? <? =? key unified?))
@@ -111,27 +116,41 @@
         (real->double-flonum (hash-ref cw k))
         1.0)))
 
-(define (integral-classes y)
-  (define integral
-    (for/list ([v (in-list (device-vector->list y))]
-               #:when (and (rational? v) (integer? v)))
-      v))
-  (sort (remove-duplicates integral =) <))
+(define (device-classes who y resources)
+  (define out (deposit-for/who who resources))
+  ((current-label-classes-job) who resources y out)
+  (match-define (list classes) (deposit->list out))
+  (device-vector->list classes))
+
+(define (y-length y)
+  (match y
+    [(? list?) (length y)]
+    [(app shape (list n)) n]))
+
+(define (class-weighted? who rows y cw)
+  (cond
+    [(not (hash? cw)) #f]
+    [(not (= (y-length y) rows))
+     (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y))]
+    [else #t]))
 
 (define (class-weight-view who kind classes cw resources)
-  (and
-   (hash? cw)
-   (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources)))
+  (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources))
 
-(define/who (fit-labels who kind y cw resources)
+(define/who (fit-labels who kind rows y cw resources)
   (match kind
     [(? device-kind?)
-     (values y #f (class-weight-view who real-labels (integral-classes y) cw resources))]
+     (values y
+             #f
+             (and (class-weighted? who rows y cw)
+                  (positive? rows)
+                  (class-weight-view who real-labels (device-classes who y resources) cw resources)))]
     [_
      (define-values (classes codes) (host-labels who kind y))
      (values (list->device-vector codes #:dtype 'int32 #:resources resources)
              classes
-             (class-weight-view who kind classes cw resources))]))
+             (and (class-weighted? who rows y cw)
+                  (class-weight-view who kind classes cw resources)))]))
 
 (define (class-view kind classes resources)
   (match kind

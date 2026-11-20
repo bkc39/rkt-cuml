@@ -11,8 +11,9 @@
          (only-in rackunit check-equal? check-exn check-not-false test-case)
          (only-in raft device-vector->list device-vector? list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" on-matrix on-vector)
-         (only-in "private/logistic-data.rkt" scaled-rows unequal-weights-message)
+         (only-in "private/common-data.rkt" host on-vector scaled-rows)
+         (only-in "private/linear-data.rkt" on-matrix)
+         (only-in "private/logistic-data.rkt" blob-case lr-case-X lr-case-y)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
@@ -22,6 +23,13 @@
 (define one-iteration-cutoff
   (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
                          "after 1 iterations \\(max-iter 1, tol 1e-04\\); raise max-iter$")))
+
+(define mixed-spread-cutoff
+  (regexp (string-append "^the solver stopped at first-order residual .* above the bound .* "
+                         "after [0-9]+ iterations \\(max-iter 1000, tol 1e-04\\); "
+                         "standardise the columns$")))
+
+(define mixed-three (blob-case "mixed three" 90 3 3 8 #:scales '(1/256 1 256)))
 
 (define (tiny-last rows factor)
   (map (match-lambda
@@ -117,6 +125,13 @@
         "X: expected row-major, got col-major 6x3"
         (lambda () (go (list*->device-matrix grid #:dtype 'float64 #:layout 'col-major) y)))
    (row "y length" "y: expected 6 elements, got 5" (lambda () (go X (on-vector '(0 1 0 1 1) 'int32))))
+   (row "y length before a NaN label, with a class-weight hash"
+        "y: expected 6 elements, got 5"
+        (lambda ()
+          (go X (on-vector (list 0.0 +nan.0 1.0 0.0 1.0) 'float64) #:class-weight (hash 0 2 1 1))))
+   (row "y length before a missing class, with a class-weight hash on a list"
+        "y: expected 6 elements, got 5"
+        (lambda () (go X '(0 1 0 1 7) #:class-weight (hash 0 2 1 1))))
    (row "non-integral label"
         "y: expected integral class labels, got 1.5"
         (lambda () (go X (on-vector '(0 1 0 1.5 1 0)))))
@@ -159,20 +174,6 @@
    (row "a class of zero weight"
         "y: class 1 has no weight"
         (lambda () (go X y #:sample-weight (on-vector '(1 0 1 0 0 1)))))
-   (row "unequal weights with three classes"
-        unequal-weights-message
-        (lambda ()
-          (go X (on-vector '(0 1 2 0 1 2) 'int32) #:sample-weight (on-vector '(1 2 1 1 1 1)))))
-   (row "balanced weights with three unequal classes"
-        unequal-weights-message
-        (lambda () (go X (on-vector '(0 1 2 0 1 1) 'int32) #:class-weight 'balanced)))
-   (row "uniform balanced weights with three unequal classes"
-        unequal-weights-message
-        (lambda ()
-          (go X
-              (on-vector '(0 1 2 0 1 1) 'int32)
-              #:sample-weight (on-vector '(0.1 0.1 0.1 0.1 0.1 0.1))
-              #:class-weight 'balanced)))
    (row "a column whose spread overflows"
         (string-append "X: column 0 has values up to 1.348269851146737e+308 in magnitude; "
                        "its spread is outside the float64 range")
@@ -212,7 +213,15 @@
           (go (on-matrix (scaled-rows '((1 0) (0 1) (2 1) (3 0) (5 1) (4 0)) (expt 2 -124)) 'float32)
               (on-vector '(0 0 0 1 1 1) 'int32)
               #:penalty 'none)))
-   (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))))
+   (row "an iteration cutoff" one-iteration-cutoff (lambda () (go X y #:max-iter 1)))
+   (row "an iteration cutoff on columns of spreads 2^8 apart says raise max-iter"
+        one-iteration-cutoff
+        (lambda () (go (on-matrix (tiny-last grid 1000)) y #:max-iter 1)))
+   (row "a cutoff short of max-iter on columns of spreads 2^8 apart names standardising"
+        mixed-spread-cutoff
+        (lambda ()
+          (go (on-matrix (lr-case-X mixed-three) 'float64)
+              (on-vector (lr-case-y mixed-three) 'int32))))))
 
 (test-gpu "logistic-regression-fit refuses each row, the earlier fault first"
   (for ([r (in-list (append (racket-rows logistic-regression-fit)
@@ -265,11 +274,6 @@
                          ([coef coef] [intercept intercept] [classes classes] [n-iter n-iter]))
     fitted)
   (logistic-regression-result coef intercept classes kind n-iter))
-
-(define (host v)
-  (if (device-vector? v)
-      (device-vector->list v)
-      v))
 
 (test-gpu "a result built by hand takes only a fitted result's label kind"
   (define X (on-matrix grid))

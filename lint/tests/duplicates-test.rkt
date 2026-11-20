@@ -1,0 +1,313 @@
+#lang racket/base
+
+(require (only-in racket/match match-define)
+         (only-in rackunit check-equal? check-regexp-match test-case)
+         (only-in "../duplicates.rkt" copied-definitions-in describe-copies)
+         (only-in "private/copies.rkt" call-with-modules copies))
+
+(define helper
+  '(define (mean xs)
+     (/ (apply + xs) (length xs))))
+
+(define renamed-helper
+  '(define (average values)
+     (/ (apply + values) (length values))))
+
+(match-define (list worst-gap largest-gap)
+  '((define (worst xs ys)
+      (for/fold ([most 0.0])
+                ([x (in-list xs)]
+                 [y (in-list ys)])
+        (let ([gap (abs (- x y))]) (max most gap))))
+    (define (largest-gap as bs)
+      (for/fold ([acc 0.0])
+                ([a (in-list as)]
+                 [b (in-list bs)])
+        (let ([d (abs (- a b))]) (max acc d))))))
+
+(test-case "a helper copied into a second file is refused at both sites"
+  (check-equal? (copies `(("a-test.rkt" (,helper)) ("private/b-data.rkt" (,helper))))
+                '(("a-test.rkt:2: mean" "b-data.rkt:2: mean"))))
+
+(test-case "a copy is found after renaming the helper, its formals and its local bindings"
+  (check-equal? (copies `(("a-test.rkt" (,helper)) ("b-test.rkt" (,renamed-helper))))
+                '(("a-test.rkt:2: mean" "b-test.rkt:2: average")))
+  (check-equal? (copies `(("a-test.rkt" (,worst-gap)) ("b-test.rkt" (,largest-gap))))
+                '(("a-test.rkt:2: worst" "b-test.rkt:2: largest-gap"))))
+
+(test-case "the refusal names what to change"
+  (call-with-modules
+   `(("a-test.rkt" (,helper)) ("b-test.rkt" (,helper)))
+   (lambda (root)
+     (check-regexp-match
+      #rx"keep one, in the family's shared module [(]cuml-test's private/common-data[.]rkt when two families use it[)], and require it from there"
+      (describe-copies (car (copied-definitions-in (list root))))))))
+
+(test-case "one definition per helper, or two in one file, passes"
+  (check-equal? (copies `(("a-test.rkt" (,helper))
+                          ("b-test.rkt" ((require (only-in "a-test.rkt" mean)) (mean '(1 2))))))
+                '())
+  (check-equal? (copies `(("a-test.rkt" (,helper ,renamed-helper)))) '()))
+
+(test-case "bodies that differ in a free name, or in a module's own definitions, are not copies"
+  (check-equal? (copies `(("a-test.rkt" (,helper)) ("b-test.rkt" ((define (mean xs)
+                                                                    (/ (apply * xs) (length xs)))))))
+                '())
+  (check-equal? (copies '(("a-test.rkt" ((define twin "a.py") (define (results r)
+                                                                (run twin r))))
+                          ("b-test.rkt" ((define twin "b.py") (define (results r)
+                                                                (run twin r))))))
+                '())
+  (check-equal? (copies '(("a-test.rkt" ((struct fixture (name)) (define (key f)
+                                                                   (fixture-name f))))
+                          ("b-test.rkt" ((struct fixture (name)) (define (key f)
+                                                                   (fixture-name f))))))
+                '()))
+
+(test-case "a table passed to define/who is a reference, not a formal"
+  (check-equal? (copies '(("a.rkt" ((define/who (a-fit who X #:hyperparameters a-params)
+                                      (fitted who X (bound-params a-params)))))
+                          ("b.rkt" ((define/who (b-fit who X #:hyperparameters b-params)
+                                      (fitted who X (bound-params b-params)))))))
+                '()))
+
+(test-case "every procedure-valued definition form is compared"
+  (for ([form (in-list '((define ((near x) y)
+                           (< (abs (- x y)) 1e-6))
+                         (define pick
+                           (case-lambda
+                             [(x) x]
+                             [(x y) (+ x y)]))
+                         (define past-sum (const (exact->inexact (expt 2 125))))
+                         (define add-one (curry + 1))
+                         (define/contract (double x)
+                           (-> real? real?)
+                           (* 2 x))))])
+    (check-equal? (length (copies `(("a.rkt" ((require racket/contract
+                                                       racket/function)
+                                              ,form))
+                                    ("b.rkt" ((require racket/contract
+                                                       racket/function)
+                                              ,form)))))
+                  1
+                  (format "~s" form))))
+
+(test-case "a definition inside module+ or module* is compared"
+  (check-equal? (copies `(("a.rkt" ((module+ test
+                                      ,helper)))
+                          ("b.rkt" ((module* main #f
+                                      ,helper)))))
+                '(("a.rkt:2: mean" "b.rkt:2: mean"))))
+
+(test-case "a constant is per-file data, not a copy"
+  (check-equal? (copies '(("a.rkt" ((define tolerance (* 64 (expt 2.0 -53)))))
+                          ("b.rkt" ((define tolerance (* 64 (expt 2.0 -53)))))))
+                '()))
+
+(test-case "free names compare by the binding they import, not by their spelling"
+  (define first-of
+    '(define (head xs)
+       (first xs)))
+  (define elsewhere
+    '("c.rkt" ((provide first) (define (first xs)
+                                 (cadr xs)))))
+  (check-equal? (copies `(("a.rkt" ((require (only-in racket/list first)) ,first-of))
+                          ("b.rkt" ((require (only-in "c.rkt" first)) ,first-of))
+                          ,elsewhere))
+                '())
+  (check-equal? (copies `(("a.rkt" ((require (only-in "c.rkt" first)) ,first-of))
+                          ("b.rkt" ((require (only-in "c.rkt" first)) ,first-of))
+                          ,elsewhere))
+                '(("a.rkt:3: head" "b.rkt:3: head")))
+  (check-equal? (copies `(("a.rkt" ((require (only-in racket/list first)) ,first-of))
+                          ("b.rkt" ((require (prefix-in list: racket/list)) (define (head xs)
+                                                                              (list:first xs))))))
+                '(("a.rkt:3: head" "b.rkt:3: head"))))
+
+(test-case "a name a nested binding shadows is renamed only inside it"
+  (check-equal? (copies '(("a.rkt" ((require (only-in "c.rkt" x z)) (define (f y)
+                                                                      (+ (let ([x 1]) x) x))))
+                          ("b.rkt" ((require (only-in "c.rkt" x z)) (define (f y)
+                                                                      (+ (let ([z 1]) z) z))))
+                          ("c.rkt" ((provide x
+                                             z)
+                                    (define x 10)
+                                    (define z 20)))))
+                '()))
+
+(test-case "quoted data is compared as written, never renamed"
+  (check-equal? (copies '(("a.rkt" ((define (tag x)
+                                      (list 'x x))))
+                          ("b.rkt" ((define (tag y)
+                                      (list 'y y))))))
+                '())
+  (check-equal? (copies '(("a.rkt" ((define (tag x)
+                                      `(x ,x))))
+                          ("b.rkt" ((define (tag y)
+                                      `(x ,y))))))
+                '(("a.rkt:2: tag" "b.rkt:2: tag"))))
+
+(test-case "a quasiquoted match pattern binds only its unquoted names, so its literals are data"
+  (check-equal? (copies '(("a.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(x ,v) v]))))
+                          ("b.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(y ,v) v]))))))
+                '())
+  (check-equal? (copies '(("a.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(x ,v) v]))))
+                          ("b.rkt" ((require (only-in racket/match match)) (define (tag row)
+                                                                             (match row
+                                                                               [`(x ,w) w]))))))
+                '(("a.rkt:3: tag" "b.rkt:3: tag"))))
+
+(test-case "a definition inside a form the lint does not know is renamed over that form"
+  (check-equal? (copies '(("a.rkt" ((require (only-in "c.rkt" with-scratch))
+                                    (define (f xs)
+                                      (with-scratch "x" (define total (apply + xs)) total))))
+                          ("b.rkt" ((require (only-in "c.rkt" with-scratch))
+                                    (define (f ys)
+                                      (with-scratch "x" (define sum (apply + ys)) sum))))
+                          ("c.rkt" ((provide with-scratch) (define with-scratch list)))))
+                '(("a.rkt:3: f" "b.rkt:3: f"))))
+
+(for ([binder (in-list '(cond
+                          when
+                          unless
+                          parameterize))]
+      [pair (in-list '(((define (f xs)
+                          (cond
+                            [(pair? xs)
+                             (define total (apply + xs))
+                             (/ total (length xs))]
+                            [else 0]))
+                        (define (g ys)
+                          (cond
+                            [(pair? ys)
+                             (define sum (apply + ys))
+                             (/ sum (length ys))]
+                            [else 0])))
+                       ((define (f xs)
+                          (when (pair? xs)
+                            (define total (apply + xs))
+                            (/ total (length xs))))
+                        (define (g ys)
+                          (when (pair? ys)
+                            (define sum (apply + ys))
+                            (/ sum (length ys)))))
+                       ((define (f xs)
+                          (unless (null? xs)
+                            (define total (apply + xs))
+                            (/ total (length xs))))
+                        (define (g ys)
+                          (unless (null? ys)
+                            (define sum (apply + ys))
+                            (/ sum (length ys)))))
+                       ((define (f xs)
+                          (parameterize ([current-output-port (current-error-port)])
+                            (define total (apply + xs))
+                            (/ total (length xs))))
+                        (define (g ys)
+                          (parameterize ([current-output-port (current-error-port)])
+                            (define sum (apply + ys))
+                            (/ sum (length ys)))))))])
+  (test-case (format "a definition inside ~a is renamed by scope" binder)
+    (match-define (list one other) pair)
+    (check-equal? (copies `(("a.rkt" (,one)) ("b.rkt" (,other)))) '(("a.rkt:2: f" "b.rkt:2: g")))))
+
+(for ([scope (in-list '((when ((define (f x)
+                                 (when (positive? x)
+                                   (define x 5)
+                                   x)))
+                          ((define (f y)
+                             (when (positive? y)
+                               (define z 5)
+                               z)))
+                          ((define limit -1) (define (f x)
+                                               (when (positive? limit)
+                                                 (define limit 5)
+                                                 limit))))
+                        (cond
+                          [(define (f x)
+                             (cond
+                               [(positive? x)
+                                (define x 5)
+                                x]
+                               [else 0]))]
+                          [(define (f y)
+                             (cond
+                               [(positive? y)
+                                (define z 5)
+                                z]
+                               [else 0]))]
+                          [(define limit -1)
+                           (define (f x)
+                             (cond
+                               [(positive? limit)
+                                (define limit 5)
+                                limit]
+                               [else 0]))])
+                        (parameterize ([define
+                                        (f x)
+                                        (parameterize ([current-command-line-arguments x])
+                                          (define x (vector))
+                                          x)])
+                          ((define (f y)
+                             (parameterize ([current-command-line-arguments y])
+                               (define z (vector))
+                               z)))
+                          ((define limit (vector "x"))
+                           (define (f x)
+                             (parameterize ([current-command-line-arguments limit])
+                               (define limit (vector))
+                               limit))))
+                        (unless ((define (f x)
+                                   (unless (zero? x)
+                                     (define x 5)
+                                     x)))
+                          ((define (f y)
+                             (unless (zero? y)
+                               (define z 5)
+                               z)))
+                          ((define limit -1) (define (f x)
+                                               (unless (zero? limit)
+                                                 (define limit 5)
+                                                 limit))))
+                        (case ((define (f x)
+                                 (case x
+                                   [(x)
+                                    (define x 5)
+                                    x]
+                                   [else 0])))
+                          [(define (f y)
+                             (case y
+                               [(x)
+                                (define z 5)
+                                z]
+                               [else 0]))]
+                          [(define (f x)
+                             (case x
+                               [(limit)
+                                (define limit 5)
+                                limit]
+                               [else 0]))])
+                        (with-handlers ([define
+                                         (f x)
+                                         (with-handlers ([x void])
+                                           (define x 5)
+                                           x)])
+                          ((define (f y)
+                             (with-handlers ([y void])
+                               (define z 5)
+                               z)))
+                          ((define limit -1) (define (f x)
+                                               (with-handlers ([limit void])
+                                                 (define limit 5)
+                                                 limit))))))])
+  (match-define (list binder one copy other) scope)
+  (test-case (format "a definition inside ~a shadows only its body, so a renamed copy matches" binder)
+    (check-equal? (copies `(("a.rkt" ,one) ("b.rkt" ,copy))) '(("a.rkt:2: f" "b.rkt:2: f"))))
+  (test-case (format "a definition inside ~a is not bound over its test or bindings" binder)
+    (check-equal? (copies `(("a.rkt" ,one) ("b.rkt" ,other))) '())))

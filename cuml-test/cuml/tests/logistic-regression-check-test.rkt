@@ -2,33 +2,30 @@
 
 (require (only-in cuml/linear-model logistic-regression-decision-function)
          (only-in racket/list range rest)
-         (only-in racket/match match-define struct*)
+         (only-in racket/match match-define)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
                   blob-case
-                  cutoff-message
+                  cutoff-exn?
                   decision-label
                   default-setting
                   default-tol
                   fit-parts
                   lr-case-name
-                  lr-case-w
                   lr-case-X
                   lr-case-y
-                  lr-fit
                   penalty-settings
                   separable-case
                   setting
                   setting-C
                   setting-fit
-                  setting-l1-ratio
                   setting-penalty
                   tight-max-iter
                   tight-tol)
-         (only-in "private/logistic-oracle.rkt" residual residual-of)
+         (only-in "private/logistic-oracle.rkt" case-residual residual)
          (only-in "private/logistic-twin-data.rkt" logistic-twin logistic-twin-results their-fit)
          (only-in "private/python-env.rkt" test-twin))
 
@@ -51,21 +48,8 @@
 
 (define (fit-or-refusal t)
   (match-define (trial c dt s max-iter tol) t)
-  (with-handlers ([(lambda (e) (and (exn:fail? e) (regexp-match? cutoff-message (exn-message e))))
-                   (lambda (_) #f)])
+  (with-handlers ([cutoff-exn? (lambda (_) #f)])
     (setting-fit c dt s #:max-iter max-iter #:tol tol)))
-
-(define (residual-at c parts s tol)
-  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
-  (residual-of (lr-case-X c)
-               (lr-case-y c)
-               (lr-case-w c)
-               coef
-               intercept
-               #:penalty (setting-penalty s)
-               #:C (setting-C s)
-               #:l1-ratio (setting-l1-ratio s)
-               #:tol tol))
 
 (test-gpu "every accepted small fit has a first-order residual within the bound"
   (define outcomes
@@ -81,7 +65,7 @@
     (match-define (cons t r) outcome)
     (test-case (trial-name t)
       (match-define (residual K F bound)
-        (residual-at (trial-case t) (fit-parts r) (trial-setting t) (trial-tol t)))
+        (case-residual (trial-case t) (fit-parts r) (trial-setting t) #:tol (trial-tol t)))
       (check-true (<= K bound) (format "K ~a bound ~a F ~a" K bound F))))
   (check-true (< 0 (length accepted) (length outcomes))
               (format "accepted ~a of ~a" (length accepted) (length outcomes))))
@@ -95,7 +79,7 @@
       (define s (setting 'l2 C #f))
       (define tol (tight-tol 'float64))
       (define r (setting-fit c 'float64 s #:tol tol #:max-iter tight-max-iter))
-      (match-define (residual K F _) (residual-at c (fit-parts r) s tol))
+      (match-define (residual K F _) (case-residual c (fit-parts r) s #:tol tol))
       (check-true (<= K (* stationary-bound (max F 1))) (format "K ~a F ~a" K F)))))
 
 (define hard-cutoff
@@ -113,9 +97,9 @@
   (for ([dt (in-list dtypes)]
         [theirs (in-list (logistic-twin-results requests))])
     (test-case (symbol->string dt)
-      (check-exn cutoff-message (lambda () (setting-fit hard-cutoff dt default-setting #:max-iter 1)))
+      (check-exn cutoff-exn? (lambda () (setting-fit hard-cutoff dt default-setting #:max-iter 1)))
       (match-define (residual K _ bound)
-        (residual-at hard-cutoff (their-fit theirs dt) default-setting default-tol))
+        (case-residual hard-cutoff (their-fit theirs dt) default-setting))
       (check-true (> K bound) (format "K ~a bound ~a" K bound)))))
 
 (test-gpu "separable data without a penalty is fitted within the bound"
@@ -124,7 +108,7 @@
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (define r (setting-fit c dt s))
-      (match-define (residual K _ bound) (residual-at c (fit-parts r) s default-tol))
+      (match-define (residual K _ bound) (case-residual c (fit-parts r) s))
       (check-true (<= K bound) (format "K ~a bound ~a" K bound))
       (define z
         (device-matrix->list* (logistic-regression-decision-function r (on-matrix (lr-case-X c) dt))))

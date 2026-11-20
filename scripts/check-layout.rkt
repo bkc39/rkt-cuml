@@ -182,8 +182,9 @@
              (if exports? " and exports" ""))]))
 
 (module+ test
-  (require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
-           (only-in rackunit check-equal? test-case))
+  (require (only-in racket/file make-directory*)
+           (only-in rackunit check-equal? test-case)
+           (only-in "../lint/private/modules.rkt" with-temporary-directory))
 
   (define (write-tree-file! dir file)
     (match file
@@ -193,12 +194,10 @@
        (with-output-to-file full (lambda () (write form)))]))
 
   (define (call-with-tree files proc)
-    (define dir (make-temporary-directory "check-layout-~a"))
-    (dynamic-wind void
-                  (lambda ()
-                    (for-each (curry write-tree-file! dir) files)
-                    (proc dir))
-                  (lambda () (delete-directory/files dir #:must-exist? #f))))
+    (with-temporary-directory (dir "check-layout-~a")
+                              (for ([file (in-list files)])
+                                (write-tree-file! dir file))
+                              (proc dir)))
 
   (define (info-file package field deps)
     (list (format "~a/info.rkt" package)

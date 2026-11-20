@@ -99,6 +99,32 @@ cumlrkt_family(decomposition
         decomposition/src/pca_device.cu
 )
 
+# The weighted softmax compiles cuML's header-only qn solver, so its source
+# must be the release of the linked libcuml.
+find_path(CUML_SOURCE_DIR glm/qn/qn.cuh HINTS $ENV{CUML_SOURCE_DIR} REQUIRED)
+file(STRINGS "${CUML_INCLUDE_DIR}/cuml/version_config.hpp" cuml_version_defines
+  REGEX "^#define CUML_VERSION_(MAJOR|MINOR|PATCH) ")
+set(cuml_version)
+foreach(part MAJOR MINOR PATCH)
+  string(REGEX MATCH "CUML_VERSION_${part} ([0-9]+)" _ "${cuml_version_defines}")
+  set(n "${CMAKE_MATCH_1}")
+  if(NOT part STREQUAL "MAJOR" AND n LESS 10)
+    set(n "0${n}")
+  endif()
+  list(APPEND cuml_version "${n}")
+endforeach()
+list(JOIN cuml_version "." cuml_version)
+set(cuml_source_version_file "${CUML_SOURCE_DIR}/../../VERSION")
+set(cuml_source_version "none")
+if(EXISTS "${cuml_source_version_file}")
+  file(STRINGS "${cuml_source_version_file}" cuml_source_version LIMIT_COUNT 1)
+endif()
+if(NOT cuml_source_version STREQUAL cuml_version)
+  message(FATAL_ERROR
+    "cuML source ${CUML_SOURCE_DIR} is version ${cuml_source_version}, the "
+    "linked libcuml ${cuml_version}: bump cumlSrc in flake.nix to v${cuml_version}")
+endif()
+
 cumlrkt_family(linear_model
   SOURCES linear_model/src/linear_model.cpp
           linear_model/src/glm_fit.cpp linear_model/src/linear_regression.cpp
@@ -115,7 +141,10 @@ cumlrkt_family(linear_model
           linear_model/src/cd_device.cu linear_model/src/logistic.cpp
           linear_model/src/logistic_apply.cpp linear_model/src/logistic_device.cu
           linear_model/src/logistic_apply_device.cu
+          linear_model/src/logistic_resolve.cpp
+          linear_model/src/logistic_solve.cpp
           linear_model/src/logistic_weights.cpp
+          linear_model/src/logistic_softmax.cu
           linear_model/src/mbsgd.cpp linear_model/src/mbsgd_device.cu
           common/src/labels.cu
   TESTS linear_model/tests/glm_staging_test.cpp
@@ -123,7 +152,14 @@ cumlrkt_family(linear_model
         linear_model/src/cd_staging.cpp linear_model/src/cd_device.cu
         linear_model/tests/linear_model_refusal_test.cpp
         linear_model/tests/logistic_checks_test.cpp
+        linear_model/tests/logistic_rescue_test.cpp
+        linear_model/src/logistic_solve.cpp
+        linear_model/src/logistic_resolve.cpp
+        linear_model/src/logistic_device.cu
+        linear_model/src/logistic_softmax.cu
+        linear_model/tests/logistic_softmax_test.cpp
         linear_model/tests/mbsgd_checks_test.cpp
+        linear_model/tests/mbsgd_round_off_test.cpp
         linear_model/tests/ridge_staging_test.cpp
         linear_model/tests/gram_condition_test.cpp
         linear_model/tests/ritz_plan_test.cpp
@@ -142,9 +178,12 @@ cumlrkt_family(linear_model
         linear_model/src/fit_checks.cpp common/src/rows.cu
 )
 target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver CUDA::cublas)
+target_include_directories(cumlrkt_linear_model SYSTEM PRIVATE ${CUML_SOURCE_DIR})
 if(TARGET cumlrkt_linear_model_tests)
-  target_link_libraries(cumlrkt_linear_model_tests PRIVATE CUDA::cusolver
-                                                          CUDA::cublas)
+  target_link_libraries(cumlrkt_linear_model_tests
+    PRIVATE CUDA::cusolver CUDA::cublas cuml_runtime)
+  target_include_directories(cumlrkt_linear_model_tests SYSTEM PRIVATE
+    ${CUML_SOURCE_DIR})
 endif()
 
 cumlrkt_family(manifold

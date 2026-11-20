@@ -16,28 +16,31 @@
          (only-in racket/list take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-true fail test-case)
-         (only-in raft exn:fail:raft? list->device-vector)
+         (only-in raft
+                  device-matrix
+                  device-vector
+                  exn:fail:raft?
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/manifold-refusal-data.rkt"
                   cosine-message
                   large-message
                   large-row
+                  least-rate-message
                   listed-X
                   nan-message
                   nan-row
+                  tiny-X
                   tiny-with
                   zero-row)
          (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
-         (only-in "private/scaler-data.rkt" rows->matrix strided-vector)
+         (only-in "private/scaler-data.rkt" strided-vector)
          (only-in "private/umap-data.rkt" fixture-X fixture-rows tiny))
-
-(define (tiny-X)
-  (fixture-X tiny))
 
 (define (labels n [dt 'int32] [groups 2])
   (list->device-vector (for/list ([i (in-range n)])
@@ -59,9 +62,6 @@
    "~a: expected a finite value of at least 1.1754943508222875e-38 and at most 3.4028234663852886e+38, got ~a"
    name
    v))
-
-(define (least-rate-message v)
-  (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))
 
 (define (parameter-rows)
   (list
@@ -121,57 +121,62 @@
   (row id message (list X y options)))
 
 (define (X-rows)
-  (list (X-row "f12" "X: expected float32, got float64" (tiny-with '() 'float64))
-        (X-row "f13" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
-        (X-row "f13 layout"
-               "X: expected row-major, got col-major 8x3"
-               (blank-matrix 8 3 'float32 #:layout 'col-major))
-        (X-row "f14" "X: expected at least 2 rows, got 1" (rows->matrix '((1 2 3)) 'float32))
-        (X-row "f15" "X: expected at least 1 column, got 0" (blank-matrix 8 0 'float32))
-        (X-row "f19"
-               "X: nn-descent needs at least 150 rows, got 8"
-               (tiny-X)
-               #:options (hasheq 'build-algo 'nn-descent))
-        (X-row "f20" "y: expected int32 or int64, got float32" (tiny-X) #:y (labels 8 'float32))
-        (X-row "f20 rank" "y: expected rank 1, got rank 2" (tiny-X) #:y (blank-matrix 8 1 'int32))
-        (X-row "f20 stride"
-               "y: expected contiguous elements, got stride 2"
-               (tiny-X)
-               #:y (strided-vector 8 'int64))
-        (X-row "f20 length" "y: expected 8 elements, got 7" (tiny-X) #:y (labels 7))
-        (X-row "f21" nan-message (tiny-with nan-row) #:y (labels 8))
-        (X-row "f21 inf"
-               "X: row 0, column 2: expected a finite value, got -inf"
-               (tiny-with '([(0 2) -inf.0])))
-        (X-row "f22" large-message (tiny-with large-row))
-        (X-row "f23" cosine-message (tiny-with zero-row) #:options (hasheq 'metric 'cosine))
-        (X-row "f26"
-               "n-components: spectral init of 3 components needs at least 10 rows, got 8"
-               (tiny-X)
-               #:options (hasheq 'n-components 3))
-        (X-row "f26 one short"
-               "n-components: spectral init of 3 components needs at least 10 rows, got 9"
-               (tiny-with '() 'float32 (cons '(5.0 5.0 5.0) (fixture-rows tiny)))
-               #:options (hasheq 'n-components 3))
-        (X-row "f26 defaults"
-               "n-components: spectral init of 2 components needs at least 8 rows, got 7"
-               (tiny-with '() 'float32 (cdr (fixture-rows tiny))))
-        (X-row "f29"
-               f29-message
-               (rows->matrix (take (fixture-rows tiny) 6) 'float32)
-               #:y (labels 6 'int32 3)
-               #:options (hasheq 'n-components 1 'n-epochs 20))
-        (X-row "f12 before f14" "X: expected float32, got float64" (rows->matrix '((1 2 3)) 'float64))
-        (X-row "f14 before f17"
-               "X: expected at least 2 rows, got 1"
-               (rows->matrix '((1 2 3)) 'float32)
-               #:options (hasheq 'n-components 8))
-        (X-row "f20 before f21" "y: expected 8 elements, got 7" (tiny-with nan-row) #:y (labels 7))
-        (X-row "f21 before f22" nan-message (tiny-with (append nan-row '([(1 1) 1e20]))))
-        (X-row "f22 before f23"
-               large-message
-               (tiny-with (append zero-row large-row))
-               #:options (hasheq 'metric 'cosine))))
+  (list
+   (X-row "f12" "X: expected float32, got float64" (tiny-with '() 'float64))
+   (X-row "f13" "X: expected rank 2, got rank 1" (device-vector 8 #:dtype 'float32))
+   (X-row "f13 layout"
+          "X: expected row-major, got col-major 8x3"
+          (device-matrix 8 3 #:dtype 'float32 #:layout 'col-major))
+   (X-row "f14"
+          "X: expected at least 2 rows, got 1"
+          (list*->device-matrix '((1 2 3)) #:dtype 'float32))
+   (X-row "f15" "X: expected at least 1 column, got 0" (device-matrix 8 0 #:dtype 'float32))
+   (X-row "f19"
+          "X: nn-descent needs at least 150 rows, got 8"
+          (tiny-X)
+          #:options (hasheq 'build-algo 'nn-descent))
+   (X-row "f20" "y: expected int32 or int64, got float32" (tiny-X) #:y (labels 8 'float32))
+   (X-row "f20 rank" "y: expected rank 1, got rank 2" (tiny-X) #:y (device-matrix 8 1 #:dtype 'int32))
+   (X-row "f20 stride"
+          "y: expected contiguous elements, got stride 2"
+          (tiny-X)
+          #:y (strided-vector 8 'int64))
+   (X-row "f20 length" "y: expected 8 elements, got 7" (tiny-X) #:y (labels 7))
+   (X-row "f21" nan-message (tiny-with nan-row) #:y (labels 8))
+   (X-row "f21 inf"
+          "X: row 0, column 2: expected a finite value, got -inf"
+          (tiny-with '([(0 2) -inf.0])))
+   (X-row "f22" large-message (tiny-with large-row))
+   (X-row "f23" cosine-message (tiny-with zero-row) #:options (hasheq 'metric 'cosine))
+   (X-row "f26"
+          "n-components: spectral init of 3 components needs at least 10 rows, got 8"
+          (tiny-X)
+          #:options (hasheq 'n-components 3))
+   (X-row "f26 one short"
+          "n-components: spectral init of 3 components needs at least 10 rows, got 9"
+          (tiny-with '() 'float32 (cons '(5.0 5.0 5.0) (fixture-rows tiny)))
+          #:options (hasheq 'n-components 3))
+   (X-row "f26 defaults"
+          "n-components: spectral init of 2 components needs at least 8 rows, got 7"
+          (tiny-with '() 'float32 (cdr (fixture-rows tiny))))
+   (X-row "f29"
+          f29-message
+          (list*->device-matrix (take (fixture-rows tiny) 6) #:dtype 'float32)
+          #:y (labels 6 'int32 3)
+          #:options (hasheq 'n-components 1 'n-epochs 20))
+   (X-row "f12 before f14"
+          "X: expected float32, got float64"
+          (list*->device-matrix '((1 2 3)) #:dtype 'float64))
+   (X-row "f14 before f17"
+          "X: expected at least 2 rows, got 1"
+          (list*->device-matrix '((1 2 3)) #:dtype 'float32)
+          #:options (hasheq 'n-components 8))
+   (X-row "f20 before f21" "y: expected 8 elements, got 7" (tiny-with nan-row) #:y (labels 7))
+   (X-row "f21 before f22" nan-message (tiny-with (append nan-row '([(1 1) 1e20]))))
+   (X-row "f22 before f23"
+          large-message
+          (tiny-with (append zero-row large-row))
+          #:options (hasheq 'metric 'cosine))))
 
 (define (fit-calls)
   (list (cons 'umap-fit (lambda (X y options) (apply-options umap-fit (hash-set options 'y y) X)))
@@ -225,58 +230,58 @@
                (or params (umap-result-params base))))
 
 (define (transform-rows)
-  (list (row "t1" "X: expected float32, got int32" (cons (fitted) (blank-matrix 2 3 'int32)))
-        (row "t2" "X: expected rank 2, got rank 1" (cons (fitted) (blank-vector 3 'float32)))
-        (row "t3" "X: expected at least 1 row, got 0" (cons (fitted) (blank-matrix 0 3 'float32)))
-        (row "t5"
-             "result X: expected float32, got float64"
-             (cons (hand-built #:X (tiny-with '() 'float64)) (tiny-X)))
-        (row "t5 rows"
-             "result X: expected at least 2 rows, got 1"
-             (cons (hand-built #:X (rows->matrix '((1 2 3)) 'float32)) (tiny-X)))
-        (row "t6"
-             "embedding: expected float32, got float64"
-             (cons (hand-built #:embedding (blank-matrix 8 2 'float64)) (tiny-X)))
-        (row "t6 rows"
-             "embedding: expected 8 rows, got 7"
-             (cons (hand-built #:embedding (blank-matrix 7 2 'float32)) (tiny-X)))
-        (row "t6 columns"
-             "embedding: expected 2 columns, got 3"
-             (cons (hand-built #:embedding (blank-matrix 8 3 'float32)) (tiny-X)))
-        (row "t7" "X: expected 3 columns, got 2" (cons (fitted) (blank-matrix 2 2 'float32)))
-        (row "t8"
-             "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or cosine"
-             (cons (hand-built #:params (umap-params #:metric 'minkowski)) (tiny-X)))
-        (row "t8 n-neighbors"
-             "n-neighbors: expected at least 2, got 1"
-             (cons (hand-built #:params (umap-params #:n-neighbors 1)) (tiny-X)))
-        (row "t9"
-             "n-epochs: transform runs n-epochs/3 epochs and needs at least 3, got 2"
-             (cons (hand-built #:params (umap-params #:n-epochs 2)) (tiny-X)))
-        (row "t8 learning-rate"
-             (least-rate-message 1e-50)
-             (cons (hand-built #:params (umap-params #:learning-rate 1e-50)) (tiny-X)))
-        (row "t11 result X"
-             (string-append "result " nan-message)
-             (cons (hand-built #:X (tiny-with nan-row)) (tiny-X)))
-        (row "t11 result X norm"
-             (string-append "result " large-message)
-             (cons (hand-built #:X (tiny-with large-row)) (tiny-X)))
-        (row "t11 result X cosine"
-             (string-append "result " cosine-message)
-             (cons (hand-built #:X (tiny-with zero-row) #:params (umap-params #:metric 'cosine))
-                   (tiny-X)))
-        (row "t11 result X before X"
-             (string-append "result " nan-message)
-             (cons (hand-built #:X (tiny-with nan-row)) (tiny-with large-row)))
-        (row "t11" nan-message (cons (fitted) (tiny-with nan-row)))
-        (row "t11 norm" large-message (cons (fitted) (tiny-with large-row)))
-        (row "t11 cosine"
-             cosine-message
-             (cons (umap-fit (tiny-X) #:init 'random #:metric 'cosine) (tiny-with zero-row)))
-        (row "t7 before t11"
-             "X: expected 3 columns, got 2"
-             (cons (fitted) (rows->matrix '((+nan.0 1)) 'float32)))))
+  (list
+   (row "t1" "X: expected float32, got int32" (cons (fitted) (device-matrix 2 3 #:dtype 'int32)))
+   (row "t2" "X: expected rank 2, got rank 1" (cons (fitted) (device-vector 3 #:dtype 'float32)))
+   (row "t3" "X: expected at least 1 row, got 0" (cons (fitted) (device-matrix 0 3 #:dtype 'float32)))
+   (row "t5"
+        "result X: expected float32, got float64"
+        (cons (hand-built #:X (tiny-with '() 'float64)) (tiny-X)))
+   (row "t5 rows"
+        "result X: expected at least 2 rows, got 1"
+        (cons (hand-built #:X (list*->device-matrix '((1 2 3)) #:dtype 'float32)) (tiny-X)))
+   (row "t6"
+        "embedding: expected float32, got float64"
+        (cons (hand-built #:embedding (device-matrix 8 2 #:dtype 'float64)) (tiny-X)))
+   (row "t6 rows"
+        "embedding: expected 8 rows, got 7"
+        (cons (hand-built #:embedding (device-matrix 7 2 #:dtype 'float32)) (tiny-X)))
+   (row "t6 columns"
+        "embedding: expected 2 columns, got 3"
+        (cons (hand-built #:embedding (device-matrix 8 3 #:dtype 'float32)) (tiny-X)))
+   (row "t7" "X: expected 3 columns, got 2" (cons (fitted) (device-matrix 2 2 #:dtype 'float32)))
+   (row "t8"
+        "metric: expected euclidean, sqeuclidean, manhattan, chebyshev or cosine"
+        (cons (hand-built #:params (umap-params #:metric 'minkowski)) (tiny-X)))
+   (row "t8 n-neighbors"
+        "n-neighbors: expected at least 2, got 1"
+        (cons (hand-built #:params (umap-params #:n-neighbors 1)) (tiny-X)))
+   (row "t9"
+        "n-epochs: transform runs n-epochs/3 epochs and needs at least 3, got 2"
+        (cons (hand-built #:params (umap-params #:n-epochs 2)) (tiny-X)))
+   (row "t8 learning-rate"
+        (least-rate-message 1e-50)
+        (cons (hand-built #:params (umap-params #:learning-rate 1e-50)) (tiny-X)))
+   (row "t11 result X"
+        (string-append "result " nan-message)
+        (cons (hand-built #:X (tiny-with nan-row)) (tiny-X)))
+   (row "t11 result X norm"
+        (string-append "result " large-message)
+        (cons (hand-built #:X (tiny-with large-row)) (tiny-X)))
+   (row "t11 result X cosine"
+        (string-append "result " cosine-message)
+        (cons (hand-built #:X (tiny-with zero-row) #:params (umap-params #:metric 'cosine)) (tiny-X)))
+   (row "t11 result X before X"
+        (string-append "result " nan-message)
+        (cons (hand-built #:X (tiny-with nan-row)) (tiny-with large-row)))
+   (row "t11" nan-message (cons (fitted) (tiny-with nan-row)))
+   (row "t11 norm" large-message (cons (fitted) (tiny-with large-row)))
+   (row "t11 cosine"
+        cosine-message
+        (cons (umap-fit (tiny-X) #:init 'random #:metric 'cosine) (tiny-with zero-row)))
+   (row "t7 before t11"
+        "X: expected 3 columns, got 2"
+        (cons (fitted) (list*->device-matrix '((+nan.0 1)) #:dtype 'float32)))))
 
 (test-gpu "transform refuses each bad argument with its message"
   (for ([r (in-list (transform-rows))])
@@ -307,7 +312,7 @@
   (define model (fit (umap #:init 'random) (tiny-X)))
   (check-cuml-error 'logic
                     "transform: X: expected 3 columns, got 2"
-                    (lambda () (transform model (blank-matrix 2 2 'float32))))
+                    (lambda () (transform model (device-matrix 2 2 #:dtype 'float32))))
   (define w (list->device-vector '(1 1 1 1 1 1 1 1) #:dtype 'float32))
   (check-cuml-error 'logic "transform: umap is not fitted" (lambda () (transform (umap) (tiny-X))))
   (check-cuml-error 'logic

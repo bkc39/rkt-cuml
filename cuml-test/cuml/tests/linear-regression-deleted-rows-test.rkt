@@ -4,6 +4,7 @@
          (only-in rackunit check-false check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" uniform-source)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   check-law
@@ -11,7 +12,6 @@
                   fit-gap
                   fit-of
                   kept-rows
-                  unit-roundoff
                   zeroed)
          (only-in "private/scaler-data.rkt" bits-equal?))
 

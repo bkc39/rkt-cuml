@@ -3,8 +3,9 @@
 (require (only-in cuml/linear-model linear-regression-fit)
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/linear-data.rkt" [on-matrix matrix] [on-vector vector])
+         (only-in "private/linear-data.rkt" [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt" collinear-refusal))
 
 (define rows 5000)

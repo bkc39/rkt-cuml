@@ -2,8 +2,9 @@
 
 (require (only-in racket/list range)
          (only-in racket/match match-define)
-         (only-in "kmeans-data.rkt" blank-matrix)
-         (only-in "linear-data.rkt" [on-matrix matrix] [on-vector vector])
+         (only-in raft device-matrix)
+         (only-in "common-data.rkt" [on-vector vector])
+         (only-in "linear-data.rkt" [on-matrix matrix])
          (only-in "refusal-rows.rkt" row))
 
 (provide collinear-refusal
@@ -62,7 +63,7 @@
   (define y (vector targets))
   (list (row "X dtype"
              "X: expected float32 or float64, got int32"
-             (lambda () (go (blank-matrix 5 3 'int32) y)))
+             (lambda () (go (device-matrix 5 3 #:dtype 'int32) y)))
         (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go y y)))
         (row "y dtype" "y: expected float32, got float64" (lambda () (go (matrix grid 'float32) y)))
         (row "y length"
@@ -76,7 +77,7 @@
              (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
         (row "no column"
              "X: expected at least 1 column, got 0"
-             (lambda () (go (blank-matrix 5 0 'float64) y)))
+             (lambda () (go (device-matrix 5 0 #:dtype 'float64) y)))
         (row "non-finite X"
              "X: row 3, column 1: expected a finite value, got nan"
              (lambda () (go (matrix (with-cell grid 3 1 +nan.0)) y)))

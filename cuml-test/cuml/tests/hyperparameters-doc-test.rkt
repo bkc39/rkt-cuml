@@ -63,7 +63,8 @@
          (only-in racket/list append-map takef)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-not-false test-case)
-         (only-in scribble/reader read-inside))
+         (only-in scribble/reader read-inside)
+         (only-in "private/estimator-data.rkt" keyword-of))
 
 (define (manual-forms file)
   (call-with-input-file (collection-file-path file "cuml" "scribblings" "reference")
@@ -99,9 +100,6 @@
       [(list (? keyword? kw) id _contract) (argument kw id 'none)]
       [(list id _contract default) (argument #f id default)]
       [(list id _contract) (argument #f id 'none)])))
-
-(define (keyword-of key)
-  (string->keyword (symbol->string key)))
 
 (struct binding (name proc table keys taken keywords positional others))
 

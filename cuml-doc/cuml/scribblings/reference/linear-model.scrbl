@@ -411,16 +411,16 @@ label kind of a fitted result; copy it from one. @racket[logistic-regression-pre
 Fits C times the weighted sigmoid (two classes) or softmax loss under @racket[penalty] by
 L-BFGS, OWL-QN with an l1 part; the intercept is not penalised. @racket[y] holds class labels:
 integral numbers on the device, or a list of reals, strings or symbols; @racket[classes] are the
-sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
+sorted distinct labels. @racket[class-weight] scales each row's weight by its class's. Unlike
+Python cuML's, the softmax honours the weights.
 
-The fit is refused when the solver has not converged; the check bounds the first-order residual, not
+The fit is refused when the solver has not converged: the check bounds the first-order residual, not
 the distance to the optimum. A column constant over the rows of positive weight (zero, without
 @racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
-last bits is refused: centre it. Columns of widely mixed scale can be refused at any
-@racket[max-iter]: standardise them. Without @racket[fit-intercept], columns far from zero can be
-refused short of @racket[max-iter]: lower @racket[tol] or centre them
-(@hyperlink["https://github.com/bkc39/rkt-cuml/issues/126"]{#126}). On separable data without a
-penalty the coefficients grow until the solver stops. Large fits do not repeat bitwise.
+last bits is refused: centre it. With @racket[fit-intercept] or under @racket['none], a refused fit
+is solved again and kept if it passes. @racket[n-iter] counts every solve, at most
+@racket[max-iter]. Each refusal names its remedy. Unpenalised separable fits grow until the solver
+stops. Large fits do not repeat bitwise.
 @examples[#:eval ev #:label #f
 (logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
 (eval:error (logistic-regression-fit Xc yc #:C 0))

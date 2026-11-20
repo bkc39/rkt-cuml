@@ -6,7 +6,8 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/metrics-data.rkt" grid-20 permute projection random-permutation))
+         (only-in "private/common-data.rkt" pick)
+         (only-in "private/metrics-data.rkt" grid-20 projection random-permutation))
 
 (define n 200)
 
@@ -20,7 +21,7 @@
                         #:dtype 'float32))
 
 (define (permuted X order)
-  (list*->device-matrix (permute (device-matrix->list* X) order) #:dtype 'float32))
+  (list*->device-matrix (pick (device-matrix->list* X) order) #:dtype 'float32))
 
 (test-gpu "TW1: an embedding of X by itself scores exactly 1.0"
   (define-values (X _) (fixture))

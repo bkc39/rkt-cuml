@@ -9,8 +9,9 @@
          (only-in racket/function curryr)
          (only-in racket/list argmax list-set make-list take)
          (only-in racket/match match)
-         (only-in raft device-matrix->list* device-vector->list)
-         (only-in "scaler-data.rkt" dot generated-rows round-to rows->matrix transpose))
+         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
+         (only-in "exact-algebra.rkt" dot)
+         (only-in "scaler-data.rkt" generated-rows round-to transpose))
 
 (provide (struct-out fitted)
          (struct-out fixture)
@@ -96,7 +97,7 @@
            rows)))
 
 (define (fixture-matrix f dtype [count #f])
-  (rows->matrix (fixture-rows f dtype count) dtype))
+  (list*->device-matrix (fixture-rows f dtype count) #:dtype dtype))
 
 (define (axis-rows a b c permutation)
   (define (on-axis axis value)

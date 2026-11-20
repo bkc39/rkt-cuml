@@ -11,6 +11,7 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/exact-algebra.rkt" dot)
          (only-in "private/linear-data.rkt"
@@ -19,8 +20,7 @@
                   oracle-lstsq
                   solution-coef
                   solution-intercept
-                  [on-matrix matrix]
-                  [on-vector vector])
+                  [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt" collinear-refusal not-least-squares))
 
 (define shapes '((500 3) (500 5) (500 12) (5003 3) (5003 5) (5003 12)))

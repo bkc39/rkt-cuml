@@ -5,10 +5,10 @@
          (only-in rackunit check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" columns-of on-vector unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/exact-algebra.rkt" equilibrated-condition)
          (only-in "private/linear-data.rkt"
-                  columns-of
                   gap
                   lcase
                   lcase-X
@@ -16,13 +16,11 @@
                   max-abs
                   normal-case
                   on-matrix
-                  on-vector
                   oracle-ridge
                   q2-alpha
                   q2-float32-bound
                   [ridge-solution-coef oracle-coef]
                   rounded
-                  unit-roundoff
                   weighted-gram
                   window-draw
                   window-draws

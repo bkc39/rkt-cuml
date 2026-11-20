@@ -4,16 +4,17 @@
          (only-in racket/list last make-list take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/pca-data.rkt"
                   column
                   constant-column
                   fitted
                   fitted-mean
-                  fitted-variance
                   fitted-of
+                  fitted-variance
                   fixture-matrix
                   fixture-name
                   fixture-rows
@@ -25,7 +26,7 @@
                   normal-fixture
                   wide-fixture)
          (only-in "private/program.rkt" run-program)
-         (only-in "private/scaler-data.rkt" bits-equal? round-to rows->matrix unit-roundoff))
+         (only-in "private/scaler-data.rkt" bits-equal? round-to))
 
 (define dtypes '(float32 float64))
 
@@ -66,7 +67,7 @@
     (test-case (format "~a ~a k=~a" dt (fixture-name f) k)
       (define u (unit-roundoff dt))
       (define rows (fixture-rows f dt))
-      (define X (rows->matrix rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (define result (pca-fit X #:n-components k))
       (match-define (fitted components _ _ _ mean) (fitted-of result))
       (define d (length mean))
@@ -92,7 +93,7 @@
     (test-case (format "~a ~a k=~a" dt (fixture-name f) k)
       (define u (unit-roundoff dt))
       (define rows (fixture-rows f dt))
-      (define X (rows->matrix rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (define result (pca-fit X #:n-components k #:whiten #t))
       (match-define (fitted components variance _ _ mean) (fitted-of result))
       (define d (length mean))
@@ -119,7 +120,7 @@
     (define rows
       (for/list ([row (in-list (constant-column 200 4 2 3.0))])
         (map narrow row)))
-    (define X (rows->matrix rows dt))
+    (define X (list*->device-matrix rows #:dtype dt))
     (define plain (pca-fit X))
     (define whitened (pca-fit X #:whiten #t))
     (match-define (fitted _ variance _ _ _) (fitted-of whitened))
@@ -150,12 +151,12 @@
                 [whiten (in-list '(#f #t))]
                 #:unless (eq? f wide-fixture)
                 [rows (in-value (fixture-rows f dt))]
-                [result (in-value (pca-fit (rows->matrix rows dt) #:whiten whiten))]
+                [result (in-value (pca-fit (list*->device-matrix rows #:dtype dt) #:whiten whiten))]
                 [lists (in-value (fitted-of result))]
                 #:when (>= (last (fitted-variance lists))
                            (* 1e-3 (apply max (fitted-variance lists)))))
       (define u (unit-roundoff dt))
-      (define X (rows->matrix rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (define mean (fitted-mean lists))
       (define d (length mean))
       (define back
@@ -175,7 +176,7 @@
          [f (in-list (list normal-fixture integer-fixture))])
     (define u (unit-roundoff dt))
     (define rows (fixture-rows f dt))
-    (define X (rows->matrix rows dt))
+    (define X (list*->device-matrix rows #:dtype dt))
     (define result (pca-fit X #:whiten #t))
     (match-define (fitted components variance _ _ mean) (fitted-of result))
     (define d (length mean))
@@ -186,7 +187,8 @@
     (define back (device-matrix->list* (pca-inverse-transform result T)))
     (for ([m (in-list '(1 2 10))])
       (define head (take rows m))
-      (define t-head (~> (rows->matrix head dt) (pca-transform result _) device-matrix->list*))
+      (define t-head
+        (~> (list*->device-matrix head #:dtype dt) (pca-transform result _) device-matrix->list*))
       (define transform-bound
         (for/list ([r (in-list (centred-norms head mean))])
           (for/list ([s (in-list scale)])
@@ -195,7 +197,10 @@
       (check-true (<= worst 1.0)
                   (format "~a ~a ~a rows: transform ~a of the bound" dt (fixture-name f) m worst))
       (define back-head
-        (~> (take tw m) (rows->matrix dt) (pca-inverse-transform result _) device-matrix->list*))
+        (~> (take tw m)
+            (list*->device-matrix #:dtype dt)
+            (pca-inverse-transform result _)
+            device-matrix->list*))
       (define inverse-bound
         (for/list ([t-row (in-list (take tw m))])
           (for/list ([mu (in-list mean)])

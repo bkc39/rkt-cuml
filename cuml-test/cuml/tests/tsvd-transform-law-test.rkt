@@ -3,11 +3,12 @@
 (require (only-in cuml/decomposition tsvd-fit tsvd-inverse-transform tsvd-transform)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" gamma unit-roundoff)
          (only-in "private/pca-data.rkt" column fixture-name fixture-rows norm)
-         (only-in "private/scaler-data.rkt" rows->matrix transpose unit-roundoff)
+         (only-in "private/scaler-data.rkt" transpose)
          (only-in "private/tsvd-data.rkt"
                   extents
                   first-problems
@@ -29,9 +30,6 @@
 (define (absolute rows)
   (for/list ([row (in-list rows)])
     (map abs row)))
-
-(define (gamma m u)
-  (/ (* m u) (- 1 (* m u))))
 
 (define (product-problems got a columns u what)
   (define-values (_ m) (extents columns))
@@ -59,7 +57,7 @@
     (match-define (list dt solver f) c)
     (test-case (format "~a ~a ~a" dt solver (fixture-name f))
       (define rows (fixture-rows f dt))
-      (define X (rows->matrix rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (define result (tsvd-fit X #:n-components 3 #:solver solver))
       (match-define (svd components _ _ _) (tsvd-of result))
       (define T (tsvd-transform result X))
@@ -77,7 +75,7 @@
     (define rows (fixture-rows f dt))
     (define-values (_n d) (extents rows))
     (test-case (format "~a ~a ~a" dt solver (fixture-name f))
-      (define X (rows->matrix rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (define result (tsvd-fit X #:n-components d #:solver solver))
       (define back
         (~> (tsvd-transform result X) (tsvd-inverse-transform result _) device-matrix->list*))
@@ -104,7 +102,7 @@
           (min n d)
           3))
     (test-case (format "~a ~a ~a k=~a" dt solver (fixture-name f) k)
-      (define X (rows->matrix rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (define result (tsvd-fit X #:n-components k #:solver solver))
       (match-define (svd _ variance ratio _) (tsvd-of result))
       (define T-rows (device-matrix->list* (tsvd-transform result X)))

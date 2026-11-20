@@ -5,7 +5,8 @@
                   mbsgd-classifier-predict
                   mbsgd-regressor-fit
                   mbsgd-regressor-predict)
-         (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target)
          (only-in "private/process-memory.rkt" test-fit-memory))
 
@@ -23,6 +24,10 @@
   (define huge-y
     (on-vector (for/list ([i (in-range 100)])
                  (if (even? i) 1e155 -1e155))))
+  (define huge-float32-y
+    (on-vector (for/list ([i (in-range 100)])
+                 (if (even? i) 3e38 -3e38))
+               'float32))
   (define three-classes
     (on-vector (for/list ([i (in-range 100)])
                  (modulo i 3))
@@ -34,6 +39,8 @@
                       (lambda () (mbsgd-regressor-fit diverging-X diverging-y #:eta0 10)))
                 (list "mbsgd-regressor-fit: y is too large to check the fit; rescale y"
                       (lambda () (mbsgd-regressor-fit small-X huge-y)))
+                (list "mbsgd-regressor-fit: y is too large to check the fit; rescale y"
+                      (lambda () (mbsgd-regressor-fit diverging-X huge-float32-y #:eta0 1e-30)))
                 (list "mbsgd-classifier-fit: y: expected exactly 2 classes, got 3"
                       (lambda () (mbsgd-classifier-fit diverging-X three-classes))))))
 

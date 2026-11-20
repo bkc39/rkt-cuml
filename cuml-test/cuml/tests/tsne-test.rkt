@@ -8,16 +8,13 @@
                   tsne-result-n-iter
                   tsne-result-params
                   tsne-result?)
-         (only-in racket/flonum flsingle)
          (only-in rackunit check-equal? check-false check-pred check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/exact-algebra.rkt" single?)
          (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
          (only-in "private/tsne-data.rkt" embedded)
          (only-in "private/umap-data.rkt" far-blobs finite-rows? fixture-X fixture-rows overlap tiny))
-
-(define (single? x)
-  (and (flonum? x) (eqv? x (flsingle x))))
 
 (define (check-statistics result max-iter)
   (define n-iter (tsne-result-n-iter result))

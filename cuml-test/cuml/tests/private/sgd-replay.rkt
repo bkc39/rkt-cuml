@@ -1,7 +1,9 @@
 #lang racket/base
 
 (require (only-in racket/list split-at)
-         (only-in racket/math sgn sqr))
+         (only-in racket/math sgn sqr)
+         (only-in "common-data.rkt" mean)
+         (only-in "exact-algebra.rkt" dot))
 
 (provide (struct-out replay)
          sgd-objective
@@ -11,14 +13,8 @@
 
 (define adaptive-floor 1e-6)
 
-(define (dot u v)
-  (for/sum ([a (in-list u)] [b (in-list v)]) (* a b)))
-
 (define (axpy a x y)
   (map (lambda (xi yi) (+ (* a xi) yi)) x y))
-
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
 
 (define (sigmoid z)
   (/ 1.0 (+ 1.0 (exp (- z)))))

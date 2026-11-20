@@ -7,7 +7,6 @@
 
 (provide drawn-seed
          finite-real?
-         flag
          metric-code
          rows-or-zero)
 
@@ -25,6 +24,3 @@
   (match (and (device-array? a) (shape a))
     [(cons n _) n]
     [_ 0]))
-
-(define (flag v)
-  (if v 1 0))

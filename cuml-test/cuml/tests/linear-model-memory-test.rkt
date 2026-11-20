@@ -7,7 +7,8 @@
                   logistic-regression-predict
                   logistic-regression-predict-proba)
          (only-in racket/list make-list)
-         (only-in "private/linear-data.rkt" lcase-X lcase-w lcase-y normal-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" lcase-X lcase-w lcase-y normal-case on-matrix)
          (only-in "private/linear-refusal-rows.rkt" with-cell)
          (only-in "private/logistic-data.rkt" blob-case lr-case-w lr-case-X lr-case-y)
          (only-in "private/process-memory.rkt" test-fit-memory))

@@ -2,28 +2,30 @@
 
 (require (only-in racket/flonum flsingle)
          (only-in racket/match match)
-         (only-in "scaler-data.rkt" rows->matrix)
-         (only-in "umap-data.rkt" fixture-rows tiny))
+         (only-in raft list*->device-matrix)
+         (only-in "umap-data.rkt" fixture-X fixture-rows tiny))
 
 (provide cosine-message
          large-message
          large-row
+         least-rate-message
          listed-X
          nan-message
          nan-row
          normless-message
+         tiny-X
          tiny-with
          zero-row)
 
 (define (tiny-with cells [dt 'float32] [rows (fixture-rows tiny)])
-  (rows->matrix (for/list ([row (in-list rows)]
-                           [r (in-naturals)])
-                  (for/list ([x (in-list row)]
-                             [c (in-naturals)])
-                    (match (assoc (list r c) cells)
-                      [(list _ value) value]
-                      [#f x])))
-                dt))
+  (list*->device-matrix (for/list ([row (in-list rows)]
+                                   [r (in-naturals)])
+                          (for/list ([x (in-list row)]
+                                     [c (in-naturals)])
+                            (match (assoc (list r c) cells)
+                              [(list _ value) value]
+                              [#f x])))
+                        #:dtype dt))
 
 (define large (flsingle 1e20))
 
@@ -47,3 +49,9 @@
 (define cosine-message (normless-message 3))
 
 (define listed-X '((0.125 0.0 0.0) (0.5 0.25 0.0)))
+
+(define (tiny-X)
+  (fixture-X tiny))
+
+(define (least-rate-message v)
+  (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))

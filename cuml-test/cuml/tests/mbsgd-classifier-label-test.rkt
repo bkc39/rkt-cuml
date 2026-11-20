@@ -15,7 +15,8 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list device-vector? dtype list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" host on-vector)
+         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows clf-parts)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
@@ -24,11 +25,6 @@
 
 (define (relabel table)
   (map (lambda (c) (vector-ref table c)) codes))
-
-(define (host v)
-  (if (device-vector? v)
-      (device-vector->list v)
-      v))
 
 (define (kinds)
   (list (list "int32 0/1" (on-vector codes 'int32) '(0 1) 'int32)

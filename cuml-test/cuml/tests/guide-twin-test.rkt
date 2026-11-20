@@ -13,7 +13,7 @@
                   tsvd-result-singular-values)
          (only-in cuml/scribblings/guide/helpers features rounded)
          (only-in datasets/core load-dataset-table)
-         (only-in racket/list first second take)
+         (only-in racket/list first take)
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check check-equal? test-case)
@@ -75,7 +75,7 @@
                  10)
   (check-printed "two components' share"
                  (list (apply + (host (pca-result-explained-variance-ratio scaled-fit) 2)))
-                 (list (+ (first ratio) (second ratio)))
+                 (list (apply + (take ratio 2)))
                  (list (* 2 ratio-bound))
                  10)
   (check-printed "PCA's ratios"

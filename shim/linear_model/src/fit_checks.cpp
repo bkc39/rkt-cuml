@@ -13,6 +13,7 @@
 #include "cumlrkt/support.hpp"
 #include "cumlrkt/vectors.hpp"
 #include "glm_staging.hpp"
+#include "min_rows.hpp"
 #include "raftrkt/view.hpp"
 
 namespace cumlrkt::glm {
@@ -61,7 +62,7 @@ checked_fit<T> checked_inputs(const raft::handle_t& handle,
   const T* w = request.w == nullptr ? nullptr
                                     : raftrkt::vector_data<T, int32_t>(
                                           request.w, "sample-weight", x.n);
-  require_some("X", "row", x.n, 2);
+  require_some("X", "row", x.n, min_rows);
   require_some("X", "column", x.d);
   require_index("X", x.n, x.d);
   require_codes();

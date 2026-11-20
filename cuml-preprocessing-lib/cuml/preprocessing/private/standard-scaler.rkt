@@ -2,7 +2,7 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters boolean->int define-hyperparameters)
          (only-in racket/match match match-define)
          (only-in raft current-device-resources shape)
          (only-in raft/unsafe deposit->list)
@@ -37,9 +37,6 @@
 (define current-scratch-elements
   (make-parameter (expt 2 26) scratch-elements 'current-scratch-elements))
 
-(define (flag v)
-  (if v 1 0))
-
 (define (fitted who X with-mean with-std resources)
   (define out (deposit-for/who who resources))
   (define n-samples
@@ -47,8 +44,8 @@
                                                 resources
                                                 X
                                                 out
-                                                (flag with-mean)
-                                                (flag with-std)
+                                                (boolean->int with-mean)
+                                                (boolean->int with-std)
                                                 (current-scratch-elements)))
   (match-define (list _ n-features) (shape X))
   (define-values (mean var scale)

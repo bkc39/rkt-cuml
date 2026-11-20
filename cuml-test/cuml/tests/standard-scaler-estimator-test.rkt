@@ -25,21 +25,14 @@
          (only-in racket/generic exn:fail:support?)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-exn check-false check-not-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" printed round-trips)
-         (only-in "private/kmeans-data.rkt" blank-matrix)
-         (only-in "private/scaler-data.rkt" bits-equal? normal-rows rows->matrix))
+         (only-in "private/scaler-data.rkt" bits-equal? normal-rows statistics))
 
 (define changed (hasheq 'with-mean #f 'with-std #f))
-
-(define (statistics result)
-  (for/list ([v (list (standard-scaler-result-mean result)
-                      (standard-scaler-result-var result)
-                      (standard-scaler-result-scale result))])
-    (and v (device-vector->list v))))
 
 (test-case "the default parameters, and every keyword round-trips"
   (check-equal? (standard-scaler-params) (hasheq 'with-mean #t 'with-std #t))
@@ -75,7 +68,7 @@
   (check-equal? (capabilities (standard-scaler) standard-scaler?) '(#t #f #f #t #f #t)))
 
 (test-gpu "inverse-transform of a transformer without one is not supported"
-  (define X (rows->matrix (normal-rows 2 40 2 'float32) 'float32))
+  (define X (list*->device-matrix (normal-rows 2 40 2 'float32) #:dtype 'float32))
   (check-exn exn:fail:support? (lambda () (inverse-transform (fit (kmeans #:n-clusters 2) X) X))))
 
 (test-gpu "L11, L18: the estimator is the procedures, bitwise, and fit leaves its argument unfitted"
@@ -83,7 +76,7 @@
          [with-mean (in-list '(#t #f))]
          [with-std (in-list '(#t #f))])
     (test-case (format "~a ~a ~a" dt with-mean with-std)
-      (define X (rows->matrix (normal-rows 11 300 7 dt) dt))
+      (define X (list*->device-matrix (normal-rows 11 300 7 dt) #:dtype dt))
       (define e (standard-scaler #:with-mean with-mean #:with-std with-std))
       (define fitted-e (fit e X '(ignored)))
       (check-equal? (list (fitted? e) (fitted? fitted-e)) '(#f #t))
@@ -108,4 +101,5 @@
 (test-gpu "fit-transform names the generic for a fit refusal"
   (check-cuml-error 'logic
                     "fit-transform: X: expected at least 1 row, got 0"
-                    (lambda () (fit-transform (standard-scaler) (blank-matrix 0 3 'float32)))))
+                    (lambda ()
+                      (fit-transform (standard-scaler) (device-matrix 0 3 #:dtype 'float32)))))

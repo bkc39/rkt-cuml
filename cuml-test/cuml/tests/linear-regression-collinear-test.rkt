@@ -8,6 +8,7 @@
          (only-in rackunit check-true test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" unit-roundoff [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/exact-algebra.rkt" dot)
          (only-in "private/linear-data.rkt"
@@ -22,9 +23,7 @@
                   solution-intercept
                   solution-kappa
                   summed-case
-                  unit-roundoff
-                  [on-matrix matrix]
-                  [on-vector vector])
+                  [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt" collinear-refusal not-least-squares))
 
 (define sizes '(60 1000))
