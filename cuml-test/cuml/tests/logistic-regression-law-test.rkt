@@ -17,6 +17,7 @@
                   case-y
                   fit-flat
                   fit-parts
+                  gauged-fit
                   lr-case
                   lr-case-X
                   lr-case-name
@@ -25,6 +26,7 @@
                   lr-fit
                   lr-fit-coef
                   relative-gap
+                  repeated-rows
                   scaled-case
                   scaled-parts
                   tight-max-iter
@@ -178,27 +180,45 @@
         (define size (+ (abs bc) (for/sum ([xj (in-list x)] [wj (in-list w)]) (abs (* xj wj)))))
         (check-true (<= (abs (- (inexact->exact zc) exact)) (* (add1 (length x)) u size)))))))
 
-(define (repeated c times)
-  (define (spread xs)
-    (for*/list ([(x y) (in-parallel (in-list xs) (in-list (lr-case-y c)))]
-                [_ (in-range (hash-ref times y))])
-      x))
-  (lr-case (lr-case-name c) (spread (lr-case-X c)) (spread (lr-case-y c)) #f))
+(define (class-counts c times)
+  (map (lambda (y) (hash-ref times y)) (lr-case-y c)))
+
+(define unbalanced-three
+  (let ([c (blob-case "three unbalanced classes" 160 3 3 13)])
+    (define keep
+      (for/list ([y (in-list (lr-case-y c))]
+                 [i (in-naturals)])
+        (if (or (= y 0) (and (= y 1) (zero? (modulo i 2))) (zero? (modulo i 4))) 1 0)))
+    (repeated-rows c keep)))
+
+(define row-weighted-three (blob-case "three classes, integer row weights" 90 3 3 14 #:weighted? #t))
 
 (define repeated-gap-bound 1e-6)
 
+(define (check-repeated c counts fit-weighted)
+  (define tol (tight-tol 'float64))
+  (define weighted (fit-parts (fit-weighted tol)))
+  (define spread
+    (fit-parts (case-fit (repeated-rows c counts) 'float64 #:tol tol #:max-iter tight-max-iter)))
+  (define gap (relative-gap (gauged-fit weighted) (gauged-fit spread)))
+  (check-true (<= gap repeated-gap-bound) (format "gap ~a" gap)))
+
 (test-gpu "integer class weights fit as repeated rows"
   (define unweighted-binary (lr-case "binary" (lr-case-X binary) (lr-case-y binary) #f))
-  (for ([c (in-list (list unweighted-binary three))]
-        [times (in-list (list (hash 0 2 1 3) (hash 0 2 1 2 2 2)))])
+  (for ([c (in-list (list unweighted-binary three unbalanced-three))]
+        [times (in-list (list (hash 0 2 1 3) (hash 0 2 1 2 2 2) (hash 0 1 1 3 2 2)))])
     (test-case (lr-case-name c)
-      (define tol (tight-tol 'float64))
-      (define weighted
-        (fit-parts (case-fit c 'float64 #:class-weight times #:tol tol #:max-iter tight-max-iter)))
-      (define spread
-        (fit-parts (case-fit (repeated c times) 'float64 #:tol tol #:max-iter tight-max-iter)))
-      (define gap (relative-gap (fit-flat weighted) (fit-flat spread)))
-      (check-true (<= gap repeated-gap-bound) (format "gap ~a" gap)))))
+      (check-repeated
+       c
+       (class-counts c times)
+       (lambda (tol)
+         (case-fit c 'float64 #:class-weight times #:tol tol #:max-iter tight-max-iter))))))
+
+(test-gpu "integer sample weights with three classes fit as repeated rows"
+  (check-repeated row-weighted-three
+                  (lr-case-w row-weighted-three)
+                  (lambda (tol)
+                    (case-fit row-weighted-three 'float64 #:tol tol #:max-iter tight-max-iter))))
 
 (define (window-scale-gap-bound dt)
   (by-dtype dt (min (* 8 2e-3) 8e-2) (min (* 8 1e-6) 3e-2)))

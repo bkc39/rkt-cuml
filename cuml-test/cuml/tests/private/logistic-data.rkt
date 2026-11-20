@@ -35,6 +35,7 @@
          gauged-sklearn
          penalty-settings
          relative-gap
+         repeated-rows
          scaled-case
          scaled-parts
          scaled-rows
@@ -42,7 +43,6 @@
          setting-fit
          tight-max-iter
          tight-tol
-         unequal-weights-message
          with-column)
 
 (struct lr-case (name X y w) #:transparent)
@@ -58,10 +58,6 @@
 
 (define (cutoff-exn? e)
   (and (exn:fail? e) (regexp-match? cutoff-message (exn-message e))))
-
-(define unequal-weights-message
-  (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
-                 "(cuML's softmax ignores them); got unequal weights"))
 
 (define default-tol 1e-4)
 
@@ -126,6 +122,13 @@
            (map (lambda (row) (cons value row)) (lr-case-X c))
            (lr-case-y c)
            (lr-case-w c)))
+
+(define (repeated-rows c counts)
+  (define (spread xs)
+    (for*/list ([(x n) (in-parallel (in-list xs) (in-list counts))]
+                [_ (in-range n)])
+      x))
+  (lr-case (lr-case-name c) (spread (lr-case-X c)) (spread (lr-case-y c)) #f))
 
 (define (case-y c [label-dtype 'int32])
   (on-vector (lr-case-y c) label-dtype))

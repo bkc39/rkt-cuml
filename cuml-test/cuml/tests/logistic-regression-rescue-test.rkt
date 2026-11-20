@@ -6,8 +6,8 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
          (only-in "private/linear-data.rkt" on-matrix on-vector)
-         (only-in "private/logistic-data.rkt" lr-case-X lr-case-y)
-         (only-in "private/logistic-oracle.rkt" residual)
+         (only-in "private/logistic-data.rkt" default-setting fit-parts lr-case lr-case-X lr-case-y)
+         (only-in "private/logistic-oracle.rkt" case-residual residual)
          (only-in "private/raw-breast-cancer.rkt" raw-breast-cancer)
          (only-in "private/real-logistic-data.rkt"
                   check-stationary
@@ -17,15 +17,18 @@
 
 (define raw-breast-cancer-arms '((float64 #f 6000) (float32 #t 6000) (float64 #t 20000)))
 
-(define (stamps span seed)
+(define class-cuts (hash 2 '(0) 3 '(-1 1)))
+
+(define (stamps span seed #:classes [k 2])
   (define normal (normal-source seed))
   (define uniform (uniform-source (add1 seed)))
   (for/lists (X y #:result (values X y))
              ([_ (in-range 400)])
              (define a (normal))
              (define t (* span (uniform)))
+             (define s (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2)))
              (values (list a (+ 1.7e9 t))
-                     (if (positive? (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2))) 1 0))))
+                     (for/sum ([cut (in-list (hash-ref class-cuts k))]) (if (> s cut) 1 0)))))
 
 (define (refusal fit)
   (with-handlers ([exn:fail? exn-message])
@@ -40,6 +43,21 @@
       (define r
         (logistic-regression-fit (on-matrix X 'float64) (on-vector y 'int32) #:penalty penalty))
       (match-define (residual K _ bound) (residual-at r X y #:penalty penalty))
+      (check-true (<= K bound) (format "K ~a bound ~a" (exact->inexact K) (exact->inexact bound))))))
+
+(test-gpu "epoch-second timestamps, three classes, unequal weights: fitted inside the check's bound"
+  (for ([seed (in-list '(5 6 7))])
+    (test-case (format "~a" seed)
+      (define-values (X y) (stamps 60.0 seed #:classes 3))
+      (define w
+        (for/list ([i (in-range (length y))])
+          (add1 (modulo i 3))))
+      (define r
+        (logistic-regression-fit (on-matrix X 'float64)
+                                 (on-vector y 'int32)
+                                 #:sample-weight (on-vector w 'float64)))
+      (match-define (residual K _ bound)
+        (case-residual (lr-case "stamps" X y w) (fit-parts r) default-setting))
       (check-true (<= K bound) (format "K ~a bound ~a" (exact->inexact K) (exact->inexact bound))))))
 
 (test-gpu "a rescue out of max-iter: names its last residual, says raise max-iter"
