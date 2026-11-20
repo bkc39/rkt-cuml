@@ -10,6 +10,7 @@
          gamma
          gaussian
          host
+         kept-rows
          least-magnitude
          mean
          noise
@@ -27,6 +28,12 @@
   (define size (if (eq? dt 'float32) 4 8))
   (for/list ([x (in-list xs)])
     (integer-bytes->integer (real->floating-point-bytes x size) #f)))
+
+(define (kept-rows xs weights)
+  (for/list ([x (in-list xs)]
+             [w (in-list weights)]
+             #:unless (zero? w))
+    x))
 
 (define (columns-of rows)
   (apply map list rows))

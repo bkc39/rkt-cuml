@@ -4,6 +4,7 @@
          (only-in racket/match match match* match-define struct*)
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
+         (only-in "common-data.rkt" kept-rows)
          (only-in "linear-data.rkt" by-dtype dtypes on-matrix)
          (only-in "logistic-data.rkt"
                   decision-label
@@ -48,12 +49,6 @@
     [(_ (cons 0 rest)) (collapsed labels rest)]
     [((cons label _) (cons n rest)) (cons label (collapsed (list-tail labels n) rest))]))
 
-(define (weighted-rows xs counts)
-  (for/list ([x (in-list xs)]
-             [n (in-list counts)]
-             #:unless (zero? n))
-    x))
-
 (define (centre-coef? penalty)
   (and (memq penalty '(l1 none)) #t))
 
@@ -91,7 +86,7 @@
                                                                      (on-matrix (lr-case-X c) dt))))
       (define-values (z labels)
         (if repeated?
-            (values (weighted-rows all-z (lr-case-w c))
+            (values (kept-rows all-z (lr-case-w c))
                     (collapsed (hash-ref theirs 'predict) (lr-case-w c)))
             (values all-z (hash-ref theirs 'predict))))
       (for ([zi (in-list z)]
