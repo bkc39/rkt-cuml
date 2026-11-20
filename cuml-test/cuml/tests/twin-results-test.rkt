@@ -59,7 +59,10 @@
 
 (define run-rows
   `(("no fixtures sends only the cases" #f #f ,(hasheq 'cases requests) passed)
-    ("the fixtures reach the request" ,fixtures #f ,(hasheq 'cases requests 'fixtures fixtures) passed)
+    ("the fixtures reach the request" ,fixtures
+                                      #f
+                                      ,(hasheq 'cases requests 'fixtures fixtures)
+                                      passed)
     ("the native libcuml given is checked" #f "26.10.00" ,(hasheq 'cases requests) ,native)))
 
 (for ([row (in-list run-rows)])
@@ -69,8 +72,11 @@
     (define (run script input)
       (set! sent (list script input))
       (answer pinned))
-    (check-equal? (failed-message
-                   (lambda ()
-                     (twin-results "twin.py" requests #:expected-cuml expected #:fixtures sent-fixtures #:run run)))
+    (check-equal? (failed-message (lambda ()
+                                    (twin-results "twin.py"
+                                                  requests
+                                                  #:expected-cuml expected
+                                                  #:fixtures sent-fixtures
+                                                  #:run run)))
                   outcome)
     (check-equal? sent (list "twin.py" request))))
