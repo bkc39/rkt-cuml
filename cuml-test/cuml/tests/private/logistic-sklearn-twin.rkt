@@ -23,6 +23,7 @@
          (only-in "logistic-twin-data.rkt" logistic-twin-results setting-twin twin-trial))
 
 (provide check-sklearn-twins
+         collapsed
          sklearn-trials)
 
 (define (optimum-gap-bound dt)
@@ -44,7 +45,14 @@
 (define (collapsed labels counts)
   (match* (labels counts)
     [(_ '()) '()]
+    [(_ (cons 0 rest)) (collapsed labels rest)]
     [((cons label _) (cons n rest)) (cons label (collapsed (list-tail labels n) rest))]))
+
+(define (weighted-rows xs counts)
+  (for/list ([x (in-list xs)]
+             [n (in-list counts)]
+             #:unless (zero? n))
+    x))
 
 (define (centre-coef? penalty)
   (and (memq penalty '(l1 none)) #t))
@@ -78,13 +86,14 @@
                   (format "coef gap ~a, the unweighted fit's ~a" gap solver-gap))
       (define default-gap (gap-to-sklearn (fit-parts (setting-fit c dt s))))
       (check-true (<= default-gap (default-tol-cap dt)) (format "default-tol gap ~a" default-gap))
-      (define z
+      (define all-z
         (device-matrix->list* (logistic-regression-decision-function fitted
                                                                      (on-matrix (lr-case-X c) dt))))
-      (define labels
+      (define-values (z labels)
         (if repeated?
-            (collapsed (hash-ref theirs 'predict) (lr-case-w c))
-            (hash-ref theirs 'predict)))
+            (values (weighted-rows all-z (lr-case-w c))
+                    (collapsed (hash-ref theirs 'predict) (lr-case-w c)))
+            (values all-z (hash-ref theirs 'predict))))
       (for ([zi (in-list z)]
             [label (in-list labels)]
             #:unless (< (margin zi) boundary-margin))
