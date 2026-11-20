@@ -46,30 +46,31 @@ weights are at least 0 with a positive sum. A zero weight deletes its row, and s
 at most 2@superscript{−150}·4@superscript{k} (float32) or 2@superscript{−1075}·4@superscript{k}
 (float64), 4@superscript{k} being the largest weight's power of two rounded up to a power of 4.
 
-@racket['auto] and @racket['eig] solve the normal equations, @racket['svd] and @racket['svd-jacobi]
-use a Jacobi SVD, @racket['qr] a QR factorisation and @racket['svd-qr] a QR-based SVD; each column,
-@racket[y] and the weights are first scaled by powers of two.
+@racket['auto] and @racket['eig] solve the normal equations, @racket['svd]
+and @racket['svd-jacobi] use a Jacobi SVD, @racket['qr] a QR factorisation
+and @racket['svd-qr] a QR-based SVD; each column, @racket[y] and the weights
+are first scaled by powers of two.
 
-A column constant over the rows of positive weight (zero, without @racket[fit-intercept]) gets
-coefficient 0. With more non-constant columns than rows of positive weight, less one for
-@racket[fit-intercept], the Jacobi SVD gives the minimum-norm fit, except in float32 with
-@racket[fit-intercept], where the fit interpolates @racket[y] but generally is not minimum-norm.
+A column constant over the rows of positive weight (zero, without
+@racket[fit-intercept]) gets coefficient 0. With more non-constant columns
+than rows of positive weight, less one for @racket[fit-intercept], the Jacobi
+SVD gives the minimum-norm fit, except in float32 with
+@racket[fit-intercept], where the fit interpolates @racket[y] but generally
+is not minimum-norm.
 
 The fit is refused when the residual's weighted inner product with some column, centred under
 @racket[fit-intercept], exceeds 2@superscript{-8} (float32) or 2@superscript{-18} (float64) times
-that column's weighted spread times @racket[y]'s, as with collinear columns in float32, where
-float64 often fits. Unless X is wide (above) or has one non-constant column, float32 @racket['qr]
-and @racket['svd-qr] also refuse X before the solve when a lower bound on κ′, the condition number
-of X's Gram matrix with columns centred under @racket[fit-intercept] and scaled to unit spread,
-gives u·√κ′ ≥ 2@superscript{-8}, u being the dtype's unit roundoff, as with a full one-hot design
-with an intercept: drop a level, pass @racket[#:fit-intercept #f], or use float64 @racket['auto]. On
-exactly collinear X, float32 @racket['svd] and @racket['svd-jacobi] do not give the minimum-norm
-fit. A coefficient fixed only by rows of low weight w is accurate to about u·√(w@subscript{max}/w),
-a loss the refusal does not see.
+that column's weighted spread times @racket[y]'s, as with collinear float32 columns (float64 often
+fits). Float32 @racket['qr] and @racket['svd-qr] also refuse X, unless wide or with one non-constant
+column, before the solve when a lower bound on κ′ (the condition number of X's Gram matrix, centred
+as above, at unit spread) gives u·√κ′ ≥ 2@superscript{-8}, u the dtype's unit roundoff, as with a
+one-hot design and an intercept (@tt{plans/layout.md}, L2-l, has remedies). A coefficient fixed only
+by rows of low weight w is accurate to about u·√(w@subscript{max}/w), a loss the refusal misses.
 
-Weighted fits with an intercept can differ in the last bits between runs from about 2000 rows, as in
-Python cuML; unweighted fits, and fits without an intercept, repeat bitwise. @racket[X], @racket[y]
-and @racket[sample-weight] are not modified.
+Weighted fits with an intercept can differ in the last bits between runs
+from about 2000 rows, as in Python cuML; unweighted fits, and fits without an
+intercept, repeat bitwise. @racket[X], @racket[y] and @racket[sample-weight]
+are not modified.
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 1) (1 1) (2 1) (3 1)) #:dtype 'float64))
 (define yc (list->device-vector '(1 3 5 7) #:dtype 'float64))
@@ -110,11 +111,12 @@ The hyperparameters of @racket[linear-regression-fit] and
                             [#:resources resources (or/c #f device-resources?) #f])
          linear-regression?]{
 An unfitted linear regression with the hyperparameters
-@racket[(linear-regression-params params ...)]: an estimator, a predictor and a scorer. @racket[fit]
-is @racket[linear-regression-fit] and needs @racket[y]; @racket[predict] is
-@racket[linear-regression-predict]; @racket[score] is @racket[r2-score] of @racket[y] against the
-predictions, weighted by @racket[sample-weight]; in float32 it can count a row whose weight
-@racket[fit] counted as zero. Errors name the generic.
+@racket[(linear-regression-params params ...)]: an estimator, a predictor
+and a scorer. @racket[fit] is @racket[linear-regression-fit] and needs
+@racket[y]; @racket[predict] is @racket[linear-regression-predict];
+@racket[score] is @racket[r2-score] of @racket[y] against the predictions,
+weighted by @racket[sample-weight]; in float32 it can count a row whose
+weight @racket[fit] counted as zero. Errors name the generic.
 @examples[#:eval ev #:label #f
 (define e (fit (linear-regression) X y))
 (real->decimal-string (score e X y) 6)
@@ -169,19 +171,16 @@ dtype's unit roundoff, is below rounding and is taken as 0: that fit is
 weight (zero, without @racket[fit-intercept]) gets coefficient 0.
 
 The fit is refused when the solve is not a ridge solution, as when X is ill-conditioned for
-@racket[alpha] (@racket['svd], float64 or a larger @racket[alpha] may fit), and when @racket[alpha]
-scaled with X passes the dtype's range. The coefficients are accurate to about u·κ@subscript{α}
-relative to the largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
-(λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the eigenvalues λ of
-XᵀWX on the varying columns, X centred as above. With @racket[alpha] above u times the narrowest
-column's spread and at most u times the widest's, @racket['svd] refuses X that is ill-conditioned
-for @racket[alpha] before the solve; a larger @racket[alpha], or float64 for float32 X, may fit. In
-float64 this also refuses some fits that @racket['svd] would return accurately. Elsewhere, where
-u·κ@subscript{α} is 1 or more, as with columns of very different scales or nearly collinear columns,
-either solver may refuse the fit as ill-conditioned or return it wrong. @racket['auto] and
-@racket['eig] can also lose accuracy whatever @racket[alpha] is when XᵀWX has eigenvalues below
-u·λ@subscript{max} (u·κ@subscript{0} ≥ 1), as in Python cuML; @racket['svd] does not.
-@tt{plans/layout.md} (L2-j to L2-l) has the measurements.
+@racket[alpha] (@racket['svd], float64 or a larger @racket[alpha] may fit; with @racket[alpha] above
+u times the narrowest column's spread and at most u times the widest's, @racket['svd] refuses it
+before the solve, and in float64 some accurate fits), and when @racket[alpha] scaled with X passes
+the dtype's range. The coefficients are accurate to about u·κ@subscript{α} relative to the largest,
+less so when y is nearly orthogonal to X, κ@subscript{α} being (λ@subscript{max} +
+@racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the eigenvalues λ of XᵀWX on the varying
+columns, X centred as above. Elsewhere either solver may refuse or err at u·κ@subscript{α} ≥ 1, as
+with nearly collinear columns. @racket['auto] and @racket['eig] can also lose accuracy whatever
+@racket[alpha] is when XᵀWX has eigenvalues below u·λ@subscript{max} (u·κ@subscript{0} ≥ 1), as in
+Python cuML; @racket['svd] does not. @tt{plans/layout.md} (L2-j to L2-l) measures this.
 
 Fits repeat as @racket[linear-regression-fit]'s, and @racket[X], @racket[y] and
 @racket[sample-weight] are not modified.
@@ -214,9 +213,10 @@ The hyperparameters of @racket[ridge-fit] and @racket[ridge], as @racket[kmeans-
                 [#:fit-intercept fit-intercept boolean? #t]
                 [#:resources resources (or/c #f device-resources?) #f])
          ridge?]{
-An unfitted ridge regression with the hyperparameters @racket[(ridge-params params ...)], as
-@racket[linear-regression]: @racket[fit] is @racket[ridge-fit] and needs @racket[y],
-@racket[predict] is @racket[ridge-predict], and @racket[score] is the weighted @racket[r2-score].
+An unfitted ridge regression with the hyperparameters
+@racket[(ridge-params params ...)], as @racket[linear-regression]: @racket[fit] is
+@racket[ridge-fit] and needs @racket[y], @racket[predict] is @racket[ridge-predict],
+and @racket[score] is the weighted @racket[r2-score].
 @examples[#:eval ev #:label #f
 (real->decimal-string (score (fit (ridge #:alpha 0.5) X y) X y) 6)
 (eval:error (fit (ridge) X))
