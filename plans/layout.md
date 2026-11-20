@@ -2053,9 +2053,12 @@ scratch, the source is `cpp/src/glm/qn/`.
   (L-BFGS/OWL-QN unchanged), read from the flake's `cumlSrc`; every other
   fit, unweighted multiclass included, still calls libcuml's `qnFit`.
   The check's K and the rescue's re-solves read the same w̃.
-  - Reduction: a gtest pins equal weights to cuML's `Softmax` bit for
-    bit, and the loss and gradient to a float64 host reference for
-    k ∈ {2, 3, 7} under unequal weights. The unweighted k=3 fit of
+  - Reduction: a gtest pins equal weights to cuML's `Softmax` (the
+    gradient bit for bit; the loss, which both kernels sum across blocks
+    by atomicAdd, to (m − 1)·ε of that sum's order), and the loss and
+    gradient to a float64 host reference under unequal weights, for
+    m = 101 rows (several blocks, the last ragged) and
+    k ∈ {2, 3, 7, 33} (33 > 32 takes the kernel's C > BX loops). The unweighted k=3 fit of
     `logistic-regression-twin-bits-test` is unchanged bit for bit; at
     f1f7ced and here its float32 and float64 fits print identically.
   - S1: integer class weights (k=3, unbalanced classes) and per-row

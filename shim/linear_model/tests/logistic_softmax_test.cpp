@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <raft/core/handle.hpp>
 #include <random>
 #include <type_traits>
@@ -26,7 +27,7 @@ using cumlrkt::glm::logistic::softmax_loss_grad;
 using cumlrkt::glm::logistic::softmax_problem;
 using cumlrkt::test::resources;
 
-constexpr int64_t rows = 32;
+constexpr int64_t rows = 101;
 constexpr int64_t columns = 3;
 constexpr unsigned seed = 124;
 constexpr double least_weight = 0.2;
@@ -149,21 +150,25 @@ void expect_cuml_softmax(int64_t k) {
   const problem p = drawn(k, true);
   const loss_grad ours = device_loss_grad<T>(p, true);
   const loss_grad theirs = device_loss_grad<T>(p, false);
-  EXPECT_EQ(ours.loss, theirs.loss) << "k " << k;
+  // Both kernels add each block's positive partial loss into one scalar by
+  // atomicAdd, so the losses differ only in that sum's order.
+  const double order_tol = static_cast<double>(rows - 1) *
+                           std::numeric_limits<T>::epsilon() * theirs.loss;
+  EXPECT_NEAR(ours.loss, theirs.loss, order_tol) << "k " << k;
   EXPECT_EQ(ours.grad, theirs.grad) << "k " << k;
 }
 
 TEST(WeightedSoftmax, MatchesAFloat64HostReference) {
   CUMLRKT_REQUIRE_GPU();
-  for (const int64_t k : {2, 3, 7}) {
+  for (const int64_t k : {2, 3, 7, 33}) {
     expect_reference<double>(k);
     expect_reference<float>(k);
   }
 }
 
-TEST(WeightedSoftmax, EqualWeightsAreCumlsSoftmaxBitForBit) {
+TEST(WeightedSoftmax, EqualWeightsAreCumlsSoftmax) {
   CUMLRKT_REQUIRE_GPU();
-  for (const int64_t k : {2, 3, 7}) {
+  for (const int64_t k : {2, 3, 7, 33}) {
     expect_cuml_softmax<double>(k);
     expect_cuml_softmax<float>(k);
   }
