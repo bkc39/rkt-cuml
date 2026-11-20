@@ -7,11 +7,11 @@
          (only-in rackunit check-= check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
+         (only-in "private/common-data.rkt" columns-of mean)
          (only-in "private/metrics-data.rkt"
                   exact-accuracy
                   exact-mse
                   exact-r2
-                  mean
                   pow2-scaled
                   r2-bound
                   r2-gap
@@ -136,9 +136,6 @@
     (for/list ([j (in-range d)])
       (+ (* 10.0 j) (next)))))
 
-(define (columns xss)
-  (apply map list xss))
-
 (test-gpu "a matrix's error is within 1e-14 of the mean of its columns' errors"
   (for* ([dt (in-list '(float32 float64))]
          [weighted? (in-list '(#f #t))]
@@ -148,8 +145,8 @@
     (define w (and weighted? (integer-weights 300 d)))
     (define whole (mse y p w #:dtype dt))
     (define by-column
-      (mean (for/list ([a (in-list (columns y))]
-                       [b (in-list (columns p))])
+      (mean (for/list ([a (in-list (columns-of y))]
+                       [b (in-list (columns-of p))])
               (mse a b w #:dtype dt))))
     (check-= whole by-column (* 1e-14 by-column) (format "~a against ~a" whole by-column))))
 

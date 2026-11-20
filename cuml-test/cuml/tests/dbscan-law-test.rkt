@@ -4,7 +4,9 @@
          (only-in racket/list make-list range shuffle)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
+         (only-in raft list*->device-matrix list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" block-starts noise pick)
          (only-in "private/dbscan-data.rkt"
                   cosine-cloud
                   cosine-distance
@@ -15,16 +17,12 @@
                   expected
                   expected-core
                   expected-labels
-                  first-copies
                   fitted-lists
                   integer-grid
-                  mat
-                  pick
                   repeat-rows
                   same-partition?
                   seeded
-                  structure-problems
-                  vec)
+                  structure-problems)
          (only-in "private/kmeans-data.rkt" dtypes))
 
 (define (oracle-of rows eps min-samples #:weights [weights #f])
@@ -42,14 +40,11 @@
 (define (wide-pair-fit d factor)
   (match-define (list a b) (wide-pair d))
   (define eps (* factor (cosine-distance a b)))
-  (values (fitted-lists (mat (list a b) 'float32) #:eps eps #:min-samples 2 #:metric 'cosine)
+  (values (fitted-lists (list*->device-matrix (list a b) #:dtype 'float32)
+                        #:eps eps
+                        #:min-samples 2
+                        #:metric 'cosine)
           (dbscan-oracle 2 (cosine-within (vector a b) eps) 2)))
-
-(define (noise labels)
-  (for/list ([l (in-list labels)]
-             [i (in-naturals)]
-             #:when (= l -1))
-    i))
 
 (define (adjacent? labels core e)
   (match-define (expected _ _ options) e)
@@ -77,7 +72,7 @@
          [seed (in-range 1 6)])
     (test-case (format "~a seed ~a" dt seed)
       (define rows (integer-grid 150 2 12 seed))
-      (check-one-batch (fitted-lists (mat rows dt) #:eps 1.5 #:min-samples 4)
+      (check-one-batch (fitted-lists (list*->device-matrix rows #:dtype dt) #:eps 1.5 #:min-samples 4)
                        (oracle-of rows 3/2 4)))))
 
 (define big-rows (integer-grid 2001 2 60 21))
@@ -86,7 +81,7 @@
 (test-gpu "the core samples, their clusters and the noise do not depend on the batch size"
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (define X (mat big-rows dt))
+      (define X (list*->device-matrix big-rows #:dtype dt))
       (for ([mbytes (in-list '(1 2 5))])
         (check-batched (fitted-lists X #:eps 1.5 #:min-samples 4 #:max-mbytes-per-batch mbytes)
                        big-oracle))
@@ -101,8 +96,10 @@
   (define at (list->vector p))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (match-define (list labels core) (fitted-lists (mat rows dt) #:eps 1.5 #:min-samples 4))
-      (match-define (list p-labels p-core) (fitted-lists (mat permuted dt) #:eps 1.5 #:min-samples 4))
+      (match-define (list labels core)
+        (fitted-lists (list*->device-matrix rows #:dtype dt) #:eps 1.5 #:min-samples 4))
+      (match-define (list p-labels p-core)
+        (fitted-lists (list*->device-matrix permuted #:dtype dt) #:eps 1.5 #:min-samples 4))
       (define (mapped indices)
         (define chosen (make-vector 300 #f))
         (for ([i (in-list indices)])
@@ -120,24 +117,31 @@
   (define rows (integer-grid 300 3 10 12))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (define found (fitted-lists (mat rows dt) #:eps 1.5 #:min-samples 5))
-      (check-equal?
-       (fitted-lists (mat (map (lambda (r) (map + r '(-7 40 3))) rows) dt) #:eps 1.5 #:min-samples 5)
-       found)
-      (check-equal?
-       (fitted-lists (mat (map (lambda (r) (map - r)) rows) dt) #:eps 1.5 #:min-samples 5)
-       found))))
+      (define found (fitted-lists (list*->device-matrix rows #:dtype dt) #:eps 1.5 #:min-samples 5))
+      (check-equal? (fitted-lists (list*->device-matrix (map (lambda (r) (map + r '(-7 40 3))) rows)
+                                                        #:dtype dt)
+                                  #:eps 1.5
+                                  #:min-samples 5)
+                    found)
+      (check-equal? (fitted-lists (list*->device-matrix (map (lambda (r) (map - r)) rows) #:dtype dt)
+                                  #:eps 1.5
+                                  #:min-samples 5)
+                    found))))
 
 (test-gpu "integer weights act as repeated rows; negative weights subtract"
   (define rows (integer-grid 200 2 16 5))
   (define weights (seeded 9 (lambda () (map (lambda (_) (add1 (random 4))) rows))))
   (define repeated (repeat-rows rows weights))
-  (define firsts (first-copies weights))
+  (define firsts (block-starts weights))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
       (match-define (list labels core)
-        (fitted-lists (mat rows dt) #:eps 1.5 #:min-samples 7 #:sample-weight (vec weights dt)))
-      (match-define (list r-labels r-core) (fitted-lists (mat repeated dt) #:eps 1.5 #:min-samples 7))
+        (fitted-lists (list*->device-matrix rows #:dtype dt)
+                      #:eps 1.5
+                      #:min-samples 7
+                      #:sample-weight (list->device-vector weights #:dtype dt)))
+      (match-define (list r-labels r-core)
+        (fitted-lists (list*->device-matrix repeated #:dtype dt) #:eps 1.5 #:min-samples 7))
       (check-equal? labels (pick r-labels firsts))
       (check-equal? core
                     (for/list ([f (in-list firsts)]
@@ -146,25 +150,32 @@
                       i))
       (match-define (expected w-labels w-core _) (oracle-of rows 3/2 7 #:weights weights))
       (check-equal? (list labels core) (list w-labels w-core))
-      (check-equal? (fitted-lists (mat rows dt)
+      (check-equal? (fitted-lists (list*->device-matrix rows #:dtype dt)
                                   #:eps 1.5
                                   #:min-samples 4
-                                  #:sample-weight (vec (map (lambda (_) 1) rows) dt))
-                    (fitted-lists (mat rows dt) #:eps 1.5 #:min-samples 4))
-      (check-equal? (fitted-lists (mat '((0) (10) (20)) dt)
+                                  #:sample-weight (list->device-vector (map (lambda (_) 1) rows)
+                                                                       #:dtype dt))
+                    (fitted-lists (list*->device-matrix rows #:dtype dt) #:eps 1.5 #:min-samples 4))
+      (check-equal? (fitted-lists (list*->device-matrix '((0) (10) (20)) #:dtype dt)
                                   #:eps 1
                                   #:min-samples 5
-                                  #:sample-weight (vec '(1 5 1) dt))
+                                  #:sample-weight (list->device-vector '(1 5 1) #:dtype dt))
                     '((-1 0 -1) (1)))
       (define negative '((1) (1) (0) (2)))
-      (check-equal?
-       (fitted-lists (mat negative dt) #:eps 1 #:min-samples 5 #:sample-weight (vec '(1 1 3 -1) dt))
-       '((0 0 0 -1) (2)))
-      (check-equal? (fitted-lists (mat negative dt) #:eps 1 #:min-samples 5) '((-1 -1 -1 -1) ()))
-      (check-equal? (fitted-lists (mat negative dt) #:eps 1 #:min-samples 4) '((0 0 0 0) (0 1)))
-      (check-equal?
-       (fitted-lists (mat negative dt) #:eps 1 #:min-samples 5 #:sample-weight (vec '(1 1 3 1) dt))
-       '((0 0 0 0) (0 1 2))))))
+      (check-equal? (fitted-lists (list*->device-matrix negative #:dtype dt)
+                                  #:eps 1
+                                  #:min-samples 5
+                                  #:sample-weight (list->device-vector '(1 1 3 -1) #:dtype dt))
+                    '((0 0 0 -1) (2)))
+      (check-equal? (fitted-lists (list*->device-matrix negative #:dtype dt) #:eps 1 #:min-samples 5)
+                    '((-1 -1 -1 -1) ()))
+      (check-equal? (fitted-lists (list*->device-matrix negative #:dtype dt) #:eps 1 #:min-samples 4)
+                    '((0 0 0 0) (0 1)))
+      (check-equal? (fitted-lists (list*->device-matrix negative #:dtype dt)
+                                  #:eps 1
+                                  #:min-samples 5
+                                  #:sample-weight (list->device-vector '(1 1 3 1) #:dtype dt))
+                    '((0 0 0 0) (0 1 2))))))
 
 (define pre-rows (integer-grid 2001 2 60 33))
 (define pre-distances (distance-matrix pre-rows))
@@ -172,8 +183,8 @@
 (test-gpu "precomputed distances give the euclidean labels, at one batch and at many"
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (define X (mat pre-rows dt))
-      (define D (mat pre-distances dt))
+      (define X (list*->device-matrix pre-rows #:dtype dt))
+      (define D (list*->device-matrix pre-distances #:dtype dt))
       (for* ([eps (in-list '(1.5 2.5))]
              [mbytes (in-list '(#f 1))])
         (check-equal? (fitted-lists D
@@ -191,7 +202,11 @@
   (check-true (pair? (expected-core e)))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (check-one-batch (fitted-lists (mat rows dt) #:eps eps #:min-samples 4 #:metric 'cosine) e))))
+      (check-one-batch (fitted-lists (list*->device-matrix rows #:dtype dt)
+                                     #:eps eps
+                                     #:min-samples 4
+                                     #:metric 'cosine)
+                       e))))
 
 (test-gpu "scaling each row by a factor in [0.1, 10] leaves the cosine labels and the oracle's"
   (define eps 0.02)
@@ -206,9 +221,17 @@
   (define e (dbscan-oracle 300 (cosine-within (list->vector scaled) eps) 4))
   (for ([dt (in-list dtypes)])
     (test-case (symbol->string dt)
-      (define found (fitted-lists (mat scaled dt) #:eps eps #:min-samples 4 #:metric 'cosine))
+      (define found
+        (fitted-lists (list*->device-matrix scaled #:dtype dt)
+                      #:eps eps
+                      #:min-samples 4
+                      #:metric 'cosine))
       (check-one-batch found e)
-      (check-equal? found (fitted-lists (mat rows dt) #:eps eps #:min-samples 4 #:metric 'cosine)))))
+      (check-equal? found
+                    (fitted-lists (list*->device-matrix rows #:dtype dt)
+                                  #:eps eps
+                                  #:min-samples 4
+                                  #:metric 'cosine)))))
 
 (test-gpu "cosine labels do not depend on the order or the scale of the rows"
   (for* ([dt (in-list dtypes)]
@@ -216,14 +239,20 @@
     (match-define (list rows labels) c)
     (test-case (format "~a ~a" dt rows)
       (match-define (list found _)
-        (fitted-lists (mat rows dt) #:eps 0.49 #:min-samples 2 #:metric 'cosine))
+        (fitted-lists (list*->device-matrix rows #:dtype dt)
+                      #:eps 0.49
+                      #:min-samples 2
+                      #:metric 'cosine))
       (check-equal? found labels))))
 
 (test-gpu "rows along one direction are cosine neighbours at any eps"
   (for* ([dt (in-list dtypes)]
          [eps (in-list '(1e-30 1e-6 0.49))])
     (test-case (format "~a eps ~a" dt eps)
-      (check-equal? (fitted-lists (mat '((1 0) (2 0)) dt) #:eps eps #:min-samples 2 #:metric 'cosine)
+      (check-equal? (fitted-lists (list*->device-matrix '((1 0) (2 0)) #:dtype dt)
+                                  #:eps eps
+                                  #:min-samples 2
+                                  #:metric 'cosine)
                     '((0 0) (0 1))))))
 
 (test-gpu "a pair at cosine distance exactly eps is a neighbour pair"
@@ -233,15 +262,19 @@
                                          (((1 0) (-1 0)) 2)))])
     (match-define (list rows eps) c)
     (test-case (format "~a ~a eps ~a" dt rows eps)
-      (check-equal? (fitted-lists (mat rows dt) #:eps eps #:min-samples 2 #:metric 'cosine)
+      (check-equal? (fitted-lists (list*->device-matrix rows #:dtype dt)
+                                  #:eps eps
+                                  #:min-samples 2
+                                  #:metric 'cosine)
                     '((0 0) (0 1))))))
 
 (test-gpu "at eps 2 every pair is a neighbour pair"
   (for* ([dt (in-list dtypes)]
          [rows (in-list '(((8 6) (-8 -6)) ((24 10) (-24 -10))))])
     (test-case (format "~a ~a" dt rows)
-      (check-equal? (fitted-lists (mat rows dt) #:eps 2 #:min-samples 2 #:metric 'cosine)
-                    '((0 0) (0 1))))))
+      (check-equal?
+       (fitted-lists (list*->device-matrix rows #:dtype dt) #:eps 2 #:min-samples 2 #:metric 'cosine)
+       '((0 0) (0 1))))))
 
 (test-gpu "float32 cosine labels match the oracle at eps 1e-3, and at 1024 columns 1e-5, either side of a wide pair's distance"
   (for ([c (in-list `((1024 0.999) (1024 1.001)
@@ -259,6 +292,8 @@
   (check-equal? found '((0 0) (0 1))))
 
 (test-gpu "a subnormal eps under cosine returns"
-  (check-equal?
-   (fitted-lists (mat '((1 0) (0 1)) 'float64) #:eps 5e-324 #:min-samples 2 #:metric 'cosine)
-   '((-1 -1) ())))
+  (check-equal? (fitted-lists (list*->device-matrix '((1 0) (0 1)) #:dtype 'float64)
+                              #:eps 5e-324
+                              #:min-samples 2
+                              #:metric 'cosine)
+                '((-1 -1) ())))

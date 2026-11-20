@@ -2,7 +2,8 @@
 
 (require (only-in cuml/linear-model mbsgd-regressor-fit)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" law-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" law-case on-matrix)
          (only-in "private/mbsgd-data.rkt" normal-rows reg-target)
          (only-in "private/mbsgd-gate-data.rkt" rose)
          (only-in "private/refusal-rows.rkt" check-row row row-id))

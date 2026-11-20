@@ -2,7 +2,8 @@
 
 (require (only-in cuml/linear-model ridge-fit ridge-predict)
          (only-in "private/blob-data.rkt" uniform-source)
-         (only-in "private/linear-data.rkt" lcase-X lcase-w lcase-y normal-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" lcase-X lcase-w lcase-y normal-case on-matrix)
          (only-in "private/process-memory.rkt" test-fit-memory))
 
 (define (setup)

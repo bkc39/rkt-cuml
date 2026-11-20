@@ -9,7 +9,8 @@
          racket/runtime-path
          (only-in rackunit check-eq? check-equal? check-exn check-true test-case)
          (only-in threading ~>)
-         (only-in "linear-data.rkt" columns-of on-matrix)
+         (only-in "common-data.rkt" columns-of flonum-exact)
+         (only-in "linear-data.rkt" on-matrix)
          (only-in "linear-twin-data.rkt" decoded)
          (only-in "logistic-data.rkt"
                   correct
@@ -64,9 +65,6 @@
 (define-runtime-path raw-optima-path "raw-logistic-optima.rktd")
 (define sklearn-gap-bound 1e-5)
 (define row-slack 1)
-
-(define (flonum-exact v)
-  (inexact->exact (real->double-flonum v)))
 
 (define (standardised X)
   (define (scaled xs)

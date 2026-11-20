@@ -237,6 +237,21 @@
           ${lib.concatMapStringsSep " " (p: "\"$PWD/${p}\"") cumlPackages}
       '';
 
+      installRacketHome = ''
+        export HOME=$TMPDIR/home
+        export PLTUSERHOME=$TMPDIR/racket-home
+        export CUML_NATIVE_LIB_PATH=${shim}
+        mkdir -p $PLTUSERHOME
+        ${stageNativeLibs shim}
+        [ "$_stage_failed" = 0 ] || exit 1
+        ${installThreading ""}
+        ${installDocsDeps "--skip-installed"}
+        ${installGlmnet ""}
+        ${installRaft "$TMPDIR/rkt-raft" ""}
+        ${installCuml ""}
+        raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft datasets-core datasets-uci glmnet
+      '';
+
       racketPackage = pkgs.stdenv.mkDerivation {
         pname = "rkt-cuml";
         inherit version;
@@ -248,18 +263,7 @@
         buildInputs = [ shim ];
         buildPhase = ''
           runHook preBuild
-          export HOME=$TMPDIR/home
-          export PLTUSERHOME=$TMPDIR/racket-home
-          export CUML_NATIVE_LIB_PATH=${shim}
-          mkdir -p $PLTUSERHOME
-          ${stageNativeLibs shim}
-          [ "$_stage_failed" = 0 ] || exit 1
-          ${installThreading ""}
-          ${installDocsDeps "--skip-installed"}
-          ${installGlmnet ""}
-          ${installRaft "$TMPDIR/rkt-raft" ""}
-          ${installCuml ""}
-          raco setup -j 4 --no-docs --pkgs raft-x86_64-linux raft datasets-core datasets-uci glmnet
+          ${installRacketHome}
           bash scripts/pkg-deps.sh ${cumlPackageNames}
           runHook postBuild
         '';
@@ -313,23 +317,27 @@
         installPhase = "touch $out";
       });
 
+      # The copy check expands every compared file's requires, so it needs the
+      # packages' home, Resyntax for scripts/resyntax-rules*.rkt, and compiled
+      # cuml packages: expanding them from source took the check past 2 hours.
       racketReview = pkgs.stdenv.mkDerivation {
         pname = "rkt-cuml-racket-review";
         inherit version;
         src = lib.cleanSource ./.;
         nativeBuildInputs = [ racket ];
+        buildInputs = [ shim ];
         dontConfigure = true;
         buildPhase = ''
           runHook preBuild
-          export HOME=$TMPDIR/home
-          export PLTUSERHOME=$TMPDIR/racket-home
-          mkdir -p $PLTUSERHOME
-          raco pkg install --batch -j 4 --copy --no-docs --deps fail --scope user \
-            ${racketTools.sources}/*/
+          ${installRacketHome}
+          raco pkg install --batch -j 4 --copy --no-docs --deps fail --scope user --skip-installed \
+            ${racketTools.sources}/*/ ${racketTools.resyntaxSources}/*/
           raco pkg install --batch --no-docs --no-setup --deps fail --scope user \
             --link --name cuml-lint ./lint
-          raco setup -j 4 --no-docs --pkgs cuml-lint
+          raco setup -j 4 --no-docs --pkgs cuml-lint ${cumlPackageNames}
+          _review_start=$SECONDS
           bash scripts/review.sh
+          echo "racket-review: setup ''${_review_start}s, review $((SECONDS - _review_start))s"
           runHook postBuild
         '';
         installPhase = "touch $out";
@@ -385,7 +393,22 @@
             touch $out
           '';
 
-      resyntaxSource = "https://github.com/jackfirth/resyntax.git#40f3497321f8590eb6a0b7c7984a9116323b7ebf";
+      racketGate =
+        name: script:
+        pkgs.runCommand "rkt-cuml-${name}"
+          {
+            src = lib.cleanSource ./.;
+            nativeBuildInputs = [ racket ];
+          }
+          ''
+            export HOME=$TMPDIR/home
+            export PLTUSERHOME=$TMPDIR/racket-home
+            cd $src
+            ${pkgs.bash}/bin/bash scripts/${script}
+            touch $out
+          '';
+
+      resyntaxSource = "https://github.com/jackfirth/resyntax.git#${racketTools.resyntaxRev}";
 
       # PLTUSERHOME lives outside $PWD (raco refuses a --link target inside a
       # collects dir), one directory per checkout so worktrees never share
@@ -683,6 +706,7 @@
         no-syntax-rule = grepGate "no-syntax-rule" "no-syntax-rule.sh";
         no-raw-malloc = grepGate "no-raw-malloc" "no-raw-malloc.sh";
         no-noqa = grepGate "no-noqa" "no-noqa.sh";
+        no-positional-access = racketGate "no-positional-access" "no-positional-access.sh";
         gpu-suite-signals = grepGate "gpu-suite-signals" "gpu-suite-signals.sh";
         gate-constants = grepGate "gate-constants" "gate-constants.sh";
       };

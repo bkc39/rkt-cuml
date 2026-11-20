@@ -4,7 +4,11 @@
                      (only-in syntax/parse/pre expr id))
          (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters
+                  boolean->int
+                  bound-params
+                  define-codes
+                  define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
@@ -183,7 +187,7 @@
                                             [n-iter-no-change n-iter-no-change]
                                             [random-state random-state]))
     settings)
-  (define seeded (if random-state 1 0))
+  (define seeded (boolean->int random-state))
   (define seed (or random-state 0))
   (match classifier
     [#f
@@ -276,7 +280,7 @@
   (match-define (list rows _) (shape X))
   (define-values (y-view classes) (host-codes who kind rows y resources))
   (define out (deposit-for/who who resources))
-  (fit-job who resources X y-view out settings #:classifier (list (if classes 1 0) code))
+  (fit-job who resources X y-view out settings #:classifier (list (boolean->int classes) code))
   (match (deposit->list out)
     [(list coef intercept) (mbsgd-classifier-result coef (scalar intercept) classes kind loss)]
     [(list coef intercept device-classes)

@@ -14,9 +14,14 @@
          (only-in racket/flonum flsingle)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list list->device-vector)
+         (only-in raft
+                  device-matrix->list*
+                  device-vector->list
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape rows->matrix)
+         (only-in "private/exact-algebra.rkt" single?)
+         (only-in "private/scaler-data.rkt" bits-equal? matrix-shape)
          (only-in "private/umap-data.rkt"
                   far-blobs
                   finite-rows?
@@ -24,9 +29,6 @@
                   fixture-rows
                   fixture-y
                   overlap))
-
-(define (single? x)
-  (and (flonum? x) (eqv? x (flsingle x))))
 
 (test-gpu "the embedding is a fresh n×k float32 matrix, and the result keeps X and the params"
   (for* ([init (in-list '(spectral random))]
@@ -68,7 +70,7 @@
   (check-true (bits-equal? (device-matrix->list* (umap-result-embedding result)) before) "embedding"))
 
 (test-gpu "spectral init starts from a random embedding on 12 identical rows, labels i mod 3"
-  (define X (rows->matrix (make-list 12 '(1.0 2.0 3.0 4.0)) 'float32))
+  (define X (list*->device-matrix (make-list 12 '(1.0 2.0 3.0 4.0)) #:dtype 'float32))
   (define y
     (list->device-vector (for/list ([i (in-range 12)])
                            (modulo i 3))

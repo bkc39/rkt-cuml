@@ -24,6 +24,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" raised)
+         (only-in "private/exact-algebra.rkt" float32-of)
          (only-in "private/program.rkt" run-program)
          (only-in "private/table-data.rkt"
                   edge-table
@@ -51,9 +52,6 @@
                                  tooth-growth
                                  us-arrests
                                  wine)))
-
-(define (float32-of v)
-  (flsingle (real->double-flonum v)))
 
 (define (converted-rows t columns element-type)
   (host-rows t

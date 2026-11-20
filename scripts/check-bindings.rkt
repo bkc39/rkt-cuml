@@ -182,8 +182,9 @@
   (exit (if (ormap (compose1 failed? report-findings) reports) 1 0)))
 
 (module+ test
-  (require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
+  (require (only-in racket/file make-directory*)
            (only-in rackunit check-equal? check-exn check-false check-true test-case)
+           (only-in "../lint/private/modules.rkt" call-with-temporary-directory)
            (only-in "check-layout.rkt" families))
 
   (define plan
@@ -224,14 +225,9 @@
                                                (STALE-PLAN "dbscan_fit_job")))
     (check-true (and (failed? findings) #t)))
 
-  (define (call-with-temporary-directory proc)
-    (define dir (make-temporary-directory "check-bindings-~a"))
-    (dynamic-wind void
-                  (lambda () (proc dir))
-                  (lambda () (delete-directory/files dir #:must-exist? #f))))
-
   (test-case "bindings come from define-<family>, its #:c-id and the define-job string"
     (call-with-temporary-directory
+     "check-bindings-~a"
      (lambda (dir)
        (make-directory* (build-path dir "private"))
        (with-output-to-file
@@ -246,6 +242,7 @@
 
   (test-case "each family counts only its own prefix and its own definer"
     (call-with-temporary-directory
+     "check-bindings-~a"
      (lambda (dir)
        (make-directory* (build-path dir "private"))
        (with-output-to-file
@@ -264,6 +261,7 @@
 
   (test-case "a family package without a bindings plan fails the census"
     (call-with-temporary-directory
+     "check-bindings-~a"
      (lambda (dir)
        (for ([package (in-list '("cuml-core-lib" "cuml-lib" "cuml-toy-lib"))])
          (make-directory* (build-path dir package)))

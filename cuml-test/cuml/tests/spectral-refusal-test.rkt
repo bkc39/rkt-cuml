@@ -9,15 +9,24 @@
          (only-in racket/match match)
          (only-in rackunit check-equal? check-exn fail test-case)
          (only-in raft
+                  device-matrix
                   device-resources
+                  device-vector
                   exn:fail:raft-kind
                   exn:fail:raft?
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
-         (only-in "private/refusal-rows.rkt" check-row norm-message row row-id with-row)
+         (only-in "private/refusal-rows.rkt"
+                  check-row
+                  grid
+                  index-message
+                  norm-message
+                  row
+                  row-id
+                  with-bad-row
+                  with-row)
          (only-in "private/spectral-data.rkt"
                   edited-vectors
                   graph
@@ -26,15 +35,8 @@
                   graph-labels
                   graph-map-vals
                   labels
+                  past-sum
                   set-entry))
-
-(define (grid dt [n 10])
-  (list*->device-matrix (for/list ([i (in-range n)])
-                          (list (add1 i) (* 2 i)))
-                        #:dtype dt))
-
-(define (with-bad-row bad)
-  (with-row bad #:then '((7 7) (8 9) (9 1) (3 3))))
 
 (define tol-most "eigen-tol: expected at most 3.4028234663852886e+38, got ")
 
@@ -43,14 +45,22 @@
   (define fit spectral-clustering-fit)
   (list
    (row "D0 float64" "X: expected float32, got float64" (lambda () (fit (grid 'float64))))
-   (row "D0 int32" "X: expected float32, got int32" (lambda () (fit (blank-matrix 10 2 'int32))))
-   (row "D1 rank" "X: expected rank 2, got rank 1" (lambda () (fit (blank-vector 10 'float32))))
+   (row "D0 int32"
+        "X: expected float32, got int32"
+        (lambda () (fit (device-matrix 10 2 #:dtype 'int32))))
+   (row "D1 rank"
+        "X: expected rank 2, got rank 1"
+        (lambda () (fit (device-vector 10 #:dtype 'float32))))
    (row "D1 layout"
         "X: expected row-major, got col-major 10x2"
-        (lambda () (fit (blank-matrix 10 2 'float32 #:layout 'col-major))))
+        (lambda () (fit (device-matrix 10 2 #:dtype 'float32 #:layout 'col-major))))
    (row "D2" "X: expected at least 4 rows, got 3" (lambda () (fit (grid 'float32 3))))
-   (row "D2 empty" "X: expected at least 4 rows, got 0" (lambda () (fit (blank-matrix 0 2 'float32))))
-   (row "D3" "X: expected at least 1 column, got 0" (lambda () (fit (blank-matrix 10 0 'float32))))
+   (row "D2 empty"
+        "X: expected at least 4 rows, got 0"
+        (lambda () (fit (device-matrix 0 2 #:dtype 'float32))))
+   (row "D3"
+        "X: expected at least 1 column, got 0"
+        (lambda () (fit (device-matrix 10 0 #:dtype 'float32))))
    (row "D5" "n-clusters: expected at least 1, got 0" (lambda () (fit X #:n-clusters 0)))
    (row "D5 negative" "n-clusters: expected at least 1, got -2" (lambda () (fit X #:n-clusters -2)))
    (row "D6"
@@ -77,7 +87,7 @@
    (row "D0 before D2" "X: expected float32, got float64" (lambda () (fit (grid 'float64 3))))
    (row "D2 before D3"
         "X: expected at least 4 rows, got 3"
-        (lambda () (fit (blank-matrix 3 0 'float32))))
+        (lambda () (fit (device-matrix 3 0 #:dtype 'float32))))
    (row "D5 before D7"
         "n-clusters: expected at least 1, got 0"
         (lambda () (fit X #:n-clusters 0 #:n-components 0)))
@@ -106,9 +116,6 @@
 (define (fit-vectors rows cols vals [n ring-n])
   (spectral-clustering-fit-graph rows cols vals n))
 
-(define (index-message name entry got)
-  (format "~a: entry ~a: expected an index in [0, 10), got ~a" name entry got))
-
 (define (weight-message entry got)
   (format "vals: entry ~a: expected a finite weight of at least 0, got ~a" entry got))
 
@@ -126,8 +133,6 @@
 (define (four-entries n)
   (graph '(0 1 2 3) '(1 0 3 2) '(1.0 1.0 1.0 1.0) n))
 
-(define past-sum (const (exact->inexact (expt 2 125))))
-
 (define (graph-rows-of)
   (define (fault g)
     (lambda () (graph-labels g #:n-clusters 2)))
@@ -137,32 +142,32 @@
         "rows: expected int32, got float32"
         (lambda ()
           (match (graph->vectors ring)
-            [(list _ cols vals) (fit-vectors (blank-vector 20 'float32) cols vals)])))
+            [(list _ cols vals) (fit-vectors (device-vector 20 #:dtype 'float32) cols vals)])))
    (row "G0 rows int64"
         "rows: expected int32, got int64"
         (lambda ()
           (match (graph->vectors ring)
-            [(list _ cols vals) (fit-vectors (blank-vector 20 'int64) cols vals)])))
+            [(list _ cols vals) (fit-vectors (device-vector 20 #:dtype 'int64) cols vals)])))
    (row "G0 vals float64"
         "vals: expected float32, got float64"
         (lambda ()
           (match (graph->vectors ring)
-            [(list rows cols _) (fit-vectors rows cols (blank-vector 20 'float64))])))
+            [(list rows cols _) (fit-vectors rows cols (device-vector 20 #:dtype 'float64))])))
    (row "G1 rows"
         "rows: expected rank 1, got rank 2"
         (lambda ()
           (match (graph->vectors ring)
-            [(list _ cols vals) (fit-vectors (blank-matrix 20 1 'int32) cols vals)])))
+            [(list _ cols vals) (fit-vectors (device-matrix 20 1 #:dtype 'int32) cols vals)])))
    (row "G2 cols"
         "cols: expected 20 entries, as rows has, got 19"
         (lambda ()
           (match (graph->vectors ring)
-            [(list rows _ vals) (fit-vectors rows (blank-vector 19 'int32) vals)])))
+            [(list rows _ vals) (fit-vectors rows (device-vector 19 #:dtype 'int32) vals)])))
    (row "G2 vals"
         "vals: expected 20 entries, as rows has, got 21"
         (lambda ()
           (match (graph->vectors ring)
-            [(list rows cols _) (fit-vectors rows cols (blank-vector 21 'float32))])))
+            [(list rows cols _) (fit-vectors rows cols (device-vector 21 #:dtype 'float32))])))
    (row "G3 few"
         "n-samples: expected at least 4, got 3"
         (lambda () (apply fit-vectors (append (graph->vectors ring) '(3)))))
@@ -227,12 +232,14 @@
    (row "G12 empty"
         "vals: expected at least one positive weight, got none"
         (lambda ()
-          (fit-vectors (blank-vector 0 'int32) (blank-vector 0 'int32) (blank-vector 0 'float32))))
+          (fit-vectors (device-vector 0 #:dtype 'int32)
+                       (device-vector 0 #:dtype 'int32)
+                       (device-vector 0 #:dtype 'float32))))
    (row "G2 before G9"
         "vals: expected 20 entries, as rows has, got 19"
         (lambda ()
           (match (edited-vectors ring #:rows (set-entry 7 10))
-            [(list rows cols _) (fit-vectors rows cols (blank-vector 19 'float32))])))
+            [(list rows cols _) (fit-vectors rows cols (device-vector 19 #:dtype 'float32))])))
    (row "G9 before G10 at one entry"
         (index-message "rows" 7 10)
         (fault (graph-edit ring #:rows (set-entry 7 10) #:cols (set-entry 7 10))))
@@ -275,7 +282,8 @@
   (check-cuml-error 'logic
                     (string-append "spectral-clustering-fit: X: 102261127 rows with 10 neighbours"
                                    " need 2147483667 graph entries, more than 2147483647")
-                    (lambda () (spectral-clustering-fit (blank-matrix 102261127 1 'float32)))))
+                    (lambda ()
+                      (spectral-clustering-fit (device-matrix 102261127 1 #:dtype 'float32)))))
 
 (test-gpu "rows at the squared-norm boundary, and subnormal rows, fit"
   (define boundary

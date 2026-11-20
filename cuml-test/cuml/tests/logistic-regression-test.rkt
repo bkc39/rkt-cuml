@@ -31,7 +31,8 @@
                   list->device-vector
                   shape)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes on-matrix on-vector unit-roundoff)
+         (only-in "private/common-data.rkt" on-vector unit-roundoff)
+         (only-in "private/linear-data.rkt" dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
                   argmax-index
                   blob-case
@@ -39,8 +40,8 @@
                   correct
                   decision-label
                   fit-parts
-                  lr-case-name
                   lr-case-X
+                  lr-case-name
                   lr-case-y))
 
 (define binary (blob-case "binary" 120 3 2 1))

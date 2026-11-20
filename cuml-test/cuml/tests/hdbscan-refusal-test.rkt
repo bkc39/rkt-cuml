@@ -12,29 +12,26 @@
          (only-in racket/match match)
          (only-in rackunit check-equal? check-exn fail test-case)
          (only-in raft
+                  device-matrix
                   device-resources
+                  device-vector
                   exn:fail:raft-kind
                   exn:fail:raft?
                   list*->device-matrix
                   with-device-resources)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/hdbscan-data.rkt" dataset)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/program.rkt" run-program)
-         (only-in "private/refusal-rows.rkt" check-row norm-message row row-id with-row))
-
-(define (grid dt [n 10])
-  (list*->device-matrix (for/list ([i (in-range n)])
-                          (list (add1 i) (* 2 i)))
-                        #:dtype dt))
-
-(define (with-bad-row bad)
-  (with-row bad #:then '((7 7) (8 9) (9 1) (3 3))))
-
-(define (float-most name got)
-  (format "~a: expected at most 3.4028234663852886e+38, got ~a" name got))
+         (only-in "private/refusal-rows.rkt"
+                  check-row
+                  float-most
+                  grid
+                  norm-message
+                  row
+                  row-id
+                  with-bad-row
+                  with-row))
 
 (define (fit-rows)
   (define X (grid 'float32))
@@ -44,14 +41,14 @@
        (row id message (lambda () (keyword-apply hdbscan-fit kws kw-values (list x)))))))
   (list
    (fit-row "H0 float64" "X: expected float32, got float64" (grid 'float64))
-   (fit-row "H0 int32" "X: expected float32, got int32" (blank-matrix 10 2 'int32))
-   (fit-row "H1 rank" "X: expected rank 2, got rank 1" (blank-vector 10 'float32))
+   (fit-row "H0 int32" "X: expected float32, got int32" (device-matrix 10 2 #:dtype 'int32))
+   (fit-row "H1 rank" "X: expected rank 2, got rank 1" (device-vector 10 #:dtype 'float32))
    (fit-row "H1 layout"
             "X: expected row-major, got col-major 10x2"
-            (blank-matrix 10 2 'float32 #:layout 'col-major))
+            (device-matrix 10 2 #:dtype 'float32 #:layout 'col-major))
    (fit-row "H2" "X: expected at least 2 rows, got 1" (grid 'float32 1))
-   (fit-row "H2 empty" "X: expected at least 2 rows, got 0" (blank-matrix 0 2 'float32))
-   (fit-row "H3" "X: expected at least 1 column, got 0" (blank-matrix 10 0 'float32))
+   (fit-row "H2 empty" "X: expected at least 2 rows, got 0" (device-matrix 0 2 #:dtype 'float32))
+   (fit-row "H3" "X: expected at least 1 column, got 0" (device-matrix 10 0 #:dtype 'float32))
    (fit-row "H7 zero" "min-samples: expected at least 1, got 0" #:min-samples 0)
    (fit-row "H7 most" "min-samples: expected at most 1023, got 1024" #:min-samples 1024)
    (fit-row "H8" "X: 4 samples are fewer than min-samples 5" (grid 'float32 4))
@@ -99,17 +96,17 @@
     (list (row (format "~a hdbscan-approximate-predict" id) message (lambda () (predict points)))
           (row (format "~a hdbscan-membership-vector" id) message (lambda () (membership points)))))
   (append (both "A1" "points: expected float32, got float64" (grid 'float64 4))
-          (both "A2 rank" "points: expected rank 2, got rank 1" (blank-vector 4 'float32))
+          (both "A2 rank" "points: expected rank 2, got rank 1" (device-vector 4 #:dtype 'float32))
           (both "A2 layout"
                 "points: expected row-major, got col-major 4x2"
-                (blank-matrix 4 2 'float32 #:layout 'col-major))
-          (both "A3" "points: expected at least 1 row, got 0" (blank-matrix 0 2 'float32))
+                (device-matrix 4 2 #:dtype 'float32 #:layout 'col-major))
+          (both "A3" "points: expected at least 1 row, got 0" (device-matrix 0 2 #:dtype 'float32))
           (both "A4"
                 "points: expected 2 columns, as the model was fit on, got 3"
-                (blank-matrix 4 3 'float32))
+                (device-matrix 4 3 #:dtype 'float32))
           (both "A4 before A8"
                 "points: expected 2 columns, as the model was fit on, got 3"
-                (mat '((1 2 3) (+nan.0 0 0)) 'float32))
+                (list*->device-matrix '((1 2 3) (+nan.0 0 0)) #:dtype 'float32))
           (list (row "M1 hdbscan-membership-vector"
                      "batch-size: expected at least 1, got 0"
                      (lambda () (membership (grid 'float32 4) #:batch-size 0)))
@@ -123,14 +120,14 @@
       (check-row 'hdbscan-fit r))))
 
 (test-gpu "the prediction procedures refuse each bad argument with their own names"
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (for ([r (in-list (prediction-rows result))])
     (test-case (row-id r)
       (match (regexp-match #rx" ([a-z-]+)$" (row-id r))
         [(list _ name) (check-row (string->symbol name) r)]))))
 
 (test-gpu "a released model is refused by every prediction procedure before its points are read"
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (native-model-release! (hdbscan-result-model result))
   (define float64 (grid 'float64 4))
   (for ([name (in-list '(hdbscan-approximate-predict hdbscan-membership-vector
@@ -221,7 +218,7 @@
   (check-exn exn:fail:contract? (lambda () (fit #:max-cluster-size (expt 2 63))))
   (check-exn exn:fail:contract? (lambda () (fit #:min-cluster-size 2.5)))
   (check-exn exn:fail:contract? (lambda () (fit #:alpha 'one)))
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (check-exn exn:fail:contract?
              (lambda () (hdbscan-membership-vector result (grid 'float32) #:batch-size (expt 2 63))))
   (check-exn exn:fail:contract?

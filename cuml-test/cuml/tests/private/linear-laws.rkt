@@ -8,6 +8,7 @@
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
+         (only-in "common-data.rkt" columns-of gamma unit-roundoff)
          (only-in "exact-algebra.rkt" bracket-condition dot norm2 outer-bracket)
          (only-in "linear-data.rkt"
                   algorithms
@@ -15,7 +16,6 @@
                   case-result
                   check-law
                   check-law-case
-                  columns-of
                   dtypes
                   exact-fit
                   floor-log2
@@ -30,7 +30,6 @@
                   oracle-lstsq
                   result-fit
                   solution
-                  unit-roundoff
                   weighted-gram
                   weighted-spread
                   weights-or-ones))
@@ -128,9 +127,6 @@
   (if weighted?
       (weighted-y-roundings rows)
       (mean-roundings rows #f)))
-
-(define (gamma k u)
-  (/ (* k u) (- 1 (* k u))))
 
 (define (positive-rows c)
   (count positive? (weights-or-ones (lcase-w c) (lcase-y c))))

@@ -16,6 +16,7 @@
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
+         (only-in "common-data.rkt" columns-of on-vector)
          (only-in "exact-algebra.rkt"
                   condition
                   dot
@@ -33,7 +34,6 @@
          case-result
          check-law
          check-law-case
-         columns-of
          decimals
          docs-case
          dtypes
@@ -54,7 +54,6 @@
          max-abs
          normal-case
          on-matrix
-         on-vector
          oracle-lstsq
          oracle-ridge
          ridge-oracles
@@ -67,7 +66,6 @@
          rounded-case
          scaled-case
          scaled-columns
-         unit-roundoff
          weighted-gram
          weighted-spread
          weights-or-ones
@@ -82,11 +80,6 @@
 
 (define (by-dtype dt float32 float64)
   (if (eq? dt 'float32) float32 float64))
-
-(define (unit-roundoff dtype)
-  (if (eq? dtype 'float32)
-      (expt 2.0 -24)
-      (expt 2.0 -53)))
 
 (define docs-case (lcase "docs" '((1 1) (1 2) (2 2) (2 3)) '(6 8 9 11) #f))
 
@@ -129,9 +122,6 @@
 
 (define (on-matrix rows [dtype 'float64])
   (list*->device-matrix rows #:dtype dtype))
-
-(define (on-vector xs [dtype 'float64])
-  (and xs (list->device-vector xs #:dtype dtype)))
 
 (define (case-result c dt #:algorithm [a 'auto] #:fit-intercept [fi #t])
   (linear-regression-fit (on-matrix (lcase-X c) dt)
@@ -302,9 +292,6 @@
   (let ([law name])
     (law-case law
       (check-law law got bound))))
-
-(define (columns-of rows)
-  (apply map list rows))
 
 (define (max-abs xs)
   (for/fold ([m 0]) ([x (in-list xs)])

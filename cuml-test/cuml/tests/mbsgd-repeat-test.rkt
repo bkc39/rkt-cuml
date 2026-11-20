@@ -3,7 +3,8 @@
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in rackunit check-equal? check-not-equal?)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/mbsgd-data.rkt"
                   blob-rows
                   clf-parts

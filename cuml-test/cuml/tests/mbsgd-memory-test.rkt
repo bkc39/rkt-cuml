@@ -5,7 +5,8 @@
                   mbsgd-classifier-predict
                   mbsgd-regressor-fit
                   mbsgd-regressor-predict)
-         (only-in "private/linear-data.rkt" on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target)
          (only-in "private/process-memory.rkt" test-fit-memory))
 

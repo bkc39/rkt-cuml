@@ -5,9 +5,11 @@
          (only-in racket/match match-define)
          (only-in racket/math nan?)
          (only-in rackunit check-= check-equal? check-true test-case)
+         (only-in raft list->device-vector)
          (only-in "private/blob-data.rkt" uniform-source)
+         (only-in "private/common-data.rkt" on-vector)
          (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/scores-data.rkt" label-cases on vec weights-of)
+         (only-in "private/scores-data.rkt" label-cases on)
          (only-in "private/scores-twin-data.rkt" case-of checked-twin-results))
 
 (define (weighted-label-cases)
@@ -30,7 +32,10 @@
         [theirs (in-list results)])
     (match-define (list i at bt truth found w) c)
     (match-define (hash-table ('sklearn sk) ('cuml cu)) theirs)
-    (define ours (accuracy-score (vec truth at) (vec found bt) #:sample-weight (weights-of w)))
+    (define ours
+      (accuracy-score (list->device-vector truth #:dtype at)
+                      (list->device-vector found #:dtype bt)
+                      #:sample-weight (on-vector w)))
     (test-case (format "case ~a ~a x ~a~a" i at bt (if w " weighted" ""))
       (cond
         [w

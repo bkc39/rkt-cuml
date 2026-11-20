@@ -8,8 +8,8 @@
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* dtype)
-         (only-in "private/dbscan-data.rkt" integer-grid mat same-partition?)
+         (only-in raft device-matrix->list* dtype list*->device-matrix)
+         (only-in "private/dbscan-data.rkt" integer-grid same-partition?)
          (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
                   hand-rows
@@ -45,7 +45,9 @@
 
 (define (racket-fit s connectivity k)
   (define r
-    (single-linkage-fit (mat (spec-rows s) 'float32) #:n-clusters k #:connectivity connectivity))
+    (single-linkage-fit (list*->device-matrix (spec-rows s) #:dtype 'float32)
+                        #:n-clusters k
+                        #:connectivity connectivity))
   (match-define (list labels children) (result->lists r))
   (run s connectivity k labels children (dtype (single-linkage-result-labels r))))
 

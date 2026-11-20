@@ -7,20 +7,20 @@
                   bf*
                   bf+
                   bf-
+                  bf-precision
                   bf/
                   bf<
                   bf>
-                  bigfloat->real
-                  bf-precision
                   bfabs
                   bfexp
                   bflog1p
                   bfmax
                   bfmin
-                  bfsqrt)
+                  bfsqrt
+                  bigfloat->real)
          (only-in racket/list make-list)
          (only-in racket/match match match-define struct*)
-         (only-in "linear-data.rkt" columns-of)
+         (only-in "common-data.rkt" columns-of)
          (only-in "logistic-data.rkt" default-tol lr-case lr-fit setting))
 
 (provide (struct-out residual)

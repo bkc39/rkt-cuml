@@ -16,6 +16,7 @@
   (no-syntax-rule ("scripts/no-syntax-rule.sh" #:shell ""))
   (no-raw-malloc  ("scripts/no-raw-malloc.sh" #:shell ""))
   (no-noqa        ("scripts/no-noqa.sh" #:shell ""))
+  (no-positional-access ("scripts/no-positional-access.sh" #:shell ""))
   (gpu-suite-signals ("scripts/gpu-suite-signals.sh" #:shell ""))
   (gate-constants ("scripts/gate-constants.sh" #:shell ""))
   (layout         "racket scripts/check-layout.rkt")
@@ -29,4 +30,4 @@
   (resyntax       "scripts/resyntax.sh")
   (docs           "scripts/render-docs.sh .scratch/docs")
   (check          "nix flake check --max-jobs 1 --cores 4"))
- (push-gates (format no-syntax-rule no-raw-malloc no-noqa gpu-suite-signals gate-constants layout pkg-deps review compile test bindings)))
+ (push-gates (format no-syntax-rule no-raw-malloc no-noqa no-positional-access gpu-suite-signals gate-constants layout pkg-deps review compile test bindings)))

@@ -6,12 +6,12 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" bits-of columns-of unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   case-fit
                   case-result
                   check-law
-                  columns-of
                   dtypes
                   gap
                   lcase
@@ -22,10 +22,8 @@
                   max-abs
                   normal-case
                   on-matrix
-                  result-fit
-                  unit-roundoff)
+                  result-fit)
          (only-in "private/linear-twin-data.rkt"
-                  bits-of
                   decoded
                   one-column
                   p1-cases

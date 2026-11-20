@@ -22,6 +22,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
          (only-in "private/capabilities.rkt" capabilities)
+         (only-in "private/common-data.rkt" on-vector)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/estimator-data.rkt" listed printed round-trips)
          (only-in "private/linear-data.rkt"
@@ -31,8 +32,7 @@
                   lcase-w
                   lcase-y
                   normal-case
-                  on-matrix
-                  on-vector)
+                  on-matrix)
          (only-in "private/scaler-data.rkt" bits-equal?))
 
 (define changed (hasheq 'algorithm 'qr 'fit-intercept #f))

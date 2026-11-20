@@ -2,7 +2,7 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters boolean->int define-hyperparameters)
          (only-in racket/match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
@@ -57,7 +57,7 @@
 (define (applied job who result X resources)
   (match-define (pca-result components variance _ _ mean _ _ whiten) result)
   (define out (deposit-for/who who resources))
-  (job who resources X components mean (and whiten variance) out (if whiten 1 0))
+  (job who resources X components mean (and whiten variance) out (boolean->int whiten))
   (match-define (list applied-X) (deposit->list out))
   applied-X)
 

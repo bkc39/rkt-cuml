@@ -4,10 +4,11 @@
          (only-in racket/list append*)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
+         (only-in "private/common-data.rkt" bits-of)
          (only-in "private/pca-data.rkt" fixture-name)
          (only-in "private/python-env.rkt" test-twin twin-params)
          (only-in "private/tsvd-data.rkt" svd)
-         (only-in "private/tsvd-twin-data.rkt" float-bits ours twin-case twin-cases twin-results))
+         (only-in "private/tsvd-twin-data.rkt" ours twin-case twin-cases twin-results))
 
 (define (requests)
   (for*/list ([c (in-list twin-cases)]
@@ -29,7 +30,7 @@
                                         explained_variance_ratio
                                         transform
                                         inverse))])
-        (check-equal? (float-bits dt mine)
+        (check-equal? (bits-of dt mine)
                       (hash-ref theirs (string->symbol (format "~a_bits" name)))
                       (symbol->string name))))))
 
