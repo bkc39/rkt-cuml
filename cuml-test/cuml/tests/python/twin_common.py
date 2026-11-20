@@ -14,8 +14,10 @@ def host(a):
     return np.asarray(a.get() if hasattr(a, "get") else a)
 
 
-def put(out, key, a):
+def put(out, key, a, *, float64=False):
     a = np.ascontiguousarray(host(a))
+    if float64:
+        out[key] = a.astype(np.float64).ravel().tolist()
     out[key + "_bits"] = a.view(BITS[a.dtype]).ravel().tolist()
 
 

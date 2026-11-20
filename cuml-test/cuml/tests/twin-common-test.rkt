@@ -26,3 +26,18 @@
     (match-define (hash-table ('results results) ('version version)) (run-twin script input))
     (check-equal? results (list (hasheq 'alpha 1.5 'solver "auto")))
     (check-equal? (string? (hash-ref version 'numpy #f)) numpy? "version.numpy")))
+
+(define-runtime-path put-of "python/put_twin.py")
+
+(define bits '(a_bits 1069547520 3221225472))
+
+(define put-rows
+  `(("put writes the bits alone" "put" (,bits))
+    ("put(float64=True) writes the float64 list beside the bits" "put_float64" ((a 1.5 -2.0) ,bits))))
+
+(for ([row (in-list put-rows)])
+  (match-define (list name op stored) row)
+  (test-python name
+    (match-define (hash-table ('results results))
+      (run-twin put-of (hasheq 'cases (list (hasheq 'op op 'values '(1.5 -2.0) 'dtype "float32")))))
+    (check-equal? results (list (make-immutable-hasheq stored)))))
