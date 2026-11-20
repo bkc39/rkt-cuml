@@ -1,12 +1,9 @@
-"""The bits-only payload and the runner shared by the linear-model twins."""
+"""The runner, the version record and the bits-only payload the twins share."""
 
 import json
 import sys
 
 import numpy as np
-import sklearn
-
-import cuml
 
 BITS = {np.dtype(np.float32): np.uint32, np.dtype(np.float64): np.uint64}
 WIDTH = {"float32": np.uint32, "float64": np.uint64}
@@ -41,15 +38,35 @@ def fitted(m, dtype):
     return out
 
 
-def run(ops):
+def versions(**extra):
+    out = {}
+    try:
+        import sklearn
+
+        out["sklearn"] = sklearn.__version__
+    except ImportError:
+        pass
+    try:
+        import cuml
+
+        out["cuml"] = cuml.__version__
+    except ImportError:
+        pass
+    out.update(extra)
+    return out
+
+
+def params_of(cls):
+    return lambda case: cls().get_params()
+
+
+def run(ops, *, fixtures=False, version=None):
     with open(sys.argv[1]) as f:
         given = json.load(f)
-    results = [ops[case["op"]](case) for case in given["cases"]]
+    if fixtures:
+        shared = given.get("fixtures", {})
+        results = [ops[case["op"]](shared, case) for case in given["cases"]]
+    else:
+        results = [ops[case["op"]](case) for case in given["cases"]]
     with open(sys.argv[2], "w") as f:
-        json.dump(
-            {
-                "results": results,
-                "version": {"sklearn": sklearn.__version__, "cuml": cuml.__version__},
-            },
-            f,
-        )
+        json.dump({"results": results, "version": version or versions()}, f)

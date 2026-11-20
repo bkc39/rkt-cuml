@@ -3,22 +3,29 @@
 (require (only-in json json-null read-json write-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
-         (only-in racket/match == match)
+         (only-in racket/match == match match-define)
          (only-in racket/port open-output-nowhere)
          (only-in racket/promise delay force)
          (only-in racket/string string-replace)
          (only-in racket/system system*)
+         (only-in rackunit check-equal?)
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu gpu-skip test-unless-skipped)
          ;; whole-module: its syntax classes come with it
          syntax/parse/define
          (only-in threading ~>))
 
-(provide or-null
+(provide checked-results
+         or-null
+         python-cuml-version
          run-cases
          run-twin
          test-twin
-         twin-params)
+         twin-default-params
+         twin-params
+         twin-results)
+
+(define python-cuml-version "26.08.00")
 
 (define python (find-executable-path "python3"))
 
@@ -69,6 +76,30 @@
 
 (define (run-cases script cases)
   (hash-ref (run-twin script (hasheq 'cases cases)) 'results))
+
+(define (checked-results answer #:expected-cuml [expected #f])
+  (match answer
+    [(hash-table ('results results) ('version (hash-table ('cuml version))))
+     (check-equal? version python-cuml-version "the twin's Python cuML is not the pinned release")
+     (when expected
+       (check-equal? version expected "the twin's Python cuML is not the native libcuml"))
+     results]
+    [_
+     (error 'twin-results
+            "the twin wrote no version.cuml (got ~e); write its output with twin_common.run"
+            (and (hash? answer) (hash-ref answer 'version #f)))]))
+
+(define (twin-results script requests #:expected-cuml [expected #f] #:fixtures [fixtures #f])
+  (checked-results (run-twin script
+                             (if fixtures
+                                 (hasheq 'cases requests 'fixtures fixtures)
+                                 (hasheq 'cases requests)))
+                   #:expected-cuml expected))
+
+(define (twin-default-params script unbound)
+  (match-define (list theirs) (twin-results script (list (hasheq 'op "params"))))
+  (printf "twin params: ~s\n" theirs)
+  (twin-params theirs unbound))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped (force twin-skip) name body ...))
