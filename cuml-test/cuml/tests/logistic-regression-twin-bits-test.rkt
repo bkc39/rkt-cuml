@@ -10,7 +10,6 @@
          (only-in threading ~>)
          (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/linear-data.rkt" on-matrix)
-         (only-in "private/linear-twin-data.rkt" decoded)
          (only-in "private/logistic-data.rkt" fit-flat fit-parts flat-matrix lr-case-X lr-fit-n-iter)
          (only-in "private/logistic-twin-data.rkt" their-fit twin-trial)
          (only-in "private/logistic-twin-rows.rkt"
@@ -22,7 +21,7 @@
                   row-fit
                   row-name
                   rows)
-         (only-in "private/python-env.rkt" test-twin))
+         (only-in "private/python-env.rkt" decoded test-twin))
 
 (define (proba-scale t k)
   (if (= k 2)

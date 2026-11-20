@@ -11,7 +11,6 @@
          (only-in threading ~>)
          (only-in "common-data.rkt" columns-of flonum-exact)
          (only-in "linear-data.rkt" on-matrix)
-         (only-in "linear-twin-data.rkt" decoded)
          (only-in "logistic-data.rkt"
                   correct
                   cutoff-exn?
@@ -31,7 +30,8 @@
                   tight-max-iter
                   tight-tol)
          (only-in "logistic-oracle.rkt" case-residual residual residual-bound residual-gradient)
-         (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin))
+         (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin)
+         (only-in "python-env.rkt" decoded))
 
 (provide (struct-out labelled)
          check-raw-optima

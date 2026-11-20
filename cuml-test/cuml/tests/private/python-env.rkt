@@ -3,6 +3,7 @@
 (require (only-in json json-null read-json write-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
+         (only-in racket/list append*)
          (only-in racket/match == match match-define)
          (only-in racket/port open-output-nowhere)
          (only-in racket/promise delay force)
@@ -15,7 +16,11 @@
          syntax/parse/define
          (only-in threading ~>))
 
-(provide checked-results
+(provide bits-of
+         checked-results
+         decoded
+         floats->bits
+         matrix->bits
          or-null
          python-cuml-version
          python-sklearn-version
@@ -136,3 +141,20 @@
 
 (define (or-null v)
   (or v (json-null)))
+
+(define (float-size dt)
+  (if (eq? dt 'float32) 4 8))
+
+(define (bits-of dt xs)
+  (for/list ([x (in-list xs)])
+    (integer-bytes->integer (real->floating-point-bytes x (float-size dt)) #f)))
+
+(define (decoded dt bits)
+  (for/list ([b (in-list bits)])
+    (floating-point-bytes->real (integer->integer-bytes b (float-size dt) #f))))
+
+(define (floats->bits dt xs)
+  (bits-of dt (map exact->inexact xs)))
+
+(define (matrix->bits dt rows)
+  (floats->bits dt (append* rows)))

@@ -5,8 +5,7 @@
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in threading ~>)
-         (only-in "common-data.rkt" bits-of unit-roundoff)
+         (only-in "common-data.rkt" unit-roundoff)
          (only-in "linear-data.rkt"
                   algorithms
                   case-fit
@@ -25,13 +24,11 @@
                   rounded-case
                   scaled-columns
                   solution)
-         (only-in "python-env.rkt" twin-results))
+         (only-in "python-env.rkt" decoded floats->bits matrix->bits twin-results))
 
-(provide (all-from-out "python-env.rkt")
-         case-request
+(provide case-request
          check-cuml-failures
          check-cuml-parity
-         decoded
          one-column
          p1-cases
          request
@@ -41,18 +38,13 @@
 
 (define-runtime-path twin "../python/linear_regression_twin.py")
 
-(define (decoded dt bits)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([b (in-list bits)])
-    (floating-point-bytes->real (integer->integer-bytes b size #f))))
-
 (define (case-request op c dt fi settings)
   (for/fold ([request (hasheq 'op op
                               'dtype (symbol->string dt)
-                              'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
-                              'y (bits-of dt (map exact->inexact (lcase-y c)))
+                              'X (matrix->bits dt (lcase-X c))
+                              'y (floats->bits dt (lcase-y c))
                               'w (if (lcase-w c)
-                                     (bits-of dt (map exact->inexact (lcase-w c)))
+                                     (floats->bits dt (lcase-w c))
                                      'null)
                               'fit_intercept fi)])
             ([(key value) (in-hash settings)])

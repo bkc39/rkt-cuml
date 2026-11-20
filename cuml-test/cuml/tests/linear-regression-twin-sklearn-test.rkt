@@ -6,7 +6,7 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" bits-of columns-of unit-roundoff)
+         (only-in "private/common-data.rkt" columns-of unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   case-fit
@@ -24,14 +24,13 @@
                   on-matrix
                   result-fit)
          (only-in "private/linear-twin-data.rkt"
-                  decoded
                   one-column
                   p1-cases
                   request
                   results
                   theirs
                   with-constant)
-         (only-in "private/python-env.rkt" test-twin twin-params))
+         (only-in "private/python-env.rkt" bits-of decoded test-twin twin-params))
 
 (define (already-staged)
   (define c (normal-case 300 5 9 #:weighted? #t))

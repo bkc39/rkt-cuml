@@ -18,6 +18,7 @@
          (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/estimator-data.rkt" listed)
          (only-in "private/python-env.rkt"
+                  bits-of
                   checked-results
                   python-sklearn-version
                   run-twin
@@ -122,11 +123,6 @@
               [s-sk (in-list scale-sk)])
           (check-equal? (= s 1.0) (= s-sk 1.0) "a masked column is masked on both sides"))))))
 
-(define (bits-of xs dt)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([x (in-list xs)])
-    (integer-bytes->integer (real->floating-point-bytes x size) #f)))
-
 (test-twin "L15, L16: transform and inverse are sklearn's, bitwise in float32"
   (define cases
     (for*/list ([fit-dt (in-list '(float32 float64))]
@@ -150,8 +146,8 @@
       (check-equal? (hash-ref result 'dtype) (symbol->string y-dt))
       (cond
         [(eq? y-dt 'float32)
-         (check-equal? (bits-of t y-dt) (hash-ref result 'transform_bits) "transform")
-         (check-equal? (bits-of back y-dt) (hash-ref result 'inverse_bits) "inverse")]
+         (check-equal? (bits-of y-dt t) (hash-ref result 'transform_bits) "transform")
+         (check-equal? (bits-of y-dt back) (hash-ref result 'inverse_bits) "inverse")]
         [else
          (define d (dataset-width data))
          (define mean (or (listed (standard-scaler-result-mean fitted)) (make-list d 0.0)))

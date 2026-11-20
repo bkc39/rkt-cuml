@@ -3,8 +3,7 @@
 (require (only-in racket/math pi sqr)
          (only-in raft device-vector->list device-vector? list->device-vector))
 
-(provide bits-of
-         columns-of
+(provide columns-of
          block-starts
          flonum-exact
          gamma
@@ -23,11 +22,6 @@
          unit-roundoff
          unscaled
          worst)
-
-(define (bits-of dt xs)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([x (in-list xs)])
-    (integer-bytes->integer (real->floating-point-bytes x size) #f)))
 
 (define (kept-rows xs weights)
   (for/list ([x (in-list xs)]

@@ -4,9 +4,8 @@
          (only-in racket/list append*)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
-         (only-in "private/common-data.rkt" bits-of)
          (only-in "private/pca-data.rkt" fixture-name)
-         (only-in "private/python-env.rkt" test-twin twin-params)
+         (only-in "private/python-env.rkt" bits-of test-twin twin-params)
          (only-in "private/tsvd-data.rkt" svd)
          (only-in "private/tsvd-twin-data.rkt" ours twin-case twin-cases twin-results))
 

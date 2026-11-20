@@ -1,11 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model/private/native libcuml-version)
-         (only-in racket/list append*)
          racket/runtime-path
-         (only-in threading ~>)
-         (only-in "common-data.rkt" bits-of)
-         (only-in "linear-twin-data.rkt" decoded twin-results)
          (only-in "logistic-data.rkt"
                   default-tol
                   lr-case-X
@@ -14,7 +10,8 @@
                   lr-fit
                   setting-C
                   setting-l1-ratio
-                  setting-penalty))
+                  setting-penalty)
+         (only-in "python-env.rkt" decoded floats->bits matrix->bits twin-results))
 
 (provide (struct-out twin-trial)
          logistic-twin
@@ -37,10 +34,10 @@
                        #:max-iter [max-iter 1000])
   (hasheq 'op op
           'dtype (symbol->string dt)
-          'X (bits-of dt (~> c lr-case-X append* (map exact->inexact _)))
+          'X (matrix->bits dt (lr-case-X c))
           'y (lr-case-y c)
           'w (if (lr-case-w c)
-                 (bits-of dt (map exact->inexact (lr-case-w c)))
+                 (floats->bits dt (lr-case-w c))
                  'null)
           'penalty (symbol->string penalty)
           'C C
