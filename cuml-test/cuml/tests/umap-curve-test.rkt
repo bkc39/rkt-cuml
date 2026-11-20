@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/manifold/private/curve curve-iterations curve-parameters)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in racket/flonum fl* flexpt)
          (only-in racket/match match-define)
          racket/runtime-path
@@ -27,7 +28,8 @@
     (twin-results twin
                   (for/list ([p (in-list pairs)])
                     (match-define (cons s m) p)
-                    (hasheq 'op "ab" 'spread s 'min_dist m))))
+                    (hasheq 'op "ab" 'spread s 'min_dist m))
+                  #:expected-cuml libcuml-version))
   (for ([p (in-list pairs)]
         [theirs (in-list found)])
     (match-define (cons s m) p)
@@ -59,5 +61,7 @@
 
 (test-twin "scipy's departure at spread 1e-3, min-dist 1e-4 is pinned"
   (match-define (list theirs)
-    (twin-results twin (list (hasheq 'op "ab" 'spread 1e-3 'min_dist 1e-4))))
+    (twin-results twin
+                  (list (hasheq 'op "ab" 'spread 1e-3 'min_dist 1e-4))
+                  #:expected-cuml libcuml-version))
   (check-true (< (abs (+ (hash-ref theirs 'b) 70.497)) 1e-3)))

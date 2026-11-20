@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/manifold umap-fit umap-result umap-result-embedding umap-transform)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in cuml/metrics trustworthiness)
          (only-in json json-null)
          (only-in racket/list drop last range take)
@@ -128,7 +129,7 @@
 
 (define (digits)
   (match-define (list (hash-table ['X rows] ['y labels]))
-    (twin-results twin (list (hasheq 'op "digits"))))
+    (twin-results twin (list (hasheq 'op "digits")) #:expected-cuml libcuml-version))
   (fixture "digits" rows labels))
 
 (define (tail-split f)
@@ -164,7 +165,8 @@
   (define found
     (twin-results twin
                   (append (map quality-case fits results)
-                          (list (quality-case held held-result #:transform (fixture-rows new))))))
+                          (list (quality-case held held-result #:transform (fixture-rows new))))
+                  #:expected-cuml libcuml-version))
   (for ([f (in-list fits)]
         [result (in-list results)]
         [theirs (in-list found)])
@@ -194,7 +196,8 @@
   (define theirs
     (twin-results twin
                   (for/list ([r (in-list runs)])
-                    (case-of f new (outcome-result r)))))
+                    (case-of f new (outcome-result r)))
+                  #:expected-cuml libcuml-version))
   (for ([options (in-list configs)]
         [r (in-list runs)]
         [found (in-list theirs)])

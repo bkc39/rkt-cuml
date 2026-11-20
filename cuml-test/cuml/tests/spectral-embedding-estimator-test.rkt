@@ -16,6 +16,7 @@
                   spectral-embedding-params
                   spectral-embedding-result-embedding
                   spectral-embedding-result?)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in racket/list make-list)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
@@ -104,7 +105,7 @@
   (check-true (<= (apply max (column-gaps one zero)) 1e-4) (format "~a" (column-gaps one zero))))
 
 (test-twin "the parameters are Python's, but for random-state 0 and the function-only keywords"
-  (define theirs (twin-default-params twin '()))
+  (define theirs (twin-default-params twin '() #:expected-cuml libcuml-version))
   (check-equal? (hash-set theirs 'random-state 0)
                 (hash-remove (hash-remove (spectral-embedding-params) 'norm-laplacian) 'drop-first)
                 (format "~a" theirs)))

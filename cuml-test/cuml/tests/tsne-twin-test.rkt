@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/manifold tsne-params)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in rackunit check-equal?)
          (only-in "private/python-env.rkt" test-twin twin-default-params)
          (only-in "private/tsne-data.rkt" check-tsne-parity twin)
@@ -43,5 +44,5 @@
                       handle))
 
 (test-twin "the parameters are Python's, but for random-state and n-neighbors"
-  (check-equal? (twin-default-params twin unbound)
+  (check-equal? (twin-default-params twin unbound #:expected-cuml libcuml-version)
                 (hash-set* (tsne-params) 'random-state #f 'n-neighbors 90)))
