@@ -3,11 +3,10 @@
 (require (only-in cuml/decomposition pca-params)
          (only-in racket/match match-define)
          (only-in rackunit check-equal?)
-         (only-in "private/pca-twin-data.rkt" check-against-cuml named twin-results)
+         (only-in "private/pca-twin-data.rkt" test-against-cuml twin-results)
          (only-in "private/python-env.rkt" test-twin twin-params))
 
-(test-twin "normal is cuML-Python's within the L14 bounds"
-  (check-against-cuml (named "normal")))
+(test-against-cuml "normal")
 
 (define renames (hasheq 'iterated-power 'iterations 'svd-solver 'solver))
 

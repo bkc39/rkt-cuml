@@ -1,8 +1,5 @@
 #lang racket/base
 
-(require (only-in "private/pca-twin-data.rkt" check-against-cuml named)
-         (only-in "private/python-env.rkt" test-twin))
+(require (only-in "private/pca-twin-data.rkt" test-against-cuml))
 
-(for ([name (in-list '("offset" "low rank"))])
-  (test-twin (format "~a is cuML-Python's within the L14 bounds" name)
-    (check-against-cuml (named name))))
+(for-each test-against-cuml '("offset" "low rank"))

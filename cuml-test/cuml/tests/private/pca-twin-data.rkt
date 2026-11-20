@@ -24,16 +24,16 @@
                   fixtures
                   norm
                   over-bound)
-         (only-in "python-env.rkt" [twin-results python-twin-results])
+         (only-in "python-env.rkt" test-twin [twin-results python-twin-results])
          (only-in "scaler-data.rkt" rows-of))
 
 (provide (struct-out ours)
-         check-against-cuml
          check-against-sklearn
          fit-ours
          l14-problems
          named
          sample-count
+         test-against-cuml
          twin-case
          twin-key
          twin-ks
@@ -235,3 +235,7 @@
     (match-define (list dt k solver) c)
     (test-case (format "~a ~a k=~a ~a" (fixture-name f) dt k solver)
       (check-equal? (l14-problems (fit-ours f dt k #:solver solver) cuml bound dt solver) '()))))
+
+(define (test-against-cuml name)
+  (test-twin (format "~a is cuML-Python's within the L14 bounds" name)
+    (check-against-cuml (named name))))
