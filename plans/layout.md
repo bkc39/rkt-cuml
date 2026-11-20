@@ -1676,7 +1676,17 @@ Follow-ups are GitHub issues.
   the 280, so only the formula's gtest pins it. Ordinary X is still
   accepted: the 40 p11 fits under the threshold, Gaussian and s = 0.05
   correlated X (cost table) and the correlated and twin shapes of
-  `gram_condition_test.cpp`.
+  `gram_condition_test.cpp`. r5's x_j = 33·f + e_j at 20000×100 (retuned
+  to 14 and 20 there, where it no longer encloses) is accepted on the
+  exact Gram at κ′ ≈ 1.25e5, within 2⁻⁸ of the `Dsyevd` ratio (4 draws,
+  gtest); its check costs 8.2 ms (median of 5, warm). The r7 probe
+  (`Probe.*`, a local gtest; near pairs, β near h, a cluster at the
+  window's edge, light rows of weight 2⁻¹⁴⁹ to 2⁻²⁰; n = 31 to 33, 1023 to
+  1025, 4097, 20001; d = 1, 2, 16, 17, 100) ran 2456 inputs and checked
+  each of the 1574 acceptances against κ′ from the stored X in long
+  double (Jacobi): certified 456, enclosed 2, Ritz 1110, exact 6, none
+  past the threshold or under the reference; Ritz refused 564, exact
+  318.
 
   ε_eig = c_eig·√d·u₃₂·μ_max covers `Ssyevd` itself: the computed pairs are
   exact for G̃ + F, ‖F‖₂ ≤ p(d)·u₃₂·‖G̃‖₂ (Householder tridiagonalisation
