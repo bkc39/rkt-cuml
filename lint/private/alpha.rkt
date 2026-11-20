@@ -114,12 +114,12 @@
   (define (definition-head env head)
     (match head
       [(cons (? symbol? one) items)
-       (define-values (normal inner) (formals env items))
-       (values (cons (ref env one) normal) inner)]
+       (define-values (renamed inner) (formals env items))
+       (values (cons (ref env one) renamed) inner)]
       [(cons (? pair? curried) items)
        (define-values (outer middle) (definition-head env curried))
-       (define-values (normal inner) (formals middle items))
-       (values (cons outer normal) inner)]))
+       (define-values (renamed inner) (formals middle items))
+       (values (cons outer renamed) inner)]))
   (define (body env forms)
     (define inner (bind env (body-names forms)))
     (map (lambda (form) (body-form inner form)) forms))
@@ -127,11 +127,11 @@
     (match form
       [(list* (and definer (or 'define 'define/who)) (? pair? head) forms)
        #:when (not (hash-ref env definer #f))
-       (define-values (normal inner) (definition-head env head))
-       (list* (ref env definer) normal (body inner forms))]
+       (define-values (renamed inner) (definition-head env head))
+       (list* (ref env definer) renamed (body inner forms))]
       [(list* 'define/contract (? pair? head) contract forms)
-       (define-values (normal inner) (definition-head env head))
-       (list* (ref env 'define/contract) normal (expr env contract) (body inner forms))]
+       (define-values (renamed inner) (definition-head env head))
+       (list* (ref env 'define/contract) renamed (expr env contract) (body inner forms))]
       [(list* (and definer (or 'define 'define/contract 'define-values)) target rest)
        #:when (not (hash-ref env definer #f))
        (list* (ref env definer) (each env target) (each env rest))]
@@ -139,25 +139,25 @@
        #:when (not (hash-ref env definer #f))
        (cons (ref env definer) (match-form-normal env layout rest))]
       [_ (expr env form)]))
+  (define ((normal env) one)
+    (normal-pattern env one))
   (define (normal-pattern env datum)
-    (define (normal one)
-      (normal-pattern env one))
     (match datum
       [(or '_ (? ellipsis?)) datum]
       [(? symbol?) (ref env datum)]
       [(cons 'quote _) datum]
-      [(cons 'quasiquote template) (cons 'quasiquote (quasi-map template normal #:pattern? #t))]
+      [(cons 'quasiquote template) (cons 'quasiquote (quasi-map template (normal env) #:pattern? #t))]
       [(cons '== exprs) (cons '== (map (lambda (one) (expr env one)) (proper exprs)))]
       [(list* (and head (or '? 'app 'regexp 'pregexp)) predicate patterns)
-       (list* head (expr env predicate) (map normal (proper patterns)))]
+       (list* head (expr env predicate) (map (normal env) (proper patterns)))]
       [(list 'struct* id (? list? fields))
        (list 'struct*
              (ref env id)
              (for/list ([field (in-list fields)])
                (match field
-                 [(list name one) (list name (normal one))]
+                 [(list name one) (list name (normal-pattern env one))]
                  [_ field])))]
-      [(list 'struct id (? list? patterns)) (list 'struct (ref env id) (map normal patterns))]
+      [(list 'struct id (? list? patterns)) (list 'struct (ref env id) (map (normal env) patterns))]
       [(list 'struct id other) (list 'struct (ref env id) other)]
       [(cons 'hash entries) (cons 'hash (hash-entries env (proper entries)))]
       [(cons 'hash* entries) (cons 'hash* (hash*-entries env (proper entries)))]
@@ -165,15 +165,15 @@
        (cons 'hash-table
              (for/list ([entry (in-list (proper entries))])
                (if (pair? entry)
-                   (map normal (proper entry))
+                   (map (normal env) (proper entry))
                    entry)))]
       [(list 'var (? symbol? id)) (list 'var (ref env id))]
       [(cons 'not patterns)
        (define inner (bind env (append-map pattern-names (proper patterns))))
-       (cons 'not (map (lambda (one) (normal-pattern inner one)) (proper patterns)))]
-      [(cons (and head (pattern-head)) patterns) (cons head (map normal (proper patterns)))]
-      [(cons (? symbol? head) patterns) (cons (ref env head) (map normal (proper patterns)))]
-      [(? pair?) (map normal (proper datum))]
+       (cons 'not (map (normal inner) (proper patterns)))]
+      [(cons (and head (pattern-head)) patterns) (cons head (map (normal env) (proper patterns)))]
+      [(cons (? symbol? head) patterns) (cons (ref env head) (map (normal env) (proper patterns)))]
+      [(? pair?) (map (normal env) (proper datum))]
       [_ datum]))
   (define (hash-entries env entries)
     (match entries
@@ -196,14 +196,14 @@
       [_ entries]))
   (define (normal-lhs env layout lhs)
     (match* (layout lhs)
-      [((match-layout _ 'several _) (? list?)) (map (lambda (one) (normal-pattern env one)) lhs)]
+      [((match-layout _ 'several _) (? list?)) (map (normal env) lhs)]
       [((match-layout _ 'several _) _) lhs]
       [(_ _) (normal-pattern env lhs)]))
   (define (match-form-normal env layout rest)
     (match* (layout rest)
       [((match-layout '(head) _ _) (cons (? pair? head) items))
-       (define-values (normal inner) (definition-head env head))
-       (cons normal (clauses inner items #:several? #t))]
+       (define-values (renamed inner) (definition-head env head))
+       (cons renamed (clauses inner items #:several? #t))]
       [((match-layout before patterns 'clause) _)
        #:when (and (list? rest) (<= (length before) (length rest)))
        (define-values (leading items) (split-at rest (length before)))
@@ -229,10 +229,10 @@
                (list patterns)))
          (define names (append-map pattern-names each-pattern))
          (define inner (bind env names))
-         (define normal (map (lambda (one) (normal-pattern inner one)) each-pattern))
+         (define renamed (map (normal inner) each-pattern))
          (cons (if several?
-                   normal
-                   (car normal))
+                   renamed
+                   (car renamed))
                (clause-body inner (append-map direct-pattern-names each-pattern) forms))]
         [_ clause])))
   (define (clause-body inner names forms)
@@ -274,10 +274,10 @@
          (if recursive?
              (bind env (append-map names bindings))
              env))
-       (define-values (normal inner)
-         (for/fold ([normal '()]
+       (define-values (renamed inner)
+         (for/fold ([renamed '()]
                     [scope all]
-                    #:result (values (reverse normal) scope))
+                    #:result (values (reverse renamed) scope))
                    ([one (in-list bindings)])
            (define init
              (each (if sequential? scope all)
@@ -288,36 +288,42 @@
              (if recursive?
                  scope
                  (bind scope (names one))))
-           (values (cons (cons (target bound one) init) normal) bound)))
-       (list* normal (body inner forms))]
+           (values (cons (cons (target bound one) init) renamed) bound)))
+       (list* renamed (body inner forms))]
       [_ (each env rest)]))
   (define (for-form env head rest)
     (match rest
       [(list* accumulators (? list? items) forms)
        #:when (fold-head? head)
        (define accumulated (bind env (clause-names accumulators)))
-       (define-values (normal inner) (for-clauses accumulated items))
-       (list* (each accumulated accumulators) normal (body inner forms))]
+       (define-values (renamed inner) (for-clauses accumulated items))
+       (list* (each accumulated accumulators) renamed (body inner forms))]
       [(list* (? list? items) forms)
-       (define-values (normal inner) (for-clauses env items))
-       (list* normal (body inner forms))]
+       (define-values (renamed inner) (for-clauses env items))
+       (list* renamed (body inner forms))]
       [_ (each env rest)]))
   (define (for-clauses env items)
     (match items
       [(list* (? keyword? key) form rest)
        (define guard (expr env form))
-       (define-values (normal inner) (for-clauses env rest))
-       (values (list* key guard normal) inner)]
+       (define-values (renamed inner) (for-clauses env rest))
+       (values (list* key guard renamed) inner)]
       [(cons (and one (list target sequence)) rest)
        (define bound (bind env (clause-ids one)))
        (define clause (list (each bound target) (expr env sequence)))
-       (define-values (normal inner) (for-clauses bound rest))
-       (values (cons clause normal) inner)]
+       (define-values (renamed inner) (for-clauses bound rest))
+       (values (cons clause renamed) inner)]
       [(cons one rest)
        (define item (expr env one))
-       (define-values (normal inner) (for-clauses env rest))
-       (values (cons item normal) inner)]
+       (define-values (renamed inner) (for-clauses env rest))
+       (values (cons item renamed) inner)]
       [_ (values '() env)]))
+  (define (procedure-clause env clause [otherwise values])
+    (match clause
+      [(cons items forms)
+       (define-values (renamed inner) (formals env items))
+       (cons renamed (body inner forms))]
+      [_ (otherwise clause)]))
   (define (expr env datum)
     (match datum
       [(? symbol?) (ref env datum)]
@@ -328,19 +334,8 @@
              (match head
                [(or 'quote 'quote-syntax 'syntax) rest]
                [(or 'quasiquote 'quasisyntax) (quasi-map rest (lambda (inner) (expr env inner)))]
-               [(? lambda-head?)
-                (match rest
-                  [(cons items forms)
-                   (define-values (normal inner) (formals env items))
-                   (cons normal (body inner forms))]
-                  [_ (each env rest)])]
-               ['case-lambda
-                (for/list ([clause (in-list (proper rest))])
-                  (match clause
-                    [(cons items forms)
-                     (define-values (normal inner) (formals env items))
-                     (cons normal (body inner forms))]
-                    [_ clause]))]
+               [(? lambda-head?) (procedure-clause env rest (lambda (one) (each env one)))]
+               ['case-lambda (map (lambda (clause) (procedure-clause env clause)) (proper rest))]
                [(app match-form (? values layout)) (match-form-normal env layout rest)]
                [(? let-head?)
                 (let-form env
