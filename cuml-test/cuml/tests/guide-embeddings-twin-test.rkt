@@ -18,7 +18,7 @@
          (only-in raft device-matrix->list* device-vector->list list->device-vector)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" embeddings-pin evaluated-chapter)
-         (only-in "private/python-env.rkt" python-cuml-version run-twin test-twin)
+         (only-in "private/python-env.rkt" checked-results run-twin test-twin)
          (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/tsne-data.rkt" tsne-case)
          (only-in "private/umap-data.rkt" fixture twin-case))
@@ -74,22 +74,20 @@
                 (cons (list 'trust name) (op "trust" 'X rows 'E (samples name))))
               (for/list ([name (in-list pictures)])
                 (cons (list 'ari name) (op "ari" 'y ids 'labels (hash-ref labels name))))))
-    (match-define (hash-table ['results results] ['version version])
-      (run-twin script (hasheq 'cases (map cdr cases))))
+    (define answer (run-twin script (hasheq 'cases (map cdr cases))))
     (twin-run chapter
               labels
               coarse
               tsne-seed-1
-              (make-immutable-hash (map cons (map car cases) results))
-              version)))
+              (make-immutable-hash (map cons (map car cases) (checked-results answer)))
+              (hash-ref answer 'version))))
 
 (define (theirs key field)
   (match-define (struct* twin-run ([results results])) (force twin))
   (hash-ref (hash-ref results key) field))
 
-(test-twin "the embeddings twin runs Python cuML 26.08.00 and sklearn 1.8.0"
+(test-twin "the embeddings twin runs the pinned Python cuML and sklearn 1.8.0"
   (match-define (struct* twin-run ([version version])) (force twin))
-  (check-equal? (hash-ref version 'cuml) python-cuml-version)
   (check-equal? (hash-ref version 'sklearn) "1.8.0"))
 
 (test-twin "the embeddings chapter's pixels and digits are sklearn's"

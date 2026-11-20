@@ -24,7 +24,7 @@
                   fixtures
                   norm
                   over-bound)
-         (only-in "python-env.rkt" python-cuml-version run-twin)
+         (only-in "python-env.rkt" [twin-results python-twin-results])
          (only-in "scaler-data.rkt" rows-of))
 
 (provide (struct-out ours)
@@ -79,11 +79,7 @@
     (for*/hasheq ([f (in-list fixtures)]
                   [dt (in-list '(float32 float64))])
       (values (string->symbol (twin-key f dt)) (append* (twin-rows f dt)))))
-  (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
-    (run-twin twin (hasheq 'cases cases 'fixtures payload)))
-  (check-equal? version python-cuml-version)
-  (check-equal? version libcuml-version)
-  results)
+  (python-twin-results twin cases #:fixtures payload #:expected-cuml libcuml-version))
 
 (struct ours (fitted noise n-samples transform))
 
