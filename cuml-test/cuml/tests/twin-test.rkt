@@ -9,7 +9,7 @@
 
 (test-twin "the Python twin imports the cuML release the cluster shim was built against"
   (define answer (run-twin twin (hasheq 'cases '())))
+  (checked-results answer #:expected-cuml libcuml-version)
   (printf "twin version: cuml ~a, libcumlrkt_cluster ~a\n"
-          (hash-ref (hash-ref answer 'version) 'cuml #f)
-          libcuml-version)
-  (checked-results answer #:expected-cuml libcuml-version))
+          (hash-ref (hash-ref answer 'version) 'cuml)
+          libcuml-version))
