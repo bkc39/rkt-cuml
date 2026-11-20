@@ -1,5 +1,6 @@
 """The runner, the version record and the bits-only payload the twins share."""
 
+import importlib
 import json
 import sys
 
@@ -38,35 +39,24 @@ def fitted(m, dtype):
     return out
 
 
-def versions(**extra):
+def versions():
     out = {}
-    try:
-        import sklearn
-
-        out["sklearn"] = sklearn.__version__
-    except ImportError:
-        pass
-    try:
-        import cuml
-
-        out["cuml"] = cuml.__version__
-    except ImportError:
-        pass
-    out.update(extra)
+    for name in ("sklearn", "cuml"):
+        try:
+            out[name] = importlib.import_module(name).__version__
+        except ImportError:
+            pass
     return out
 
 
 def params_of(cls):
-    return lambda case: cls().get_params()
+    return lambda *_: cls().get_params()
 
 
-def run(ops, *, fixtures=False, version=None):
+def run(ops, *, fixtures=False):
     with open(sys.argv[1]) as f:
         given = json.load(f)
-    if fixtures:
-        shared = given.get("fixtures", {})
-        results = [ops[case["op"]](shared, case) for case in given["cases"]]
-    else:
-        results = [ops[case["op"]](case) for case in given["cases"]]
+    shared = (given.get("fixtures", {}),) if fixtures else ()
+    results = [ops[case["op"]](*shared, case) for case in given["cases"]]
     with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": version or versions()}, f)
+        json.dump({"results": results, "version": versions()}, f)
