@@ -1,6 +1,6 @@
 """Twin of cuml/tests/dbscan-twin-test.rkt: cuml.DBSCAN fits the data and
 parameters the Racket side used; sklearn.cluster.DBSCAN fits the cosine
-cases, since cuml 26.08 normalises cosine input by column."""
+cases, since the pinned cuML normalises cosine input by column."""
 
 import numpy as np
 from sklearn.cluster import DBSCAN
