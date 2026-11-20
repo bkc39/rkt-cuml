@@ -1,6 +1,10 @@
-"""Twin of cuml/tests/pca-twin-test.rkt and pca-cuml-twin-test.rkt: sklearn's
-PCA (svd_solver='full') fits float64 copies of the rows the Racket side used,
-and cuML-Python's PCA fits them in their own dtype."""
+"""Twin of cuml/tests/pca-twin-test.rkt, pca-twin-offset-test.rkt and
+pca-twin-wide-test.rkt, and of the cuML twin files pca-cuml-twin-test.rkt,
+pca-cuml-twin-scales-test.rkt, pca-cuml-twin-correlated-test.rkt,
+pca-cuml-twin-integers-test.rkt, pca-cuml-twin-offset-test.rkt and
+pca-cuml-twin-departures-test.rkt: sklearn's PCA (svd_solver='full') fits float64
+copies of the rows the Racket side used, and cuML-Python's PCA fits them in their
+own dtype."""
 
 import numpy as np
 from cuml.decomposition import PCA as CuPCA
