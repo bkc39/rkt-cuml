@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <raft/core/handle.hpp>
 #include <random>
+#include <type_traits>
 #include <vector>
 
 #include "cumlrkt/support.hpp"
@@ -32,6 +33,9 @@ constexpr double least_weight = 0.2;
 constexpr double most_weight = 3.0;
 constexpr double float64_tol = 1e-12;
 constexpr double float32_tol = 2e-5;
+template <typename T>
+constexpr double reference_tol =
+    std::is_same_v<T, double> ? float64_tol : float32_tol;
 
 struct problem {
   std::vector<double> x;
@@ -126,7 +130,8 @@ loss_grad device_loss_grad(const problem& p, bool weighted) {
 }
 
 template <typename T>
-void expect_reference(int64_t k, double tol) {
+void expect_reference(int64_t k) {
+  const double tol = reference_tol<T>;
   const problem p = drawn(k, false);
   const loss_grad want = host_reference(p);
   const loss_grad got = device_loss_grad<T>(p, true);
@@ -151,8 +156,8 @@ void expect_cuml_softmax(int64_t k) {
 TEST(WeightedSoftmax, MatchesAFloat64HostReference) {
   CUMLRKT_REQUIRE_GPU();
   for (const int64_t k : {2, 3, 7}) {
-    expect_reference<double>(k, float64_tol);
-    expect_reference<float>(k, float32_tol);
+    expect_reference<double>(k);
+    expect_reference<float>(k);
   }
 }
 
