@@ -9,17 +9,19 @@
          (only-in racket/match match match-define struct*)
          (only-in raft device-matrix->list* device-vector->list device-vector?)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "common-data.rkt" columns-of mean on-vector scaled-rows)
+         (only-in "common-data.rkt" block-starts columns-of kept-rows mean on-vector pick scaled-rows)
          (only-in "linear-data.rkt" by-dtype dyadic on-matrix))
 
 (provide (struct-out lr-case)
          (struct-out lr-fit)
          (struct-out setting)
          argmax-index
+         balanced-class-weights
          blob-case
          case-fit
          case-y
          centred-columns
+         collapsed
          centred-vector
          coef-flat
          correct
@@ -32,17 +34,18 @@
          fit-flat
          fit-parts
          flat-matrix
+         gauged-case-fit
          gauged-fit
          gauged-sklearn
          penalty-settings
          relative-gap
+         repeated-rows
          scaled-case
          scaled-parts
          separable-case
          setting-fit
          tight-max-iter
          tight-tol
-         unequal-weights-message
          with-column)
 
 (struct lr-case (name X y w) #:transparent)
@@ -58,10 +61,6 @@
 
 (define (cutoff-exn? e)
   (and (exn:fail? e) (regexp-match? cutoff-message (exn-message e))))
-
-(define unequal-weights-message
-  (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
-                 "(cuML's softmax ignores them); got unequal weights"))
 
 (define default-tol 1e-4)
 
@@ -122,6 +121,24 @@
            (map (lambda (row) (cons value row)) (lr-case-X c))
            (lr-case-y c)
            (lr-case-w c)))
+
+(define (balanced-class-weights ys)
+  (define sizes
+    (for/fold ([sizes (hash)]) ([y (in-list ys)])
+      (hash-update sizes y add1 0)))
+  (define k (hash-count sizes))
+  (for/hash ([(c size) (in-hash sizes)])
+    (values c (/ (length ys) (* k size)))))
+
+(define (repeated-rows c counts)
+  (define (spread xs)
+    (for*/list ([(x n) (in-parallel (in-list xs) (in-list counts))]
+                [_ (in-range n)])
+      x))
+  (lr-case (lr-case-name c) (spread (lr-case-X c)) (spread (lr-case-y c)) #f))
+
+(define (collapsed labels counts)
+  (pick labels (kept-rows (block-starts counts) counts)))
 
 (define (case-y c [label-dtype 'int32])
   (on-vector (lr-case-y c) label-dtype))
@@ -212,6 +229,18 @@
                           (centred-columns coef)
                           coef))
              (centred-vector intercept))]))
+
+(define (gauged-case-fit c
+                         #:C [C 1.0]
+                         #:sample-weight [w (on-vector (lr-case-w c) 'float64)]
+                         #:class-weight [class-weight #f])
+  (gauged-fit (fit-parts (case-fit c
+                                   'float64
+                                   #:C C
+                                   #:sample-weight w
+                                   #:class-weight class-weight
+                                   #:tol (tight-tol 'float64)
+                                   #:max-iter tight-max-iter))))
 
 (define (gauged-fit f #:centre-coef? [centre-coef? #t])
   (match-define (struct* lr-fit ([coef coef] [intercept intercept])) f)

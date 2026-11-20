@@ -2,7 +2,7 @@
 
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in racket/list make-list take)
-         (only-in racket/match match)
+         (only-in racket/match match-define)
          (only-in rackunit check-not-exn)
          (only-in "common-data.rkt" on-vector)
          (only-in "cuml-error.rkt" raised)
@@ -95,9 +95,9 @@
 (define off-predictions-at-eta0 (refused-by (lambda (_) off-predictions)))
 
 (define (loss-r2 fit)
-  (match (regexp-match #px"the loss rose from ([0-9.e+-]+) to ([0-9.e+-]+);"
-                       (exn-message (raised fit)))
-    [(list _ start end) (- 1 (/ (string->number end) (string->number start)))]))
+  (match-define (list _ start end)
+    (regexp-match #px"the loss rose from ([0-9.e+-]+) to ([0-9.e+-]+);" (exn-message (raised fit))))
+  (- 1 (/ (string->number end) (string->number start))))
 
 (define constant-rows (normal-rows 300 4 3))
 (define unit-noise (map car (normal-rows 300 1 9)))

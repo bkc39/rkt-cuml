@@ -13,7 +13,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" host on-vector scaled-rows)
          (only-in "private/linear-data.rkt" on-matrix)
-         (only-in "private/logistic-data.rkt" blob-case lr-case-X lr-case-y unequal-weights-message)
+         (only-in "private/logistic-data.rkt" blob-case lr-case-X lr-case-y)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
@@ -174,20 +174,6 @@
    (row "a class of zero weight"
         "y: class 1 has no weight"
         (lambda () (go X y #:sample-weight (on-vector '(1 0 1 0 0 1)))))
-   (row "unequal weights with three classes"
-        unequal-weights-message
-        (lambda ()
-          (go X (on-vector '(0 1 2 0 1 2) 'int32) #:sample-weight (on-vector '(1 2 1 1 1 1)))))
-   (row "balanced weights with three unequal classes"
-        unequal-weights-message
-        (lambda () (go X (on-vector '(0 1 2 0 1 1) 'int32) #:class-weight 'balanced)))
-   (row "uniform balanced weights with three unequal classes"
-        unequal-weights-message
-        (lambda ()
-          (go X
-              (on-vector '(0 1 2 0 1 1) 'int32)
-              #:sample-weight (on-vector '(0.1 0.1 0.1 0.1 0.1 0.1))
-              #:class-weight 'balanced)))
    (row "a column whose spread overflows"
         (string-append "X: column 0 has values up to 1.348269851146737e+308 in magnitude; "
                        "its spread is outside the float64 range")

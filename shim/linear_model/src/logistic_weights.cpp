@@ -113,11 +113,6 @@ std::optional<weighted_rows> weighted_rows_of(
   const int64_t m = positive_weights(eff.data(), n, index.data(), stream);
   const row_selection rows{m < n ? index.data() : nullptr, m};
   const bool uniform = equal_weights(eff.data(), rows, stream);
-  if (labels.k > 2 && !uniform) {
-    throw logic_error(
-        "sample-weight: weights with 3 or more classes must be equal on every "
-        "row (cuML's softmax ignores them); got unequal weights");
-  }
   const double scale =
       static_cast<double>(m) / weight_sum(eff.data(), rows, stream);
   return weighted_rows{

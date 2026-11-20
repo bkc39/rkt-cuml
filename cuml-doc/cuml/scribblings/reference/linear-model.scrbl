@@ -411,7 +411,8 @@ label kind of a fitted result; copy it from one. @racket[logistic-regression-pre
 Fits C times the weighted sigmoid (two classes) or softmax loss under @racket[penalty] by
 L-BFGS, OWL-QN with an l1 part; the intercept is not penalised. @racket[y] holds class labels:
 integral numbers on the device, or a list of reals, strings or symbols; @racket[classes] are the
-sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
+sorted distinct labels. @racket[class-weight] scales each row's weight by its class's. Unlike
+Python cuML's, the softmax honours the weights.
 
 The fit is refused when the solver has not converged: the check bounds the first-order residual, not
 the distance to the optimum. A column constant over the rows of positive weight (zero, without
