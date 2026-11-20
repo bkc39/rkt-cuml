@@ -4,7 +4,7 @@
          (only-in racket/list count remove-duplicates)
          (only-in racket/match match-define struct*)
          (only-in rackunit check-true test-case)
-         (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix)
+         (only-in "private/linear-data.rkt" dtypes on-matrix)
          (only-in "private/logistic-data.rkt"
                   default-setting
                   default-tol
@@ -18,6 +18,7 @@
                   relative-gap
                   tight-max-iter
                   tight-tol)
+         (only-in "private/logistic-sklearn-twin.rkt" optimum-gap-bound)
          (only-in "private/logistic-twin-data.rkt" logistic-twin-results setting-twin)
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/real-logistic-data.rkt"
@@ -30,9 +31,6 @@
   (define n (length y))
   (define k (length (remove-duplicates y)))
   (map (lambda (c) (/ n (* k (count (lambda (v) (= v c)) y)))) y))
-
-(define (balanced-gap-bound dt)
-  (by-dtype dt 2e-3 1e-6))
 
 (define (balanced-twin set)
   (match-define (struct* labelled ((case c))) set)
@@ -64,4 +62,4 @@
     (test-case (format "standardised, tight, ~a" dt)
       (define fitted (balanced-fit standardised dt #:tol (tight-tol dt) #:max-iter tight-max-iter))
       (define gap (relative-gap (gauged-fit (fit-parts fitted)) (gauged-sklearn optimum)))
-      (check-true (<= gap (balanced-gap-bound dt)) (format "coef gap ~a" gap)))))
+      (check-true (<= gap (optimum-gap-bound dt)) (format "coef gap ~a" gap)))))

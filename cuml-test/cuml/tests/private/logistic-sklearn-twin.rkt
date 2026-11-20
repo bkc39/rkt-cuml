@@ -25,6 +25,7 @@
 
 (provide check-sklearn-twins
          collapsed
+         optimum-gap-bound
          sklearn-trials)
 
 (define (optimum-gap-bound dt)
