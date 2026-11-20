@@ -15,7 +15,7 @@ def rows(fixtures, case):
     return X.reshape(-1, case["d"]).astype(case["dtype"])
 
 
-def fitted(out, model):
+def put_fitted(out, model):
     put(out, "components", model.components_, float64=True)
     put(out, "singular_values", model.singular_values_, float64=True)
     put(out, "explained_variance", model.explained_variance_, float64=True)
@@ -36,7 +36,7 @@ def cuml_model(case):
 def transform(fixtures, case):
     X = np.asfortranarray(rows(fixtures, case))
     model = cuml_model(case).fit(X)
-    out = fitted({}, model)
+    out = put_fitted({}, model)
     T = model.transform(X)
     put(out, "transform", T, float64=True)
     put(out, "inverse", model.inverse_transform(np.asfortranarray(T)), float64=True)
@@ -46,7 +46,7 @@ def transform(fixtures, case):
 def sklearn_fit(fixtures, case):
     X = rows(fixtures, case)
     model = SkTSVD(n_components=case["k"], algorithm="arpack", random_state=0)
-    return fitted({}, model.fit(X))
+    return put_fitted({}, model.fit(X))
 
 
 def exact(fixtures, case):
