@@ -35,6 +35,8 @@ constexpr double tall_slack = 0x1p-6;
 constexpr double floor_slack = 0x1p-40;
 constexpr double floor_eta = 0x1p-10;
 constexpr double floor_error = 0x1p-20;
+constexpr int64_t light_rows = 4;
+constexpr double light_kappa = 2.0;
 constexpr std::array<std::array<double, 3>, 4> blocks{
     {{1e-6, 1.0, 1e-4}, {1.0, 1e-6, 1e-4}, {0.5, 0.5, 0.25}, {1e-3, 2.0, 0.0}}};
 
@@ -129,6 +131,21 @@ TEST(GramProof, AWindowTheBlockBoundCannotProveGoesExact) {
   EXPECT_EQ(e.path, gram_path::exact);
   EXPECT_GE(e.kappa, kappa);
   EXPECT_LT(e.kappa, kappa * (1 + tall_slack));
+}
+
+TEST(GramProof, AColumnSetByOneLightRowIsProvenThroughItsResidual) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const std::vector<float> host{0, 1, 2, 3, 1, 1, 1, 5};
+  const std::vector<float> weights{3, 3, 3, 0x1p-148F};
+  const filled<float> x(res, host, {light_rows * 2});
+  const filled<float> w(res, weights, {light_rows});
+  const condition_estimate e = equilibrated_condition<float>(
+      raftrkt::handle_of(res.handle),
+      static_cast<const float*>(x.array.view.data),
+      static_cast<const float*>(w.array.view.data), light_rows, 2, 0.0F, true,
+      refusal_kappa);
+  EXPECT_LT(e.kappa, light_kappa);
 }
 
 TEST(GramProof, TheExactPathAcceptsOnlyOnItsEnclosure) {

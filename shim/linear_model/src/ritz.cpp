@@ -22,6 +22,7 @@ constexpr int64_t square_roundings = 3;
 constexpr int64_t staged_roundings = 5;
 constexpr int64_t host_roundings = 32;
 constexpr int64_t mean_roundings = 6;
+constexpr int64_t deviation_roundings = 2;
 constexpr int64_t exact_staged_roundings = 10;
 constexpr int64_t ridge_roundings = 3;
 constexpr int64_t applied_roundings = 8;
@@ -172,10 +173,20 @@ double mean_error(int64_t n, const std::vector<double>& spread,
   const double total = c.total * (1.0 - rounding(rows));
   const double relative = rounding((2.0 * rows) + mean_roundings);
   double squares = 0.0;
+  const double deviation = rounding(rows + deviation_roundings);
+  const double weight = c.total * (1.0 + rounding(rows));
   for (int64_t k = 0; k < d; ++k) {
-    const double reach =
+    const double crude =
         relative * scale[k] *
         (std::sqrt(spread[k] / (total * summed)) + std::abs(c.mean[k]));
+    const double reach =
+        c.residual.empty()
+            ? crude
+            : std::min(crude, (std::abs(c.residual[k]) +
+                               (deviation *
+                                std::sqrt(weight * spread[k] / summed))) /
+                                  total * scale[k] *
+                                  (1.0 + rounding(deviation_roundings)));
     squares += reach * reach;
   }
   return squares * c.total * (1.0 + rounding(rows)) *

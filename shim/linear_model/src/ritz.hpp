@@ -39,6 +39,7 @@ struct gram_bound {
 struct centring {
   std::vector<double> mean;
   double total;
+  std::vector<double> residual;
 };
 
 struct gram_batch {

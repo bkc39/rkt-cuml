@@ -51,6 +51,7 @@ using ritz::symmetric_block;
 constexpr int64_t block_rows = ritz::gram_block_rows;
 constexpr int64_t block_floats = ritz::block_floats;
 constexpr double infinite = std::numeric_limits<double>::infinity();
+constexpr double mean_refinement = 8.0;
 
 template <typename T>
 struct weight_of {
@@ -83,6 +84,19 @@ struct weighted_square {
   __device__ double operator()(int64_t k, int64_t i) const {
     const double v = static_cast<double>(x[(k * n) + i]) - mean[k];
     return (w == nullptr ? 1.0 : static_cast<double>(w[i])) * v * v;
+  }
+};
+
+template <typename T>
+struct weighted_deviation {
+  const T* x;
+  const T* w;
+  const double* mean;
+  int64_t n;
+
+  __device__ double operator()(int64_t k, int64_t i) const {
+    const double v = static_cast<double>(x[(k * n) + i]) - mean[k];
+    return (w == nullptr ? 1.0 : static_cast<double>(w[i])) * v;
   }
 };
 
@@ -184,7 +198,7 @@ centred column_means(const raft::handle_t& handle, const T* x, const T* w,
                      int64_t n, int64_t d, bool fit_intercept) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   if (!fit_intercept) {
-    return {to_device(std::vector<double>(d, 0.0), stream), {{}, 0.0}};
+    return {to_device(std::vector<double>(d, 0.0), stream), {{}, 0.0, {}}};
   }
   const thrust::counting_iterator<int64_t> rows(0);
   const double total =
@@ -193,7 +207,7 @@ centred column_means(const raft::handle_t& handle, const T* x, const T* w,
   buffer<double> sums = column_sums(handle, weighted_entry<T>{x, w, n}, n, d);
   each(handle, d, divided_by{sums.data(), total});
   std::vector<double> host = to_host(sums, stream);
-  return {std::move(sums), {std::move(host), total}};
+  return {std::move(sums), {std::move(host), total, {}}};
 }
 
 template <typename T>
@@ -408,7 +422,7 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
   require_some("chunk", "vector", chunk);
   const rmm::cuda_stream_view stream = stream_of(handle);
   const auto a = static_cast<double>(alpha);
-  const centred centre = column_means(handle, x, w, n, d, fit_intercept);
+  centred centre = column_means(handle, x, w, n, d, fit_intercept);
   const buffer<double>& mean = centre.mean;
   const std::vector<double> spread = to_host(
       column_sums(handle, weighted_square<T>{x, w, mean.data(), n}, n, d),
@@ -427,7 +441,14 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
     m[(k * d) + k] += static_cast<float>(a * scale[k] * scale[k]);
   }
   ritz::gram_bound bound = ritz::bound_of(n, spread, scale, a);
+  const double plain = ritz::gram_error(bound);
   bound.mean = ritz::mean_error(n, spread, scale, centre.host);
+  if (bound.mean * mean_refinement > plain) {
+    centre.host.residual = to_host(
+        column_sums(handle, weighted_deviation<T>{x, w, mean.data(), n}, n, d),
+        stream);
+    bound.mean = ritz::mean_error(n, spread, scale, centre.host);
+  }
   const double exact = ritz::exact_error(bound, n);
   const std::optional<eigen_pairs> e = eigen_of(handle, m, d, true);
   if (!e) {
