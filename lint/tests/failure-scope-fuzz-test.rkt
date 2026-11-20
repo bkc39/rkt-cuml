@@ -122,52 +122,52 @@
                                entries)))))
 
 (define (spine-tail depth)
-  (match (random 3)
-    [0 (node (pick names) (lambda () `(list ,@(repeated leaf-value '..0))))]
-    [1 (node `(var ,(pick names)) (lambda () `(list ,@(repeated leaf-value '..0))))]
-    [_ (list-node (sub1 depth))]))
+  ((pick (list (lambda () (node (pick names) (lambda () `(list ,@(repeated leaf-value '..0)))))
+               (lambda ()
+                 (node `(var ,(pick names)) (lambda () `(list ,@(repeated leaf-value '..0)))))
+               (lambda () (list-node (sub1 depth)))))))
 
 (define (spine-node depth)
   (define head (generate (sub1 depth)))
   (define tail (spine-tail depth))
-  (match (random 3)
-    [0
-     (node `(cons ,(node-pattern head) ,(node-pattern tail))
-           (lambda () `(cons ,((node-value head)) ,((node-value tail)))))]
-    [1
-     (node (list (pick '(list-rest list*)) (node-pattern head) (node-pattern tail))
-           (lambda () `(list* ,((node-value head)) ,((node-value tail)))))]
-    [_ (quasi-node (sub1 depth) #:tail (and (chance 0.5) (spine-tail depth)))]))
+  ((pick (list (lambda ()
+                 (node `(cons ,(node-pattern head) ,(node-pattern tail))
+                       (lambda () `(cons ,((node-value head)) ,((node-value tail))))))
+               (lambda ()
+                 (node (list (pick '(list-rest list*)) (node-pattern head) (node-pattern tail))
+                       (lambda () `(list* ,((node-value head)) ,((node-value tail))))))
+               (lambda () (quasi-node (sub1 depth) #:tail (and (chance 0.5) (spine-tail depth))))))))
 
 (define (element depth)
-  (match (random 11)
-    [0
-     (define one (generate (sub1 depth)))
-     (node (list (list 'unquote (node-pattern one))) (lambda () `(list ,((node-value one)))))]
-    [1
-     (define one (generate (sub1 depth)))
-     (define repeat (random-repeat))
-     (node (list (list 'unquote (node-pattern one)) repeat)
-           (lambda () `(list ,@(repeated (node-value one) repeat))))]
-    [2
-     (define name (pick names))
-     (node (list (list 'unquote-splicing name)) (lambda () `(list ,@(repeated leaf-value '..0))))]
-    [3
-     (define one (list-node (sub1 depth)))
-     (node (list (list 'unquote-splicing (node-pattern one))) (node-value one))]
-    [4
-     (define one (spine-node depth))
-     (node (list (list 'unquote-splicing (node-pattern one))) (node-value one))]
-    [5 (node '(x) (lambda () ''(x)))]
-    [6 (node '(,@'()) (lambda () ''()))]
-    [7 (node '(,@'(x)) (lambda () ''(x)))]
-    [8
-     (define one (template (sub1 depth)))
-     (node (list (node-pattern one)) (lambda () `(list ,((node-value one)))))]
-    [_
-     (define one (template (sub1 depth) #:tail #f))
-     (node (list (list->vector (node-pattern one)))
-           (lambda () `(list (list->vector ,((node-value one))))))]))
+  (define (spliced one)
+    (node (list (list 'unquote-splicing (node-pattern one))) (node-value one)))
+  (define (nested-vector)
+    (define one (template (sub1 depth) #:tail #f))
+    (node (list (list->vector (node-pattern one)))
+          (lambda () `(list (list->vector ,((node-value one)))))))
+  ((pick (list (lambda ()
+                 (define one (generate (sub1 depth)))
+                 (node (list (list 'unquote (node-pattern one)))
+                       (lambda () `(list ,((node-value one))))))
+               (lambda ()
+                 (define one (generate (sub1 depth)))
+                 (define repeat (random-repeat))
+                 (node (list (list 'unquote (node-pattern one)) repeat)
+                       (lambda () `(list ,@(repeated (node-value one) repeat)))))
+               (lambda ()
+                 (define name (pick names))
+                 (node (list (list 'unquote-splicing name))
+                       (lambda () `(list ,@(repeated leaf-value '..0)))))
+               (lambda () (spliced (list-node (sub1 depth))))
+               (lambda () (spliced (spine-node depth)))
+               (lambda () (node '(x) (lambda () ''(x))))
+               (lambda () (node '(,@'()) (lambda () ''())))
+               (lambda () (node '(,@'(x)) (lambda () ''(x))))
+               (lambda ()
+                 (define one (template (sub1 depth)))
+                 (node (list (node-pattern one)) (lambda () `(list ,((node-value one))))))
+               nested-vector
+               nested-vector))))
 
 (define (template depth #:tail [tail (and (chance 0.2) (generate (sub1 depth)))])
   (define elements
@@ -196,46 +196,50 @@
   (define (other-value)
     ((node-value other)))
   (define pattern (node-pattern one))
-  (match (random 11)
-    [0 (node `(cons ,pattern ,(node-pattern other)) (lambda () `(cons ,(value) ,(other-value))))]
-    [1 (node `(box ,pattern) (lambda () `(box ,(value))))]
-    [2 (node `(point ,pattern ,(node-pattern other)) (lambda () `(point ,(value) ,(other-value))))]
-    [3
-     (node `(struct point (,pattern ,(node-pattern other)))
-           (lambda () `(point ,(value) ,(other-value))))]
-    [4 (node `(struct* point ([b ,pattern])) (lambda () `(point ,(other-value) ,(value))))]
-    [5 (node `(? values ,pattern) value)]
-    [6 (node `(app values ,pattern) value)]
-    [7
-     (define name (pick names))
-     (node (if (chance 0.5)
-               `(and ,name ,pattern)
-               `(and ,pattern ,name))
-           value)]
-    [8
-     (define wrapper (pick '(box list vector)))
-     (node (if (chance 0.5)
-               `(or ,pattern (,wrapper ,pattern))
-               `(or (,wrapper ,pattern) ,pattern))
-           (lambda ()
-             (if (chance 0.5)
-                 (value)
-                 (list wrapper (value)))))]
-    [9 (node `(app box (box ,pattern)) value)]
-    [_ (node `(? values ,(pick names) ,pattern) value)]))
+  ((pick
+    (list
+     (lambda ()
+       (node `(cons ,pattern ,(node-pattern other)) (lambda () `(cons ,(value) ,(other-value)))))
+     (lambda () (node `(box ,pattern) (lambda () `(box ,(value)))))
+     (lambda ()
+       (node `(point ,pattern ,(node-pattern other)) (lambda () `(point ,(value) ,(other-value)))))
+     (lambda ()
+       (node `(struct point (,pattern ,(node-pattern other)))
+             (lambda () `(point ,(value) ,(other-value)))))
+     (lambda () (node `(struct* point ([b ,pattern])) (lambda () `(point ,(other-value) ,(value)))))
+     (lambda () (node `(? values ,pattern) value))
+     (lambda () (node `(app values ,pattern) value))
+     (lambda ()
+       (define name (pick names))
+       (node (if (chance 0.5)
+                 `(and ,name ,pattern)
+                 `(and ,pattern ,name))
+             value))
+     (lambda ()
+       (define wrapper (pick '(box list vector)))
+       (node (if (chance 0.5)
+                 `(or ,pattern (,wrapper ,pattern))
+                 `(or (,wrapper ,pattern) ,pattern))
+             (lambda ()
+               (if (chance 0.5)
+                   (value)
+                   (list wrapper (value))))))
+     (lambda () (node `(app box (box ,pattern)) value))
+     (lambda () (node `(? values ,(pick names) ,pattern) value))))))
 
 (define (generate depth)
   (if (<= depth 0)
       (leaf)
-      (match (random 9)
-        [0 (leaf)]
-        [1 (list-node depth)]
-        [2 (list-rest-node depth)]
-        [3 (vector-node depth)]
-        [4 (list-no-order-node depth)]
-        [5 (hash-table-node depth)]
-        [6 (quasi-node depth)]
-        [_ (wrap-node depth)])))
+      ((pick (list (lambda (_depth) (leaf))
+                   list-node
+                   list-rest-node
+                   vector-node
+                   list-no-order-node
+                   hash-table-node
+                   quasi-node
+                   wrap-node
+                   wrap-node))
+       depth)))
 
 (define (size datum)
   (cond
