@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/list append*)
+(require (only-in cuml/linear-model/private/native libcuml-version)
+         (only-in racket/list append*)
          racket/runtime-path
          (only-in threading ~>)
          (only-in "common-data.rkt" bits-of)
@@ -66,7 +67,7 @@
                  #:max-iter max-iter))
 
 (define (logistic-twin-results requests)
-  (twin-results logistic-twin-script requests))
+  (twin-results logistic-twin-script requests #:expected-cuml libcuml-version))
 
 (define (their-fit theirs dt)
   (lr-fit (list (decoded dt (hash-ref theirs 'coef_bits)))

@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
+         (only-in cuml/linear-model/private/native libcuml-version)
          (only-in racket/hash hash-union)
          (only-in racket/list append*)
          racket/runtime-path
@@ -86,7 +87,7 @@
                 (values (python-name k) (python-value v)))))
 
 (define (mbsgd-twin-results requests)
-  (twin-results mbsgd-twin-script requests))
+  (twin-results mbsgd-twin-script requests #:expected-cuml libcuml-version))
 
 (define (their-parts theirs dt)
   (list (decoded dt (hash-ref theirs 'coef_bits))

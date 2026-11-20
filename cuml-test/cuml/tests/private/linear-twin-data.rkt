@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/list make-list)
+(require (only-in cuml/linear-model/private/native libcuml-version)
+         (only-in racket/list make-list)
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
@@ -67,7 +68,7 @@
                                        (symbol->string a)))))
 
 (define (results requests)
-  (twin-results twin requests))
+  (twin-results twin requests #:expected-cuml libcuml-version))
 
 (define (theirs dt result)
   (match-define (list intercept) (decoded dt (hash-ref result 'intercept_bits)))
