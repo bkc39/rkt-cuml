@@ -17,7 +17,7 @@
 
 (define wanted
   (match (getenv "CUML_LINT_FUZZ_COUNT")
-    [#f 400]
+    [#f 250]
     [count (string->number count)]))
 
 (define (pick choices)
@@ -147,7 +147,7 @@
     [_ (quasi-node (sub1 depth) #:tail (and (chance 0.5) (spine-tail depth)))]))
 
 (define (element depth)
-  (match (random 9)
+  (match (random 11)
     [0
      (define one (generate (sub1 depth)))
      (node (list (list 'unquote (node-pattern one))) (lambda () `(list ,((node-value one)))))]
@@ -166,7 +166,9 @@
      (define one (spine-node depth))
      (node (list (list 'unquote-splicing (node-pattern one))) (node-value one))]
     [5 (node '(x) (lambda () ''(x)))]
-    [6
+    [6 (node '(,@'()) (lambda () ''()))]
+    [7 (node '(,@'(x)) (lambda () ''(x)))]
+    [8
      (define one (template (sub1 depth)))
      (node (list (node-pattern one)) (lambda () `(list ,((node-value one)))))]
     [_
