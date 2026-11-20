@@ -224,10 +224,10 @@
 
 (test-gpu "unequal weights with three classes fit as repeated rows"
   (define rows '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
-  (define three (lr-case "three" rows '(0 1 2 0 1 2) #f))
+  (define two-of-each (lr-case "three" rows '(0 1 2 0 1 2) #f))
   (define unequal (lr-case "unequal" rows '(0 1 2 0 1 1) #f))
   (test-case "unequal sample weights"
-    (check-repeated three '(1 2 1 1 1 1) #:sample-weight (on-vector '(1 2 1 1 1 1) 'float64)))
+    (check-repeated two-of-each '(1 2 1 1 1 1) #:sample-weight (on-vector '(1 2 1 1 1 1) 'float64)))
   (test-case "balanced, three unequal classes"
     (check-repeated unequal '(3 2 6 3 2 2) #:C 3.0 #:class-weight 'balanced))
   (test-case "balanced over uniform sample weights"

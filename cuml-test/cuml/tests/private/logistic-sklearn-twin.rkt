@@ -1,8 +1,8 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-decision-function)
-         (only-in racket/match match match-define struct*)
          (only-in racket/list filter-not make-list)
+         (only-in racket/match match match-define struct*)
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in "common-data.rkt" kept-rows)
