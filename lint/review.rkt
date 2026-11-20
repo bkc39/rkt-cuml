@@ -3,9 +3,7 @@
 (require (only-in racket/list append-map)
          (only-in racket/syntax format-id)
          (only-in review/ext pop-scope push-scope recur track-binding track-error)
-         ;; whole-module: its syntax classes come with it
          syntax/parse/define
-         ;; whole-module: its syntax classes come with it
          syntax/parse/pre
          (only-in "private/modules.rkt" read-module))
 
