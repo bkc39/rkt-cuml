@@ -2,6 +2,7 @@
 
 (require (only-in cuml/manifold/private/curve curve-iterations curve-parameters)
          (only-in cuml/manifold/private/native libcuml-version)
+         (only-in racket/dict in-dict)
          (only-in racket/flonum fl* flexpt)
          (only-in racket/match match-define)
          racket/runtime-path
@@ -26,13 +27,11 @@
 (test-twin "L4a, L4b: a and b are within the bounds of scipy's curve_fit and a precise solver"
   (define found
     (twin-results twin
-                  (for/list ([p (in-list pairs)])
-                    (match-define (cons s m) p)
+                  (for/list ([(s m) (in-dict pairs)])
                     (hasheq 'op "ab" 'spread s 'min_dist m))
                   #:expected-cuml libcuml-version))
-  (for ([p (in-list pairs)]
+  (for ([(s m) (in-dict pairs)]
         [theirs (in-list found)])
-    (match-define (cons s m) p)
     (define-values (a b) (curve-parameters m s))
     (test-case (format "spread ~a min-dist ~a" s m)
       (check-true (<= (relative a (hash-ref theirs 'a)) curve-fit-bound) "curve_fit a")
