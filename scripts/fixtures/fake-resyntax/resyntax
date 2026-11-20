@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 echo "resyntax: analyzer identifier-usage-analyzer timed out after 5 ms while analyzing $FAKE_RESYNTAX_FILE" >&2
+yes "resyntax: --- a line of analyzer output that names no file and suggests nothing ---" |
+  head -n "${FAKE_RESYNTAX_PAD_LINES:-0}"
 echo "resyntax: analyzer variable-mutability-analyzer failed with error while analyzing $FAKE_RESYNTAX_FILE: boom" >&2
 exit "${FAKE_RESYNTAX_RC:-0}"

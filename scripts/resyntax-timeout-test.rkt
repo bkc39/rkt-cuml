@@ -70,12 +70,13 @@
                        (check-false ok?)
                        (check-regexp-match #rx"whole number of milliseconds, not '30s'" output))))
 
-(define (run-faked file rc)
+(define (run-faked file rc #:pad-lines [pad-lines 0])
   (parameterize ([current-environment-variables
                   (environment-variables-copy (current-environment-variables))])
     (putenv "PATH" (format "~a:~a" (path->string fake-resyntax) (getenv "PATH")))
     (putenv "FAKE_RESYNTAX_FILE" (path->string file))
     (putenv "FAKE_RESYNTAX_RC" (number->string rc))
+    (putenv "FAKE_RESYNTAX_PAD_LINES" (number->string pad-lines))
     (run-on file)))
 
 (test-case "a file whose path has a space is listed whole, with every analyzer it missed"
@@ -95,3 +96,16 @@
                        (check-false ok?)
                        (check-regexp-match #rx"files not fully analysed: 1;" output)
                        (check-regexp-match #rx"resyntax exited 3" output))))
+
+(test-case "analyzer output over the 128 KiB argument limit is listed, and the lane still passes"
+  (call-with-fixture
+   (lambda (file)
+     (define-values (ok? output) (run-faked file 0 #:pad-lines 4000))
+     (check-true (> (string-length output) 300000))
+     (check-true ok?)
+     (check-false (regexp-match? #rx"Argument list too long" output))
+     (check-regexp-match #rx"files not fully analysed: 1;" output)
+     (check-regexp-match
+      #rx"\n  [^\n]*/module[.]rkt: identifier-usage-analyzer, variable-mutability-analyzer\n"
+      output)
+     (check-regexp-match #rx"in the analysed files; files not fully analysed: 1," output))))
