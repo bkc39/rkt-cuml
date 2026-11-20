@@ -154,13 +154,23 @@
       [_ datum])))
 
 (define (unquoted-parts template #:pattern? [pattern? #f])
-  (define parts '())
-  (quasi-map template
-             (lambda (inner)
-               (set! parts (cons inner parts))
-               inner)
-             #:pattern? pattern?)
-  (reverse parts))
+  (let walk ([one template]
+             [depth 1])
+    (define (again item)
+      (walk item depth))
+    (define datum (datum-of one))
+    (match datum
+      [(list (app datum-of (or 'unquote 'unquote-splicing)) inner)
+       (if (or pattern? (= depth 1))
+           (list inner)
+           (walk inner (sub1 depth)))]
+      [(list (app datum-of 'quasiquote) inner) (walk inner (add1 depth))]
+      [(cons a d) (append (again a) (again d))]
+      [(? vector?) (append-map again (vector->list datum))]
+      [(? box?) (again (unbox datum))]
+      [(? hash?) (append-map again (for/list ([value (in-hash-values datum)]) value))]
+      [(app prefab-struct-key (? values)) (append-map again (cdr (vector->list (struct->vector datum))))]
+      [_ '()])))
 
 (define (ellipsis? datum)
   (and (symbol? datum)
