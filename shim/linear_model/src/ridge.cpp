@@ -37,7 +37,8 @@ double ridge_fit_into(const raft::handle_t& handle,
                       prepared.fit_intercept,
                       {glm_family::ridge,
                        ridge_algorithm(fit.algorithm, prepared.positive, kept)},
-                      std::move(prepared.counted)};
+                      std::move(prepared.counted),
+                      scale->window};
   return finish_fit(handle, in, plan, scale->alpha, out);
 }
 
