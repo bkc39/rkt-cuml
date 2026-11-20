@@ -27,8 +27,7 @@
              (define a (normal))
              (define t (* span (uniform)))
              (define s (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2)))
-             (values (list a (+ 1.7e9 t))
-                     (count (lambda (cut) (> s cut)) cuts))))
+             (values (list a (+ 1.7e9 t)) (count (lambda (cut) (> s cut)) cuts))))
 
 (define (refusal fit)
   (with-handlers ([exn:fail? exn-message])

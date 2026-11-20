@@ -31,8 +31,9 @@
 (define (balanced-twin set)
   (match-define (struct* labelled ((case c))) set)
   (define y (lr-case-y c))
+  (define weights (map (curry hash-ref (balanced-class-weights y)) y))
   (setting-twin "sklearn-fit"
-                (lr-case "balanced" (lr-case-X c) y (map (curry hash-ref (balanced-class-weights y)) y))
+                (lr-case "balanced" (lr-case-X c) y weights)
                 'float64
                 default-setting
                 #:tol (tight-tol 'float64)))

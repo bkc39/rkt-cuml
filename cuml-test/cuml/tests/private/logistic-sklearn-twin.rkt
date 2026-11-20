@@ -48,7 +48,7 @@
               [s (in-list settings)])
     (twin-trial dt c s #t)))
 
-(struct oracle (case counts solver-gap))
+(struct oracle (seen counts solver-gap))
 
 (define (oracle-of c repeated?)
   (cond
@@ -72,7 +72,7 @@
       (oracle-of (twin-trial-case r) repeated?)))
   (define (request r o)
     (match-define (struct* twin-trial ([dt dt] [setting s])) r)
-    (setting-twin "sklearn-fit" (oracle-case o) dt s #:tol (tight-tol dt)))
+    (setting-twin "sklearn-fit" (oracle-seen o) dt s #:tol (tight-tol dt)))
   (for ([r (in-list rows)]
         [o (in-list oracles)]
         [theirs (in-list (logistic-twin-results (map request rows oracles)))])
@@ -95,9 +95,8 @@
       (define default-gap (gap-to-sklearn (fit-parts (setting-fit c dt s))))
       (check-true (<= default-gap (default-tol-cap dt)) (format "default-tol gap ~a" default-gap))
       (define z
-        (kept-rows (device-matrix->list* (logistic-regression-decision-function
-                                          fitted
-                                          (on-matrix (lr-case-X c) dt)))
+        (kept-rows (device-matrix->list*
+                    (logistic-regression-decision-function fitted (on-matrix (lr-case-X c) dt)))
                    counts))
       (for ([zi (in-list z)]
             [label (in-list (collapsed (hash-ref theirs 'predict) counts))]
@@ -108,8 +107,7 @@
   (list (blob-case "three classes weighted" 120 3 3 34 #:weighted? #t)
         (blob-case "five classes weighted" 150 3 5 35 #:weighted? #t)))
 
-(define penalised-settings
-  (filter-not (lambda (s) (eq? (setting-penalty s) 'none)) penalty-settings))
+(define penalised-settings (filter-not (lambda (s) (eq? (setting-penalty s) 'none)) penalty-settings))
 
 (define (check-weighted-sklearn-twins dt)
   (check-sklearn-twins (sklearn-trials weighted-cases penalised-settings #:dtypes (list dt))
