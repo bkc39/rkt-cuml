@@ -58,21 +58,39 @@
 (define fixtures (hasheq 'a '(1.0)))
 
 (define run-rows
-  `(("no fixtures sends only the cases" ,pinned #f #f ,(hasheq 'cases requests) passed)
-    ("the fixtures reach the request" ,pinned
-                                      ,fixtures
-                                      #f
-                                      ,(hasheq 'cases requests 'fixtures fixtures)
-                                      passed)
-    ("the native libcuml given is checked" ,pinned #f "26.10.00" ,(hasheq 'cases requests) ,native)
-    ("an unpinned twin fails without a native libcuml" ,unpinned
-                                                       #f
-                                                       #f
-                                                       ,(hasheq 'cases requests)
-                                                       ,pin)))
+  `(#hasheq((name . "no fixtures sends only the cases")
+            (version . ,pinned)
+            (fixtures . #f)
+            (expected . #f)
+            (request . ,(hasheq 'cases requests))
+            (outcome . passed))
+    #hasheq((name . "the fixtures reach the request")
+            (version . ,pinned)
+            (fixtures . ,fixtures)
+            (expected . #f)
+            (request . ,(hasheq 'cases requests 'fixtures fixtures))
+            (outcome . passed))
+    #hasheq((name . "the native libcuml given is checked")
+            (version . ,pinned)
+            (fixtures . #f)
+            (expected . "26.10.00")
+            (request . ,(hasheq 'cases requests))
+            (outcome . ,native))
+    #hasheq((name . "an unpinned twin fails without a native libcuml")
+            (version . ,unpinned)
+            (fixtures . #f)
+            (expected . #f)
+            (request . ,(hasheq 'cases requests))
+            (outcome . ,pin))))
 
 (for ([row (in-list run-rows)])
-  (match-define (list name version sent-fixtures expected request outcome) row)
+  (match-define (hash-table ('name name)
+                            ('version version)
+                            ('fixtures sent-fixtures)
+                            ('expected expected)
+                            ('request request)
+                            ('outcome outcome))
+    row)
   (test-case name
     (define sent '())
     (define (run script input)
