@@ -18,14 +18,14 @@
          (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/scaler-data.rkt" matrix-shape normal-rows rows->matrix vector-shape))
+         (only-in "private/scaler-data.rkt" matrix-shape normal-rows vector-shape))
 
 (test-gpu "the result's vectors are float64 of length d, and the outputs keep X's shape and dtype"
   (for* ([dt (in-list '(float32 float64))]
          [size (in-list '((1 1) (7 13) (256 64)))])
     (match-define (list n d) size)
     (test-case (format "~a ~ax~a" dt n d)
-      (define X (rows->matrix (normal-rows (+ n d) n d dt) dt))
+      (define X (list*->device-matrix (normal-rows (+ n d) n d dt) #:dtype dt))
       (define fitted (standard-scaler-fit X))
       (check-true (standard-scaler-result? fitted))
       (for ([v (list (standard-scaler-result-mean fitted)
@@ -45,7 +45,7 @@
       (check-true (standard-scaler-result? again)))))
 
 (test-gpu "the flags give the documented fields"
-  (define X (rows->matrix (normal-rows 3 7 3 'float32) 'float32))
+  (define X (list*->device-matrix (normal-rows 3 7 3 'float32) #:dtype 'float32))
   (for* ([with-mean (in-list '(#t #f))]
          [with-std (in-list '(#t #f))])
     (define fitted (standard-scaler-fit X #:with-mean with-mean #:with-std with-std))

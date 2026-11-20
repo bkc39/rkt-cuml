@@ -1,14 +1,19 @@
 #lang racket/base
 
 (require (only-in cuml estimator-params)
+         (only-in racket/list combinations)
          (only-in racket/match match)
          (only-in raft device-matrix->list* device-vector->list device-vector?))
 
 (provide apply-options
          hash-remove*
+         keyword-of
+         keywords-of
          listed
          printed
-         round-trips)
+         round-trips
+         subsets
+         twice)
 
 (define (apply-options proc options . args)
   (define names (sort (hash-keys options) symbol<?))
@@ -34,3 +39,17 @@
     [#f #f]
     [(? device-vector?) (device-vector->list v)]
     [_ (device-matrix->list* v)]))
+
+(define (subsets keys n)
+  (for*/list ([k (in-range (add1 n))]
+              [subset (in-list (combinations keys k))])
+    subset))
+
+(define (twice size)
+  (* 2 size))
+
+(define (keyword-of key)
+  (string->keyword (symbol->string key)))
+
+(define (keywords-of proc)
+  (call-with-values (lambda () (procedure-keywords proc)) list))

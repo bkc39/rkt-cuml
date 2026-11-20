@@ -2,30 +2,28 @@
 
 (require (only-in cuml fit ridge)
          (only-in cuml/linear-model linear-regression-result ridge-fit ridge-params ridge-predict)
-         (only-in racket/match match-define struct*)
+         (only-in racket/match match-define match-lambda struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix device-matrix->list* device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" [on-vector vector] unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
                   check-law
                   dtypes
                   exact-fit
                   gap
                   lcase
-                  lcase-name
                   lcase-X
+                  lcase-name
                   lcase-y
+                  [on-matrix matrix]
                   max-abs
                   normal-case
                   oracle-ridge
-                  [on-matrix matrix]
-                  [on-vector vector]
                   ridge-solution
                   rounded
-                  unit-roundoff
                   weighted-spread)
          (only-in "private/linear-refusal-rows.rkt"
                   grid
@@ -39,40 +37,40 @@
 (define (fit-rows go)
   (define X (matrix grid))
   (define y (vector targets))
-  (append (list (row "non-boolean fit-intercept before the X views"
-                     "fit-intercept: expected #t or #f, got 'yes"
-                     (lambda () (go (blank-matrix 5 3 'int32) y #:fit-intercept 'yes #:alpha 'x)))
-                (row "non-real alpha before the X views"
-                     "alpha: expected a real number, got 'x"
-                     (lambda () (go (blank-matrix 5 3 'int32) y #:alpha 'x)))
-                (row "X dtype before alpha"
-                     "X: expected float32 or float64, got int32"
-                     (lambda () (go (blank-matrix 5 3 'int32) y #:alpha -1)))
-                (row "unknown solver"
-                     "solver: expected auto, eig or svd"
-                     (lambda () (go X y #:solver 'lsmr)))
-                (row "unknown solver before alpha"
-                     "solver: expected auto, eig or svd"
-                     (lambda () (go X y #:solver 'lsmr #:alpha -1)))
-                (row "negative alpha"
-                     "alpha: expected a finite value at least 0, got -1"
-                     (lambda () (go X y #:alpha -1)))
-                (row "infinite alpha"
-                     "alpha: expected a finite value at least 0, got inf"
-                     (lambda () (go X y #:alpha +inf.0)))
-                (row "nan alpha"
-                     "alpha: expected a finite value at least 0, got nan"
-                     (lambda () (go X y #:alpha +nan.0)))
-                (row "alpha past the double range"
-                     "alpha: expected a finite value at least 0, got inf"
-                     (lambda () (go X y #:alpha (expt 10 400))))
-                (row "alpha before a non-finite y"
-                     "alpha: expected a finite value at least 0, got -1"
-                     (lambda () (go X (vector '(1 2 3 4 +inf.0)) #:alpha -1)))
-                (row "coefficient overflow"
-                     "X: column 2: the coefficient exceeds the float32 range"
-                     (lambda () (go (overflow-X) (overflow-y) #:alpha (expt 2 -250)))))
-          (shared-fit-rows go)))
+  (append
+   (list
+    (row "non-boolean fit-intercept before the X views"
+         "fit-intercept: expected #t or #f, got 'yes"
+         (lambda () (go (device-matrix 5 3 #:dtype 'int32) y #:fit-intercept 'yes #:alpha 'x)))
+    (row "non-real alpha before the X views"
+         "alpha: expected a real number, got 'x"
+         (lambda () (go (device-matrix 5 3 #:dtype 'int32) y #:alpha 'x)))
+    (row "X dtype before alpha"
+         "X: expected float32 or float64, got int32"
+         (lambda () (go (device-matrix 5 3 #:dtype 'int32) y #:alpha -1)))
+    (row "unknown solver" "solver: expected auto, eig or svd" (lambda () (go X y #:solver 'lsmr)))
+    (row "unknown solver before alpha"
+         "solver: expected auto, eig or svd"
+         (lambda () (go X y #:solver 'lsmr #:alpha -1)))
+    (row "negative alpha"
+         "alpha: expected a finite value at least 0, got -1"
+         (lambda () (go X y #:alpha -1)))
+    (row "infinite alpha"
+         "alpha: expected a finite value at least 0, got inf"
+         (lambda () (go X y #:alpha +inf.0)))
+    (row "nan alpha"
+         "alpha: expected a finite value at least 0, got nan"
+         (lambda () (go X y #:alpha +nan.0)))
+    (row "alpha past the double range"
+         "alpha: expected a finite value at least 0, got inf"
+         (lambda () (go X y #:alpha (expt 10 400))))
+    (row "alpha before a non-finite y"
+         "alpha: expected a finite value at least 0, got -1"
+         (lambda () (go X (vector '(1 2 3 4 +inf.0)) #:alpha -1)))
+    (row "coefficient overflow"
+         "X: column 2: the coefficient exceeds the float32 range"
+         (lambda () (go (overflow-X) (overflow-y) #:alpha (expt 2 -250)))))
+   (shared-fit-rows go)))
 
 (define (estimator-fit X
                        y
@@ -151,7 +149,10 @@
       inexact->exact))
 
 (define (narrow-alpha c k)
-  (spread-alpha (map cadr (lcase-X c)) k))
+  (spread-alpha (map (match-lambda
+                       [(list* _ second-column _) second-column])
+                     (lcase-X c))
+                k))
 
 (test-gpu "a narrow column's coefficient lost under a large alpha is refused"
   (for* ([p (in-list '((float32 44 30) (float64 100 40) (float32 60 0)))]

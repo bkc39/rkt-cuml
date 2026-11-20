@@ -12,8 +12,9 @@
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft dtype shape)
+         (only-in raft dtype list->device-vector list*->device-matrix shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/exact-algebra.rkt" [inexact-rows floats])
          (only-in "private/kmeans-data.rkt"
                   argmin-row
                   blob-data
@@ -22,34 +23,31 @@
                   dtypes
                   far-start
                   first-rows
-                  floats
+                  grid-weights
                   grid64
                   grid64-means
                   grid64-start
                   grid8
                   grid8-labels
-                  grid-weights
                   host
                   host-vector
-                  mat
                   norm2
+                  outcome
                   shift
                   squared-distance
                   start
                   step-weights
                   string-inits
-                  vec
                   weighted-grid8
                   weighted-start))
 
-(define (outcome r)
-  (match-define (kmeans-result centroids labels inertia n-iter) r)
-  (list (host centroids) (host-vector labels) inertia n-iter))
-
 (define fit-grid
-  (make-keyword-procedure
-   (lambda (kws vals rows first dt)
-     (keyword-apply kmeans-fit kws vals (list (mat rows dt)) #:init (mat first dt)))))
+  (make-keyword-procedure (lambda (kws vals rows first dt)
+                            (keyword-apply kmeans-fit
+                                           kws
+                                           vals
+                                           (list (list*->device-matrix rows #:dtype dt))
+                                           #:init (list*->device-matrix first #:dtype dt)))))
 
 (test-gpu "law A: every fit returns arrays of the documented shapes and dtypes"
   (for* ([dt (in-list dtypes)]
@@ -81,7 +79,7 @@
          [seed (in-range 1 9)])
     (test-case (format "~a, seed ~a" dt seed)
       (define X (blob-data 400 3 5 (+ seed 100) dt))
-      (define w (vec (cyclic-weights 400) dt))
+      (define w (list->device-vector (cyclic-weights 400) #:dtype dt))
       (match-define (kmeans-result centroids labels inertia _)
         (kmeans-fit X #:n-clusters 5 #:random-state seed))
       (check-equal? (host-vector (kmeans-predict centroids X)) (host-vector labels))
@@ -117,8 +115,9 @@
 (test-gpu "law C: the transform's argmin is predict on the grids, exactly"
   (for* ([dt (in-list dtypes)]
          [(rows first) (in-parallel (list grid8 grid64) (list start grid64-start))])
-    (define X (mat rows dt))
-    (define centroids (kmeans-result-centroids (kmeans-fit X #:init (mat first dt))))
+    (define X (list*->device-matrix rows #:dtype dt))
+    (define centroids
+      (kmeans-result-centroids (kmeans-fit X #:init (list*->device-matrix first #:dtype dt))))
     (check-equal? (map argmin-row (host (kmeans-transform centroids X)))
                   (host-vector (kmeans-predict centroids X)))))
 
@@ -148,25 +147,33 @@
 (test-gpu "law D: weights are rescaled to sum to the sample count"
   (same-for-both-dtypes
    (lambda (dt)
-     (define X (mat weighted-grid8 dt))
-     (define w (vec grid-weights dt))
+     (define X (list*->device-matrix weighted-grid8 #:dtype dt))
+     (define w (list->device-vector grid-weights #:dtype dt))
      (match-define (kmeans-result centroids _ inertia _)
-       (kmeans-fit X #:init (mat weighted-start dt) #:sample-weight w))
+       (kmeans-fit X #:init (list*->device-matrix weighted-start #:dtype dt) #:sample-weight w))
      (check-equal? inertia 52.0)
      (check-equal? (kmeans-score centroids X #:sample-weight w) -52.0)
      (check-equal? (kmeans-score centroids X) -40.0)
-     (check-equal?
-      (kmeans-score centroids X #:sample-weight (vec (map (lambda (v) (* 2 v)) grid-weights) dt))
-      -52.0)
+     (check-equal? (kmeans-score centroids
+                                 X
+                                 #:sample-weight
+                                 (list->device-vector (map (lambda (v) (* 2 v)) grid-weights)
+                                                      #:dtype dt))
+                   -52.0)
      (match-define (kmeans-result stepped _ _ _)
        (kmeans-fit X
-                   #:init (mat weighted-start dt)
+                   #:init (list*->device-matrix weighted-start #:dtype dt)
                    #:max-iter 1
-                   #:sample-weight (vec step-weights dt)))
+                   #:sample-weight (list->device-vector step-weights #:dtype dt)))
      (check-equal? (host stepped) '((1.0 1.5) (12.0 12.0)))
-     (define unit (outcome (fit-grid grid8 start dt #:sample-weight (vec (make-list 8 1) dt))))
+     (define unit
+       (outcome
+        (fit-grid grid8 start dt #:sample-weight (list->device-vector (make-list 8 1) #:dtype dt))))
      (check-equal? unit (outcome (fit-grid grid8 start dt)))
-     (check-equal? (outcome (fit-grid grid8 start dt #:sample-weight (vec (make-list 8 2) dt))) unit)
+     (check-equal?
+      (outcome
+       (fit-grid grid8 start dt #:sample-weight (list->device-vector (make-list 8 2) #:dtype dt)))
+      unit)
      (list inertia (host stepped) unit))))
 
 (test-gpu "law D: translating and permuting the grid moves the fit with it"
@@ -191,7 +198,7 @@
 
 (test-gpu "law D: fits repeat for a seed, and an array init ignores n-init"
   (for ([dt (in-list dtypes)])
-    (define X (mat grid64 dt))
+    (define X (list*->device-matrix grid64 #:dtype dt))
     (for* ([init (in-list string-inits)]
            [seed (in-range 1 4)])
       (check-equal? (outcome (kmeans-fit X #:n-clusters 4 #:init init #:random-state seed))
@@ -201,7 +208,7 @@
 
 (test-gpu "law D: as many clusters as samples puts each sample in its own"
   (for ([dt (in-list dtypes)])
-    (define X (mat grid8 dt))
+    (define X (list*->device-matrix grid8 #:dtype dt))
     (match-define (kmeans-result centroids labels inertia _)
       (kmeans-fit X #:n-clusters 8 #:random-state 1))
     (check-equal? inertia 0.0)
@@ -210,11 +217,11 @@
 
 (test-gpu "law D: the batch size changes nothing"
   (for ([dt (in-list dtypes)])
-    (define X (mat grid64 dt))
+    (define X (list*->device-matrix grid64 #:dtype dt))
     (define B (blob-data 500 4 6 3 dt))
     (define C (kmeans-result-centroids (kmeans-fit B #:n-clusters 6 #:random-state 2)))
     (define (on-batch b)
-      (define centroids (mat grid64-means dt))
+      (define centroids (list*->device-matrix grid64-means #:dtype dt))
       (list (host-vector (kmeans-predict centroids X #:max-samples-per-batch b))
             (host (kmeans-transform centroids X #:max-samples-per-batch b))
             (outcome (fit-grid grid64 grid64-start dt #:max-samples-per-batch b))

@@ -3,6 +3,7 @@
 (require (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" columns-of unit-roundoff)
          (only-in "private/elastic-net-data.rkt"
                   check-accuracy
                   coef-distance
@@ -23,16 +24,14 @@
          (only-in "private/exact-algebra.rkt" norm2)
          (only-in "private/linear-data.rkt"
                   check-law
-                  columns-of
                   dtypes
-                  lcase-w
                   lcase-X
+                  lcase-w
                   lcase-y
                   max-abs
                   oracle-ridge
                   ridge-solution
-                  scaled-case
-                  unit-roundoff))
+                  scaled-case))
 
 (test-gpu "small l1-ratio approaches ridge at alpha times the weight sum"
   (define c (correlated-case 200 7 0.9 51 #:weighted? #t))

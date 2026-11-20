@@ -1,14 +1,11 @@
 #lang racket/base
 
 (require (only-in cuml/core/private/define-who define/who)
-         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
-         (only-in racket/list combinations)
+         (only-in cuml/core/private/hyperparameters boolean->int define-codes define-hyperparameters)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-exn check-pred check-regexp-match check-true test-case)
-         (only-in "private/cuml-error.rkt" check-cuml-error raised))
-
-(define (twice size)
-  (* 2 size))
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/estimator-data.rkt" keyword-of keywords-of subsets twice))
 
 (define-hyperparameters widget-params
   [size 3]
@@ -26,20 +23,12 @@
 
 (define changed (hasheq 'size 5 'scale 7 'shade 'bold 'label "x"))
 
-(define (keyword-of key)
-  (string->keyword (symbol->string key)))
-
 (define (call-with proc keys table positional)
   (define sorted (sort keys keyword<? #:key keyword-of))
   (keyword-apply proc
                  (map keyword-of sorted)
                  (map (lambda (k) (hash-ref table k)) sorted)
                  positional))
-
-(define (subsets keys n)
-  (for*/list ([k (in-range (add1 n))]
-              [subset (in-list (combinations keys k))])
-    subset))
 
 (define entry-keys '(size scale label))
 
@@ -99,9 +88,6 @@
                   (spy 'X #:params (call-with widget-params keys changed '())))
     (check-equal? (call-with spy (cons 'params keys) (hash-set changed 'params base) (list 'X))
                   (spy 'X #:params (call-with widget-params keys changed (list base))))))
-
-(define (keywords-of proc)
-  (call-with-values (lambda () (procedure-keywords proc)) list))
 
 (test-case "the entry point names itself, checks the fixed key and takes the table's keywords"
   (check-cuml-error 'logic
@@ -270,3 +256,6 @@
 
 (test-case "define-codes maps each name to its code and anything else to -1"
   (check-equal? (map shade-code '(plain bold italic "plain" 0)) '(0 1 -1 -1 -1)))
+
+(test-case "boolean->int is a native flag: 0 for #f, 1 for any other value"
+  (check-equal? (map boolean->int '(#f #t 0 7 none)) '(0 1 1 1 1)))

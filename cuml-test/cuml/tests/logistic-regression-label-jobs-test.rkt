@@ -6,7 +6,8 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix device-vector)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" on-matrix on-vector))
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" on-matrix))
 
 (define rows '((0.0) (1.0) (2.0) (3.0) (4.0) (5.0) (6.0) (7.0)))
 (define labels '(0 0 1 0 1 1 0 1))

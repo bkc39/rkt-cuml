@@ -19,15 +19,10 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/guide-data.rkt" flattened-text)
-         (only-in "private/linear-data.rkt"
-                  decimals
-                  docs-case
-                  lcase-X
-                  lcase-y
-                  [on-matrix matrix]
-                  [on-vector vector]))
+         (only-in "private/linear-data.rkt" decimals docs-case lcase-X lcase-y [on-matrix matrix]))
 
 (test-gpu "the linear-regression examples print what the manual shows"
   (define X (matrix '((1 1) (1 2) (2 2) (2 3))))

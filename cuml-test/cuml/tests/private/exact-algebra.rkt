@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/list argmax last splitf-at)
+(require (only-in racket/flonum flsingle)
+         (only-in racket/list argmax last splitf-at)
          (only-in racket/match match match-define)
          (only-in threading ~>))
 
@@ -11,11 +12,14 @@
          eigen-bottom
          eigen-bracket
          eigen-range
+         float32-of
+         inexact-rows
          integer-scaled
          mat*vec
          min-norm-solve
          norm2
          outer-bracket
+         single?
          varying-inner)
 
 (define (dot u v)
@@ -432,3 +436,9 @@
   (check-true (and (<= varying-top 4) (<= 1 varying-bottom (* 1001/1000 1))))
   (check-equal? (varying-inner (diagonal '(0 0)) '(0 . 0)) '(0 . 0))
   (check-equal? (varying-inner (diagonal '(4 1)) 'kept) 'kept))
+
+(define (float32-of x)
+  (flsingle (real->double-flonum x)))
+
+(define (single? x)
+  (and (flonum? x) (eqv? x (flsingle x))))

@@ -4,8 +4,9 @@
          (only-in racket/list make-list take)
          (only-in racket/match match)
          (only-in rackunit check-not-exn)
+         (only-in "common-data.rkt" on-vector)
          (only-in "cuml-error.rkt" raised)
-         (only-in "linear-data.rkt" law-case on-matrix on-vector)
+         (only-in "linear-data.rkt" law-case on-matrix)
          (only-in "mbsgd-data.rkt" blob-rows normal-rows reg-target)
          (only-in "refusal-rows.rkt" check-row row))
 

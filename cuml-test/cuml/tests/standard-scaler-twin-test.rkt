@@ -14,15 +14,11 @@
          (only-in racket/match match-define match-lambda)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/estimator-data.rkt" listed)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
-         (only-in "private/scaler-data.rkt"
-                  constant-rows
-                  generated-rows
-                  rows->matrix
-                  ulp
-                  unit-roundoff))
+         (only-in "private/scaler-data.rkt" constant-rows generated-rows ulp))
 
 (define-runtime-path twin "python/standard_scaler_twin.py")
 
@@ -67,7 +63,7 @@
 
 (define (fit-of data dt flags)
   (match-define (list with-mean with-std) flags)
-  (standard-scaler-fit (rows->matrix (dataset-rows data) dt)
+  (standard-scaler-fit (list*->device-matrix (dataset-rows data) #:dtype dt)
                        #:with-mean with-mean
                        #:with-std with-std))
 
@@ -142,7 +138,7 @@
     (match-define (list fit-dt y-dt data flags) c)
     (test-case (format "fit ~a, transform ~a, ~a ~a" fit-dt y-dt (dataset-name data) flags)
       (define fitted (fit-of data fit-dt flags))
-      (define Y (rows->matrix (dataset-rows data) y-dt))
+      (define Y (list*->device-matrix (dataset-rows data) #:dtype y-dt))
       (define T (standard-scaler-transform fitted Y))
       (define t (append* (device-matrix->list* T)))
       (define back (append* (device-matrix->list* (standard-scaler-inverse-transform fitted T))))

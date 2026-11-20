@@ -9,6 +9,7 @@
          (only-in racket/list argmin make-list remove-duplicates)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
+         (only-in raft list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/kmeans-data.rkt"
                   blob-data
@@ -20,8 +21,7 @@
                   scaled-close?
                   squared-distance
                   string-inits
-                  tolerance
-                  vec))
+                  tolerance))
 
 (define (host-inertia rows centroids weights)
   (define rescale (/ (length rows) (apply + weights)))
@@ -51,7 +51,10 @@
       (define X (blob-data 300 3 4 (+ seed 100) dt))
       (define weights (cyclic-weights 300))
       (match-define (kmeans-result centroids _ inertia _)
-        (kmeans-fit X #:n-clusters 4 #:random-state seed #:sample-weight (vec weights dt)))
+        (kmeans-fit X
+                    #:n-clusters 4
+                    #:random-state seed
+                    #:sample-weight (list->device-vector weights #:dtype dt)))
       (define rows (host X))
       (define cs (host centroids))
       (check-inertia inertia rows cs weights dt "inertia")

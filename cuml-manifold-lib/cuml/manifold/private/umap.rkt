@@ -2,7 +2,11 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters
+                  boolean->int
+                  bound-params
+                  define-codes
+                  define-hyperparameters)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
          (only-in racket/match match-define)
@@ -10,7 +14,7 @@
          (only-in raft/unsafe deposit->list)
          (only-in "curve.rkt" curve-parameters)
          (only-in "native.rkt" cuml-manifold-umap-fit-job cuml-manifold-umap-transform-job)
-         (only-in "support.rkt" drawn-seed finite-real? flag metric-code rows-or-zero))
+         (only-in "support.rkt" drawn-seed finite-real? metric-code rows-or-zero))
 
 (provide (struct-out umap-result)
          umap-fit
@@ -84,10 +88,10 @@
                v))
 
 (define (schedule n-epochs random-state rows)
-  (values (flag n-epochs)
+  (values (boolean->int n-epochs)
           (or n-epochs 0)
           (or random-state (drawn-seed))
-          (flag (or random-state (< rows deterministic-below)))))
+          (boolean->int (or random-state (< rows deterministic-below)))))
 
 (define (fitted who X y params resources)
   (match-define (hash-table ['n-neighbors n-neighbors]

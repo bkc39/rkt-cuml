@@ -3,6 +3,7 @@
 (require (only-in racket/match match-define struct*)
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/exact-algebra.rkt" norm2)
          (only-in "private/linear-data.rkt"
@@ -12,16 +13,15 @@
                   exact-fit
                   gap
                   lcase
+                  lcase-X
                   lcase-name
                   lcase-w
-                  lcase-X
                   lcase-y
                   max-abs
                   normal-case
                   oracle-ridge
                   ridge-oracles
                   ridge-solution
-                  unit-roundoff
                   weights-or-ones)
          (only-in "private/ridge-data.rkt"
                   lstsq-algorithm

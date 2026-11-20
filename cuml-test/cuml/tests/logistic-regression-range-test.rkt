@@ -7,7 +7,8 @@
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
-         (only-in "private/linear-data.rkt" by-dtype dtypes on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" by-dtype dtypes)
          (only-in "private/logistic-data.rkt"
                   blob-case
                   case-fit

@@ -19,15 +19,15 @@
                   hdbscan-spanning-tree-weights)
          (only-in racket/list count make-list range shuffle take)
          (only-in rackunit check-equal? check-pred check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list dtype shape)
+         (only-in raft device-matrix->list* device-vector->list dtype list*->device-matrix shape)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/dbscan-data.rkt" mat pick same-partition? seeded)
+         (only-in "private/common-data.rkt" pick repeat-each)
+         (only-in "private/dbscan-data.rkt" same-partition? seeded)
          (only-in "private/hdbscan-data.rkt"
                   dataset
                   dataset-names
                   descent-problems
-                  dup
                   fitted-labels
                   fitted-lambdas
                   fitted-of
@@ -40,7 +40,7 @@
 (define flt-max 3.4028234663852886e38)
 
 (test-gpu "HD1: outputs have their dtypes, shapes and structure"
-  (define result (hdbscan-fit (mat (dataset 'b50) 'float32)))
+  (define result (hdbscan-fit (list*->device-matrix (dataset 'b50) #:dtype 'float32)))
   (define tree (hdbscan-result-condensed-tree result))
   (define linkage (hdbscan-result-single-linkage-tree result))
   (define mst (hdbscan-result-minimum-spanning-tree result))
@@ -92,7 +92,7 @@
   (check-equal? (fitted-probabilities single) (make-list 100 1.0))
   (test-case "dup x10 lambdas are finite"
     (check-true (andmap (lambda (l) (<= l flt-max))
-                        (fitted-lambdas (fitted-of (dup (dataset 'b50) 10)))))))
+                        (fitted-lambdas (fitted-of (repeat-each (dataset 'b50) 10)))))))
 
 (test-gpu "the manual: an alpha far below 1e-17 leaves every sample noise"
   (define fitted (fitted-of (dataset 'b50) #:options (hasheq 'alpha 1e-30)))
@@ -109,7 +109,7 @@
                     (make-list n -1)))))
 
 (test-gpu "HD9: a fit leaves X unchanged"
-  (define X (mat (dataset 'moons) 'float32))
+  (define X (list*->device-matrix (dataset 'moons) #:dtype 'float32))
   (define before (device-matrix->list* X))
   (hdbscan-fit X)
   (check-equal? (device-matrix->list* X) before))
@@ -129,10 +129,10 @@
    1))
 
 (test-gpu "each ten-fold duplicate of b50 is its own cluster but one"
-  (check-equal? (~> (dataset 'b50) (dup 10) fitted-of fitted-labels label-count) 299))
+  (check-equal? (~> (dataset 'b50) (repeat-each 10) fitted-of fitted-labels label-count) 299))
 
 (test-gpu "b50 doubled is 24 clusters, and a permutation changes the partition"
-  (define rows (dup (dataset 'b50) 2))
+  (define rows (repeat-each (dataset 'b50) 2))
   (define labels (fitted-labels (fitted-of rows)))
   (check-equal? (label-count labels) 24)
   (define perm (seeded 1 (lambda () (shuffle (range (length rows))))))
@@ -152,7 +152,7 @@
                 1))
 
 (test-gpu "leaf selection on b50 predicts at least 290 of its own fit labels"
-  (define X (mat (dataset 'b50) 'float32))
+  (define X (list*->device-matrix (dataset 'b50) #:dtype 'float32))
   (define result (hdbscan-fit X #:cluster-selection-method 'leaf))
   (define predicted
     (~> result (hdbscan-approximate-predict X) hdbscan-prediction-labels device-vector->list))

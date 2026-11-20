@@ -4,12 +4,14 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   check-law
                   dtypes
                   exact-fit
                   fit-gap
+                  fit-of
                   fit-size
                   gap
                   kappa-of
@@ -19,7 +21,6 @@
                   lcase-name
                   lcase-w
                   lcase-y
-                  fit-of
                   max-abs
                   normal-case
                   oracle-lstsq
@@ -30,7 +31,6 @@
                   scaled-columns
                   solution
                   solution-kappa
-                  unit-roundoff
                   weights-or-ones
                   zeroed)
          (only-in "private/scaler-data.rkt" bits-equal?))

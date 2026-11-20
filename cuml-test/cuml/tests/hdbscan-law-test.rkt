@@ -5,7 +5,8 @@
          (only-in rackunit check-equal? check-true fail test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/dbscan-data.rkt" pick same-partition? seeded)
+         (only-in "private/common-data.rkt" noise pick)
+         (only-in "private/dbscan-data.rkt" same-partition? seeded)
          (only-in "private/hdbscan-data.rkt"
                   close?
                   dataset
@@ -46,12 +47,6 @@
          (check-true (close? their-persistence our-persistence 1e-5))))]
     [(list status _ errors) (fail (format "the fit's process exited with ~a:\n~a" status errors))]))
 
-(define (noise-set labels)
-  (for/list ([l (in-list labels)]
-             [i (in-naturals)]
-             #:when (= l -1))
-    i))
-
 (define (permuted-fits name seed)
   (define rows (dataset name))
   (define perm (seeded seed (lambda () (shuffle (range (length rows))))))
@@ -66,7 +61,7 @@
       (define-values (perm base permuted) (permuted-fits name seed))
       (define labels (fitted-labels permuted))
       (check-true (same-partition? (fitted-labels base) perm labels (range (length perm))))
-      (check-equal? (noise-set labels) (noise-set (pick (fitted-labels base) perm))))))
+      (check-equal? (noise labels) (noise (pick (fitted-labels base) perm))))))
 
 (test-gpu "HD5: probabilities permute within 1e-6"
   (for ([name (in-list '(b50 b10 moons circles))])

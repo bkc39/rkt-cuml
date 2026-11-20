@@ -14,13 +14,18 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
-         (only-in raft device-resources device-vector->list shape with-device-resources)
+         (only-in raft
+                  device-matrix
+                  device-resources
+                  device-vector
+                  device-vector->list
+                  shape
+                  with-device-resources)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" raised)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/process-memory.rkt"
                   baseline-sample
                   device-growth
@@ -51,9 +56,9 @@
 
 (define (refusals X)
   (define centroids (kmeans-result-centroids (kmeans-fit X #:n-clusters n-clusters #:max-iter 1)))
-  (define wide-weights (blank-vector n-samples 'float64))
-  (define wide-centroids (blank-matrix n-clusters n-features 'float64))
-  (define col-major (blank-matrix n-samples n-features 'float32 #:layout 'col-major))
+  (define wide-weights (device-vector n-samples #:dtype 'float64))
+  (define wide-centroids (device-matrix n-clusters n-features #:dtype 'float64))
+  (define col-major (device-matrix n-samples n-features #:dtype 'float32 #:layout 'col-major))
   (list (lambda () (kmeans-fit X #:n-clusters (add1 n-samples)))
         (lambda () (kmeans-fit X #:n-clusters n-clusters #:sample-weight wide-weights))
         (lambda () (kmeans-predict wide-centroids X))

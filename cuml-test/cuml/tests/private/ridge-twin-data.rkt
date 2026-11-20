@@ -4,22 +4,22 @@
          racket/runtime-path
          (only-in racket/sequence in-slice)
          (only-in rackunit check-equal? test-case)
+         (only-in "common-data.rkt" unit-roundoff)
          (only-in "linear-data.rkt"
                   check-law
                   exact-fit
                   floor-log2
                   gap
                   lcase
+                  lcase-X
                   lcase-name
                   lcase-w
-                  lcase-X
                   lcase-y
                   max-abs
                   normal-case
                   ridge-oracles
                   ridge-solution
-                  scaled-case
-                  unit-roundoff)
+                  scaled-case)
          (only-in "linear-twin-data.rkt" case-request theirs twin-results)
          (only-in "ridge-data.rkt" ridge-case-fit solvers widest-spread))
 
