@@ -202,9 +202,8 @@ TEST(GramError, TheWideKernelStaysWithinItsRunBound) {
 TEST(GramError, TheMeansRoundingEntersTheBound) {
   const std::vector<double> spread{static_cast<double>(mean_rows)};
   const std::vector<double> scale{1.0 / std::sqrt(spread[0])};
-  const double centred =
-      mean_error(mean_rows, spread, scale,
-                 {{mean_offset}, double{mean_rows}, {}});
+  const double centred = mean_error(mean_rows, spread, scale,
+                                    {{mean_offset}, double{mean_rows}, {}});
   const double reach =
       2.0 * static_cast<double>(mean_rows) * 0x1p-53 * mean_offset;
   EXPECT_GT(centred, double{mean_rows} * reach * reach * scale[0] * scale[0]);

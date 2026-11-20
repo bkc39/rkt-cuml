@@ -182,11 +182,11 @@ double mean_error(int64_t n, const std::vector<double>& spread,
     const double reach =
         c.residual.empty()
             ? crude
-            : std::min(crude, (std::abs(c.residual[k]) +
-                               (deviation *
-                                std::sqrt(weight * spread[k] / summed))) /
-                                  total * scale[k] *
-                                  (1.0 + rounding(deviation_roundings)));
+            : std::min(crude,
+                       (std::abs(c.residual[k]) +
+                        (deviation * std::sqrt(weight * spread[k] / summed))) /
+                           total * scale[k] *
+                           (1.0 + rounding(deviation_roundings)));
     squares += reach * reach;
   }
   return squares * c.total * (1.0 + rounding(rows)) *
