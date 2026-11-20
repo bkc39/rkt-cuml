@@ -109,17 +109,14 @@
   (and (for-head? head) (regexp-match? #rx"/(fold|foldr|lists)$" (symbol->string head))))
 
 (define (lambda-head? head)
-  (and (memq head '(lambda λ)) #t))
+  (match head
+    [(or 'lambda 'λ) #t]
+    [_ #f]))
 
 (define (let-head? head)
-  (and (memq head
-             '(let let*
-                letrec
-                letrec*
-                let-values
-                let*-values
-                letrec-values))
-       #t))
+  (match head
+    [(or 'let 'let* 'letrec 'letrec* 'let-values 'let*-values 'letrec-values) #t]
+    [_ #f]))
 
 (define (proper datum)
   (match datum
@@ -168,8 +165,12 @@
       [(cons a d) (append (again a) (again d))]
       [(? vector?) (append-map again (vector->list datum))]
       [(? box?) (again (unbox datum))]
-      [(? hash?) (append-map again (for/list ([value (in-hash-values datum)]) value))]
-      [(app prefab-struct-key (? values)) (append-map again (cdr (vector->list (struct->vector datum))))]
+      [(? hash?)
+       (for*/list ([value (in-hash-values datum)]
+                   [part (in-list (again value))])
+         part)]
+      [(app prefab-struct-key (? values))
+       (append-map again (cdr (vector->list (struct->vector datum))))]
       [_ '()])))
 
 (define (ellipsis? datum)
@@ -210,7 +211,8 @@
     [_ #f]))
 
 (define (literal? datum)
-  (ormap (lambda (kind?) (kind? datum)) (list boolean? bytes? char? keyword? number? regexp? string?)))
+  (ormap (lambda (kind?) (kind? datum))
+         (list boolean? bytes? char? keyword? number? regexp? string?)))
 
 (define (literal-key? key)
   (match key
