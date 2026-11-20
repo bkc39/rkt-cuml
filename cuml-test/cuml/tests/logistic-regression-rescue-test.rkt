@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-fit logistic-regression-result-n-iter)
+         (only-in racket/list count)
          (only-in racket/match match-define)
          (only-in rackunit check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
@@ -18,9 +19,7 @@
 
 (define raw-breast-cancer-arms '((float64 #f 6000) (float32 #t 6000) (float64 #t 20000)))
 
-(define class-cuts (hash 2 '(0) 3 '(-1 1)))
-
-(define (stamps span seed #:classes [k 2])
+(define (stamps span seed #:cuts [cuts '(0)])
   (define normal (normal-source seed))
   (define uniform (uniform-source (add1 seed)))
   (for/lists (X y #:result (values X y))
@@ -29,7 +28,7 @@
              (define t (* span (uniform)))
              (define s (+ a (* 4 (- (/ t span) 1/2)) (- (uniform) 1/2)))
              (values (list a (+ 1.7e9 t))
-                     (for/sum ([cut (in-list (hash-ref class-cuts k))]) (if (> s cut) 1 0)))))
+                     (count (lambda (cut) (> s cut)) cuts))))
 
 (define (refusal fit)
   (with-handlers ([exn:fail? exn-message])
@@ -49,10 +48,11 @@
 (test-gpu "epoch-second timestamps, three classes, unequal weights: fitted inside the check's bound"
   (for ([seed (in-list '(5 6 7))])
     (test-case (format "~a" seed)
-      (define-values (X y) (stamps 60.0 seed #:classes 3))
+      (define-values (X y) (stamps 60.0 seed #:cuts '(-1 1)))
       (define w
-        (for/list ([i (in-range (length y))])
-          (add1 (modulo i 3))))
+        (for/list ([_ (in-list y)]
+                   [weight (in-cycle '(1 2 3))])
+          weight))
       (define r
         (logistic-regression-fit (on-matrix X 'float64)
                                  (on-vector y 'int32)
