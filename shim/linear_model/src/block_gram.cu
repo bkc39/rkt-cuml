@@ -1,5 +1,9 @@
+#include <cublas_v2.h>
+
 #include <cstdint>
+#include <raft/core/cublas_macros.hpp>
 #include <rmm/cuda_stream_view.hpp>
+#include <type_traits>
 
 #include "block_gram.hpp"
 #include "cumlrkt/support.hpp"
@@ -55,7 +59,53 @@ __global__ void narrow_grams(block_rows_of<T> r, int64_t first, double* parts) {
   }
 }
 
+class pedantic_math {
+ public:
+  explicit pedantic_math(cublasHandle_t cublas) : cublas_(cublas) {
+    RAFT_CUBLAS_TRY(cublasGetMathMode(cublas_, &mode_));
+    RAFT_CUBLAS_TRY(cublasSetMathMode(cublas_, CUBLAS_PEDANTIC_MATH));
+  }
+  pedantic_math(const pedantic_math&) = delete;
+  pedantic_math& operator=(const pedantic_math&) = delete;
+  pedantic_math(pedantic_math&&) = delete;
+  pedantic_math& operator=(pedantic_math&&) = delete;
+  ~pedantic_math() {
+    cublasSetMathMode(cublas_, mode_);
+  }
+
+ private:
+  cublasHandle_t cublas_;
+  cublasMath_t mode_ = CUBLAS_DEFAULT_MATH;
+};
+
 }  // namespace
+
+template <typename U>
+void wide_block_grams(cublasHandle_t cublas, const U* block, int64_t rows,
+                      int64_t d, ritz::gram_batch batch, U* parts) {
+  const pedantic_math pedantic(cublas);
+  const U one{1};
+  const U zero{0};
+  const auto dim = static_cast<int>(d);
+  const auto run = static_cast<int>(batch.run);
+  const auto lead = static_cast<int>(rows);
+  if constexpr (std::is_same_v<U, float>) {
+    RAFT_CUBLAS_TRY(cublasSgemmStridedBatched(
+        cublas, CUBLAS_OP_T, CUBLAS_OP_N, dim, dim, run, &one, block, lead,
+        batch.run, block, lead, batch.run, &zero, parts, dim, d * d,
+        static_cast<int>(batch.blocks)));
+  } else {
+    RAFT_CUBLAS_TRY(cublasDgemmStridedBatched(
+        cublas, CUBLAS_OP_T, CUBLAS_OP_N, dim, dim, run, &one, block, lead,
+        batch.run, block, lead, batch.run, &zero, parts, dim, d * d,
+        static_cast<int>(batch.blocks)));
+  }
+}
+
+template void wide_block_grams<float>(cublasHandle_t, const float*, int64_t,
+                                      int64_t, ritz::gram_batch, float*);
+template void wide_block_grams<double>(cublasHandle_t, const double*, int64_t,
+                                       int64_t, ritz::gram_batch, double*);
 
 template <typename T>
 void narrow_block_grams(rmm::cuda_stream_view stream, block_rows_of<T> rows,

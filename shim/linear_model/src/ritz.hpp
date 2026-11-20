@@ -10,6 +10,9 @@ constexpr int64_t gram_block_rows = 1024;
 constexpr int64_t narrow_gram_columns = 16;
 constexpr int64_t narrow_run_rows = 32;
 constexpr int64_t pass_chunk = 8;
+constexpr int64_t exact_run_rows = 1024;
+constexpr int64_t staged_floats = int64_t{1} << 23;
+constexpr int64_t block_floats = int64_t{1} << 22;
 
 enum class gram_path : std::uint8_t { none, certified, enclosed, ritz, exact };
 
@@ -30,6 +33,17 @@ struct gram_bound {
   int64_t run_rows;
   double trace;
   double diagonal;
+  double mean = 0.0;
+};
+
+struct centring {
+  std::vector<double> mean;
+  double total;
+};
+
+struct gram_batch {
+  int64_t run;
+  int64_t blocks;
 };
 
 struct eigen_pairs {
@@ -43,6 +57,17 @@ struct enclosure_norms {
   double matrix;
   double basis;
   double product;
+};
+
+struct enclosure_terms {
+  double error;
+  double eta;
+};
+
+struct block_bound {
+  double window;
+  double complement;
+  double coupling;
 };
 
 struct spectrum_interval {
@@ -66,10 +91,21 @@ std::vector<double> symmetric_block(const std::vector<double>& m, int64_t c,
 
 int64_t gram_run_rows(int64_t d);
 
+gram_batch wide_batch(gram_shape shape);
+
+gram_batch exact_batch(gram_shape shape);
+
 gram_bound bound_of(int64_t n, const std::vector<double>& spread,
                     const std::vector<double>& scale, double alpha);
 
+double mean_error(int64_t n, const std::vector<double>& spread,
+                  const std::vector<double>& scale, const centring& c);
+
 double gram_error(gram_bound b);
+
+double exact_error(gram_bound b, int64_t n);
+
+double applied_error(gram_bound b, gram_shape shape);
 
 double spectrum_error(const std::vector<double>& values, double gram);
 
@@ -77,8 +113,15 @@ double expected_residual(const std::vector<double>& values);
 
 std::optional<double> certified_kappa(spectrum_interval s, double limit);
 
+std::optional<enclosure_terms> terms_of(enclosure_norms r, int64_t d);
+
 std::optional<spectrum_interval> enclosure(const std::vector<double>& values,
                                            enclosure_norms r, int64_t d);
+
+double complement_floor(const std::vector<double>& values, int64_t window,
+                        enclosure_terms t);
+
+double block_floor(block_bound b);
 
 bool exact_gram_cheaper(int64_t vectors, gram_shape shape);
 

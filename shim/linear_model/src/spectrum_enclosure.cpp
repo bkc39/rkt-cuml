@@ -2,18 +2,22 @@
 
 #include <cublas_v2.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <optional>
 #include <raft/core/cublas_macros.hpp>
 #include <raft/core/handle.hpp>
 #include <raft/core/resource/cublas_handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
+#include <utility>
 #include <vector>
 
 #include "cumlrkt/support.hpp"
 #include "glm_staging_device.hpp"
 #include "ritz.hpp"
+#include "symmetric_eigen.hpp"
 
 namespace cumlrkt::glm {
 
@@ -21,6 +25,14 @@ namespace {
 
 constexpr double mirrored = 2.0;
 constexpr int64_t host_enclosure_columns = 16;
+constexpr double float64_roundoff = 0x1p-53;
+constexpr double host_steps = 16.0;
+constexpr int outward_ulps = 4;
+
+double rounded(double k) {
+  const double ku = k * float64_roundoff;
+  return ku / (1.0 - ku);
+}
 
 void blas(cublasStatus_t result) {
   RAFT_CUBLAS_TRY(result);
@@ -31,7 +43,8 @@ struct lower_symmetric {
   double squares;
 };
 
-lower_symmetric promoted(const std::vector<float>& m, int64_t d) {
+template <typename S>
+lower_symmetric promoted(const std::vector<S>& m, int64_t d) {
   lower_symmetric a{std::vector<double>(d * d), 0.0};
   for (int64_t j = 0; j < d; ++j) {
     for (int64_t i = j; i < d; ++i) {
@@ -67,7 +80,8 @@ std::vector<double> product(const std::vector<double>& a,
   return c;
 }
 
-ritz::enclosure_norms host_norms(const std::vector<float>& m,
+template <typename S>
+ritz::enclosure_norms host_norms(const std::vector<S>& m,
                                  const ritz::eigen_pairs& e, int64_t d) {
   const lower_symmetric a = promoted(m, d);
   std::vector<double> g = a.matrix;
@@ -97,10 +111,37 @@ double squares(cublasHandle_t cublas, const buffer<double>& x) {
   return s;
 }
 
+double residual_squares(cublasHandle_t cublas, const std::vector<double>& v,
+                        const std::vector<double>& av,
+                        const std::vector<double>& h, int64_t d, int64_t k,
+                        rmm::cuda_stream_view stream) {
+  const buffer<double> dv = to_device(v, stream);
+  const buffer<double> dh = to_device(h, stream);
+  buffer<double> r = to_device(av, stream);
+  const double one = 1.0;
+  const double minus = -1.0;
+  const auto [rows, cols] = std::pair{static_cast<int>(d), static_cast<int>(k)};
+  blas(cublasDgemm(cublas, CUBLAS_OP_N, CUBLAS_OP_N, rows, cols, cols, &minus,
+                   dv.data(), rows, dh.data(), cols, &one, r.data(), rows));
+  return squares(cublas, r);
+}
+
+double downward(double x) {
+  for (int i = 0; i < outward_ulps; ++i) {
+    x = std::nextafter(x, -std::numeric_limits<double>::infinity());
+  }
+  return x;
+}
+
+double windowed(double low, double eta) {
+  return low >= 0 ? low / (1.0 + eta) : low / (1.0 - eta);
+}
+
 }  // namespace
 
+template <typename S>
 ritz::enclosure_norms enclosure_norms_of(const raft::handle_t& handle,
-                                         const std::vector<float>& m,
+                                         const std::vector<S>& m,
                                          const ritz::eigen_pairs& e,
                                          int64_t d) {
   if (d <= host_enclosure_columns) {
@@ -135,6 +176,62 @@ ritz::enclosure_norms enclosure_norms_of(const raft::handle_t& handle,
           .matrix = std::sqrt(a.squares),
           .basis = std::sqrt(squares(cublas, v)),
           .product = std::sqrt(squares(cublas, p))};
+}
+
+template ritz::enclosure_norms enclosure_norms_of<float>(
+    const raft::handle_t&, const std::vector<float>&, const ritz::eigen_pairs&,
+    int64_t);
+template ritz::enclosure_norms enclosure_norms_of<double>(
+    const raft::handle_t&, const std::vector<double>&, const ritz::eigen_pairs&,
+    int64_t);
+
+std::optional<ritz::spectrum_interval> window_spectrum(
+    const raft::handle_t& handle, const std::vector<float>& m,
+    const ritz::eigen_pairs& e, window_inputs w, window_errors r) {
+  const auto d = static_cast<int64_t>(e.values.size());
+  const int64_t k = w.window;
+  const ritz::enclosure_norms gram = enclosure_norms_of(handle, m, e, d);
+  const std::optional<ritz::enclosure_terms> t = ritz::terms_of(gram, d);
+  const std::optional<ritz::spectrum_interval> s =
+      ritz::enclosure(e.values, gram, d);
+  const std::vector<double> h = ritz::symmetric_block(w.crossed, w.vectors, k);
+  const std::optional<ritz::eigen_pairs> he = eigen_of(handle, h, k, true);
+  if (!t || !s || !he) {
+    return std::nullopt;
+  }
+  const std::optional<ritz::spectrum_interval> hs =
+      ritz::enclosure(he->values, enclosure_norms_of(handle, h, *he, k), k);
+  if (!hs) {
+    return std::nullopt;
+  }
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
+  blas(cublasSetStream(cublas, stream.value()));
+  blas(cublasSetPointerMode(cublas, CUBLAS_POINTER_MODE_HOST));
+  const std::vector<double> v(w.basis.begin(), w.basis.begin() + (k * d));
+  const std::vector<double> av(w.applied.begin(), w.applied.begin() + (k * d));
+  const double grown = (1.0 + rounded(static_cast<double>((d * k) + 2))) *
+                       (1.0 + rounded(host_steps));
+  const double vf = frobenius(v) * grown;
+  const double af = frobenius(av) * grown;
+  const double hf = frobenius(h) * grown;
+  const double drift = r.applied * vf * grown;
+  const double eta = t->eta;
+  const double shift =
+      ((std::sqrt(1.0 + eta) * drift) +
+       (rounded(static_cast<double>(d)) * vf * af) + (rounded(1.0) * hf)) *
+      grown;
+  const double floor = downward(windowed(hs->low - shift, eta) - r.mean);
+  const double residual =
+      std::sqrt(residual_squares(cublas, v, av, h, d, k, stream)) * grown;
+  const double coupling =
+      (((residual + (rounded(static_cast<double>(k + 1)) * (af + (vf * hf)))) +
+        drift) /
+       std::sqrt(1.0 - eta) * grown) +
+      r.mean;
+  const double complement = ritz::complement_floor(e.values, k, *t) - r.gram;
+  return ritz::spectrum_interval{
+      ritz::block_floor({floor, complement, coupling}), s->high + r.gram};
 }
 
 std::optional<ritz::spectrum_interval> enclosed_spectrum(

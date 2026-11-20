@@ -21,6 +21,12 @@ constexpr int64_t wide_run_rows_min = 64;
 constexpr int64_t square_roundings = 3;
 constexpr int64_t staged_roundings = 5;
 constexpr int64_t host_roundings = 32;
+constexpr int64_t mean_roundings = 6;
+constexpr int64_t exact_staged_roundings = 10;
+constexpr int64_t ridge_roundings = 3;
+constexpr int64_t applied_roundings = 8;
+constexpr int64_t floor_roundings = 4;
+constexpr int64_t block_roundings = 6;
 constexpr double expected_residual_factor = 0.5;
 constexpr double eigen_error_factor = 16.0;
 constexpr double window_reach = 16.0;
@@ -29,9 +35,10 @@ constexpr double certified_margin = 2.0;
 constexpr double pass_ns = 0.0208;
 constexpr double vector_square_ns = 0.077;
 constexpr double vector_ns = 98000.0;
-constexpr double row_ns = 305.0;
-constexpr double syrk_ns = 0.0022;
-constexpr double eigen_cube_ns = 0.021;
+constexpr double row_ns = 3.9;
+constexpr double gemm_ns = 0.0049;
+constexpr double eigen_square_ns = 74.0;
+constexpr double exact_fixed_ns = 1.8e6;
 constexpr double enclosure_cube_ns = 0.0085;
 constexpr double enclosure_square_ns = 11.3;
 constexpr double enclosure_ns = 126000.0;
@@ -65,11 +72,19 @@ double outward(double x, double toward) {
   return x;
 }
 
+gram_batch batch_of(gram_shape shape, int64_t run) {
+  const auto [n, d] = shape;
+  return {.run = run,
+          .blocks = std::min({std::max(int64_t{1}, staged_floats / (run * d)),
+                              std::max(int64_t{1}, block_floats / (d * d)),
+                              (n + run - 1) / run})};
+}
+
 double exact_ns(gram_shape shape) {
   const auto rows = static_cast<double>(shape.rows);
   const auto cols = static_cast<double>(shape.columns);
-  return (row_ns * rows) + (syrk_ns * rows * cols * cols) +
-         (eigen_cube_ns * cols * cols * cols);
+  return (row_ns * rows) + (gemm_ns * rows * cols * cols) +
+         (eigen_square_ns * cols * cols) + exact_fixed_ns;
 }
 
 double pass_cost_ns(int64_t vectors, gram_shape shape) {
@@ -118,6 +133,14 @@ int64_t gram_run_rows(int64_t d) {
                              gram_block_rows);
 }
 
+gram_batch wide_batch(gram_shape shape) {
+  return batch_of(shape, gram_run_rows(shape.columns));
+}
+
+gram_batch exact_batch(gram_shape shape) {
+  return batch_of(shape, exact_run_rows);
+}
+
 gram_bound bound_of(int64_t n, const std::vector<double>& spread,
                     const std::vector<double>& scale, double alpha) {
   const auto d = static_cast<int64_t>(spread.size());
@@ -138,6 +161,27 @@ gram_bound bound_of(int64_t n, const std::vector<double>& spread,
           .diagonal = diagonal * host};
 }
 
+double mean_error(int64_t n, const std::vector<double>& spread,
+                  const std::vector<double>& scale, const centring& c) {
+  if (c.mean.empty()) {
+    return 0.0;
+  }
+  const auto rows = static_cast<double>(n);
+  const auto d = static_cast<int64_t>(spread.size());
+  const double summed = 1.0 - rounding(rows + square_roundings);
+  const double total = c.total * (1.0 - rounding(rows));
+  const double relative = rounding((2.0 * rows) + mean_roundings);
+  double squares = 0.0;
+  for (int64_t k = 0; k < d; ++k) {
+    const double reach =
+        relative * scale[k] *
+        (std::sqrt(spread[k] / (total * summed)) + std::abs(c.mean[k]));
+    squares += reach * reach;
+  }
+  return squares * c.total * (1.0 + rounding(rows)) *
+         (1.0 + rounding(static_cast<double>(d + host_roundings)));
+}
+
 double gram_error(gram_bound b) {
   const double staged = compounded(
       float32_roundoff, rounding(static_cast<double>(staged_roundings)));
@@ -148,8 +192,27 @@ double gram_error(gram_bound b) {
                                   float32_roundoff);
   const double ridge =
       compounded(compounded(float32_roundoff, float32_roundoff), rounding(2.0));
-  const double error = (entry * b.trace) + (ridge * (1.0 + entry) * b.diagonal);
+  const double error =
+      (entry * b.trace) + (ridge * (1.0 + entry) * b.diagonal) + b.mean;
   return error * (1.0 + rounding(static_cast<double>(host_roundings)));
+}
+
+double exact_error(gram_bound b, int64_t n) {
+  const int64_t runs = ((n + exact_run_rows - 1) / exact_run_rows) + 1;
+  const double entry = compounded(
+      rounding(static_cast<double>(exact_run_rows + exact_staged_roundings)),
+      rounding(static_cast<double>(runs)));
+  const double ridge = rounding(static_cast<double>(ridge_roundings));
+  const double error =
+      (entry * b.trace) + (ridge * (1.0 + entry) * b.diagonal) + b.mean;
+  return error * (1.0 + rounding(static_cast<double>(host_roundings)));
+}
+
+double applied_error(gram_bound b, gram_shape shape) {
+  const double products = rounding(
+      static_cast<double>(shape.rows + shape.columns + applied_roundings));
+  return products * (b.trace + b.diagonal) *
+         (1.0 + rounding(static_cast<double>(host_roundings)));
 }
 
 double spectrum_error(const std::vector<double>& values, double gram) {
@@ -177,8 +240,7 @@ std::optional<double> certified_kappa(spectrum_interval s, double limit) {
   return upper;
 }
 
-std::optional<spectrum_interval> enclosure(const std::vector<double>& values,
-                                           enclosure_norms r, int64_t d) {
+std::optional<enclosure_terms> terms_of(enclosure_norms r, int64_t d) {
   const auto k = static_cast<double>(d);
   const double norms = 1.0 + rounding((k * k) + 2.0);
   const double products = rounding(k);
@@ -191,13 +253,45 @@ std::optional<spectrum_interval> enclosure(const std::vector<double>& values,
   const double symmetric =
       (r.symmetric * norms * (1.0 + rounding(1.0))) +
       (products * basis * ((basis * r.matrix * norms) + (r.product * norms)));
-  const double error = symmetric * (1.0 + rounding(enclosure_steps));
+  return enclosure_terms{.error = symmetric * (1.0 + rounding(enclosure_steps)),
+                         .eta = eta};
+}
 
-  const double low = values.front() - error;
-  const double high = values.back() + error;
+std::optional<spectrum_interval> enclosure(const std::vector<double>& values,
+                                           enclosure_norms r, int64_t d) {
+  const std::optional<enclosure_terms> t = terms_of(r, d);
+  if (!t) {
+    return std::nullopt;
+  }
+  const double low = values.front() - t->error;
+  const double high = values.back() + t->error;
   return spectrum_interval{
-      outward(low / (low > 0 ? 1.0 + eta : 1.0 - eta), -infinite),
-      outward(high / (high > 0 ? 1.0 - eta : 1.0 + eta), infinite)};
+      outward(low / (low > 0 ? 1.0 + t->eta : 1.0 - t->eta), -infinite),
+      outward(high / (high > 0 ? 1.0 - t->eta : 1.0 + t->eta), infinite)};
+}
+
+double complement_floor(const std::vector<double>& values, int64_t window,
+                        enclosure_terms t) {
+  const double next = values[window];
+  const double lean = (next - values.front()) * t.eta * t.eta;
+  const double slack = rounding(static_cast<double>(floor_roundings)) *
+                       (std::abs(next) + lean + t.error);
+  const double b = next - lean - t.error - slack;
+  return outward(b / (b >= 0 ? 1.0 + t.eta : 1.0 - t.eta), -infinite);
+}
+
+double block_floor(block_bound b) {
+  const auto [window, complement, coupling] = b;
+  const double low = std::min(window, complement);
+  if (!(coupling > 0)) {
+    return low;
+  }
+  const double apart =
+      std::abs(complement - window) * half * (1.0 - rounding(2.0));
+  const double squared = coupling * coupling;
+  const double lean = squared / (apart + std::sqrt((apart * apart) + squared)) *
+                      (1.0 + rounding(static_cast<double>(block_roundings)));
+  return outward(low - lean, -infinite);
 }
 
 bool exact_gram_cheaper(int64_t vectors, gram_shape shape) {

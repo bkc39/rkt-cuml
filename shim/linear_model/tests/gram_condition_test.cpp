@@ -296,7 +296,8 @@ void expect_refused_through_the_window(const resources& res, int64_t spare,
       summed_beside_near_pairs({ritz_rows, salt * 1000}, {many_pairs, spare});
   const condition_estimate e =
       estimate_of<float>(res, c, {}, 0.0, {.limit = 0x1p32});
-  EXPECT_EQ(e.path, gram_path::ritz) << c.d << " " << salt;
+  EXPECT_EQ(e.path, spare == 0 ? gram_path::exact : gram_path::ritz)
+      << c.d << " " << salt;
   EXPECT_EQ(e.window, many_pairs + 1) << c.d << " " << salt;
   EXPECT_GT(e.kappa, 0x1p32) << c.d << " " << salt;
 }

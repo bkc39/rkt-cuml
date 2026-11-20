@@ -5,6 +5,7 @@
 #include <cmath>
 #include <cstdint>
 #include <raft/core/handle.hpp>
+#include <raft/core/resource/cublas_handle.hpp>
 #include <vector>
 
 #include "block_gram.hpp"
@@ -24,10 +25,15 @@ using cumlrkt::glm::equilibrated_condition;
 using cumlrkt::glm::narrow_block_grams;
 using cumlrkt::glm::to_device;
 using cumlrkt::glm::to_host;
+using cumlrkt::glm::wide_block_grams;
+using cumlrkt::glm::ritz::bound_of;
+using cumlrkt::glm::ritz::gram_batch;
 using cumlrkt::glm::ritz::gram_bound;
 using cumlrkt::glm::ritz::gram_error;
 using cumlrkt::glm::ritz::gram_path;
 using cumlrkt::glm::ritz::gram_run_rows;
+using cumlrkt::glm::ritz::mean_error;
+using cumlrkt::glm::ritz::wide_batch;
 using cumlrkt::test::filled;
 using cumlrkt::test::resources;
 
@@ -47,6 +53,10 @@ constexpr int hadamard_spread_bits = 10;
 constexpr int64_t wide_columns = 100;
 constexpr int64_t kernel_blocks = 2;
 constexpr double rounding_lean = 0x1.fcp-18;
+constexpr double wide_lean = 0x1.fcp-16;
+constexpr int64_t wide_kernel_columns = 17;
+constexpr int64_t mean_rows = 1000000;
+constexpr double mean_offset = 0x1p20;
 
 struct design {
   std::vector<double> x;
@@ -161,6 +171,47 @@ TEST(GramError, TheNarrowKernelStaysWithinItsRunBound) {
   for (const double part : to_host(parts, stream_of(handle))) {
     EXPECT_LE(std::abs(part - exact), bound);
   }
+}
+
+TEST(GramError, TheWideKernelStaysWithinItsRunBound) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const raft::handle_t& handle = raftrkt::handle_of(res.handle);
+  const int64_t d = wide_kernel_columns;
+  const int64_t m = gram_run_rows(d);
+  const gram_batch batch =
+      wide_batch({kernel_blocks * cumlrkt::glm::ritz::gram_block_rows, d});
+  const int64_t rows = batch.blocks * batch.run;
+  const auto c = static_cast<float>(std::sqrt(1.0 + wide_lean));
+  const double square = static_cast<double>(c) * static_cast<double>(c);
+  const auto x = to_device(std::vector<float>(rows * d, c), stream_of(handle));
+  auto parts = to_device(std::vector<float>(batch.blocks * d * d, 0.0F),
+                         stream_of(handle));
+  cublasHandle_t cublas = raft::resource::get_cublas_handle(handle);
+  ASSERT_EQ(cublasSetStream(cublas, stream_of(handle).value()),
+            CUBLAS_STATUS_SUCCESS);
+  wide_block_grams<float>(cublas, x.data(), rows, d, batch, parts.data());
+  const double exact = square * static_cast<double>(m);
+  const double bound =
+      gram_error({.runs = 1, .run_rows = m, .trace = exact, .diagonal = 0.0});
+  for (const float part : to_host(parts, stream_of(handle))) {
+    EXPECT_LE(std::abs(static_cast<double>(part) - exact), bound);
+  }
+}
+
+TEST(GramError, TheMeansRoundingEntersTheBound) {
+  const std::vector<double> spread{static_cast<double>(mean_rows)};
+  const std::vector<double> scale{1.0 / std::sqrt(spread[0])};
+  const double centred =
+      mean_error(mean_rows, spread, scale, {{mean_offset}, double{mean_rows}});
+  const double reach =
+      2.0 * static_cast<double>(mean_rows) * 0x1p-53 * mean_offset;
+  EXPECT_GT(centred, double{mean_rows} * reach * reach * scale[0] * scale[0]);
+  EXPECT_EQ(mean_error(mean_rows, spread, scale, {{}, 0.0}), 0.0);
+  gram_bound b = bound_of(mean_rows, spread, scale, 0.0);
+  const double without = gram_error(b);
+  b.mean = centred;
+  EXPECT_GE(gram_error(b), without + centred);
 }
 
 TEST(GramError, TheBoundGrowsWithTheRunAndTheTrace) {

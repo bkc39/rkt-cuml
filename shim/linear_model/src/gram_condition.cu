@@ -49,8 +49,7 @@ using ritz::ritz_pair;
 using ritz::symmetric_block;
 
 constexpr int64_t block_rows = ritz::gram_block_rows;
-constexpr int64_t staged_floats = int64_t{1} << 23;
-constexpr int64_t block_floats = int64_t{1} << 22;
+constexpr int64_t block_floats = ritz::block_floats;
 constexpr double infinite = std::numeric_limits<double>::infinity();
 
 template <typename T>
@@ -175,13 +174,17 @@ struct added_into {
   }
 };
 
+struct centred {
+  buffer<double> mean;
+  ritz::centring host;
+};
+
 template <typename T>
-buffer<double> column_means(const raft::handle_t& handle, const T* x,
-                            const T* w, int64_t n, int64_t d,
-                            bool fit_intercept) {
+centred column_means(const raft::handle_t& handle, const T* x, const T* w,
+                     int64_t n, int64_t d, bool fit_intercept) {
   const rmm::cuda_stream_view stream = stream_of(handle);
   if (!fit_intercept) {
-    return to_device(std::vector<double>(d, 0.0), stream);
+    return {to_device(std::vector<double>(d, 0.0), stream), {{}, 0.0}};
   }
   const thrust::counting_iterator<int64_t> rows(0);
   const double total =
@@ -189,7 +192,8 @@ buffer<double> column_means(const raft::handle_t& handle, const T* x,
                                weight_of<T>{w}, 0.0, thrust::plus<double>{});
   buffer<double> sums = column_sums(handle, weighted_entry<T>{x, w, n}, n, d);
   each(handle, d, divided_by{sums.data(), total});
-  return sums;
+  std::vector<double> host = to_host(sums, stream);
+  return {std::move(sums), {std::move(host), total}};
 }
 
 template <typename T>
@@ -223,24 +227,26 @@ cublasHandle_t cublas_on(const raft::handle_t& handle) {
   return cublas;
 }
 
-class pedantic_math {
- public:
-  explicit pedantic_math(cublasHandle_t cublas) : cublas_(cublas) {
-    RAFT_CUBLAS_TRY(cublasGetMathMode(cublas_, &mode_));
-    RAFT_CUBLAS_TRY(cublasSetMathMode(cublas_, CUBLAS_PEDANTIC_MATH));
-  }
-  pedantic_math(const pedantic_math&) = delete;
-  pedantic_math& operator=(const pedantic_math&) = delete;
-  pedantic_math(pedantic_math&&) = delete;
-  pedantic_math& operator=(pedantic_math&&) = delete;
-  ~pedantic_math() {
-    cublasSetMathMode(cublas_, mode_);
-  }
-
- private:
-  cublasHandle_t cublas_;
-  cublasMath_t mode_ = CUBLAS_DEFAULT_MATH;
-};
+template <typename T, typename U>
+std::vector<double> batched_gram(const equilibration<T>& q,
+                                 ritz::gram_batch batch) {
+  const rmm::cuda_stream_view stream = stream_of(q.handle);
+  const int64_t cells = q.d * q.d;
+  buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
+  const int64_t rows = batch.blocks * batch.run;
+  buffer<U> parts = scratch<U>(batch.blocks * cells, stream);
+  cublasHandle_t cublas = cublas_on(q.handle);
+  q.template each_block<U>(rows, [&](const U* block, int64_t start) {
+    const int64_t count =
+        std::min(batch.blocks, (q.n - start + batch.run - 1) / batch.run);
+    wide_block_grams<U>(cublas, block, rows, q.d, {batch.run, count},
+                        parts.data());
+    const buffer<double> sums =
+        column_sums(q.handle, block_part<U>{parts.data(), cells}, count, cells);
+    each(q.handle, cells, added_into{sums.data(), gram.data()});
+  });
+  return to_host(gram, stream);
+}
 
 template <typename T>
 std::vector<double> narrow_gram(const equilibration<T>& q) {
@@ -267,31 +273,7 @@ std::vector<double> lower_gram(const equilibration<T>& q) {
   if (q.d <= narrow_gram_columns) {
     return narrow_gram(q);
   }
-  const rmm::cuda_stream_view stream = stream_of(q.handle);
-  const int64_t cells = q.d * q.d;
-  buffer<double> gram = to_device(std::vector<double>(cells, 0.0), stream);
-  const int64_t run = ritz::gram_run_rows(q.d);
-  const int64_t blocks = std::min(
-      {std::max(int64_t{1}, staged_floats / (run * q.d)),
-       std::max(int64_t{1}, block_floats / cells), (q.n + run - 1) / run});
-  const int64_t rows = blocks * run;
-  buffer<float> parts = scratch<float>(blocks * cells, stream);
-  cublasHandle_t cublas = cublas_on(q.handle);
-  const pedantic_math pedantic(cublas);
-  const float one = 1.0F;
-  const float zero = 0.0F;
-  const auto dim = static_cast<int>(q.d);
-  q.template each_block<float>(rows, [&](const float* block, int64_t start) {
-    const int64_t count = std::min(blocks, (q.n - start + run - 1) / run);
-    RAFT_CUBLAS_TRY(cublasSgemmStridedBatched(
-        cublas, CUBLAS_OP_T, CUBLAS_OP_N, dim, dim, static_cast<int>(run), &one,
-        block, static_cast<int>(rows), run, block, static_cast<int>(rows), run,
-        &zero, parts.data(), dim, cells, static_cast<int>(count)));
-    const buffer<double> sums = column_sums(
-        q.handle, block_part<float>{parts.data(), cells}, count, cells);
-    each(q.handle, cells, added_into{sums.data(), gram.data()});
-  });
-  return to_host(gram, stream);
+  return batched_gram<T, float>(q, ritz::wide_batch({q.n, q.d}));
 }
 
 template <typename T>
@@ -346,33 +328,36 @@ std::vector<double> crossed(const raft::handle_t& handle,
 }
 
 template <typename T>
-double exact_condition(const equilibration<T>& q) {
-  const rmm::cuda_stream_view stream = stream_of(q.handle);
+double exact_condition(const equilibration<T>& q, double error, double limit) {
   const int64_t d = q.d;
-  const int64_t rows = std::min(q.n, std::max(int64_t{1}, block_floats / d));
-  buffer<double> g = to_device(std::vector<double>(d * d, 0.0), stream);
-  cublasHandle_t cublas = cublas_on(q.handle);
-  const double one = 1.0;
-  q.template each_block<double>(rows, [&](const double* b, int64_t) {
-    RAFT_CUBLAS_TRY(cublasDsyrk(cublas, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_T,
-                                static_cast<int>(d), static_cast<int>(rows),
-                                &one, b, static_cast<int>(rows), &one, g.data(),
-                                static_cast<int>(d)));
-  });
-  std::vector<double> m = to_host(g, stream);
+  std::vector<double> m =
+      batched_gram<T, double>(q, ritz::exact_batch({q.n, d}));
   for (int64_t k = 0; k < d; ++k) {
     m[(k * d) + k] += q.alpha * q.scale[k] * q.scale[k];
   }
-  const std::optional<eigen_pairs> e = eigen_of(q.handle, m, d, false);
-  if (!e || !(e->values.front() > 0)) {
+  const std::optional<eigen_pairs> e = eigen_of(q.handle, m, d, true);
+  if (!e) {
     return infinite;
   }
-  return e->values.back() / e->values.front();
+  const std::optional<ritz::spectrum_interval> s =
+      ritz::enclosure(e->values, enclosure_norms_of(q.handle, m, *e, d), d);
+  if (s) {
+    if (const auto k =
+            ritz::certified_kappa({s->low - error, s->high + error}, limit)) {
+      return *k;
+    }
+  }
+  const double estimate =
+      e->values.front() > 0 ? e->values.back() / e->values.front() : infinite;
+  return std::max(estimate, limit);
 }
 
 template <typename T>
-double ritz_condition(const equilibration<T>& q, const eigen_pairs& e,
-                      const gram_plan& plan) {
+std::optional<double> ritz_condition(const equilibration<T>& q,
+                                     const std::vector<float>& m,
+                                     const eigen_pairs& e,
+                                     const gram_plan& plan,
+                                     window_errors errors, double limit) {
   const int64_t d = q.d;
   const int64_t window = plan.window;
   const int64_t c = window + 1;
@@ -386,19 +371,30 @@ double ritz_condition(const equilibration<T>& q, const eigen_pairs& e,
       pencil_of(q.handle, symmetric_block(h, c, window),
                 symmetric_block(s, c, window), window);
   if (!small) {
-    return infinite;
+    return std::nullopt;
   }
   const double* y = small->vectors.data();
   const ritz_pair p{small->values.front(), combined(basis, d, y, window),
                     combined(av, d, y, window)};
   const double largest = h.back() / s.back();
-  if (e.values.front() > plan.reach) {
-    return p.value > 0 ? largest / p.value : infinite;
+  double smallest = p.value;
+  if (e.values.front() <= plan.reach) {
+    const std::vector<double> v = refined(e, window, p, d);
+    const std::vector<double> rv = applied(q, v, 1);
+    smallest = std::min(p.value, dot(v.data(), rv.data(), d));
   }
-  const std::vector<double> v = refined(e, window, p, d);
-  const std::vector<double> rv = applied(q, v, 1);
-  const double smallest = std::min(p.value, dot(v.data(), rv.data(), d));
-  return smallest > 0 ? largest / smallest : infinite;
+  if (!(smallest > 0)) {
+    return infinite;
+  }
+  if (!(largest / smallest < limit)) {
+    return largest / smallest;
+  }
+  const std::optional<ritz::spectrum_interval> proven =
+      window_spectrum(q.handle, m, e, {basis, av, h, window, c}, errors);
+  if (!proven) {
+    return std::nullopt;
+  }
+  return ritz::certified_kappa(*proven, limit);
 }
 
 }  // namespace
@@ -412,7 +408,8 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
   require_some("chunk", "vector", chunk);
   const rmm::cuda_stream_view stream = stream_of(handle);
   const auto a = static_cast<double>(alpha);
-  const buffer<double> mean = column_means(handle, x, w, n, d, fit_intercept);
+  const centred centre = column_means(handle, x, w, n, d, fit_intercept);
+  const buffer<double>& mean = centre.mean;
   const std::vector<double> spread = to_host(
       column_sums(handle, weighted_square<T>{x, w, mean.data(), n}, n, d),
       stream);
@@ -429,11 +426,14 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
   for (int64_t k = 0; k < d; ++k) {
     m[(k * d) + k] += static_cast<float>(a * scale[k] * scale[k]);
   }
+  ritz::gram_bound bound = ritz::bound_of(n, spread, scale, a);
+  bound.mean = ritz::mean_error(n, spread, scale, centre.host);
+  const double exact = ritz::exact_error(bound, n);
   const std::optional<eigen_pairs> e = eigen_of(handle, m, d, true);
   if (!e) {
-    return {exact_condition(q), gram_path::exact, d};
+    return {exact_condition(q, exact, limit), gram_path::exact, d};
   }
-  const double error = ritz::gram_error(ritz::bound_of(n, spread, scale, a));
+  const double error = ritz::gram_error(bound);
   const gram_plan plan = plan_of(e->values, error, {n, d}, limit);
   if (const auto k =
           enclosed_kappa(handle, m, *e, plan, {n, d}, limit, error)) {
@@ -445,9 +445,13 @@ condition_estimate equilibrated_condition(const raft::handle_t& handle,
                                ? plan_of(e->values, error, {n, d}, 0.0)
                                : plan;
   if (window.path == gram_path::ritz) {
-    return {ritz_condition(q, *e, window), window.path, window.window};
+    const window_errors errors{error, ritz::applied_error(bound, {n, d}),
+                               bound.mean};
+    if (const auto k = ritz_condition(q, m, *e, window, errors, limit)) {
+      return {*k, window.path, window.window};
+    }
   }
-  return {exact_condition(q), gram_path::exact, window.window};
+  return {exact_condition(q, exact, limit), gram_path::exact, window.window};
 }
 
 template condition_estimate equilibrated_condition<float>(const raft::handle_t&,
