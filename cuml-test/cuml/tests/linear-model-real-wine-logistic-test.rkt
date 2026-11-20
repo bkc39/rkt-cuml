@@ -44,18 +44,21 @@
                            #:tol tol
                            #:max-iter max-iter))
 
+(struct arm (name set optimum tol bound))
+
 (test-twin "wine: balanced class weights over unequal cultivars fit at sklearn's balanced optimum"
   (define raw (labelled-set 'wine "cultivar" '()))
   (define standardised (labelled-set 'wine "cultivar" '() #:standardise? #t))
-  (match-define (list raw-optimum optimum)
+  (match-define (list raw-optimum standardised-optimum)
     (logistic-twin-results (list (balanced-twin raw) (balanced-twin standardised))))
-  (for ([dt (in-list dtypes)])
-    (test-case (format "raw, the default tol, ~a" dt)
-      (define gap
-        (relative-gap (gauged-fit (fit-parts (balanced-fit raw dt #:max-iter tight-max-iter)))
-                      (gauged-sklearn raw-optimum)))
-      (check-true (<= gap (default-tol-cap dt)) (format "coef gap ~a" gap)))
-    (test-case (format "standardised, tight, ~a" dt)
-      (define fitted (balanced-fit standardised dt #:tol (tight-tol dt) #:max-iter tight-max-iter))
-      (define gap (relative-gap (gauged-fit (fit-parts fitted)) (gauged-sklearn optimum)))
-      (check-true (<= gap (optimum-gap-bound dt)) (format "coef gap ~a" gap)))))
+  (define arms
+    (list (arm "raw, the default tol" raw raw-optimum (lambda (_) default-tol) default-tol-cap)
+          (arm "standardised, tight" standardised standardised-optimum tight-tol optimum-gap-bound)))
+  (define (gap-to optimum fitted)
+    (relative-gap (gauged-fit (fit-parts fitted)) (gauged-sklearn optimum)))
+  (for* ([dt (in-list dtypes)]
+         [a (in-list arms)])
+    (match-define (struct* arm ([name name] [set set] [optimum optimum] [tol tol] [bound bound])) a)
+    (test-case (format "~a, ~a" name dt)
+      (define gap (gap-to optimum (balanced-fit set dt #:tol (tol dt) #:max-iter tight-max-iter)))
+      (check-true (<= gap (bound dt)) (format "coef gap ~a" gap)))))
