@@ -2,7 +2,7 @@
 
 (require (only-in racket/port port->string with-output-to-string)
          racket/runtime-path
-         (only-in racket/system system*)
+         (only-in racket/system system*/exit-code)
          (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
          (only-in "../private/modules.rkt" with-temporary-directory))
 
@@ -20,11 +20,11 @@
   (with-temporary-directory
    (root "positional-~a")
    (with-output-to-file (build-path root "table-test.rkt") (lambda () (display text)))
-   (define ok? #f)
-   (define output
-     (with-output-to-string
-      (lambda () (set! ok? (system* (find-executable-path "bash") gate (path->string root))))))
-   (values ok? output)))
+   (define output (open-output-string))
+   (define code
+     (parameterize ([current-output-port output])
+       (system*/exit-code (find-executable-path "bash") gate (path->string root))))
+   (values (zero? code) (get-output-string output))))
 
 (test-case "a test table read with a positional accessor is refused, with what to use instead"
   (for ([accessor (in-list '(cadr caddr cadddr second third fourth fifth tenth))])
