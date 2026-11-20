@@ -124,19 +124,22 @@ TEST(GramProof, TheBlockFloorIsTheTwoByTwosSmallestEigenvalue) {
   }
 }
 
+void expect_widened_outward(double end, double error) {
+  const spectrum_interval s = widened({end, end}, error);
+  const long double low = static_cast<long double>(end) - error;
+  const long double high = static_cast<long double>(end) + error;
+  EXPECT_LT(static_cast<long double>(end + error), high) << end;
+  EXPECT_GT(static_cast<long double>(end - error), low) << end;
+  EXPECT_LE(static_cast<long double>(s.low), low) << end;
+  EXPECT_GE(static_cast<long double>(s.high), high) << end;
+}
+
 TEST(GramProof, EveryIntervalEndRoundsOutward) {
   for (const auto& [end, error] : rounded_ends) {
-    const spectrum_interval s = widened({end, end}, error);
-    const long double low = static_cast<long double>(end) - error;
-    const long double high = static_cast<long double>(end) + error;
-    EXPECT_LT(static_cast<long double>(end + error), high) << end;
-    EXPECT_GT(static_cast<long double>(end - error), low) << end;
-    EXPECT_LE(static_cast<long double>(s.low), low) << end << " " << error;
-    EXPECT_GE(static_cast<long double>(s.high), high) << end << " " << error;
+    expect_widened_outward(end, error);
   }
-  const auto k = certified_kappa({third_low, 1.0}, 1.0);
-  ASSERT_TRUE(k.has_value());
-  EXPECT_GE(static_cast<long double>(*k), 1.0L / 3.0L);
+  const double k = certified_kappa({third_low, 1.0}, 1.0).value_or(0.0);
+  EXPECT_GE(static_cast<long double>(k), 1.0L / 3.0L);
 }
 
 TEST(GramProof, TheComplementFloorLeansOnTheBasissSkew) {
@@ -187,15 +190,35 @@ TEST(GramProof, AColumnSetByOneLightRowIsProvenThroughItsResidual) {
   EXPECT_LT(e.kappa, light_kappa);
 }
 
-design two_pairs(int64_t n, double low_eps, double next_eps) {
+struct two_pair_shape {
+  int64_t n;
+  double low_eps;
+  double next_eps;
+};
+
+design two_pairs(two_pair_shape p) {
+  const auto [n, low_eps, next_eps] = p;
   design c{std::vector<double>(n * pair_columns), n, pair_columns};
   for (int64_t i = 0; i < n; ++i) {
     c.x[i] = hadamard(i, 1);
     c.x[n + i] = hadamard(i, 1) + (low_eps * hadamard(i, 2));
     c.x[(2 * n) + i] = hadamard(i, 4);
-    c.x[(3 * n) + i] = hadamard(i, 4) + (next_eps * hadamard(i, 8));
+    c.x[(3 * n) + i] =
+        hadamard(i, 4) + (next_eps * hadamard(i, int64_t{1} << 3));
   }
   return c;
+}
+
+void expect_cluster_accepted_on_exact(const resources& res) {
+  const condition_estimate cluster = estimate_of(
+      res, two_pairs({cluster_rows, cluster_low_eps, cluster_next_eps}),
+      refusal_kappa);
+  const auto kappa = static_cast<double>(pair_kappa(cluster_low_eps));
+  EXPECT_EQ(cluster.path, gram_path::exact);
+  EXPECT_EQ(cluster.window, 1);
+  EXPECT_GE(cluster.kappa, kappa);
+  EXPECT_LT(cluster.kappa, kappa * (1 + bound_slack));
+  EXPECT_LT(cluster.kappa, refusal_kappa / 2);
 }
 
 TEST(GramProof, TheExactPathAcceptsOnlyOnItsEnclosure) {
@@ -206,15 +229,7 @@ TEST(GramProof, TheExactPathAcceptsOnlyOnItsEnclosure) {
   EXPECT_LT(static_cast<double>(pair_kappa(near_eps)), refusal_kappa);
   EXPECT_EQ(e.path, gram_path::exact);
   EXPECT_GE(e.kappa, refusal_kappa);
-  const condition_estimate cluster = estimate_of(
-      res, two_pairs(cluster_rows, cluster_low_eps, cluster_next_eps),
-      refusal_kappa);
-  const auto kappa = static_cast<double>(pair_kappa(cluster_low_eps));
-  EXPECT_EQ(cluster.path, gram_path::exact);
-  EXPECT_EQ(cluster.window, 1);
-  EXPECT_GE(cluster.kappa, kappa);
-  EXPECT_LT(cluster.kappa, kappa * (1 + bound_slack));
-  EXPECT_LT(cluster.kappa, refusal_kappa / 2);
+  expect_cluster_accepted_on_exact(res);
 }
 
 struct window_case {
@@ -302,9 +317,7 @@ condition_estimate weighted_estimate(const resources& res,
       refusal_kappa);
 }
 
-TEST(GramProof, ALightColumnsMeanBoundPastLambdaMinStopsTheRitzProof) {
-  CUMLRKT_REQUIRE_GPU();
-  const resources res;
+void expect_light_pair_accepted_on_ritz(const resources& res) {
   const auto kappa = static_cast<double>(pair_kappa(light_pair_eps));
   const condition_estimate plain =
       weighted_estimate(res, light_pair(light_plain_weight));
@@ -312,6 +325,12 @@ TEST(GramProof, ALightColumnsMeanBoundPastLambdaMinStopsTheRitzProof) {
   EXPECT_EQ(plain.window, 1);
   EXPECT_GE(plain.kappa, kappa);
   EXPECT_LT(plain.kappa, kappa * (1 + bound_slack));
+}
+
+TEST(GramProof, ALightColumnsMeanBoundPastLambdaMinStopsTheRitzProof) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  expect_light_pair_accepted_on_ritz(res);
   const condition_estimate e =
       weighted_estimate(res, light_pair(light_mean_weight));
   EXPECT_EQ(e.path, gram_path::exact);
