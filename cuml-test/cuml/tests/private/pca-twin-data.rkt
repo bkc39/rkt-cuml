@@ -24,7 +24,7 @@
                   fixtures
                   norm
                   over-bound)
-         (only-in "python-env.rkt" run-twin)
+         (only-in "python-env.rkt" python-cuml-version run-twin)
          (only-in "scaler-data.rkt" rows-of))
 
 (provide (struct-out ours)
@@ -81,7 +81,7 @@
       (values (string->symbol (twin-key f dt)) (append* (twin-rows f dt)))))
   (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
     (run-twin twin (hasheq 'cases cases 'fixtures payload)))
-  (check-equal? version "26.08.00")
+  (check-equal? version python-cuml-version)
   (check-equal? version libcuml-version)
   results)
 

@@ -18,7 +18,7 @@
          (only-in raft device-matrix->list* device-vector->list list->device-vector)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" embeddings-pin evaluated-chapter)
-         (only-in "private/python-env.rkt" run-twin test-twin)
+         (only-in "private/python-env.rkt" python-cuml-version run-twin test-twin)
          (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/tsne-data.rkt" tsne-case)
          (only-in "private/umap-data.rkt" fixture twin-case))
@@ -89,7 +89,7 @@
 
 (test-twin "the embeddings twin runs Python cuML 26.08.00 and sklearn 1.8.0"
   (match-define (struct* twin-run ([version version])) (force twin))
-  (check-equal? (hash-ref version 'cuml) "26.08.00")
+  (check-equal? (hash-ref version 'cuml) python-cuml-version)
   (check-equal? (hash-ref version 'sklearn) "1.8.0"))
 
 (test-twin "the embeddings chapter's pixels and digits are sklearn's"

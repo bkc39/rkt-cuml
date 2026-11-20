@@ -9,7 +9,7 @@
          (only-in raft device-matrix->list* list*->device-matrix)
          (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps product)
          (only-in "pca-twin-data.rkt" twin-key)
-         (only-in "python-env.rkt" run-twin)
+         (only-in "python-env.rkt" python-cuml-version run-twin)
          (only-in "scaler-data.rkt" generated-rows rows-of)
          (only-in "tsvd-data.rkt"
                   normal-fixture
@@ -70,7 +70,7 @@
       (values (string->symbol (twin-key f dt)) (append* (fixture-rows f dt)))))
   (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
     (run-twin twin (hasheq 'cases cases 'fixtures payload)))
-  (check-equal? version "26.08.00")
+  (check-equal? version python-cuml-version)
   (check-equal? version libcuml-version)
   results)
 
