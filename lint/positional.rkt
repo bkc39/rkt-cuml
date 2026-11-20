@@ -130,7 +130,7 @@
 (define (file-accesses file refused)
   (define module (read-module file))
   (define own (bound-names (syntax->datum module)))
-  (accesses module (filter (lambda (name) (not (memq name own))) refused)))
+  (accesses module (remq* own refused)))
 
 (define (positional-accesses roots refused)
   (for*/list ([root (in-list roots)]
