@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (for-syntax racket/base)
+(require (for-syntax racket/base
+                     (only-in syntax/parse/pre syntax-parser))
          (only-in racket/list append-map split-at)
          (only-in racket/match define-match-expander match match* match-define))
 
@@ -93,9 +94,8 @@
     [(_ _ _) #f]))
 
 (define-match-expander failure-forms
-  (lambda (stx)
-    (syntax-case stx ()
-      [(_ id more) #'(cons (list '=> (? symbol? id)) more)])))
+  (syntax-parser
+    [(_ id more) #'(cons (list '=> (? symbol? id)) more)]))
 
 (define-match-expander pattern-head
   (lambda (_stx)
