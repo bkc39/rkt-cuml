@@ -90,8 +90,14 @@
                          title))))
 
 (define-syntax-class test-form-name
-  #:datum-literals (test-gpu test-model-probe test-process-memory test-twin test-without-gpu)
-  (pattern (~or* test-gpu test-model-probe test-process-memory test-twin test-without-gpu)))
+  #:datum-literals
+  (test-gpu test-model-probe test-process-memory test-python test-twin test-without-gpu)
+  (pattern (~or* test-gpu
+                 test-model-probe
+                 test-process-memory
+                 test-python
+                 test-twin
+                 test-without-gpu)))
 
 (define-syntax-class reviewed-form
   #:datum-literals (define-cd-result define-definition-context-refactoring-rule

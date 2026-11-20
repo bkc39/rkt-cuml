@@ -34,7 +34,7 @@
                   fitted-sources
                   fitted-weights
                   prediction->lists)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
+         (only-in "private/python-env.rkt" test-twin twin-default-params twin-results))
 
 (define-runtime-path twin "python/hdbscan_twin.py")
 
@@ -112,12 +112,11 @@
                   'membership (device-matrix->list* (hdbscan-membership-vector result points)))))
 
 (test-twin "T1, T2: HDBSCAN's trees and predictions equal cuML's; its labels are sklearn's, but on the Racket-drawn circles"
-  (match-define (hash-table ('results results) ('version version))
-    (run-twin twin
-              (hasheq 'cases (append (map (lambda (c) (python-case "fit" c)) cuml-cases)
-                                     (map (lambda (c) (python-case "sklearn" c)) sklearn-cases)))))
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
+  (define results
+    (twin-results twin
+                  (append (map (lambda (c) (python-case "fit" c)) cuml-cases)
+                          (map (lambda (c) (python-case "sklearn" c)) sklearn-cases))
+                  #:expected-cuml libcuml-version))
   (define-values (cuml-results sklearn-results) (split-at results (length cuml-cases)))
   (define cuml-same
     (for/list ([c (in-list cuml-cases)]
@@ -156,9 +155,7 @@
           (count values sklearn-same)))
 
 (test-twin "cuml's HDBSCAN default parameters are hdbscan-params'"
-  (match-define (hash-table ('results (list theirs)))
-    (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped (twin-params theirs '(p gen-min-span-tree prediction-data build-kwds device-ids)))
-  (printf "twin params: ~s\n" theirs)
+  (define mapped
+    (twin-default-params twin '(p gen-min-span-tree prediction-data build-kwds device-ids)))
   (check-equal? mapped defaults)
   (check-equal? (hash-remove (estimator-params (hdbscan)) 'resources) defaults))

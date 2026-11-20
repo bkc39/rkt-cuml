@@ -106,6 +106,7 @@
                  "test-pools"
                  "test-probe"
                  "test-process-memory"
+                 "test-python"
                  "test-twin"
                  "test-without-gpu"
                  "with-device-resources")

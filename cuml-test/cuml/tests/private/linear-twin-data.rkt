@@ -25,9 +25,10 @@
                   rounded-case
                   scaled-columns
                   solution)
-         (only-in "python-env.rkt" run-twin))
+         (only-in "python-env.rkt" twin-results))
 
-(provide case-request
+(provide (all-from-out "python-env.rkt")
+         case-request
          check-cuml-failures
          check-cuml-parity
          decoded
@@ -36,7 +37,6 @@
          request
          results
          theirs
-         twin-results
          with-constant)
 
 (define-runtime-path twin "../python/linear_regression_twin.py")
@@ -67,14 +67,8 @@
                                        "eig"
                                        (symbol->string a)))))
 
-(define (twin-results script requests)
-  (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
-    (run-twin script (hasheq 'cases requests)))
-  (check-equal? version libcuml-version)
-  results)
-
 (define (results requests)
-  (twin-results twin requests))
+  (twin-results twin requests #:expected-cuml libcuml-version))
 
 (define (theirs dt result)
   (match-define (list intercept) (decoded dt (hash-ref result 'intercept_bits)))

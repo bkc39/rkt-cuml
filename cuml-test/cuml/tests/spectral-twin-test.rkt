@@ -11,7 +11,7 @@
          (only-in raft list*->device-matrix)
          (only-in threading cond~>)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params)
+         (only-in "private/python-env.rkt" test-twin twin-default-params twin-results)
          (only-in "private/spectral-data.rkt"
                   blobs
                   circles
@@ -109,13 +109,12 @@
 (test-twin "T1, T2: spectral clustering's labels equal cuML's; graph partitions are sklearn's"
   (define ds (dense-specs))
   (define gs (graph-specs))
-  (match-define (hash-table ('results results) ('version version))
-    (run-twin twin
-              (hasheq 'cases (append (map dense-case ds)
-                                     (map (lambda (s) (graph-case "precomputed" s)) gs)
-                                     (map (lambda (s) (graph-case "sklearn" s)) gs)))))
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
+  (define results
+    (twin-results twin
+                  (append (map dense-case ds)
+                          (map (lambda (s) (graph-case "precomputed" s)) gs)
+                          (map (lambda (s) (graph-case "sklearn" s)) gs))
+                  #:expected-cuml libcuml-version))
   (define-values (dense-results rest) (split-at results (length ds)))
   (define-values (precomputed-results sklearn-results) (split-at rest (length gs)))
   (define dense-same
@@ -159,11 +158,9 @@
                  graph-outcomes)))
 
 (test-twin "cuml's SpectralClustering default parameters are spectral-clustering-params'"
-  (match-define (hash-table ('results (list theirs)))
-    (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped (hash-update (twin-params theirs '()) 'random-state (lambda (seed) (or seed 0))))
+  (define mapped
+    (hash-update (twin-default-params twin '()) 'random-state (lambda (seed) (or seed 0))))
   (define ours-params (spectral-clustering-params))
-  (printf "twin params: ~s\n" theirs)
   (check-equal? (sort (hash-keys mapped) symbol<?) (sort (hash-keys ours-params) symbol<?))
   (check-equal? mapped ours-params)
   (check-equal? (estimator-params (spectral-clustering)) ours-params))

@@ -13,7 +13,7 @@
                   result->lists
                   seeded)
          (only-in "private/kmeans-data.rkt" blob-data)
-         (only-in "private/python-env.rkt" or-null run-twin test-twin twin-params))
+         (only-in "private/python-env.rkt" or-null test-twin twin-default-params twin-results))
 
 (define-runtime-path twin "python/dbscan_twin.py")
 
@@ -101,10 +101,7 @@
 
 (test-twin "dbscan-fit's labels and core samples equal cuml.DBSCAN's, and sklearn's under cosine"
   (define runs (map racket-fit specs))
-  (match-define (hash-table ('results results) ('version version))
-    (run-twin twin (hasheq 'cases (map fit-case runs))))
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
+  (define results (twin-results twin (map fit-case runs) #:expected-cuml libcuml-version))
   (define equal-count
     (for/sum ([r (in-list runs)] [theirs (in-list results)])
              (match-define (run s _ _ (list labels core) labels-dtype) r)
@@ -129,9 +126,6 @@
           equal-count))
 
 (test-twin "cuml.DBSCAN's default parameters are dbscan-params'"
-  (match-define (hash-table ('results (list theirs)))
-    (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped (twin-params theirs '(algorithm calc-core-sample-indices)))
+  (define mapped (twin-default-params twin '(algorithm calc-core-sample-indices)))
   (define ours (hash-remove (dbscan-params) 'out-dtype))
-  (printf "twin params: ~s\n" theirs)
   (check-equal? mapped ours))

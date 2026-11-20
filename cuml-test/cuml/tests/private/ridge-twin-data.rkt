@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/match match-define struct*)
+(require (only-in cuml/linear-model/private/native libcuml-version)
+         (only-in racket/match match-define struct*)
          racket/runtime-path
          (only-in racket/sequence in-slice)
          (only-in rackunit check-equal? test-case)
@@ -37,7 +38,7 @@
                 (hasheq 'alpha (real->double-flonum alpha) 'solver (symbol->string solver))))
 
 (define (results requests)
-  (twin-results twin requests))
+  (twin-results twin requests #:expected-cuml libcuml-version))
 
 (define (headroom dt)
   (if (eq? dt 'float32) 16 64))

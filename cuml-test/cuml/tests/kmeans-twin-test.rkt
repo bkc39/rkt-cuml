@@ -27,7 +27,7 @@
                   scaled-close?
                   string-inits
                   tolerance)
-         (only-in "private/python-env.rkt" or-null run-twin test-twin twin-params))
+         (only-in "private/python-env.rkt" or-null test-twin twin-default-params twin-results))
 
 (define-runtime-path twin "python/kmeans_twin.py")
 
@@ -283,11 +283,10 @@
                #:when (memq (spec-kind (run-spec r)) '(fit-weighted fit))
                #:when (hash-empty? (spec-options (run-spec r))))
       (racket-apply r)))
-  (define answer
-    (run-twin twin (hasheq 'cases (append (map fit-case runs) (map apply-case appliers)))))
-  (match-define (hash-table ('results results) ('version version)) answer)
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
+  (define results
+    (twin-results twin
+                  (append (map fit-case runs) (map apply-case appliers))
+                  #:expected-cuml libcuml-version))
   (check-equal? (list (length runs) (length appliers)) '(27 10))
   (define comparisons
     (for/list ([r (in-list runs)]
@@ -329,14 +328,12 @@
    (if (null? off-by-one) "none" off-by-one)))
 
 (test-twin "cuml.KMeans's default parameters are the estimator's"
-  (match-define (hash-table ('results (list theirs)))
-    (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
+  (define theirs (twin-default-params twin '(device-buffer-samples init-size)))
   (define mapped
-    (hash-update (twin-params theirs '(device-buffer-samples init-size max-samples-per-batch))
+    (hash-update (hash-remove theirs 'max-samples-per-batch)
                  'random-state
                  (lambda (seed) (or seed 0))))
-  (printf "twin params: ~s\n" theirs)
   (check-equal? (sort (hash-keys mapped) symbol<?) (sort (hash-keys (kmeans-params)) symbol<?))
   (check-equal? mapped (kmeans-params))
   (check-equal? (estimator-params (kmeans)) (kmeans-params))
-  (check-equal? (current-batch-samples) (hash-ref theirs 'max_samples_per_batch)))
+  (check-equal? (current-batch-samples) (hash-ref theirs 'max-samples-per-batch)))
