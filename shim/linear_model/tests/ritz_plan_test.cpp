@@ -8,6 +8,7 @@
 #include <raft/core/handle.hpp>
 #include <vector>
 
+#include "gram_condition.hpp"
 #include "linear_model_fixture.hpp"
 #include "raftrkt/view.hpp"
 #include "ritz.hpp"
@@ -16,9 +17,11 @@
 
 namespace {
 
+using cumlrkt::glm::condition_estimate;
 using cumlrkt::glm::eigen_of;
 using cumlrkt::glm::enclosed_spectrum;
 using cumlrkt::glm::enclosure_norms_of;
+using cumlrkt::glm::equilibrated_condition;
 using cumlrkt::glm::ritz::certified_kappa;
 using cumlrkt::glm::ritz::dot;
 using cumlrkt::glm::ritz::eigen_pairs;
@@ -33,6 +36,7 @@ using cumlrkt::glm::ritz::gram_shape;
 using cumlrkt::glm::ritz::plan_of;
 using cumlrkt::glm::ritz::spectrum_error;
 using cumlrkt::glm::ritz::spectrum_interval;
+using cumlrkt::test::filled;
 using cumlrkt::test::resources;
 
 constexpr double near_step = 0x1p-30;
@@ -51,6 +55,7 @@ constexpr double draw_centre = 11.0;
 constexpr int64_t correlated_rows = 20000;
 constexpr int64_t correlated_columns = 100;
 constexpr double correlated_loading = 20.0;
+constexpr double heavy_loading = 33.0;
 constexpr gram_shape correlated_shape{1000000, correlated_columns};
 constexpr uint64_t correlated_salts = 4;
 constexpr double skew_cosine = 0.6;
@@ -312,6 +317,30 @@ TEST(GramPlan, ACorrelatedSpectrumIsCertifiedByItsResiduals) {
   const resources res;
   for (uint64_t salt = 0; salt < correlated_salts; ++salt) {
     expect_certified_by_residuals(res, salt);
+  }
+}
+
+condition_estimate estimate_of(const resources& res,
+                               const std::vector<double>& xd, double limit) {
+  const std::vector<float> host(xd.begin(), xd.end());
+  const filled<float> x(res, host, {correlated_rows * correlated_columns});
+  return equilibrated_condition<float>(
+      raftrkt::handle_of(res.handle),
+      static_cast<const float*>(x.array.view.data), nullptr, correlated_rows,
+      correlated_columns, 0.0F, true, limit);
+}
+
+TEST(GramPlan, AHeavyFactorIsAcceptedOnTheExactGram) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  for (uint64_t salt = 0; salt < correlated_salts; ++salt) {
+    const std::vector<double> x = factor_draws(
+        {correlated_rows, correlated_columns, heavy_loading, salt});
+    const condition_estimate e = estimate_of(res, x, 0x1p32);
+    const condition_estimate refined = estimate_of(res, x, 0.0);
+    EXPECT_EQ(e.path, gram_path::exact) << salt;
+    EXPECT_GE(e.kappa, refined.kappa) << salt;
+    EXPECT_LT(e.kappa, refined.kappa * (1 + 0x1p-8)) << salt;
   }
 }
 

@@ -60,6 +60,9 @@ constexpr double light_pair_eps = 0x1p-12;
 constexpr float light_mean_weight = 0x1p-44F;
 constexpr float light_plain_weight = 0x1p-20F;
 constexpr double light_value = 5.0;
+constexpr int64_t cluster_rows = int64_t{1} << 14;
+constexpr double cluster_low_eps = 0x1p-10;
+constexpr double cluster_next_eps = 0x1.6ap-6;
 
 struct design {
   std::vector<double> x;
@@ -184,6 +187,17 @@ TEST(GramProof, AColumnSetByOneLightRowIsProvenThroughItsResidual) {
   EXPECT_LT(e.kappa, light_kappa);
 }
 
+design two_pairs(int64_t n, double low_eps, double next_eps) {
+  design c{std::vector<double>(n * pair_columns), n, pair_columns};
+  for (int64_t i = 0; i < n; ++i) {
+    c.x[i] = hadamard(i, 1);
+    c.x[n + i] = hadamard(i, 1) + (low_eps * hadamard(i, 2));
+    c.x[(2 * n) + i] = hadamard(i, 4);
+    c.x[(3 * n) + i] = hadamard(i, 4) + (next_eps * hadamard(i, 8));
+  }
+  return c;
+}
+
 TEST(GramProof, TheExactPathAcceptsOnlyOnItsEnclosure) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
@@ -192,6 +206,15 @@ TEST(GramProof, TheExactPathAcceptsOnlyOnItsEnclosure) {
   EXPECT_LT(static_cast<double>(pair_kappa(near_eps)), refusal_kappa);
   EXPECT_EQ(e.path, gram_path::exact);
   EXPECT_GE(e.kappa, refusal_kappa);
+  const condition_estimate cluster = estimate_of(
+      res, two_pairs(cluster_rows, cluster_low_eps, cluster_next_eps),
+      refusal_kappa);
+  const auto kappa = static_cast<double>(pair_kappa(cluster_low_eps));
+  EXPECT_EQ(cluster.path, gram_path::exact);
+  EXPECT_EQ(cluster.window, 1);
+  EXPECT_GE(cluster.kappa, kappa);
+  EXPECT_LT(cluster.kappa, kappa * (1 + bound_slack));
+  EXPECT_LT(cluster.kappa, refusal_kappa / 2);
 }
 
 struct window_case {
