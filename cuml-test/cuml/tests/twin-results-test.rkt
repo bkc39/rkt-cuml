@@ -58,20 +58,26 @@
 (define fixtures (hasheq 'a '(1.0)))
 
 (define run-rows
-  `(("no fixtures sends only the cases" #f #f ,(hasheq 'cases requests) passed)
-    ("the fixtures reach the request" ,fixtures
+  `(("no fixtures sends only the cases" ,pinned #f #f ,(hasheq 'cases requests) passed)
+    ("the fixtures reach the request" ,pinned
+                                      ,fixtures
                                       #f
                                       ,(hasheq 'cases requests 'fixtures fixtures)
                                       passed)
-    ("the native libcuml given is checked" #f "26.10.00" ,(hasheq 'cases requests) ,native)))
+    ("the native libcuml given is checked" ,pinned #f "26.10.00" ,(hasheq 'cases requests) ,native)
+    ("an unpinned twin fails without a native libcuml" ,unpinned
+                                                       #f
+                                                       #f
+                                                       ,(hasheq 'cases requests)
+                                                       ,pin)))
 
 (for ([row (in-list run-rows)])
-  (match-define (list name sent-fixtures expected request outcome) row)
+  (match-define (list name version sent-fixtures expected request outcome) row)
   (test-case name
     (define sent '())
     (define (run script input)
       (set! sent (list script input))
-      (answer pinned))
+      (answer version))
     (check-equal? (failed-message (lambda ()
                                     (twin-results "twin.py"
                                                   requests
