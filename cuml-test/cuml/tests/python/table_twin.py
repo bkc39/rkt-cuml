@@ -1,9 +1,8 @@
-import json
 import math
-import sys
 
 import cupy as cp
 import pandas as pd
+from twin_common import run
 
 
 def rows(case):
@@ -17,16 +16,10 @@ def signs(rows):
     return [[math.copysign(1.0, x) for x in row] for row in rows]
 
 
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    out = []
-    for case in cases:
-        got = rows(case)
-        out.append({"name": case["name"], "rows": got, "signs": signs(got)})
-    with open(sys.argv[2], "w") as f:
-        json.dump({"cases": out}, f)
+def selection(case):
+    got = rows(case)
+    return {"name": case["name"], "rows": got, "signs": signs(got)}
 
 
 if __name__ == "__main__":
-    main()
+    run({"selection": selection})

@@ -1,6 +1,4 @@
-import json
 import math
-import sys
 
 import numpy as np
 from cuml.metrics import accuracy_score as cu_acc
@@ -18,12 +16,7 @@ from sklearn.metrics import r2_score as sk_r2
 from sklearn.metrics import silhouette_samples as sk_samples
 from sklearn.metrics import silhouette_score as sk_score
 from sklearn.metrics.cluster import contingency_matrix as sk_contingency
-
-import cuml
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
+from twin_common import host, run, versions
 
 
 def contingency(case):
@@ -105,26 +98,19 @@ def accuracy(case):
 
 
 def version(case):
-    return cuml.__version__
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {
-        "contingency": contingency,
-        "ari": ari,
-        "silhouette": silhouette,
-        "trustworthiness": trustworthiness,
-        "r2": regression,
-        "mse": regression,
-        "accuracy": accuracy,
-        "version": version,
-    }
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": cuml.__version__}, f)
+    return versions()["cuml"]
 
 
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "contingency": contingency,
+            "ari": ari,
+            "silhouette": silhouette,
+            "trustworthiness": trustworthiness,
+            "r2": regression,
+            "mse": regression,
+            "accuracy": accuracy,
+            "version": version,
+        }
+    )

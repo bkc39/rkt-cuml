@@ -18,6 +18,7 @@
 (provide checked-results
          or-null
          python-cuml-version
+         python-sklearn-version
          run-twin
          test-python
          test-twin
@@ -26,6 +27,8 @@
          twin-results)
 
 (define python-cuml-version "26.08.00")
+
+(define python-sklearn-version "1.8.0")
 
 (define python (find-executable-path "python3"))
 

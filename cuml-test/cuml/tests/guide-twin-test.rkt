@@ -21,7 +21,7 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" boundary-margin host scaled-matrix)
-         (only-in "private/python-env.rkt" checked-results run-twin test-twin)
+         (only-in "private/python-env.rkt" checked-results python-sklearn-version run-twin test-twin)
          (only-in "private/scaler-data.rkt" [float32-roundoff u]))
 
 (define-runtime-path twin "python/guide_twin.py")
@@ -57,7 +57,7 @@
                       (hash-table ['error reconstruction-error]))
     (checked-results answer #:expected-cuml libcuml-version))
   (match-define (hash-table ['version (hash-table ['sklearn sklearn])]) answer)
-  (check-equal? sklearn "1.8.0")
+  (check-equal? sklearn python-sklearn-version)
   (define raw-fit (pca-fit raw #:n-components 2))
   (define scaled-fit (pca-fit scaled))
   (define svd-fit (tsvd-fit scaled #:n-components 2))

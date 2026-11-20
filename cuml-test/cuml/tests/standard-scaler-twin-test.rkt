@@ -17,16 +17,21 @@
          (only-in raft device-matrix->list* list*->device-matrix)
          (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/estimator-data.rkt" listed)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params)
+         (only-in "private/python-env.rkt"
+                  checked-results
+                  python-sklearn-version
+                  run-twin
+                  test-twin
+                  twin-default-params)
          (only-in "private/scaler-data.rkt" constant-rows generated-rows ulp))
 
 (define-runtime-path twin "python/standard_scaler_twin.py")
 
 (define (twin-results cases)
-  (match-define (hash-table ('results results) ('version version))
-    (run-twin twin (hasheq 'cases cases)))
-  (check-equal? version "1.8.0")
-  results)
+  (define answer (run-twin twin (hasheq 'cases cases)))
+  (match-define (hash-table ['version (hash-table ['sklearn sklearn])]) answer)
+  (check-equal? sklearn python-sklearn-version)
+  (checked-results answer))
 
 (struct dataset (name rows))
 
@@ -166,5 +171,4 @@
          (check-true (within? back x-sk inverse-tolerance) "inverse")]))))
 
 (test-twin "the hyperparameters are sklearn's but copy"
-  (match-define (list theirs) (twin-results (list (hasheq 'op "params"))))
-  (check-equal? (standard-scaler-params) (twin-params theirs '(copy))))
+  (check-equal? (standard-scaler-params) (twin-default-params twin #:unbound '(copy))))

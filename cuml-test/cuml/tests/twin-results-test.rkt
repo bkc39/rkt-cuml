@@ -9,14 +9,18 @@
                   exn:test:check-stack
                   exn:test:check?
                   test-case)
-         (only-in "private/python-env.rkt" checked-results python-cuml-version twin-results))
+         (only-in "private/python-env.rkt"
+                  checked-results
+                  python-cuml-version
+                  python-sklearn-version
+                  twin-results))
 
 (define (answer version)
   (hasheq 'results '(1 2) 'version version))
 
-(define pinned (hasheq 'cuml python-cuml-version 'sklearn "1.8.0"))
+(define pinned (hasheq 'cuml python-cuml-version 'sklearn python-sklearn-version))
 
-(define unpinned (hasheq 'cuml "26.10.00" 'sklearn "1.8.0"))
+(define unpinned (hasheq 'cuml "26.10.00" 'sklearn python-sklearn-version))
 
 (define pin "the twin's Python cuML is not the pinned release")
 
@@ -36,7 +40,7 @@
     ("pinned, native differs" ,(answer pinned) "26.10.00" (check ,native))
     ("unpinned" ,(answer unpinned) #f (check ,pin))
     ("unpinned, native agrees with it" ,(answer unpinned) "26.10.00" (check ,pin))
-    ("no cuml key" ,(answer (hasheq 'sklearn "1.8.0")) #f (refused "no version.cuml"))
+    ("no cuml key" ,(answer (hasheq 'sklearn python-sklearn-version)) #f (refused "no version.cuml"))
     ("a bare version string" ,(answer python-cuml-version) #f (refused "no version.cuml"))
     ("no version" ,(hasheq 'results '(1 2)) #f (refused "no version.cuml"))
     ("no results" ,(hasheq 'version pinned) #f (refused "no results"))
