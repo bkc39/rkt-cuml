@@ -5,7 +5,7 @@
                   logistic-regression-fit
                   logistic-regression-result-coef
                   logistic-regression-result-intercept)
-         (only-in racket/list first remove-duplicates rest)
+         (only-in racket/list first make-list remove-duplicates rest)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
@@ -213,6 +213,21 @@
 
 (test-gpu "integer sample weights with three classes fit as repeated rows"
   (check-repeated row-weighted-three (lr-case-w row-weighted-three)))
+
+(test-gpu "unequal weights with three classes fit as repeated rows"
+  (define rows '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
+  (define three (lr-case "three" rows '(0 1 2 0 1 2) #f))
+  (define unequal (lr-case "unequal" rows '(0 1 2 0 1 1) #f))
+  (test-case "unequal sample weights"
+    (check-repeated three '(1 2 1 1 1 1) #:sample-weight (on-vector '(1 2 1 1 1 1) 'float64)))
+  (test-case "balanced, three unequal classes"
+    (check-repeated unequal '(3 2 6 3 2 2) #:C 3.0 #:class-weight 'balanced))
+  (test-case "balanced over uniform sample weights"
+    (check-repeated unequal
+                    '(3 2 6 3 2 2)
+                    #:C 30.0
+                    #:sample-weight (on-vector (make-list 6 0.1) 'float64)
+                    #:class-weight 'balanced)))
 
 (define (window-scale-gap-bound dt)
   (by-dtype dt (min (* 8 2e-3) 8e-2) (min (* 8 1e-6) 3e-2)))

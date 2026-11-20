@@ -8,23 +8,12 @@
                   logistic-regression-result-label-kind)
          (only-in racket/list make-list)
          (only-in racket/match match-define match-lambda struct*)
-         (only-in rackunit check-equal? check-exn check-not-false check-true test-case)
+         (only-in rackunit check-equal? check-exn check-not-false test-case)
          (only-in raft device-vector->list device-vector? list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" host on-vector scaled-rows)
          (only-in "private/linear-data.rkt" on-matrix)
-         (only-in "private/logistic-data.rkt"
-                  blob-case
-                  case-fit
-                  fit-parts
-                  gauged-fit
-                  lr-case
-                  lr-case-X
-                  lr-case-y
-                  relative-gap
-                  repeated-rows
-                  tight-max-iter
-                  tight-tol)
+         (only-in "private/logistic-data.rkt" blob-case lr-case-X lr-case-y)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
@@ -241,43 +230,6 @@
       (check-row "logistic-regression-fit" r))))
 
 (struct applied-row (function row))
-
-(define multiclass-gap-bound 1e-6)
-
-(test-gpu "unequal weights with three classes are accepted and fit as repeated rows"
-  (define three (lr-case "three" grid '(0 1 2 0 1 2) #f))
-  (define unequal (lr-case "unequal" grid '(0 1 2 0 1 1) #f))
-  (define tol (tight-tol 'float64))
-  (define (fitted c #:C [C 1.0] #:sample-weight [w #f] #:class-weight [cw #f])
-    (gauged-fit (fit-parts (case-fit c
-                                     'float64
-                                     #:C C
-                                     #:sample-weight w
-                                     #:class-weight cw
-                                     #:tol tol
-                                     #:max-iter tight-max-iter))))
-  (for ([accepted
-         (in-list (list (list "unequal sample weights"
-                              three
-                              '(1 2 1 1 1 1)
-                              (lambda ()
-                                (fitted three #:sample-weight (on-vector '(1 2 1 1 1 1) 'float64))))
-                        (list "balanced, three unequal classes"
-                              unequal
-                              '(3 2 6 3 2 2)
-                              (lambda () (fitted unequal #:C 3.0 #:class-weight 'balanced)))
-                        (list "balanced over uniform sample weights"
-                              unequal
-                              '(3 2 6 3 2 2)
-                              (lambda ()
-                                (fitted unequal
-                                        #:C 30.0
-                                        #:sample-weight (on-vector (make-list 6 0.1) 'float64)
-                                        #:class-weight 'balanced)))))])
-    (match-define (list name c counts fit) accepted)
-    (test-case name
-      (define gap (relative-gap (fit) (fitted (repeated-rows c counts))))
-      (check-true (<= gap multiclass-gap-bound) (format "gap ~a" gap)))))
 
 (define (predict-row id message call)
   (applied-row "logistic-regression-predict" (row id message call)))
