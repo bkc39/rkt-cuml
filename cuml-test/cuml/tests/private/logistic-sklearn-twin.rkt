@@ -1,12 +1,13 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-decision-function)
-         (only-in racket/match match match* match-define struct*)
+         (only-in racket/match match match-define struct*)
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in "common-data.rkt" kept-rows)
          (only-in "linear-data.rkt" by-dtype dtypes on-matrix)
          (only-in "logistic-data.rkt"
+                  collapsed
                   decision-label
                   default-tol-cap
                   fit-parts
@@ -24,7 +25,6 @@
          (only-in "logistic-twin-data.rkt" logistic-twin-results setting-twin twin-trial))
 
 (provide check-sklearn-twins
-         collapsed
          optimum-gap-bound
          sklearn-trials)
 
@@ -43,12 +43,6 @@
   (if repeated?
       (repeated-rows c (lr-case-w c))
       c))
-
-(define (collapsed labels counts)
-  (match* (labels counts)
-    [(_ '()) '()]
-    [(_ (cons 0 rest)) (collapsed labels rest)]
-    [((cons label _) (cons n rest)) (cons label (collapsed (list-tail labels n) rest))]))
 
 (define (centre-coef? penalty)
   (and (memq penalty '(l1 none)) #t))

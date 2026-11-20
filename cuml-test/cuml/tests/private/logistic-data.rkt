@@ -9,7 +9,7 @@
          (only-in racket/match match match-define struct*)
          (only-in raft device-matrix->list* device-vector->list device-vector?)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "common-data.rkt" columns-of mean on-vector scaled-rows)
+         (only-in "common-data.rkt" block-starts columns-of kept-rows mean on-vector pick scaled-rows)
          (only-in "linear-data.rkt" by-dtype dyadic on-matrix))
 
 (provide (struct-out lr-case)
@@ -21,6 +21,7 @@
          case-fit
          case-y
          centred-columns
+         collapsed
          centred-vector
          coef-flat
          correct
@@ -134,6 +135,9 @@
                 [_ (in-range n)])
       x))
   (lr-case (lr-case-name c) (spread (lr-case-X c)) (spread (lr-case-y c)) #f))
+
+(define (collapsed labels counts)
+  (pick labels (kept-rows (block-starts counts) counts)))
 
 (define (case-y c [label-dtype 'int32])
   (on-vector (lr-case-y c) label-dtype))
