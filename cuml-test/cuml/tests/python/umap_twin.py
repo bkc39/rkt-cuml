@@ -2,14 +2,8 @@
 cuml's UMAP embeds the data the Racket side used, and cuml's trustworthiness
 and HDBSCAN score the embeddings."""
 
-import json
-import sys
-
 import numpy as np
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
+from twin_common import host, run
 
 
 def curve(x, a, b):
@@ -143,35 +137,14 @@ def params(case):
     }
 
 
-def versions():
-    import scipy
-
-    out = {"scipy": scipy.__version__}
-    try:
-        import sklearn
-
-        import cuml
-
-        out.update({"cuml": cuml.__version__, "sklearn": sklearn.__version__})
-    except ImportError:
-        pass
-    return out
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {
-        "ab": ab,
-        "umap": umap,
-        "quality": quality,
-        "digits": digits,
-        "params": params,
-    }
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": versions()}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "ab": ab,
+            "umap": umap,
+            "quality": quality,
+            "digits": digits,
+            "params": params,
+        },
+        versions_of=("scipy",),
+    )

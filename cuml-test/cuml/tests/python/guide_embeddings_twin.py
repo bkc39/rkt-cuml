@@ -2,12 +2,10 @@
 trustworthiness, UMAP and TSNE, and sklearn's ARI, on the float32 rows and
 the fitted parameters of the embeddings chapter."""
 
-import json
-import sys
-
 import numpy as np
 import tsne_twin
 import umap_twin
+from twin_common import host, run
 
 
 def f32(rows):
@@ -39,32 +37,17 @@ def ari(case):
 
 def umap(case):
     m, _ = umap_twin.fitted(case, case["seed"])
-    return {"embedding": umap_twin.host(m.embedding_).astype(np.float64).tolist()}
-
-
-def versions():
-    import sklearn
-
-    import cuml
-
-    return {"cuml": cuml.__version__, "sklearn": sklearn.__version__}
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {
-        "digits": umap_twin.digits,
-        "hdbscan": hdbscan,
-        "trust": trust,
-        "ari": ari,
-        "umap": umap,
-        "tsne": tsne_twin.tsne,
-    }
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": versions()}, f)
+    return {"embedding": host(m.embedding_).astype(np.float64).tolist()}
 
 
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "digits": umap_twin.digits,
+            "hdbscan": hdbscan,
+            "trust": trust,
+            "ari": ari,
+            "umap": umap,
+            "tsne": tsne_twin.tsne,
+        }
+    )

@@ -156,6 +156,8 @@
 
 (test-twin "cuml's HDBSCAN default parameters are hdbscan-params'"
   (define mapped
-    (twin-default-params twin '(p gen-min-span-tree prediction-data build-kwds device-ids)))
+    (twin-default-params twin
+                         #:expected-cuml libcuml-version
+                         #:unbound '(p gen-min-span-tree prediction-data build-kwds device-ids)))
   (check-equal? mapped defaults)
   (check-equal? (hash-remove (estimator-params (hdbscan)) 'resources) defaults))

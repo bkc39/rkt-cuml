@@ -39,9 +39,9 @@ def fitted(m, dtype):
     return out
 
 
-def versions():
+def versions(*modules):
     out = {}
-    for name in ("sklearn", "cuml"):
+    for name in ("sklearn", "cuml", *modules):
         try:
             out[name] = importlib.import_module(name).__version__
         except ImportError:
@@ -53,10 +53,10 @@ def params_of(cls):
     return lambda *_: cls().get_params()
 
 
-def run(ops, *, fixtures=False):
+def run(ops, *, fixtures=False, versions_of=()):
     with open(sys.argv[1]) as f:
         given = json.load(f)
     shared = (given.get("fixtures", {}),) if fixtures else ()
     results = [ops[case["op"]](*shared, case) for case in given["cases"]]
     with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": versions()}, f)
+        json.dump({"results": results, "version": versions(*versions_of)}, f)
