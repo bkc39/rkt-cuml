@@ -26,6 +26,14 @@
        (system*/exit-code (find-executable-path "bash") gate (path->string root))))
    (values (zero? code) (get-output-string output))))
 
+(define (refusal accessor [line "[0-9]+"])
+  (pregexp (format "table-test[.]rkt:~a: ~a: read a test table's rows" line accessor)))
+
+(define (check-refused forms [accessor "second"] #:line [line "[0-9]+"])
+  (define-values (ok? output) (gate-on forms))
+  (check-false ok? output)
+  (check-regexp-match (refusal accessor line) output))
+
 (test-case "a test table read with a positional accessor is refused, with what to use instead"
   (for ([accessor (in-list '(cadr caddr cadddr second third fourth fifth tenth))])
     (define-values (ok? output) (gate-on `((define rows '((a 1 2 3))) (map ,accessor rows))))
@@ -52,17 +60,13 @@
 (test-case "list-ref with a literal index is refused, inside another access too"
   (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref (list-ref rows 0) 2))))
   (check-false ok?)
-  (check-regexp-match
-   #rx"table-test[.]rkt:3: list-ref with a literal index: read a test table's rows with match-define"
-   output)
+  (check-regexp-match (refusal "list-ref with a literal index" 3) output)
   (check-equal? (length (regexp-match* #rx"list-ref with a literal index:" output)) 2))
 
 (test-case "list-ref with a quoted literal index is refused"
-  (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref rows '2))))
-  (check-false ok?)
-  (check-regexp-match
-   #rx"table-test[.]rkt:3: list-ref with a literal index: read a test table's rows with match-define"
-   output))
+  (check-refused '((define rows '((a 1 2 3))) (list-ref rows '2))
+                 "list-ref with a literal index"
+                 #:line 3))
 
 (test-case "list-ref with a computed index passes"
   (define-values (ok? output)
@@ -75,11 +79,9 @@
   (check-true ok? output))
 
 (test-case "list-ref with a quasiquoted literal index is refused"
-  (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref rows `2))))
-  (check-false ok?)
-  (check-regexp-match
-   #rx"table-test[.]rkt:3: list-ref with a literal index: read a test table's rows with match-define"
-   output))
+  (check-refused '((define rows '((a 1 2 3))) (list-ref rows `2))
+                 "list-ref with a literal index"
+                 #:line 3))
 
 (for ([use (in-list '(((require racket/list) (define (scaled xs)
                                                (define tenth 0.1)
@@ -112,9 +114,7 @@
                                                    (second xs)))
                           ((require racket/list) (define (f xs)
                                                    `(row ,(second xs))))))])
-    (define-values (ok? output) (gate-on forms))
-    (check-false ok? output)
-    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))
+    (check-refused forms)))
 
 (for ([use (in-list '(((require racket/list) (define (keep rows)
                                                (for/list ([row (in-list rows)]
@@ -158,10 +158,7 @@
                          (match v
                            [`(a `(b ,(app second x))) x])))))])
   (test-case (format "a guard, a result, or a pattern's operator is an access: ~s" use)
-    (define-values (ok? output) (gate-on use))
-    (check-false ok? output)
-    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: (second|cadr): read a test table's rows"
-                        output)))
+    (check-refused use "(second|cadr)")))
 
 (for ([use (in-list '((define/match (f v)
                         [((struct span ((app second x) _))) x])
@@ -205,13 +202,10 @@
   (test-case (format
               "a pattern in any racket/match form, or in a form the lint does not know, is read: ~s"
               use)
-    (define-values (ok? output)
-      (gate-on `((require racket/list
-                          racket/match)
-                 (struct span (lo hi))
-                 ,use)))
-    (check-false ok? output)
-    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))
+    (check-refused `((require racket/list
+                              racket/match)
+                     (struct span (lo hi))
+                     ,use))))
 
 (test-case "a quasipattern's literal neither binds the name nor reads it, so only the body's accessor is refused"
   (define-values (ok? output)
@@ -290,9 +284,7 @@
                        (define (g rows)
                          (map second rows)))))])
   (test-case (format "a not pattern, or a legacy struct pattern's name, binds nothing: ~s" use)
-    (define-values (ok? output) (gate-on use))
-    (check-false ok? output)
-    (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output)))
+    (check-refused use #:line 4)))
 
 (test-case "a guard's accessor does not hide the same accessor elsewhere in the file"
   (define-values (ok? output)
@@ -303,20 +295,18 @@
                                      (define (col rows)
                                        (map second rows)))))
   (check-false ok? output)
-  (check-regexp-match #rx"table-test[.]rkt:3: second: read a test table's rows" output)
-  (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
+  (check-regexp-match (refusal "second" 3) output)
+  (check-regexp-match (refusal "second" 4) output))
 
 (test-case "racket/list's accessor is refused beside a match that binds another name"
-  (define-values (ok? output)
-    (gate-on '((require racket/list
-                        racket/match)
-               (define (gap row)
-                 (match row
-                   [(list best worst) (- worst best)]))
-               (define (g xs)
-                 (second xs)))))
-  (check-false ok? output)
-  (check-regexp-match #rx"table-test[.]rkt:4: second: read a test table's rows" output))
+  (check-refused '((require racket/list
+                            racket/match)
+                   (define (gap row)
+                     (match row
+                       [(list best worst) (- worst best)]))
+                   (define (g xs)
+                     (second xs)))
+                 #:line 4))
 
 (test-case "an unquote inside a nested quasiquote is data"
   (define-values (ok? output)
@@ -336,6 +326,4 @@
   (test-case (format
               "an unquote at depth one, or inside a box, hash table or prefab struct, is an access: ~s"
               use)
-    (define-values (ok? output) (gate-on use))
-    (check-false ok? output)
-    (check-regexp-match #rx"table-test[.]rkt:[0-9]+: second: read a test table's rows" output)))
+    (check-refused use)))
