@@ -2,7 +2,7 @@
 
 (require (only-in racket/file find-files)
          (only-in racket/list append-map)
-         (only-in racket/match match match*)
+         (only-in racket/match match match* match-define)
          (only-in "private/modules.rkt" read-module rkt?)
          (only-in "private/patterns.rkt"
                   binds
@@ -138,8 +138,7 @@
     (list file (cdr found) (car found))))
 
 (module+ main
-  (require (only-in racket/match match-define)
-           (only-in racket/string string-join))
+  (require (only-in racket/string string-join))
   (match-define (cons refused-text roots) (vector->list (current-command-line-arguments)))
   (define refused (map string->symbol (regexp-split #rx"," refused-text)))
   (define found (positional-accesses roots refused))
