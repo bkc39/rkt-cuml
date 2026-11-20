@@ -32,12 +32,19 @@
 (define bits '(a_bits 1069547520 3221225472))
 
 (define put-rows
-  `(("put writes the bits alone" "put" (,bits))
-    ("put(float64=True) writes the float64 list beside the bits" "put_float64" ((a 1.5 -2.0) ,bits))))
+  `(("put writes the bits alone" "put" "float32" (1.5 -2.0) (,bits))
+    ("put(float64=True) writes the float64 list beside the bits" "put_float64"
+                                                                 "float32"
+                                                                 (1.5 -2.0)
+                                                                 ((a 1.5 -2.0) ,bits))
+    ("put(float64=True) keeps a float64 value's own bits" "put_float64"
+                                                          "float64"
+                                                          (0.1)
+                                                          ((a 0.1) (a_bits 4591870180066957722)))))
 
 (for ([row (in-list put-rows)])
-  (match-define (list name op stored) row)
+  (match-define (list name op dtype values stored) row)
   (test-python name
     (match-define (hash-table ('results results))
-      (run-twin put-of (hasheq 'cases (list (hasheq 'op op 'values '(1.5 -2.0) 'dtype "float32")))))
+      (run-twin put-of (hasheq 'cases (list (hasheq 'op op 'values values 'dtype dtype)))))
     (check-equal? results (list (make-immutable-hasheq stored)))))
