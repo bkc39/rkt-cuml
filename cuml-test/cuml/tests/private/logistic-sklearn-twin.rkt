@@ -2,12 +2,13 @@
 
 (require (only-in cuml/linear-model logistic-regression-decision-function)
          (only-in racket/match match match-define struct*)
-         (only-in racket/list make-list)
+         (only-in racket/list filter-not make-list)
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in "common-data.rkt" kept-rows)
          (only-in "linear-data.rkt" by-dtype dtypes on-matrix)
          (only-in "logistic-data.rkt"
+                  blob-case
                   collapsed
                   decision-label
                   default-tol-cap
@@ -18,6 +19,7 @@
                   lr-case-w
                   lr-case-X
                   lr-case-y
+                  penalty-settings
                   relative-gap
                   repeated-rows
                   setting-fit
@@ -31,6 +33,7 @@
                   twin-trial-case))
 
 (provide check-sklearn-twins
+         check-weighted-sklearn-twins
          optimum-gap-bound
          sklearn-trials)
 
@@ -100,3 +103,14 @@
             [label (in-list (collapsed (hash-ref theirs 'predict) counts))]
             #:unless (< (margin zi) boundary-margin))
         (check-true (= (decision-label zi) label) "predict")))))
+
+(define weighted-cases
+  (list (blob-case "three classes weighted" 120 3 3 34 #:weighted? #t)
+        (blob-case "five classes weighted" 150 3 5 35 #:weighted? #t)))
+
+(define penalised-settings
+  (filter-not (lambda (s) (eq? (setting-penalty s) 'none)) penalty-settings))
+
+(define (check-weighted-sklearn-twins dt)
+  (check-sklearn-twins (sklearn-trials weighted-cases penalised-settings #:dtypes (list dt))
+                       #:repeated? #t))
