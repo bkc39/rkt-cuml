@@ -5,12 +5,20 @@
          (only-in racket/match define-match-expander match match* match-define))
 
 (provide binding-clauses
+         (struct-out binds)
+         binds-of
          clause-ids
+         clause-names
+         definition-root
          direct-pattern-names
          ellipsis?
          failure-forms
          fold-head?
          for-head?
+         formal-names
+         head-names
+         lambda-head?
+         let-head?
          lhs-patterns
          match-form
          match-form-parts
@@ -26,6 +34,8 @@
 (struct match-layout (before patterns scope) #:transparent)
 
 (struct match-parts (leading groups tail) #:transparent)
+
+(struct binds (names forms) #:transparent)
 
 (define match-forms
   (let ([one-per-clause (lambda before (match-layout before 'one 'clause))]
@@ -97,6 +107,19 @@
 
 (define (fold-head? head)
   (and (for-head? head) (regexp-match? #rx"/(fold|foldr|lists)$" (symbol->string head))))
+
+(define (lambda-head? head)
+  (and (memq head '(lambda λ)) #t))
+
+(define (let-head? head)
+  (and (memq head
+             '(let let*
+                letrec
+                letrec*
+                let-values
+                let*-values
+                letrec-values))
+       #t))
 
 (define (proper datum)
   (match datum
@@ -286,3 +309,49 @@
     [(list* (? keyword?) _ rest) (binding-clauses rest)]
     [(cons one rest) (cons one (binding-clauses rest))]
     [_ '()]))
+
+(define (clause-names clauses)
+  (append-map clause-ids (binding-clauses clauses)))
+
+(define (formal-names formals)
+  (match formals
+    [(? symbol? rest) (list rest)]
+    [(cons (? keyword?) more) (formal-names more)]
+    [(cons (? symbol? one) more) (cons one (formal-names more))]
+    [(cons (list (? symbol? one) _) more) (cons one (formal-names more))]
+    [(cons _ more) (formal-names more)]
+    [_ '()]))
+
+(define (head-names head)
+  (match head
+    [(cons (? symbol? name) formals) (cons name (formal-names formals))]
+    [(cons (? pair? inner) formals) (append (head-names inner) (formal-names formals))]
+    [_ '()]))
+
+(define (definition-root head)
+  (match head
+    [(cons (? symbol? name) _) name]
+    [(cons (? pair? inner) _) (definition-root inner)]
+    [_ #f]))
+
+(define (target-names target)
+  (match target
+    [(? symbol? name) (list name)]
+    [(? pair?) (head-names target)]
+    [_ '()]))
+
+(define (binds-of datum)
+  (match datum
+    [(list* (or 'define 'define-values) target rest) (binds (target-names target) (list rest))]
+    [(list* (? lambda-head?) formals rest) (binds (formal-names formals) (list rest))]
+    [(list* 'case-lambda clauses)
+     (define procedures (filter pair? clauses))
+     (binds (append-map formal-names (map car procedures)) (map cdr procedures))]
+    [(list* 'let (? symbol? loop) clauses rest)
+     (binds (cons loop (clause-names clauses)) (list clauses rest))]
+    [(list* (? let-head?) clauses rest) (binds (clause-names clauses) (list clauses rest))]
+    [(list* (? fold-head?) (? list? accumulators) (? list? clauses) rest)
+     (binds (append (clause-names accumulators) (clause-names clauses))
+            (list accumulators clauses rest))]
+    [(list* (? for-head?) (? list? clauses) rest) (binds (clause-names clauses) (list clauses rest))]
+    [_ #f]))

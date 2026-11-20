@@ -4,13 +4,16 @@
          (only-in racket/list append-map split-at)
          (only-in racket/match define-match-expander match match*)
          (only-in "patterns.rkt"
-                  binding-clauses
                   clause-ids
+                  clause-names
+                  definition-root
                   direct-pattern-names
                   ellipsis?
                   failure-forms
                   fold-head?
                   for-head?
+                  lambda-head?
+                  let-head?
                   lhs-patterns
                   match-form
                   match-layout
@@ -24,8 +27,7 @@
 
 (define-match-expander procedure-head
   (lambda (_stx)
-    #'(or 'lambda
-          'λ
+    #'(or (? lambda-head?)
           'case-lambda
           (? procedure-form?)
           'const
@@ -46,12 +48,6 @@
 
 (define (lhs-names layout lhs)
   (append-map pattern-names (lhs-patterns layout lhs)))
-
-(define (definition-root head)
-  (match head
-    [(cons (? symbol? name) _) name]
-    [(cons (? pair? inner) _) (definition-root inner)]
-    [_ #f]))
 
 (define (procedure-name datum)
   (match datum
@@ -299,7 +295,7 @@
     (match rest
       [(list* accumulators (? list? items) forms)
        #:when (fold-head? head)
-       (define accumulated (bind env (append-map clause-ids (binding-clauses accumulators))))
+       (define accumulated (bind env (clause-names accumulators)))
        (define-values (normal inner) (for-clauses accumulated items))
        (list* (each accumulated accumulators) normal (body inner forms))]
       [(list* (? list? items) forms)
@@ -332,7 +328,7 @@
              (match head
                [(or 'quote 'quote-syntax 'syntax) rest]
                [(or 'quasiquote 'quasisyntax) (quasi-map rest (lambda (inner) (expr env inner)))]
-               [(or 'lambda 'λ)
+               [(? lambda-head?)
                 (match rest
                   [(cons items forms)
                    (define-values (normal inner) (formals env items))
@@ -346,7 +342,7 @@
                      (cons normal (body inner forms))]
                     [_ clause]))]
                [(app match-form (? values layout)) (match-form-normal env layout rest)]
-               [(or 'let 'let* 'letrec 'letrec* 'let-values 'let*-values 'letrec-values)
+               [(? let-head?)
                 (let-form env
                           rest
                           #:named? (eq? head 'let)

@@ -5,11 +5,10 @@
          (only-in racket/match match match*)
          (only-in "private/modules.rkt" read-module rkt?)
          (only-in "private/patterns.rkt"
-                  binding-clauses
-                  clause-ids
+                  binds
+                  binds-of
                   failure-forms
-                  fold-head?
-                  for-head?
+                  head-names
                   match-form
                   match-form-parts
                   match-layout
@@ -24,24 +23,6 @@
     [(or (? exact-nonnegative-integer?) (list (or 'quote 'quasiquote) (? exact-nonnegative-integer?)))
      #t]
     [_ #f]))
-
-(define (formal-names formals)
-  (match formals
-    [(? symbol? rest) (list rest)]
-    [(cons (? keyword?) more) (formal-names more)]
-    [(cons (? symbol? one) more) (cons one (formal-names more))]
-    [(cons (list (? symbol? one) _) more) (cons one (formal-names more))]
-    [(cons _ more) (formal-names more)]
-    [_ '()]))
-
-(define (head-names head)
-  (match head
-    [(cons (? symbol? name) formals) (cons name (formal-names formals))]
-    [(cons (? pair? inner) formals) (append (head-names inner) (formal-names formals))]
-    [_ '()]))
-
-(define (clause-names clauses)
-  (append-map clause-ids (binding-clauses clauses)))
 
 (define (match-form-names layout items)
   (match (match-form-parts layout items)
@@ -61,33 +42,9 @@
 (define (bound-names datum)
   (match datum
     [(cons (or 'quote 'quasiquote) _) '()]
-    [(list* (or 'define 'define-values) target rest)
-     (append (match target
-               [(? symbol? name) (list name)]
-               [(? pair?) (head-names target)]
-               [_ '()])
-             (bound-names rest))]
-    [(list* (or 'lambda 'λ) formals rest) (append (formal-names formals) (bound-names rest))]
-    [(list* 'case-lambda clauses)
-     (append-map (lambda (clause)
-                   (match clause
-                     [(cons formals rest) (append (formal-names formals) (bound-names rest))]
-                     [_ '()]))
-                 clauses)]
-    [(list* 'let (? symbol? loop) clauses rest)
-     (append (list loop) (clause-names clauses) (bound-names clauses) (bound-names rest))]
-    [(list* (or 'let 'let* 'letrec 'letrec* 'let-values 'let*-values 'letrec-values) clauses rest)
-     (append (clause-names clauses) (bound-names clauses) (bound-names rest))]
     [(cons (app match-form (? values layout)) items)
      (append (match-form-names layout items) (bound-names items))]
-    [(list* (? fold-head?) (? list? accumulators) (? list? clauses) rest)
-     (append (clause-names accumulators)
-             (clause-names clauses)
-             (bound-names accumulators)
-             (bound-names clauses)
-             (bound-names rest))]
-    [(list* (? for-head?) (? list? clauses) rest)
-     (append (clause-names clauses) (bound-names clauses) (bound-names rest))]
+    [(app binds-of (binds names forms)) (append names (append-map bound-names forms))]
     [(cons a d) (append (bound-names a) (bound-names d))]
     [_ '()]))
 
