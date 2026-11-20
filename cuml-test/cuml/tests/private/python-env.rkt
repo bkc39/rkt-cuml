@@ -20,6 +20,7 @@
          python-cuml-version
          run-cases
          run-twin
+         test-python
          test-twin
          twin-default-params
          twin-params
@@ -48,13 +49,18 @@
                                             [current-error-port (open-output-nowhere)])
                                (system* python "-c" (format "import ~a" module)))))))
 
+(define python-skip
+  (delay
+    (cond
+      [(not python) "no Python twin (python3 is not on PATH)"]
+      [(not (python-imports? "numpy")) "no Python twin (import numpy failed)"]
+      [else #f])))
+
 (define twin-skip ;; noqa
   (delay
     (or gpu-skip
-        (cond
-          [(not python) "no Python twin (python3 is not on PATH)"]
-          [(not (python-imports? "cuml")) "no Python twin (import cuml failed)"]
-          [else #f]))))
+        (force python-skip)
+        (and (not (python-imports? "cuml")) "no Python twin (import cuml failed)"))))
 
 (define (run-twin script input)
   (with-release ([dir
@@ -84,25 +90,32 @@
      (when expected
        (check-equal? version expected "the twin's Python cuML is not the native libcuml"))
      results]
-    [_
+    [(hash-table ('results _))
      (error 'twin-results
             "the twin wrote no version.cuml (got ~e); write its output with twin_common.run"
-            (and (hash? answer) (hash-ref answer 'version #f)))]))
+            (hash-ref answer 'version #f))]
+    [_ (error 'twin-results "the twin wrote no results; write its output with twin_common.run")]))
 
-(define (twin-results script requests #:expected-cuml [expected #f] #:fixtures [fixtures #f])
-  (checked-results (run-twin script
-                             (if fixtures
-                                 (hasheq 'cases requests 'fixtures fixtures)
-                                 (hasheq 'cases requests)))
-                   #:expected-cuml expected))
+(define (twin-results script
+                      requests
+                      #:expected-cuml [expected #f]
+                      #:fixtures [fixtures #f]
+                      #:run [run run-twin])
+  (define request
+    (for/hasheq ([(key value) (in-dict `((cases . ,requests) (fixtures . ,fixtures)))]
+                 #:when value)
+      (values key value)))
+  (checked-results (run script request) #:expected-cuml expected))
 
 (define (twin-default-params script unbound)
   (match-define (list theirs) (twin-results script (list (hasheq 'op "params"))))
-  (printf "twin params: ~s\n" theirs)
   (twin-params theirs unbound))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped (force twin-skip) name body ...))
+
+(define-syntax-parse-rule (test-python name:expr body:expr ...+)
+  (test-unless-skipped (force python-skip) name body ...))
 
 (define unbound-twin-params '(verbose output-type))
 
