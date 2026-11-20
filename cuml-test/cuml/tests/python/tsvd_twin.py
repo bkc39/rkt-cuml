@@ -3,28 +3,11 @@ cuML-Python's TruncatedSVD fits the rows the Racket side used in their own
 dtype, sklearn's arpack TruncatedSVD fits them too, and numpy's SVD of their
 float64 copy is the exact reference."""
 
-import json
-import sys
-
 import numpy as np
-import sklearn
 from cuml.decomposition import TruncatedSVD as CuTSVD
 from sklearn.decomposition import TruncatedSVD as SkTSVD
 from sklearn.utils.extmath import svd_flip
-
-import cuml
-
-BITS = {np.dtype(np.float32): np.uint32, np.dtype(np.float64): np.uint64}
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
-
-
-def put(out, key, a):
-    a = np.ascontiguousarray(host(a))
-    out[key] = a.astype(np.float64).ravel().tolist()
-    out[key + "_bits"] = a.view(BITS[a.dtype]).ravel().tolist()
+from twin_common import params_of, put, run
 
 
 def rows(fixtures, case):
@@ -33,10 +16,10 @@ def rows(fixtures, case):
 
 
 def fitted(out, model):
-    put(out, "components", model.components_)
-    put(out, "singular_values", model.singular_values_)
-    put(out, "explained_variance", model.explained_variance_)
-    put(out, "explained_variance_ratio", model.explained_variance_ratio_)
+    put(out, "components", model.components_, float64=True)
+    put(out, "singular_values", model.singular_values_, float64=True)
+    put(out, "explained_variance", model.explained_variance_, float64=True)
+    put(out, "explained_variance_ratio", model.explained_variance_ratio_, float64=True)
     return out
 
 
@@ -55,8 +38,8 @@ def transform(fixtures, case):
     model = cuml_model(case).fit(X)
     out = fitted({}, model)
     T = model.transform(X)
-    put(out, "transform", T)
-    put(out, "inverse", model.inverse_transform(np.asfortranarray(T)))
+    put(out, "transform", T, float64=True)
+    put(out, "inverse", model.inverse_transform(np.asfortranarray(T)), float64=True)
     return out
 
 
@@ -73,30 +56,13 @@ def exact(fixtures, case):
     return {"singular_values": s.tolist(), "components": Vt.ravel().tolist()}
 
 
-def params(fixtures, case):
-    return CuTSVD().get_params()
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        given = json.load(f)
-    ops = {
-        "transform": transform,
-        "sklearn": sklearn_fit,
-        "exact": exact,
-        "params": params,
-    }
-    fixtures = given.get("fixtures", {})
-    results = [ops[case["op"]](fixtures, case) for case in given["cases"]]
-    with open(sys.argv[2], "w") as f:
-        json.dump(
-            {
-                "results": results,
-                "version": {"sklearn": sklearn.__version__, "cuml": cuml.__version__},
-            },
-            f,
-        )
-
-
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "transform": transform,
+            "sklearn": sklearn_fit,
+            "exact": exact,
+            "params": params_of(CuTSVD),
+        },
+        fixtures=True,
+    )

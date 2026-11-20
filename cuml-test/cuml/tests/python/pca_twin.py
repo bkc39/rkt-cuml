@@ -2,19 +2,10 @@
 PCA (svd_solver='full') fits float64 copies of the rows the Racket side used,
 and cuML-Python's PCA fits them in their own dtype."""
 
-import json
-import sys
-
 import numpy as np
-import sklearn
 from cuml.decomposition import PCA as CuPCA
 from sklearn.decomposition import PCA as SkPCA
-
-import cuml
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
+from twin_common import host, params_of, run
 
 
 def flat(a):
@@ -80,25 +71,8 @@ def cuml_fit(fixtures, case):
     return out
 
 
-def params(fixtures, case):
-    return CuPCA().get_params()
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        given = json.load(f)
-    ops = {"sklearn": sklearn_fit, "cuml": cuml_fit, "params": params}
-    fixtures = given.get("fixtures", {})
-    results = [ops[case["op"]](fixtures, case) for case in given["cases"]]
-    with open(sys.argv[2], "w") as f:
-        json.dump(
-            {
-                "results": results,
-                "version": {"sklearn": sklearn.__version__, "cuml": cuml.__version__},
-            },
-            f,
-        )
-
-
 if __name__ == "__main__":
-    main()
+    run(
+        {"sklearn": sklearn_fit, "cuml": cuml_fit, "params": params_of(CuPCA)},
+        fixtures=True,
+    )
