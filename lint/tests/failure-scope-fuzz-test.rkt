@@ -110,9 +110,9 @@
 
 (define (key-node depth)
   (define key (pick '('x 'y 7 "s")))
-  (cond
-    [(chance 0.5) (node key (lambda () key))]
-    [else (generate (sub1 depth))]))
+  (if (chance 0.5)
+      (node key (lambda () key))
+      (generate (sub1 depth))))
 
 (define (hash-table-node depth)
   (define entries
