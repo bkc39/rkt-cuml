@@ -210,8 +210,7 @@
     [_ #f]))
 
 (define (literal? datum)
-  (for/or ([kind? (in-list (list boolean? bytes? char? keyword? number? regexp? string?))])
-    (kind? datum)))
+  (ormap (lambda (kind?) (kind? datum)) (list boolean? bytes? char? keyword? number? regexp? string?)))
 
 (define (literal-key? key)
   (match key
