@@ -5,6 +5,7 @@
                   logistic-regression-fit
                   logistic-regression-result-coef
                   logistic-regression-result-intercept)
+         (only-in racket/function curry)
          (only-in racket/list first make-list remove-duplicates rest)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
@@ -180,15 +181,22 @@
         (check-true (<= (abs (- (inexact->exact zc) exact)) (* (add1 (length x)) u size)))))))
 
 (define (class-counts c times)
-  (map (lambda (y) (hash-ref times y)) (lr-case-y c)))
+  (map (curry hash-ref times) (lr-case-y c)))
+
+(define (unbalanced-count y i)
+  (cond
+    [(= y 0) 1]
+    [(and (= y 1) (even? i)) 1]
+    [(zero? (modulo i 4)) 1]
+    [else 0]))
+
+(define unbalanced-source (blob-case "three unbalanced classes" 160 3 3 13))
 
 (define unbalanced-three
-  (let ([c (blob-case "three unbalanced classes" 160 3 3 13)])
-    (define keep
-      (for/list ([y (in-list (lr-case-y c))]
-                 [i (in-naturals)])
-        (if (or (= y 0) (and (= y 1) (zero? (modulo i 2))) (zero? (modulo i 4))) 1 0)))
-    (repeated-rows c keep)))
+  (repeated-rows unbalanced-source
+                 (for/list ([y (in-list (lr-case-y unbalanced-source))]
+                            [i (in-naturals)])
+                   (unbalanced-count y i))))
 
 (define row-weighted-three (blob-case "three classes, integer row weights" 90 3 3 14 #:weighted? #t))
 
