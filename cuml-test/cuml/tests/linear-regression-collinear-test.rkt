@@ -1,29 +1,25 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model
-                  linear-regression-fit
-                  linear-regression-result-coef
-                  linear-regression-result-intercept)
-         (only-in racket/match match match-define)
+(require (only-in racket/match match match-define)
          (only-in rackunit check-true test-case)
-         (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" unit-roundoff [on-vector vector])
+         (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/exact-algebra.rkt" dot)
          (only-in "private/linear-data.rkt"
                   gap
                   lcase
                   lcase-name
                   lcase-X
                   lcase-y
+                  lstsq
                   max-abs
                   oracle-lstsq
+                  outcome
+                  prediction-gap
                   solution-coef
-                  solution-intercept
                   solution-kappa
                   summed-case
-                  [on-matrix matrix])
+                  wobble)
          (only-in "private/linear-refusal-rows.rkt" collinear-refusal not-least-squares))
 
 (define sizes '(60 1000))
@@ -37,25 +33,14 @@
 (define wide-bound (expt 2 -20))
 
 (define (fit-with algorithm c #:fit-intercept [fi #t])
-  (linear-regression-fit (matrix (lcase-X c) 'float32)
-                         (vector (lcase-y c) 'float32)
-                         #:algorithm algorithm
-                         #:fit-intercept fi))
+  (lstsq (lcase-X c) (lcase-y c) 'float32 algorithm #:fit-intercept fi))
 
-(define (coef-of fit)
-  (map inexact->exact (device-vector->list (linear-regression-result-coef fit))))
+(define (case-gap c fit)
+  (prediction-gap (lcase-X c) (lcase-y c) fit))
 
-(define (relative-gap coef oracle)
+(define (relative-gap fit oracle)
+  (match-define (list coef _) fit)
   (/ (gap coef (solution-coef oracle)) (max-abs (solution-coef oracle))))
-
-(define (prediction-gap c fit)
-  (define o (oracle-lstsq (lcase-X c) (lcase-y c) #f #t))
-  (define (predict b coef)
-    (for/list ([row (in-list (lcase-X c))])
-      (+ b (dot row coef))))
-  (/ (gap (predict (inexact->exact (linear-regression-result-intercept fit)) (coef-of fit))
-          (predict (solution-intercept o) (solution-coef o)))
-     (max-abs (lcase-y c))))
 
 (define (shifted-case n)
   (define c (summed-case n 0))
@@ -83,7 +68,7 @@
            (list a b (+ a b) c (+ c (* eps e))))
          (for/list ([v (in-list (scrambled n (+ seed 80)))]
                     [i (in-naturals)])
-           (+ v (/ (modulo (* 31 i) 17) 16)))
+           (+ v (wobble i)))
          #f))
 
 (test-gpu "float32 'qr and 'svd-qr refuse exactly collinear X"
@@ -109,16 +94,15 @@
          [seed (in-range draws)])
     (define c (summed-case n seed))
     (test-case (format "~a ~a" algorithm (lcase-name c))
-      (match (with-handlers ([exn:fail? exn-message])
-               (fit-with algorithm c))
+      (match (outcome (lambda () (fit-with algorithm c)))
         [(? string? message) (check-true (regexp-match? not-least-squares message) message)]
-        [fit (check-true (< (prediction-gap c fit) prediction-bound))]))))
+        [fit (check-true (< (case-gap c fit) prediction-bound))]))))
 
 (test-gpu "float32 'qr and 'svd-qr fit wide X by the Jacobi SVD without the Gram check"
   (define c (lcase "4 by 5" '((1 0 2 1 3) (0 3 1 4 1) (4 1 0 2 2) (2 2 5 0 1)) '(1 2 3 4) #f))
   (for ([algorithm (in-list '(qr svd-qr))])
     (test-case (format "~a ~a" algorithm (lcase-name c))
-      (check-true (< (prediction-gap c (fit-with algorithm c)) wide-bound)))))
+      (check-true (< (case-gap c (fit-with algorithm c)) wide-bound)))))
 
 (test-gpu "columns collinear only after centring are refused with an intercept and fit without"
   (for* ([algorithm (in-list '(qr svd-qr))]
@@ -127,17 +111,18 @@
     (test-case (format "~a ~a" algorithm (lcase-name c))
       (check-cuml-error 'logic (collinear-refusal algorithm) (lambda () (fit-with algorithm c)))
       (define oracle (oracle-lstsq (lcase-X c) (lcase-y c) #f #f))
-      (check-true (<= (relative-gap (coef-of (fit-with algorithm c #:fit-intercept #f)) oracle)
+      (check-true (<= (relative-gap (fit-with algorithm c #:fit-intercept #f) oracle)
                       (* qr-share (unit-roundoff 'float32) (solution-kappa oracle)))))))
 
 (define share-rows
-  `((auto 1/4 ,normal-equations-share 2) (auto 1/16 ,normal-equations-share 2)
-                                         (eig 1/4 ,normal-equations-share 2)
-                                         (eig 1/16 ,normal-equations-share 2)
-                                         (svd 1/128 ,qr-share 1)
-                                         (svd-jacobi 1/128 ,qr-share 1)
-                                         (qr 1/128 ,qr-share 1)
-                                         (svd-qr 1/128 ,qr-share 1)))
+  (list `(auto 1/4 ,normal-equations-share 2)
+        `(auto 1/16 ,normal-equations-share 2)
+        `(eig 1/4 ,normal-equations-share 2)
+        `(eig 1/16 ,normal-equations-share 2)
+        `(svd 1/128 ,qr-share 1)
+        `(svd-jacobi 1/128 ,qr-share 1)
+        `(qr 1/128 ,qr-share 1)
+        `(svd-qr 1/128 ,qr-share 1)))
 
 (test-gpu "every float32 algorithm fits nearly collinear X within its share of u kappa^p"
   (for* ([row (in-list share-rows)]
@@ -147,5 +132,5 @@
     (define c (summed-case n seed eps))
     (define oracle (oracle-lstsq (lcase-X c) (lcase-y c) #f #t))
     (test-case (format "~a ~a" algorithm (lcase-name c))
-      (check-true (<= (relative-gap (coef-of (fit-with algorithm c)) oracle)
+      (check-true (<= (relative-gap (fit-with algorithm c) oracle)
                       (* share (unit-roundoff 'float32) (expt (solution-kappa oracle) power)))))))

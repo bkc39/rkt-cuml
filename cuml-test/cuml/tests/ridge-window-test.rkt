@@ -7,7 +7,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" columns-of on-vector unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/exact-algebra.rkt" equilibrated-condition)
+         (only-in "private/exact-algebra.rkt" equilibrated-condition map-diagonal)
          (only-in "private/linear-data.rkt"
                   gap
                   lcase
@@ -38,15 +38,16 @@
   (lcase (format "x1 2^~a, wide 2^~a, eps ~a" narrow wide eps)
          (for/list ([row (in-list (lcase-X base))]
                     [i (in-naturals)]
-                    [z (in-list (lcase-X noise))])
+                    [noise-row (in-list (lcase-X noise))])
            (match-define (list x1 x2 _) row)
+           (match-define (list z) noise-row)
            (match-define (list a b) (map (lambda (draw) (window-draw i draw)) window-draws))
            (in-dtype dt
                      (list (* x1 (expt 2 narrow))
                            x2
                            (* a (expt 2 wide))
                            (* b (expt 2 wide))
-                           (* (+ a b (* eps (car z))) (expt 2 wide)))))
+                           (* (+ a b (* eps z)) (expt 2 wide)))))
          (in-dtype dt (lcase-y base))
          #f))
 
@@ -78,13 +79,7 @@
 
 (define (regularised-condition c alpha)
   (define-values (G _b _mx _my) (weighted-gram (lcase-X c) (lcase-y c) #f #f))
-  (equilibrated-condition (for/list ([row (in-list G)]
-                                     [i (in-naturals)])
-                            (for/list ([g (in-list row)]
-                                       [j (in-naturals)])
-                              (if (= i j)
-                                  (+ g (inexact->exact alpha))
-                                  g)))))
+  (equilibrated-condition (map-diagonal (lambda (g) (+ g (inexact->exact alpha))) G)))
 
 (define float64-refused-share (cons (expt 2 -18) 0.35))
 

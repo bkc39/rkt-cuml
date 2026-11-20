@@ -3,9 +3,9 @@
 (require (only-in cuml/linear-model linear-regression-fit)
          (only-in rackunit test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" [on-vector vector])
+         (only-in "private/common-data.rkt" columns-of [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/linear-data.rkt" [on-matrix matrix])
+         (only-in "private/linear-data.rkt" integer-draws wobble [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt" collinear-refusal))
 
 (define rows 5000)
@@ -16,13 +16,7 @@
 (define spare-columns 120)
 
 (define (integers salt)
-  (let loop ([s (+ 1 (* 7919 salt))]
-             [i 0]
-             [acc '()])
-    (define next (modulo (+ (* s 1103515245) 12345) 2147483648))
-    (if (= i rows)
-        acc
-        (loop next (add1 i) (cons (- (modulo (quotient next 65536) 23) 11) acc)))))
+  (reverse (integer-draws salt rows)))
 
 (define (near-pair j seed)
   (define x (integers (+ (* 100 j) seed 3)))
@@ -42,11 +36,11 @@
 (define (targets seed)
   (for/list ([v (in-list (integers (+ seed 777)))]
              [i (in-naturals)])
-    (+ v (/ (modulo (* 31 i) 17) 16))))
+    (+ v (wobble i))))
 
 (define (check-refused pairs spare)
   (for ([seed (in-range seeds)])
-    (define X (matrix (apply map list (near-null-columns pairs spare seed)) 'float32))
+    (define X (matrix (columns-of (near-null-columns pairs spare seed)) 'float32))
     (define y (vector (targets seed) 'float32))
     (for ([algorithm (in-list '(qr svd-qr))])
       (test-case (format "~a, ~a near pairs, ~a spare columns, seed ~a" algorithm pairs spare seed)

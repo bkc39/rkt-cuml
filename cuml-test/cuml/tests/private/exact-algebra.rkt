@@ -16,6 +16,7 @@
          float32-of
          inexact-rows
          integer-scaled
+         map-diagonal
          mat*vec
          min-norm-solve
          norm2
@@ -238,14 +239,17 @@
       [(cons (cons pivot pivot-tail) rest)
        (and (positive? pivot) (loop (eliminated rest pivot pivot-tail previous) pivot))])))
 
-(define (shifted G s)
-  (for/list ([row (in-list G)]
+(define (map-diagonal f M)
+  (for/list ([row (in-list M)]
              [i (in-naturals)])
-    (for/list ([g (in-list row)]
+    (for/list ([m (in-list row)]
                [j (in-naturals)])
       (if (= i j)
-          (- g s)
-          g))))
+          (f m)
+          m))))
+
+(define (shifted G s)
+  (map-diagonal (lambda (g) (- g s)) G))
 
 (define (negated G)
   (for/list ([row (in-list G)])
@@ -337,13 +341,7 @@
 (define equilibrated-nudge (expt 2 -400))
 
 (define (equilibrated-below S t)
-  (let loop ([A (for/list ([row (in-list S)]
-                           [i (in-naturals)])
-                  (for/list ([s (in-list row)]
-                             [j (in-naturals)])
-                    (if (= i j)
-                        (* (- 1 t) s)
-                        s)))]
+  (let loop ([A (map-diagonal (lambda (s) (* (- 1 t) s)) S)]
              [negative 0])
     (match A
       ['() negative]

@@ -1,27 +1,26 @@
 #lang racket/base
 
-(require (only-in cuml/linear-model
-                  linear-regression-fit
-                  linear-regression-result-coef
-                  linear-regression-result-intercept
-                  ridge-fit
-                  ridge-result-coef
-                  ridge-result-intercept)
-         (only-in racket/match match match-define)
+(require (only-in cuml/linear-model ridge-fit)
+         (only-in racket/match match match-define match-lambda)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/common-data.rkt" [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/exact-algebra.rkt" dot)
          (only-in "private/linear-data.rkt"
+                  exact-fit
                   gap
+                  lstsq
                   max-abs
                   oracle-lstsq
+                  outcome
+                  prediction-gap
                   solution-coef
                   solution-intercept
+                  wobble
                   [on-matrix matrix])
-         (only-in "private/linear-refusal-rows.rkt" collinear-refusal not-least-squares))
+         (only-in "private/linear-refusal-rows.rkt" collinear-refusal not-least-squares)
+         (only-in "private/ridge-data.rkt" ridge-result-fit))
 
 (define shapes '((500 3) (500 5) (500 12) (5003 3) (5003 5) (5003 12)))
 (define remedy-bound (expt 2 -18))
@@ -39,33 +38,12 @@
                     (if (= j (level i)) 1 0))
                   (list (spread i))))
         (for/list ([i (in-range n)])
-          (+ (* 3 (level i)) (* 1/2 (spread i)) (/ (- (modulo (* 31 i) 17) 8) 64)))))
+          (+ (* 3 (level i)) (* 1/2 (spread i)) (/ (- (wobble i) 1/2) 4)))))
 
-(define (fitted fit coef-of intercept-of)
-  (cons (inexact->exact (intercept-of fit)) (map inexact->exact (device-vector->list (coef-of fit)))))
-
-(define (lstsq rows y dt algorithm #:fit-intercept [fi #t])
-  (fitted
-   (linear-regression-fit (matrix rows dt) (vector y dt) #:algorithm algorithm #:fit-intercept fi)
-   linear-regression-result-coef
-   linear-regression-result-intercept))
-
-(define (prediction-gap rows y b+c #:fit-rows [fit-rows rows])
+(define (min-norm-gap rows y fit)
+  (match-define (list coef b) fit)
   (define o (oracle-lstsq rows y #f #t))
-  (define (predict on b c)
-    (for/list ([row (in-list on)])
-      (+ b (dot row c))))
-  (/ (gap (predict fit-rows (car b+c) (cdr b+c))
-          (predict rows (solution-intercept o) (solution-coef o)))
-     (max-abs y)))
-
-(define (min-norm-gap rows y b+c)
-  (define o (oracle-lstsq rows y #f #t))
-  (/ (gap b+c (cons (solution-intercept o) (solution-coef o))) (max-abs (solution-coef o))))
-
-(define (outcome thunk)
-  (with-handlers ([exn:fail? exn-message])
-    (thunk)))
+  (/ (gap (cons b coef) (cons (solution-intercept o) (solution-coef o))) (max-abs (solution-coef o))))
 
 (test-gpu "float32 'qr and 'svd-qr refuse one-hot columns with an intercept"
   (for* ([shape (in-list shapes)]
@@ -81,12 +59,15 @@
     (match-define (list rows y) (apply one-hot-case shape))
     (for ([algorithm (in-list '(qr svd-qr))])
       (test-case (format "~a ~a, a level dropped" algorithm shape)
-        (define dropped (map cdr rows))
+        (define dropped
+          (map (match-lambda
+                 [(cons _ kept) kept])
+               rows))
         (check-true (< (prediction-gap rows y (lstsq dropped y 'float32 algorithm) #:fit-rows dropped)
                        remedy-bound)))
       (test-case (format "~a ~a, no intercept" algorithm shape)
-        (define b+c (lstsq rows y 'float32 algorithm #:fit-intercept #f))
-        (check-true (< (prediction-gap rows y b+c) remedy-bound))))
+        (define fit (lstsq rows y 'float32 algorithm #:fit-intercept #f))
+        (check-true (< (prediction-gap rows y fit) remedy-bound))))
     (test-case (format "float64 auto ~a" shape)
       (check-true (< (min-norm-gap rows y (lstsq rows y 'float64 'auto)) float64-min-norm-bound)))))
 
@@ -97,16 +78,16 @@
     (test-case (format "~a ~a" algorithm shape)
       (match (outcome (lambda () (lstsq rows y 'float32 algorithm)))
         [(? string? message) (check-true (regexp-match? not-least-squares message) message)]
-        [b+c (check-true (< (prediction-gap rows y b+c) eig-prediction-bound))]))))
+        [fit (check-true (< (prediction-gap rows y fit) eig-prediction-bound))]))))
 
 (test-gpu "float32 'svd and 'svd-jacobi fit one-hot columns with an intercept off the minimum norm"
   (for* ([shape (in-list shapes)]
          [algorithm (in-list '(svd svd-jacobi))])
     (match-define (list rows y) (apply one-hot-case shape))
-    (define b+c (lstsq rows y 'float32 algorithm))
+    (define fit (lstsq rows y 'float32 algorithm))
     (test-case (format "~a ~a" algorithm shape)
-      (check-true (< (prediction-gap rows y b+c) svd-prediction-bound))
-      (check-true (> (min-norm-gap rows y b+c) 1)))))
+      (check-true (< (prediction-gap rows y fit) svd-prediction-bound))
+      (check-true (> (min-norm-gap rows y fit) 1)))))
 
 (test-gpu "float32 ridge at alpha 0 and 1e-12 fits one-hot columns as least squares does"
   (for* ([shape (in-list shapes)]
@@ -117,9 +98,9 @@
       (check-equal?
        (outcome
         (lambda ()
-          (fitted (ridge-fit (matrix rows 'float32) (vector y 'float32) #:alpha alpha #:solver solver)
-                  ridge-result-coef
-                  ridge-result-intercept)))
+          (~> (ridge-fit (matrix rows 'float32) (vector y 'float32) #:alpha alpha #:solver solver)
+              ridge-result-fit
+              exact-fit)))
        (match (outcome (lambda () (lstsq rows y 'float32 solver)))
          [(? string? message) (regexp-replace #rx"^linear-regression-fit" message "ridge-fit")]
-         [b+c b+c])))))
+         [fit fit])))))

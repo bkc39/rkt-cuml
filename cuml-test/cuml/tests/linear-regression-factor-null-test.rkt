@@ -1,25 +1,31 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model linear-regression-fit)
+         (only-in racket/fixnum fxpopcount)
          (only-in racket/flonum flvector-ref flvector-set! make-flvector)
+         (only-in racket/list split-at)
+         (only-in racket/match match-define)
          (only-in rackunit test-case)
-         (only-in raft device-matrix flvector->device-vector)
+         (only-in raft device-matrix)
          (only-in raft/private/array write-array!)
          (only-in raft/private/pack pack-vector)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
+         (only-in "private/linear-data.rkt" integer-draws wobble [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt" collinear-refusal))
 
 (define structured-nulls
-  '((dummies-beside-ones 23379 #f) (dummies-beside-ones 57115 #f)
-                                   (signs-summing-to-zero 4596 #f)
-                                   (signs-summing-to-zero 4596 #t)
-                                   (signs-summing-to-zero 4818 #f)
-                                   (signs-summing-to-zero 4818 #t)
-                                   (hadamard-pair 0 #f)
-                                   (hadamard-pair 0 #t)
-                                   (hadamard-pair 10 #f)
-                                   (hadamard-pair 10 #t)))
+  (list '(dummies-beside-ones 23379 #f)
+        '(dummies-beside-ones 57115 #f)
+        '(signs-summing-to-zero 4596 #f)
+        '(signs-summing-to-zero 4596 #t)
+        '(signs-summing-to-zero 4818 #f)
+        '(signs-summing-to-zero 4818 #t)
+        '(hadamard-pair 0 #f)
+        '(hadamard-pair 0 #t)
+        '(hadamard-pair 10 #f)
+        '(hadamard-pair 10 #t)))
 
 (define sign-patterns
   #(#(1 1 -1 -1) #(1 -1 1 -1) #(1 -1 -1 1) #(-1 1 1 -1) #(-1 1 -1 1) #(-1 -1 1 1)))
@@ -28,10 +34,7 @@
 (define hadamard-loading 65536.0)
 
 (define (hadamard i j)
-  (if (even? (popcount (bitwise-and i j))) 1.0 -1.0))
-
-(define (popcount v)
-  (for/sum ([b (in-range (integer-length v))]) (if (bitwise-bit-set? v b) 1 0)))
+  (if (even? (fxpopcount (bitwise-and i j))) 1.0 -1.0))
 
 (define (structured-entry kind size i j)
   (case kind
@@ -49,43 +52,30 @@
 
 (define (structured-design kind size)
   (define-values (n d) (structured-shape kind size))
-  (define xs (make-flvector (* n d)))
-  (for* ([i (in-range n)]
-         [j (in-range d)])
-    (flvector-set! xs (+ (* i d) j) (structured-entry kind size i j)))
-  (define X (device-matrix n d #:dtype 'float32))
-  (void (write-array! 'structured-design X (pack-vector 'structured-design 'float32 (* n d) xs)))
-  (define y (make-flvector n))
-  (for ([i (in-range n)])
-    (flvector-set! y i (exact->inexact (/ (modulo (* 31 i) 17) 16))))
-  (values X (flvector->device-vector y #:dtype 'float32)))
+  (values (matrix (for/list ([i (in-range n)])
+                    (for/list ([j (in-range d)])
+                      (structured-entry kind size i j)))
+                  'float32)
+          (vector (for/list ([i (in-range n)])
+                    (wobble i))
+                  'float32)))
 
 (define rows 8000)
 (define columns 2000)
 (define loading 10.0)
 (define seeds 4)
 
-(define (draws salt count)
-  (define v (make-flvector count))
-  (let loop ([s (+ 1 (* 7919 salt))]
-             [i 0])
-    (when (< i count)
-      (define next (modulo (+ (* s 1103515245) 12345) 2147483648))
-      (flvector-set! v i (exact->inexact (- (modulo (quotient next 65536) 23) 11)))
-      (loop next (add1 i))))
-  v)
-
 (define (factor-columns seed)
-  (define noise (draws seed (* rows (add1 columns))))
+  (define-values (factors noise) (split-at (integer-draws seed (* rows (add1 columns))) rows))
+  (define loadings
+    (for/vector #:length rows
+                ([f (in-list factors)])
+      (* loading (exact->inexact f))))
   (define xs (make-flvector (* rows columns)))
-  (for* ([i (in-range rows)]
-         [j (in-range columns)])
-    (flvector-set! xs
-                   (+ (* i columns) j)
-                   (+ (* loading (flvector-ref noise i))
-                      (flvector-ref noise (+ rows (* i columns) j)))))
-  (for ([i (in-range rows)])
-    (define at (* i columns))
+  (for ([e (in-list noise)]
+        [k (in-naturals)])
+    (flvector-set! xs k (+ (vector-ref loadings (quotient k columns)) e)))
+  (for ([at (in-range 0 (* rows columns) columns)])
     (flvector-set! xs
                    (+ at 2)
                    (- (+ (flvector-ref xs at) (flvector-ref xs (+ at 1)))
@@ -95,10 +85,10 @@
   X)
 
 (define (targets seed)
-  (define v (draws (+ seed 777) rows))
-  (for ([i (in-range rows)])
-    (flvector-set! v i (+ (flvector-ref v i) (/ (modulo (* 31 i) 17) 16.0))))
-  (flvector->device-vector v #:dtype 'float32))
+  (vector (for/list ([v (in-list (integer-draws (+ seed 777) rows))]
+                     [i (in-naturals)])
+            (+ v (wobble i)))
+          'float32))
 
 (test-gpu "float32 'qr and 'svd-qr refuse exact collinearity among columns sharing one strong factor"
   (for ([seed (in-range seeds)])
@@ -112,7 +102,7 @@
 
 (test-gpu "float32 'qr and 'svd-qr refuse structured null vectors the float32 Gram rounds away"
   (for ([row (in-list structured-nulls)])
-    (define-values (kind size intercept) (apply values row))
+    (match-define (list kind size intercept) row)
     (define-values (X y) (structured-design kind size))
     (for ([algorithm (in-list '(qr svd-qr))])
       (test-case (format "~a, ~a ~a, intercept ~a" algorithm kind size intercept)

@@ -18,6 +18,7 @@
                   dyadic
                   lcase-X
                   summed-case
+                  wobble
                   [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt"
                   collinear-refusal
@@ -169,7 +170,7 @@
 (define (noisy-targets rows)
   (for/list ([r (in-list rows)]
              [i (in-naturals)])
-    (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
+    (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (- (wobble i) 1/2))))
 
 (define (nearly-collinear-rows n seed)
   (lcase-X (summed-case n seed 1/1024)))
