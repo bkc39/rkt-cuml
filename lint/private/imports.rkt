@@ -26,9 +26,6 @@
 (define (absolute directory relative)
   (path->string (simplify-path (path->complete-path relative directory))))
 
-;; A relative module path's index is shared between probes, and so is its
-;; resolution: anchoring it keeps each file's "c.rkt" its own. A file's own
-;; submodules are named through the file, since the probe has none of them.
 (define (anchored file here spec)
   (define-values (directory _name _dir?) (split-path file))
   (define (module-path one)
