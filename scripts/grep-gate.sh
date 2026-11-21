@@ -10,11 +10,13 @@ hits() {
 }
 
 refuse() {
-  local found=$1 message=$2 refused=0 file line text
+  local found=$1 message=$2 refused=0 file line text pattern
   shift 2
   while IFS=: read -r file line text; do
     [ -n "$file" ] || continue
-    "$@" "$file" "$text" && continue
+    for pattern in "$@"; do
+      [[ "$file:$text" =~ $pattern ]] && continue 2
+    done
     refused=1
     echo "$file:$line: $message"
     if [ -n "${GITHUB_ACTIONS:-}" ]; then
