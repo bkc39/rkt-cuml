@@ -54,7 +54,7 @@
                       (hash-set options '#:l1-ratio r))
                   (list c dt)))
 
-(define (check-zeros c dt p run)
+(define (check-zeros dt p run)
   (match-define (struct* en-run ([coef coef] [intercept b])) run)
   (match-define (struct* en-problem ([my my])) p)
   (check-equal? coef (map (lambda (_) 0.0) coef))
@@ -72,10 +72,10 @@
       (define run (fit-at c dt r alpha))
       (define zeros? (andmap zero? (en-run-coef run)))
       (match expect
-        ['zeros (check-zeros c dt p run)]
+        ['zeros (check-zeros dt p run)]
         ['zeros-or-fit
          (when zeros?
-           (check-zeros c dt p run))]
+           (check-zeros dt p run))]
         ['fit (check-true (not zeros?) "a nonzero fit")])
       (check-kkt-laws p run alpha r default-tol (positive-rows-of c) (unit-roundoff dt)))))
 
