@@ -480,7 +480,8 @@
     (define failures '())
     (parameterize ([current-check-around
                     (lambda (check)
-                      (with-handlers ([exn:test:check? (lambda (e) (set! failures (cons e failures)))])
+                      (with-handlers ([exn:test:check? (lambda (e)
+                                                         (set! failures (cons e failures)))])
                         (check)))])
       (thunk))
     (for*/list ([e (in-list (reverse failures))]
