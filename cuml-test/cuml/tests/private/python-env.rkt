@@ -3,6 +3,7 @@
 (require (only-in json json-null read-json write-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
+         (only-in racket/list append*)
          (only-in racket/match == match match-define)
          (only-in racket/port open-output-nowhere)
          (only-in racket/promise delay force)
@@ -15,9 +16,13 @@
          syntax/parse/define
          (only-in threading ~>))
 
-(provide checked-results
+(provide bits->floats
+         checked-results
+         floats->bits
+         matrix->bits
          or-null
          python-cuml-version
+         python-sklearn-version
          run-twin
          test-python
          test-twin
@@ -26,6 +31,8 @@
          twin-results)
 
 (define python-cuml-version "26.08.00")
+
+(define python-sklearn-version "1.8.0")
 
 (define python (find-executable-path "python3"))
 
@@ -79,12 +86,23 @@
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))
 
-(define (checked-results answer #:expected-cuml [expected #f])
+(define (sklearn-of version)
+  (match version
+    [(hash-table ('sklearn sklearn)) sklearn]
+    [_ #f]))
+
+(define (checked-results answer
+                         #:expected-cuml [expected #f]
+                         #:expected-sklearn [expected-sklearn #f])
   (match answer
-    [(hash-table ('results results) ('version (hash-table ('cuml version))))
-     (check-equal? version python-cuml-version "the twin's Python cuML is not the pinned release")
+    [(hash-table ('results results) ('version (and version (hash-table ('cuml cuml)))))
+     (check-equal? cuml python-cuml-version "the twin's Python cuML is not the pinned release")
      (when expected
-       (check-equal? version expected "the twin's Python cuML is not the native libcuml"))
+       (check-equal? cuml expected "the twin's Python cuML is not the native libcuml"))
+     (when expected-sklearn
+       (check-equal? (sklearn-of version)
+                     expected-sklearn
+                     "the twin's scikit-learn is not the pinned release"))
      results]
     [(hash-table ('results _))
      (error 'twin-results
@@ -95,18 +113,27 @@
 (define (twin-results script
                       requests
                       #:expected-cuml [expected #f]
+                      #:expected-sklearn [expected-sklearn #f]
                       #:fixtures [fixtures #f]
                       #:run [run run-twin])
   (define request
     (for/hasheq ([(key value) (in-dict `((cases . ,requests) (fixtures . ,fixtures)))]
                  #:when value)
       (values key value)))
-  (checked-results (run script request) #:expected-cuml expected))
+  (checked-results (run script request) #:expected-cuml expected #:expected-sklearn expected-sklearn))
 
-(define (twin-default-params script #:unbound [unbound '()] #:expected-cuml [expected #f])
+(define (twin-default-params script
+                             #:unbound [unbound '()]
+                             #:expected-cuml [expected #f]
+                             #:expected-sklearn [expected-sklearn #f]
+                             #:run [run run-twin])
   (match-define (list theirs)
-    (twin-results script (list (hasheq 'op "params")) #:expected-cuml expected))
-  (twin-params theirs unbound))
+    (twin-results script
+                  (list (hasheq 'op "params"))
+                  #:expected-cuml expected
+                  #:expected-sklearn expected-sklearn
+                  #:run run))
+  (twin-params theirs #:unbound unbound))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped (force twin-skip) name body ...))
@@ -125,7 +152,7 @@
     [(? string?) (string->symbol (string-replace value "_" "-"))]
     [_ value]))
 
-(define (twin-params theirs unbound)
+(define (twin-params theirs #:unbound [unbound '()])
   (for*/hasheq ([(key value) (in-hash theirs)]
                 [name (in-value (twin-key key))]
                 #:unless (memq name (append unbound-twin-params unbound)))
@@ -133,3 +160,17 @@
 
 (define (or-null v)
   (or v (json-null)))
+
+(define (float-size dt)
+  (if (eq? dt 'float32) 4 8))
+
+(define (floats->bits dt xs)
+  (for/list ([x (in-list xs)])
+    (integer-bytes->integer (real->floating-point-bytes x (float-size dt)) #f)))
+
+(define (bits->floats dt bits)
+  (for/list ([b (in-list bits)])
+    (floating-point-bytes->real (integer->integer-bytes b (float-size dt) #f))))
+
+(define (matrix->bits dt rows)
+  (floats->bits dt (append* rows)))

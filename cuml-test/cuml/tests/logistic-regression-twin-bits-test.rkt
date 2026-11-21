@@ -10,7 +10,6 @@
          (only-in threading ~>)
          (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/linear-data.rkt" on-matrix)
-         (only-in "private/linear-twin-data.rkt" decoded)
          (only-in "private/logistic-data.rkt" fit-flat fit-parts flat-matrix lr-case-X lr-fit-n-iter)
          (only-in "private/logistic-twin-data.rkt" their-fit twin-trial)
          (only-in "private/logistic-twin-rows.rkt"
@@ -22,7 +21,7 @@
                   row-fit
                   row-name
                   rows)
-         (only-in "private/python-env.rkt" test-twin))
+         (only-in "private/python-env.rkt" bits->floats test-twin))
 
 (define (proba-scale t k)
   (if (= k 2)
@@ -47,14 +46,14 @@
      (define X (on-matrix (lr-case-X c) dt))
      (define k (classes-of c))
      (define proba
-       (decoded (string->symbol (hash-ref theirs 'proba_dtype)) (hash-ref theirs 'proba_bits)))
+       (bits->floats (string->symbol (hash-ref theirs 'proba_dtype)) (hash-ref theirs 'proba_bits)))
      (define bound (proba-bound dt k))
      (test-case (row-name r)
        (define fitted (row-fit r))
        (check-equal? (fit-flat (fit-parts fitted)) (fit-flat (their-fit theirs dt)) "fit")
        (check-equal? (lr-fit-n-iter (fit-parts fitted)) (hash-ref theirs 'n_iter) "n-iter")
        (check-equal? (flat-matrix (logistic-regression-decision-function fitted X))
-                     (decoded dt (hash-ref theirs 'decision_bits))
+                     (bits->floats dt (hash-ref theirs 'decision_bits))
                      "decision")
        (check-equal? (device-vector->list (logistic-regression-predict fitted X))
                      (hash-ref theirs 'predict)

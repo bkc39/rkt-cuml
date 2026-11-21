@@ -21,6 +21,7 @@ jobs:
           .#checks.x86_64-linux.no-syntax-rule
           .#checks.x86_64-linux.no-raw-malloc
           .#checks.x86_64-linux.no-noqa
+          .#checks.x86_64-linux.no-twin-copies
           .#checks.x86_64-linux.no-positional-access
           .#checks.x86_64-linux.gpu-suite-signals
           .#checks.x86_64-linux.gate-constants

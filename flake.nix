@@ -285,6 +285,7 @@
           racket scripts/check-layout.rkt
           raco test scripts/check-bindings.rkt
           racket scripts/check-bindings.rkt
+          raco test scripts/no-twin-copies-test.rkt scripts/no-noqa-test.rkt
           runHook postCheck
         '';
         installPhase = "touch $out";
@@ -717,6 +718,7 @@
         no-syntax-rule = grepGate "no-syntax-rule" "no-syntax-rule.sh";
         no-raw-malloc = grepGate "no-raw-malloc" "no-raw-malloc.sh";
         no-noqa = grepGate "no-noqa" "no-noqa.sh";
+        no-twin-copies = grepGate "no-twin-copies" "no-twin-copies.sh";
         no-positional-access = racketGate "no-positional-access" "no-positional-access.sh";
         gpu-suite-signals = grepGate "gpu-suite-signals" "gpu-suite-signals.sh";
         gate-constants = grepGate "gate-constants" "gate-constants.sh";

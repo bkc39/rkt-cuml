@@ -21,7 +21,8 @@
                   ridge-oracles
                   ridge-solution
                   scaled-case)
-         (only-in "linear-twin-data.rkt" case-request theirs twin-results)
+         (only-in "linear-twin-data.rkt" case-request theirs)
+         (only-in "python-env.rkt" twin-results)
          (only-in "ridge-data.rkt" ridge-case-fit solvers widest-spread))
 
 (provide check-raw-parity

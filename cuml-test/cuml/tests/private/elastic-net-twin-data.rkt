@@ -19,7 +19,8 @@
                   selections)
          (only-in "elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of s2-bound)
          (only-in "linear-data.rkt" check-law lcase-X lcase-name lcase-w lcase-y)
-         (only-in "linear-twin-data.rkt" case-request theirs twin-results))
+         (only-in "linear-twin-data.rkt" case-request theirs)
+         (only-in "python-env.rkt" twin-results))
 
 (provide check-raw-parity
          check-sklearn-parity)
