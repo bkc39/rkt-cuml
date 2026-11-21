@@ -16,9 +16,9 @@
          syntax/parse/define
          (only-in threading ~>))
 
-(provide bits-of
+(provide bits->floats
          checked-results
-         decoded
+         floats->bits
          matrix->bits
          or-null
          python-cuml-version
@@ -144,13 +144,13 @@
 (define (float-size dt)
   (if (eq? dt 'float32) 4 8))
 
-(define (bits-of dt xs)
+(define (floats->bits dt xs)
   (for/list ([x (in-list xs)])
     (integer-bytes->integer (real->floating-point-bytes x (float-size dt)) #f)))
 
-(define (decoded dt bits)
+(define (bits->floats dt bits)
   (for/list ([b (in-list bits)])
     (floating-point-bytes->real (integer->integer-bytes b (float-size dt) #f))))
 
 (define (matrix->bits dt rows)
-  (bits-of dt (append* rows)))
+  (floats->bits dt (append* rows)))

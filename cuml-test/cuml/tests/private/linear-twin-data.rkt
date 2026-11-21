@@ -24,7 +24,7 @@
                   rounded-case
                   scaled-columns
                   solution)
-         (only-in "python-env.rkt" bits-of decoded matrix->bits twin-results))
+         (only-in "python-env.rkt" bits->floats floats->bits matrix->bits twin-results))
 
 (provide case-request
          check-cuml-failures
@@ -42,9 +42,9 @@
   (for/fold ([request (hasheq 'op op
                               'dtype (symbol->string dt)
                               'X (matrix->bits dt (lcase-X c))
-                              'y (bits-of dt (lcase-y c))
+                              'y (floats->bits dt (lcase-y c))
                               'w (if (lcase-w c)
-                                     (bits-of dt (lcase-w c))
+                                     (floats->bits dt (lcase-w c))
                                      'null)
                               'fit_intercept fi)])
             ([(key value) (in-hash settings)])
@@ -63,8 +63,8 @@
   (twin-results twin requests #:expected-cuml libcuml-version))
 
 (define (theirs dt result)
-  (match-define (list intercept) (decoded dt (hash-ref result 'intercept_bits)))
-  (list (decoded dt (hash-ref result 'coef_bits)) intercept))
+  (match-define (list intercept) (bits->floats dt (hash-ref result 'intercept_bits)))
+  (list (bits->floats dt (hash-ref result 'coef_bits)) intercept))
 
 (define one-column (normal-case 200 1 7))
 

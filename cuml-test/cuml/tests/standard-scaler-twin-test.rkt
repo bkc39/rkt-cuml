@@ -18,8 +18,8 @@
          (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/estimator-data.rkt" listed)
          (only-in "private/python-env.rkt"
-                  bits-of
                   checked-results
+                  floats->bits
                   python-sklearn-version
                   run-twin
                   test-twin
@@ -146,8 +146,8 @@
       (check-equal? (hash-ref result 'dtype) (symbol->string y-dt))
       (cond
         [(eq? y-dt 'float32)
-         (check-equal? (bits-of y-dt t) (hash-ref result 'transform_bits) "transform")
-         (check-equal? (bits-of y-dt back) (hash-ref result 'inverse_bits) "inverse")]
+         (check-equal? (floats->bits y-dt t) (hash-ref result 'transform_bits) "transform")
+         (check-equal? (floats->bits y-dt back) (hash-ref result 'inverse_bits) "inverse")]
         [else
          (define d (dataset-width data))
          (define mean (or (listed (standard-scaler-result-mean fitted)) (make-list d 0.0)))

@@ -9,7 +9,7 @@
          (only-in "elastic-net-data.rkt" apply-keywords)
          (only-in "linear-data.rkt" on-matrix)
          (only-in "mbsgd-data.rkt" clf-parts reg-parts)
-         (only-in "python-env.rkt" bits-of decoded matrix->bits twin-results))
+         (only-in "python-env.rkt" bits->floats floats->bits matrix->bits twin-results))
 
 (provide clf-fit
          clf-result
@@ -76,7 +76,7 @@
                       'n (length X)
                       'X (matrix->bits dt X)
                       'y (if y
-                             (bits-of dt y)
+                             (floats->bits dt y)
                              'null)
                       'codes (or codes 'null)
                       'loss (python-value loss)
@@ -88,5 +88,5 @@
   (twin-results mbsgd-twin-script requests #:expected-cuml libcuml-version))
 
 (define (their-parts theirs dt)
-  (list (decoded dt (hash-ref theirs 'coef_bits))
-        (car (decoded dt (hash-ref theirs 'intercept_bits)))))
+  (list (bits->floats dt (hash-ref theirs 'coef_bits))
+        (car (bits->floats dt (hash-ref theirs 'intercept_bits)))))

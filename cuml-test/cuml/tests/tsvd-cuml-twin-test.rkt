@@ -5,7 +5,7 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
          (only-in "private/pca-data.rkt" fixture-name)
-         (only-in "private/python-env.rkt" bits-of test-twin twin-params)
+         (only-in "private/python-env.rkt" floats->bits test-twin twin-params)
          (only-in "private/tsvd-data.rkt" svd)
          (only-in "private/tsvd-twin-data.rkt" ours twin-case twin-cases twin-results))
 
@@ -29,7 +29,7 @@
                                         explained_variance_ratio
                                         transform
                                         inverse))])
-        (check-equal? (bits-of dt mine)
+        (check-equal? (floats->bits dt mine)
                       (hash-ref theirs (string->symbol (format "~a_bits" name)))
                       (symbol->string name))))))
 

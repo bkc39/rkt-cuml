@@ -31,7 +31,7 @@
                   tight-tol)
          (only-in "logistic-oracle.rkt" case-residual residual residual-bound residual-gradient)
          (only-in "logistic-twin-data.rkt" logistic-twin logistic-twin-results setting-twin)
-         (only-in "python-env.rkt" decoded))
+         (only-in "python-env.rkt" bits->floats))
 
 (provide (struct-out labelled)
          check-raw-optima
@@ -172,8 +172,8 @@
 
 (define (check-python-off-optimum python oracle dt)
   (define gap
-    (relative-gap (append (decoded dt (hash-ref python 'coef_bits))
-                          (decoded dt (hash-ref python 'intercept_bits)))
+    (relative-gap (append (bits->floats dt (hash-ref python 'coef_bits))
+                          (bits->floats dt (hash-ref python 'intercept_bits)))
                   (gauged-sklearn oracle)))
   (check-true (> gap (default-tol-cap dt))
               (format "Python cuML's point: coef gap ~a (cap ~a)" gap (default-tol-cap dt))))

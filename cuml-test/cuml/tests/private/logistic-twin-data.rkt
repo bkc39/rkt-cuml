@@ -11,7 +11,7 @@
                   setting-C
                   setting-l1-ratio
                   setting-penalty)
-         (only-in "python-env.rkt" bits-of decoded matrix->bits twin-results))
+         (only-in "python-env.rkt" bits->floats floats->bits matrix->bits twin-results))
 
 (provide (struct-out twin-trial)
          logistic-twin
@@ -37,7 +37,7 @@
           'X (matrix->bits dt (lr-case-X c))
           'y (lr-case-y c)
           'w (if (lr-case-w c)
-                 (bits-of dt (lr-case-w c))
+                 (floats->bits dt (lr-case-w c))
                  'null)
           'penalty (symbol->string penalty)
           'C C
@@ -67,6 +67,6 @@
   (twin-results logistic-twin-script requests #:expected-cuml libcuml-version))
 
 (define (their-fit theirs dt)
-  (lr-fit (list (decoded dt (hash-ref theirs 'coef_bits)))
-          (decoded dt (hash-ref theirs 'intercept_bits))
+  (lr-fit (list (bits->floats dt (hash-ref theirs 'coef_bits)))
+          (bits->floats dt (hash-ref theirs 'intercept_bits))
           (hash-ref theirs 'n_iter)))
