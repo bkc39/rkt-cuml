@@ -30,7 +30,7 @@
                             (add tree)
                             (run-gate tree)))
 
-(test-case "a clean tree passes, its host, json.dump and pins in their homes"
+(test-case "a clean tree passes, its host, json.dump, sys.argv[2] and pins in their homes"
   (match-define (list passed? output) (with-clean-tree void))
   (check-true passed? output)
   (check-regexp-match #rx"^no-twin-copies: " output))
@@ -59,6 +59,10 @@
      "dump_twin.py"
      "cuml-test/cuml/tests/python/dump_twin.py"
      #rx"python/dump_twin.py:7: json.dump\\( outside [^\n]*: write the twin's output with")
+    ("sys.argv[2] outside twin_common.py fails"
+     "argv_twin.py"
+     "cuml-test/cuml/tests/python/argv_twin.py"
+     #rx"python/argv_twin.py:6: sys.argv\\[2\\] outside [^\n]*: write the twin's output with")
     ("a quoted cuML pin outside python-env.rkt fails"
      "cuml-pin.rkt"
      "cuml-test/cuml/tests/cuml-pin-test.rkt"
