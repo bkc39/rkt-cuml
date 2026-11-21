@@ -7,8 +7,9 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in racket/promise delay force)
+         (only-in raft list*->device-matrix)
          (only-in "private/process-memory.rkt" test-rounds-and-refusals)
-         (only-in "private/scaler-data.rkt" normal-rows rows->matrix)
+         (only-in "private/scaler-data.rkt" normal-rows)
          (only-in "private/spectral-data.rkt"
                   edited-vectors
                   graph->vectors
@@ -33,13 +34,15 @@
   (fit-graph (force vectors) 4))
 
 (define (refusals _fitted)
-  (define nan-row (rows->matrix (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) 'float32))
+  (define nan-row
+    (list*->device-matrix (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) #:dtype 'float32))
   (define halves
-    (rows->matrix (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0))) 'float32))
+    (list*->device-matrix (append (make-list 100 '(1.0 2.0)) (make-list 100 '(3.0 5.0)))
+                          #:dtype 'float32))
   (define few
-    (rows->matrix (for/list ([i (in-range 5)])
-                    (list (exact->inexact i) 1.0))
-                  'float32))
+    (list*->device-matrix (for/list ([i (in-range 5)])
+                            (list (exact->inexact i) 1.0))
+                          #:dtype 'float32))
   (match-define (list-rest _ _ _ row₃ _) (graph-rows blocks))
   (define looped (edited-vectors blocks #:cols (set-entry 3 row₃)))
   (list (lambda () (spectral-embedding-fit nan-row))
@@ -49,7 +52,8 @@
         (lambda () (fit-graph looped))))
 
 (test-rounds-and-refusals "fit, fit-transform and fit-graph"
-                          (lambda () (rows->matrix (normal-rows 7 4096 16 'float32) 'float32))
+                          (lambda ()
+                            (list*->device-matrix (normal-rows 7 4096 16 'float32) #:dtype 'float32))
                           one-round
                           refusals
                           #:rounds 30

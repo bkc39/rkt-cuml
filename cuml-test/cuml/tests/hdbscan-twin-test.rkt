@@ -13,8 +13,7 @@
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
-         (only-in "private/dbscan-data.rkt" mat)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in "private/estimator-data.rkt" apply-options hash-remove*)
          (only-in "private/hdbscan-data.rkt"
                   alternate
@@ -35,7 +34,7 @@
                   fitted-sources
                   fitted-weights
                   prediction->lists)
-         (only-in "private/python-env.rkt" run-twin test-twin twin-params))
+         (only-in "private/python-env.rkt" test-twin twin-default-params twin-results))
 
 (define-runtime-path twin "python/hdbscan_twin.py")
 
@@ -104,8 +103,8 @@
         (cons 'weights fitted-weights)))
 
 (define (ours c)
-  (define X (mat (twin-case-rows c) 'float32))
-  (define points (mat (twin-case-points c) 'float32))
+  (define X (list*->device-matrix (twin-case-rows c) #:dtype 'float32))
+  (define points (list*->device-matrix (twin-case-points c) #:dtype 'float32))
   (define result (apply-options hdbscan-fit (twin-case-options c) X))
   (values (fit-lists result)
           (hasheq 'predicted (prediction->lists (hdbscan-approximate-predict result points))
@@ -113,12 +112,11 @@
                   'membership (device-matrix->list* (hdbscan-membership-vector result points)))))
 
 (test-twin "T1, T2: HDBSCAN's trees and predictions equal cuML's; its labels are sklearn's, but on the Racket-drawn circles"
-  (match-define (hash-table ('results results) ('version version))
-    (run-twin twin
-              (hasheq 'cases (append (map (lambda (c) (python-case "fit" c)) cuml-cases)
-                                     (map (lambda (c) (python-case "sklearn" c)) sklearn-cases)))))
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
+  (define results
+    (twin-results twin
+                  (append (map (lambda (c) (python-case "fit" c)) cuml-cases)
+                          (map (lambda (c) (python-case "sklearn" c)) sklearn-cases))
+                  #:expected-cuml libcuml-version))
   (define-values (cuml-results sklearn-results) (split-at results (length cuml-cases)))
   (define cuml-same
     (for/list ([c (in-list cuml-cases)]
@@ -145,7 +143,8 @@
       (define found
         (fitted-labels (fit-lists (apply-options hdbscan-fit
                                                  (twin-case-options c)
-                                                 (mat (twin-case-rows c) 'float32)))))
+                                                 (list*->device-matrix (twin-case-rows c)
+                                                                       #:dtype 'float32)))))
       (test-case (format "sklearn: ~a" (twin-case-name c))
         (check-equal? found (hash-ref theirs 'labels)))
       (equal? found (hash-ref theirs 'labels))))
@@ -156,9 +155,9 @@
           (count values sklearn-same)))
 
 (test-twin "cuml's HDBSCAN default parameters are hdbscan-params'"
-  (match-define (hash-table ('results (list theirs)))
-    (run-twin twin (hasheq 'cases (list (hasheq 'op "params")))))
-  (define mapped (twin-params theirs '(p gen-min-span-tree prediction-data build-kwds device-ids)))
-  (printf "twin params: ~s\n" theirs)
+  (define mapped
+    (twin-default-params twin
+                         #:expected-cuml libcuml-version
+                         #:unbound '(p gen-min-span-tree prediction-data build-kwds device-ids)))
   (check-equal? mapped defaults)
   (check-equal? (hash-remove (estimator-params (hdbscan)) 'resources) defaults))

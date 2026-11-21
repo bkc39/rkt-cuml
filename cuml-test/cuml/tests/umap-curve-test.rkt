@@ -1,11 +1,14 @@
 #lang racket/base
 
 (require (only-in cuml/manifold/private/curve curve-iterations curve-parameters)
+         (only-in cuml/manifold/private/native libcuml-version)
+         (only-in racket/dict in-dict)
          (only-in racket/flonum fl* flexpt)
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in "private/python-env.rkt" run-cases test-twin))
+         (only-in "private/common-data.rkt" relative)
+         (only-in "private/python-env.rkt" test-twin twin-results))
 
 (define-runtime-path twin "python/umap_twin.py")
 
@@ -15,9 +18,6 @@
               #:when (<= m s))
     (cons s m)))
 
-(define (relative ours theirs)
-  (/ (abs (- ours theirs)) (abs theirs)))
-
 (define curve-fit-bound (sqrt 1.49012e-8))
 (define tight-bound 1e-7)
 
@@ -26,13 +26,12 @@
 
 (test-twin "L4a, L4b: a and b are within the bounds of scipy's curve_fit and a precise solver"
   (define found
-    (run-cases twin
-               (for/list ([p (in-list pairs)])
-                 (match-define (cons s m) p)
-                 (hasheq 'op "ab" 'spread s 'min_dist m))))
-  (for ([p (in-list pairs)]
+    (twin-results twin
+                  (for/list ([(s m) (in-dict pairs)])
+                    (hasheq 'op "ab" 'spread s 'min_dist m))
+                  #:expected-cuml libcuml-version))
+  (for ([(s m) (in-dict pairs)]
         [theirs (in-list found)])
-    (match-define (cons s m) p)
     (define-values (a b) (curve-parameters m s))
     (test-case (format "spread ~a min-dist ~a" s m)
       (check-true (<= (relative a (hash-ref theirs 'a)) curve-fit-bound) "curve_fit a")
@@ -60,5 +59,8 @@
   (check-true (< (abs (- b 0.89506)) 1e-5)))
 
 (test-twin "scipy's departure at spread 1e-3, min-dist 1e-4 is pinned"
-  (match-define (list theirs) (run-cases twin (list (hasheq 'op "ab" 'spread 1e-3 'min_dist 1e-4))))
+  (match-define (list theirs)
+    (twin-results twin
+                  (list (hasheq 'op "ab" 'spread 1e-3 'min_dist 1e-4))
+                  #:expected-cuml libcuml-version))
   (check-true (< (abs (+ (hash-ref theirs 'b) 70.497)) 1e-3)))

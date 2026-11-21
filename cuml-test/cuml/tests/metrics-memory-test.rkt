@@ -14,14 +14,13 @@
          (only-in racket/list make-list range)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true)
-         (only-in raft list*->device-matrix)
+         (only-in raft list*->device-matrix list->device-vector)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/metrics-data.rkt"
                   label-pair
-                  labels-of
                   overlap
                   overlap-labels
                   projection
@@ -33,8 +32,7 @@
                   pool-sample
                   sample-bytes
                   sample-used
-                  test-process-memory)
-         (only-in "private/scores-data.rkt" vec))
+                  test-process-memory))
 
 (define rounds 300)
 (define sample-every 100)
@@ -48,16 +46,16 @@
   (define-values (X E) (projection 300 10 2))
   (define-values (y p w)
     (regression-pair 2000 #:offset 10.0 #:noise 0.5 #:seed 4 #:dtype 'float32 #:weighted? #t))
-  (inputs (labels-of truth 'int32)
-          (labels-of found 'int64)
+  (inputs (list->device-vector truth #:dtype 'int32)
+          (list->device-vector found #:dtype 'int64)
           (overlap 'float32 #:each 100)
-          (labels-of (overlap-labels #:each 100) 'int32)
+          (list->device-vector (overlap-labels #:each 100) #:dtype 'int32)
           X
           E
-          (vec y 'float32)
-          (vec p 'float64)
+          (list->device-vector y #:dtype 'float32)
+          (list->device-vector p #:dtype 'float64)
           (overlap 'float64 #:each 100)
-          (vec w 'float64)))
+          (list->device-vector w #:dtype 'float64)))
 
 (define (one-round in)
   (match-define (inputs truth found S ys X E y p S64 w) in)
@@ -72,12 +70,12 @@
 
 (define (refusals in)
   (match-define (inputs truth _ S ys X _ y _ _ _) in)
-  (define short (labels-of '(0 1 2) 'int32))
-  (define short-values (vec '(1 2 3) 'float64))
-  (define zero-weights (vec (make-list 2000 0) 'float64))
-  (define many (labels-of (range 46341) 'int32))
-  (define flat (labels-of (make-list 46341 0) 'int32))
-  (define one-label (labels-of (make-list 400 3) 'int32))
+  (define short (list->device-vector '(0 1 2) #:dtype 'int32))
+  (define short-values (list->device-vector '(1 2 3) #:dtype 'float64))
+  (define zero-weights (list->device-vector (make-list 2000 0) #:dtype 'float64))
+  (define many (list->device-vector (range 46341) #:dtype 'int32))
+  (define flat (list->device-vector (make-list 46341 0) #:dtype 'int32))
+  (define one-label (list->device-vector (make-list 400 3) #:dtype 'int32))
   (define nan-rows (list*->device-matrix (cons '(+nan.0 0) (make-list 399 '(1 1))) #:dtype 'float32))
   (define big-rows (list*->device-matrix (cons '(1e20 0) (make-list 299 '(1 1))) #:dtype 'float32))
   (define float-most "4.253529586511731e+37")
@@ -170,13 +168,13 @@
 (test-process-memory "a contingency table holds its counts and labels, not the n-sized relabel scratch"
   (define n (expt 2 22))
   (define a
-    (labels-of (for/list ([i (in-range n)])
-                 (modulo i 2))
-               'int64))
+    (list->device-vector (for/list ([i (in-range n)])
+                           (modulo i 2))
+                         #:dtype 'int64))
   (define b
-    (labels-of (for/list ([i (in-range n)])
-                 (modulo i 3))
-               'int64))
+    (list->device-vector (for/list ([i (in-range n)])
+                           (modulo i 3))
+                         #:dtype 'int64))
   (define before (sample-used (pool-sample)))
   (define table (contingency-matrix a b))
   (define held (- (sample-used (pool-sample)) before))

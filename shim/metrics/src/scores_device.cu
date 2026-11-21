@@ -80,9 +80,19 @@ struct residual_magnitude {
 };
 
 template <typename T>
+struct offset_at {
+  value_at<T> y;
+  int64_t anchor;
+
+  __device__ double operator()(int64_t i) const {
+    return __dsub_rn(y(i), y(anchor));
+  }
+};
+
+template <typename T>
 struct deviation_magnitude {
   weight_at w;
-  value_at<T> y;
+  offset_at<T> y;
   double mean;
 
   __device__ double operator()(int64_t i) const {
@@ -93,7 +103,7 @@ struct deviation_magnitude {
 template <typename T>
 struct weighted_value {
   weight_at w;
-  value_at<T> y;
+  offset_at<T> y;
 
   __device__ double operator()(int64_t i) const {
     return w.positive(i) ? __dmul_rn(w(i), y(i)) : 0.0;
@@ -103,7 +113,7 @@ struct weighted_value {
 template <typename T>
 struct weighted_deviation {
   weight_at w;
-  value_at<T> y;
+  offset_at<T> y;
   double mean;
   int exponent;
 
@@ -232,17 +242,18 @@ double r2_of(const T* y, const P* p, int64_t n, sample_weights w,
       largest_exponent(pair_magnitude<T, P>{weight, y, p, 1}, n, stream);
   const value_at<T> truth{y, value};
   const value_at<P> pred{p, value};
-  const double mean = total(weighted_value<T>{weight, truth}, n, stream) /
+  const offset_at<T> offset{truth, first};
+  const double mean = total(weighted_value<T>{weight, offset}, n, stream) /
                       total(weight, n, stream);
   const int residual_exponent = largest_exponent(
       residual_magnitude<T, P>{weight, truth, pred, 1}, n, stream);
   const int spread_exponent =
-      largest_exponent(deviation_magnitude<T>{weight, truth, mean}, n, stream);
+      largest_exponent(deviation_magnitude<T>{weight, offset, mean}, n, stream);
   const double residual =
       total(weighted_residual<T, P>{weight, truth, pred, 1, residual_exponent},
             n, stream);
   const double spread = total(
-      weighted_deviation<T>{weight, truth, mean, spread_exponent}, n, stream);
+      weighted_deviation<T>{weight, offset, mean, spread_exponent}, n, stream);
   return 1.0 - scaled_ratio(residual, spread,
                             2 * (residual_exponent - spread_exponent));
 }

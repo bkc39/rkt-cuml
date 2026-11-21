@@ -3,19 +3,13 @@ fits the data and parameters the Racket side used; scipy's single linkage
 gives the cophenetic matrix the Racket children must induce; sklearn's
 AgglomerativeClustering gives the partitions."""
 
-import json
-import sys
-
 import numpy as np
 from scipy.cluster.hierarchy import cophenet, linkage
 from scipy.spatial.distance import pdist, squareform
 from sklearn.cluster import AgglomerativeClustering as SklearnAgglomerative
+from twin_common import host, params_of, run
 
 import cuml
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
 
 
 def samples(case):
@@ -72,18 +66,12 @@ def sklearn_fit(case):
     return {"labels": model.labels_.astype(np.int64).tolist()}
 
 
-def params(case):
-    return cuml.AgglomerativeClustering().get_params()
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {"fit": fit, "scipy": scipy_fit, "sklearn": sklearn_fit, "params": params}
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": cuml.__version__}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "fit": fit,
+            "scipy": scipy_fit,
+            "sklearn": sklearn_fit,
+            "params": params_of(cuml.AgglomerativeClustering),
+        }
+    )

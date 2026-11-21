@@ -9,30 +9,16 @@
                   trustworthiness)
          (only-in cuml/metrics/private/native libcuml-version)
          (only-in racket/match match match-define)
-         racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list list->device-vector)
          (only-in threading ~>)
-         (only-in "private/metrics-data.rkt"
-                  label-pair
-                  labels-of
-                  overlap
-                  overlap-labels
-                  projection
-                  tolerance
-                  worst)
-         (only-in "private/python-env.rkt" run-twin test-twin))
-
-(define-runtime-path twin "python/metrics_twin.py")
+         (only-in "private/common-data.rkt" worst)
+         (only-in "private/metrics-data.rkt" label-pair overlap overlap-labels projection tolerance)
+         (only-in "private/python-env.rkt" test-twin)
+         (only-in "private/scores-twin-data.rkt" checked-twin-results))
 
 (define metrics '(euclidean sqeuclidean manhattan cosine chebyshev))
 (define each 150)
-
-(define (twin-results cases)
-  (match-define (hash-table ('results results) ('version version))
-    (run-twin twin (hasheq 'cases cases)))
-  (check-equal? version libcuml-version)
-  results)
 
 (define degenerate
   '((() ()) ((4) (9))
@@ -53,7 +39,8 @@
     (list truth found)))
 
 (define (counts truth found)
-  (~> (contingency-matrix (labels-of truth 'int32) (labels-of found 'int64))
+  (~> (contingency-matrix (list->device-vector truth #:dtype 'int32)
+                          (list->device-vector found #:dtype 'int64))
       contingency-table-counts
       device-matrix->list*))
 
@@ -61,9 +48,9 @@
   (define cases
     (append (label-cases 40) (list '((-1 -1 0 2 2 2) (1 0 0 1 3 3)) '((5 -1 5 -1) (-2 -2 4 4)))))
   (define results
-    (twin-results (for/list ([c (in-list cases)])
-                    (match-define (list truth found) c)
-                    (hasheq 'op "contingency" 'truth truth 'found found))))
+    (checked-twin-results (for/list ([c (in-list cases)])
+                            (match-define (list truth found) c)
+                            (hasheq 'op "contingency" 'truth truth 'found found))))
   (for ([c (in-list cases)]
         [theirs (in-list results)]
         [i (in-naturals)])
@@ -75,19 +62,22 @@
 (test-twin "CA5, CA6: adjusted-rand-score is within 1e-14 of sklearn and equals Python cuML"
   (define cases (append (label-cases 200) degenerate))
   (define results
-    (twin-results (for/list ([c (in-list cases)])
-                    (match-define (list truth found) c)
-                    (hasheq 'op "ari"
-                            'truth truth
-                            'found found
-                            'cuml (and (>= (length truth) 2)
-                                       (andmap (lambda (x) (>= x 0)) (append truth found)))))))
+    (checked-twin-results (for/list ([c (in-list cases)])
+                            (match-define (list truth found) c)
+                            (hasheq 'op "ari"
+                                    'truth truth
+                                    'found found
+                                    'cuml (and (>= (length truth) 2)
+                                               (andmap (lambda (x) (>= x 0))
+                                                       (append truth found)))))))
   (define gaps
     (for/list ([c (in-list cases)]
                [theirs (in-list results)]
                [i (in-naturals)])
       (match-define (list truth found) c)
-      (define ours (adjusted-rand-score (labels-of truth 'int32) (labels-of found 'int32)))
+      (define ours
+        (adjusted-rand-score (list->device-vector truth #:dtype 'int32)
+                             (list->device-vector found #:dtype 'int32)))
       (define gap (abs (- ours (hash-ref theirs 'sklearn))))
       (test-case (format "case ~a" i)
         (check-true (<= gap 1e-14) (format "~a against sklearn's ~a" ours (hash-ref theirs 'sklearn)))
@@ -106,8 +96,9 @@
           'cuml #t))
 
 (define (ours X ys metric)
-  (list (silhouette-score X (labels-of ys 'int32) #:metric metric)
-        (device-vector->list (silhouette-samples X (labels-of ys 'int32) #:metric metric))))
+  (list (silhouette-score X (list->device-vector ys #:dtype 'int32) #:metric metric)
+        (device-vector->list
+         (silhouette-samples X (list->device-vector ys #:dtype 'int32) #:metric metric))))
 
 (define (noisy-labels)
   (for/list ([y (in-list (overlap-labels #:each each))]
@@ -122,9 +113,9 @@
             (for/list ([dt (in-list '(float32 float64))])
               (list "SL7" dt 'euclidean (overlap dt #:each each) (noisy-labels)))))
   (define results
-    (twin-results (for/list ([r (in-list runs)])
-                    (match-define (list _ dt metric X ys) r)
-                    (silhouette-case X ys metric dt))))
+    (checked-twin-results (for/list ([r (in-list runs)])
+                            (match-define (list _ dt metric X ys) r)
+                            (silhouette-case X ys metric dt))))
   (for ([r (in-list runs)]
         [theirs (in-list results)])
     (match-define (list law dt metric X ys) r)
@@ -148,13 +139,13 @@
       (define-values (X E) (projection n 10 2 #:seed n))
       (list n k X E)))
   (define results
-    (twin-results (for/list ([r (in-list runs)])
-                    (match-define (list _ k X E) r)
-                    (hasheq 'op "trustworthiness"
-                            'X (device-matrix->list* X)
-                            'E (device-matrix->list* E)
-                            'n_neighbors k))))
-  (check-equal? (twin-results (list (hasheq 'op "version"))) (list libcuml-version))
+    (checked-twin-results (for/list ([r (in-list runs)])
+                            (match-define (list _ k X E) r)
+                            (hasheq 'op "trustworthiness"
+                                    'X (device-matrix->list* X)
+                                    'E (device-matrix->list* E)
+                                    'n_neighbors k))))
+  (check-equal? (checked-twin-results (list (hasheq 'op "version"))) (list libcuml-version))
   (for ([r (in-list runs)]
         [theirs (in-list results)])
     (match-define (list n k X E) r)

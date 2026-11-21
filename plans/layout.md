@@ -1026,8 +1026,14 @@ Follow-ups are GitHub issues.
   e_s = max(0, e − 1021), only as far as the difference needs, so every
   residual of values below 2^1022 is the correctly rounded y − ŷ. With s
   that value scaling, each residual s·y − s·ŷ is divided again by 2^e_r,
-  e_r = ilogb(max |s·y − s·ŷ|), and for r2 each deviation s·y − ȳ by
-  2^e_d, e_d = ilogb(max |s·y − ȳ|), before squaring; both maxima are over
+  e_r = ilogb(max |s·y − s·ŷ|), and for r2 each deviation by 2^e_d before
+  squaring. The deviation is anchored at the first positive-weight sample
+  f, (s·y − s·y_f) − m, m the weighted mean of s·y − s·y_f, so a heavy
+  near-constant sample's rounded mean cannot swamp a light sample's spread
+  (#98: y ≈ 2.59e-113 at weights 2.7e232 and 2.5e173 scored 1.0 against
+  the exact −178637.99, as sklearn does; now 0.75 ulp off, inside the
+  pinned 2-ulp bound, `anchored-r2-ulps`);
+  e_d = ilogb(max |(s·y − s·y_f) − m|); both maxima are over
   the positive samples, whatever their weights. The final ratio divides
   the frexp mantissas and applies one ldexp, so it is rounded once, as a
   normal number, whatever the exponents: with R′ = m_R·2^a,
@@ -1547,7 +1553,8 @@ Follow-ups are GitHub issues.
   u·κ_α ≥ 1. There the wrong answer is stationary to rounding, so L2-e's
   check is a best-effort detector, not a bound. A sound refusal needs a
   solve equilibrated per column, which `ridgeFit`'s scalar α cannot give
-  (#104); no further detector is added in L2. The Scribble says the
+  (#104); no further detector is added in L2. #104 closes the L2-i window
+  for 'svd only (L2-l). The Scribble says the
   coefficients are accurate to about u·κ_α, and that past u·κ_α ≥ 1 a fit may
   be refused or returned wrong under either solver.
   Measured cases (review r3 probes r1, r4, r5, r6; `.scratch` runs at r4):
@@ -1582,6 +1589,379 @@ Follow-ups are GitHub issues.
   0.129 to 4.1e-7, and every α′ = 0 cosine (17892) is unchanged bitwise.
   Q2 is unchanged: float32 'eig refused at 0.385 and 0.203, 'svd accepted at
   4.0e-4 and 7.9e-5; float64 accepted at ≤ 1.2e-8 ('eig) and 1.7e-13 ('svd).
+- **L2-l, the window refusal (#104) and float32 'qr / 'svd-qr (#102).** One
+  device routine (`linear_model/src/gram_condition.cu`, its host Ritz
+  helpers in `ritz.cpp`, its cuSOLVER calls in `symmetric_eigen.cpp`, its
+  policy in `conditioning.cpp`) bounds κ′, the
+  condition number of D⁻¹(X̃ᵀWX̃ + α′I)D⁻¹ with D² = σ′_j² + α′ (X̃ the staged
+  X centred with float64 means under fit-intercept, uncentred without), from
+  below, without a float64 copy of X. The Scribble states only the contract;
+  this is the mechanism. The equilibrated rows Z (z_ik = √w_i·s_k·(x_ik − μ_k),
+  s_k = 1/√(σ′_k² + α′), formed in float64 and rounded once to float32)
+  are multiplied in float32 runs of at most m rows (`gram_run_rows`), and
+  each run's sum is added into float64. At d ≤ 16 one shared-memory pass
+  over X (`block_gram.cu`) flushes each thread's float32 sum every
+  m = 32 rows (`narrow_run_rows`); above it a strided-batched
+  `cublasSgemm` (pedantic math) runs over m-row batches with
+  m = clamp(2·bit_ceil(d), 64, 1024): 256 at d = 100, 1024 from d = 512.
+  The run length is measured: at 1e6×100 the check takes 23.4, 14.7, 10.6,
+  8.8 and 7.6 ms at m = 32, 64, 128, 256 and 1024 (an Sgemm batch writes
+  d²/m floats per row), and at d ≤ 16 the flush is free (1e7×10: 4.6 ms
+  against 4.4). G̃ is that Gram rounded to float32, α′s_k² added in float32
+  on its diagonal, and a float32 `Ssyevd` of G̃ gives eigenpairs
+  (μ_j, v_j) (float64 `Dsyevd` cost about 8× the fit at 8000×2000).
+  **ε_G is a proven bound on ‖G̃ − G‖₂**, G the exact Gram of the stored X
+  under the check's own μ and s, plus α′S². By Higham's inner-product
+  bound (Accuracy and Stability of Numerical Algorithms, 2nd ed., §3.1,
+  (3.5): |fl(xᵀy) − xᵀy| ≤ γ_m·|x|ᵀ|y| in any evaluation order,
+  γ_k = k·u/(1 − k·u)) each run is within γ_m(u₃₂) of the exact sum of
+  its float32 products, and by the summation bound (§4.2, (4.4), any
+  order) the float64 sum of R = ⌈n/m⌉ + 1 runs is within γ_R(u₆₄) of the
+  sum of their magnitudes. With δ = (1 + u₃₂)(1 + γ₅(u₆₄)) − 1 for the
+  staging (four float64 operations and the float32 cast) and u₃₂ for G̃'s
+  float32 rounding, every entry has
+  |G̃ − G|_ij ≤ c·(|Z|ᵀ|Z|)_ij + [i = j]·δ_α·(1 + c)·G_ii, where
+  c = (1 + u₃₂)(1 + γ_R)(1 + γ_m)(1 + δ)² − 1 and
+  δ_α = (1 + u₃₂)²(1 + γ₂(u₆₄)) − 1 covers α′s_k² and the float32 add.
+  The spectral norm is monotone on non-negative matrices (Horn and
+  Johnson, Thm 8.1.18) and ‖|Z|ᵀ|Z|‖₂ = ‖|Z|‖₂² ≤ ‖Z‖_F² = Σ_k s_k²σ′_k²,
+  which the column moments already give (each σ′_k² divided by
+  1 − γ_{n+3} for its own float64 sum). So
+  ε_G = c·Σ_k s_k²σ′_k² + δ_α·(1 + c)·max_k G_kk + ε_μ, times 1 + γ_32
+  for the host arithmetic (`bound_of` and `gram_error` in `ritz.cpp`),
+  about (m + 5)·u₃₂·d: 2.2e-6·d at d ≤ 16, 1.5e-5·d at d = 100. ε_μ is
+  the computed mean's rank-one rounding: Σw(x − μ) = 0 for the exact
+  weighted mean μ, so the Gram centred at the computed μ̂ is
+  G(μ) + W·δδᵀ exactly, δ = μ − μ̂, and its scaled norm
+  ε_μ = W·Σ_k s_k²δ_k² joins ε_G. By (4.4) for the float64 sums Σw·x and
+  W = Σw (w·x one rounding) and one division,
+  |δ_k| ≤ γ_{2n+6}(u₆₄)·(Σw|x_k|/W) with W taken low by γ_n, and
+  Σw|x_k| ≤ √(W·σ′_k²) + W·|μ̂_k| (Cauchy–Schwarz), so the moments give it
+  (`mean_error`); without an intercept μ̂ = 0 is exact and ε_μ = 0. It is
+  5e-8 for a column of mean 2²⁰ and unit sd over 1e6 rows. The |μ̂_k| term
+  is loose when a column is constant but for light rows: X = (0 1; 1 1;
+  2 1; 3 5) with weights (3, 3, 3, 2⁻¹⁴⁸) has κ′ ≈ 1, but s₂² ≈ 2¹⁴⁸/16
+  made ε_μ ≈ 5e14 and the check refused it. When ε_μ exceeds ε_G/8, one
+  more float64 pass computes r̂_k = Σw(x_k − μ̂_k); δ_k = r_k/W exactly
+  and |r̂_k − r_k| ≤ γ_{n+2}·Σw|x_k − μ̂_k| ≤ γ_{n+2}·√(W·σ′_k²), so
+  |δ_k| ≤ (|r̂_k| + γ_{n+2}·√(W·σ′_k²))/W, and the smaller bound is used
+  (gtest). r4's
+  2·√(1024·d)·u₃₂ assumed independent roundings; aligned ones beat it, and
+  it certified two dummies beside a ones column (no intercept, n = 23379
+  and 57115), ±1 columns summing to zero (d = 4, n = 4596 and 4818) and a
+  Hadamard pair at κ = 2³³ (n = 1024), all exactly or nearly singular;
+  the `GramError` gtests pin each as refused, and each fails at d884e9e.
+  r4's soundness table may have loaded a stale library (its script staged
+  a saved copy, not the head build); the r5 and r6 re-runs read the
+  loaded library's sha256 from `/proc/self/maps` in every probe process
+  (r6: fdf24ca1, the nix build of the head, the same as the staged copy;
+  every count below was the same on f59bdee4).
+  The gtest probes link a local build of the same sources. Every refusal
+  below came from a Rayleigh quotient past the threshold or a failed
+  proof, so no proof was asked to refuse:
+
+  | probe | inputs | accepted at κ ≥ 2³² | paths |
+  |---|---|---|---|
+  | structured nulls (gtest) | dummies, signs, Hadamard pairs: 335 | 0 | Ritz 317, exact 18, all refused |
+  | one-hot, k = 2 to 50 (gtest) | n to 1e6, intercept or k levels and ones: 60 | 0 | Ritz, all refused |
+  | aligned roundings (gtest, r6) | sign designs, d = 4 to 16: 280 | 0 | Ritz, all refused |
+  | p11 known κ | 344 at κ ≥ 2³², 40 below (all 40 fit) | 0 | |
+  | p20 one-hot, spread, factor | 256, 180, 600 | 0 | |
+  | p18 factor, 8000×2000 | B = 3 to 40, 40 fits | 0 | |
+  | p12 sweep, graded, factor | 488, 90, 32 | 0 | |
+
+  The aligned-rounding search looked for X whose float32 Gram errors line
+  up along the null direction, which r4's ε_G would miss: with r4's
+  2·√(1024·d)·u₃₂ in place of the proven ε_G it still accepted none of
+  the 280, so only the formula's gtest pins it. Ordinary X is still
+  accepted: the 40 p11 fits under the threshold, Gaussian and s = 0.05
+  correlated X (cost table) and the correlated and twin shapes of
+  `gram_condition_test.cpp`. r5's x_j = 33·f + e_j at 20000×100 (retuned
+  to 14 and 20 there, where it no longer encloses) is accepted on the
+  exact Gram at κ′ ≈ 1.25e5, within 2⁻⁸ of the `Dsyevd` ratio (4 draws,
+  gtest); its check costs 8.2 ms (median of 5, warm). The r7 probe
+  (`Probe.*`, a local gtest; near pairs, β near h, a cluster at the
+  window's edge, light rows of weight 2⁻¹⁴⁹ to 2⁻²⁰; n = 31 to 33, 1023 to
+  1025, 4097, 20001; d = 1, 2, 16, 17, 100) ran 2456 inputs and checked
+  each of the 1574 acceptances against κ′ from the stored X in long
+  double (Jacobi): certified 456, enclosed 2, Ritz 1110, exact 6, none
+  past the threshold or under the reference; Ritz refused 564, exact
+  318.
+
+  ε_eig = c_eig·√d·u₃₂·μ_max covers `Ssyevd` itself: the computed pairs are
+  exact for G̃ + F, ‖F‖₂ ≤ p(d)·u₃₂·‖G̃‖₂ (Householder tridiagonalisation
+  and divide and conquer are backward stable; cuSOLVER documents no
+  p(d)). c_eig = 16
+  (`eigen_error_factor`) is twice the largest ‖F‖ measured as
+  max_j ‖G̃v_j − μ_j v_j‖ + μ_max·‖VᵀV − I‖ in float64 (both norms
+  spectral), 7.6·√d·u₃₂·μ_max, over factor Grams (x_j = B·f + e_j,
+  B = 0, 3, 10, 40, exact x₂ = x₀ + x₁ − x₃, n = 8000) and correlated ones
+  (x_j = f + s·z_j, s = 0.05, 0.3, n = 20000) at d = 100, 500, 1000, 2000;
+  eigenvalue errors were at most 1.2·√d·u₃₂·μ_max. At 8000×2000, B = 10
+  (λ_max ≈ 1980) ε_eig is 0.085 against r2's ε_G of 1.7e-4, which is the term r2
+  lacked (p18; the proven ε_G there is 0.12). ε_eig is measured, not proven, so it only plans: it sets the a-priori
+  label and the window's reach, and never accepts; nor does any rounding
+  model. The check then decides
+  in four steps. **Certify:** when μ₁ > ε = ε_G + ε_eig and twice
+  (μ_max + ε)/(μ₁ − ε) is under the refusal threshold the plan is
+  `certified`, and the enclosure below must prove it; nothing is accepted
+  without it. **Enclose:** the enclosure runs when the plan certifies, or
+  when ε_G plus the expected residual would certify and its cost is under
+  the path the plan takes (`spectrum_enclosure.cpp`, path `enclosed`).
+  The expected residual is 0.5·d·u₃₂·μ_max (`expected_residual`):
+  ‖Ê‖_F/(d·u₃₂·μ_max) measured 0.04 to 0.2 on x_j = f + s·z_j at 1e6×100,
+  1.1 on integer factor draws at 20000×100 and 0.7 to 3.5 on Gaussian X at
+  d = 10 to 1000; it binds only where μ₁ is near ε_G, the correlated
+  shapes, so a prefilter that rejects them would send certifiable X to a
+  window of 99 vectors. A failed enclosure costs its own time: 0.13 ms at
+  d = 10 on the device, 0.25 ms at d = 100, 20.6 ms at d = 1000; at
+  d ≤ 16 its products run on the host. In float64, from G̃ (the
+  lower triangle `Ssyevd` read), V and M = diag(μ): P = G̃V (`Dsymm`),
+  Ê = VᵀP − M and Ŵ = VᵀV − I (`Dgemm`). E = VᵀG̃V − M is the symmetric
+  residual, VᵀR + (VᵀV − I)·M with R = G̃V − VM; formed whole, its
+  (VᵀV − I)·M part cancels against VᵀR (d = 100, s = 0.03: ‖Ê‖_F is
+  5.1·√d·u₃₂·μ_max, ‖R‖₂ + μ_max·‖VᵀV − I‖₂ is 4.1, and the same with
+  Frobenius norms 14.2). With γ_k = k·u₆₄/(1 − k·u₆₄) and
+  |fl(AB) − AB| ≤ γ_k·|A||B| for inner dimension k in any summation order
+  (Higham, Thm 3.5), ‖E − Ê‖_F ≤ γ_1‖Ê‖_F + γ_d‖V‖_F(‖V‖_F‖G̃‖_F + ‖P‖_F)
+  and ‖W − Ŵ‖_F ≤ γ_1‖Ŵ‖_F + γ_d‖V‖_F², each computed norm enlarged by
+  1 + γ_{d²+2}; Frobenius over spectral gives e ≥ ‖E‖₂ and
+  η ≥ ‖VᵀV − I‖₂. Weyl's inequality (Horn and Johnson, Thm 4.3.1) puts the
+  eigenvalues of VᵀG̃V within e of the μ_j in order, and Ostrowski's
+  theorem (Horn and Johnson, Thm 4.5.9) gives
+  λ_j(VᵀG̃V) = θ_j·λ_j(G̃), θ_j ∈ [1 − η, 1 + η], when η < 1. So
+  λ_min(G̃) ≥ (μ₁ − e)/(1 + η) and λ_max(G̃) ≤ (μ_max + e)/(1 − η) (the
+  divisor flips for a negative bound), each rounded outward by 4 ulps;
+  Weyl with ε_G bounds κ′ by (λ_max + ε_G)/(λ_min − ε_G), certified when
+  twice that is under the threshold. It needs nothing of `Ssyevd` beyond
+  the pairs it returned, so an acceptance rests on Weyl's inequality with
+  the proven ε_G, Higham's Thm 3.5 for the residual's rounding, and
+  Ostrowski's theorem. The gtests pin a correlated Gram it certifies, a
+  skew basis whose small residual would hide λ_max = 3 without η, and zero
+  computed residuals that still carry their rounding term. **Window:** otherwise it
+  is every v_j with μ_j ≤ μ₁ + 16·ε (the reach). This is a plan: with A′
+  the exact equilibrated Gram and z its smallest eigenvector, Davis–Kahan
+  puts |v_jᵀz| ≤ ε/(μ_j − λ_min) in v_j, so a window that reaches 16·ε
+  past μ₁ should hold z, but ε holds the measured ε_eig, so nothing is
+  accepted on it. **Exact** is chosen instead when the window has no gap at
+  its edge (μ_{w+1} < 2·(μ₁ + reach): the edge cuts a cluster, and a v_j
+  just outside can hold as much of z as one inside), when μ₁ < −ε (outside
+  the error model), or when the window's pass costs at least the exact
+  Gram (the model below). Both
+  terms fix p18 on their own: with ε_G alone the window was 11 to 17 vectors
+  whose edge cut the bulk (μ₂ ≈ 0.0025, μ_{w+1} ≈ 0.0027 against an edge of
+  0.0027), so the gap rule sends it to the exact Gram; with ε_eig the reach
+  is 1.35 and the window is the whole bulk, 1999 of 2000, past the cost
+  rule. Otherwise A′V for the window and the top vector is formed by two
+  float64 kernels over X (a projection per row and vector, a column sum per
+  column and vector), in chunks of 8 vectors (`pass_chunk`), so the pass
+  keeps one n×8 float64 buffer live; then H = VᵀA′V and S = VᵀV. The
+  smallest eigenvalue of the pencil (H, S) (`Dsygvd`, so V need not be
+  orthonormal) is the Ritz value, and the top vector's quotient is the
+  largest. When μ₁ ≤ reach, one correction step refines the Ritz vector
+  against the eigenvectors outside the window (one more single-vector
+  pass), and the smaller of the two quotients is used. Both are Rayleigh
+  quotients, so their ratio κ′_R ≤ κ′, and the check refuses on it when
+  κ′_R reaches the threshold. **The Ritz path accepts only on a proven
+  lower bound on λ_min(A′)**, the 2×2 block bound (`window_spectrum` in
+  `spectrum_enclosure.cpp`, `block_floor` and `complement_floor` in
+  `ritz.cpp`). With P the orthogonal projector onto the span of the w
+  window vectors V_w and x = x₁ + x₂, x₁ = Px,
+  xᵀA′x ≥ h‖x₁‖² − 2c‖x₁‖‖x₂‖ + β‖x₂‖², so λ_min(A′) is at least the
+  smaller eigenvalue of [[h, c], [c, β]],
+  min(h, β) − c²/(|β − h|/2 + √((β − h)²/4 + c²)), when
+  - **h** bounds λ_min of A′ on span V_w: the Weyl/Ostrowski enclosure of
+    the computed window block H_w (symmetrised, its own `Dsyevd` pairs and
+    residual bounds), less ‖H_w − V_wᵀA′V_w‖₂ ≤ √(1 + η)·‖F‖ +
+    γ_d‖V_w‖_F‖A′V_w‖_F + u₆₄‖H_w‖_F, divided by 1 + η (1 − η if negative)
+    because V_wᵀV_w, a principal block of VᵀV, has its eigenvalues in
+    [1 − η, 1 + η]. F is the error of the float64 passes: Higham (3.5) on
+    each product and sum in them gives
+    |F| ≤ γ_{n+d+8}(u₆₄)·(|Z|ᵀ|Z| + α′S²)·|V_w|, so
+    ‖F‖₂ ≤ γ_{n+d+8}·(‖Z‖_F² + max α′s_k²)·‖V_w‖_F (`applied_error`);
+  - **β** bounds xᵀA′x/‖x‖² for x ⊥ V_w: from G̃'s enclosure (e, η), with
+    y = V⁻¹x, V_wᵀx = 0 gives ‖y_w‖ ≤ η‖y‖, so
+    xᵀG̃x ≥ (μ_{w+1} − (μ_{w+1} − μ₁)·η² − e)·‖y‖² with
+    ‖y‖² ∈ [1/(1 + η), 1/(1 − η)], then less ε_G;
+  - **c** bounds ‖(I − P)A′P‖₂: (I − P)A′V_w = (I − P)(A′V_w − V_wM) for
+    any M, so with M = H_w it is at most the computed residual
+    ‖A′V_w − V_wH_w‖_F (one `Dgemm`, plus γ_{w+1} of its terms) plus
+    ‖F‖, over √(1 − η).
+  ε_μ is taken from h and added to c; the upper end is G̃'s enclosure plus
+  ε_G. Every end an error is added to or taken from (h, β, c, the upper
+  end, the enclosed and exact intervals widened by ε_G) and the ratio
+  returned as κ′'s bound are rounded outward by 4 ulps (`outward` and
+  `widened` in `ritz.cpp`), so no end rests on round-to-nearest (gtest:
+  1 + 2⁻⁶⁰ rounds to 1). β never sets the floor end to end: the gap rule
+  puts μ_{w+1} at 2·(μ₁ + 16·ε) ≥ 32·ε_G, so a gtest of `window_spectrum`
+  on a diagonal G̃ pins its − ε_G (and h's − ε_μ, c's + ε_μ); a light row
+  (weight 2⁻⁴⁴) beside a near pair at κ′ = 2²⁶ makes ε_μ ≈ 8·λ_min, and the
+  Ritz proof fails and goes exact (accepted on Ritz at weight 2⁻²⁰). The Ritz path accepts when twice their ratio is under the
+  threshold and otherwise goes exact. The c² term is second order: on a
+  near pair beside two orthogonal columns (2¹⁴ rows, κ′ = 2²²) the bound is
+  within 2⁻¹⁰ of κ′ (gtest). It fails where ‖F‖ reaches λ_min, about
+  κ′ ≳ 1/(n·u₆₄): the same pair at 2²² rows and κ′ = 2³⁰ goes exact.
+  **Exact:** the float64 Gram is formed in m₆₄ = 1024-row batches
+  (`exact_batch`, a strided-batched `Dgemm` under pedantic math into a
+  part per batch, the parts summed in float64 into the accumulator). By
+  (3.5) and (4.4) its error is at most
+  ((1 + γ_{m₆₄+10})(1 + γ_R) − 1)·‖Z‖_F² + γ₃·(1 + ·)·max G_kk + ε_μ
+  (γ in u₆₄, the 10 for the float64 staging, R = ⌈n/m₆₄⌉ + 1,
+  `exact_error`), about 2.2e-13·d at 1e6 rows (γ₁₀₃₄ compounded with γ_R,
+  R = 978). A float64 `Dsyevd` with
+  vectors and the same enclosure bound its spectrum; the exact path
+  accepts when twice (λ_max + ε)/(λ_min − ε) is under the threshold, and
+  otherwise refuses with the larger of the `Dsyevd` ratio and the
+  threshold. m₆₄ is measured: the exact path took 75, 74, 75, 140 and
+  86 ms at 1e6×100 for m₆₄ = 256, 1024, 4096, 16384 and 65536 (1e6×10:
+  5.5, 5.4, 6.5, 11.3, 40.3 ms; 2e5×1000: 886, 870, 896, 968, 1090 ms),
+  against r5's blocked `Dsyrk` at 312, 377 and 584 ms. What each
+  acceptance rests on: certified and enclosed, the enclosure with the
+  proven ε_G (a proof); Ritz, the 2×2 block bound on the window block's
+  enclosure, G̃'s enclosure, ε_G and the residual (a proof); exact, the
+  enclosure of the float64 Gram with its proven error (a proof). Every
+  acceptance returns its proven upper bound on κ′. A refusal rests on a
+  Rayleigh quotient or on a failed proof, so an X whose κ′ is under the
+  threshold is refused only when no path proves it: κ′ within a factor of
+  2 of the threshold, or λ_min under the error of the path that reached
+  it.
+  Without the Ritz step (one vector), exact x₃ = x₁ + x₂ beside a
+  near pair x₅ = x₄ + ε·z (ε = 2^−12, 2^−13; n = 1000, 5000; 8 draws; 'qr
+  and 'svd-qr) passed the Gram check on 34 of 64 fits (31 then refused by
+  the stationarity check, 3 accepted with |c| ≈ 3e4); with it all 64 are
+  refused by the Gram check. Beside k near pairs x′ = x + 2^−12·z
+  (n = 5000, 4 draws), 632e662's 16-vector cap let 24 of the test's 56 fits
+  through the Gram check (k = 16 to 30, 120 more independent columns or
+  none), and the reviewer's probe saw 7 of 192 accepted with |c| up to
+  4.6e4; now every one is refused by it. The gtests assert the path and
+  window the routine chose: k near pairs beside 120 independent columns
+  take the Ritz window of k + 1, and collinearity beside an unseparated
+  cluster takes the exact Gram. Every column x_j = 10·f + e_j
+  at 8000×2000 with exact x₂ = x₀ + x₁ − x₃ (4 draws, 'qr and 'svd-qr)
+  passed the Gram check at cac8734 and 632e662 (8 of 8: 2 accepted, 6
+  refused by the stationarity check); now all 8 are refused by it. It runs
+  before the solve, for
+  ridge 'svd only when some kept column is negligible against α′ and some
+  is not (the L2-i window), and for float32 least squares under 'qr and
+  'svd-qr only (α′ = 0), except wide X or one kept column, which
+  `linear_regression.cpp` sends to the Jacobi SVD unchecked (4×5 pinned);
+  'auto, 'eig, 'svd and 'svd-jacobi behave as at 099f0c1. Ridge refuses at u·κ′ ≥ 2^−tolerance_bits ("X is ill-conditioned
+  for this alpha"), least squares at u·√κ′ ≥ 2^−8 ("X has u*kappa", "X may
+  have collinear columns"). Over 30 draws of x₃ = x₁ + x₂ (n = 60 / 1000),
+  'qr and 'svd-qr refuse all 60; 'svd and 'svd-jacobi fit 12 / 22 with
+  |c| up to 3.5e4 and predictions within 2.2e-3·max|y| (rms 0.005 against a
+  residual of 0.1), refusing the rest as not least squares; 'auto and 'eig
+  fit 0 / 1 and refuse the rest. A full one-hot design with an intercept
+  (k = 3, 5, 12 levels, n = 500, 5003): float32 'qr and 'svd-qr refuse it;
+  'auto / 'eig fit k = 3, n = 500 off the minimum norm (predictions 5e-5) and
+  refuse the other five as not least squares; 'svd / 'svd-jacobi fit with
+  coefficients 800–5200× max|c*| off the minimum norm and predictions within
+  3.3e-4; ridge at α = 0 and 1e-12 (negligible) matches least squares fit
+  for fit. Dropping a level or fitting without an intercept fits under
+  float32 'qr within 7.5e-7 of the least-squares predictions; float64 'auto
+  gives the minimum-norm fit within 6.4e-14. Nearly collinear X
+  (ε = 1/128, 1/4; κ(X) = √κ(Gram), as `solution-kappa` reports it) fits
+  within 11.5·u·κ(X) (QR and SVD paths) of the exact solve, pinned at 32.
+  'auto and 'eig solve the normal equations, so their error grows as
+  u·κ(Gram) = u·κ(X)². Over the p13 sweep (ε = 1/2 to 1/1024, n = 20 to
+  5000, 420 draws per ε, dtype and algorithm, 10080 fits) the worst
+  error/(u·κ(X)²), float32:
+
+  | ε | 1/2 | 1/4 | 1/8 | 1/16 | 1/64 | 1/1024 |
+  |---|---|---|---|---|---|---|
+  | worst | 1.79 | 2.04 | 2.21 | 2.69 | 2.58 | 0.19 |
+  | at κ(X) | 21.8 | 41.8 | 72.2 | 117.9 | 562.9 | (2 fit) |
+
+  ('auto and 'eig agree; at 1/64, 155 fit and 265 are refused). The test
+  pins 27/5·u·κ(X)², with κ(X) = √κ(Gram) as `solution-kappa` reports it,
+  twice the worst; a 2.5× smaller share fails it (ε = 1/16, n = 1000).
+  Float64 is uncovered (#145): it reaches 7.7·u·κ(X)² at ε ≥ 1/64 and 40.3
+  at 1/1024 (κ(X) 10764), and no test pins it. x₂ = x₁ + 3 is
+  refused with an intercept and fits without. Measured in floating point
+  (p104, n = 60, exact float64 Gram): window cases with exactly collinear
+  wide columns give u·κ′ ≥ 7.99 (float32) and ≥ 0.35 (float64, where κ′
+  saturates at double rounding; exact ≥ 8), Q2 float32 8.3e-8 to 8.7e-8,
+  nearly collinear float64 columns ≤ 7.4e-8: ≥ 10^6 apart either way.
+  Float64 fits whose u·κ′ lies in [2^−18, 0.35) are refused though 'svd is
+  accurate there: the wide trio a, b, a + b + ε·z at ε = 2^−12 to 2^−18
+  has exact u·κ′ 1.9e-5 to 0.078 (the check prints it to 10 digits), and,
+  measured once against a library built without the check, the 'svd fit is
+  within 1.1e-11 to 1.9e-8 of the exact ridge solve. The test pins only the
+  refusal and the u·κ′ range: no test-only entry point runs the unchecked
+  solve.
+  For 'svd-qr the free detector |X̃b|/|Db| from the residual check does not
+  separate (exactly collinear float32 X reaches u/q 3.7e-5, x₃ = x₁ + x₂ +
+  2^−10·z reaches 1.3e-5). Cost with every acceptance proven (r6),
+  float32 'qr, RTX 3090 Ti shared, medians of 5 after a warm-up: "check"
+  is `equilibrated_condition` alone, timed in a local gtest after a device
+  sync; "fit" is the whole fit with the check, timed the same way; the r5
+  columns are cee6469 timed in the same session. x_j = f + s·z_j is the
+  correlated family:
+
+  | shape | check | fit | path | r5 check | r5 fit | r5 path |
+  |---|---|---|---|---|---|---|
+  | 1e7×2 | 1.5 ms | | certified | 1.4 ms | | certified |
+  | 1e7×10 | 4.4 ms | | certified | 4.7 ms | | certified |
+  | 1e6×2 | 0.67 ms | 8.3 ms | certified | 0.67 ms | 8.1 ms | certified |
+  | 1e6×10 | 0.96 ms | 17.3 ms | certified | 1.0 ms | 17.4 ms | certified |
+  | 1e5×10 | 0.51 ms | 2.7 ms | certified | 0.53 ms | 2.6 ms | certified |
+  | 1e6×100 Gaussian | 8.9 ms | 154.1 ms | certified | 8.9 ms | 154.3 ms | certified |
+  | 1e6×100, s = 0.01 | 74.9 ms | 220.6 ms | exact | 221.9 ms | 367.9 ms | Ritz, 99 vectors |
+  | 1e6×100, s = 0.03 | 75.2 ms | 220.3 ms | exact | 222.0 ms | 367.8 ms | Ritz, 99 vectors |
+  | 1e6×100, s = 0.05 | 8.8 ms | 154.8 ms | enclosed | 10.2 ms | 177.9 ms | enclosed |
+  | 2e5×1000 | 70.2 ms | 390.6 ms | certified | 97.8 ms | 388.9 ms | certified |
+  | 1e6×10 one-hot, 9 of 10 levels, intercept | 0.91 ms | 16.3 ms | certified | 2.4 ms | 16.3 ms | certified |
+  | 1e6×10 one-hot, all 10 levels, intercept | 2.1 ms | 4.9 ms | Ritz, refused | 5.3 ms | 4.9 ms | Ritz, refused |
+
+  The fit at 1e7 rows fails in cuSOLVER at r5 and r6 alike, with or
+  without the check, so those rows have no fit time. The check's share of
+  the fit is check/(fit − check): 51% at s = 0.01 and 0.03 (r5: 152%),
+  22% at 2e5×1000 (#140 stays open, path unchanged), 9% or less elsewhere
+  at 1e6 rows (8.8% at 1e6×2) but for the refused all-levels one-hot
+  (75%, a fit that stops at the check); 1e7×10 (#146) is unchanged at 4.4 ms. s = 0.01 and 0.03
+  moved from Ritz to exact and got three times cheaper: the batched
+  float64 Gram costs 75 ms at 1e6×100 against 312 ms for r5's blocked
+  `Dsyrk`, so the plan now prices a 99-vector pass (216 ms) above it.
+  Before the refit those shapes took the Ritz window and the block bound
+  certified them (231 ms, same κ′). The proven ε_G at d = 100 is about
+  1.5e-3 (1.5e-5 of the trace), above λ_min there, so no certificate or enclosure
+  exists. r4's measurements: at 1e6×100 the stages were moments 2.3,
+  blocked Gram 4.0, `Ssyevd` 1.2. At d ≤ 16 the Gram is one shared-memory
+  pass over X (`block_gram.cu`), 1.9 ms at 1e7×10 against 4.5 ms for the
+  strided `Sgemm`; 1e7×10 misses the 10% bar because the moments are a
+  float64 pass over X (2.3 ms, the card's float64 rate is 1/64 of
+  float32). At 2e5×1000 and 8000×2000 (#140) `Ssyevd` with vectors, the
+  enclosure (16.4 ms at d = 1000) and the Gram dominate. The cost model
+  (`ritz.cpp`) decides only between Ritz and exact, both of which prove
+  their acceptance, so its error moves cost, never a decision. The exact
+  row is refitted at r6 to the batched Gram with the path forced; the
+  Ritz and enclosure rows are r5's:
+
+  | path | model | shape | measured | model |
+  |---|---|---|---|---|
+  | exact | 3.9·n + 0.0049·n·d² + 74·d² + 1.8e6 ns | 1e7×10 | 48.7 ms | −6.2% |
+  | | | 1e6×10 | 5.5 ms | +11.9% |
+  | | | 1e6×30 | 10.1 ms | +0.9% |
+  | | | 1e6×100 | 75.2 ms | −26.3% |
+  | | | 1e5×100 | 13.4 ms | −41.4% |
+  | | | 1e5×30 | 2.6 ms | +5.3% |
+  | | | 1e6×300 | 417.3 ms | +8.6% |
+  | | | 2e4×1000 | 170.4 ms | +2.0% |
+  | | | 2e5×1000 | 875.1 ms | +20.7% |
+  | Ritz, v vectors | v·(0.0208·n·d + 0.077·d² + 98000) ns | 1e6×100, v = 2 | 4.64 ms | −6.1% |
+  | | | 1e6×100, v = 9 | 19.3 ms | +1.4% |
+  | | | 1e6×100, v = 33 | 69.5 ms | +3.5% |
+  | | | 1e6×20, v = 9 | 4.62 ms | +0.1% |
+  | | | 8000×2000, v = 9 | 6.65 ms | 0.0% |
+  | | | 2e5×1000, v = 9 | 38.7 ms | +0.8% |
+  | enclosure | 0.0085·d³ + 11.3·d² + 126000 ns | d = 10 | 0.128 ms | −0.7% |
+  | | | d = 100 | 0.243 ms | +1.9% |
+  | | | d = 1000 | 20.6 ms | −3.3% |
+  | | | d = 2000 | 111.4 ms | +1.7% |
+
+  The exact path is bound by the float64 Gram at d ≤ 300 (n·d² flops at
+  the card's float64 rate) and by `Dsyevd` with vectors at d ≥ 1000
+  (the d² term stands in for it over the fitted range).
 - **L2-k, float32 'eig on a Gram singular to the dtype (L3r, #111).**
   Breast-cancer (569×29, texture-mean on raw X, column sds 0.0026 to 569,
   intercept): XᵀWX has λ_max 2.5e8 and λ_min 4.0e-4, u·κ₀ = 3.8e4, and 19 of
@@ -1800,7 +2180,8 @@ scratch, the source is `cpp/src/glm/qn/`.
   n_iter 16 against 9.
 - **F4 softmax weights.** `Softmax::getLossAndDZ` ignores the weights: k = 3
   weighted fits are the unweighted fit bit for bit, 3–6e-2 off the weighted
-  optimum.
+  optimum. Superseded by #124 (close-out B2): the shim's own weighted
+  softmax reads them.
 - **F5 gauge.** Softmax intercepts (always) and coefficients (l1, none) are
   fixed only up to a shift common to the classes: Σb = −0.44 (cuML) against
   0 (oracle, sklearn); centred intercepts agree to 5e-7.
@@ -1883,6 +2264,7 @@ scratch, the source is `cpp/src/glm/qn/`.
   (E6, ruled).
 - **L4-c.** With 3 or more classes the effective weights must be equal on
   every row of positive weight (#23); equal weights fold to unweighted.
+  Superseded by #124 (close-out B2): unequal weights are fitted.
 - **L4-d labels.** Integral device vectors (int32, int64, float32, float64)
   or host lists of reals, strings or symbols, encoded to sorted codes;
   predict gives y's kind back. Host reals are made exact integers once,
@@ -1908,7 +2290,7 @@ scratch, the source is `cpp/src/glm/qn/`.
   `penalty-normalized` the penalty is multiplied by the row count, as in Python
   cuML; `'balanced` weighs class c by W/(k·W_c), and a class missing from a
   class-weight hash weighs 1; with 3 or more classes the weights must be equal
-  on every row (#23); defaults are Python cuML's (scikit-learn's max-iter is 100);
+  on every row (#23; lifted by #124); defaults are Python cuML's (scikit-learn's max-iter is 100);
   "large fits" in the reference means more than a few hundred rows (L4-h).
 - **L4-f′.** No warm restarts in L4.
 - **L4-g.** At max-iter n-iter = max-iter and the check decides.
@@ -1955,6 +2337,129 @@ scratch, the source is `cpp/src/glm/qn/`.
 - **L4-p.** Raw breast-cancer is refused (R2): Python cuML's point there is
   off the float64 oracle by more than S4's cap (measured 0.98 f64, 0.99
   f32, against 3e-2 and 8e-2).
+- **Close-out B1 (#127, #126, #125, 2026-11-18).**
+  - #127: `label_classes` returns a device y's sorted classes, so a
+    class-weight hash on device labels moves O(k) to the host, not y.
+    The host-bytes test counts the Racket heap only
+    (`current-memory-use 'cumulative`): a host copy of y made inside the
+    shim, in malloc'd or pinned memory, would not show in it.
+  - #126: a cutoff whose kept spreads differ by more than 2^8 advises
+    "standardise the columns". With fit-intercept or under `'none`, a
+    fit the check refuses is solved again (`logistic_solve.cpp`,
+    `rescued`), from zero and then from the first solve's point mapped
+    into the new coordinates: kept columns centred with fit-intercept
+    (means folded into the intercept), each staged by its own power of two
+    under `'none` (the loss depends only on Xw), the shared exponent
+    otherwise; without fit-intercept only the per-column staging, only
+    under `'none`. The answer is mapped back to the first solve's
+    coordinates and passes the same check there, or the fit is refused.
+    The rescue's solves share the one max-iter budget, so n-iter
+    counts every solve and is at most max-iter (Python's `n_iter_`). A
+    first solve that reaches max-iter and fails the check is not
+    rescued; its refusal says "raise max-iter". A failed rescue's
+    refusal names its last finite attempt's residual and bound (the first
+    solve's when none was finite), and the iterations of every solve, so
+    a rescue that spends the budget also says "raise max-iter". Fits the first solve accepts run the same code as before,
+    bitwise.
+    Epoch-second timestamps over a minute (offset 1.7e9) fit at the
+    default max-iter (n-iter 14-25). Raw breast-cancer is refused at the
+    default max-iter in both dtypes for every penalty (R2 again) but
+    one: float32 l2 at C 0.01 is accepted in about 2 runs in 5 (18 of
+    48, and 5 of 12 in the r1 re-review), within its cap; under
+    `'none` it fits to K <= 1e-7 max(F, 1) given room: float64 with an
+    intercept at 20000 (n-iter 11717), without one at 6000 (4084),
+    float32 with one at 6000 (2322-3134).
+  - Raw breast-cancer's accepted fits depend on max-iter, so their caps
+    do too: S4's caps hold at the default max-iter, and above it each
+    capped arm has its own cap, twice the worst gap to the float64
+    optimum over its runs (24 f64, 48 f32), a regression pin, not an
+    acceptance rule (r1b ruling). The check is the contract; the first
+    solve is Python cuML's bit for bit, so its fits stand. Gaps (worst,
+    cap; share refused): l1 at max-iter 4000, f64 7.07e-2, 1.5e-1, 0/24
+    (the first solve, every run the same); f32 1.32e-1, 2.7e-1, 87/248;
+    elastic net at 4000, f64 4.88e-2, 1e-1, 0/24; f32 1.47e-1, no cap,
+    325/398; l2 at C 0.01, f64 at 4000 4.41e-4, 9e-4, 0/24; f32 at 4000
+    1.77e-3, 3.6e-3, 6/48; f32 at 1000 8.06e-4, 1.7e-3, 30/48. The
+    float32 elastic-net tail grows with the runs: its worst was 1.17e-2
+    over the first 24, 8.06e-2 over 48 and 1.47e-1 over 248 (the r1
+    re-review's 200 more); the r2 re-review's 150 more were refused 128
+    times, worst 8.06e-2. A cap on a tail that keeps growing rules out
+    no regression, so that arm has none (r3 ruling): an accepted fit
+    has a finite gap and the oracle's float32 residual (`residual-of`)
+    within the check's own bound. The float64 arms have only been
+    accepted, so each must be accepted within its cap and a refusal
+    fails it; a float32 arm is refused (the cutoff's message) or
+    accepted within its cap or that bound, and each has done both; any
+    other error fails either kind. At max-iter 1000 every
+    other penalised arm is refused in 24 of 24 runs.
+  - The float32 standardised breast-cancer l1 fit does not repeat: 40
+    runs at 099f0c1 and 40 at this branch put its gap to the float64 fit
+    between 5.0e-3 and 1.42e-2; `float32-gap-checks` is per penalty. l1
+    (2.9e-2) and elastic net (1.7e-3) are one fit, twice the worst of 40
+    runs. l2 is the second-smallest gap of 5 fits (r1c ruling: one run,
+    2.2e-5 to 6.2e-4, cannot pin a 10x regression; r3 ruling: a median
+    of 5 fails about 2% of runs), at 1.6e-4. One fit is above 1.6e-4 in
+    69 of 500 runs (r1c's 200 and the r2 re-review's 300); the
+    second-smallest is above it only when 4 of 5 are, 0.16% of runs at
+    that rate (0.37% at its 95% upper bound). Over the 488 sliding
+    windows of 5, the worst second-smallest is 1.93e-4 (1 window above
+    1.6e-4) and the smallest 2.75e-5, so a 10x regression (2.75e-4 or
+    more) fails. Elastic net's gaps have two modes (about
+    1.5e-4 and 8.05e-4, 47 of 100 draws at the upper), so neither one fit
+    nor a median of 5 pins a 10x regression of the lower one: its bound
+    pins a regression only relative to the upper mode. Accepted as is
+    (r2 ruling); what selects the mode is #142.
+    The logistic twin file and the float32 breast-cancer file are split so
+    each runs in about 25 s at `--timeout 45`.
+  - The capped arms' float64 optima (l1 and elastic net at C 1, l2 at
+    C 0.01) are pinned in `private/raw-logistic-optima.rktd` (our qn solver,
+    tol 1e-10; l1 24919 and elastic net 22726 iterations, 12 to 60 s each
+    by host load), not refitted per run;
+    sklearn's saga at tol 1e-10 is off stationarity there (K/F 3e-2 after
+    5 minutes), so it cannot be the pin. A GPU-suite test checks each
+    pinned optimum to K <= 1e-5 max(F, 1) (the oracle's MPFR is not in the
+    nix sandbox).
+  - #125: not shipped. On the p4 grid, up to 3 warm restarts cut the
+    median coefficient error of the 541 restarted fits only 1.49×
+    (1.65× over change and line-search stops), short of the 2× bar, at
+    0.16× the fit's iterations; each restart stops on the change test
+    again (issuecomment-6985014426).
+- **Close-out B2 (#124, 2026-11-19).** Unequal weights with 3 or more
+  classes are fitted. `weighted_softmax.cuh` adapts cuML 26.08's
+  `glm_softmax.cuh` (lines 33-181): each row's loss term and dZ column
+  are multiplied by its L4-b weight w̃ = w·m/W, so the loss is
+  Σ w̃(lse − η_y)/N and the gradient (linearBwd's /N) is its derivative.
+  `logistic_softmax.cu` runs it under qn's own `qn_fit`
+  (L-BFGS/OWL-QN unchanged), read from the flake's `cumlSrc`; every other
+  fit, unweighted multiclass included, still calls libcuml's `qnFit`.
+  The check's K and the rescue's re-solves read the same w̃.
+  - Reduction: a gtest pins equal weights to cuML's `Softmax` (the
+    gradient bit for bit; the loss, which both kernels sum across blocks
+    by atomicAdd, to (m − 1)·ε of that sum's order), and the loss and
+    gradient to a float64 host reference under unequal weights, for
+    m = 101 rows (several blocks, the last ragged) and
+    k ∈ {2, 3, 7, 33} (33 > 32 takes the kernel's C > BX loops). The unweighted k=3 fit of
+    `logistic-regression-twin-bits-test` is unchanged bit for bit; at
+    f1f7ced and here its float32 and float64 fits print identically.
+  - S1: integer class weights (k=3, unbalanced classes) and per-row
+    integer sample weights fit as repeated rows within 1e-6.
+  - Twin: sklearn's saga does not converge under sample weights (seed 44,
+    l1, k=3: its K 0.083 against ours 5.6e-8), so the weighted twins
+    give sklearn the equivalent repeated rows. Over seeds 40-51 our
+    weighted fit's gap to it equals libcuml's unweighted fit of those
+    repeated rows (Python cuML's path) to 1e-15 in float64. That gap
+    exceeds T3's 1e-6 even unweighted for l1 and elastic net (float64
+    maxima 2.5e-6 l1 k=5, 5.7e-6 elastic net k=5, 8.4e-6 elastic net
+    k=3; float32 up to 4.4e-3 elastic net k=3, against 3.6e-3 for the
+    repeated rows), so the bound is the repeated rows' gap plus T3.
+  - Wine `'balanced`: raw wine is not stationary at sklearn's tight
+    balanced fit (its K 6.7e-6, ours 8.6e-6; gap 4.2e-4 float64,
+    2.2e-3 float32), so it is held to the default-tol cap; standardised
+    wine is within T3.
+  - Rescue: epoch-second timestamps with three classes and weights
+    1 + (i mod 3) are refused by the first solve (K 0.25 above 6.8e-3)
+    and fitted by the rescue; a rescue that re-solves unweighted fails
+    the check.
 - **Deviations accepted.** Missing classes weigh 1 (L4-r); house wording
   for the y length, negative weights, zero weight sum and #24; a
   column-reach cap in place of `shared_cap`; Racket refusals raise
@@ -1970,7 +2475,15 @@ scratch, the source is `cpp/src/glm/qn/`.
   row-major (house `rows_of`, as L1–L3), so the twins run row-major
   and col-major X is a refusal row; float32 multiclass fits under l1
   or elasticnet repeat on neither side at 150–200 rows, so those rows
-  compare within S3's 1e-3 and the rest stay bit for bit. R1 and R3:
+  compare within a bound per class count (three classes 2.04e-4, five
+  2.98e-3) and the rest stay bit for bit. Each bound is twice the worst
+  of its rows in #133's repeat study: 50 fits a side of each such row
+  under a `-j 4` load, every pair of ours and Python's (2,500 a row),
+  worst 1.49e-3 (five classes, elasticnet, no intercept; 303 pairs above
+  S3's old 1e-3), three classes at most 1.02e-4; 3 of our 400 fits
+  logged a failed line search (five classes, l1: n-iter 58, 34 and 36
+  against 63 and 38), Python's n-iter has 3 such outliers there, and
+  none is in the worst pair. R1 and R3:
   sklearn's point is not a 1e-6 oracle on the real sets (lbfgs stops
   on ftol = 64ε, breast-cancer l2 K 1.1e-8 at sklearn's point and
   8.6e-7 off our tol-0 fit, iris 1.1e-6; saga takes 70 s for l1 and
@@ -2084,14 +2597,28 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   gradient noise adds to the oscillation, so c = 3.5 leaves 2.13×. The
   classifier's A is capped at 4·F_start (fix r1e): uncapped, a large eta0
   makes A large enough to hide divergence (ratios to 3,721 at eta0 1,
-  F10-C). The regressor's A is uncapped (fix r1f): its F_start is var(y),
-  not scale-free, so a cap refuses small-variance y at the defaults (2 or
-  3 rows of 3 columns, l1 α 10: F_start to 7.2e-5, ratio to 3,328), some
-  beyond what eta0/10 clears; no regressor l1 study exists (#134). The
-  largest rise a good fit needs at the default eta0 is breast cancer log
-  l1 α 10, ratio 3.21, inside the capped limit of 5.025·F_start; lowering
-  eta0 shrinks A and the oscillation alike, so "lower #:eta0" still clears
-  every refusal the cap adds. The
+  F10-C). The regressor's A is capped at 0.25·max(1, k/800)·F_start
+  (#134, F10-R, F10-W), and where F_start is round-off (F_start ≤ m·floor,
+  m 32 in float64 and 1 in float32, F10-R round-off) without fit-intercept
+  at 0.25·mean(y²), the zero model's loss there; with fit-intercept an l1
+  or elastic-net regressor at round-off is judged against the zero model
+  b = ȳ, w = 0 instead, refused ("y is constant to round-off and ...;
+  lower #:eta0 or #:alpha") unless every |w| ≤ 2·eta0·α·r, two penalty
+  steps, and |b − ȳ| ≤ 1e-6·|ȳ| (r3; a cap of .25·mean(y²) uncentred
+  there passed a fit off the constant by up to about ȳ/2), and any regressor with fit-intercept at
+  round-off is refused when √loss > 2⁻¹⁰·|ȳ| + √floor (r4b, F10-R
+  round-off). A and both caps scale with y², so the
+  caps are y-scale-invariant, and they keep A finite for any finite
+  F_start and mean(y²) (uncapped, A is inf in float64 above α ≈ 1e154 and
+  passed any finite fit; uncapped at round-off with no other check, a
+  constant y = 1.7 passed at prediction RMSE up to 9.8e146); a fit of a
+  constant has the two bounds instead, which hold for no diverging fit.
+  F10-R separates its good
+  fits (largest need 0.0734·F_start) from its bad ones (smallest 0.606).
+  The largest rise a good classifier fit needs at the default eta0 is
+  breast cancer log l1 α 10, ratio 3.21, inside the capped limit of
+  5.025·F_start; lowering eta0 shrinks A and the oscillation alike, so
+  "lower #:eta0" still clears every refusal a cap adds. The
   floor is 1e-12·F_start + 10·ε_T²·mean(y²) for the regressor, ε_T the
   dtype's machine epsilon (round-off of y's magnitude: a constant y, or a
   float32 y far from 0, whose residuals are quantised at ε·|y|), and
@@ -2099,9 +2626,18 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   setting the review found at chance above the zero model except one that
   A admits at eta0 1, and refuses no good fit at the default eta0; it
   refuses 10 good fits at eta0 .01, which no constant s can avoid (F10-C).
-  The gate catches blow-ups and fits ending above F_start·1.025 + A, A at
-  most 4·F_start for the classifier under l1 or elastic-net and uncapped for the
-  regressor; it passes a fit at or below that which predicts badly
+  The gate catches blow-ups and fits ending above F_start·1.025 + A + floor, A at
+  most 4·F_start for the classifier and as above for the regressor under
+  l1 or elastic-net. Above round-off it also refuses a regressor whose
+  loss without the penalty ends above F_start·1.025 + min(floor,
+  .025·F_start), a fit worse than the zero model (with an intercept,
+  in-sample R² below −.025 − min(floor/F_start, .025), at worst −.05),
+  "the loss rose from … to …; lower #:eta0" (F10-W r2; r3 capped the
+  floor's share, whose + floor admitted R² down to −(.025 + floor/F_start),
+  about −1 at float32's round-off edge: storing b in the dtype raises the
+  loss by at most floor/40 < .025·F_start, inside the slack, and the share
+  is kept for the f32 near-constant elastic net, F10-R round-off). It
+  passes a fit at or below those which predicts badly
   (F10-C: e.g. bc hinge l2 α 10, eta0 .05, bs 1, f32, accuracy .097;
   blobs hinge l2 α 10, eta0 .1, bs n, 200 epochs, accuracy .12). Both
   refusals advise lowering eta0, and print both values to 6 significant
@@ -2109,7 +2645,25 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   about 1.3e154, or with fit-intercept |y − ȳ| above it; each term of a mean is
   divided by n before the sum) is
   refused before the solve, "y is too large to check the fit; rescale
-  y" (fix r1f, r1g). Each of alpha, tol, eta0 and power-t is checked
+  y" (fix r1f, r1g). So is a y the solver's own sums in X's dtype could
+  overflow (#135): float32's sums overflow long before the double
+  checks, and the fit was then refused as not finite with "lower
+  #:eta0", which no eta0 clears. Bisected at eta0 1e-30 (2 epochs,
+  n 2 to 20,000, X unit or ×1e3, batch 1, 32, n, with and without
+  fit-intercept), the first non-finite iterate comes at Σ|y| ≥ 1.01·max
+  under fit-intercept (the centring mean's sum) or at
+  max_j Σ_i |x_ij|·|y_i − ȳ| ≥ 0.646·max (a batch's gradient sum), max
+  the dtype's largest value. The refusal bounds both before the solve:
+  m·Σ|y − ȳ| with m = max|x| (2·max|x| under fit-intercept, which centres
+  X) or, under fit-intercept, Σ|y|, above max/4; ȳ is 0 without
+  fit-intercept. Its bound is at least the measured sum, so it refuses at least 2.5×
+  below every measured overflow;
+  in float64 it needs m·Σ|y − ȳ| above 4.5e307. An X column whose Σ|x|
+  exceeds max/4 is refused "rescale X" with or without fit-intercept
+  (r1, r2): without it such a column has max|x| ≥ max/(4n), and a stable
+  step, below 1/max|x|², rounds to 0 in the dtype for any n ≤ 2^31
+  (float32 X ≈ 3e36, no intercept, was refused "lower #:eta0" at every
+  eta0 down to 1e-37). Each of alpha, tol, eta0 and power-t is checked
   against X's dtype right after its own range, in settings order: one
   that overflows it, "alpha: 1e+150 overflows float32", or an alpha or
   eta0 that rounds to 0 in it, "eta0: 1e-50 rounds to 0 in float32"
@@ -2175,6 +2729,161 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   gap ≤ 1 that the uncapped rule accepts, so the good fits refused stay
   the 10 at eta0 .01 and none at 1e-3; every must-refuse row stays
   refused. F10 (p7, 960 fits) is l2 only, so A = 0 and the cap is moot.
+- **F10-R regressor gate study** (#134; 25,920 fits, uncapped regressor:
+  l1 and elastic net at l1-ratio .15 and .5, α 1e-4..10, eta0 1e-4..1, bs
+  1/32/n, constant/invscaling, epochs 1/10/200 (not bs 1 × 200 above 32
+  rows), f32 and f64, on normal 512×6 seed 3 (noise .5), diabetes 442×10
+  standardised X and raw y (var 5,929), small-y (512×6 seed 5, y × 1e-3)
+  and small-n (3×3, 8 seeds)). F_opt is the lesser of a host
+  coordinate-descent optimum in double and every finite fit's objective;
+  g = (F_end − F_opt)/F_start, and need = (F_end − 1.025·F_start −
+  floor)/F_start is the cap a fit needs to pass. Fixed before reading any
+  gate value: good is g < .1; bad is g ≥ 1 (the excess over the optimum is
+  at least the zero model's objective) or in-sample R² < 0 on a problem
+  whose optimum has R² ≥ .1. Uncapped, the gate accepted 22,438 (3,222
+  rose, 260 not finite): 8,090 good, 1,710 bad (the 30 bad by R² are among
+  them), every bad one only through A (need .606 to 1.7e7: small-y and
+  small-n at large α·eta0, e.g. small-y l1 α 10 eta0 1 bs n invscaling 10
+  epochs, g 1.69e7); diabetes has no bad fit and no good fit that needs A.
+  The largest good need is .0734 (normal, l1-ratio .5, α 10, eta0 .01, bs
+  n, 1 epoch), the smallest bad .606 (small-y, l1-ratio .5, α 1e-3, eta0 1,
+  bs n, 1 epoch, g 1.34): every cap in [.1, .5] refuses no good fit and all
+  1,710 bad; cap 1 keeps 16 bad, the classifier's 4 keeps 410. The cap .25
+  (3.4× the largest good, 2.4× below the smallest bad) refuses 2,148 fits
+  accepted uncapped (0 good, 1,710 bad, 438 neither); eta0/10 clears 784,
+  /100 458 more, /1000 170, lower 34, and 702 are at the grid's eta0 floor
+  1e-4 (cap since r1: .25·max(1, k/800), F10-W). Caveat: the good side is tautological. A fit the cap refuses ends
+  above 1.275·F_start (the slack and the cap), and F_opt ≤ F_start because
+  the zero model is a candidate, so every cap refusal has g > .275 and no
+  good fit (g < .1) can be one. The bad side is measured, not derived: a
+  learnable problem could rise less than .25·F_start and still fit badly,
+  and a fit whose g is large only because the l1 oscillation's penalty is
+  large next to F_start can predict as well as the optimum (F10-W).
+  The cap bounds what A can hide; it does not certify the fit. The cap
+  refuses no test row with g < .1. Its new refusals among them, each refused
+  at the defaults in f32 and f64 alike and passing at a lower eta0, are now
+  refusal rows: `mbsgd-gate-small-n-test`'s l1 α 10 regressor (3 columns,
+  eta0 1e-3) on 13 of 20 seeds at 2 rows (g .313 to 3,327, seed 1187 at
+  F_start 7.2e-5) and 11 of 20 at 3 rows (g .322 to 15.9), and its 4-row
+  and 6-row seeds (g .612, .607); and `mbsgd-gate-documented-test`'s
+  300×5, y × .01, l1 α 1 (g 8.12, passes at eta0 2e-5). The accepted rows
+  reach g .266 (2 rows, seed 1261). The lowest eta0 a refused row needs is
+  1e-6 (seeds 1002, 1187), the highest 5e-4.
+  The refused small-n rows' g is the same in f32 and f64 to 3 figures
+  (.314 to 3,330). By predictions, 36 of its 52
+  refused fits have in-sample R² within .02 of the optimum's: their g is
+  large because α·|w|₁ of the oscillation is large next to a tiny
+  F_start, not because they predict badly. They stay refused (r1 ruling).
+- **F10-R round-off** (r1, r2). A constant y under l1 or elastic net has
+  F_start of 0 to an ulp² of y (the mean's rounding: 0.3 f64 3.1e-33,
+  1e6 f64 1.4e-20), so a quarter of it refused the oscillation at the
+  defaults (rise 3.8e-11 under l1 α 1e-4). Round-off is F_start ≤ m·floor:
+  a constant within ±1 ulp has F_start ≤ ((1 + e)·ε·y)², e the mean's
+  error in ε·|y|; f32's mean is summed in double, so e ≤ n·2⁻⁵³/ε ≤ 2 even
+  in sequence and 3² < 10 gives m = 1; f64's is at most log2(n)/2 ≤ 16 for
+  a tree sum and 17² < 32·10 gives m = 32 (a 3e6-row f64 constant passes,
+  reviewer probe). r1's single m = 32 called up to about 18·ε·|ȳ| of real
+  f32 spread round-off: y = 1e6 + 1.5·x₁ + .5·e (300×4, var 2.35) passed
+  l1 α 100 eta0 .1 at R² −70.8 and α 1e4 at R² −7.2e5 (r2). At round-off A
+  is capped at .25·mean(y²), the zero model's loss without an intercept:
+  r1 left it uncapped, and y = 1.7 passed l1 α 100 eta0 .1 at prediction
+  RMSE 10.9, α 1e150 at 9.8e146, and bs 1 invscaling eta0 1 at .17 (r2).
+  r3: with fit-intercept that cap passed y = 1.7 l1 α .51 eta0 .3 off the
+  constant by .0018 (and up to about ȳ/2 at larger α·eta0), so such a fit
+  is now judged by the two bounds below, which refuse it in both dtypes;
+  every row above is refused by them too. They hold for l1-ratio .001 to
+  .15 at the defaults (max |w| .95 steps throughout). On X whose column
+  means are exactly 0, b = ȳ whatever w, so only the coefficient bound
+  acts: it passes l1 α .51 eta0 .6 one batch at max |w| .42 (2·eta0·α·r =
+  .61) and refuses eta0 .72 at .75.
+  Every constant 0.3, 1.7, 1e6 under l1 and elastic net passes at the
+  defaults in both dtypes with |b − y| ≤ 1e-6·|y| (worst 1.4e-7, the f32
+  rounding of 0.3) and every |w| ≤ 2·eta0·α·r (worst .95·eta0·α·r), over X
+  seeds 3, 5, 7, 13. Near-constant y = 1.7 + 1e-6·e (300×4, defaults α
+  1e-4): F_start 1.08e-12, 2.6 f32 floors, so f32 is now above round-off.
+  Under l1 it is refused (g 33.2, R² −.078 against the optimum's 0: it
+  predicts worse than the zero model); under elastic net it passes the
+  cap and the loss guard (loss 1.0251·F_start, R² −.025, inside the
+  slack plus the floor's share). Above round-off (m = 1) the cap refuses
+  the default f32 l1 fit of y = 1.7 + s·e or 1.7 + s·x₁ from 2.3 floors
+  to 41.9 (noise, s 1e-6 to 4e-6) and to 149.3 (signal, s 1e-6 to 8e-6),
+  all "objective rose"; the noise fit passes at s 8e-6 (167.9 floors, R²
+  −.0017), and elastic net and l2 pass throughout (r2 reviewer probe
+  near-constant-f32; s 1e-6 and 2e-6 pinned in
+  mbsgd-gate-round-off-test; #141). No round-off multiple bounds these
+  refusals: they stop where the oscillation's rise, 2.1e-11 to 3.6e-11 here,
+  falls inside .25·F_start.
+  r4b (H-A, H-B): at round-off with fit-intercept every regressor, under
+  any penalty, is also refused when its prediction error √loss exceeds
+  2⁻¹⁰·|ȳ| + √floor ("the fit's predictions are off by …"). r4's
+  loss ≤ F_start·1.025 + floor refused 7 of the 19 round-off-test rows: an
+  exact constant has F_start ≈ 0 while l1 leaves |w| ≈ eta0·α·r, a loss
+  of 3e-14 at 6.2e-7·|ȳ| (f32 y = 0.3). At round-off the measure is the
+  error relative to the constant. The share lies between that 6.2e-7, the
+  largest at the defaults for |ȳ| ≥ .3, and 0.040 (y = 1.7 l1 α .51 eta0
+  .1, r2; the intercept bound refuses it first), 2.6 octaves above their
+  geometric middle; the smallest pinned row only this bound refuses is
+  zero-mean elastic net α 1 eta0 .1, at 9.9e-3·|ȳ|. On zero-mean and
+  standardised X, where b = ȳ whatever w and only the coefficient bound
+  acted, it refuses 60 constant-std fits 0ba2ed9 passed (y = 1.7, l1 and
+  elastic net, both dtypes, 1.03e-3·|ȳ| up to 6.5e4·|ȳ|; e.g. l1 α 10 and
+  100 at eta0 .1, .57 to 6.5) and passes the 76 at most 9.66e-4·|ȳ|. In
+  the other probes r4b ran no row moves: the 19 round-off-test rows,
+  F10-W's 16, constant-q (worst accepted 7.2e-4·|ȳ|, y ≡ 0 32/32), constant-mid
+  (its one accepted fit off the constant, f64 y = 1e6 l1 α 3e4 eta0 .1
+  invscaling, is at 3.75e-5·|ȳ| and still passes), repro-h1, h1-wide
+  and ordinary (768/768). Small constants do move (r4b reviewer probes
+  small-c2; small-c's round constants fit exactly): a constant's l1 fit
+  oscillates by an absolute amount, about eta0·α·r·√d (1.9e-7 at the
+  defaults on standardised X, d = 4), so below |ȳ| ≈ 2¹⁰·eta0·α·r·√d,
+  about 2e-4 there, a constant the fit does not reproduce exactly is
+  refused by this bound: 3 f32 and 9 f64 of 45 l1 constants from 1e-5 to
+  .033 that 0ba2ed9 passed (f64 y ≡ 1.1e-4 pinned refused in
+  mbsgd-gate-round-off-predictions-test; y ≡ 1e-4 fits exactly and
+  passes). On raw X the intercept bound already refuses them at 0ba2ed9.
+  An absolute term in the bound would accept H-A's rows again, so the
+  refusal stands (r4c ruling). H-B is accepted by ruling: R² at round-off
+  measures rounding, not the fit. h1-wide's accepted fits with R² < −.05
+  are all at round-off, within 6.0e-7·|ȳ| in f32 (27, F_start ≤ .96
+  floors) and 6.5e-15·|ȳ| in f64 (25, ≤ 31.7 floors); y = 1e6 + .36·x₁ +
+  .072·e (f32, R² −2.08, .89 floors, 6.2e-7·|ȳ| = 5.2·ε·|ȳ|) and an f64
+  fit at R² −1.84 (14.1 floors, 4.4e-15·|ȳ| = 20·ε·|ȳ|) are pinned
+  accepted, each checked for R² < −1, F_start at round-off and an error
+  within the share (mbsgd-gate-round-off-predictions-test).
+  Near the floor the loss guard (r3) refuses y = 1e6 + .5·x₁ + .1·e
+  (f32, 1.73 floors) l1 α 1 eta0 .05 (R² −.14) and α 2 eta0 .02 (R²
+  −.097), which the old + floor passed; it passes s .45 α 1 eta0 .02 (R²
+  −.032, 1.39 floors) and s .42 α 1 eta0 .05 (R² −.027, 1.22 floors),
+  inside −.05. f64 is refused under l1 (g 33.4, R² −.054) and elastic net (g
+  .42, R² −.003, inside .02 of the optimum's 0; #141). No round-off
+  multiple reaches f64 (it would need ~7e17). At 1e-5·e and 1e-4·e
+  both dtypes pass.
+- **F10-W wide lasso** (r1; n 200, d 500 to 8,000, y = x₁ + x₂ + x₃ +
+  .5·e, l1 and elastic net .15 at α .1 and 1, eta0 1e-3, 1e-4, 1e-5, f32
+  and f64, 3 seeds, 360 fits; and at eta0 3e-3 to .1, 1 seed, 96 fits).
+  At the defaults the .25 cap refused 16 fits, all l1 α 1 at d ≥ 2,000
+  (g .50 to 2.35), every one with R² within .02 of the optimum's or
+  better: the oscillation's penalty, ∝ k·eta0·α², outgrows F_start. A
+  tenth of eta0 passes them but predicts worse within the default epochs
+  (d 2,000 R² .43 against .64). The cap is now .25·max(1, k/800), k the
+  coefficients: it leaves every fit with k ≤ 800 as it was (every F10-R
+  and test row has k ≤ 11), and the largest k₀ in .25·k/k₀ that passes
+  every matching default fit is 875 (d 2,000 seed 21, need .572).
+  Separation over both sets, by d (accepted max g / refused min g):
+  2,000 .74 / 1.53, 4,000 1.10 / 3.28, 8,000 2.35 / 7.45; the refused
+  are at eta0 ≥ 3e-3, and every fit with R² < 0 (smallest g 9.46, d
+  8,000 eta0 3e-3) stays refused. No fit the new cap accepts and the
+  old refused predicts worse than R² − .02. r2: validated at n 200 only,
+  the widening passed n 12 × d 8,000 l1 α .6 at R² −.39 and n 10 × d
+  8,000 α .3 (f32) at R² −1.18; the loss guard now refuses those. Rerun
+  at n 10, 12 and 50 (same y, d and penalties, α .1, .3, .6, 1, eta0
+  1e-3 and 1e-4, both dtypes, 3 seeds; n 12 × d 8,000 1 seed; 1,368
+  fits): the widening admits 5 fits with R² < 0, all at d 8,000, n 10
+  and 12 (R² −.41 to −1.18), and the guard refuses each; the other 36
+  fits it admits over n 12 to 200 all have R² within .02 of the
+  optimum's. The guard refuses no other fit, and no plain .25 cap with
+  the guard passes the 16 (the guard only refuses), so the widening
+  stays, with the guard.
 - **F11 real data**, gap (F − F*)/F* against exact ridge α 1e-4: diabetes
   as shipped (column spread .048), cuML defaults .71 (coef .89 off); eta0
   .01 .107; sklearn SGDRegressor defaults .14. Diabetes standardised:

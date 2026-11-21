@@ -2,14 +2,8 @@
 Racket side used, cuml's trustworthiness and HDBSCAN score the embeddings,
 and sklearn's exact TSNE is the reference for method exact."""
 
-import json
-import sys
-
 import numpy as np
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
+from twin_common import host, run
 
 
 def rows(case):
@@ -112,33 +106,13 @@ def params(case):
     }
 
 
-def versions():
-    out = {}
-    try:
-        import sklearn
-
-        import cuml
-
-        out.update({"cuml": cuml.__version__, "sklearn": sklearn.__version__})
-    except ImportError:
-        pass
-    return out
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {
-        "tsne": tsne,
-        "python-default": python_default,
-        "quality": quality,
-        "sklearn": sklearn,
-        "params": params,
-    }
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": versions()}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "tsne": tsne,
+            "python-default": python_default,
+            "quality": quality,
+            "sklearn": sklearn,
+            "params": params,
+        }
+    )

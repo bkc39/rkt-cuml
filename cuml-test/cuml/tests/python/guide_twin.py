@@ -2,13 +2,10 @@
 reconstruction error, and arpack TruncatedSVD of the float32 rows the
 decomposition chapter fits, in float64."""
 
-import json
-import sys
-
 import numpy as np
-import sklearn
 from sklearn.decomposition import PCA, TruncatedSVD
 from sklearn.metrics import mean_squared_error
+from twin_common import run
 
 
 def rows(case):
@@ -48,14 +45,5 @@ def reconstruction(case):
     }
 
 
-def main():
-    with open(sys.argv[1]) as f:
-        given = json.load(f)
-    ops = {"pca": pca, "tsvd": tsvd, "reconstruction": reconstruction}
-    results = [ops[case["op"]](case) for case in given["cases"]]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": sklearn.__version__}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run({"pca": pca, "tsvd": tsvd, "reconstruction": reconstruction})

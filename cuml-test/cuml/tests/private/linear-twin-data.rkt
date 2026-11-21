@@ -5,7 +5,7 @@
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in threading ~>)
+         (only-in "common-data.rkt" unit-roundoff)
          (only-in "linear-data.rkt"
                   algorithms
                   case-fit
@@ -14,8 +14,8 @@
                   fit-size
                   kappa-of
                   lcase
-                  lcase-name
                   lcase-X
+                  lcase-name
                   lcase-w
                   lcase-y
                   max-abs
@@ -23,42 +23,28 @@
                   oracle-lstsq
                   rounded-case
                   scaled-columns
-                  solution
-                  unit-roundoff)
-         (only-in "python-env.rkt" run-twin))
+                  solution)
+         (only-in "python-env.rkt" bits->floats floats->bits matrix->bits twin-results))
 
-(provide bits-of
-         case-request
+(provide case-request
          check-cuml-failures
          check-cuml-parity
-         decoded
          one-column
          p1-cases
          request
          results
          theirs
-         twin-results
          with-constant)
 
 (define-runtime-path twin "../python/linear_regression_twin.py")
 
-(define (bits-of dt xs)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([x (in-list xs)])
-    (integer-bytes->integer (real->floating-point-bytes x size) #f)))
-
-(define (decoded dt bits)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([b (in-list bits)])
-    (floating-point-bytes->real (integer->integer-bytes b size #f))))
-
 (define (case-request op c dt fi settings)
   (for/fold ([request (hasheq 'op op
                               'dtype (symbol->string dt)
-                              'X (bits-of dt (~> c lcase-X (apply append _) (map exact->inexact _)))
-                              'y (bits-of dt (map exact->inexact (lcase-y c)))
+                              'X (matrix->bits dt (lcase-X c))
+                              'y (floats->bits dt (lcase-y c))
                               'w (if (lcase-w c)
-                                     (bits-of dt (map exact->inexact (lcase-w c)))
+                                     (floats->bits dt (lcase-w c))
                                      'null)
                               'fit_intercept fi)])
             ([(key value) (in-hash settings)])
@@ -73,18 +59,12 @@
                                        "eig"
                                        (symbol->string a)))))
 
-(define (twin-results script requests)
-  (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
-    (run-twin script (hasheq 'cases requests)))
-  (check-equal? version libcuml-version)
-  results)
-
 (define (results requests)
-  (twin-results twin requests))
+  (twin-results twin requests #:expected-cuml libcuml-version))
 
 (define (theirs dt result)
-  (match-define (list intercept) (decoded dt (hash-ref result 'intercept_bits)))
-  (list (decoded dt (hash-ref result 'coef_bits)) intercept))
+  (match-define (list intercept) (bits->floats dt (hash-ref result 'intercept_bits)))
+  (list (bits->floats dt (hash-ref result 'coef_bits)) intercept))
 
 (define one-column (normal-case 200 1 7))
 

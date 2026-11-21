@@ -16,6 +16,7 @@
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
+         (only-in "common-data.rkt" columns-of on-vector)
          (only-in "exact-algebra.rkt"
                   condition
                   dot
@@ -33,7 +34,6 @@
          case-result
          check-law
          check-law-case
-         columns-of
          decimals
          docs-case
          dtypes
@@ -46,19 +46,24 @@
          gap
          host-cosine
          insert-column
+         integer-draws
          kept-rows
          kappa-of
          law-case
          law-cases
+         lstsq
          reach-fixtures
          max-abs
          normal-case
          on-matrix
-         on-vector
          oracle-lstsq
          oracle-ridge
+         outcome
          ridge-oracles
          power-spread-case
+         prediction-gap
+         q2-alpha
+         q2-float32-bound
          power-spread-gone
          remove-at
          result-fit
@@ -67,10 +72,14 @@
          rounded-case
          scaled-case
          scaled-columns
-         unit-roundoff
+         summed-case
          weighted-gram
          weighted-spread
          weights-or-ones
+         window-draw
+         window-draws
+         window-float64-bound
+         wobble
          zeroed)
 
 (struct lcase (name X y w) #:transparent)
@@ -82,11 +91,6 @@
 
 (define (by-dtype dt float32 float64)
   (if (eq? dt 'float32) float32 float64))
-
-(define (unit-roundoff dtype)
-  (if (eq? dtype 'float32)
-      (expt 2.0 -24)
-      (expt 2.0 -53)))
 
 (define docs-case (lcase "docs" '((1 1) (1 2) (2 2) (2 3)) '(6 8 9 11) #f))
 
@@ -130,9 +134,6 @@
 (define (on-matrix rows [dtype 'float64])
   (list*->device-matrix rows #:dtype dtype))
 
-(define (on-vector xs [dtype 'float64])
-  (and xs (list->device-vector xs #:dtype dtype)))
-
 (define (case-result c dt #:algorithm [a 'auto] #:fit-intercept [fi #t])
   (linear-regression-fit (on-matrix (lcase-X c) dt)
                          (on-vector (lcase-y c) dt)
@@ -165,6 +166,56 @@
 
 (define (gap xs ys)
   (max-abs (map - xs ys)))
+
+(define q2-alpha 1.0)
+(define q2-float32-bound (expt 2 -10))
+(define window-float64-bound 1e-10)
+(define window-draws '((37 3 101) (53 7 97)))
+
+(define (window-draw i draw)
+  (match-define (list multiplier shift modulus) draw)
+  (- (modulo (* multiplier (+ i shift)) modulus) (quotient modulus 2)))
+
+(define (summed-case n seed [eps 0])
+  (define c (normal-case n 2 seed))
+  (define next (uniform-source (+ 31 seed)))
+  (lcase (format "x3 = x1 + x2 + ~a z, ~a rows, seed ~a" eps n seed)
+         (for/list ([row (in-list (lcase-X c))])
+           (append row (list (+ (apply + row) (* eps (dyadic (- (next) 1/2)))))))
+         (lcase-y c)
+         #f))
+
+(define (integer-draws salt count)
+  (for/fold ([s (+ 1 (* 7919 salt))]
+             [draws '()]
+             #:result (reverse draws))
+            ([_ (in-range count)])
+    (define next (modulo (+ (* s 1103515245) 12345) 2147483648))
+    (values next (cons (- (modulo (quotient next 65536) 23) 11) draws))))
+
+(define (wobble i)
+  (/ (modulo (* 31 i) 17) 16))
+
+(define (outcome thunk)
+  (with-handlers ([exn:fail? exn-message])
+    (thunk)))
+
+(define (lstsq rows y dt algorithm #:fit-intercept [fi #t])
+  (~> (linear-regression-fit (on-matrix rows dt)
+                             (on-vector y dt)
+                             #:algorithm algorithm
+                             #:fit-intercept fi)
+      result-fit
+      exact-fit))
+
+(define (prediction-gap rows y fit #:fit-rows [fit-rows rows])
+  (match-define (list coef b) fit)
+  (define o (oracle-lstsq rows y #f #t))
+  (define (predict on intercept coefs)
+    (for/list ([row (in-list on)])
+      (+ intercept (dot row coefs))))
+  (/ (gap (predict fit-rows b coef) (predict rows (solution-intercept o) (solution-coef o)))
+     (max-abs y)))
 
 (define (kappa-of c fi)
   (solution-kappa (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi)))
@@ -302,9 +353,6 @@
   (let ([law name])
     (law-case law
       (check-law law got bound))))
-
-(define (columns-of rows)
-  (apply map list rows))
 
 (define (max-abs xs)
   (for/fold ([m 0]) ([x (in-list xs)])

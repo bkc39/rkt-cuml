@@ -6,12 +6,12 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" columns-of unit-roundoff)
          (only-in "private/linear-data.rkt"
                   algorithms
                   case-fit
                   case-result
                   check-law
-                  columns-of
                   dtypes
                   gap
                   lcase
@@ -22,18 +22,15 @@
                   max-abs
                   normal-case
                   on-matrix
-                  result-fit
-                  unit-roundoff)
+                  result-fit)
          (only-in "private/linear-twin-data.rkt"
-                  bits-of
-                  decoded
                   one-column
                   p1-cases
                   request
                   results
                   theirs
                   with-constant)
-         (only-in "private/python-env.rkt" test-twin twin-params))
+         (only-in "private/python-env.rkt" bits->floats floats->bits test-twin twin-params))
 
 (define (already-staged)
   (define c (normal-case 300 5 9 #:weighted? #t))
@@ -100,7 +97,7 @@
                [f (in-list fits)])
       (match-define (list c dt) g)
       (match-define (list _ coef b) f)
-      (hash-set* (request "predict" c dt 'auto #t) 'coef (bits-of dt coef) 'intercept b)))
+      (hash-set* (request "predict" c dt 'auto #t) 'coef (floats->bits dt coef) 'intercept b)))
   (for ([g (in-list rows)]
         [f (in-list fits)]
         [r (in-list (results requests))])
@@ -113,7 +110,7 @@
         (~> fitted (linear-regression-predict (on-matrix (lcase-X c) dt)) device-vector->list))
       (for ([row (in-list (lcase-X c))]
             [p (in-list ours-p)]
-            [q (in-list (decoded dt (hash-ref r 'pred_bits)))])
+            [q (in-list (bits->floats dt (hash-ref r 'pred_bits)))])
         (define size (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))
         (check-law "prediction"
                    (abs (- (inexact->exact p) (inexact->exact q)))
@@ -121,5 +118,5 @@
 
 (test-twin "the defaults match Python cuML's"
   (match-define (list theirs) (results (list (hasheq 'op "params"))))
-  (check-equal? (twin-params theirs '(copy-X)) (hasheq 'algorithm 'auto 'fit-intercept #t))
+  (check-equal? (twin-params theirs #:unbound '(copy-X)) (hasheq 'algorithm 'auto 'fit-intercept #t))
   (check-equal? (linear-regression-params) (hasheq 'algorithm 'auto 'fit-intercept #t)))

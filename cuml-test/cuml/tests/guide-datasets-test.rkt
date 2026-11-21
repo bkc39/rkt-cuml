@@ -3,8 +3,8 @@
 (require (only-in cuml/scribblings/guide/helpers dataset-column dataset-columns features sizes)
          (only-in datasets/core dataset-table-names load-dataset-table)
          (only-in pkg/lib pkg-directory)
-         (only-in racket/list append-map last make-list remove-duplicates second)
-         (only-in racket/match match match-define)
+         (only-in racket/list append-map last make-list remove-duplicates)
+         (only-in racket/match match match-define match-lambda)
          (only-in racket/path file-name-from-path)
          (only-in racket/string string-contains?)
          (only-in rackunit check-equal? check-not-false check-true test-case)
@@ -42,7 +42,11 @@
 (define dataset-use #px"\\((?:load-dataset-table|dataset-columns?|features) '([a-z-]+)")
 
 (define (chapter-datasets chapter)
-  (map string->symbol (regexp-match* dataset-use (flattened-text chapter) #:match-select cadr)))
+  (map string->symbol
+       (regexp-match* dataset-use
+                      (flattened-text chapter)
+                      #:match-select (match-lambda
+                                       [(list _ name) name]))))
 
 (define (notice-of pkg)
   (define dir (pkg-directory (symbol->string pkg)))
@@ -91,7 +95,11 @@
 (test-case "the install line and the Examples intro name the datasets umbrella, which carries every cited package"
   (check-true (regexp-match? #px" datasets( |\\})" (install-line)) "install line: datasets")
   (check-true (regexp-match? #px"@tt\\{datasets\\}" (examples-intro)) "Examples intro: datasets")
-  (for ([pkg (in-list (remove-duplicates (map second dataset-citations)))])
+  (define pkgs
+    (map (match-lambda
+           [(list _ pkg _ _) pkg])
+         dataset-citations))
+  (for ([pkg (in-list (remove-duplicates pkgs))])
     (check-not-false (member (symbol->string pkg) (cons "datasets-core" (declared "datasets" 'deps)))
                      (format "the datasets umbrella carries ~a" pkg))))
 

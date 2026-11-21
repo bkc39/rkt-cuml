@@ -7,11 +7,11 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
+         (only-in raft device-matrix list*->device-matrix)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
          (only-in "private/cuml-error.rkt" raised)
-         (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/process-memory.rkt"
                   baseline-sample
                   device-growth
@@ -20,7 +20,7 @@
                   sample-bytes
                   sample-used
                   test-process-memory)
-         (only-in "private/scaler-data.rkt" normal-rows rows->matrix))
+         (only-in "private/scaler-data.rkt" normal-rows))
 
 (define rounds 50)
 (define sample-every 10)
@@ -34,13 +34,14 @@
     fitted))
 
 (define (refusals fitted)
-  (define nan-row (rows->matrix (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) 'float32))
-  (define no-rows (blank-matrix 0 32 'float32))
-  (define narrow (blank-matrix 4 3 'float32))
-  (define integers (blank-matrix 4 32 'int32))
-  (define inf-row (rows->matrix (list (cons +inf.0 (make-list 31 0.0))) 'float32))
-  (define one-row (blank-matrix 1 32 'float32))
-  (define eight-rows (blank-matrix 8 32 'float32))
+  (define nan-row
+    (list*->device-matrix (cons (list +nan.0 1.0) (make-list 99 '(1.0 2.0))) #:dtype 'float32))
+  (define no-rows (device-matrix 0 32 #:dtype 'float32))
+  (define narrow (device-matrix 4 3 #:dtype 'float32))
+  (define integers (device-matrix 4 32 #:dtype 'int32))
+  (define inf-row (list*->device-matrix (list (cons +inf.0 (make-list 31 0.0))) #:dtype 'float32))
+  (define one-row (device-matrix 1 32 #:dtype 'float32))
+  (define eight-rows (device-matrix 8 32 #:dtype 'float32))
   (list (lambda () (tsvd-fit nan-row))
         (lambda () (tsvd-fit one-row))
         (lambda () (tsvd-fit eight-rows #:n-components 40))
@@ -52,7 +53,7 @@
 (test-process-memory (format
                       "~a fit, transform and inverse rounds and their refusals leave device memory flat"
                       rounds)
-  (define X (rows->matrix (normal-rows 7 4096 32 'float32) 'float32))
+  (define X (list*->device-matrix (normal-rows 7 4096 32 'float32) #:dtype 'float32))
   (define fitted (one-round X))
   (define calls (refusals fitted))
   (define (refuse-all)

@@ -97,7 +97,7 @@ packet (§4) has the detail.
 | L3 #89 | the residual starts from y, so a non-zero coef on entry is solved wrongly (no warm start) | `cd.cuh:210` | coef zeroed |
 | L3 #89 | `int n_rows`/`n_cols`; the weighted `binary_mult` uses an `int` index (not probed) | `cd.cuh:127,184` | V12; weights never passed |
 | L4 #90 | the binary weighted loss is divided by Σw but its gradient by N, so f and g disagree unless Σw = N: weights ×8 put the coefficients 0.13–0.45 off (l2) | `glm/qn/glm_base.cuh` 141–174 | weights rescaled to Σw̃ = m, penalties by m/(C·W) (L4-b) |
-| L4 #90 | the softmax loss never reads the sample weights: weighted k = 3 fits equal the unweighted one bit for bit, 3–6e-2 off the weighted optimum | `glm/qn/glm_softmax.cuh` 175–181 | unequal weights with 3 or more classes refused (#23, L4-c) |
+| L4 #90 | the softmax loss never reads the sample weights: weighted k = 3 fits equal the unweighted one bit for bit, 3–6e-2 off the weighted optimum | `glm/qn/glm_softmax.cuh` 175–181 | a weighted softmax adapted from it in the shim, under qn's own solver (#124; L4-c's refusal lifted) |
 | L4 #90 | `lbfgs_memory` 0 segfaults (exit 139); −1 throws "cannot create std::vector larger than max_size()" | `glm/qn/qn_solvers.cuh` | refused below 1 (#11) |
 | L4 #90 | the stop is not scale-invariant: X·2^±10 puts the fit 0.2 / 6e-3 off, X·2^±20 returns garbage after 2 iterations, silently | `glm/qn/qn_util.cuh` `check_convergence`, the absolute line-search cuts | one shared power-of-two staging from the median column spread (L4-a) and the post-solve check (L4-f) |
 | L4 #90 | a line-search failure is a silent stop at the last good point (`OPT_LS_FAILED` only logged) | `glm/qn/qn_solvers.cuh` `qn_fit_x` | the post-solve check (L4-f) |

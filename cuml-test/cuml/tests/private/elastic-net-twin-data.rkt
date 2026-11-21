@@ -1,8 +1,10 @@
 #lang racket/base
 
-(require (only-in racket/match match-define struct*)
+(require (only-in cuml/linear-model/private/native libcuml-version)
+         (only-in racket/match match-define struct*)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
+         (only-in "common-data.rkt" unit-roundoff)
          (only-in "elastic-net-data.rkt"
                   case-alpha
                   coef-distance
@@ -16,8 +18,9 @@
                   mirrored-weight-case
                   selections)
          (only-in "elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of s2-bound)
-         (only-in "linear-data.rkt" check-law lcase-name lcase-w lcase-X lcase-y unit-roundoff)
-         (only-in "linear-twin-data.rkt" case-request theirs twin-results))
+         (only-in "linear-data.rkt" check-law lcase-X lcase-name lcase-w lcase-y)
+         (only-in "linear-twin-data.rkt" case-request theirs)
+         (only-in "python-env.rkt" twin-results))
 
 (provide check-raw-parity
          check-sklearn-parity)
@@ -65,7 +68,8 @@
   (define fits
     (twin-results twin
                   (for/list ([row (in-list rows)])
-                    (request "cuml" row dt))))
+                    (request "cuml" row dt))
+                  #:expected-cuml libcuml-version))
   (for ([row (in-list rows)]
         [t (in-list fits)])
     (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r] [selection s])) row)
@@ -90,7 +94,8 @@
   (define fits
     (twin-results twin
                   (for/list ([row (in-list rows)])
-                    (request "sklearn" row dt))))
+                    (request "sklearn" row dt))
+                  #:expected-cuml libcuml-version))
   (define ran
     (for/sum ([row (in-list rows)] [t (in-list fits)])
              (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r])) row)

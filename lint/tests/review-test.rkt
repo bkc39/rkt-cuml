@@ -1,22 +1,13 @@
 #lang racket/base
 
-(require (only-in racket/file delete-directory/files make-directory* make-temporary-directory)
-         (only-in rackunit check-equal? test-case))
-
-(define (call-with-temporary-directory proc)
-  (define root (make-temporary-directory "review-~a"))
-  (dynamic-wind void (lambda () (proc root)) (lambda () (delete-directory/files root))))
+(require (only-in rackunit check-equal? test-case)
+         (only-in "../private/modules.rkt" with-temporary-directory write-module))
 
 (define (call-with-module-file forms proc #:under [under "lint"])
-  (call-with-temporary-directory (lambda (root)
-                                   (define directory (build-path root under))
-                                   (define file (build-path directory "module.rkt"))
-                                   (make-directory* directory)
-                                   (with-output-to-file file
-                                                        (lambda ()
-                                                          (displayln "#lang racket/base")
-                                                          (for-each writeln forms)))
-                                   (proc file))))
+  (with-temporary-directory (root "review-~a")
+                            (define file (build-path root under "module.rkt"))
+                            (write-module file "#lang racket/base" forms)
+                            (proc file)))
 
 (define (problems-in forms #:under [under "lint"])
   (call-with-module-file forms
@@ -218,12 +209,14 @@
 (define titles-with-spec-ids
   '((require (only-in rackunit check-true test-case)
              (only-in raft/tests/private/gpu test-gpu)
-             (only-in "python-env.rkt" test-twin))
+             (only-in "python-env.rkt" test-python test-twin))
     (test-case "a fit repeats (S3)"
       (check-true #t))
     (test-gpu "a constant column gets coef 0 (S3, H1)"
       (check-true #t))
     (test-twin "the fit is Python's bit for bit (T1, F12)"
+      (check-true #t))
+    (test-python "params_of reads the defaults (A2)"
       (check-true #t))
     (test-case "a title may end in a parenthesis (bitwise)"
       (check-true #t))
@@ -263,6 +256,7 @@
      "the test title \"a fit repeats (S3).\" carries a spec id: say the law, and keep ids in plans"
      "the test title \"bit for bit (T1 and F12)\" carries a spec id: say the law, and keep ids in plans"
      "the test title \"fits at the default tol (L4-f)\" carries a spec id: say the law, and keep ids in plans"
+     "the test title \"params_of reads the defaults (A2)\" carries a spec id: say the law, and keep ids in plans"
      "the test title \"refused with its message (#23)\" carries a spec id: say the law, and keep ids in plans"
      "the test title \"the fit is Python's bit for bit (T1, F12)\" carries a spec id: say the law, and keep ids in plans"
      "the test title \"the laws hold (T1–T4)\" carries a spec id: say the law, and keep ids in plans")))

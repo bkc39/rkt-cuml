@@ -6,8 +6,8 @@
                   single-linkage-result-labels)
          (only-in racket/list append* argmin filter-map first range remove-duplicates)
          (only-in racket/match == match match-define match-lambda)
-         (only-in racket/math sqr)
          (only-in raft device-matrix->list* device-vector->list)
+         (only-in "common-data.rkt" squared-distance)
          (only-in "dbscan-data.rkt" seeded))
 
 (provide (struct-out oracle)
@@ -18,6 +18,7 @@
          group-rows
          hand-children
          hand-labels
+         hand-labels-at
          hand-rows
          linkage-oracle
          linked-lists
@@ -28,7 +29,6 @@
          permuted-labels
          permuted-rows
          result->lists
-         squared-distance
          tie-children
          tie-labels
          tie-rows
@@ -40,6 +40,8 @@
 (define hand-rows '((0) (1) (3) (7) (15)))
 (define hand-children '((0 1) (2 5) (3 6) (4 7)))
 (define hand-labels '((0 0 0 0 0) (0 0 0 0 1) (0 0 0 2 1) (0 0 3 2 1) (4 3 2 1 0)))
+(define (hand-labels-at k)
+  (list-ref hand-labels (sub1 k)))
 (define permuted-rows '((15) (3) (0) (7) (1)))
 (define permuted-children '((2 4) (1 5) (3 6) (0 7)))
 (define permuted-labels '((0 0 0 0 0) (1 0 0 0 0) (2 0 0 1 0) (3 2 0 1 0) (4 3 2 1 0)))
@@ -72,9 +74,6 @@
                         [_ (in-range 40)])
               (for/list ([_ (in-range 2)])
                 (+ offset (/ (random 100000) 9973.0)))))))
-
-(define (squared-distance a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (sqr (- x y))))
 
 (struct oracle (n weights edges cophenetic))
 

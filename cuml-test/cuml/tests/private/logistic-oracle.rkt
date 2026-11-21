@@ -7,22 +7,24 @@
                   bf*
                   bf+
                   bf-
+                  bf-precision
                   bf/
                   bf<
                   bf>
-                  bigfloat->real
-                  bf-precision
                   bfabs
                   bfexp
                   bflog1p
                   bfmax
                   bfmin
-                  bfsqrt)
+                  bfsqrt
+                  bigfloat->real)
          (only-in racket/list make-list)
-         (only-in racket/match match)
-         (only-in "linear-data.rkt" columns-of))
+         (only-in racket/match match match-define struct*)
+         (only-in "common-data.rkt" columns-of)
+         (only-in "logistic-data.rkt" default-tol lr-case lr-fit setting))
 
 (provide (struct-out residual)
+         case-residual
          residual-of)
 
 (struct residual (gradient objective bound) #:transparent)
@@ -194,3 +196,24 @@
     (define tau (max (inexact->exact tol) tolerance-floor))
     (define F* (bigfloat->real F))
     (residual (bigfloat->real worst) F* (* residual-factor tau (max F* tau)))))
+
+(define (case-residual c
+                       parts
+                       s
+                       #:tol [tol default-tol]
+                       #:fit-intercept [fi #t]
+                       #:dtype [dt 'float64])
+  (match-define (struct* lr-case ([X X] [y y] [w w])) c)
+  (match-define (struct* lr-fit ([coef coef] [intercept intercept])) parts)
+  (match-define (setting penalty C l1-ratio) s)
+  (residual-of X
+               y
+               w
+               coef
+               intercept
+               #:penalty penalty
+               #:C C
+               #:l1-ratio l1-ratio
+               #:fit-intercept fi
+               #:tol tol
+               #:dtype dt))

@@ -2,17 +2,33 @@
 
 (require (only-in racket/list range)
          (only-in racket/match match-define)
-         (only-in "kmeans-data.rkt" blank-matrix)
-         (only-in "linear-data.rkt" [on-matrix matrix] [on-vector vector])
+         (only-in raft device-matrix)
+         (only-in "common-data.rkt" [on-vector vector])
+         (only-in "linear-data.rkt" [on-matrix matrix])
          (only-in "refusal-rows.rkt" row))
 
-(provide grid
+(provide collinear-refusal
+         grid
+         not-least-squares
          overflow-X
          overflow-y
          shared-fit-rows
          targets
+         window-refusal
          with-cell
          with-element)
+
+(define (collinear-refusal algorithm)
+  (pregexp
+   (format
+    "^linear-regression-fit: X: the ~a solve's X has u[*]kappa (inf|[0-9.e+-]+) >= 2\\^-8; X may have collinear columns$"
+    algorithm)))
+
+(define not-least-squares
+  #rx"^linear-regression-fit: X: the [a-z-]+ solve is not a least-squares solution")
+
+(define window-refusal
+  #rx"^ridge-fit: X: the svd solve's regularised Gram matrix has u[*]kappa (inf|[0-9.e+-]+) >= 2\\^-[0-9]+; X is ill-conditioned for this alpha [(].*a larger alpha may fit[)]$")
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1)))
 (define targets '(1 2 3 4 5))
@@ -47,7 +63,7 @@
   (define y (vector targets))
   (list (row "X dtype"
              "X: expected float32 or float64, got int32"
-             (lambda () (go (blank-matrix 5 3 'int32) y)))
+             (lambda () (go (device-matrix 5 3 #:dtype 'int32) y)))
         (row "X rank" "X: expected rank 2, got rank 1" (lambda () (go y y)))
         (row "y dtype" "y: expected float32, got float64" (lambda () (go (matrix grid 'float32) y)))
         (row "y length"
@@ -61,7 +77,7 @@
              (lambda () (go (matrix '((1 2 3))) (vector '(1)))))
         (row "no column"
              "X: expected at least 1 column, got 0"
-             (lambda () (go (blank-matrix 5 0 'float64) y)))
+             (lambda () (go (device-matrix 5 0 #:dtype 'float64) y)))
         (row "non-finite X"
              "X: row 3, column 1: expected a finite value, got nan"
              (lambda () (go (matrix (with-cell grid 3 1 +nan.0)) y)))

@@ -3,4 +3,5 @@
  (issue 88 due ridge_fit_job)
  (issue 89 due elastic_net_fit_job)
  (issue 90 due logistic_regression_fit_job logistic_regression_apply_job label_encode_job)
+ (issue 127 due label_classes_job)
  (issue 91 due mbsgd_regressor_fit_job mbsgd_classifier_fit_job threshold_labels_job))

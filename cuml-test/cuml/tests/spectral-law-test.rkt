@@ -4,8 +4,10 @@
          (only-in racket/list count range shuffle take)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true fail test-case)
+         (only-in raft list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/dbscan-data.rkt" mat pick same-partition? seeded)
+         (only-in "private/common-data.rkt" pick)
+         (only-in "private/dbscan-data.rkt" same-partition? seeded)
          (only-in "private/program.rkt" run-program)
          (only-in "private/spectral-data.rkt"
                   blobs
@@ -63,7 +65,8 @@
 (test-gpu "SC3: planted partitions are recovered, dense and as graphs"
   (for ([p (in-list (dense-planted))])
     (test-case (fit-case-name p)
-      (check-true (planted? (labels (mat (fit-case-data p) 'float32) #:n-clusters (fit-case-k p))
+      (check-true (planted? (labels (list*->device-matrix (fit-case-data p) #:dtype 'float32)
+                                    #:n-clusters (fit-case-k p))
                             (fit-case-truth p)))))
   (for ([p (in-list (graph-planted))])
     (test-case (fit-case-name p)
@@ -73,12 +76,13 @@
 (test-gpu "SC4: permuting rows or nodes permutes the partition; entry order changes nothing"
   (define-values (rows _truth) (three-blobs))
   (define-values (g _gtruth) (three-blocks))
-  (define base (labels (mat rows 'float32) #:n-clusters 3))
+  (define base (labels (list*->device-matrix rows #:dtype 'float32) #:n-clusters 3))
   (define graph-base (graph-labels g #:n-clusters 3))
   (for ([seed (in-range 3)])
     (test-case (format "seed ~a" seed)
       (define perm (seeded seed (lambda () (shuffle (range (length rows))))))
-      (define permuted (labels (mat (permute-rows rows perm) 'float32) #:n-clusters 3))
+      (define permuted
+        (labels (list*->device-matrix (permute-rows rows perm) #:dtype 'float32) #:n-clusters 3))
       (check-true (same-partition? permuted (range 300) (pick base perm) (range 300)) "rows")
       (define node-perm (seeded seed (lambda () (shuffle (range (graph-n g))))))
       (check-true (same-partition? (graph-labels (permute-graph g node-perm) #:n-clusters 3)
@@ -104,7 +108,8 @@
   (define-values (rows truth) (blobs 100 3 2 6.0 2))
   (for ([k (in-list '(10 15))])
     (test-case (format "~a neighbours" k)
-      (define dense (labels (mat rows 'float32) #:n-clusters 3 #:n-neighbors k))
+      (define dense
+        (labels (list*->device-matrix rows #:dtype 'float32) #:n-clusters 3 #:n-neighbors k))
       (check-equal? (graph-labels (knn-graph rows k) #:n-clusters 3) dense)
       (check-true (planted? dense truth)))))
 
@@ -137,8 +142,8 @@
   (define-values (rows truth) (three-blobs))
   (define-values (g gtruth) (three-blocks))
   (define-values (overlapping _otruth) (blobs 2000 5 8 3.0 7))
-  (define X (mat rows 'float32))
-  (define O (mat overlapping 'float32))
+  (define X (list*->device-matrix rows #:dtype 'float32))
+  (define O (list*->device-matrix overlapping #:dtype 'float32))
   (define cases
     (list
      (list "blobs" 0 (lambda () (labels X #:n-clusters 3 #:random-state 5)))
@@ -165,30 +170,31 @@
                        spectral-clustering-fit
                        spectral-clustering-fit-graph
                        spectral-clustering-result-labels)
-              (only-in cuml/tests/private/dbscan-data mat)
               (only-in cuml/tests/private/spectral-data
                        graph->vectors
                        graph-n
                        three-blobs
                        three-blocks)
-              (only-in raft device-vector->list))
+              (only-in raft device-vector->list list*->device-matrix))
      (define-values (rows _truth) (three-blobs))
      (define-values (g _gtruth) (three-blocks))
      (define (labels-of r)
        (device-vector->list (spectral-clustering-result-labels r)))
-     (write
-      (list (labels-of (spectral-clustering-fit (mat rows 'float32) #:n-clusters 3 #:random-state 5))
-            (labels-of (apply spectral-clustering-fit-graph
-                              (append (graph->vectors g) (list (graph-n g)))
-                              #:n-clusters 3
-                              #:random-state 5))))))
+     (write (list (labels-of (spectral-clustering-fit (list*->device-matrix rows #:dtype 'float32)
+                                                      #:n-clusters 3
+                                                      #:random-state 5))
+                  (labels-of (apply spectral-clustering-fit-graph
+                                    (append (graph->vectors g) (list (graph-n g)))
+                                    #:n-clusters 3
+                                    #:random-state 5))))))
 
 (test-gpu "SC10: one seed gives the same labels in another process"
   (define-values (rows _truth) (three-blobs))
   (define-values (g _gtruth) (three-blocks))
   (match (run-program cross-process-program)
     [(list 0 output _)
-     (check-equal? (read (open-input-string output))
-                   (list (labels (mat rows 'float32) #:n-clusters 3 #:random-state 5)
-                         (graph-labels g #:n-clusters 3 #:random-state 5)))]
+     (check-equal?
+      (read (open-input-string output))
+      (list (labels (list*->device-matrix rows #:dtype 'float32) #:n-clusters 3 #:random-state 5)
+            (graph-labels g #:n-clusters 3 #:random-state 5)))]
     [(list status _ errors) (fail (format "the fit's process exited with ~a:\n~a" status errors))]))

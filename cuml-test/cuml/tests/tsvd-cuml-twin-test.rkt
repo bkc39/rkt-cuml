@@ -5,9 +5,9 @@
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
          (only-in "private/pca-data.rkt" fixture-name)
-         (only-in "private/python-env.rkt" test-twin twin-params)
+         (only-in "private/python-env.rkt" floats->bits test-twin twin-params)
          (only-in "private/tsvd-data.rkt" svd)
-         (only-in "private/tsvd-twin-data.rkt" float-bits ours twin-case twin-cases twin-results))
+         (only-in "private/tsvd-twin-data.rkt" ours twin-case twin-cases twin-results))
 
 (define (requests)
   (for*/list ([c (in-list twin-cases)]
@@ -29,7 +29,7 @@
                                         explained_variance_ratio
                                         transform
                                         inverse))])
-        (check-equal? (float-bits dt mine)
+        (check-equal? (floats->bits dt mine)
                       (hash-ref theirs (string->symbol (format "~a_bits" name)))
                       (symbol->string name))))))
 
@@ -39,7 +39,7 @@
   (match-define (cons first-case _) twin-cases)
   (match-define (list theirs) (twin-results (list (list "params" first-case 'float64 'full))))
   (define mapped
-    (for/hasheq ([(key value) (in-hash (twin-params theirs '(random-state)))])
+    (for/hasheq ([(key value) (in-hash (twin-params theirs #:unbound '(random-state)))])
       (values (hash-ref renames key key) value)))
   (check-equal? (hash-ref mapped 'tol) 1e-7)
   (check-equal? (hash-set mapped 'tol 0.0) (tsvd-params)))

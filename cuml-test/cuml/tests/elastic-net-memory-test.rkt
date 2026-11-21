@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model elastic-net-fit elastic-net-predict lasso-fit)
+         (only-in "private/common-data.rkt" on-vector)
          (only-in "private/elastic-net-data.rkt" correlated-case)
          (only-in "private/linear-data.rkt"
                   docs-case
@@ -8,7 +9,6 @@
                   lcase-w
                   lcase-y
                   on-matrix
-                  on-vector
                   scaled-case
                   scaled-columns)
          (only-in "private/process-memory.rkt" test-fit-memory))

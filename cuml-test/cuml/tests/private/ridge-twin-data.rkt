@@ -1,26 +1,28 @@
 #lang racket/base
 
-(require (only-in racket/match match-define struct*)
+(require (only-in cuml/linear-model/private/native libcuml-version)
+         (only-in racket/match match-define struct*)
          racket/runtime-path
          (only-in racket/sequence in-slice)
          (only-in rackunit check-equal? test-case)
+         (only-in "common-data.rkt" unit-roundoff)
          (only-in "linear-data.rkt"
                   check-law
                   exact-fit
                   floor-log2
                   gap
                   lcase
+                  lcase-X
                   lcase-name
                   lcase-w
-                  lcase-X
                   lcase-y
                   max-abs
                   normal-case
                   ridge-oracles
                   ridge-solution
-                  scaled-case
-                  unit-roundoff)
-         (only-in "linear-twin-data.rkt" case-request theirs twin-results)
+                  scaled-case)
+         (only-in "linear-twin-data.rkt" case-request theirs)
+         (only-in "python-env.rkt" twin-results)
          (only-in "ridge-data.rkt" ridge-case-fit solvers widest-spread))
 
 (provide check-raw-parity
@@ -37,7 +39,7 @@
                 (hasheq 'alpha (real->double-flonum alpha) 'solver (symbol->string solver))))
 
 (define (results requests)
-  (twin-results twin requests))
+  (twin-results twin requests #:expected-cuml libcuml-version))
 
 (define (headroom dt)
   (if (eq? dt 'float32) 16 64))

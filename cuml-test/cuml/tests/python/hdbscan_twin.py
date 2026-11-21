@@ -2,9 +2,6 @@
 settings the Racket side used, with its trees, predictions and memberships;
 sklearn's HDBSCAN at min_samples + 1 labels the same data."""
 
-import json
-import sys
-
 import numpy as np
 from cuml.cluster import HDBSCAN
 from cuml.cluster.hdbscan import (
@@ -13,12 +10,7 @@ from cuml.cluster.hdbscan import (
     membership_vector,
 )
 from sklearn.cluster import HDBSCAN as SkHDBSCAN
-
-import cuml
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
+from twin_common import host, params_of, run
 
 
 def floats(a):
@@ -92,18 +84,5 @@ def sklearn_fit(case):
     return {"labels": ints(found)}
 
 
-def params(case):
-    return HDBSCAN().get_params()
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {"fit": fit, "sklearn": sklearn_fit, "params": params}
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": cuml.__version__}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run({"fit": fit, "sklearn": sklearn_fit, "params": params_of(HDBSCAN)})

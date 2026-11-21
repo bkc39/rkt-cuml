@@ -11,6 +11,7 @@
                   tsne-result-embedding
                   umap
                   umap-model)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in racket/match match-define struct*)
          (only-in racket/promise delay force)
          racket/runtime-path
@@ -18,7 +19,7 @@
          (only-in raft device-matrix->list* device-vector->list list->device-vector)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" embeddings-pin evaluated-chapter)
-         (only-in "private/python-env.rkt" run-twin test-twin)
+         (only-in "private/python-env.rkt" python-sklearn-version test-twin twin-results)
          (only-in "private/scaler-data.rkt" bits-equal?)
          (only-in "private/tsne-data.rkt" tsne-case)
          (only-in "private/umap-data.rkt" fixture twin-case))
@@ -29,7 +30,7 @@
 
 (define embedded-pictures (cdr pictures))
 
-(struct twin-run (chapter labels coarse tsne-seed-1 results version))
+(struct twin-run (chapter labels coarse tsne-seed-1 results))
 
 (define (op name . fields)
   (apply hasheq 'op name fields))
@@ -74,23 +75,23 @@
                 (cons (list 'trust name) (op "trust" 'X rows 'E (samples name))))
               (for/list ([name (in-list pictures)])
                 (cons (list 'ari name) (op "ari" 'y ids 'labels (hash-ref labels name))))))
-    (match-define (hash-table ['results results] ['version version])
-      (run-twin script (hasheq 'cases (map cdr cases))))
     (twin-run chapter
               labels
               coarse
               tsne-seed-1
-              (make-immutable-hash (map cons (map car cases) results))
-              version)))
+              (make-immutable-hash (map cons
+                                        (map car cases)
+                                        (twin-results script
+                                                      (map cdr cases)
+                                                      #:expected-cuml libcuml-version
+                                                      #:expected-sklearn python-sklearn-version))))))
 
 (define (theirs key field)
   (match-define (struct* twin-run ([results results])) (force twin))
   (hash-ref (hash-ref results key) field))
 
-(test-twin "the embeddings twin runs Python cuML 26.08.00 and sklearn 1.8.0"
-  (match-define (struct* twin-run ([version version])) (force twin))
-  (check-equal? (hash-ref version 'cuml) "26.08.00")
-  (check-equal? (hash-ref version 'sklearn) "1.8.0"))
+(test-twin "the embeddings twin runs the pinned Python cuML and sklearn"
+  (check-true (twin-run? (force twin))))
 
 (test-twin "the embeddings chapter's pixels and digits are sklearn's"
   (match-define (struct* twin-run ([chapter chapter])) (force twin))

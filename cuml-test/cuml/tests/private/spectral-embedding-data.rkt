@@ -6,8 +6,9 @@
                   spectral-embedding-result-embedding
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in racket/flonum flsingle)
-         (only-in racket/list append* argmax make-list second)
+         (only-in racket/list append* argmax make-list)
          (only-in racket/match match match-define match-lambda)
          (only-in racket/math pi sqr)
          racket/runtime-path
@@ -16,8 +17,9 @@
          (only-in "blob-data.rkt" centred-blobs)
          (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
-         (only-in "python-env.rkt" run-cases)
-         (only-in "scaler-data.rkt" bits-equal? dot transpose)
+         (only-in "exact-algebra.rkt" dot)
+         (only-in "python-env.rkt" twin-results)
+         (only-in "scaler-data.rkt" bits-equal? transpose)
          (only-in "spectral-data.rkt"
                   graph
                   graph->vectors
@@ -109,7 +111,11 @@
   (graph-edit g
               #:rows (lambda (rows) (append rows rows))
               #:cols (lambda (cols) (append cols cols))
-              #:vals (lambda (_) (append (map car split) (map cadr split)))))
+              #:vals (lambda (_)
+                       (for/lists (firsts seconds #:result (append firsts seconds))
+                                  ([part (in-list split)])
+                                  (match-define (list first second) part)
+                                  (values first second)))))
 
 (define (summed-entries g parts)
   (graph-map-vals g (lambda (w) (flsingle (apply + (parts w))))))
@@ -254,8 +260,12 @@
           (bitwise (embedded (embedded-graph g options))))))
 
 (define (check-twins entries)
+  (define cases
+    (map (match-lambda
+           [(list _ twin-case _) twin-case])
+         entries))
   (for ([entry (in-list entries)]
-        [found (in-list (run-cases twin (map second entries)))])
+        [found (in-list (twin-results twin cases #:expected-cuml libcuml-version))])
     (match-define (list label _ check) entry)
     (test-case label
       (check (hash-ref found 'embedding)))))

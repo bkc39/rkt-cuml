@@ -27,7 +27,10 @@
 #include "logistic_checks.hpp"
 #include "logistic_device.hpp"
 #include "logistic_fit.hpp"
+#include "logistic_resolve.hpp"
+#include "logistic_solve.hpp"
 #include "logistic_weights.hpp"
+#include "min_rows.hpp"
 #include "raftrkt/deposit.hpp"
 #include "raftrkt/view.hpp"
 
@@ -35,19 +38,11 @@ namespace cumlrkt::glm::logistic {
 
 namespace {
 
-constexpr double change_tol_per_tol = 0.01;
 constexpr double unstaged_spread_least = 0x1p-8;
 constexpr double unstaged_spread_most = 0x1p8;
-constexpr double tolerance_floor = 1e-4;
-constexpr double residual_factor = 64;
 constexpr double float32_l2_most = 0x1p21;
 constexpr double float64_l2_most = 0x1p21;
 constexpr double float64_l2_most_without_intercept = 0x1p46;
-
-struct penalties {
-  double l1;
-  double l2;
-};
 
 template <typename T, typename L>
 struct fit_outputs {
@@ -61,41 +56,6 @@ struct solved_fit {
   buffer<T> coef;
   buffer<T> intercept;
   int32_t n_iter;
-};
-
-struct solve_check {
-  qn_shape shape;
-  std::vector<double> sigma;
-  std::vector<double> mean;
-  penalties pen;
-  int n_iter;
-};
-
-template <typename T>
-struct staged_fit {
-  std::optional<buffer<T>> copied;
-  T* source;
-  buffer<T> y;
-  std::optional<buffer<T>> w;
-  std::vector<int64_t> kept;
-  int shift;
-  penalties pen;
-  qn_shape shape;
-  std::vector<double> sigma;
-  std::vector<double> mean;
-
-  T* x() {
-    return copied ? copied->data() : source;
-  }
-  T* weights() {
-    return w ? w->data() : nullptr;
-  }
-};
-
-template <typename T>
-struct qn_solution {
-  buffer<T> params;
-  int n_iter;
 };
 
 penalties penalties_of(const fit_options& o) {
@@ -212,51 +172,6 @@ void require_staged_columns(const column_stats& s, int shift) {
   }
 }
 
-const char* cutoff_advice(const solve_check& c, const fit_options& o) {
-  if (c.n_iter >= o.max_iter) {
-    return "raise max-iter";
-  }
-  return c.shape.fit_intercept ? "lower tol, or centre X"
-                               : "lower tol, centre X, or fit an intercept";
-}
-
-template <typename T>
-void require_resolved(const residual_sums& sums, const std::vector<T>& params,
-                      const fit_options& options, const solve_check& c) {
-  const auto m = static_cast<double>(c.shape.m);
-  const auto per_row = [m](double v) { return v / m; };
-  const penalties pen = options.normalized
-                            ? penalties{per_row(c.pen.l1), per_row(c.pen.l2)}
-                            : c.pen;
-  const int64_t k = c.shape.k;
-  double f = per_row(sums.loss);
-  double worst = 0;
-  for (int64_t q = 0; q < c.shape.p * k; ++q) {
-    const auto v = static_cast<double>(params[q]);
-    f += (pen.l1 * std::abs(v)) + (pen.l2 / 2 * v * v);
-    const double centred = c.shape.fit_intercept
-                               ? c.mean[q / k] * per_row(sums.intercept[q % k])
-                               : 0.0;
-    const double g = per_row(sums.gradient[q]) - centred + (pen.l2 * v);
-    const double pg =
-        v != 0 ? g + std::copysign(pen.l1, v)
-               : std::copysign(std::max(std::abs(g) - pen.l1, 0.0), g);
-    worst = std::max(worst, std::abs(pg) / c.sigma[q / k]);
-  }
-  for (int64_t q = 0; c.shape.fit_intercept && q < k; ++q) {
-    worst = std::max(worst, std::abs(per_row(sums.intercept[q])));
-  }
-  const double tau = std::max(options.tol, tolerance_floor);
-  const double bound = residual_factor * tau * std::max(f, tau);
-  if (!(worst <= bound)) {
-    throw logic_error(std::format(
-        "the solver stopped at first-order residual {} above the bound {} "
-        "after {} iterations (max-iter {}, tol {}); {}",
-        printed(worst), printed(bound), c.n_iter, options.max_iter,
-        printed(options.tol), cutoff_advice(c, options)));
-  }
-}
-
 template <typename T>
 solved_fit<T> closed_form(const raft::handle_t& handle,
                           const std::optional<weighted_rows>& wt,
@@ -280,22 +195,6 @@ solved_fit<T> closed_form(const raft::handle_t& handle,
     }
   }
   return {zeroed<T>(outputs * x.d, stream), to_device(b, stream), 0};
-}
-
-ML::GLM::qn_params qn_params_of(const fit_options& o, int64_t k, penalties p) {
-  ML::GLM::qn_params q;
-  q.loss = k == 2 ? ML::GLM::QN_LOSS_LOGISTIC : ML::GLM::QN_LOSS_SOFTMAX;
-  q.penalty_l1 = p.l1;
-  q.penalty_l2 = p.l2;
-  q.grad_tol = o.tol;
-  q.change_tol = o.tol * change_tol_per_tol;
-  q.max_iter = o.max_iter;
-  q.linesearch_max_iter = o.linesearch_max_iter;
-  q.lbfgs_memory = o.lbfgs_memory;
-  q.verbose = quiet_level;
-  q.fit_intercept = o.fit_intercept;
-  q.penalty_normalized = o.normalized;
-  return q;
 }
 
 template <typename T>
@@ -351,27 +250,22 @@ staged_fit<T> staged_of(const raft::handle_t& handle,
 }
 
 template <typename T>
-qn_solution<T> solve(const raft::handle_t& handle, staged_fit<T>& st,
-                     const fit_options& options) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const qn_shape& shape = st.shape;
-  buffer<T> params =
-      zeroed<T>((shape.p + (shape.fit_intercept ? 1 : 0)) * shape.k, stream);
-  T objective{0};
-  int n_iter = 0;
-  ML::GLM::qnFit<T, int>(handle, qn_params_of(options, shape.classes, st.pen),
-                         st.x(), false, st.y.data(), static_cast<int>(shape.m),
-                         static_cast<int>(shape.p),
-                         static_cast<int>(shape.classes), params.data(),
-                         &objective, &n_iter, st.weights());
-  settle(handle);
-  require_finite_solution(params.data(), static_cast<int64_t>(params.size()),
-                          stream);
-  require_resolved<T>(residuals_of<T>(handle, st.x(), st.y.data(), st.weights(),
-                                      params.data(), shape),
-                      to_host(params, stream), options,
-                      {shape, st.sigma, st.mean, st.pen, n_iter});
-  return {std::move(params), n_iter};
+qn_solution<T> solve(const raft::handle_t& handle, const matrix<T, int64_t>& x,
+                     row_selection rows, const column_stats& stats,
+                     staged_fit<T>& st, const fit_options& options) {
+  attempt<T> plain =
+      attempted<T>(handle, st.x(), st.y.data(), st.weights(),
+                   {st.shape, st.sigma, st.mean, st.pen, 0}, options);
+  if (plain.r.resolved()) {
+    return std::move(plain.solution);
+  }
+  rescue<T> second = rescued<T>(handle, x, rows, stats, st, plain, options);
+  if (!second.solution) {
+    solve_check spent = plain.check;
+    spent.n_iter = second.n_iter;
+    refuse_cutoff(second.last.value_or(plain.r), options, spent);
+  }
+  return std::move(*second.solution);
 }
 
 template <typename T>
@@ -406,7 +300,8 @@ solved_fit<T> solved(const raft::handle_t& handle, const matrix<T, int64_t>& x,
     return closed_form<T>(handle, wt, codes, k, x, options.fit_intercept);
   }
   staged_fit<T> st = staged_of<T>(handle, x, options, wt, codes, k, stats);
-  const qn_solution<T> solution = solve<T>(handle, st, options);
+  const qn_solution<T> solution =
+      solve<T>(handle, x, rows_in(wt, x.n), stats, st, options);
   return unstaged<T>(handle, st, solution, x.d);
 }
 
@@ -438,7 +333,7 @@ int32_t fit_into(const raft::handle_t& handle, const fit_views& views,
                    ? nullptr
                    : raftrkt::vector_data<T, int32_t>(views.sample_weight,
                                                       "sample-weight", x.n);
-  require_some("X", "row", x.n, 2);
+  require_some("X", "row", x.n, min_rows);
   require_some("X", "column", x.d);
   require_index("X", x.n, x.d);
   require_integral(y, x.n, stream);

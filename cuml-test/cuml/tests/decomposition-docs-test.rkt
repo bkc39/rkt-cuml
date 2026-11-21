@@ -27,7 +27,7 @@
          (only-in threading ~>)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/pca-data.rkt" magnitude-rows)
-         (only-in "private/scaler-data.rkt" rows->matrix scaled-rows))
+         (only-in "private/scaler-data.rkt" scaled-rows))
 
 (define axes '((4 0) (-4 0) (0 1) (0 -1) (0 0)))
 (define exact-axes '((4.0 0.0) (-4.0 0.0) (0.0 1.0) (0.0 -1.0) (0.0 0.0)))
@@ -129,7 +129,7 @@
 
 (test-gpu "the manual: the whitened round trip needs every root of variance at least epsilon"
   (define (round-trip rows)
-    (define M (rows->matrix rows 'float32))
+    (define M (list*->device-matrix rows #:dtype 'float32))
     (define fitted (pca-fit M #:whiten #t))
     (values (~> (pca-transform fitted M) (pca-inverse-transform fitted _) device-matrix->list*)
             (map sqrt (device-vector->list (pca-result-explained-variance fitted)))

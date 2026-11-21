@@ -7,21 +7,25 @@
                   logistic-regression-result-n-iter)
          (only-in racket/list append* make-list)
          (only-in racket/match match match-define struct*)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list device-vector?)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "linear-data.rkt" by-dtype columns-of dyadic on-matrix on-vector))
+         (only-in "common-data.rkt" block-starts columns-of kept-rows mean on-vector pick scaled-rows)
+         (only-in "linear-data.rkt" by-dtype dyadic on-matrix))
 
 (provide (struct-out lr-case)
          (struct-out lr-fit)
          (struct-out setting)
          argmax-index
+         balanced-class-weights
          blob-case
          case-fit
          case-y
          centred-columns
+         collapsed
          centred-vector
          coef-flat
          correct
+         cutoff-exn?
          cutoff-message
          decision-label
          default-setting
@@ -30,18 +34,18 @@
          fit-flat
          fit-parts
          flat-matrix
+         gauged-case-fit
          gauged-fit
          gauged-sklearn
          penalty-settings
          relative-gap
+         repeated-rows
          scaled-case
          scaled-parts
-         scaled-rows
          separable-case
          setting-fit
          tight-max-iter
          tight-tol
-         unequal-weights-message
          with-column)
 
 (struct lr-case (name X y w) #:transparent)
@@ -55,9 +59,8 @@
 
 (define cutoff-message #rx"first-order residual .* above the bound")
 
-(define unequal-weights-message
-  (string-append "sample-weight: weights with 3 or more classes must be equal on every row "
-                 "(cuML's softmax ignores them); got unequal weights"))
+(define (cutoff-exn? e)
+  (and (exn:fail? e) (regexp-match? cutoff-message (exn-message e))))
 
 (define default-tol 1e-4)
 
@@ -107,10 +110,6 @@
     (values (cons (+ first (if (= label 1) 1/2 -1/2)) rest) label))
   (for/lists (X y #:result (lr-case name X y #f)) ([row (in-list rows)]) (separated row)))
 
-(define (scaled-rows rows factor)
-  (for/list ([row (in-list rows)])
-    (map (lambda (v) (* v factor)) row)))
-
 (define (scaled-case c factor)
   (struct-copy lr-case c [X (scaled-rows (lr-case-X c) factor)]))
 
@@ -122,6 +121,24 @@
            (map (lambda (row) (cons value row)) (lr-case-X c))
            (lr-case-y c)
            (lr-case-w c)))
+
+(define (balanced-class-weights ys)
+  (define sizes
+    (for/fold ([sizes (hash)]) ([y (in-list ys)])
+      (hash-update sizes y add1 0)))
+  (define k (hash-count sizes))
+  (for/hash ([(c size) (in-hash sizes)])
+    (values c (/ (length ys) (* k size)))))
+
+(define (repeated-rows c counts)
+  (define (spread xs)
+    (for*/list ([(x n) (in-parallel (in-list xs) (in-list counts))]
+                [_ (in-range n)])
+      x))
+  (lr-case (lr-case-name c) (spread (lr-case-X c)) (spread (lr-case-y c)) #f))
+
+(define (collapsed labels counts)
+  (pick labels (kept-rows (block-starts counts) counts)))
 
 (define (case-y c [label-dtype 'int32])
   (on-vector (lr-case-y c) label-dtype))
@@ -195,9 +212,6 @@
     [(list s) (if (> s 0) 1 0)]
     [_ (argmax-index z)]))
 
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
-
 (define (centred-vector xs)
   (define m (mean xs))
   (map (lambda (v) (- v m)) xs))
@@ -215,6 +229,18 @@
                           (centred-columns coef)
                           coef))
              (centred-vector intercept))]))
+
+(define (gauged-case-fit c
+                         #:C [C 1.0]
+                         #:sample-weight [w (on-vector (lr-case-w c) 'float64)]
+                         #:class-weight [class-weight #f])
+  (gauged-fit (fit-parts (case-fit c
+                                   'float64
+                                   #:C C
+                                   #:sample-weight w
+                                   #:class-weight class-weight
+                                   #:tol (tight-tol 'float64)
+                                   #:max-iter tight-max-iter))))
 
 (define (gauged-fit f #:centre-coef? [centre-coef? #t])
   (match-define (struct* lr-fit ([coef coef] [intercept intercept])) f)

@@ -1,0 +1,329 @@
+#lang racket/base
+
+(require (only-in racket/port port->string with-output-to-string)
+         racket/runtime-path
+         (only-in racket/system system*/exit-code)
+         (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
+         (only-in "../private/modules.rkt" with-temporary-directory))
+
+(define-runtime-path gate "../../scripts/no-positional-access.sh")
+
+(define-runtime-path comments-fixture "fixtures/positional-in-comments.rkt")
+
+(define (gate-on forms)
+  (gate-on-file (with-output-to-string (lambda ()
+                                         (displayln "#lang racket/base")
+                                         (for ([form (in-list forms)])
+                                           (writeln form))))))
+
+(define (gate-on-file text)
+  (with-temporary-directory
+   (root "positional-~a")
+   (with-output-to-file (build-path root "table-test.rkt") (lambda () (display text)))
+   (define output (open-output-string))
+   (define code
+     (parameterize ([current-output-port output])
+       (system*/exit-code (find-executable-path "bash") gate (path->string root))))
+   (values (zero? code) (get-output-string output))))
+
+(define (refusal accessor [line "[0-9]+"])
+  (pregexp (format "table-test[.]rkt:~a: ~a: read a test table's rows" line accessor)))
+
+(define (check-refused forms [accessor "second"] #:line [line "[0-9]+"])
+  (define-values (ok? output) (gate-on forms))
+  (check-false ok? output)
+  (check-regexp-match (refusal accessor line) output))
+
+(test-case "a test table read with a positional accessor is refused, with what to use instead"
+  (for ([accessor (in-list '(cadr caddr cadddr second third fourth fifth tenth))])
+    (define-values (ok? output) (gate-on `((define rows '((a 1 2 3))) (map ,accessor rows))))
+    (check-false ok? (symbol->string accessor))
+    (check-regexp-match
+     (pregexp (format "table-test[.]rkt:3: ~a: read a test table's rows with match-define" accessor))
+     output)))
+
+(test-case "a table read with match-define passes, and so do names that only contain the accessor"
+  (define-values (ok? output)
+    (gate-on '((require (only-in racket/match match-define)) (define rows '((a 1 2)))
+                                                             (for ([row (in-list rows)])
+                                                               (match-define (list name x y) row)
+                                                               (list name x y))
+                                                             (define (caddr-free x)
+                                                               x)
+                                                             (define my-cadddr 4)
+                                                             (define third-row 3))))
+  (check-true ok?)
+  (check-regexp-match
+   #rx"no cadr, caddr, cadddr, second, third, fourth, fifth, sixth, seventh, eighth, ninth, tenth, or list-ref with a literal index"
+   output))
+
+(test-case "list-ref with a literal index is refused, inside another access too"
+  (define-values (ok? output) (gate-on '((define rows '((a 1 2 3))) (list-ref (list-ref rows 0) 2))))
+  (check-false ok?)
+  (check-regexp-match (refusal "list-ref with a literal index" 3) output)
+  (check-equal? (length (regexp-match* #rx"list-ref with a literal index:" output)) 2))
+
+(test-case "list-ref with a quoted literal index is refused"
+  (check-refused '((define rows '((a 1 2 3))) (list-ref rows '2))
+                 "list-ref with a literal index"
+                 #:line 3))
+
+(test-case "list-ref with a computed index passes"
+  (define-values (ok? output)
+    (gate-on '((define rows '((a 1 2 3))) (for/list ([i (in-range 3)])
+                                            (list-ref rows (- 2 i))))))
+  (check-true ok? output))
+
+(test-case "an accessor named in a comment or a string is not a use"
+  (define-values (ok? output) (gate-on-file (call-with-input-file comments-fixture port->string)))
+  (check-true ok? output))
+
+(test-case "list-ref with a quasiquoted literal index is refused"
+  (check-refused '((define rows '((a 1 2 3))) (list-ref rows `2))
+                 "list-ref with a literal index"
+                 #:line 3))
+
+(for ([use (in-list '(((require racket/list) (define (scaled xs)
+                                               (define tenth 0.1)
+                                               (map (lambda (x) (* x tenth)) xs)))
+                      ((define units '(second minute hour)))
+                      ((define (timeout n)
+                         (list n 'second)))
+                      ((define header '(first second)))
+                      ((define (pair-sum p)
+                         (let-values ([(first second) (values (car p) (cdr p))])
+                           (+ first second))))
+                      ((define (weighted second xs)
+                         (map (lambda (x) (* x second)) xs)))
+                      ((define (row n)
+                         `(second ,n)))
+                      ((define (pairs xs)
+                         (for*/list ([first (in-list xs)]
+                                     [second (in-list xs)])
+                           (cons first second))))
+                      ((require racket/match) (define (gap row)
+                                                (match-define (list* best second _) row)
+                                                (- second best)))))])
+  (test-case (format "a name the file binds, or quoted data, is not an access: ~s" use)
+    (define-values (ok? output) (gate-on use))
+    (check-true ok? output)))
+
+(test-case "racket/list's accessor is refused beside quoted data, and inside an unquote"
+  (for ([forms (in-list '(((require racket/list) (define units '(second minute))
+                                                 (define (f xs)
+                                                   (second xs)))
+                          ((require racket/list) (define (f xs)
+                                                   `(row ,(second xs))))))])
+    (check-refused forms)))
+
+(for ([use (in-list '(((require racket/list) (define (keep rows)
+                                               (for/list ([row (in-list rows)]
+                                                          #:when (second row))
+                                                 row)))
+                      ((define (keep rows)
+                         (for/list ([row (in-list rows)]
+                                    #:unless (cadr row))
+                           row)))
+                      ((require racket/list) (define (f rows)
+                                               (for/fold ([acc '()]
+                                                          #:result (second acc))
+                                                         ([r rows])
+                                                 (cons r acc))))
+                      ((require racket/list
+                                racket/match)
+                       (define (f rows)
+                         (match-define (list (app second x)) rows)
+                         x))
+                      ((require racket/list
+                                racket/match)
+                       (struct span (first last))
+                       (define (f s)
+                         (match-define (struct* span ([first (app second x)])) s)
+                         x))
+                      ((require racket/list
+                                racket/match)
+                       (struct span (lo hi))
+                       (define (f v)
+                         (match v
+                           [(struct span ((app second x) _)) x])))
+                      ((require racket/list
+                                racket/match)
+                       (struct span (lo hi))
+                       (define (f v)
+                         (match v
+                           [(struct span ((? (lambda (r) (second r))) _)) 1])))
+                      ((require racket/list
+                                racket/match)
+                       (define (f v)
+                         (match v
+                           [`(a `(b ,(app second x))) x])))))])
+  (test-case (format "a guard, a result, or a pattern's operator is an access: ~s" use)
+    (check-refused use "(second|cadr)")))
+
+(for ([use (in-list '((define/match (f v)
+                        [((struct span ((app second x) _))) x])
+                      (define/match (f v)
+                        [((struct span ((? second) _))) 1])
+                      (define/match (f v)
+                        [(`(a `(b ,(app second x)))) x])
+                      (define f
+                        (match-lambda**
+                          [((struct span ((app second x) _))) x]))
+                      (define f
+                        (match-lambda**
+                          [(`(a `(b ,(app second x)))) x]))
+                      (define f (match-λ [(struct span ((app second x) _)) x]))
+                      (define f (match-λ* [(list (struct span ((app second x) _))) x]))
+                      (define f (match-λ** [((struct span ((app second x) _))) x]))
+                      (define (f v)
+                        (match-letrec ([(struct span ((app second x) _)) v])
+                          x))
+                      (define (f v)
+                        (match-let-values ([((struct span ((app second x) _))) (values v)])
+                          x))
+                      (define (f v)
+                        (match-let*-values ([((struct span ((app second x) _))) (values v)])
+                          x))
+                      (define (f v)
+                        (match-letrec-values ([((struct span ((app second x) _))) (values v)])
+                          x))
+                      (define (f v)
+                        (match/values (values v) [((struct span ((app second x) _))) x]))
+                      (define (f v)
+                        (match/derived v v [(struct span ((app second x) _)) x]))
+                      (define (f v)
+                        (match*/derived (v) v [((struct span ((app second x) _))) x]))
+                      (define (f v)
+                        (let ()
+                          (match-define (struct span ((app second x) _)) v)
+                          x))
+                      (define (f v)
+                        (my-match v [(struct span ((app second x) _)) x]))))])
+  (test-case (format
+              "a pattern in any racket/match form, or in a form the lint does not know, is read: ~s"
+              use)
+    (check-refused `((require racket/list
+                              racket/match)
+                     (struct span (lo hi))
+                     ,use))))
+
+(test-case "a quasipattern's literal neither binds the name nor reads it, so only the body's accessor is refused"
+  (define-values (ok? output)
+    (gate-on '((require racket/list
+                        racket/match)
+               (define (f row)
+                 (match-define `(x second ,y) row)
+                 (second y)))))
+  (check-false ok? output)
+  (check-equal? (length (regexp-match* #rx"second:" output)) 1 output))
+
+(for ([use (in-list
+            '(((require racket/match) (define (gap row)
+                                        (match row
+                                          [(list best second) (- second best)])))
+              ((require racket/match) (define (gap row other)
+                                        (match* (row other)
+                                          [((list best second) _) (- second best)])))
+              ((require racket/match) (define gap
+                                        (match-lambda
+                                          [(list best second) (- second best)])))
+              ((require racket/match) (define (gap row)
+                                        (match-let ([(list best second) row])
+                                          (- second best))))
+              ((require racket/match) (define (gap row)
+                                        (match-let* ([(list best second) row])
+                                          (- second best))))
+              ((struct span (first second)) (define (len s)
+                                              (- (span-second s) (span-first s))))
+              ((struct span (first [second #:mutable])) (define (len s)
+                                                          (- (span-second s) (span-first s))))
+              ((define (f p)
+                 (define-values (first second) (values (car p) (cdr p)))
+                 (+ first second)))
+              ((define (f p)
+                 (let* ([first (car p)]
+                        [second (cdr p)])
+                   (+ first second))))
+              ((require racket/match) (define (f s)
+                                        (match s
+                                          [(regexp #rx"(.)(.)" (list _ first second)) second])))
+              ((require racket/match) (define (f v)
+                                        (match v
+                                          [`(k `(,second)) second])))
+              ((require racket/match) (struct span (lo hi))
+                                      (define (f v)
+                                        (match v
+                                          [(struct span (lo second)) second])))
+              ((require racket/match) (struct gap (lo hi))
+                                      (define (f g)
+                                        (match-define (struct* gap ([lo best] [hi second])) g)
+                                        (- second best)))
+              ((require racket/match) (struct span (first second))
+                                      (define (f s)
+                                        (match-define (struct* span ([first a] [second b])) s)
+                                        (- b a)))
+              ((require racket/match) (define (f h)
+                                        (match h
+                                          [(hash-table (second v) ...) (map cons second v)])))))])
+  (test-case (format "a match pattern or a struct field that binds the name is not an access: ~s" use)
+    (define-values (ok? output) (gate-on use))
+    (check-true ok? output)))
+
+(for ([use (in-list '(((require racket/list
+                                racket/match)
+                       (define (f v)
+                         (match v
+                           [(not second) 1]))
+                       (define (g rows)
+                         (map second rows)))
+                      ((require racket/list
+                                racket/match)
+                       (define (f v)
+                         (match v
+                           [(struct second (lo hi)) lo]))
+                       (define (g rows)
+                         (map second rows)))))])
+  (test-case (format "a not pattern, or a legacy struct pattern's name, binds nothing: ~s" use)
+    (check-refused use #:line 4)))
+
+(test-case "a guard's accessor does not hide the same accessor elsewhere in the file"
+  (define-values (ok? output)
+    (gate-on '((require racket/list) (define (keep rows)
+                                       (for/list ([row (in-list rows)]
+                                                  #:when (second row))
+                                         row))
+                                     (define (col rows)
+                                       (map second rows)))))
+  (check-false ok? output)
+  (check-regexp-match (refusal "second" 3) output)
+  (check-regexp-match (refusal "second" 4) output))
+
+(test-case "racket/list's accessor is refused beside a match that binds another name"
+  (check-refused '((require racket/list
+                            racket/match)
+                   (define (gap row)
+                     (match row
+                       [(list best worst) (- worst best)]))
+                   (define (g xs)
+                     (second xs)))
+                 #:line 4))
+
+(test-case "an unquote inside a nested quasiquote is data"
+  (define-values (ok? output)
+    (gate-on '((require racket/list) (define (tmpl xs)
+                                       `(a `(b ,(second xs)))))))
+  (check-true ok? output))
+
+(for ([use (in-list '(((require racket/list) (define (tmpl xs)
+                                               `(a `(b ,,(second xs)))))
+                      ((require racket/list) (define (tmpl xs)
+                                               `#&
+                                               ,(second xs)))
+                      ((require racket/list) (define (tmpl xs)
+                                               `#hash((a . ,(second xs)))))
+                      ((require racket/list) (define (tmpl xs)
+                                               `#s(row ,(second xs))))))])
+  (test-case (format
+              "an unquote at depth one, or inside a box, hash table or prefab struct, is an access: ~s"
+              use)
+    (check-refused use)))

@@ -1,18 +1,17 @@
 #lang racket/base
 
-(require (only-in racket/list append*)
+(require (only-in cuml/linear-model/private/native libcuml-version)
          racket/runtime-path
-         (only-in threading ~>)
-         (only-in "linear-twin-data.rkt" bits-of decoded twin-results)
          (only-in "logistic-data.rkt"
                   default-tol
-                  lr-case-w
                   lr-case-X
+                  lr-case-w
                   lr-case-y
                   lr-fit
                   setting-C
                   setting-l1-ratio
-                  setting-penalty))
+                  setting-penalty)
+         (only-in "python-env.rkt" bits->floats floats->bits matrix->bits twin-results))
 
 (provide (struct-out twin-trial)
          logistic-twin
@@ -35,10 +34,10 @@
                        #:max-iter [max-iter 1000])
   (hasheq 'op op
           'dtype (symbol->string dt)
-          'X (bits-of dt (~> c lr-case-X append* (map exact->inexact _)))
+          'X (matrix->bits dt (lr-case-X c))
           'y (lr-case-y c)
           'w (if (lr-case-w c)
-                 (bits-of dt (map exact->inexact (lr-case-w c)))
+                 (floats->bits dt (lr-case-w c))
                  'null)
           'penalty (symbol->string penalty)
           'C C
@@ -65,9 +64,9 @@
                  #:max-iter max-iter))
 
 (define (logistic-twin-results requests)
-  (twin-results logistic-twin-script requests))
+  (twin-results logistic-twin-script requests #:expected-cuml libcuml-version))
 
 (define (their-fit theirs dt)
-  (lr-fit (list (decoded dt (hash-ref theirs 'coef_bits)))
-          (decoded dt (hash-ref theirs 'intercept_bits))
+  (lr-fit (list (bits->floats dt (hash-ref theirs 'coef_bits)))
+          (bits->floats dt (hash-ref theirs 'intercept_bits))
           (hash-ref theirs 'n_iter)))

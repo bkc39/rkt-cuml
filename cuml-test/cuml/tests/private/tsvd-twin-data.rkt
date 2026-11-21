@@ -5,11 +5,11 @@
          (only-in racket/list append* take)
          (only-in racket/match match match-define)
          racket/runtime-path
-         (only-in rackunit check-equal?)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in "pca-data.rkt" fixture fixture-name fixture-rows gaps product)
-         (only-in "python-env.rkt" run-twin)
-         (only-in "scaler-data.rkt" generated-rows rows->matrix rows-of)
+         (only-in "pca-twin-data.rkt" twin-key)
+         (only-in "python-env.rkt" [twin-results python-twin-results])
+         (only-in "scaler-data.rkt" generated-rows rows-of)
          (only-in "tsvd-data.rkt"
                   normal-fixture
                   normal-rows-of
@@ -20,7 +20,6 @@
                   tsvd-of))
 
 (provide (struct-out twin-case)
-         float-bits
          ours
          theirs-reference
          theirs-svd
@@ -49,9 +48,6 @@
         (twin-case uniform-fixture 7)
         (twin-case tie-fixture 1)))
 
-(define (key f dt)
-  (format "~a/~a" (fixture-name f) dt))
-
 (define (width f)
   (match-define (cons first-row _) (fixture-rows f 'float64))
   (length first-row))
@@ -61,7 +57,7 @@
     (for/list ([request (in-list requests)])
       (match-define (list op (twin-case f k) dt solver) request)
       (hasheq 'op op
-              'fixture (key f dt)
+              'fixture (twin-key f dt)
               'd (width f)
               'k k
               'dtype (symbol->string dt)
@@ -70,12 +66,8 @@
     (for*/hasheq ([c (in-list twin-cases)]
                   [dt (in-list '(float32 float64))])
       (define f (twin-case-fixture c))
-      (values (string->symbol (key f dt)) (append* (fixture-rows f dt)))))
-  (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
-    (run-twin twin (hasheq 'cases cases 'fixtures payload)))
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
-  results)
+      (values (string->symbol (twin-key f dt)) (append* (fixture-rows f dt)))))
+  (python-twin-results twin cases #:fixtures payload #:expected-cuml libcuml-version))
 
 (define (theirs-svd theirs d)
   (match-define (hash-table ('components components)
@@ -94,15 +86,10 @@
              singular
              (take (gaps (map (lambda (s) (* s s)) spectrum)) (length singular))))
 
-(define (float-bits dt xs)
-  (define size (if (eq? dt 'float32) 4 8))
-  (for/list ([x (in-list xs)])
-    (integer-bytes->integer (real->floating-point-bytes x size) #f)))
-
 (define (ours c dt solver)
   (match-define (twin-case f k) c)
   (define rows (fixture-rows f dt))
-  (define X (rows->matrix rows dt))
+  (define X (list*->device-matrix rows #:dtype dt))
   (define result (tsvd-fit X #:n-components k #:solver solver))
   (define T (tsvd-transform result X))
   (values rows

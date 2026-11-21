@@ -14,7 +14,6 @@
                   transform
                   transformer?)
          (only-in cuml/private/estimator-support define-estimator define-predictor)
-         (only-in racket/list combinations)
          (only-in racket/match match-define)
          (only-in rackunit
                   check-equal?
@@ -26,10 +25,8 @@
                   check-regexp-match
                   check-true
                   test-case)
-         (only-in "private/cuml-error.rkt" check-cuml-error raised))
-
-(define (twice size)
-  (* 2 size))
+         (only-in "private/cuml-error.rkt" check-cuml-error raised)
+         (only-in "private/estimator-data.rkt" keyword-of subsets twice))
 
 (define-hyperparameters gadget-params
   [size 3]
@@ -84,20 +81,12 @@
 
 (define changed (hasheq 'size 5 'scale 7 'shade 'bold 'label "x" 'speed 2 'place 'here))
 
-(define (keyword-of key)
-  (string->keyword (symbol->string key)))
-
 (define (call-with proc keys positional)
   (define sorted (sort keys keyword<? #:key keyword-of))
   (keyword-apply proc
                  (map keyword-of sorted)
                  (map (lambda (k) (hash-ref changed k)) sorted)
                  positional))
-
-(define (subsets keys n)
-  (for*/list ([k (in-range (add1 n))]
-              [subset (in-list (combinations keys k))])
-    subset))
 
 (define table-keys '(size scale shade label))
 

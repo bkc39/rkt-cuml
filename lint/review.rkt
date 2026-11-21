@@ -3,11 +3,9 @@
 (require (only-in racket/list append-map)
          (only-in racket/syntax format-id)
          (only-in review/ext pop-scope push-scope recur track-binding track-error)
-         (only-in syntax/modread with-module-reading-parameterization)
-         ;; whole-module: its syntax classes come with it
          syntax/parse/define
-         ;; whole-module: its syntax classes come with it
-         syntax/parse/pre)
+         syntax/parse/pre
+         (only-in "private/modules.rkt" read-module))
 
 (provide review-syntax
          should-review?)
@@ -92,8 +90,14 @@
                          title))))
 
 (define-syntax-class test-form-name
-  #:datum-literals (test-gpu test-model-probe test-process-memory test-twin test-without-gpu)
-  (pattern (~or* test-gpu test-model-probe test-process-memory test-twin test-without-gpu)))
+  #:datum-literals
+  (test-gpu test-model-probe test-process-memory test-python test-twin test-without-gpu)
+  (pattern (~or* test-gpu
+                 test-model-probe
+                 test-process-memory
+                 test-python
+                 test-twin
+                 test-without-gpu)))
 
 (define-syntax-class reviewed-form
   #:datum-literals (define-cd-result define-definition-context-refactoring-rule
@@ -224,10 +228,7 @@
 (define (provided-names source)
   (cond
     [(path-string? source)
-     (syntax-parse (with-input-from-file source
-                                         (lambda ()
-                                           (port-count-lines! (current-input-port))
-                                           (with-module-reading-parameterization read-syntax)))
+     (syntax-parse (read-module source)
        [(_module _name _lang (_begin form ...))
         (define defined (append-map defined-in (attribute form)))
         (append-map (lambda (one) (provided-in one defined)) (attribute form))]

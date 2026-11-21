@@ -10,7 +10,9 @@
          (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
+         (only-in "common-data.rkt" unit-roundoff)
+         (only-in "exact-algebra.rkt" dot)
          (only-in "pca-data.rkt"
                   fitted-components
                   fitted-mean
@@ -22,16 +24,19 @@
                   fixtures
                   norm
                   over-bound)
-         (only-in "python-env.rkt" run-twin)
-         (only-in "scaler-data.rkt" dot rows->matrix rows-of unit-roundoff))
+         (only-in "python-env.rkt"
+                  python-sklearn-version
+                  test-twin
+                  [twin-results python-twin-results])
+         (only-in "scaler-data.rkt" rows-of))
 
 (provide (struct-out ours)
-         check-against-cuml
          check-against-sklearn
          fit-ours
          l14-problems
          named
          sample-count
+         test-against-cuml
          twin-case
          twin-key
          twin-ks
@@ -77,18 +82,18 @@
     (for*/hasheq ([f (in-list fixtures)]
                   [dt (in-list '(float32 float64))])
       (values (string->symbol (twin-key f dt)) (append* (twin-rows f dt)))))
-  (match-define (hash-table ('results results) ('version (hash-table ('cuml version))))
-    (run-twin twin (hasheq 'cases cases 'fixtures payload)))
-  (check-equal? version "26.08.00")
-  (check-equal? version libcuml-version)
-  results)
+  (python-twin-results twin
+                       cases
+                       #:fixtures payload
+                       #:expected-cuml libcuml-version
+                       #:expected-sklearn python-sklearn-version))
 
 (struct ours (fitted noise n-samples transform))
 
 (define (fit-ours f dt k #:whiten [whiten #f] #:solver [solver 'full])
   (define rows (twin-rows f dt))
   (match-define (cons first-row _) rows)
-  (define X (rows->matrix rows dt))
+  (define X (list*->device-matrix rows #:dtype dt))
   (define m (min (length rows) (length first-row)))
   (define result (pca-fit X #:n-components (and (< k m) k) #:whiten whiten #:solver solver #:tol 0.0))
   (ours (fitted-of result)
@@ -237,3 +242,7 @@
     (match-define (list dt k solver) c)
     (test-case (format "~a ~a k=~a ~a" (fixture-name f) dt k solver)
       (check-equal? (l14-problems (fit-ours f dt k #:solver solver) cuml bound dt solver) '()))))
+
+(define (test-against-cuml name)
+  (test-twin (format "~a is cuML-Python's within the L14 bounds" name)
+    (check-against-cuml (named name))))

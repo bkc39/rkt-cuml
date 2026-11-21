@@ -8,40 +8,36 @@
          (only-in racket/match match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-exn check-pred check-true fail test-case)
-         (only-in raft exn:fail:raft? list->device-vector)
+         (only-in raft
+                  device-matrix
+                  device-vector
+                  exn:fail:raft?
+                  list*->device-matrix
+                  list->device-vector)
          (only-in raft/tests/private/collect drain-finalizers!)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in raft/tests/private/probe probe-pool-used test-pools)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/estimator-data.rkt" apply-options)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
          (only-in "private/manifold-refusal-data.rkt"
                   cosine-message
                   large-message
                   large-row
+                  least-rate-message
                   listed-X
                   nan-message
                   nan-row
                   normless-message
+                  tiny-X
                   tiny-with
                   zero-row)
-         (only-in "private/refusal-rows.rkt" check-row row row-call row-id)
-         (only-in "private/scaler-data.rkt" rows->matrix)
+         (only-in "private/refusal-rows.rkt" check-row float-most row row-call row-id)
          (only-in "private/tsne-data.rkt" diverged-rx embedded)
          (only-in "private/umap-data.rkt" finite-rows? fixture-X fixture-rows tiny))
 
 (define small (hasheq 'perplexity 5.0))
 
 (define pool-device 0)
-
-(define (tiny-X)
-  (fixture-X tiny))
-
-(define (beyond-float name v)
-  (format "~a: expected at most 3.4028234663852886e+38, got ~a" name v))
-
-(define (least-rate-message v)
-  (format "learning-rate: expected at least 1.1754943508222875e-38, got ~a" v))
 
 (define (parameter-rows)
   (list
@@ -64,14 +60,14 @@
    (row "f7 float"
         "perplexity: expected a finite value above 1 in float32, got 1.000000001"
         (hasheq 'perplexity (+ 1.0 1e-9)))
-   (row "f7 most" (beyond-float 'perplexity "1e+39") (hasheq 'perplexity 1e39))
+   (row "f7 most" (float-most 'perplexity "1e+39") (hasheq 'perplexity 1e39))
    (row "f8"
         "early-exaggeration: expected a finite value of at least 1, got 0.5"
         (hasheq 'early-exaggeration 0.5))
    (row "f8 nan"
         "early-exaggeration: expected a finite value of at least 1, got nan"
         (hasheq 'early-exaggeration +nan.0))
-   (row "f8 most" (beyond-float 'early-exaggeration "1e+39") (hasheq 'early-exaggeration 1e39))
+   (row "f8 most" (float-most 'early-exaggeration "1e+39") (hasheq 'early-exaggeration 1e39))
    (row "f9" "learning-rate: expected a finite value above 0, got 0" (hasheq 'learning-rate 0.0))
    (row "f9 nan"
         "learning-rate: expected a finite value above 0, got nan"
@@ -148,7 +144,8 @@
                  " lower learning-rate, centre or rescale X, or raise n-neighbors"))
 
 (define (scaled-tiny k)
-  (rows->matrix (map (lambda (r) (map (lambda (x) (* x k)) r)) (fixture-rows tiny)) 'float32))
+  (list*->device-matrix (map (lambda (r) (map (lambda (x) (* x k)) r)) (fixture-rows tiny))
+                        #:dtype 'float32))
 
 (define (offset-rows t0)
   (for/list ([i (in-range 32)])
@@ -159,12 +156,12 @@
   (map (lambda (r) (map - r means)) rows))
 
 (define (duplicates k)
-  (rows->matrix (append (make-list k '(0 0)) (make-list k '(1 1))) 'float32))
+  (list*->device-matrix (append (make-list k '(0 0)) (make-list k '(1 1))) #:dtype 'float32))
 
 (define (line-rows largest)
-  (rows->matrix (for/list ([i (in-range 8)])
-                  (list (* i (/ largest 7)) 0.0))
-                'float32))
+  (list*->device-matrix (for/list ([i (in-range 8)])
+                          (list (* i (/ largest 7)) 0.0))
+                        #:dtype 'float32))
 
 (define limit-ratio 0.97)
 
@@ -172,23 +169,23 @@
   (row id message (cons X options)))
 
 (define (X-rows)
-  (define one-row (rows->matrix '((1 2 3)) 'float32))
-  (define zeros (rows->matrix (make-list 8 '(0 0 0)) 'float32))
+  (define one-row (list*->device-matrix '((1 2 3)) #:dtype 'float32))
+  (define zeros (list*->device-matrix (make-list 8 '(0 0 0)) #:dtype 'float32))
   (define cosine (hash-set small 'metric 'cosine))
   (define sqeuclidean (hash-set small 'metric 'sqeuclidean))
   (define manhattan (hash-set small 'metric 'manhattan))
   (define pca (hasheq 'perplexity 3.0 'init 'pca))
-  (define normless-pca (rows->matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) 'float32))
+  (define normless-pca (list*->device-matrix (cons '(0.0 0.0 0.0) (cdr past-pca)) #:dtype 'float32))
   (list
    (X-row "f11" "X: expected float32, got float64" (tiny-with '() 'float64))
-   (X-row "f12" "X: expected rank 2, got rank 1" (blank-vector 8 'float32))
+   (X-row "f12" "X: expected rank 2, got rank 1" (device-vector 8 #:dtype 'float32))
    (X-row "f12 layout"
           "X: expected row-major, got col-major 8x3"
-          (blank-matrix 8 3 'float32 #:layout 'col-major))
+          (device-matrix 8 3 #:dtype 'float32 #:layout 'col-major))
    (X-row "f13" "X: expected at least 2 rows, got 1" one-row)
    (X-row "f14"
           "X: expected at least 2 columns, got 1"
-          (rows->matrix (map (lambda (r) (take r 1)) (fixture-rows tiny)) 'float32))
+          (list*->device-matrix (map (lambda (r) (take r 1)) (fixture-rows tiny)) #:dtype 'float32))
    (X-row "f17" "perplexity: expected at most the 8 neighbours, got 30" (tiny-X) (hasheq))
    (X-row "f17 neighbours"
           "perplexity: expected at most the 4 neighbours, got 5"
@@ -216,10 +213,13 @@
           (manhattan-message (* 3 past-manhattan))
           (tiny-with (antipodal past-manhattan past-manhattan past-manhattan))
           (hash-set manhattan 'method 'exact))
-   (X-row "f20d" (pca-message (spread-of past-pca)) (rows->matrix past-pca 'float32) pca)
+   (X-row "f20d"
+          (pca-message (spread-of past-pca))
+          (list*->device-matrix past-pca #:dtype 'float32)
+          pca)
    (X-row "f20d exact"
           (pca-message (spread-of past-pca))
-          (rows->matrix past-pca 'float32)
+          (list*->device-matrix past-pca #:dtype 'float32)
           (hash-set pca 'method 'exact))
    (X-row "f21" cosine-message (tiny-with zero-row) cosine)
    (X-row "f23 small scale" small-scale-message (scaled-tiny 1e-11) sqeuclidean)
@@ -227,7 +227,9 @@
           small-scale-message
           (scaled-tiny 1e-11)
           (hash-set sqeuclidean 'method 'exact))
-   (X-row "f23 offset" small-scale-message (rows->matrix (offset-rows 1.7e9) 'float32))
+   (X-row "f23 offset"
+          small-scale-message
+          (list*->device-matrix (offset-rows 1.7e9) #:dtype 'float32))
    (X-row "f23 duplicates" small-scale-message (duplicates 40))
    (X-row "f23 duplicates past the n-neighbors cap"
           small-scale-message
@@ -237,7 +239,7 @@
           small-scale-message
           (line-rows (* limit-ratio (expt 2.0 -64)))
           (hash-set small 'metric 'manhattan))
-   (X-row "f22" every-row-equal (rows->matrix (make-list 8 '(1.5 1.5 1.5)) 'float32))
+   (X-row "f22" every-row-equal (list*->device-matrix (make-list 8 '(1.5 1.5 1.5)) #:dtype 'float32))
    (X-row "f22 zeros" every-row-equal zeros)
    (X-row "f1 before f11"
           "method: expected fft or exact"
@@ -301,7 +303,7 @@
                                       (antipodal inside-manhattan inside-manhattan inside-manhattan))
                                      (hasheq 'perplexity 5.0 'metric 'manhattan))
                                (list "f20d"
-                                     (rows->matrix inside-pca 'float32)
+                                     (list*->device-matrix inside-pca #:dtype 'float32)
                                      (hasheq 'perplexity 3.0 'init 'pca))))]
          [method (in-list '(fft exact))])
     (match-define (list id X options) entry)
@@ -309,12 +311,14 @@
     (check-true (finite-rows? (embedded fitted)) (format "~a ~a" id method))))
 
 (test-gpu "f23's remedies fit: centred offset rows, more neighbours, a line just above 2^-64"
-  (for* ([entry (in-list
-                 (list (list "centred" (rows->matrix (centred (offset-rows 1.7e9)) 'float32) small)
-                       (list "n-neighbors" (duplicates 40) (hash-set small 'n-neighbors 60))
-                       (list "above 2^-64"
-                             (line-rows (/ (expt 2.0 -64) limit-ratio))
-                             (hash-set small 'metric 'manhattan))))]
+  (for* ([entry (in-list (list (list "centred"
+                                     (list*->device-matrix (centred (offset-rows 1.7e9))
+                                                           #:dtype 'float32)
+                                     small)
+                               (list "n-neighbors" (duplicates 40) (hash-set small 'n-neighbors 60))
+                               (list "above 2^-64"
+                                     (line-rows (/ (expt 2.0 -64) limit-ratio))
+                                     (hash-set small 'metric 'manhattan))))]
          [method (in-list '(fft exact))])
     (match-define (list id X options) entry)
     (define fitted (apply-options tsne-fit (hash-set options 'method method) X))
@@ -334,7 +338,7 @@
   (check-cuml-error 'logic
                     (diverged-rx 'tsne-fit)
                     (lambda ()
-                      (tsne-fit (rows->matrix (take (fixture-rows tiny) 2) 'float32)
+                      (tsne-fit (list*->device-matrix (take (fixture-rows tiny) 2) #:dtype 'float32)
                                 #:perplexity 2.0
                                 #:method 'exact))))
 

@@ -16,7 +16,8 @@
          (only-in rackunit check-equal? check-pred check-true test-case)
          (only-in raft device-matrix->list* device-vector->list device-vector? dtype shape)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" decimals dtypes on-matrix on-vector)
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" decimals dtypes on-matrix)
          (only-in "private/mbsgd-data.rkt" blob-rows normal-rows reg-target))
 
 (define rows (normal-rows 40 3 11))

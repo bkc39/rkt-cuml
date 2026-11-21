@@ -19,8 +19,9 @@
                   list*->device-matrix
                   list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" mean)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/metrics-data.rkt" exact-r2 host-ari mean))
+         (only-in "private/metrics-data.rkt" exact-r2 host-ari))
 
 (define truth-labels '(0 0 0 1 1 1))
 (define found-labels '(1 1 -1 0 0 0))

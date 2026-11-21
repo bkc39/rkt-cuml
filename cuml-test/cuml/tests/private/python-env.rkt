@@ -3,21 +3,36 @@
 (require (only-in json json-null read-json write-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
-         (only-in racket/match == match)
+         (only-in racket/list append*)
+         (only-in racket/match == match match-define)
          (only-in racket/port open-output-nowhere)
          (only-in racket/promise delay force)
          (only-in racket/string string-replace)
          (only-in racket/system system*)
+         (only-in rackunit check-equal?)
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu gpu-skip test-unless-skipped)
          ;; whole-module: its syntax classes come with it
          syntax/parse/define
          (only-in threading ~>))
 
-(provide run-cases
+(provide bits->floats
+         checked-results
+         floats->bits
+         matrix->bits
+         or-null
+         python-cuml-version
+         python-sklearn-version
          run-twin
+         test-python
          test-twin
-         twin-params)
+         twin-default-params
+         twin-params
+         twin-results)
+
+(define python-cuml-version "26.08.00")
+
+(define python-sklearn-version "1.8.0")
 
 (define python (find-executable-path "python3"))
 
@@ -40,13 +55,18 @@
                                             [current-error-port (open-output-nowhere)])
                                (system* python "-c" (format "import ~a" module)))))))
 
+(define python-skip
+  (delay
+    (cond
+      [(not python) "no Python twin (python3 is not on PATH)"]
+      [(not (python-imports? "numpy")) "no Python twin (import numpy failed)"]
+      [else #f])))
+
 (define twin-skip ;; noqa
   (delay
     (or gpu-skip
-        (cond
-          [(not python) "no Python twin (python3 is not on PATH)"]
-          [(not (python-imports? "cuml")) "no Python twin (import cuml failed)"]
-          [else #f]))))
+        (force python-skip)
+        (and (not (python-imports? "cuml")) "no Python twin (import cuml failed)"))))
 
 (define (run-twin script input)
   (with-release ([dir
@@ -66,11 +86,60 @@
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))
 
-(define (run-cases script cases)
-  (hash-ref (run-twin script (hasheq 'cases cases)) 'results))
+(define (sklearn-of version)
+  (match version
+    [(hash-table ('sklearn sklearn)) sklearn]
+    [_ #f]))
+
+(define (checked-results answer
+                         #:expected-cuml [expected #f]
+                         #:expected-sklearn [expected-sklearn #f])
+  (match answer
+    [(hash-table ('results results) ('version (and version (hash-table ('cuml cuml)))))
+     (check-equal? cuml python-cuml-version "the twin's Python cuML is not the pinned release")
+     (when expected
+       (check-equal? cuml expected "the twin's Python cuML is not the native libcuml"))
+     (when expected-sklearn
+       (check-equal? (sklearn-of version)
+                     expected-sklearn
+                     "the twin's scikit-learn is not the pinned release"))
+     results]
+    [(hash-table ('results _))
+     (error 'twin-results
+            "the twin wrote no version.cuml (got ~e); write its output with twin_common.run"
+            (hash-ref answer 'version #f))]
+    [_ (error 'twin-results "the twin wrote no results; write its output with twin_common.run")]))
+
+(define (twin-results script
+                      requests
+                      #:expected-cuml [expected #f]
+                      #:expected-sklearn [expected-sklearn #f]
+                      #:fixtures [fixtures #f]
+                      #:run [run run-twin])
+  (define request
+    (for/hasheq ([(key value) (in-dict `((cases . ,requests) (fixtures . ,fixtures)))]
+                 #:when value)
+      (values key value)))
+  (checked-results (run script request) #:expected-cuml expected #:expected-sklearn expected-sklearn))
+
+(define (twin-default-params script
+                             #:unbound [unbound '()]
+                             #:expected-cuml [expected #f]
+                             #:expected-sklearn [expected-sklearn #f]
+                             #:run [run run-twin])
+  (match-define (list theirs)
+    (twin-results script
+                  (list (hasheq 'op "params"))
+                  #:expected-cuml expected
+                  #:expected-sklearn expected-sklearn
+                  #:run run))
+  (twin-params theirs #:unbound unbound))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped (force twin-skip) name body ...))
+
+(define-syntax-parse-rule (test-python name:expr body:expr ...+)
+  (test-unless-skipped (force python-skip) name body ...))
 
 (define unbound-twin-params '(verbose output-type))
 
@@ -83,8 +152,25 @@
     [(? string?) (string->symbol (string-replace value "_" "-"))]
     [_ value]))
 
-(define (twin-params theirs unbound)
+(define (twin-params theirs #:unbound [unbound '()])
   (for*/hasheq ([(key value) (in-hash theirs)]
                 [name (in-value (twin-key key))]
                 #:unless (memq name (append unbound-twin-params unbound)))
     (values name (twin-value value))))
+
+(define (or-null v)
+  (or v (json-null)))
+
+(define (float-size dt)
+  (if (eq? dt 'float32) 4 8))
+
+(define (floats->bits dt xs)
+  (for/list ([x (in-list xs)])
+    (integer-bytes->integer (real->floating-point-bytes x (float-size dt)) #f)))
+
+(define (bits->floats dt bits)
+  (for/list ([b (in-list bits)])
+    (floating-point-bytes->real (integer->integer-bytes b (float-size dt) #f))))
+
+(define (matrix->bits dt rows)
+  (floats->bits dt (append* rows)))

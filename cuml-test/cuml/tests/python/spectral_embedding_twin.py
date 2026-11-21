@@ -2,14 +2,8 @@
 spectral_embedding embeds the data or graph the Racket side used, and
 sklearn's spectral_embedding and SpectralEmbedding are the references."""
 
-import json
-import sys
-
 import numpy as np
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
+from twin_common import host, run
 
 
 def sign_rule(E):
@@ -138,34 +132,14 @@ def params(case):
     }
 
 
-def versions():
-    out = {}
-    try:
-        import sklearn
-
-        import cuml
-
-        out.update({"cuml": cuml.__version__, "sklearn": sklearn.__version__})
-    except ImportError:
-        pass
-    return out
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {
-        "embed": embed,
-        "raw-tiny": raw_tiny,
-        "graph": graph,
-        "sklearn": sklearn_graph,
-        "sklearn-dense": sklearn_dense,
-        "params": params,
-    }
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": versions()}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "embed": embed,
+            "raw-tiny": raw_tiny,
+            "graph": graph,
+            "sklearn": sklearn_graph,
+            "sklearn-dense": sklearn_dense,
+            "params": params,
+        }
+    )

@@ -58,13 +58,14 @@ SVD gives the minimum-norm fit, except in float32 with
 @racket[fit-intercept], where the fit interpolates @racket[y] but generally
 is not minimum-norm.
 
-The fit is refused when the residual's weighted inner product with some
-centred column exceeds 2@superscript{-8} (float32) or 2@superscript{-18}
-(float64) times that column's weighted spread times @racket[y]'s, as with
-collinear columns in float32; @racket['qr] or float64 often fits. A
-coefficient fixed only by rows of low weight w is accurate to about
-u·√(w@subscript{max}/w), u being the dtype's unit roundoff, and the refusal
-does not see its loss.
+The fit is refused when the residual's weighted inner product with some column, centred under
+@racket[fit-intercept], exceeds 2@superscript{-8} (float32) or 2@superscript{-18} (float64) times
+that column's weighted spread times @racket[y]'s, as with collinear float32 columns (float64 often
+fits). Float32 @racket['qr] and @racket['svd-qr] also refuse X, unless wide or with one non-constant
+column, before the solve when a lower bound on κ′ (the condition number of X's Gram matrix, centred
+as above, at unit spread) gives u·√κ′ ≥ 2@superscript{-8}, u the dtype's unit roundoff, as with a
+one-hot design and an intercept (@tt{plans/layout.md}, L2-l, has remedies). A coefficient fixed only
+by rows of low weight w is accurate to about u·√(w@subscript{max}/w), a loss the refusal misses.
 
 Weighted fits with an intercept can differ in the last bits between runs
 from about 2000 rows, as in Python cuML; unweighted fits, and fits without an
@@ -169,18 +170,17 @@ dtype's unit roundoff, is below rounding and is taken as 0: that fit is
 @racket['eig]), refusals included. A column constant over the rows of positive
 weight (zero, without @racket[fit-intercept]) gets coefficient 0.
 
-The fit is refused when the solve is not a ridge solution, as when X is
-ill-conditioned for @racket[alpha] (@racket['svd], float64 or a larger
-@racket[alpha] may fit), and when @racket[alpha] scaled with X passes the dtype's
-range. The coefficients are accurate to about u·κ@subscript{α} relative to the
-largest, less so when y is nearly orthogonal to X, κ@subscript{α} being
-(λ@subscript{max} + @racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the
-eigenvalues λ of XᵀWX on the varying columns, X centred as above. Where u·κ@subscript{α} is 1 or more, as
-with columns of very different scales or nearly collinear columns, either solver
-may refuse the fit as ill-conditioned or return it wrong. @racket['auto] and
-@racket['eig] can also lose accuracy whatever @racket[alpha] is when XᵀWX has
-eigenvalues below u·λ@subscript{max} (u·κ@subscript{0} ≥ 1), as in Python cuML;
-@racket['svd] does not. @tt{plans/layout.md} (L2-j, L2-k) has the measurements.
+The fit is refused when the solve is not a ridge solution, as when X is ill-conditioned for
+@racket[alpha] (@racket['svd], float64 or a larger @racket[alpha] may fit; with @racket[alpha] above
+u times the narrowest column's spread and at most u times the widest's, @racket['svd] refuses it
+before the solve, and in float64 some accurate fits), and when @racket[alpha] scaled with X passes
+the dtype's range. The coefficients are accurate to about u·κ@subscript{α} relative to the largest,
+less so when y is nearly orthogonal to X, κ@subscript{α} being (λ@subscript{max} +
+@racket[alpha])/(λ@subscript{min} + @racket[alpha]) over the eigenvalues λ of XᵀWX on the varying
+columns, X centred as above. Elsewhere either solver may refuse or err at u·κ@subscript{α} ≥ 1, as
+with nearly collinear columns. @racket['auto] and @racket['eig] can also lose accuracy whatever
+@racket[alpha] is when XᵀWX has eigenvalues below u·λ@subscript{max} (u·κ@subscript{0} ≥ 1), as in
+Python cuML; @racket['svd] does not. @tt{plans/layout.md} (L2-j to L2-l) measures this.
 
 Fits repeat as @racket[linear-regression-fit]'s, and @racket[X], @racket[y] and
 @racket[sample-weight] are not modified.
@@ -411,16 +411,16 @@ label kind of a fitted result; copy it from one. @racket[logistic-regression-pre
 Fits C times the weighted sigmoid (two classes) or softmax loss under @racket[penalty] by
 L-BFGS, OWL-QN with an l1 part; the intercept is not penalised. @racket[y] holds class labels:
 integral numbers on the device, or a list of reals, strings or symbols; @racket[classes] are the
-sorted distinct labels. @racket[class-weight] scales each row's weight by its class's.
+sorted distinct labels. @racket[class-weight] scales each row's weight by its class's. Unlike
+Python cuML's, the softmax honours the weights.
 
-The fit is refused when the solver has not converged; the check bounds the first-order residual, not
+The fit is refused when the solver has not converged: the check bounds the first-order residual, not
 the distance to the optimum. A column constant over the rows of positive weight (zero, without
 @racket[fit-intercept]) gets coefficient 0; with @racket[fit-intercept], one that varies only in its
-last bits is refused: centre it. Columns of widely mixed scale can be refused at any
-@racket[max-iter]: standardise them. Without @racket[fit-intercept], columns far from zero can be
-refused short of @racket[max-iter]: lower @racket[tol] or centre them
-(@hyperlink["https://github.com/bkc39/rkt-cuml/issues/126"]{#126}). On separable data without a
-penalty the coefficients grow until the solver stops. Large fits do not repeat bitwise.
+last bits is refused: centre it. With @racket[fit-intercept] or under @racket['none], a refused fit
+is solved again and kept if it passes. @racket[n-iter] counts every solve, at most
+@racket[max-iter]. Each refusal names its remedy. Unpenalised separable fits grow until the solver
+stops. Large fits do not repeat bitwise.
 @examples[#:eval ev #:label #f
 (logistic-regression-result-n-iter (logistic-regression-fit Xc yc #:penalty 'l1 #:C 10.0))
 (eval:error (logistic-regression-fit Xc yc #:C 0))

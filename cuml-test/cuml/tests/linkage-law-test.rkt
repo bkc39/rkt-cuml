@@ -1,11 +1,12 @@
 #lang racket/base
 
-(require (only-in racket/list first range remove-duplicates rest second shuffle)
-         (only-in racket/match match-define)
+(require (only-in racket/list first range remove-duplicates rest shuffle)
+         (only-in racket/match match-define match-lambda)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/dbscan-data.rkt" integer-grid mat pick same-partition? seeded)
+         (only-in "private/common-data.rkt" pick)
+         (only-in "private/dbscan-data.rkt" integer-grid same-partition? seeded)
          (only-in "private/kmeans-data.rkt" blob-data)
          (only-in "private/linkage-data.rkt"
                   children->labels
@@ -20,7 +21,10 @@
                   partition-refines?))
 
 (define (fit-lists rows k connectivity #:c [c 15])
-  (linked-lists (mat rows 'float32) #:n-clusters k #:connectivity connectivity #:c c))
+  (linked-lists (list*->device-matrix rows #:dtype 'float32)
+                #:n-clusters k
+                #:connectivity connectivity
+                #:c c))
 
 (define (children-of rows connectivity #:c [c 15])
   (match-define (list _ children) (fit-lists rows 2 connectivity #:c c))
@@ -97,7 +101,11 @@
       (define fits
         (for/list ([k (in-range 1 41)])
           (fit-lists rows k connectivity)))
-      (check-equal? (length (remove-duplicates (map second fits))) 1)
+      (define children
+        (map (match-lambda
+               [(list _ one) one])
+             fits))
+      (check-equal? (length (remove-duplicates children)) 1)
       (for ([coarse (in-list fits)]
             [fine (in-list (rest fits))])
         (check-true (partition-refines? (first fine) (first coarse)))))))
