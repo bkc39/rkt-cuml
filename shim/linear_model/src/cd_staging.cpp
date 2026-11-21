@@ -185,33 +185,41 @@ zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
     sigmas += std::sqrt(value_of(m.square) / total);
   }
   long double top = 0;
-  long double curvature = 0;
-  long double binding = 0;
   long double residual = -penalty;
   long double allowance = penalty_rounding;
   long double margin = -std::numeric_limits<long double>::infinity();
+  const auto cross_of = [&](const moment& m) {
+    return std::abs(value_of(m.cross)) / total;
+  };
+  const auto column_of = [&](const moment& m) {
+    return (gamma * std::sqrt(value_of(m.square) / total) * sigma_y) +
+           penalty_rounding;
+  };
   for (const moment& m : t.moments) {
-    const long double cross = std::abs(value_of(m.cross)) / total;
-    const long double spread = std::sqrt(value_of(m.square) / total) * sigma_y;
-    const long double column = (gamma * spread) + penalty_rounding;
-    if (cross > top) {
-      const long double sigma = std::sqrt(value_of(m.square) / total);
-      top = cross;
-      binding = sigma;
-      curvature = std::max((sigma * sigma) + l2, sigma * sigmas);
-    }
+    const long double cross = cross_of(m);
+    const long double column = column_of(m);
+    top = std::max(top, cross);
     if (cross - penalty - column > margin) {
       margin = cross - penalty - column;
       residual = cross - penalty;
       allowance = column;
     }
   }
+  long double widest = 0;
+  for (const moment& m : t.moments) {
+    const long double cross = cross_of(m);
+    if (cross >= penalty || top - cross <= column_of(m)) {
+      widest = std::max(widest, std::sqrt(value_of(m.square) / total));
+    }
+  }
+  const long double curvature =
+      std::max((widest * widest) + l2, widest * sigmas);
   return {static_cast<double>(residual),
           static_cast<double>(allowance),
           r.l1_ratio > 0 ? static_cast<double>(top / r.l1_ratio)
                          : std::numeric_limits<double>::infinity(),
           static_cast<double>(curvature),
-          static_cast<double>(binding),
+          static_cast<double>(widest),
           static_cast<double>(sigma_y)};
 }
 

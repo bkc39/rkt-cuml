@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdint>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "cd_staging.hpp"
 #include "cumlrkt/support.hpp"
@@ -176,6 +178,41 @@ TEST(CdZeroFit, AnElasticNetAlphaFarOutsideTheBindingColumnsBandKeepsTheTol) {
       << far;
   const std::string near = advice(alpha_max * (1 - (true_band / 2)));
   EXPECT_NE(near.find("which no tol resolves"), std::string::npos) << near;
+}
+
+residual_terms tied_beside_binding(bool binding_first) {
+  const moment binding{scaled_sum{1, binding_square_exponent},
+                       scaled_sum{binding_correlation, binding_cross_exponent}};
+  const moment wide{scaled_sum{1, 2},
+                    scaled_sum{binding_correlation, binding_cross_exponent}};
+  return {binding_first ? std::vector<moment>{binding, wide}
+                        : std::vector<moment>{wide, binding},
+          {1, 1},
+          {1, 2}};
+}
+
+TEST(CdZeroFit, ATiedColumnSetsTheBandInEitherOrder) {
+  const double alpha_max = binding_alpha_max(small_ratio);
+  const double alpha =
+      alpha_max *
+      (1 - (far_factor * expected_rounding(small_ratio, alpha_max)));
+  const kkt_terms unresolvable{stop_residual, stop_tol, 1};
+  const auto band_and_advice = [&](bool binding_first) {
+    const zero_fit z = zero_fit_of<double>(tied_beside_binding(binding_first),
+                                           {4, alpha, small_ratio, rows});
+    const double band = alpha_rounding(z, tiny_largest, stop, small_ratio);
+    return std::pair{band, refusal_of([&] {
+                       require_resolved<double>(
+                           unresolvable, stop_epochs,
+                           {stop_tol, tiny_largest, alpha, z.alpha_max, band});
+                     })};
+  };
+  const auto [first_band, first_advice] = band_and_advice(true);
+  const auto [last_band, last_advice] = band_and_advice(false);
+  EXPECT_EQ(first_band, last_band);
+  EXPECT_EQ(first_advice, last_advice);
+  EXPECT_NE(first_advice.find("which no tol resolves"), std::string::npos)
+      << first_advice;
 }
 
 TEST(CdZeroFit, ZerosAreAcceptedUpToTheAllowance) {

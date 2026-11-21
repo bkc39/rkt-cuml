@@ -2232,12 +2232,19 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   V16b keeps "lower tol below the largest coefficient" while its
   allowance A < 1. From A ≥ 1 rounding alone moves the coefficients by
   their own size. Whether a lower tol can still help depends on where the
-  exact coefficients are. Near alpha-max only the column j that sets it
-  (`zero_fit`'s σⱼ, σ_y and κⱼ = max(σⱼ² + α′(1 − ρ), σⱼΣσ), its KKT
-  curvature) moves off 0, and its gradient Ĉⱼ/Ŵ − κⱼb′ⱼ is off by the
-  solve's rounding in that column's own terms: over n epochs
+  exact coefficients are. Near alpha-max only the columns that can be
+  active at α move off 0: those with |Ĉₖ|/Ŵ ≥ α′ρ, or within their own
+  allowance of the largest (so every column tied with the one that sets
+  alpha-max). Each one's gradient Ĉₖ/Ŵ − κₖb′ₖ is off by the solve's
+  rounding in that column's own terms, with κₖ = max(σₖ² + α′(1 − ρ),
+  σₖΣσ) its KKT curvature. κₖ grows with σₖ, so the largest of those
+  roundings is the widest active column j's (`zero_fit`'s σⱼ, σ_y and κⱼ),
+  whatever the column order: over n epochs
   u√n·(2·max|b′|·κⱼ + √rows·σ_y·σⱼ) (`alpha_rounding`), the coefficient's
-  two roundings through κⱼ and the column's √rows-term dot product. A's
+  two roundings through κⱼ and the column's √rows-term dot product. With
+  the σ = 1 column given the binding one's cross, the band is σ = 1's in
+  either order (`cd_zero_fit_test`; at 5938ec8 the first tied column set
+  it, so the order chose the advice). A's
   gradient term is √rows·σ_y·maxₖ σₖ/κₖ instead, a maximum over every
   column, which with ρ < 1 and a narrow binding column beside a wide one
   (σ 2⁻¹⁰ and 1, ρ = 0.01) is about 80 times column j's own and called a
