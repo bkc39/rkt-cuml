@@ -49,6 +49,8 @@ struct zero_fit {
   double allowance;
   double alpha_max;
   double curvature;
+  double sigma;
+  double sigma_y;
 };
 
 template <typename T>
@@ -71,6 +73,9 @@ template <typename T>
 zero_fit zero_fit_of(const residual_terms& t, const zero_request& r);
 
 bool accepts_zero(const zero_fit& z);
+
+double alpha_rounding(const zero_fit& z, double largest, double l1_ratio,
+                      const cd_epochs& epochs);
 
 void require_kkt(const kkt_terms& k, int n_iter, double tol);
 

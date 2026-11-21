@@ -186,6 +186,7 @@ zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
   }
   long double top = 0;
   long double curvature = 0;
+  long double binding = 0;
   long double residual = -penalty;
   long double allowance = penalty_rounding;
   long double margin = -std::numeric_limits<long double>::infinity();
@@ -196,6 +197,7 @@ zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
     if (cross > top) {
       const long double sigma = std::sqrt(value_of(m.square) / total);
       top = cross;
+      binding = sigma;
       curvature = std::max((sigma * sigma) + l2, sigma * sigmas);
     }
     if (cross - penalty - column > margin) {
@@ -207,11 +209,25 @@ zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
   return {static_cast<double>(residual), static_cast<double>(allowance),
           r.l1_ratio > 0 ? static_cast<double>(top / r.l1_ratio)
                          : std::numeric_limits<double>::infinity(),
-          static_cast<double>(curvature)};
+          static_cast<double>(curvature), static_cast<double>(binding),
+          static_cast<double>(sigma_y)};
 }
 
 bool accepts_zero(const zero_fit& z) {
   return z.residual <= z.allowance;
+}
+
+double alpha_rounding(const zero_fit& z, double largest, double l1_ratio,
+                      const cd_epochs& epochs) {
+  if (!std::isfinite(z.alpha_max)) {
+    return 0;
+  }
+  const long double gradient =
+      (coefficient_rounding * largest * z.curvature) +
+      (std::sqrt(static_cast<long double>(epochs.rows)) * z.sigma_y * z.sigma);
+  return static_cast<double>(
+      epochs.roundoff * std::sqrt(static_cast<long double>(epochs.n_iter)) *
+      gradient / (static_cast<long double>(z.alpha_max) * l1_ratio));
 }
 
 void require_kkt(const kkt_terms& k, int n_iter, double tol) {

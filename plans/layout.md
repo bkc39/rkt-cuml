@@ -2197,8 +2197,8 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   the widest column's σσ_y instead, a column of spread 2⁻²⁰ and correlation
   0.9 beside an orthogonal column of spread 1 (float64, 1000 rows) was
   zeroed at α = λ_max·(1 − 1.48·10⁻⁷), where the lasso coefficient is
-  0.1397 (`elastic-net-alpha-max-test`). One double
-  ulp below λ_max is ρ·λ_max·u ≤ u·λ̄, inside the allowance. On wine
+  0.1397 (`elastic-net-alpha-max-test`). One double ulp below λ_max is
+  ρ·λ_max·u ≤ u·σⱼσ_y of the binding column j, inside its allowance. On wine
   (alcohol on the other 12 columns, raw X), λ_max, glmnet's value
   163.64265023355625, one ulp either side and 2·λ_max return zeros in both
   dtypes, lasso and l1-ratio 1/2 (`elastic-net-alpha-max-test`; at 0c590cc
@@ -2215,13 +2215,20 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   V16b keeps "lower tol below the largest coefficient" while its
   allowance A < 1. From A ≥ 1 rounding alone moves the coefficients by
   their own size. Whether a lower tol can still help depends on where the
-  exact coefficients are: A·max|b′| is the solve's rounding in the
-  coefficients, and times κⱼ = max(σⱼ² + α′(1 − ρ), σⱼΣσ), the KKT
-  curvature of the column j that sets alpha-max, it is that rounding in the
-  gradient's units. When (α_max − α)·ρ, alpha-max's distance in the same
-  units, is within it, that is (α_max − α)/α_max ≤ A·max|b′|·κⱼ/(ρ·α′_max),
-  the exact coefficients are themselves under the rounding, so no tol
-  resolves them: the refusal names α and alpha-max, raise α to it or lower
+  exact coefficients are. Near alpha-max only the column j that sets it
+  (`zero_fit`'s σⱼ, σ_y and κⱼ = max(σⱼ² + α′(1 − ρ), σⱼΣσ), its KKT
+  curvature) moves off 0, and its gradient Ĉⱼ/Ŵ − κⱼb′ⱼ is off by the
+  solve's rounding in that column's own terms: over n epochs
+  u√n·(2·max|b′|·κⱼ + √rows·σ_y·σⱼ) (`alpha_rounding`), the coefficient's
+  two roundings through κⱼ and the column's √rows-term dot product. A's
+  gradient term is √rows·σ_y·maxₖ σₖ/κₖ instead, a maximum over every
+  column, which with ρ < 1 and a narrow binding column beside a wide one
+  (σ 2⁻¹⁰ and 1, ρ = 0.01) is about 80 times column j's own and called a
+  fit near that was 10 times farther below alpha-max than the band
+  (`cd_zero_fit_test`). When (α_max − α)·ρ, alpha-max's distance in the
+  gradient's units, is within that band, that is (α_max − α)/α_max ≤
+  u√n·(2·max|b′|·κⱼ + √rows·σ_y·σⱼ)/(ρ·α′_max), the exact coefficients are
+  themselves under the rounding, so no tol resolves them: the refusal names α and alpha-max, raise α to it or lower
   it (or, in float32, fit in float64). Otherwise, and when ρ = 0, the exact
   coefficients are larger than the rounding, and an early absolute stop is
   what left them under it, so a lower tol can still grow them: the refusal
