@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model ridge-fit)
+         (only-in racket/flonum flsingle)
          (only-in racket/match match match-define match-lambda)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
@@ -56,15 +57,15 @@
   (define o (oracle-lstsq rows y #f #t))
   (/ (gap (cons b coef) (cons (solution-intercept o) (solution-coef o))) (max-abs (solution-coef o))))
 
-(test-case "the svd bound admits a range-space error of u_T times the prediction scale"
-  (match-define (list rows y) (one-hot-case 500 3))
-  (define o (oracle-lstsq rows y #f #t))
-  (define coef (solution-coef o))
-  (define b (solution-intercept o))
-  (define exact (list coef b))
-  (define shift (* 99/100 (coefficient-rounding exact) (+ (prediction-mass rows exact) (max-abs y))))
-  (define moved (list coef (+ b shift)))
-  (check-true (< (prediction-gap rows y moved) (rounded-prediction-bound rows y moved))))
+(test-case "the svd bound admits the range-space error of y rounded to float32"
+  (for ([k (in-list '(3 5 12))])
+    (match-define (list rows integral-y) (one-hot-case 500 k))
+    (define y (map (lambda (v) (/ v 3)) integral-y))
+    (define rounded-y (map (lambda (v) (inexact->exact (flsingle (real->double-flonum v)))) y))
+    (define o (oracle-lstsq rows rounded-y #f #t))
+    (define fit (list (solution-coef o) (solution-intercept o)))
+    (test-case (format "~a levels" k)
+      (check-true (< 0 (prediction-gap rows y fit) (rounded-prediction-bound rows y fit))))))
 
 (test-gpu "float32 'qr and 'svd-qr refuse one-hot columns with an intercept"
   (for* ([shape (in-list shapes)]

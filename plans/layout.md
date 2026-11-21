@@ -1917,7 +1917,16 @@ Follow-ups are GitHub issues.
   c = V·z is a d-term sum per coefficient and b one more rounding, so the
   prediction error is at most
   γ_(d+1)(u_T)·(maxᵢ(|b| + Σⱼ|xᵢⱼcⱼ|) + max|y|) over max|y|, the last
-  term the range-space error, of order u_T times the prediction scale.
+  term the range-space error. Its size u_T·max|y| is stated, not derived:
+  y rounded to the dtype, δ = fl_T(y) − y with |δᵢ| ≤ u_T·|yᵢ|, moves the
+  exact predictions by Pδ (P the projection onto the centred design's
+  range), and ‖Pδ‖∞ ≤ ‖P‖∞·u_T·max|y|, where ‖P‖∞ is ≈ 1 for level means
+  but not bounded by 1 in general. The test's stub is that error itself:
+  the exact fit of y/3 rounded to float32 (the test's own y is exact in
+  float32), 500 rows, 3, 5 and 12 levels, is 0.09–0.35% of the bound and
+  0.5–5% of it with γ₁ in place of γ_(d+1), so no stub of this kind
+  catches that mutant; the float32 'svd and 'svd-jacobi fits do (8 of 12
+  fail it).
   This checks predictions, not centring: the offset arms are what check
   the shim's centring. Measured against it (6 shapes, both
   solvers equal): 0.16–0.24 on the head, 0.16–0.37 on the shim before
