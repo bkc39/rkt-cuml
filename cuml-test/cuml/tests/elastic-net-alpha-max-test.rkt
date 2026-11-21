@@ -87,5 +87,12 @@
     (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
     (define alpha (* (exact->inexact share) (exact->inexact (alpha-max p r))))
     (match-define (kkt K B A)
-      (host-kkt p (map (lambda (_) 0.0) (car (lcase-X c))) alpha r default-tol 1 (positive-rows-of c) (unit-roundoff dt)))
+      (host-kkt p
+                (map (lambda (_) 0.0) (car (lcase-X c)))
+                alpha
+                r
+                default-tol
+                1
+                (positive-rows-of c)
+                (unit-roundoff dt)))
     (check-true (> K (+ B A)) (format "~a l1-ratio ~a: residual ~a, bound ~a" dt r K (+ B A)))))
