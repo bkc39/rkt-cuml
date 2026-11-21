@@ -90,6 +90,15 @@
         libcusparse
       ];
 
+      # The header-only qn solver behind libcuml's qnFit, for the shim's
+      # weighted softmax (#124): the release of the RAPIDS set's libcuml.
+      cumlSrc = pkgs.fetchFromGitHub {
+        owner = "rapidsai";
+        repo = "cuml";
+        rev = "265b9da6a0e75dbef071a3168398b993a5ff6f0e";
+        hash = "sha256-Dws7mYogG7X/1e+Dp6Z9jN2/rzhrpmLcSpYFiEuxrhI=";
+      };
+
       shim = cudaPackages.backendStdenv.mkDerivation {
         pname = "cumlrkt";
         inherit version;
@@ -114,6 +123,7 @@
           "-DBUILD_TESTING=ON"
           "-DCMAKE_CUDA_ARCHITECTURES=${cudaArchitectures}"
           "-DCUMLRKT_TESTS_PREFIX=${placeholder "tests"}"
+          "-DCUML_SOURCE_DIR=${cumlSrc}/cpp/src"
         ];
         preBuild = capJobs;
         doCheck = true;
@@ -306,6 +316,7 @@
         cmakeFlags = [
           "-DBUILD_TESTING=ON"
           "-DCMAKE_CUDA_ARCHITECTURES=${cudaArchitectures}"
+          "-DCUML_SOURCE_DIR=${cumlSrc}/cpp/src"
         ];
         buildPhase = ''
           runHook preBuild
@@ -729,6 +740,7 @@
             treefmtEval.config.build.wrapper
           ]
           ++ cudaDevLibs;
+          CUML_SOURCE_DIR = "${cumlSrc}/cpp/src";
           shellHook = inCheckout (
             gpuHook + racketHome + provisionRacket + provisionTools + provisionResyntax
           );

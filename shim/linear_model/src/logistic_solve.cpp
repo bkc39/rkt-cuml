@@ -22,6 +22,7 @@
 #include "logistic_device.hpp"
 #include "logistic_fit.hpp"
 #include "logistic_resolve.hpp"
+#include "logistic_softmax.hpp"
 
 namespace cumlrkt::glm::logistic {
 
@@ -141,10 +142,18 @@ qn_solution<T> qn_solved(const raft::handle_t& handle, T* x, T* y, T* w,
           : to_device(start, stream);
   T objective{0};
   int n_iter = 0;
-  ML::GLM::qnFit<T, int>(
-      handle, qn_params_of(options, shape.classes, pen), x, false, y,
-      static_cast<int>(shape.m), static_cast<int>(shape.p),
-      static_cast<int>(shape.classes), params.data(), &objective, &n_iter, w);
+  const ML::GLM::qn_params q = qn_params_of(options, shape.classes, pen);
+  if (shape.classes > 2 && w != nullptr) {
+    weighted_softmax_fit<T>(
+        handle, q, x, y, w,
+        {shape.m, shape.p, shape.classes, shape.fit_intercept}, params.data(),
+        &objective, &n_iter);
+  } else {
+    ML::GLM::qnFit<T, int>(handle, q, x, false, y, static_cast<int>(shape.m),
+                           static_cast<int>(shape.p),
+                           static_cast<int>(shape.classes), params.data(),
+                           &objective, &n_iter, w);
+  }
   settle(handle);
   return {std::move(params), n_iter};
 }

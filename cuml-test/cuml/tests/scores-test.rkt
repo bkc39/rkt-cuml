@@ -7,7 +7,7 @@
          (only-in rackunit check-= check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source uniform-source)
-         (only-in "private/common-data.rkt" columns-of mean)
+         (only-in "private/common-data.rkt" columns-of kept-rows mean)
          (only-in "private/metrics-data.rkt"
                   exact-accuracy
                   exact-mse
@@ -215,12 +215,6 @@
     (check-equal? (mse y p ones #:dtype dt) (mse y p #:dtype dt)))
   (check-equal? (accuracy labels guesses (make-list (length labels) 1.0)) (accuracy labels guesses)))
 
-(define (kept xs w)
-  (for/list ([x (in-list xs)]
-             [c (in-list w)]
-             #:unless (zero? c))
-    x))
-
 (test-gpu "integer weights match repeated rows, zero weights dropped rows, within 1e-14"
   (for ([c (in-list (sample-cases))])
     (match-define (list i dt y p _) c)
@@ -232,12 +226,12 @@
       (check-true (<= (relative-gap (mse y p w #:dtype dt)
                                     (mse (repeated y w) (repeated p w) #:dtype dt))
                       1e-14))
-      (when (> (length (kept y zero-one)) 1)
+      (when (> (length (kept-rows y zero-one)) 1)
         (check-true (<= (r2-gap (r2 y p zero-one #:dtype dt)
-                                (r2 (kept y zero-one) (kept p zero-one) #:dtype dt))
+                                (r2 (kept-rows y zero-one) (kept-rows p zero-one) #:dtype dt))
                         1e-14))
         (check-true (<= (relative-gap (mse y p zero-one #:dtype dt)
-                                      (mse (kept y zero-one) (kept p zero-one) #:dtype dt))
+                                      (mse (kept-rows y zero-one) (kept-rows p zero-one) #:dtype dt))
                         1e-14))))))
 
 (test-gpu "mixed float32 and float64 arguments give the bits of the widened call"
