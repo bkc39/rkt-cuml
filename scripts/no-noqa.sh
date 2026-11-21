@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/grep-gate.sh"
+
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
 allowed_marks=(
@@ -25,20 +27,9 @@ allowed() {
   return 1
 }
 
-hits=$(grep -rnE --include='*.rkt' --include='*.scrbl' \
-  ';; (noqa|lint: ignore|review: ignore)$|#\|review: ignore\|#' .fmt.rkt cuml-*/ lint scripts || true)
-
-status=0
-while IFS=: read -r file line text; do
-  [ -n "$file" ] || continue
-  allowed "$file" "$text" && continue
-  status=1
-  message="lint suppression: teach lint/review.rkt the form instead"
-  echo "$file:$line: $message"
-  if [ -n "${GITHUB_ACTIONS:-}" ]; then
-    echo "::error file=$file,line=$line::$message"
-  fi
-done <<<"$hits"
+found=$(hits -rnE --include='*.rkt' --include='*.scrbl' \
+  ';; (noqa|lint: ignore|review: ignore)$|#\|review: ignore\|#' .fmt.rkt cuml-*/ lint scripts)
+refuse "$found" "lint suppression: teach lint/review.rkt the form instead" allowed
 
 if [ "$status" -eq 0 ]; then
   echo "no-noqa: no new lint suppression in the cuml packages, lint or scripts"
