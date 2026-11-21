@@ -8,11 +8,14 @@
          (only-in "common-data.rkt" on-vector))
 
 (provide accuracy
+         anchored-r2-ulps
          integer-weights
          label-cases
+         light-spread-r2
          mse
          on
-         r2)
+         r2
+         swamped)
 
 (define (on xs dt)
   (match xs
@@ -31,6 +34,15 @@
   (accuracy-score (list->device-vector a #:dtype at)
                   (list->device-vector b #:dtype bt)
                   #:sample-weight (on-vector w wt)))
+
+(define swamped
+  (let* ([y0 2.596792935118996e-113]
+         [y (list y0 2.590663465894096e-113)])
+    (list y (list y0 0.0) '(2.687389544376786e232 2.452974414517411e173))))
+
+(define light-spread-r2 "-178637.99")
+
+(define anchored-r2-ulps 2)
 
 (define int32-palette '(-1 0 1 2 7 2147483647 -2147483647 -2147483648))
 

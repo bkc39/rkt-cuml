@@ -129,6 +129,10 @@ cumlrkt_family(linear_model
   SOURCES linear_model/src/linear_model.cpp
           linear_model/src/glm_fit.cpp linear_model/src/linear_regression.cpp
           linear_model/src/ridge.cpp linear_model/src/ridge_staging.cpp
+          linear_model/src/gram_condition.cu linear_model/src/ritz.cpp
+          linear_model/src/block_gram.cu linear_model/src/conditioning.cpp
+          linear_model/src/spectrum_enclosure.cpp
+          linear_model/src/symmetric_eigen.cpp
           linear_model/src/fit_checks.cpp linear_model/src/predict.cpp
           linear_model/src/glm_staging.cpp
           linear_model/src/glm_staging_device.cu
@@ -157,17 +161,27 @@ cumlrkt_family(linear_model
         linear_model/tests/mbsgd_checks_test.cpp
         linear_model/tests/mbsgd_round_off_test.cpp
         linear_model/tests/ridge_staging_test.cpp
+        linear_model/tests/gram_condition_test.cpp
+        linear_model/tests/ritz_plan_test.cpp
+        linear_model/tests/gram_error_test.cpp
+        linear_model/tests/gram_proof_test.cpp
+        linear_model/tests/column_sums_test.cu
         linear_model/src/ridge_staging.cpp
+        linear_model/src/gram_condition.cu
+        linear_model/src/ritz.cpp
+        linear_model/src/block_gram.cu linear_model/src/conditioning.cpp
+        linear_model/src/spectrum_enclosure.cpp
+        linear_model/src/symmetric_eigen.cpp
         linear_model/src/glm_staging.cpp
         linear_model/src/glm_staging_device.cu
         linear_model/src/residual_check.cu
         linear_model/src/fit_checks.cpp common/src/rows.cu
 )
-target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver)
+target_link_libraries(cumlrkt_linear_model PRIVATE CUDA::cusolver CUDA::cublas)
 target_include_directories(cumlrkt_linear_model SYSTEM PRIVATE ${CUML_SOURCE_DIR})
 if(TARGET cumlrkt_linear_model_tests)
   target_link_libraries(cumlrkt_linear_model_tests
-    PRIVATE CUDA::cusolver cuml_runtime)
+    PRIVATE CUDA::cusolver CUDA::cublas cuml_runtime)
   target_include_directories(cumlrkt_linear_model_tests SYSTEM PRIVATE
     ${CUML_SOURCE_DIR})
 endif()

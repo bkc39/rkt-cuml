@@ -29,6 +29,7 @@ template <typename T>
 struct ridge_scale {
   int shared;
   T alpha;
+  bool window;
 };
 
 template <typename T>

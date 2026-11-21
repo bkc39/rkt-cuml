@@ -12,9 +12,18 @@
          (only-in "private/blob-data.rkt" uniform-source)
          (only-in "private/common-data.rkt" [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/linear-data.rkt" algorithms dtypes dyadic [on-matrix matrix])
+         (only-in "private/linear-data.rkt"
+                  algorithms
+                  dtypes
+                  dyadic
+                  lcase-X
+                  summed-case
+                  wobble
+                  [on-matrix matrix])
          (only-in "private/linear-refusal-rows.rkt"
+                  collinear-refusal
                   grid
+                  not-least-squares
                   overflow-X
                   overflow-y
                   shared-fit-rows
@@ -147,9 +156,6 @@
                     "predict: linear-regression is not fitted"
                     (lambda () (predict (linear-regression) (matrix grid)))))
 
-(define not-least-squares
-  #rx"^linear-regression-fit: X: the [a-z-]+ solve is not a least-squares solution")
-
 (define (collinear-rows n)
   (for/list ([i (in-range n)])
     (define a (- (modulo (* 37 i) 11) 5))
@@ -164,7 +170,10 @@
 (define (noisy-targets rows)
   (for/list ([r (in-list rows)]
              [i (in-naturals)])
-    (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (/ (- (modulo (* 31 i) 17) 8) 16))))
+    (+ (for/sum ([x (in-list r)] [k (in-naturals 1)]) (* k x)) (- (wobble i) 1/2))))
+
+(define (nearly-collinear-rows n seed)
+  (lcase-X (summed-case n seed 1/1024)))
 
 (define (uneven-weights n)
   (define draw (uniform-source 77))
@@ -173,16 +182,24 @@
         0
         (dyadic (+ 1/2 (* 3/2 (draw))) 6))))
 
-(test-gpu "a solve that is not a least-squares solution is refused"
-  (for ([fixture (in-list (list (list 'eig 'float32 (collinear-rows 60) #f)
-                                (list 'qr 'float32 (one-hot-rows 400 4) #f)
-                                (list 'qr 'float64 (collinear-rows 60) #f)
-                                (list 'auto 'float32 (collinear-rows 5003) (uneven-weights 5003))
-                                (list 'qr 'float64 (collinear-rows 5003) (uneven-weights 5003))))])
-    (match-define (list algorithm dt rows w) fixture)
+(test-gpu "a solve that is not a least-squares solution, or float32 collinear X under 'qr, is refused"
+  (for ([fixture
+         (in-list
+          (list (list 'eig 'float32 (nearly-collinear-rows 60 0) #f not-least-squares)
+                (list 'auto 'float32 (nearly-collinear-rows 1000 1) #f not-least-squares)
+                (list 'auto
+                      'float32
+                      (nearly-collinear-rows 5003 2)
+                      (uneven-weights 5003)
+                      not-least-squares)
+                (list 'qr 'float64 (collinear-rows 60) #f not-least-squares)
+                (list 'qr 'float64 (collinear-rows 5003) (uneven-weights 5003) not-least-squares)
+                (list 'qr 'float32 (one-hot-rows 400 4) #f (collinear-refusal 'qr))
+                (list 'svd-qr 'float32 (one-hot-rows 400 4) #f (collinear-refusal 'svd-qr))))])
+    (match-define (list algorithm dt rows w refusal) fixture)
     (test-case (format "~a ~a ~a rows~a" algorithm dt (length rows) (if w ", weighted" ""))
       (check-cuml-error 'logic
-                        not-least-squares
+                        refusal
                         (lambda ()
                           (linear-regression-fit (matrix rows dt)
                                                  (vector (noisy-targets rows) dt)

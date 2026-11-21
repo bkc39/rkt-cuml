@@ -46,18 +46,24 @@
          gap
          host-cosine
          insert-column
+         integer-draws
          kept-rows
          kappa-of
          law-case
          law-cases
+         lstsq
          reach-fixtures
          max-abs
          normal-case
          on-matrix
          oracle-lstsq
          oracle-ridge
+         outcome
          ridge-oracles
          power-spread-case
+         prediction-gap
+         q2-alpha
+         q2-float32-bound
          power-spread-gone
          remove-at
          result-fit
@@ -66,9 +72,14 @@
          rounded-case
          scaled-case
          scaled-columns
+         summed-case
          weighted-gram
          weighted-spread
          weights-or-ones
+         window-draw
+         window-draws
+         window-float64-bound
+         wobble
          zeroed)
 
 (struct lcase (name X y w) #:transparent)
@@ -155,6 +166,56 @@
 
 (define (gap xs ys)
   (max-abs (map - xs ys)))
+
+(define q2-alpha 1.0)
+(define q2-float32-bound (expt 2 -10))
+(define window-float64-bound 1e-10)
+(define window-draws '((37 3 101) (53 7 97)))
+
+(define (window-draw i draw)
+  (match-define (list multiplier shift modulus) draw)
+  (- (modulo (* multiplier (+ i shift)) modulus) (quotient modulus 2)))
+
+(define (summed-case n seed [eps 0])
+  (define c (normal-case n 2 seed))
+  (define next (uniform-source (+ 31 seed)))
+  (lcase (format "x3 = x1 + x2 + ~a z, ~a rows, seed ~a" eps n seed)
+         (for/list ([row (in-list (lcase-X c))])
+           (append row (list (+ (apply + row) (* eps (dyadic (- (next) 1/2)))))))
+         (lcase-y c)
+         #f))
+
+(define (integer-draws salt count)
+  (for/fold ([s (+ 1 (* 7919 salt))]
+             [draws '()]
+             #:result (reverse draws))
+            ([_ (in-range count)])
+    (define next (modulo (+ (* s 1103515245) 12345) 2147483648))
+    (values next (cons (- (modulo (quotient next 65536) 23) 11) draws))))
+
+(define (wobble i)
+  (/ (modulo (* 31 i) 17) 16))
+
+(define (outcome thunk)
+  (with-handlers ([exn:fail? exn-message])
+    (thunk)))
+
+(define (lstsq rows y dt algorithm #:fit-intercept [fi #t])
+  (~> (linear-regression-fit (on-matrix rows dt)
+                             (on-vector y dt)
+                             #:algorithm algorithm
+                             #:fit-intercept fi)
+      result-fit
+      exact-fit))
+
+(define (prediction-gap rows y fit #:fit-rows [fit-rows rows])
+  (match-define (list coef b) fit)
+  (define o (oracle-lstsq rows y #f #t))
+  (define (predict on intercept coefs)
+    (for/list ([row (in-list on)])
+      (+ intercept (dot row coefs))))
+  (/ (gap (predict fit-rows b coef) (predict rows (solution-intercept o) (solution-coef o)))
+     (max-abs y)))
 
 (define (kappa-of c fi)
   (solution-kappa (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi)))

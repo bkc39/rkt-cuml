@@ -29,6 +29,7 @@ struct fit_plan {
   bool fit_intercept;
   glm_solver solver;
   counted_rows counted;
+  bool alpha_window = false;
 };
 
 template <typename T>
