@@ -10,6 +10,7 @@
 #include <numeric>
 #include <optional>
 #include <ranges>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -29,6 +30,7 @@ constexpr int32_t most_cd_rows = std::numeric_limits<int32_t>::max();
 constexpr int moment_sum_guard_bits = 6;
 constexpr int label_sum_guard_bits = 4;
 constexpr long double coefficient_rounding = 2;
+constexpr long double zero_residual_roundings = 14;
 
 int half_floor(int x) {
   return even_floor(x) / 2;
@@ -161,6 +163,36 @@ kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
                           (coefficient_rounding + gradient))};
 }
 
+// γ_(5h+14)·max_j σ_jσ_y bounds the double residual's error, h the
+// column_reduce count (plans/layout.md L3-p); 2u_T·α·l1 is the penalty's
+// rounding into T.
+template <typename T>
+zero_fit zero_fit_of(const residual_terms& t, double weight, double alpha,
+                     double l1_ratio, int64_t rows) {
+  const long double total = weight;
+  const long double sigma_y = std::sqrt(value_of(t.y_square) / total);
+  long double cross = 0;
+  long double spread = 0;
+  for (const moment& m : t.moments) {
+    cross = std::max(cross, std::abs(value_of(m.cross)) / total);
+    spread = std::max(spread, std::sqrt(value_of(m.square) / total) * sigma_y);
+  }
+  const long double count =
+      (5.0L * static_cast<long double>(column_sum_roundings(rows))) +
+      zero_residual_roundings;
+  const long double u = unit_roundoff<double>;
+  const long double penalty = static_cast<long double>(alpha) * l1_ratio;
+  return {static_cast<double>(cross - penalty),
+          static_cast<double>((count * u / (1 - (count * u)) * spread) +
+                              (2 * unit_roundoff<T> * penalty)),
+          l1_ratio > 0 ? static_cast<double>(cross / l1_ratio)
+                       : std::numeric_limits<double>::infinity()};
+}
+
+bool accepts_zero(const zero_fit& z) {
+  return z.residual <= z.allowance;
+}
+
 void require_kkt(const kkt_terms& k, int n_iter, double tol) {
   const double bound = k.bound + k.allowance;
   if (!k.residual || *k.residual > bound) {
@@ -175,19 +207,37 @@ void require_kkt(const kkt_terms& k, int n_iter, double tol) {
 
 template <typename T>
 void require_resolved(const kkt_terms& k, int n_iter, double tol,
-                      double largest) {
+                      double largest, double alpha, double alpha_max) {
   const bool over = !k.residual || *k.residual > std::max(k.bound, tol);
-  if (over && k.allowance > k.bound) {
-    constexpr bool narrow = std::is_same_v<T, float>;
+  if (!over || k.allowance <= k.bound) {
+    return;
+  }
+  constexpr bool narrow = std::is_same_v<T, float>;
+  const std::string dtype = raftrkt::dtype_name(raftrkt::dtype_code<T>);
+  const std::string residual = k.residual ? printed(*k.residual) : "nan";
+  if (k.allowance < 1) {
     throw logic_error(std::format(
         "X: coordinate descent stopped after {} epochs with every coefficient "
         "under tol {} and KKT residual {} > tol, within {}'s rounding of the "
         "solve; lower tol below the largest coefficient ({}){}",
-        n_iter, printed(tol), k.residual ? printed(*k.residual) : "nan",
-        raftrkt::dtype_name(raftrkt::dtype_code<T>),
+        n_iter, printed(tol), residual, dtype,
         printed<T>(static_cast<T>(largest)),
         narrow ? " or fit in float64" : ""));
   }
+  const std::string cause =
+      std::isfinite(alpha_max)
+          ? std::format(
+                "alpha {} is that close below alpha-max {}, from "
+                "which every coefficient is 0: raise alpha to "
+                "alpha-max or lower it",
+                printed(alpha), printed(alpha_max))
+          : std::string("lower alpha");
+  throw logic_error(std::format(
+      "X: coordinate descent stopped after {} epochs with KKT residual {} > "
+      "tol and every coefficient (largest {}) under {}'s rounding of the "
+      "solve, which no tol resolves; {}{}",
+      n_iter, residual, printed<T>(static_cast<T>(largest)), dtype, cause,
+      narrow ? ", or fit in float64" : ""));
 }
 
 bool absolute_stop(int n_iter, int max_iter, double largest, double tol) {
@@ -236,7 +286,13 @@ template int cd_shared_cap<float>(const staging&, int64_t);
 template int cd_shared_cap<double>(const staging&, int64_t);
 template cd_scale<float> cd_scale_of<float>(const staging&, int64_t, double);
 template cd_scale<double> cd_scale_of<double>(const staging&, int64_t, double);
-template void require_resolved<float>(const kkt_terms&, int, double, double);
-template void require_resolved<double>(const kkt_terms&, int, double, double);
+template zero_fit zero_fit_of<float>(const residual_terms&, double, double,
+                                     double, int64_t);
+template zero_fit zero_fit_of<double>(const residual_terms&, double, double,
+                                      double, int64_t);
+template void require_resolved<float>(const kkt_terms&, int, double, double,
+                                      double, double);
+template void require_resolved<double>(const kkt_terms&, int, double, double,
+                                       double, double);
 
 }  // namespace cumlrkt::glm

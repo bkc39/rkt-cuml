@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <raft/core/handle.hpp>
@@ -22,6 +24,16 @@ template <typename T>
 std::optional<cd_centres> centres_of(const T* y, const T* w, row_selection rows,
                                      const staging& s, bool fit_intercept,
                                      rmm::cuda_stream_view stream);
+
+template <typename T>
+double weighted_intercept(const cd_centres& c, const std::vector<T>& b,
+                          int y_exponent) {
+  double fitted = 0;
+  for (size_t k = 0; k < b.size(); ++k) {
+    fitted += (c.mean[k] + c.remainder[k]) * static_cast<double>(b[k]);
+  }
+  return std::ldexp((c.y.mean + c.y.remainder) - fitted, -y_exponent);
+}
 
 template <typename T>
 double weight_total(const T* w, row_selection rows,

@@ -48,10 +48,32 @@ double largest_of(const std::vector<T>& b) {
 }
 
 template <typename T>
+double weight_of(const fit_inputs<T>& in, row_selection rows,
+                 rmm::cuda_stream_view stream) {
+  return in.w == nullptr ? static_cast<double>(rows.count)
+                         : weight_total(in.w, rows, stream);
+}
+
+template <typename T>
+zero_fit zero_fit_at(const raft::handle_t& handle, const fit_inputs<T>& in,
+                     const fit_plan& plan, const staging& s,
+                     const cd_request& request, int shared) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  const row_selection rows = plan.counted.rows;
+  const buffer<T> zeros =
+      zeroed<T>(static_cast<int64_t>(s.kept.size()), stream);
+  const residual_terms terms = residual_moments(
+      handle, in.x, in.y, in.w, rows, s, zeros.data(), plan.fit_intercept);
+  return zero_fit_of<T>(terms, weight_of(in, rows, stream),
+                        std::ldexp(request.alpha, 2 * shared), request.l1_ratio,
+                        rows.count);
+}
+
+template <typename T>
 void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
                 const fit_plan& plan, const staging& s,
                 const cd_request& request, const std::vector<T>& b,
-                cd_scale<T> scale, int n_iter) {
+                cd_scale<T> scale, int n_iter, const zero_fit& zero) {
   const T tol = static_cast<T>(request.tol);
   const double largest = largest_of(b);
   if (!absolute_stop(n_iter, request.max_iter, largest,
@@ -62,9 +84,7 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
   const residual_terms terms = residual_moments(
       handle, in.x, in.y, in.w, rows, s, to_device(b, stream_of(handle)).data(),
       plan.fit_intercept);
-  const double weight = in.w == nullptr
-                            ? static_cast<double>(rows.count)
-                            : weight_total(in.w, rows, stream_of(handle));
+  const double weight = weight_of(in, rows, stream_of(handle));
   const auto alpha = static_cast<double>(scale.alpha);
   const auto ratio = static_cast<double>(static_cast<T>(request.l1_ratio));
   const std::vector<double> coef(b.begin(), b.end());
@@ -73,17 +93,8 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
   const kkt_terms k =
       kkt_of(terms, coef, weight, {alpha * ratio, alpha * (1 - ratio)}, epochs);
   require_kkt(k, n_iter, request.tol);
-  require_resolved<T>(k, n_iter, request.tol, largest);
-}
-
-template <typename T>
-double weighted_intercept(const cd_centres& c, const std::vector<T>& b,
-                          int shared) {
-  double fitted = 0;
-  for (size_t k = 0; k < b.size(); ++k) {
-    fitted += (c.mean[k] + c.remainder[k]) * static_cast<double>(b[k]);
-  }
-  return std::ldexp((c.y.mean + c.y.remainder) - fitted, -shared);
+  require_resolved<T>(k, n_iter, request.tol, largest, request.alpha,
+                      std::ldexp(zero.alpha_max, -2 * scale.shared));
 }
 
 template <typename T>
@@ -96,6 +107,23 @@ T unscaled_intercept(const std::optional<cd_centres>& centres,
 }
 
 template <typename T>
+cd_solution<T> zero_solved(const raft::handle_t& handle,
+                           const fit_inputs<T>& in, const fit_plan& plan,
+                           const staging& s) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  auto coef = std::make_unique<buffer<T>>(zeroed<T>(in.x.d, stream));
+  T intercept{0};
+  if (plan.fit_intercept) {
+    const centre c =
+        target_centre(in.y, in.w, plan.counted.rows, s.y_exponent, stream);
+    intercept = static_cast<T>(std::ldexp(c.mean + c.remainder, -s.y_exponent));
+  }
+  settle(handle);
+  require_in_range(int64_t{-1}, intercept);
+  return {{std::move(coef), static_cast<double>(intercept)}, 1};
+}
+
+template <typename T>
 cd_solution<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                          const fit_plan& plan, const cd_request& request) {
   const rmm::cuda_stream_view stream = stream_of(handle);
@@ -105,6 +133,10 @@ cd_solution<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   const staging s = shared_at(plan.s, scale.shared, scale.shared);
   const auto kept = static_cast<int64_t>(s.kept.size());
   const bool weighted = w != nullptr;
+  const zero_fit zero = zero_fit_at(handle, in, plan, s, request, scale.shared);
+  if (accepts_zero(zero)) {
+    return zero_solved(handle, in, plan, s);
+  }
   const std::optional<cd_centres> centres =
       centres_of(y, w, rows, s, weighted && plan.fit_intercept, stream);
   staged_problem<T> p = weighted
@@ -124,7 +156,7 @@ cd_solution<T> cd_solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   settle(handle);
   require_finite_solution(cs.data(), kept, intercept, plan.solver, stream);
   const std::vector<T> b = to_host(cs, stream);
-  check_stop(handle, in, plan, s, request, b, scale, n_iter);
+  check_stop(handle, in, plan, s, request, b, scale, n_iter, zero);
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
   const T unscaled =
       plan.fit_intercept

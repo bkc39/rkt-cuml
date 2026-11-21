@@ -277,9 +277,10 @@ where u(λ@subscript{max} + λ)/(λ@subscript{min} + λ) is 1 or more,
 λ = @racket[alpha](1 − @racket[l1-ratio]), λ@subscript{max} and λ@subscript{min} being the extreme
 eigenvalues of XᵀWX/Σw, X centred as for @racket[ridge-fit], and u the dtype's unit roundoff;
 @tt{plans/layout.md} (L3-b) has the error bound and the measurements. An
-@racket[alpha] more than rounding above max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]),
-or max@subscript{j}|x@subscript{j}ᵀWy|/(Σw·@racket[l1-ratio]) without @racket[fit-intercept], gives
-coefficients 0. A column constant over the rows of positive weight (zero, without
+@racket[alpha] at least max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]),
+or max@subscript{j}|x@subscript{j}ᵀWy|/(Σw·@racket[l1-ratio]) without @racket[fit-intercept], less
+the rounding of that quotient (L3-p), gives coefficients 0 and the intercept ȳ without running
+coordinate descent; @racket[n-iter] is 1. A column constant over the rows of positive weight (zero, without
 @racket[fit-intercept]) gets coefficient 0.
 
 Unlike scikit-learn, the default @racket[tol] is 10@superscript{−3}, not 10@superscript{−4}, and it

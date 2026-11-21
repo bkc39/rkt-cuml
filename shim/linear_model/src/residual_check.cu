@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstdint>
 #include <raft/core/handle.hpp>
@@ -116,6 +117,18 @@ scaled_sum sum_of(product3 p) {
 }
 
 }  // namespace
+
+int64_t column_sum_roundings(int64_t rows) {
+  constexpr int64_t lane_rows = chunk_rows / (block_threads / column_lanes);
+  constexpr int lane_levels =
+      std::bit_width(static_cast<unsigned>(block_threads / column_lanes) - 1);
+  constexpr int fold_levels =
+      std::bit_width(static_cast<unsigned>(block_threads) - 1);
+  const int64_t chunks =
+      std::max<int64_t>(1, (rows + chunk_rows - 1) / chunk_rows);
+  return lane_rows + lane_levels +
+         ((chunks + block_threads - 1) / block_threads) + fold_levels;
+}
 
 template <typename T>
 residual_terms residual_moments(const raft::handle_t& handle,

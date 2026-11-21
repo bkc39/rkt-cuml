@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <raft/core/handle.hpp>
 #include <vector>
 
@@ -25,6 +26,8 @@ struct residual_terms {
 };
 
 double cosine_of(const moment& m, scaled_sum y);
+
+int64_t column_sum_roundings(int64_t rows);
 
 struct ridge_penalty {
   double alpha;

@@ -2120,6 +2120,50 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   the least eigenvalue of XᵀWX/Σw on the centred columns (F14; 7.9e-2 of
   max|b| at correlation 0.99 is sound under it); fits at max-iter (L3-e);
   and, as for ridge (L2-k), fits where u(λ_max + λ₂)/(λ_min + λ₂) ≥ 1.
+- **L3-p, the zero fit at alpha-max (#109).** Before CD the shim computes
+  the zero vector's KKT residual R̂ = maxⱼ|Ĉⱼ|/Ŵ − α′ρ, Ĉⱼ = x′ⱼᵀW(y′ − ȳ′)
+  in the staged coordinates of V16 (`residual_moments` at b = 0, so the
+  residual r is the centred y′ exactly as summed), α′ = α·4^s in double and
+  ρ the l1-ratio as given. When R̂ ≤ γ_k·maxⱼ σ̂ⱼσ̂_y + 2u_T·α′ρ it returns
+  b = 0, the intercept ȳ (v̄ + ρ_y, unstaged and rounded once to the dtype)
+  and n-iter 1, the epoch cdFit reports for a zero fit; it does not call
+  cdFit. The allowance is the residual's own error bound, in double's u:
+  - each term wᵢvᵢrᵢ is 6 roundings off its exact value (v = (x′ − v̄) − ρ
+    and r the same for y, two each; w·v; the product), and `column_reduce`
+    adds it in h = 256 + 3 + ⌈chunks/256⌉ + 8 more (a lane's 256 rows of a
+    2048-row chunk, the 8-lane tree, a fold thread's chunks, the 256-thread
+    tree; `column_sum_roundings`), so |Ĉⱼ − Cⱼ| ≤ γ_(h+6)·Σw|vr| ≤
+    γ_(h+6)·W·σⱼσ_y by Cauchy–Schwarz;
+  - Ŵ is a sum of the same depth, so |Ĉⱼ/Ŵ − Cⱼ/W| ≤ γ_(3h+7)·σⱼσ_y, since
+    |Cⱼ|/W ≤ σⱼσ_y;
+  - σ̂ⱼσ̂_y, from the same sums, is within γ_(2h+6) of σⱼσ_y, so the
+    computed bound is γ_(5h+13)·σ̂ⱼσ̂_y; one more rounding covers the
+    second-order W·δⱼδ_y the centring's constant error leaves, so k = 5h + 14
+    (1354 up to 2¹⁹ rows, γ_k = 1.5·10⁻¹³);
+  - 2u_T·α′ρ is α's and ρ's rounding into the dtype the solve runs in (and,
+    in float64, the host's long-double products).
+  So the allowance is c·u·λ̄ with λ̄ = maxⱼ σⱼσ_y ≥ ρ·λ_max and c = k: the
+  error of a sum is relative to Σ|terms|, not to |Σ terms|, so no constant c
+  makes it c·u·λ_max; against λ_max, c is k/maxⱼ|corr(xⱼ, y)|. One double
+  ulp below λ_max is ρ·λ_max·u ≤ u·λ̄, inside the allowance. On wine
+  (alcohol on the other 12 columns, raw X), λ_max, glmnet's value
+  163.64265023355625, one ulp either side and 2·λ_max return zeros in both
+  dtypes, lasso and l1-ratio 1/2 (`elastic-net-alpha-max-test`; at 0c590cc
+  the float64 λ_max and glmnet's value were refused by V16b at any tol). The
+  pass costs one more column-moments pass per fit (L3-d's 10 ms at
+  1e6 × 100 float32). CD's inputs are not touched: over the elastic-net
+  twin, real-data and glmnet suites (3268 requests) every fit CD still runs
+  is `equal?` before and after (3246, coefficients, intercept and n-iter),
+  and the 36 refusals are the same. The 18 fits that were already zeros
+  (unweighted, α above alpha-max) keep their coefficients and n-iter but
+  take ȳ from v̄ + ρ_y, rounded once, instead of cuML's mean accumulated
+  in the dtype: one ulp in all 18 (wine float64 13.000617977528087 to
+  13.00061797752809, float32 13.000618934631348 to 13.000617980957031).
+  V16b keeps "lower tol below the largest coefficient" only while its
+  allowance A < 1. From A ≥ 1 rounding alone moves the coefficients by
+  their own size, so no tol resolves them; the refusal names the cause
+  instead: α within that rounding below alpha-max (named), raise α to it or
+  lower it (or, in float32, fit in float64); "lower alpha" when ρ = 0.
 - **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
   against lstsq at tol 1e-14).
 - **L3-d.** K is computed only when n-iter < max-iter and
