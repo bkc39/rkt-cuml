@@ -27,12 +27,17 @@
 (define float64-min-norm-bound (expt 2 -40))
 (define eig-prediction-bound (expt 2 -12))
 
-(define (rounded-prediction-bound rows y fit)
+(define (prediction-mass rows fit)
   (match-define (list coef b) fit)
-  (define mass
-    (for/fold ([worst 0]) ([row (in-list rows)])
-      (max worst (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))))
-  (/ (* (gamma (add1 (length coef)) (unit-roundoff 'float32)) mass) (max-abs y)))
+  (for/fold ([worst 0]) ([row (in-list rows)])
+    (max worst (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))))
+
+(define (coefficient-rounding fit)
+  (match-define (list coef _) fit)
+  (gamma (add1 (length coef)) (unit-roundoff 'float32)))
+
+(define (rounded-prediction-bound rows y fit)
+  (/ (* (coefficient-rounding fit) (+ (prediction-mass rows fit) (max-abs y))) (max-abs y)))
 
 (define (one-hot-case n k)
   (define (level i)
@@ -50,6 +55,17 @@
   (match-define (list coef b) fit)
   (define o (oracle-lstsq rows y #f #t))
   (/ (gap (cons b coef) (cons (solution-intercept o) (solution-coef o))) (max-abs (solution-coef o))))
+
+(test-case "the svd bound admits a range-space error of u_T times the prediction scale"
+  (match-define (list rows y) (one-hot-case 500 3))
+  (define o (oracle-lstsq rows y #f #t))
+  (define coef (solution-coef o))
+  (define b (solution-intercept o))
+  (define exact (list coef b))
+  (define shift
+    (* 99/100 (coefficient-rounding exact) (+ (prediction-mass rows exact) (max-abs y))))
+  (define moved (list coef (+ b shift)))
+  (check-true (< (prediction-gap rows y moved) (rounded-prediction-bound rows y moved))))
 
 (test-gpu "float32 'qr and 'svd-qr refuse one-hot columns with an intercept"
   (for* ([shape (in-list shapes)]

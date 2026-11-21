@@ -1909,8 +1909,10 @@ Follow-ups are GitHub issues.
   the predictions only through the rounding of c and b to the dtype:
   c = V·z is a d-term sum per coefficient and b one more rounding, so the
   prediction error is at most
-  γ_(d+1)(u_T)·maxᵢ(|b| + Σⱼ|xᵢⱼcⱼ|) over max|y|, the range-space error
-  being of order u_T against that. Measured against it (6 shapes, both
+  γ_(d+1)(u_T)·(maxᵢ(|b| + Σⱼ|xᵢⱼcⱼ|) + max|y|) over max|y|, the last
+  term the range-space error, of order u_T times the prediction scale.
+  This checks predictions, not centring: the offset arms are what check
+  the shim's centring. Measured against it (6 shapes, both
   solvers equal): 0.16–0.24 on the head, 0.16–0.37 on the shim before
   #112, so the old 2⁻¹⁰'s 1.34 was the null component's size, not the
   centring's error; ridge at α = 0 and 1e-12 (negligible) matches least squares fit
