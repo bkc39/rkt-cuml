@@ -53,6 +53,20 @@ def stage(X, y, w, fi):
     return e, f, g, kept, counted, wide
 
 
+def centred(v, w):
+    """Centre as the shim does: the mean in double less the remainder of its
+    rounding, each value rounded once to the dtype."""
+    weights = np.ones(len(v)) if w is None else w.astype(np.float64)
+    wide = v.astype(np.float64)
+    shape = (-1,) + (1,) * (wide.ndim - 1)
+    total = weights.sum()
+    mean = (weights.reshape(shape) * wide).sum(axis=0) / total
+    remainder = (weights.reshape(shape) * (wide - mean)).sum(axis=0) / total
+    counted = (weights > 0).reshape(shape)
+    out = np.where(counted, (wide - mean) - remainder, 0).astype(v.dtype)
+    return out, mean + remainder
+
+
 def staged_fit(case):
     X, y, w = inputs(case)
     fi = case["fit_intercept"]
@@ -80,13 +94,18 @@ def staged_fit(case):
     Xs = np.ldexp(X[:, kept], e[kept]).astype(dt) * zero[:, None]
     if 2 <= counted.sum() < len(y):
         Xs, ys, ws = Xs[counted], ys[counted], ws[counted]
+    if fi:
+        Xs, xbar = centred(Xs, ws)
+        ys, ybar = centred(ys, ws)
     m = CuLinearRegression(
         algorithm="svd" if wide else case["algorithm"],
-        fit_intercept=fi,
+        fit_intercept=False,
         output_type="numpy",
     ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
-    coef[kept] = np.ldexp(host(m.coef_).astype(dt), e[kept] - f).astype(dt)
-    intercept = dt(np.ldexp(dt(m.intercept_), -f)) if fi else dt(0)
+    staged = host(m.coef_).astype(dt)
+    coef[kept] = np.ldexp(staged, e[kept] - f).astype(dt)
+    fitted = float(np.dot(xbar, staged.astype(np.float64))) if fi else 0.0
+    intercept = dt(np.ldexp(ybar - fitted, -f)) if fi else dt(0)
     put(out, "coef", coef)
     put(out, "intercept", np.asarray([intercept], dtype=dt))
     return out

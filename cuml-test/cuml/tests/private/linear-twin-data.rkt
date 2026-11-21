@@ -111,8 +111,8 @@
       (cond
         [(eq? c one-column)
          (check-law "one column, staged" (fit-gap fitted (theirs dt s)) (* 4 u kappa size))]
-        [(and fi (lcase-w c) (> (length (lcase-y c)) 2000))
-         (check-law "weighted with an intercept, staged"
+        [fi
+         (check-law "with an intercept, staged"
                     (fit-gap fitted (theirs dt s))
                     (* 128 u kappa kappa size))]
         [else (check-equal? fitted (theirs dt s) "staged, bitwise")])

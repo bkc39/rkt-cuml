@@ -4,10 +4,12 @@
 #include <cstdint>
 #include <cuml/linear_model/glm.hpp>
 #include <memory>
+#include <optional>
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <utility>
 
+#include "cd_device.hpp"
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/scale.hpp"
 #include "cumlrkt/support.hpp"
@@ -67,7 +69,13 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
   require_workspace(
       plan.solver, {rows.count, kept},
       cusolver_lwork_of<T>(handle, plan.solver, {rows.count, kept}));
-  staged_problem<T> p = stage_problem(handle, x, y, w, s, rows);
+  const bool centred =
+      plan.fit_intercept && plan.solver.family == glm_family::ols;
+  const std::optional<cd_centres> centres =
+      centres_of(y, w, rows, s, centred, stream);
+  staged_problem<T> p = centres
+                            ? stage_centred(handle, x, y, w, rows, s, *centres)
+                            : stage_problem(handle, x, y, w, s, rows);
   buffer<T> cs = scratch<T>(kept, stream);
   T intercept{0};
   const auto n = static_cast<size_t>(rows.count);
@@ -87,7 +95,7 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                       plan.solver.algorithm, staged_w);
   } else {
     ML::GLM::olsFit(handle, p.x.data(), n, d, p.y.data(), cs.data(), &intercept,
-                    plan.fit_intercept, plan.solver.algorithm, staged_w);
+                    false, plan.solver.algorithm, staged_w);
   }
   settle(handle);
   require_finite_solution(cs.data(), kept, intercept, plan.solver, stream);
@@ -95,7 +103,9 @@ fit_result<T> solved(const raft::handle_t& handle, const fit_inputs<T>& in,
                                             plan.fit_intercept, alpha),
                         plan.solver);
   auto coef = std::make_unique<buffer<T>>(scratch<T>(x.d, stream));
-  const T unscaled = std::ldexp(intercept, -s.y_exponent);
+  const T unscaled = centres ? static_cast<T>(weighted_intercept(
+                                   *centres, to_host(cs, stream), s.y_exponent))
+                             : std::ldexp(intercept, -s.y_exponent);
   require_in_range(unstage_coef(handle, cs.data(), s, x.d, coef->data()),
                    unscaled);
   return {std::move(coef),

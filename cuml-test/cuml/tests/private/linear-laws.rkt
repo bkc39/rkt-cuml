@@ -4,7 +4,7 @@
          (only-in racket/contract/base -> integer-in)
          (only-in racket/contract/region define/contract)
          (only-in racket/list count)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
@@ -137,6 +137,28 @@
 (define (y-centring-gamma c u)
   (gamma (y-roundings (positive-rows c) (lcase-w c)) u))
 
+(define chunk-rows 2048)
+(define lane-rows 256)
+(define lane-levels 3)
+(define fold-threads 256)
+(define fold-levels 8)
+
+(define (column-sum-roundings rows)
+  (+ lane-rows
+     lane-levels
+     (ceiling (/ (max 1 (ceiling (/ rows chunk-rows))) fold-threads))
+     fold-levels))
+
+(define double-u (unit-roundoff 'float64))
+
+(define (shim-mean-error c weights total)
+  (define h (column-sum-roundings (positive-rows c)))
+  (lambda (xs)
+    (define mean (/ (dot weights xs) total))
+    (define deviation (/ (dot weights (map (lambda (x) (abs (- x mean))) xs)) total))
+    (* (gamma (+ h 3) double-u)
+       (+ deviation (/ (* (gamma h double-u) (dot weights (map abs xs))) total)))))
+
 (define (check-lstsq-fit c
                          fi
                          u
@@ -144,7 +166,8 @@
                          exact
                          staged
                          #:coef-centring? [coef-centring? #t]
-                         #:cap-scale [cap-scale 1])
+                         #:cap-scale [cap-scale 1]
+                         #:means [means 'shim])
   (match-define (solution c* b* _) exact)
   (match-define (staging scale y-scale weight-scale kept _ top bottom) staged)
   (match-define (list coef b) (exact-fit fit))
@@ -157,10 +180,14 @@
   (define y-gamma (y-centring-gamma c u))
   (define (abs-sum xs)
     (dot weights (map abs xs)))
+  (define host-error (shim-mean-error c weights total))
   (define ((mean-error g) xs)
-    (if fi
-        (/ (* g (abs-sum xs)) total)
-        0))
+    (cond
+      [(not fi) 0]
+      [(eq? means 'device) (/ (* g (abs-sum xs)) total)]
+      [else
+       (define mean (/ (dot weights xs) total))
+       (+ (* u (/ (dot weights (map (lambda (x) (abs (- x mean))) xs)) total)) (host-error xs))]))
   (define errors (map (mean-error mean-gamma) columns))
   (define y-error ((mean-error y-gamma) y))
   (define (shift cs)
@@ -209,12 +236,26 @@
                   (host-cosine X y (lcase-w c) coef b fi)
                   (+ (* 64 u solved-kappa stretch) centring-cosine))
   (when fi
+    (define (mean-of xs)
+      (/ (dot weights xs) total))
     (define sum-bound
-      (+ (* u total (abs b))
-         (* y-gamma (abs-sum y))
-         (* (+ mean-gamma (gamma (length coef) u))
-            (for/sum ([column (in-list columns)] [cj (in-list coef)])
-                     (* (abs-sum column) (abs cj))))))
+      (match means
+        ['device
+         (+ (* u total (abs b))
+            (* y-gamma (abs-sum y))
+            (* (+ mean-gamma (gamma (length coef) u))
+               (for/sum ([column (in-list columns)] [cj (in-list coef)])
+                        (* (abs-sum column) (abs cj)))))]
+        ['shim
+         (* total
+            (+ (* u (abs b))
+               (* (gamma (+ (length coef) 3) double-u)
+                  (+ (abs (mean-of y))
+                     (for/sum ([column (in-list columns)] [cj (in-list coef)])
+                              (abs (* (mean-of column) cj)))))
+               (host-error y)
+               (for/sum ([column (in-list columns)] [cj (in-list coef)])
+                        (* (host-error column) (abs cj)))))]))
     (define staged-means
       (for/sum ([column (in-list columns)] [dj (in-list scale)] [k (in-list kept)] #:when k)
                (* (abs (/ (dot weights column) total)) dj)))

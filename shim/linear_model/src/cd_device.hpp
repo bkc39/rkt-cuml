@@ -36,6 +36,12 @@ double weighted_intercept(const cd_centres& c, const std::vector<T>& b,
 }
 
 template <typename T>
+staged_problem<T> stage_centred(const raft::handle_t& handle,
+                                const matrix<T, int64_t>& x, const T* y,
+                                const T* w, row_selection rows,
+                                const staging& s, const cd_centres& c);
+
+template <typename T>
 double weight_total(const T* w, row_selection rows,
                     rmm::cuda_stream_view stream);
 
