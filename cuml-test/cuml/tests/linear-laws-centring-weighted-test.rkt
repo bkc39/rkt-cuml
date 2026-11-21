@@ -5,6 +5,7 @@
          (only-in "private/common-data.rkt" columns-of unit-roundoff)
          (only-in "private/exact-algebra.rkt" dot)
          (only-in "private/linear-centring-data.rkt"
+                  device-means
                   failed-laws
                   fails?
                   mean-radius
@@ -26,8 +27,8 @@
                [column (in-list (columns-of (lcase-X c)))])
       (* s (radius column))))
   (define fit (moved-solve c epsilon (worst-y-epsilon c u epsilon)))
-  (check-equal? (failed-laws c 'float32 fit exact #:means 'device) '())
-  (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:coef-centring? #f #:means 'device)))
+  (check-equal? (failed-laws c 'float32 fit exact #:means device-means) '())
+  (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:coef-centring? #f #:means device-means)))
 
 (define (atomic-case)
   (define big (+ 1 (expt 2 -23)))
@@ -67,4 +68,4 @@
   (check-true (> (abs residual-sum) coalesced-term)
               (format "residual sum ~a of the coalesced-count term"
                       (exact->inexact (/ (abs residual-sum) coalesced-term))))
-  (check-equal? (failed-laws c 'float32 (list '(0) b) exact #:means 'device) '()))
+  (check-equal? (failed-laws c 'float32 (list '(0) b) exact #:means device-means) '()))

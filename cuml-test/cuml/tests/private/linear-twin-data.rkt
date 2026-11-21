@@ -85,6 +85,8 @@
         with-constant
         one-column))
 
+(define mean-order-roundings 4)
+
 (define (check-cuml-parity dt)
   (define rows
     (for*/list ([c (in-list p1-cases)]
@@ -111,10 +113,10 @@
       (cond
         [(eq? c one-column)
          (check-law "one column, staged" (fit-gap fitted (theirs dt s)) (* 4 u kappa size))]
-        [fi
-         (check-law "with an intercept, staged"
+        [(and fi (eq? dt 'float64))
+         (check-law "float64 with an intercept, staged"
                     (fit-gap fitted (theirs dt s))
-                    (* 128 u kappa kappa size))]
+                    (* mean-order-roundings u kappa (+ 3 kappa) size))]
         [else (check-equal? fitted (theirs dt s) "staged, bitwise")])
       (unless (eq? c with-constant)
         (check-law "raw" (fit-gap fitted (theirs dt r)) (* 128 u kappa kappa size))))))

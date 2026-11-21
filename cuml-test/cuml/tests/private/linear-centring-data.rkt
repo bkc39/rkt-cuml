@@ -24,6 +24,8 @@
          (only-in "linear-laws.rkt"
                   centring-gamma
                   check-lstsq-fit
+                  device-means
+                  shim-means
                   staging
                   staging-of
                   y-centring-gamma))
@@ -34,6 +36,7 @@
          centred-solve
          check-host-fit
          consistent
+         device-means
          exact-norm
          failed-laws
          fails?
@@ -167,7 +170,7 @@
                    fit
                    (oracle-lstsq (lcase-X c) (lcase-y c) #f #t)
                    (case-staging c)
-                   #:means 'device))
+                   #:means device-means))
 
 (define (failed-laws c
                      dt
@@ -175,7 +178,7 @@
                      exact
                      #:coef-centring? [coef-centring? #t]
                      #:cap-scale [cap-scale 1]
-                     #:means [means 'shim])
+                     #:means [means shim-means])
   (define failed '())
   (define (record e)
     (define message

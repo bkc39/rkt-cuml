@@ -1284,7 +1284,7 @@ Follow-ups are GitHub issues.
   most γ_(h+3)(u_d)·(MADⱼ + |v̄ⱼ − x̄ⱼ|), and v̄ⱼ + ρⱼ carries only that; the
   final rounding moves each value by at most u_T·|v − x̄ⱼ|, whose weighted
   mean is u_T·MADⱼ. ε̄_y is the same on y. `check-lstsq-fit` takes this ε̄
-  by default (`shim-mean-error`, `#:means 'shim`) in C1, C3 and κ̃′, and T4's
+  by default (`shim-means`, `check-lstsq-fit`'s `#:means`; `device-means` is cuML's) in C1, C3 and κ̃′, and T4's
   sum is Σw·(u·|b| + γ_(d+3)(u_d)·(|ȳ| + Σⱼ|x̄ⱼcⱼ|) + δ_y + Σⱼ δⱼ|cⱼ|), δ
   being ε̄ less its u_T·MAD term: the host formula's d + 3 double
   roundings, the final rounding of b, and the centres' double errors (the
@@ -1292,6 +1292,19 @@ Follow-ups are GitHub issues.
   offset and C1 and C3 vanish against T1's and T3's first terms. Float64
   takes the same path: its old centring was already near u·|x̄|, and one
   code path is kept. Ridge keeps cuML's centring (#161).
+  The sklearn twin's `fit_centred` centres with the same formula but numpy's
+  pairwise sums, where `column_reduce` sums in its tree. Both v̄ⱼ + ρⱼ are
+  within γ_(h+3)(u_d)·(MADⱼ + γ_h(u_d)·Σw|xⱼ|/Σw) of x̄ⱼ, so they differ
+  by twice that, second order against MADⱼ. Each centred value
+  fl(fl(v − v̄) − ρ) rounds twice in each, so the two differ by at most
+  4u_d·|v − x̄ⱼ| plus that second-order term: the twin and the shim solve
+  the same problem up to a componentwise perturbation η = 4u of X and y
+  (`mean-order-roundings`). Least squares moves c by at most
+  η·κ·(2 + (κ + 1)·‖r‖/(‖X‖‖c‖)) relative to its size to first order
+  (Wedin), and the P1 cases have ‖r‖ ≤ ‖X‖‖c‖, so the twin holds float64
+  fits with an intercept to η·κ·(3 + κ)·`fit-size`. In float32 the final
+  rounding to the dtype absorbs the two sums' last bits, and those fits are
+  held bitwise, as is every fit without an intercept.
 - **L1-e, T4's intercept term (L3r, #111).** With an intercept every
   algorithm returns b = ȳ − Σⱼ x̄ⱼcⱼ from its own c, x̄ and ȳ the weighted
   means, so for any c the T4 sum is Σᵢ wᵢ(yᵢ − b − xᵢ·c) = Σw·(ȳ − Σⱼ x̄ⱼcⱼ − b)

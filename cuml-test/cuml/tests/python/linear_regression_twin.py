@@ -54,10 +54,7 @@ def stage(X, y, w, fi):
 
 
 def centred(v, w):
-    """Centre as the shim's stage_centred (shim/linear_model/src/cd_device.cu)
-    does with the means of centres_of and target_centre: the mean in double
-    less the remainder of its rounding, each value rounded once to the dtype,
-    uncounted rows zeroed. Returns the centred values and mean + remainder."""
+    """The shim's stage_centred (cd_device.cu): double mean less its remainder."""
     weights = np.ones(len(v)) if w is None else w.astype(np.float64)
     wide = v.astype(np.float64)
     shape = (-1,) + (1,) * (wide.ndim - 1)
@@ -69,7 +66,27 @@ def centred(v, w):
     return out, mean + remainder
 
 
+def intercept_of(xbar, ybar, coef):
+    """The shim's weighted_intercept, summed in double in column order."""
+    fitted = 0.0
+    for m, b in zip(xbar, coef):
+        fitted += float(m) * float(b)
+    return ybar - fitted
+
+
+def fit_centred(X, y, w, algorithm):
+    """cuML-Python without an intercept on rows centred as the shim centres."""
+    Xc, xbar = centred(X, w)
+    yc, ybar = centred(y, w)
+    m = CuLinearRegression(
+        algorithm=algorithm, fit_intercept=False, output_type="numpy"
+    ).fit(np.asfortranarray(Xc), yc, sample_weight=w)
+    coef = host(m.coef_).astype(X.dtype)
+    return coef, intercept_of(xbar, ybar, coef)
+
+
 def staged_fit(case):
+    """cuML-Python on the rows staged as the shim stages them."""
     X, y, w = inputs(case)
     fi = case["fit_intercept"]
     dt = X.dtype.type
@@ -96,29 +113,20 @@ def staged_fit(case):
     Xs = np.ldexp(X[:, kept], e[kept]).astype(dt) * zero[:, None]
     if 2 <= counted.sum() < len(y):
         Xs, ys, ws = Xs[counted], ys[counted], ws[counted]
+    algorithm = "svd" if wide else case["algorithm"]
     if fi:
-        Xs, xbar = centred(Xs, ws)
-        ys, ybar = centred(ys, ws)
-    m = CuLinearRegression(
-        algorithm="svd" if wide else case["algorithm"],
-        fit_intercept=False,
-        output_type="numpy",
-    ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
-    staged = host(m.coef_).astype(dt)
+        staged, intercept = fit_centred(Xs, ys, ws, algorithm)
+        intercept = dt(np.ldexp(intercept, -f))
+    else:
+        m = CuLinearRegression(
+            algorithm=algorithm, fit_intercept=False, output_type="numpy"
+        ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
+        staged = host(m.coef_).astype(dt)
+        intercept = dt(0)
     coef[kept] = np.ldexp(staged, e[kept] - f).astype(dt)
-    intercept = dt(np.ldexp(intercept_of(xbar, ybar, staged), -f)) if fi else dt(0)
     put(out, "coef", coef)
     put(out, "intercept", np.asarray([intercept], dtype=dt))
     return out
-
-
-def intercept_of(xbar, ybar, coef):
-    """The shim's weighted_intercept: mean + remainder less the fitted part,
-    summed in double in column order."""
-    fitted = 0.0
-    for m, b in zip(xbar, coef):
-        fitted += float(m) * float(b)
-    return ybar - fitted
 
 
 def centred_fit(case):
@@ -126,16 +134,10 @@ def centred_fit(case):
     if not case["fit_intercept"]:
         return raw_fit(case)
     X, y, w = inputs(case)
-    dt = X.dtype.type
-    Xc, xbar = centred(X, w)
-    yc, ybar = centred(y, w)
-    m = CuLinearRegression(
-        algorithm=case["algorithm"], fit_intercept=False, output_type="numpy"
-    ).fit(np.asfortranarray(Xc), yc, sample_weight=w)
-    coef = host(m.coef_).astype(dt)
+    coef, intercept = fit_centred(X, y, w, case["algorithm"])
     out = {}
     put(out, "coef", coef)
-    put(out, "intercept", np.asarray([intercept_of(xbar, ybar, coef)], dtype=dt))
+    put(out, "intercept", np.asarray([intercept], dtype=X.dtype))
     return out
 
 
