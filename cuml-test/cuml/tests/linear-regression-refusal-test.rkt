@@ -210,31 +210,49 @@
                                                  #:sample-weight (and w (vector w dt))
                                                  #:algorithm algorithm))))))
 
+(define free-solve-allowance (expt 2 -30))
+
+(define (free-coefficients n)
+  (define rows (collinear-rows n))
+  (~> (oracle-lstsq (map (match-lambda
+                           [(list a b _) (list a b)])
+                         rows)
+                    (noisy-targets rows)
+                    (uneven-weights n)
+                    #t)
+      solution-coef))
+
+(define (effective-gaps fitted free)
+  (match-define (list a b ab) (map inexact->exact fitted))
+  (for/list ([got (list (+ a ab) (+ b ab))]
+             [own (list a b)]
+             [want (in-list free)])
+    (list (abs (- got want))
+          (+ (* (unit-roundoff 'float64) (+ (abs own) (abs ab))) free-solve-allowance)
+          (exact->inexact got)
+          (exact->inexact want))))
+
 (test-gpu "float64 'qr fits 5003 weighted collinear rows with the effective coefficients of the two free columns"
   (define rows (collinear-rows 5003))
-  (define y (noisy-targets rows))
-  (define w (uneven-weights 5003))
   (define fitted
     (~> (linear-regression-fit (matrix rows 'float64)
-                               (vector y 'float64)
-                               #:sample-weight (vector w 'float64)
+                               (vector (noisy-targets rows) 'float64)
+                               #:sample-weight (vector (uneven-weights 5003) 'float64)
                                #:algorithm 'qr)
         linear-regression-result-coef
         device-vector->list))
-  (match-define (list a b ab) (map inexact->exact fitted))
-  (define free
-    (~> (oracle-lstsq (map (match-lambda
-                             [(list a b _) (list a b)])
-                           rows)
-                      y
-                      w
-                      #t)
-        solution-coef))
-  (for ([got (list (+ a ab) (+ b ab))]
-        [want (in-list free)])
-    (check-true
-     (<= (abs (- got want)) (* 4 (unit-roundoff 'float64) (+ (abs a) (abs b) (abs ab))))
-     (format "effective ~a, least squares ~a" (exact->inexact got) (exact->inexact want)))))
+  (for ([g (in-list (effective-gaps fitted (free-coefficients 5003)))])
+    (match-define (list gap bound got want) g)
+    (check-true (<= gap bound) (format "effective ~a, least squares ~a" got want))))
+
+(test-case "effective coefficients 30% off beside a 10^15 null component fail the effective law"
+  (define free (free-coefficients 5003))
+  (match-define (list ca cb) free)
+  (define t (expt 10 15))
+  (define stub (map real->double-flonum (list (+ (* 13/10 ca) t) (+ (* 13/10 cb) t) (- t))))
+  (for ([g (in-list (effective-gaps stub free))])
+    (match-define (list gap bound got want) g)
+    (check-true (> gap bound) (format "effective ~a, least squares ~a" got want))))
 
 (test-gpu "X, y and w are unchanged after every fit"
   (for* ([dt (in-list dtypes)]
