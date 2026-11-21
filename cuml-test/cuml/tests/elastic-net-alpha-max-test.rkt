@@ -3,7 +3,7 @@
 (require (only-in cuml/linear-model lasso-fit)
          (only-in math/flonum flnext flprev)
          (only-in racket/flonum flsingle)
-         (only-in racket/list argmin make-list)
+         (only-in racket/list make-list)
          (only-in racket/match match match-define struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
@@ -70,17 +70,46 @@
   (floating-point-bytes->real
    (integer->integer-bytes (+ k (integer-bytes->integer (real->floating-point-bytes x 4) #t)) 4 #t)))
 
+(define (single-even? x)
+  (even? (integer-bytes->integer (real->floating-point-bytes x 4) #f)))
+
+(define (nearest-single q s)
+  (define (distance v)
+    (abs (- (inexact->exact v) q)))
+  (for/fold ([best s])
+            ([v (in-list (list (single-step s -1) (single-step s 1)))]
+             #:when (rational? v))
+    (define d (distance v))
+    (define e (distance best))
+    (if (or (< d e) (and (= d e) (single-even? v)))
+        v
+        best)))
+
 (define (correctly-rounded dt q)
   (define near (real->double-flonum q))
   (match dt
-    [_
-     #:when (zero? q)
-     0.0]
     ['float64 near]
     ['float32
      (define s (flsingle near))
-     (argmin (lambda (v) (abs (- (inexact->exact v) q)))
-             (list (single-step s -1) s (single-step s 1)))]))
+     (if (and (rational? s) (not (zero? s)))
+         (nearest-single q s)
+         s)]))
+
+(for ([row (in-list `((float64 0 0.0)
+                      (float64 -13/4 -3.25)
+                      (float32 0 0.0)
+                      (float32 -13 -13.0)
+                      (float32 ,(expt 2 -140) ,(expt 2.0 -140))
+                      (float32 ,(expt 2 -151) 0.0)
+                      (float32 ,(- (expt 2 -151)) -0.0)
+                      (float32 ,(expt 2 -160) 0.0)
+                      (float32 ,(+ 1 (* 3 (expt 2 -24))) ,(+ 1.0 (expt 2.0 -22)))
+                      (float32 ,(- -1 (* 3 (expt 2 -24))) ,(- -1.0 (expt 2.0 -22)))
+                      (float32 ,(+ 1 (expt 2 -24) (expt 2 -60)) ,(+ 1.0 (expt 2.0 -23)))
+                      (float32 1/3 ,(flsingle (/ 1.0 3)))))])
+  (match-define (list dt q expected) row)
+  (test-case (format "correctly-rounded ~a ~a is ~a, ties to even" dt (exact->inexact q) expected)
+    (check-equal? (correctly-rounded dt q) expected)))
 
 (define (check-zeros dt p run)
   (match-define (struct* en-run ([coef coef] [intercept b])) run)

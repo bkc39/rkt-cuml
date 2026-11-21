@@ -2202,7 +2202,10 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   (alcohol on the other 12 columns, raw X), λ_max, glmnet's value
   163.64265023355625, one ulp either side and 2·λ_max return zeros in both
   dtypes, lasso and l1-ratio 1/2 (`elastic-net-alpha-max-test`; at 0c590cc
-  the float64 λ_max and glmnet's value were refused by V16b at any tol). The
+  the float64 λ_max and glmnet's value were refused by V16b at any tol); the
+  test holds those zero fits' intercept `equal?` to the exact ȳ correctly
+  rounded to the dtype, which on wine is stronger than the documented
+  bound (ȳ to within its centring error ε̄_y). The
   pass costs one more column-moments pass per fit (L3-d's 10 ms at
   1e6 × 100 float32). CD's inputs are not touched: over the elastic-net
   twin, real-data and glmnet suites (3268 requests) every fit CD still runs
