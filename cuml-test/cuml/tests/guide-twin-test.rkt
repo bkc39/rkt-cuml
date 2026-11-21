@@ -11,6 +11,7 @@
                   tsvd-fit
                   tsvd-result-explained-variance-ratio
                   tsvd-result-singular-values)
+         (only-in cuml/decomposition/private/native libcuml-version)
          (only-in cuml/scribblings/guide/helpers features rounded)
          (only-in datasets/core load-dataset-table)
          (only-in racket/list first take)
@@ -20,7 +21,7 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" boundary-margin host scaled-matrix)
-         (only-in "private/python-env.rkt" run-twin test-twin)
+         (only-in "private/python-env.rkt" checked-results run-twin test-twin)
          (only-in "private/scaler-data.rkt" [float32-roundoff u]))
 
 (define-runtime-path twin "python/guide_twin.py")
@@ -42,20 +43,21 @@
   (define measurements (features 'wine "cultivar"))
   (define raw (table->device-matrix (load-dataset-table 'wine) #:columns measurements))
   (define scaled (scaled-matrix 'wine measurements))
-  (match-define (hash-table ['results
-                             (list (hash-table ['ratio raw-ratio])
-                                   (hash-table ['ratio ratio]
-                                               ['singular_values singular]
-                                               ['explained_variance variance])
-                                   (hash-table ['ratio svd-ratio] ['singular_values svd-singular])
-                                   (hash-table ['error reconstruction-error]))]
-                            ['version version])
+  (define answer
     (run-twin twin
               (hasheq 'cases (list (twin-case "pca" raw 2)
                                    (twin-case "pca" scaled 13)
                                    (twin-case "tsvd" scaled 2)
                                    (twin-case "reconstruction" scaled 2)))))
-  (check-equal? version "1.8.0")
+  (match-define (list (hash-table ['ratio raw-ratio])
+                      (hash-table ['ratio ratio]
+                                  ['singular_values singular]
+                                  ['explained_variance variance])
+                      (hash-table ['ratio svd-ratio] ['singular_values svd-singular])
+                      (hash-table ['error reconstruction-error]))
+    (checked-results answer #:expected-cuml libcuml-version))
+  (match-define (hash-table ['version (hash-table ['sklearn sklearn])]) answer)
+  (check-equal? sklearn "1.8.0")
   (define raw-fit (pca-fit raw #:n-components 2))
   (define scaled-fit (pca-fit scaled))
   (define svd-fit (tsvd-fit scaled #:n-components 2))
