@@ -94,7 +94,7 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
       kkt_of(terms, coef, weight, {alpha * ratio, alpha * (1 - ratio)}, epochs);
   require_kkt(k, n_iter, request.tol);
   const double rounding =
-      alpha_rounding(zero, largest, request.l1_ratio, epochs);
+      alpha_rounding(zero, largest, epochs, request.l1_ratio);
   require_resolved<T>(
       k, n_iter,
       {request.tol, largest, request.alpha,

@@ -119,20 +119,31 @@ double expected_rounding(double l1_ratio, double alpha_max) {
 
 const cd_epochs stop{stop_epochs, rows, stop_tol, std::ldexp(1.0, -53)};
 
+double binding_alpha_max(double ratio) {
+  return binding_correlation * binding_sigma / ratio;
+}
+
+zero_fit binding_fit(double ratio) {
+  return zero_fit_of<double>(binding_beside_orthogonal(),
+                             {4, binding_alpha_max(ratio), ratio, rows});
+}
+
+TEST(CdZeroFit, TheBindingColumnsSpreadsAreCarried) {
+  const zero_fit z = binding_fit(small_ratio);
+  EXPECT_DOUBLE_EQ(z.alpha_max, binding_alpha_max(small_ratio));
+  EXPECT_DOUBLE_EQ(z.sigma, binding_sigma);
+  EXPECT_DOUBLE_EQ(z.sigma_y, 1);
+}
+
 TEST(CdZeroFit, TheAlphaRoundingIsTheBindingColumnsOwn) {
   for (const double ratio : {1.0, small_ratio}) {
-    const double alpha_max = binding_correlation * binding_sigma / ratio;
-    const zero_fit z = zero_fit_of<double>(binding_beside_orthogonal(),
-                                           {4, alpha_max, ratio, rows});
-    EXPECT_DOUBLE_EQ(z.alpha_max, alpha_max);
-    EXPECT_DOUBLE_EQ(z.sigma, binding_sigma);
-    EXPECT_DOUBLE_EQ(z.sigma_y, 1);
-    EXPECT_DOUBLE_EQ(alpha_rounding(z, tiny_largest, ratio, stop),
-                     expected_rounding(ratio, alpha_max));
+    EXPECT_DOUBLE_EQ(
+        alpha_rounding(binding_fit(ratio), tiny_largest, stop, ratio),
+        expected_rounding(ratio, binding_alpha_max(ratio)));
   }
   EXPECT_EQ(alpha_rounding(zero_fit_of<double>(binding_beside_orthogonal(),
                                                {4, 1, 0, rows}),
-                           tiny_largest, 0, stop),
+                           tiny_largest, stop, 0),
             0);
 }
 
@@ -147,10 +158,9 @@ std::string refusal_of(F f) {
 }
 
 TEST(CdZeroFit, AnElasticNetAlphaFarOutsideTheBindingColumnsBandKeepsTheTol) {
-  const double alpha_max = binding_correlation * binding_sigma / small_ratio;
-  const zero_fit z = zero_fit_of<double>(binding_beside_orthogonal(),
-                                         {4, alpha_max, small_ratio, rows});
-  const double band = alpha_rounding(z, tiny_largest, small_ratio, stop);
+  const double alpha_max = binding_alpha_max(small_ratio);
+  const zero_fit z = binding_fit(small_ratio);
+  const double band = alpha_rounding(z, tiny_largest, stop, small_ratio);
   const kkt_terms unresolvable{stop_residual, stop_tol, 1};
   const auto advice = [&](double alpha) {
     return refusal_of([&] {

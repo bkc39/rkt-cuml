@@ -219,8 +219,8 @@ bool accepts_zero(const zero_fit& z) {
   return z.residual <= z.allowance;
 }
 
-double alpha_rounding(const zero_fit& z, double largest, double l1_ratio,
-                      const cd_epochs& epochs) {
+double alpha_rounding(const zero_fit& z, double largest,
+                      const cd_epochs& epochs, double l1_ratio) {
   if (!std::isfinite(z.alpha_max)) {
     return 0;
   }
