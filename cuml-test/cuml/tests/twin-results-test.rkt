@@ -151,7 +151,7 @@
   (match-define (list name version outcome expected-params) row)
   (test-case name
     (define params #f)
-    (define (run script input)
+    (define (run . _)
       (hasheq 'results (list scaler-params) 'version version))
     (check-equal? (failed-message (lambda ()
                                     (set! params
