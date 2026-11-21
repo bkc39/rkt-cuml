@@ -5,9 +5,10 @@
          (only-in racket/match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" least-magnitude unit-roundoff unscaled worst)
          (only-in "private/pca-data.rkt"
                   first-max-entries
                   fixture-name
@@ -17,7 +18,7 @@
                   magnitude-rows
                   non-increasing?
                   over-bound)
-         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix scaled-rows unit-roundoff)
+         (only-in "private/scaler-data.rkt" bits-equal? scaled-rows)
          (only-in "private/tsvd-data.rkt"
                   duplicate-fixture
                   extents
@@ -29,17 +30,16 @@
                   tsvd-of
                   twos-fixture
                   wide-fixture
-                  worst-difference
                   zeros-fixture))
 
 (define dtypes '(float32 float64))
 (define solvers '(full jacobi))
 
 (define (off-identity components)
-  (for*/fold ([worst 0.0])
+  (for*/fold ([most 0.0])
              ([(row i) (in-indexed (host-gram components))]
               [(g j) (in-indexed row)])
-    (max worst (abs (- g (if (= i j) 1.0 0.0))))))
+    (max most (abs (- g (if (= i j) 1.0 0.0))))))
 
 (define (orthonormal-bound solver d u)
   (* (if (eq? solver 'jacobi) 16 4) d u))
@@ -54,7 +54,9 @@
 
 (define (fit-of f dt solver k)
   (define rows (fixture-rows f dt))
-  (values rows (tsvd-of (tsvd-fit (rows->matrix rows dt) #:n-components k #:solver solver))))
+  (values rows
+          (tsvd-of
+           (tsvd-fit (list*->device-matrix rows #:dtype dt) #:n-components k #:solver solver))))
 
 (define (law-cases)
   (for*/list ([dt (in-list dtypes)]
@@ -116,17 +118,9 @@
       (check-true (positive-zeros? twos-variance) (format "twos ~a" twos-variance))
       (check-true (positive-zeros? twos-ratio) (format "twos ~a" twos-ratio)))))
 
-(define (least-magnitude dt)
-  (if (eq? dt 'float32)
-      (expt 2 -149)
-      (expt 2 -1074)))
-
-(define (unscaled x by power)
-  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))
-
 (define (tiny-problems dt solver by)
-  (define unit-X (rows->matrix magnitude-rows dt))
-  (define small-X (rows->matrix (scaled-rows magnitude-rows by) dt))
+  (define unit-X (list*->device-matrix magnitude-rows #:dtype dt))
+  (define small-X (list*->device-matrix (scaled-rows magnitude-rows by) #:dtype dt))
   (match-define (svd c v r s) (tsvd-of (tsvd-fit unit-X #:n-components 2 #:solver solver)))
   (match-define (svd _ _ _ all-singular) (tsvd-of (tsvd-fit unit-X #:n-components 3 #:solver solver)))
   (define-values (small T*) (tsvd-fit-transform small-X #:n-components 2 #:solver solver))
@@ -144,7 +138,7 @@
                [y (in-list c)]
                [g (in-list (~> (map sqr all-singular) gaps (take 2)))]
                [i (in-naturals)])
-      (over-bound (format "component ~a" i) (worst-difference x y) 0.0 (/ bound g)))
+      (over-bound (format "component ~a" i) (worst x y) 0.0 (/ bound g)))
     (for/list ([x (in-list s*)]
                [y (in-list s)]
                [i (in-naturals)])
@@ -173,7 +167,7 @@
   (for ([c (in-list '((float32 full 1e-38) (float64 full 1e-308) (float32 jacobi 1e-40)))])
     (match-define (list dt solver by) c)
     (test-case (format "~a ~a ~a" dt solver by)
-      (define X (rows->matrix (scaled-rows magnitude-rows by) dt))
+      (define X (list*->device-matrix (scaled-rows magnitude-rows by) #:dtype dt))
       (define-values (_ T) (tsvd-fit-transform X #:n-components 2 #:solver solver))
       (define fitted (tsvd-fit X #:n-components 2 #:solver solver))
       (check-true (bits-equal? (device-matrix->list* T)

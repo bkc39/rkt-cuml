@@ -4,7 +4,8 @@
          (only-in racket/list remove-duplicates)
          (only-in racket/match match)
          (only-in racket/math sqr)
-         (only-in raft device-vector->list list*->device-matrix list->device-vector))
+         (only-in raft device-vector->list list*->device-matrix list->device-vector)
+         (only-in "common-data.rkt" pick squared-distance))
 
 (provide (struct-out expected)
          canonical
@@ -14,22 +15,18 @@
          dbscan-oracle
          distance-matrix
          euclidean-within
-         first-copies
          fitted-lists
-         grid-labels
          grid-core
+         grid-labels
          grid-rows
-         grid-weights
          grid-weighted-core
+         grid-weights
          integer-grid
-         mat
-         pick
          repeat-rows
          result->lists
          same-partition?
          seeded
-         structure-problems
-         vec)
+         structure-problems)
 
 (struct expected (labels core options))
 
@@ -39,22 +36,11 @@
 (define grid-weights '(4 1 1 1 1 1 1 1))
 (define grid-weighted-core '(0 1 2 4))
 
-(define (mat rows dt)
-  (list*->device-matrix rows #:dtype dt))
-
-(define (vec xs dt)
-  (list->device-vector xs #:dtype dt))
-
 (define (result->lists r)
   (list (device-vector->list (dbscan-result-labels r))
         (device-vector->list (dbscan-result-core-sample-indices r))))
 
 (define fitted-lists (compose1 result->lists dbscan-fit))
-
-(define (pick xs indices)
-  (define at (list->vector xs))
-  (for/list ([i (in-list indices)])
-    (vector-ref at i)))
 
 (define (seeded seed thunk)
   (parameterize ([current-pseudo-random-generator
@@ -67,9 +53,6 @@
             (for/list ([_ (in-range n)])
               (for/list ([_ (in-range d)])
                 (random extent))))))
-
-(define (squared-distance a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (sqr (- x y))))
 
 (define ((euclidean-within rows eps) i j)
   (<= (squared-distance (vector-ref rows i) (vector-ref rows j)) (sqr eps)))
@@ -156,13 +139,6 @@
   (for*/list ([(row w) (in-parallel (in-list rows) (in-list weights))]
               [_ (in-range w)])
     row))
-
-(define (first-copies weights)
-  (for/fold ([at 0]
-             [firsts '()]
-             #:result (reverse firsts))
-            ([w (in-list weights)])
-    (values (+ at w) (cons at firsts))))
 
 (define (structure-problems labels core)
   (define k (add1 (apply max -1 labels)))

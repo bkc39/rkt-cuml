@@ -3,7 +3,8 @@
 (require (only-in cuml/linear-model logistic-regression-fit logistic-regression-result-classes)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" on-matrix on-vector))
+         (only-in "private/common-data.rkt" on-vector)
+         (only-in "private/linear-data.rkt" on-matrix))
 
 (define n (expt 2 18))
 

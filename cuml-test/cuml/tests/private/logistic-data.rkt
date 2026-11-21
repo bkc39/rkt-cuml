@@ -7,9 +7,10 @@
                   logistic-regression-result-n-iter)
          (only-in racket/list append* make-list)
          (only-in racket/match match match-define struct*)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list device-vector?)
          (only-in "blob-data.rkt" normal-source uniform-source)
-         (only-in "linear-data.rkt" by-dtype columns-of dyadic on-matrix on-vector))
+         (only-in "common-data.rkt" columns-of mean on-vector scaled-rows)
+         (only-in "linear-data.rkt" by-dtype dyadic on-matrix))
 
 (provide (struct-out lr-case)
          (struct-out lr-fit)
@@ -37,7 +38,6 @@
          relative-gap
          scaled-case
          scaled-parts
-         scaled-rows
          separable-case
          setting-fit
          tight-max-iter
@@ -110,10 +110,6 @@
     (define label (if (positive? first) 1 0))
     (values (cons (+ first (if (= label 1) 1/2 -1/2)) rest) label))
   (for/lists (X y #:result (lr-case name X y #f)) ([row (in-list rows)]) (separated row)))
-
-(define (scaled-rows rows factor)
-  (for/list ([row (in-list rows)])
-    (map (lambda (v) (* v factor)) row)))
 
 (define (scaled-case c factor)
   (struct-copy lr-case c [X (scaled-rows (lr-case-X c) factor)]))
@@ -198,9 +194,6 @@
   (match z
     [(list s) (if (> s 0) 1 0)]
     [_ (argmax-index z)]))
-
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
 
 (define (centred-vector xs)
   (define m (mean xs))

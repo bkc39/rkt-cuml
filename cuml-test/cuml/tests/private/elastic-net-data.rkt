@@ -6,6 +6,7 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-vector->list)
          (only-in "blob-data.rkt" normal-source)
+         (only-in "common-data.rkt" on-vector unit-roundoff)
          (only-in "elastic-net-oracle.rkt"
                   alpha-max
                   en-solution
@@ -22,14 +23,12 @@
                   dtypes
                   dyadic
                   lcase
+                  lcase-X
                   lcase-name
                   lcase-w
-                  lcase-X
                   lcase-y
                   max-abs
-                  on-matrix
-                  on-vector
-                  unit-roundoff))
+                  on-matrix))
 
 (provide (struct-out en-run)
          alpha-ratios

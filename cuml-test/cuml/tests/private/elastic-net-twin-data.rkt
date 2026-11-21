@@ -3,6 +3,7 @@
 (require (only-in racket/match match-define struct*)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
+         (only-in "common-data.rkt" unit-roundoff)
          (only-in "elastic-net-data.rkt"
                   case-alpha
                   coef-distance
@@ -16,7 +17,7 @@
                   mirrored-weight-case
                   selections)
          (only-in "elastic-net-oracle.rkt" en-solution oracle-elastic-net problem-of s2-bound)
-         (only-in "linear-data.rkt" check-law lcase-name lcase-w lcase-X lcase-y unit-roundoff)
+         (only-in "linear-data.rkt" check-law lcase-X lcase-name lcase-w lcase-y)
          (only-in "linear-twin-data.rkt" case-request theirs twin-results))
 
 (provide check-raw-parity

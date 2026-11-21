@@ -7,7 +7,8 @@
          (only-in rackunit check)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" dtypes law-case rounded unit-roundoff)
+         (only-in "private/common-data.rkt" mean unit-roundoff)
+         (only-in "private/linear-data.rkt" dtypes law-case rounded)
          (only-in "private/mbsgd-data.rkt" normal-rows)
          (only-in "private/mbsgd-gate-data.rkt"
                   at-eta0
@@ -18,8 +19,7 @@
                   off-predictions-at-eta0
                   regressor-fit
                   round-off-prediction-share
-                  zero-mean-rows)
-         (only-in "private/metrics-data.rkt" mean))
+                  zero-mean-rows))
 
 (define standardised-rows
   (let* ([columns (apply map list constant-rows)]

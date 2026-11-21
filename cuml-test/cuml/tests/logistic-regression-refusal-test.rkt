@@ -11,13 +11,9 @@
          (only-in rackunit check-equal? check-exn check-not-false test-case)
          (only-in raft device-vector->list device-vector? list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/linear-data.rkt" on-matrix on-vector)
-         (only-in "private/logistic-data.rkt"
-                  blob-case
-                  lr-case-X
-                  lr-case-y
-                  scaled-rows
-                  unequal-weights-message)
+         (only-in "private/common-data.rkt" host on-vector scaled-rows)
+         (only-in "private/linear-data.rkt" on-matrix)
+         (only-in "private/logistic-data.rkt" blob-case lr-case-X lr-case-y unequal-weights-message)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
 (define grid '((1 0 2) (0 3 1) (4 1 0) (2 2 5) (3 1 1) (0 0 1)))
@@ -292,11 +288,6 @@
                          ([coef coef] [intercept intercept] [classes classes] [n-iter n-iter]))
     fitted)
   (logistic-regression-result coef intercept classes kind n-iter))
-
-(define (host v)
-  (if (device-vector? v)
-      (device-vector->list v)
-      v))
 
 (test-gpu "a result built by hand takes only a fitted result's label kind"
   (define X (on-matrix grid))

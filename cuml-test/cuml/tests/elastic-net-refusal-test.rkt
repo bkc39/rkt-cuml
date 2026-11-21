@@ -12,8 +12,10 @@
          (only-in racket/list filter-not)
          (only-in racket/match match-define match-lambda match-lambda** struct*)
          (only-in rackunit check-equal? check-exn check-true test-case)
+         (only-in raft device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/blob-data.rkt" normal-source)
+         (only-in "private/common-data.rkt" [on-vector vector] unit-roundoff)
          (only-in "private/cuml-error.rkt" check-cuml-error raised)
          (only-in "private/elastic-net-data.rkt"
                   apply-keywords
@@ -35,21 +37,18 @@
                   kkt
                   oracle-elastic-net
                   problem-of)
-         (only-in "private/kmeans-data.rkt" blank-matrix)
          (only-in "private/linear-data.rkt"
                   docs-case
                   dtypes
                   dyadic
                   lcase
-                  lcase-w
                   lcase-X
+                  lcase-w
                   lcase-y
-                  max-abs
                   [on-matrix matrix]
-                  [on-vector vector]
+                  max-abs
                   scaled-case
-                  scaled-columns
-                  unit-roundoff)
+                  scaled-columns)
          (only-in "private/linear-refusal-rows.rkt" grid shared-fit-rows targets)
          (only-in "private/refusal-rows.rkt" check-row row row-id))
 
@@ -72,7 +71,7 @@
 (define (fit-rows go #:l1-ratio? [l1-ratio? #t])
   (define X (matrix grid))
   (define y (vector targets))
-  (define bad-X (blank-matrix 5 3 'int32))
+  (define bad-X (device-matrix 5 3 #:dtype 'int32))
   (append (list (row "non-boolean fit-intercept before every other fault"
                      "fit-intercept: expected #t or #f, got 'yes"
                      (lambda () (go bad-X y #:fit-intercept 'yes #:alpha 'x #:tol 'x)))
@@ -256,8 +255,8 @@
     (define c (columns-apart narrow))
     (define message
       (exn-message (raised (lambda () (en-case-fit c dt #:alpha 1e300 #:l1-ratio 1e-13)))))
-    (define printed (string->number (cadr (regexp-match #rx"at most ([^ ]+) for" message))))
-    (check-true (en-run? (en-case-fit c dt #:alpha printed #:l1-ratio 1e-13)))))
+    (match-define (list _ printed) (regexp-match #rx"at most ([^ ]+) for" message))
+    (check-true (en-run? (en-case-fit c dt #:alpha (string->number printed) #:l1-ratio 1e-13)))))
 
 (define stop-message
   #rx"^elastic-net-fit: X: coordinate descent stopped after 1 epochs with every coefficient under tol ")

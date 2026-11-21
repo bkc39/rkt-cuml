@@ -1,35 +1,36 @@
 #lang racket/base
 
 (require (only-in cuml/metrics adjusted-rand-score contingency-matrix contingency-table)
-         (only-in racket/list remove-duplicates)
+         (only-in racket/list range remove-duplicates)
          (only-in racket/match match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list dtype shape)
+         (only-in raft device-matrix->list* device-vector->list dtype list->device-vector shape)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" pick)
          (only-in "private/metrics-data.rkt"
                   bijection
                   host-ari
                   host-counts
                   label-pair
-                  labels-of
                   monotone-maps
-                  permute
                   random-permutation
                   sorted-distinct)
          (only-in "private/scaler-data.rkt" transpose))
 
 (define dtypes '(int32 int64))
 
+(define (label-case seed)
+  (define n (+ 20 (* 13 seed)))
+  (define-values (truth found) (label-pair n (+ 1 (modulo seed 6)) (+ 1 (modulo (* 5 seed) 7)) seed))
+  (list n truth found))
+
 (define (cases)
-  (for/list ([seed (in-range 24)])
-    (define n (+ 20 (* 13 seed)))
-    (define-values (truth found)
-      (label-pair n (+ 1 (modulo seed 6)) (+ 1 (modulo (* 5 seed) 7)) seed))
-    (list n truth found)))
+  (map label-case (range 24)))
 
 (define (table truth found #:true [dt1 'int32] #:pred [dt2 'int32])
   (match-define (contingency-table counts rows columns)
-    (contingency-matrix (labels-of truth dt1) (labels-of found dt2)))
+    (contingency-matrix (list->device-vector truth #:dtype dt1)
+                        (list->device-vector found #:dtype dt2)))
   (list counts rows columns))
 
 (define (table-lists truth found #:true [dt1 'int32] #:pred [dt2 'int32])
@@ -37,7 +38,8 @@
   (list (device-matrix->list* counts) (device-vector->list rows) (device-vector->list columns)))
 
 (define (ari truth found #:true [dt1 'int32] #:pred [dt2 'int32])
-  (adjusted-rand-score (labels-of truth dt1) (labels-of found dt2)))
+  (adjusted-rand-score (list->device-vector truth #:dtype dt1)
+                       (list->device-vector found #:dtype dt2)))
 
 (test-gpu "CC1: counts are int64 k1 x k2; the label vectors are the sorted distinct values in their dtypes"
   (for* ([c (in-list (cases))]
@@ -97,8 +99,7 @@
         [seed (in-naturals 100)])
     (match-define (list n truth found) c)
     (define order (random-permutation n seed))
-    (check-equal? (table-lists (permute truth order) (permute found order))
-                  (table-lists truth found))))
+    (check-equal? (table-lists (pick truth order) (pick found order)) (table-lists truth found))))
 
 (test-gpu "CC6: int32 and int64 copies of the labels, in any mix, give the same counts"
   (for ([c (in-list (cases))])
@@ -145,7 +146,7 @@
       (check-equal? (ari (map f truth) found #:true 'int64) expected)
       (check-equal? (ari truth (map f found) #:pred 'int64) expected))
     (define order (random-permutation n seed))
-    (check-equal? (ari (permute truth order) (permute found order)) expected)))
+    (check-equal? (ari (pick truth order) (pick found order)) expected)))
 
 (test-gpu "CA4: int32 and int64 agree bit for bit, and 2^40 labels score as dense ones"
   (for ([c (in-list (cases))])
@@ -157,7 +158,7 @@
   (check-equal? (ari (list 0 0 (expt 2 40) (expt 2 40)) '(0 0 1 1) #:true 'int64) 1.0))
 
 (test-gpu "CA7: twenty calls give one value"
-  (match-define (list _ truth found) (list-ref (cases) 7))
+  (match-define (list _ truth found) (label-case 7))
   (check-equal? (length (remove-duplicates (for/list ([_ (in-range 20)])
                                              (ari truth found))))
                 1))

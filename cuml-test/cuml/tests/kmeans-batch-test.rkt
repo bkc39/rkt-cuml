@@ -10,8 +10,8 @@
                   kmeans-result-inertia
                   kmeans-score
                   kmeans-transform)
-         (only-in racket/list append* first second third)
-         (only-in racket/match == match match-define)
+         (only-in racket/list append* filter-map)
+         (only-in racket/match == match match-define match-lambda)
          (only-in rackunit
                   check-equal?
                   check-exn
@@ -21,28 +21,26 @@
                   check-true
                   exn:test:check?
                   test-case)
+         (only-in raft list*->device-matrix list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/kmeans-data.rkt"
                   blob-data
                   close?
                   cyclic-weights
+                  deviation
                   dtypes
                   first-rows
                   grid64
                   grid64-start
                   host
                   host-vector
-                  mat
-                  tolerance
-                  vec))
+                  outcome
+                  tolerance))
 
 (define rows 4096)
 
 (define inits '(k-means++ scalable-k-means++ random matrix))
-
-(define (deviation a b)
-  (/ (abs (- a b)) (max 1.0 (abs b))))
 
 (define (spread actual expected)
   (for/list ([a (in-list actual)]
@@ -66,10 +64,6 @@
                 #:n-init n-init
                 #:random-state 3
                 #:sample-weight w)))
-
-(define (outcome r)
-  (match-define (kmeans-result C labels inertia n-iter) r)
-  (list (host C) (host-vector labels) inertia n-iter))
 
 (define (numbers r)
   (match-define (kmeans-result C _ inertia _) r)
@@ -156,7 +150,7 @@
                 [X (in-value (blob-data rows 4 16 11 dt))]
                 [init (in-list inits)]
                 [n-init (in-list '(1 3))]
-                [w (in-list (list #f (vec (cyclic-weights rows) dt)))]
+                [w (in-list (list #f (list->device-vector (cyclic-weights rows) #:dtype dt)))]
                 [reference (in-value (fitted X dt init n-init w 32768))]
                 [batch (in-list (list 7 100 (sub1 rows) rows))])
       (define name (format "~a ~a n-init ~a~a batch ~a" dt init n-init (if w " weighted" "") batch))
@@ -176,32 +170,43 @@
   (define grids
     (for*/list ([dt (in-list dtypes)]
                 [batch (in-list '(1 7 63 64))])
-      (define X (mat grid64 dt))
+      (define X (list*->device-matrix grid64 #:dtype dt))
       (define name (format "grid64 ~a batch ~a" dt batch))
       (define reference (fitted X dt 'random 1 #f 32768))
       (define (started)
-        (outcome (kmeans-fit X #:init (mat grid64-start dt))))
+        (outcome (kmeans-fit X #:init (list*->device-matrix grid64-start #:dtype dt))))
       (check-equal? (outcome (fitted X dt 'random 1 #f batch)) (outcome reference) name)
       (check-equal? (parameterize ([current-batch-samples batch])
                       (started))
                     (started)
                     (format "~a, start" name))
       (check-same-apply name dt (kmeans-result-centroids reference) X #f batch)))
-  (define spreads (append* (append (map third fits) grids)))
+  (define spreads
+    (append* (append (map (match-lambda
+                            [(list _ _ spread) spread])
+                          fits)
+                     grids)))
   (define (named verdict)
-    (for/list ([fit (in-list fits)]
-               #:when (eq? (second fit) verdict))
-      (first fit)))
+    (filter-map (match-lambda
+                  [(list name (== verdict) _) name]
+                  [_ #f])
+                fits))
   (printf
    "H13: largest relative centroid, inertia, distance or score deviation ~a; bit-identical: ~a\n"
-   (apply max 0.0 (map first spreads))
-   (andmap second spreads))
+   (apply max
+          0.0
+          (map (match-lambda
+                 [(list deviation _) deviation])
+               spreads))
+   (andmap (match-lambda
+             [(list _ identical?) identical?])
+           spreads))
   (printf "H13: fits that also change between runs at the default batch: ~a\n" (named 'unstable))
   (check-equal? (named 'departed) '()))
 
 (test-gpu "a parameterize, the keyword and the estimator's setting choose the same batch"
   (for ([dt (in-list dtypes)])
-    (define X (mat grid64 dt))
+    (define X (list*->device-matrix grid64 #:dtype dt))
     (define by-parameter
       (parameterize ([current-batch-samples 7])
         (kmeans-fit X #:n-clusters 4 #:init 'random #:random-state 2)))
@@ -220,7 +225,8 @@
       (define start (current-inexact-milliseconds))
       (thunk)
       (- (current-inexact-milliseconds) start)))
-  (second (sort times <)))
+  (match-define (list _ median _) (sort times <))
+  median)
 
 (test-gpu "the batch size is read when the procedure or the estimator is called"
   (define X (blob-data 65536 8 64 7 'float32))

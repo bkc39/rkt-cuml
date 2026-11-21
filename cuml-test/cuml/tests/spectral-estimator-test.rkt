@@ -18,13 +18,11 @@
          (only-in racket/list combinations make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-false check-not-equal? check-true test-case)
-         (only-in raft device-vector->list)
+         (only-in raft device-vector device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/capabilities.rkt" capabilities)
          (only-in "private/cuml-error.rkt" check-cuml-error)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options printed round-trips)
-         (only-in "private/kmeans-data.rkt" blank-vector)
          (only-in "private/spectral-data.rkt"
                   blobs
                   graph-labels
@@ -157,7 +155,7 @@
 
 (define (close-blobs-matrix)
   (define-values (rows _truth) (blobs 30 3 2 2.0 0))
-  (mat rows 'float32))
+  (list*->device-matrix rows #:dtype 'float32))
 
 (define (ways X options)
   (define base (spectral-clustering-params #:n-init 2 #:random-state 1))
@@ -222,10 +220,10 @@
   (check-cuml-error 'logic
                     "fit-predict: affinity: expected nearest-neighbors, got rbf"
                     (lambda () (fit-predict (spectral-clustering #:affinity 'rbf) X)))
-  (check-cuml-error 'logic
-                    "fit: spectral-clustering takes no sample-weight"
-                    (lambda ()
-                      (fit (spectral-clustering) X #:sample-weight (blank-vector 90 'float32))))
+  (check-cuml-error
+   'logic
+   "fit: spectral-clustering takes no sample-weight"
+   (lambda () (fit (spectral-clustering) X #:sample-weight (device-vector 90 #:dtype 'float32))))
   (check-cuml-error 'logic
                     "fit: spectral-clustering takes no sample-weight"
                     (lambda () (fit (spectral-clustering #:affinity 'rbf) 'X #:sample-weight 'w)))
@@ -234,4 +232,4 @@
                     (lambda ()
                       (fit-predict (spectral-clustering #:n-clusters 0)
                                    X
-                                   #:sample-weight (blank-vector 90 'float32)))))
+                                   #:sample-weight (device-vector 90 #:dtype 'float32)))))

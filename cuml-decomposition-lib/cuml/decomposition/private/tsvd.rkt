@@ -2,7 +2,7 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters boolean->int define-hyperparameters)
          (only-in racket/match match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
@@ -41,7 +41,7 @@
                                    (solver-code solver)
                                    tol
                                    iterations
-                                   (if with-transform 1 0))
+                                   (boolean->int with-transform))
   (match-define (list* components singular variance ratio transformed) (deposit->list out))
   (values (tsvd-result components variance ratio singular)
           (match transformed

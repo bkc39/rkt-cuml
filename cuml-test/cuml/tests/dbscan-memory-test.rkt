@@ -7,12 +7,12 @@
          (only-in racket/list make-list)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-pred check-true)
+         (only-in raft device-matrix device-vector list*->device-matrix list->device-vector)
          (only-in raft/private/foreign/memory buffer-drop-count release-failure-count)
          (only-in raft/private/job executor-threads jobs-live)
          (only-in raft/tests/private/collect collect-until settled-count)
          (only-in "private/cuml-error.rkt" raised)
-         (only-in "private/dbscan-data.rkt" distance-matrix integer-grid mat vec)
-         (only-in "private/kmeans-data.rkt" blank-matrix blank-vector)
+         (only-in "private/dbscan-data.rkt" distance-matrix integer-grid)
          (only-in "private/process-memory.rkt"
                   baseline-sample
                   device-growth
@@ -31,11 +31,11 @@
 
 (define (data)
   (define rows (map (lambda (r) (map add1 r)) (integer-grid n-samples 2 40 6)))
-  (list (mat rows 'float32)
-        (mat (distance-matrix (integer-grid 400 2 20 7)) 'float64)
-        (vec (for/list ([i (in-range n-samples)])
-               (add1 (modulo i 3)))
-             'float32)))
+  (list (list*->device-matrix rows #:dtype 'float32)
+        (list*->device-matrix (distance-matrix (integer-grid 400 2 20 7)) #:dtype 'float64)
+        (list->device-vector (for/list ([i (in-range n-samples)])
+                               (add1 (modulo i 3)))
+                             #:dtype 'float32)))
 
 (define (one-round X D w e)
   (dbscan-fit X #:eps 1.5 #:min-samples 4)
@@ -46,10 +46,10 @@
   (fit-predict e X))
 
 (define (refusals X)
-  (define zero-row (mat '((1 1) (2 2) (0 0)) 'float32))
-  (define wide-weights (blank-vector n-samples 'float64))
-  (define col-major (blank-matrix n-samples 2 'float32 #:layout 'col-major))
-  (define crashing (blank-matrix 150000 2 'float32))
+  (define zero-row (list*->device-matrix '((1 1) (2 2) (0 0)) #:dtype 'float32))
+  (define wide-weights (device-vector n-samples #:dtype 'float64))
+  (define col-major (device-matrix n-samples 2 #:dtype 'float32 #:layout 'col-major))
+  (define crashing (device-matrix 150000 2 #:dtype 'float32))
   (list (lambda () (dbscan-fit X #:eps 0))
         (lambda () (dbscan-fit X #:sample-weight wide-weights))
         (lambda () (dbscan-fit col-major))

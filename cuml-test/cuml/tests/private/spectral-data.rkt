@@ -5,13 +5,14 @@
                   spectral-clustering-fit-graph
                   spectral-clustering-result-labels)
          (only-in racket/flonum flsingle)
+         (only-in racket/function const)
          (only-in racket/list append* append-map list-set make-list range take)
-         (only-in racket/match match-lambda)
+         (only-in racket/match match-define match-lambda)
          (only-in racket/math pi)
-         (only-in raft device-vector->list list->device-vector)
+         (only-in raft device-vector->list list*->device-matrix list->device-vector)
          (only-in threading ~>)
-         (only-in "dbscan-data.rkt" mat same-partition? seeded)
-         (only-in "linkage-data.rkt" squared-distance))
+         (only-in "common-data.rkt" block-starts gaussian squared-distance)
+         (only-in "dbscan-data.rkt" same-partition? seeded))
 
 (provide (struct-out fit-case)
          (struct-out graph)
@@ -19,8 +20,8 @@
          circles
          clique-graph
          cliques
-         float32-rows
          edited-vectors
+         float32-rows
          graph->vectors
          graph-dense
          graph-edit
@@ -33,11 +34,11 @@
          knn-graph
          labels
          moons
+         past-sum
          permute-graph
          permute-rows
          planted
          planted?
-         repeat-each
          set-entry
          sparse-blocks
          three-blobs
@@ -52,6 +53,8 @@
 (struct graph (rows cols vals n) #:transparent)
 
 (struct fit-case (name data truth k options compare))
+
+(define past-sum (const (exact->inexact (expt 2 125))))
 
 (define (unit-edges edges n)
   (graph (append-map (match-lambda
@@ -92,9 +95,6 @@
 (define (planted? labels truth)
   (define all (range (length truth)))
   (same-partition? labels all truth all))
-
-(define (gaussian)
-  (* (sqrt (* -2.0 (log (- 1.0 (random))))) (cos (* 2.0 pi (random)))))
 
 (define (truth-of sizes)
   (append* (for/list ([s (in-list sizes)]
@@ -154,13 +154,6 @@
 (define (set-edge! edges i j w)
   (hash-set! edges (cons i j) w)
   (hash-set! edges (cons j i) w))
-
-(define (block-starts sizes)
-  (for/fold ([at 0]
-             [starts '()]
-             #:result (reverse starts))
-            ([s (in-list sizes)])
-    (values (+ at s) (cons at starts))))
 
 (define (sparse-blocks sizes p seed #:between [between 2] #:connected? [connected? #t])
   (define starts (block-starts sizes))
@@ -288,7 +281,7 @@
 
 (define (three-blobs-matrix #:n-each [n-each 100])
   (define-values (rows _truth) (three-blobs #:n-each n-each))
-  (mat rows 'float32))
+  (list*->device-matrix rows #:dtype 'float32))
 
 (define (three-blocks)
   (sparse-blocks '(30 40 50) 0.3 0))
@@ -297,7 +290,10 @@
   (map list (graph-rows g) (graph-cols g) (graph-vals g)))
 
 (define (entries->graph es n)
-  (graph (map car es) (map cadr es) (map caddr es) n))
+  (for/lists (rows cols vals #:result (graph rows cols vals n))
+             ([e (in-list es)])
+             (match-define (list i j v) e)
+             (values i j v)))
 
 (define (graph-upper g)
   (entries->graph (filter (match-lambda
@@ -315,8 +311,3 @@
                                     w))])
                        (entries g))
                   (graph-n g)))
-
-(define (repeat-each rows copies)
-  (for*/list ([r (in-list rows)]
-              [_ (in-range copies)])
-    r))

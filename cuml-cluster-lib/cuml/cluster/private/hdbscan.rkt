@@ -2,7 +2,7 @@
 
 (require (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/hyperparameters define-codes define-hyperparameters)
+         (only-in cuml/core/private/hyperparameters boolean->int define-codes define-hyperparameters)
          (only-in cuml/core/private/model deposit->native-model/who live-anchor/who)
          (only-in racket/match match-define match-define-values)
          (only-in raft current-device-resources)
@@ -97,7 +97,7 @@
                                   max-cluster-size
                                   alpha
                                   (cluster-selection-method-code cluster-selection-method)
-                                  (if allow-single-cluster 1 0)))
+                                  (boolean->int allow-single-cluster)))
   (match-define-values (model (list labels parents children lambdas sizes stabilities selected))
     (deposit->native-model/who who
                                'hdbscan

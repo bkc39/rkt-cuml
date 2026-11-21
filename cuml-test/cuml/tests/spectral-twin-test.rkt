@@ -5,11 +5,11 @@
          (only-in cuml/cluster/private/native libcuml-version)
          (only-in json json-null)
          (only-in racket/list count split-at)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match-define match-lambda)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
+         (only-in raft list*->device-matrix)
          (only-in threading cond~>)
-         (only-in "private/dbscan-data.rkt" mat)
          (only-in "private/estimator-data.rkt" apply-options)
          (only-in "private/python-env.rkt" run-twin test-twin twin-params)
          (only-in "private/spectral-data.rkt"
@@ -76,7 +76,7 @@
     (cond~> (hash-set (options-of s) 'n-clusters (fit-case-k s)) [graph? (hash-remove 'n-neighbors)]))
   (if graph?
       (apply-options graph-labels options (fit-case-data s))
-      (apply-options labels options (mat (fit-case-data s) 'float32))))
+      (apply-options labels options (list*->device-matrix (fit-case-data s) #:dtype 'float32))))
 
 (define (python-params s)
   (define o (options-of s))
@@ -154,7 +154,9 @@
    (count (lambda (s) (eq? (fit-case-compare s) 'partition)) gs))
   (printf "twin sklearn: ~a graphs; partitions agree in ~a\n"
           (length gs)
-          (count cadr graph-outcomes)))
+          (count (match-lambda
+                   [(list _ agree?) agree?])
+                 graph-outcomes)))
 
 (test-twin "cuml's SpectralClustering default parameters are spectral-clustering-params'"
   (match-define (hash-table ('results (list theirs)))

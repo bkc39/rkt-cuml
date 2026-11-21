@@ -9,8 +9,9 @@
          (only-in racket/match match-define)
          (only-in racket/math sqr)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" least-magnitude unit-roundoff unscaled)
          (only-in "private/pca-data.rkt"
                   axis-rows
                   column
@@ -30,7 +31,7 @@
                   over-bound
                   tie-rows
                   wide-fixture)
-         (only-in "private/scaler-data.rkt" bits-equal? rows->matrix scaled-rows unit-roundoff))
+         (only-in "private/scaler-data.rkt" bits-equal? scaled-rows))
 
 (define dtypes '(float32 float64))
 (define solvers '(full jacobi))
@@ -54,7 +55,7 @@
          [permutation (in-list '((0 1 2) (2 0 1) (1 2 0)))])
     (test-case (format "~a ~a ~a" dt solver permutation)
       (define rows (axis-rows 4.0 2.0 1.0 permutation))
-      (define X (rows->matrix rows dt))
+      (define X (list*->device-matrix rows #:dtype dt))
       (define result (pca-fit X #:solver solver))
       (match-define (fitted components variance _ _ mean) (fitted-of result))
       (check-true (bits-equal? components (permutation-matrix permutation)) "components")
@@ -109,7 +110,7 @@
 (test-gpu "the tie fixture's components take the first entry of largest magnitude positive"
   (for* ([dt (in-list dtypes)]
          [solver (in-list solvers)])
-    (define result (pca-fit (rows->matrix tie-rows dt) #:solver solver))
+    (define result (pca-fit (list*->device-matrix tie-rows #:dtype dt) #:solver solver))
     (match-define (fitted components _ _ _ _) (fitted-of result))
     (check-true (andmap positive? (first-max-entries components))
                 (format "~a ~a ~a" dt solver components))))
@@ -140,17 +141,9 @@
           (check-true (<= gap (/ (* 64 u largest) delta))
                       (format "k=~a: component ~a from the m-fit's, gap ~a" k gap delta)))))))
 
-(define (least-magnitude dt)
-  (if (eq? dt 'float32)
-      (expt 2 -149)
-      (expt 2 -1074)))
-
-(define (unscaled x by power)
-  (exact->inexact (/ (inexact->exact x) (expt (inexact->exact by) power))))
-
 (define (scaled-problems dt solver by)
-  (define unit-X (rows->matrix magnitude-rows dt))
-  (define small-X (rows->matrix (scaled-rows magnitude-rows by) dt))
+  (define unit-X (list*->device-matrix magnitude-rows #:dtype dt))
+  (define small-X (list*->device-matrix (scaled-rows magnitude-rows by) #:dtype dt))
   (define unit (pca-fit unit-X #:n-components 2 #:solver solver))
   (define small (pca-fit small-X #:n-components 2 #:solver solver))
   (match-define (fitted c (and v (list* first-variance _)) (and r (list* first-ratio _)) s mean)
@@ -177,9 +170,10 @@
       (* 8 u 3 (+ (abs m) sd))))
   (define T (device-matrix->list* (pca-transform unit unit-X)))
   (define T* (device-matrix->list* (pca-transform small small-X)))
-  (define I (device-matrix->list* (pca-inverse-transform unit (rows->matrix T dt))))
+  (define I (device-matrix->list* (pca-inverse-transform unit (list*->device-matrix T #:dtype dt))))
   (define I*
-    (device-matrix->list* (pca-inverse-transform small (rows->matrix (scaled-rows T by) dt))))
+    (device-matrix->list*
+     (pca-inverse-transform small (list*->device-matrix (scaled-rows T by) #:dtype dt))))
   (define total (/ first-variance first-ratio))
   (filter
    values

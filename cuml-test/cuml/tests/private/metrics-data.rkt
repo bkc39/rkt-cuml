@@ -16,18 +16,16 @@
          exact-r2
          four-blocks
          four-blocks-labels
+         grid-20
          host-ari
          host-counts
          label-pair
          labels
-         labels-of
-         mean
          median
          monotone-maps
          normals
          overlap
          overlap-labels
-         permute
          pow2-scaled
          projection
          r2-bound
@@ -42,9 +40,7 @@
          three-groups-labels
          tolerance
          wide-labels
-         wide-rows
-         worst
-         grid-20)
+         wide-rows)
 
 (define (seeded seed)
   (define g (make-pseudo-random-generator))
@@ -68,9 +64,6 @@
           (random k2 g)
           (modulo t k2))))
   (values truth found))
-
-(define (labels-of xs dt)
-  (list->device-vector xs #:dtype dt))
 
 (define (normals count seed)
   (define g (seeded seed))
@@ -208,9 +201,6 @@
       1
       (/ (- index expected) (- most expected))))
 
-(define (mean xs)
-  (/ (apply + xs) (length xs)))
-
 (define (median xs)
   (define sorted (sort xs <))
   (define n (length sorted))
@@ -219,12 +209,6 @@
      #:when (even? n)
      (/ (+ lo hi) 2)]
     [(cons middle _) middle]))
-
-(define (worst xs ys)
-  (for/fold ([w 0.0])
-            ([x (in-list xs)]
-             [y (in-list ys)])
-    (max w (abs (- x y)))))
 
 (define tolerances
   (hasheq 'score '(1e-6 1e-14)
@@ -245,11 +229,6 @@
     (for/list ([i (in-range n)])
       (cons (random g) i)))
   (map cdr (sort keyed < #:key car)))
-
-(define (permute xs order)
-  (define v (list->vector xs))
-  (for/list ([i (in-list order)])
-    (vector-ref v i)))
 
 (define (regression-pair n
                          #:offset offset

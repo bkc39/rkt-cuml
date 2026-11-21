@@ -10,10 +10,11 @@
          (only-in racket/list append*)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list* device-vector->list)
+         (only-in raft device-matrix->list* device-vector->list list*->device-matrix)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in "private/common-data.rkt" unit-roundoff worst)
          (only-in "private/pca-data.rkt" centred column fixture-name fixture-rows)
-         (only-in "private/scaler-data.rkt" round-to rows->matrix unit-roundoff)
+         (only-in "private/scaler-data.rkt" round-to)
          (only-in "private/tsvd-data.rkt"
                   accuracy-problems
                   exact
@@ -23,8 +24,7 @@
                   householder-fixtures
                   normal-rows-of
                   svd
-                  tsvd-of
-                  worst-difference))
+                  tsvd-of))
 
 (test-gpu "the fit is within c u F^2 of the Householder fixtures' exact SVD"
   (for* ([e (in-list householder-fixtures)]
@@ -34,7 +34,8 @@
     (match-define (exact f spectrum components) e)
     (test-case (format "~a ~a ~a k=~a" (fixture-name f) dt solver k)
       (define rows (fixture-rows f dt))
-      (define fitted (tsvd-of (tsvd-fit (rows->matrix rows dt) #:n-components k #:solver solver)))
+      (define fitted
+        (tsvd-of (tsvd-fit (list*->device-matrix rows #:dtype dt) #:n-components k #:solver solver)))
       (define c (if (eq? solver 'jacobi) 256 64))
       (check-equal?
        (first-problems
@@ -58,27 +59,25 @@
          [dt (in-list '(float32 float64))])
     (match-define (list n d k) shape)
     (test-case (format "~ax~a k=~a ~a" n d k dt)
-      (define X (rows->matrix (centred-rows (+ n d) n d dt) dt))
+      (define X (list*->device-matrix (centred-rows (+ n d) n d dt) #:dtype dt))
       (match-define (svd components variance ratio singular) (tsvd-of (tsvd-fit X #:n-components k)))
       (define pca (pca-fit X #:n-components k))
       (define pca-variance (device-vector->list (pca-result-explained-variance pca)))
       (define u (unit-roundoff dt))
       (define worst-component
-        (worst-difference (append* components)
-                          (append* (device-matrix->list* (pca-result-components pca)))))
+        (worst (append* components) (append* (device-matrix->list* (pca-result-components pca)))))
       (check-true (<= worst-component (if (eq? dt 'float32) 1e-5 1e-12))
                   (format "components ~a" worst-component))
       (define pca-singular (device-vector->list (pca-result-singular-values pca)))
       (match-define (cons largest-singular _) pca-singular)
-      (check-true (<= (worst-difference singular pca-singular) (* 64 u largest-singular))
+      (check-true (<= (worst singular pca-singular) (* 64 u largest-singular))
                   (format "singular values ~a vs ~a" singular pca-singular))
       (define scaled
         (for/list ([v (in-list pca-variance)])
           (/ (* v (- n 1)) n)))
       (match-define (cons largest-variance _) scaled)
-      (check-true (<= (worst-difference variance scaled) (* 128 u largest-variance))
+      (check-true (<= (worst variance scaled) (* 128 u largest-variance))
                   (format "variances ~a vs ~a" variance scaled))
-      (check-true
-       (<= (worst-difference ratio (device-vector->list (pca-result-explained-variance-ratio pca)))
-           (* 64 u))
-       "ratios"))))
+      (check-true (<= (worst ratio (device-vector->list (pca-result-explained-variance-ratio pca)))
+                      (* 64 u))
+                  "ratios"))))

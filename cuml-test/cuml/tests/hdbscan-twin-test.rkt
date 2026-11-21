@@ -13,8 +13,7 @@
          (only-in racket/match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
-         (only-in raft device-matrix->list*)
-         (only-in "private/dbscan-data.rkt" mat)
+         (only-in raft device-matrix->list* list*->device-matrix)
          (only-in "private/estimator-data.rkt" apply-options hash-remove*)
          (only-in "private/hdbscan-data.rkt"
                   alternate
@@ -104,8 +103,8 @@
         (cons 'weights fitted-weights)))
 
 (define (ours c)
-  (define X (mat (twin-case-rows c) 'float32))
-  (define points (mat (twin-case-points c) 'float32))
+  (define X (list*->device-matrix (twin-case-rows c) #:dtype 'float32))
+  (define points (list*->device-matrix (twin-case-points c) #:dtype 'float32))
   (define result (apply-options hdbscan-fit (twin-case-options c) X))
   (values (fit-lists result)
           (hasheq 'predicted (prediction->lists (hdbscan-approximate-predict result points))
@@ -145,7 +144,8 @@
       (define found
         (fitted-labels (fit-lists (apply-options hdbscan-fit
                                                  (twin-case-options c)
-                                                 (mat (twin-case-rows c) 'float32)))))
+                                                 (list*->device-matrix (twin-case-rows c)
+                                                                       #:dtype 'float32)))))
       (test-case (format "sklearn: ~a" (twin-case-name c))
         (check-equal? found (hash-ref theirs 'labels)))
       (equal? found (hash-ref theirs 'labels))))

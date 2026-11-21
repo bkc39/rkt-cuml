@@ -31,18 +31,8 @@
          (only-in datasets/core load-dataset-table)
          (only-in pict pict-height pict-width pict?)
          (only-in racket/function curry curryr)
-         (only-in racket/list
-                  count
-                  first
-                  group-by
-                  last
-                  make-list
-                  range
-                  remove-duplicates
-                  rest
-                  second
-                  third)
-         (only-in racket/match match-define)
+         (only-in racket/list count first group-by last make-list range remove-duplicates rest)
+         (only-in racket/match match-define match-lambda)
          (only-in racket/promise delay force)
          (only-in rackunit
                   check
@@ -57,6 +47,7 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
+         (only-in "private/common-data.rkt" mean)
          (only-in "private/guide-data.rkt"
                   blended
                   drawn?
@@ -66,7 +57,6 @@
                   painted
                   pixels
                   scaled-matrix)
-         (only-in "private/metrics-data.rkt" mean)
          (only-in "private/scaler-data.rkt" float32-roundoff transpose))
 
 (match-define (list* blue orange _) cluster-colors)
@@ -90,7 +80,14 @@
                       '((227 73 72) full4star 4star)
                       '((140 86 75) fulltriangleleft triangleleft)
                       '((23 190 207) full6star 6star)))
-  (check-equal? (~> (range 10) (map cluster-style _) (map second _) remove-duplicates length) 10)
+  (check-equal? (~> (range 10)
+                    (map cluster-style _)
+                    (map (match-lambda
+                           [(list _ shape _) shape])
+                         _)
+                    remove-duplicates
+                    length)
+                10)
   (check-exn #rx"^cluster-plot: label ids run from 0 to 9\n  label: 10"
              (lambda () (cluster-plot '(0 1) '(0 1) '(0 10)))))
 
@@ -280,7 +277,9 @@
   (check-equal? (length bands) 3)
   (check-true (for/and ([band (in-list bands)]
                         [next (in-list (rest bands))])
-                (< (second band) (first next)))))
+                (match-define (list _ high) band)
+                (match-define (list low _) next)
+                (< high low))))
 
 (test-gpu "the figures: DBSCAN's groups keep their numbers across the radii"
   (define eruptions (scaled-matrix 'faithful '("eruptions" "waiting")))
@@ -289,11 +288,12 @@
       (dbscan-fit eruptions #:eps eps #:min-samples 5)))
   (define (labels-in result)
     (device-vector->list (dbscan-result-labels result)))
-  (define groups (labels-in (third fits)))
+  (match-define (list _ _ middle _) fits)
+  (define groups (labels-in middle))
   (define matched
     (for/list ([result (in-list fits)])
       (matched-labels (labels-in result) groups)))
-  (define core (device-vector->list (dbscan-result-core-sample-indices (third fits))))
+  (define core (device-vector->list (dbscan-result-core-sample-indices middle)))
   (check-equal? (map (lambda (labels) (sort (remove-duplicates labels) <)) matched)
                 '((-1 0 1 2 3 4 5 6 7) (-1 0 1) (-1 0 1) (0)))
   (check-equal? (map (lambda (labels) (count negative? labels)) matched) '(126 25 8 0))
@@ -303,8 +303,9 @@
                            labels
                            (renumbered groups))))
                 '((71 42) (160 87) (168 96) (168 0)))
+  (match-define (list _ _ middle-matched _) matched)
   (check-equal? (count (lambda (label index) (and (>= label 0) (not (memv index core))))
-                       (third matched)
+                       middle-matched
                        (range (length groups)))
                 12))
 
@@ -367,14 +368,14 @@
   (define cultivar (chapter 'cultivar))
   (define truth (renumbered cultivar))
   (match-define (list xs ys) (columns-of projected))
-  (match-define (list one two three)
+  (match-define (list (list x1 y1) (list _ y2) (list x3 y3))
     (~> (map list truth xs ys)
         (group-by car _)
         (sort < #:key caar)
         (map (compose centre (curry map cdr)) _)))
-  (check > (first one) 0.0)
-  (check > 0.0 (first three))
-  (check < (second two) (min (second one) (second three)))
+  (check > x1 0.0)
+  (check > 0.0 x3)
+  (check < y2 (min y1 y3))
   (define clusterings
     (for/list ([samples (in-list (list (chapter 'scaled) projected))])
       (clusters-of (chapter 'clusterer) samples cultivar)))

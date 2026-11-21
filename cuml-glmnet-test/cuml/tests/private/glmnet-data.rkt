@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/tests/private/linear-data
+(require (only-in cuml/tests/private/exact-algebra inexact-rows)
+         (only-in cuml/tests/private/linear-data
                   by-dtype
                   lcase
                   lcase-name
@@ -60,10 +61,6 @@
 (define glmnet-max-iters 10000000)
 (define weight-scale 64)
 
-(define (flonum-rows rows)
-  (for/list ([row (in-list rows)])
-    (map exact->inexact row)))
-
 (define (narrowed-lr-case c dt)
   (define (narrowed row)
     (map (lambda (x) (inexact->exact (rounded dt x))) row))
@@ -94,7 +91,7 @@
   (match-define (struct* setting ([C C])) s)
   (define-values (rows labels total) (replicated X y w))
   (define r
-    (logistic-fit (flonum-rows rows)
+    (logistic-fit (inexact-rows rows)
                   labels
                   #:lambda (binomial-lambda C total)
                   #:alpha (setting-alpha s)
@@ -111,7 +108,7 @@
   (match-define (struct* setting ([C C])) s)
   (define-values (rows labels total) (replicated X y w))
   (define r
-    (multinomial-fit (flonum-rows rows)
+    (multinomial-fit (inexact-rows rows)
                      labels
                      #:lambda (binomial-lambda C total)
                      #:alpha (setting-alpha s)
@@ -122,7 +119,7 @@
   (values (lr-fit (~> r multinomial-result-coefficients vector->list (map vector->list _))
                   (vector->list (multinomial-result-intercepts r))
                   #f)
-          (multinomial-predict-proba r (flonum-rows X))))
+          (multinomial-predict-proba r (inexact-rows X))))
 
 (define (y-spread y w fi)
   (define weights (weights-or-ones w y))
@@ -138,7 +135,7 @@
   (define l1 (* alpha l1-ratio))
   (define lam (+ l1 (* (y-spread y w fi) alpha (- 1 l1-ratio))))
   (define r
-    (elnet-fit (flonum-rows rows)
+    (elnet-fit (inexact-rows rows)
                (map exact->inexact ys)
                #:lambda (exact->inexact lam)
                #:alpha (exact->inexact (/ l1 lam))
