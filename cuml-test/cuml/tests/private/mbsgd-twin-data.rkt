@@ -3,15 +3,13 @@
 (require (only-in cuml/linear-model mbsgd-classifier-fit mbsgd-regressor-fit)
          (only-in cuml/linear-model/private/native libcuml-version)
          (only-in racket/hash hash-union)
-         (only-in racket/list append*)
          racket/runtime-path
          (only-in racket/string string-replace)
-         (only-in threading ~>)
-         (only-in "common-data.rkt" bits-of on-vector)
+         (only-in "common-data.rkt" on-vector)
          (only-in "elastic-net-data.rkt" apply-keywords)
          (only-in "linear-data.rkt" on-matrix)
-         (only-in "linear-twin-data.rkt" decoded twin-results)
-         (only-in "mbsgd-data.rkt" clf-parts reg-parts))
+         (only-in "mbsgd-data.rkt" clf-parts reg-parts)
+         (only-in "python-env.rkt" bits->floats floats->bits matrix->bits twin-results))
 
 (provide clf-fit
          clf-result
@@ -76,9 +74,9 @@
   (overridden (hasheq 'op op
                       'dtype (symbol->string dt)
                       'n (length X)
-                      'X (bits-of dt (~> X append* (map exact->inexact _)))
+                      'X (matrix->bits dt X)
                       'y (if y
-                             (bits-of dt (map exact->inexact y))
+                             (floats->bits dt y)
                              'null)
                       'codes (or codes 'null)
                       'loss (python-value loss)
@@ -90,5 +88,5 @@
   (twin-results mbsgd-twin-script requests #:expected-cuml libcuml-version))
 
 (define (their-parts theirs dt)
-  (list (decoded dt (hash-ref theirs 'coef_bits))
-        (car (decoded dt (hash-ref theirs 'intercept_bits)))))
+  (list (bits->floats dt (hash-ref theirs 'coef_bits))
+        (car (bits->floats dt (hash-ref theirs 'intercept_bits)))))

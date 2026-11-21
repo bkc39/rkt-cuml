@@ -6,7 +6,7 @@
          racket/runtime-path
          (only-in rackunit check-equal?)
          (only-in raft device-matrix->list*)
-         (only-in "private/python-env.rkt" run-twin test-twin)
+         (only-in "private/python-env.rkt" test-twin twin-results)
          (only-in "private/table-data.rkt"
                   edge-values
                   edge-values32
@@ -44,14 +44,15 @@
 
 (define (twin-case->jsexpr c)
   (match-define (twin-case name t columns element-type) c)
-  (hasheq 'name name
+  (hasheq 'op "selection"
+          'name name
           'names columns
           'columns (apply map list (host-rows t columns))
           'dtype (symbol->string element-type)))
 
 (test-twin "every numeric selection and the JSON-safe edge values match pandas through cupy"
   (define all (cases))
-  (define theirs (hash-ref (run-twin twin (hasheq 'cases (map twin-case->jsexpr all))) 'cases))
+  (define theirs (twin-results twin (map twin-case->jsexpr all)))
   (check-equal? (map (lambda (their) (hash-ref their 'name)) theirs) (map twin-case-name all))
   (for ([c (in-list all)]
         [their (in-list theirs)])
