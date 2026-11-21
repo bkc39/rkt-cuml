@@ -1301,8 +1301,20 @@ Follow-ups are GitHub issues.
   the same problem up to a componentwise perturbation η = 4u of X and y
   (`mean-order-roundings`). Least squares moves c by at most
   η·κ·(2 + (κ + 1)·‖r‖/(‖X‖‖c‖)) relative to its size to first order
-  (Wedin), and the P1 cases have ‖r‖ ≤ ‖X‖‖c‖, so the twin holds float64
-  fits with an intercept to η·κ·(3 + κ)·`fit-size`. In float32 the final
+  (Wedin), in 2-norms with ‖ΔX‖₂ ≤ η‖X‖_F ≤ η√rank·‖X‖₂; the test
+  measures max|Δc| against `fit-size` ≥ max|c| ≥ ‖c‖₂/√d, so the norms cost
+  √rank·√d ≤ d. The P1 cases have ‖r‖ ≤ 0.058·‖X‖₂‖c‖₂ (exact, with an
+  intercept, so the premise ‖r‖ ≤ ‖X‖‖c‖ holds). The two cuML solves run
+  on those different inputs, so neither solve's own rounding cancels: each
+  adds its forward error, at worst the normal equations' u·κ²
+  (`solve-roundings` 2). The twin holds float64 fits with an intercept to
+  u·d·(η·κ·(3 + κ) + 2κ²)·`fit-size`. That law does not discriminate the
+  float64 centring: a constant error δⱼ in a centre enters c only at second
+  order (the centred columns and y sum to 0, so Xᵀ(δ_y·1) and the Gram's
+  cross terms vanish) and b within u·|x̄ⱼcⱼ| ≤ u·`fit-size`. A plain mean in
+  double (part 2's mutant shim) passes it on P1 and on P1's first case
+  offset by 2²⁰, so float64 centring is discriminated only by the offset
+  arms (`offset-law-arms`, the breast-cancer offset set). In float32 the final
   rounding to the dtype absorbs the two sums' last bits, and those fits are
   held bitwise, as is every fit without an intercept.
 - **L1-e, T4's intercept term (L3r, #111).** With an intercept every

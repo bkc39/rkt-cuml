@@ -87,6 +87,8 @@
 
 (define mean-order-roundings 4)
 
+(define solve-roundings 2)
+
 (define (check-cuml-parity dt)
   (define rows
     (for*/list ([c (in-list p1-cases)]
@@ -122,7 +124,13 @@
   (cond
     [(eq? c one-column) (list "one column, staged" (* 4 u kappa size))]
     [(and fi (eq? dt 'float64))
-     (list "float64 with an intercept, staged" (* mean-order-roundings u kappa (+ 3 kappa) size))]
+     (match-define (cons row _) (lcase-X c))
+     (define d (length row))
+     (list "float64 with an intercept, staged"
+           (* u
+              size
+              d
+              (+ (* mean-order-roundings kappa (+ 3 kappa)) (* solve-roundings kappa kappa))))]
     [else #f]))
 
 (module+ test
