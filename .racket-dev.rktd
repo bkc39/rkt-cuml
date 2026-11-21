@@ -17,6 +17,7 @@
   (no-raw-malloc  ("scripts/no-raw-malloc.sh" #:shell ""))
   (no-noqa        ("scripts/no-noqa.sh" #:shell ""))
   (gpu-suite-signals ("scripts/gpu-suite-signals.sh" #:shell ""))
+  (gate-constants ("scripts/gate-constants.sh" #:shell ""))
   (layout         "racket scripts/check-layout.rkt")
   (pkg-deps       "scripts/pkg-deps.sh cuml-core-lib cuml-cluster-lib cuml-decomposition-lib cuml-linear-model-lib cuml-manifold-lib cuml-metrics-lib cuml-preprocessing-lib cuml-lib cuml-doc cuml-test cuml-glmnet-test cuml")
   (review         "scripts/review.sh")
@@ -28,4 +29,4 @@
   (resyntax       "scripts/resyntax.sh")
   (docs           "scripts/render-docs.sh .scratch/docs")
   (check          "nix flake check --max-jobs 1 --cores 4"))
- (push-gates (format no-syntax-rule no-raw-malloc no-noqa gpu-suite-signals layout pkg-deps review compile test bindings)))
+ (push-gates (format no-syntax-rule no-raw-malloc no-noqa gpu-suite-signals gate-constants layout pkg-deps review compile test bindings)))

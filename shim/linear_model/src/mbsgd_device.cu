@@ -1,10 +1,15 @@
 #include <thrust/functional.h>
 #include <thrust/iterator/counting_iterator.h>
+#include <thrust/iterator/discard_iterator.h>
+#include <thrust/iterator/transform_iterator.h>
+#include <thrust/pair.h>
+#include <thrust/reduce.h>
 #include <thrust/transform_reduce.h>
 
 #include <cmath>
 #include <cstdint>
 #include <raft/core/handle.hpp>
+#include <rmm/device_uvector.hpp>
 #include <rmm/exec_policy.hpp>
 
 #include "cumlrkt/device.cuh"
@@ -67,6 +72,65 @@ inline __device__ double row_loss(int32_t loss, double y, double z) {
     }
   }
 }
+namespace {
+
+struct column_of {
+  int64_t n;
+
+  __device__ int64_t operator()(int64_t k) const {
+    return k / n;
+  }
+};
+
+template <typename T>
+struct by_column {
+  const T* v;
+  int64_t n;
+  int64_t d;
+  double centre;
+
+  __device__ thrust::pair<double, double> operator()(int64_t k) const {
+    const int64_t j = k / n;
+    const double m =
+        fabs(static_cast<double>(v[((k - (j * n)) * d) + j]) - centre);
+    return {m, m};
+  }
+};
+
+struct sum_and_max {
+  __device__ thrust::pair<double, double> operator()(
+      thrust::pair<double, double> a, thrust::pair<double, double> b) const {
+    return {a.first + b.first, fmax(a.second, b.second)};
+  }
+};
+
+struct max_and_max {
+  __device__ thrust::pair<double, double> operator()(
+      thrust::pair<double, double> a, thrust::pair<double, double> b) const {
+    return {fmax(a.first, b.first), fmax(a.second, b.second)};
+  }
+};
+
+}  // namespace
+
+template <typename T>
+magnitudes magnitudes_of(const raft::handle_t& handle, const T* v, int64_t n,
+                         int64_t d, double centre) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  const thrust::counting_iterator<int64_t> cells(0);
+  rmm::device_uvector<thrust::pair<double, double>> columns(d, stream);
+  thrust::reduce_by_key(
+      rmm::exec_policy(stream),
+      thrust::make_transform_iterator(cells, column_of{n}),
+      thrust::make_transform_iterator(cells + (n * d), column_of{n}),
+      thrust::make_transform_iterator(cells, by_column<T>{v, n, d, centre}),
+      thrust::make_discard_iterator(), columns.begin(),
+      thrust::equal_to<int64_t>{}, sum_and_max{});
+  const thrust::pair<double, double> all =
+      thrust::reduce(rmm::exec_policy(stream), columns.begin(), columns.end(),
+                     thrust::pair<double, double>{0.0, 0.0}, max_and_max{});
+  return {all.second, all.first};
+}
 
 template <typename T>
 double mean_loss(const raft::handle_t& handle, const T* x, const T* y,
@@ -110,6 +174,8 @@ void threshold_labels(const raft::handle_t& handle, const T* decision,
   template void code_targets<T>(const raft::handle_t&, const int32_t*,         \
                                 int64_t, bool, T*);                            \
   template double mean_of<T>(const raft::handle_t&, const T*, int64_t);        \
+  template magnitudes magnitudes_of<T>(const raft::handle_t&, const T*,        \
+                                       int64_t, int64_t, double);              \
   template double mean_loss<T>(const raft::handle_t&, const T*, const T*,      \
                                const T*, double, const objective_shape&);      \
   template void threshold_labels<T, int32_t>(const raft::handle_t&, const T*,  \

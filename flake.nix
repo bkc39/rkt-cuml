@@ -684,6 +684,7 @@
         no-raw-malloc = grepGate "no-raw-malloc" "no-raw-malloc.sh";
         no-noqa = grepGate "no-noqa" "no-noqa.sh";
         gpu-suite-signals = grepGate "gpu-suite-signals" "gpu-suite-signals.sh";
+        gate-constants = grepGate "gate-constants" "gate-constants.sh";
       };
 
       devShells.${system} = {

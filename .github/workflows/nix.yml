@@ -22,6 +22,7 @@ jobs:
           .#checks.x86_64-linux.no-raw-malloc
           .#checks.x86_64-linux.no-noqa
           .#checks.x86_64-linux.gpu-suite-signals
+          .#checks.x86_64-linux.gate-constants
           .#checks.x86_64-linux.line-count
           .#checks.x86_64-linux.racket-version
           .#checks.x86_64-linux.layout
