@@ -2,11 +2,10 @@
 
 (require (only-in racket/file copy-directory/files make-parent-directory*)
          (only-in racket/match match-define)
-         (only-in racket/port with-output-to-string)
          racket/runtime-path
-         (only-in racket/system system*)
-         (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
-         (only-in "../lint/private/modules.rkt" with-temporary-directory))
+         (only-in rackunit check-false check-regexp-match check-true test-case)
+         (only-in "../lint/private/modules.rkt" with-temporary-directory)
+         (only-in "private/gate-run.rkt" readable? run-gate test-unless-skipped))
 
 (define-runtime-path gate "no-twin-copies.sh")
 
@@ -14,21 +13,19 @@
 
 (define-runtime-path violations "fixtures/no-twin-copies/violations")
 
-(define (run-gate root)
-  (define ok? #f)
-  (define output
-    (with-output-to-string
-     (lambda ()
-       (parameterize ([current-error-port (current-output-port)])
-         (set! ok? (system* (find-executable-path "bash") gate (path->string root)))))))
-  (list ok? output))
+(define (gate-on root)
+  (run-gate gate (path->string root)))
 
-(define (with-clean-tree add)
+(define (call-with-clean-tree proc)
   (with-temporary-directory (root "no-twin-copies-~a")
                             (define tree (build-path root "tree"))
                             (copy-directory/files clean tree)
-                            (add tree)
-                            (run-gate tree)))
+                            (proc tree)))
+
+(define (with-clean-tree add)
+  (call-with-clean-tree (lambda (tree)
+                          (add tree)
+                          (gate-on tree))))
 
 (test-case "a clean tree passes, its host, json.dump, sys.argv[2] and pins in their homes"
   (match-define (list passed? output) (with-clean-tree void))
@@ -37,18 +34,19 @@
 
 (test-case "a root without cuml-test fails and says so"
   (match-define (list passed? output)
-    (with-temporary-directory (root "no-twin-copies-~a") (run-gate root)))
+    (with-temporary-directory (root "no-twin-copies-~a") (gate-on root)))
   (check-false passed? output)
   (check-regexp-match #rx"^no-twin-copies: no cuml-test under " output))
 
-(test-case "a file grep cannot read fails the gate"
-  (match-define (list passed? output)
-    (with-clean-tree (lambda (tree)
-                       (file-or-directory-permissions
-                        (build-path tree "cuml-test/cuml/tests/python/clean_twin.py")
-                        0))))
-  (check-false passed? output)
-  (check-regexp-match #rx"clean_twin.py: Permission denied" output))
+(call-with-clean-tree
+ (lambda (tree)
+   (define file (build-path tree "cuml-test/cuml/tests/python/clean_twin.py"))
+   (file-or-directory-permissions file 0)
+   (test-unless-skipped (and (readable? file) "the unreadable file reads (root?)")
+       "a file grep cannot read fails the gate"
+     (match-define (list passed? output) (gate-on tree))
+     (check-false passed? output)
+     (check-regexp-match #rx"clean_twin.py: Permission denied" output))))
 
 (define rows
   '(("def host( outside twin_common.py fails"
