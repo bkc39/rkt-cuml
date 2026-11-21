@@ -126,18 +126,17 @@
     [(and fi (eq? dt 'float64))
      (match-define (cons row _) (lcase-X c))
      (define d (length row))
-     (list "float64 with an intercept, staged"
-           (* u
-              size
-              d
-              (+ (* mean-order-roundings kappa (+ 3 kappa)) (* solve-roundings kappa kappa))))]
+     (list
+      "float64 with an intercept, staged"
+      (* u size d (+ (* mean-order-roundings kappa (+ 3 kappa)) (* solve-roundings kappa kappa))))]
     [else #f]))
 
 (module+ test
   (define (stub-gap c fi dt scale)
     (match-define (solution c* b _) (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi))
     (define fitted (list (map real->double-flonum c*) (real->double-flonum b)))
-    (define stub (list (map (lambda (x) (real->double-flonum (* scale x))) c*) (real->double-flonum b)))
+    (define stub
+      (list (map (lambda (x) (real->double-flonum (* scale x))) c*) (real->double-flonum b)))
     (match-define (list _ bound) (staged-law c fi dt fitted (kappa-of c fi)))
     (list (fit-gap fitted stub) bound))
   (for ([row (in-list '((#t float64 13/10 #f) (#t float64 1 #t)))])

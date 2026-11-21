@@ -206,10 +206,12 @@ zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
       allowance = column;
     }
   }
-  return {static_cast<double>(residual), static_cast<double>(allowance),
+  return {static_cast<double>(residual),
+          static_cast<double>(allowance),
           r.l1_ratio > 0 ? static_cast<double>(top / r.l1_ratio)
                          : std::numeric_limits<double>::infinity(),
-          static_cast<double>(curvature), static_cast<double>(binding),
+          static_cast<double>(curvature),
+          static_cast<double>(binding),
           static_cast<double>(sigma_y)};
 }
 

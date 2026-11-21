@@ -62,8 +62,7 @@
   (define coef (solution-coef o))
   (define b (solution-intercept o))
   (define exact (list coef b))
-  (define shift
-    (* 99/100 (coefficient-rounding exact) (+ (prediction-mass rows exact) (max-abs y))))
+  (define shift (* 99/100 (coefficient-rounding exact) (+ (prediction-mass rows exact) (max-abs y))))
   (define moved (list coef (+ b shift)))
   (check-true (< (prediction-gap rows y moved) (rounded-prediction-bound rows y moved))))
 
