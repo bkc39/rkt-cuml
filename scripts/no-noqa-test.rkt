@@ -1,8 +1,8 @@
 #lang racket/base
 
 (require (only-in racket/file find-files make-parent-directory*)
-         (only-in racket/path find-relative-path)
          (only-in racket/match match-define)
+         (only-in racket/path find-relative-path)
          racket/runtime-path
          (only-in rackunit check-equal? check-false check-regexp-match check-true test-case)
          (only-in "../lint/private/modules.rkt" with-temporary-directory)
@@ -43,25 +43,21 @@
   (check-true passed? output)
   (check-regexp-match #rx"^no-noqa: no new lint suppression" output))
 
-(call-with-repo-copy
- (lambda (root)
-   (define file (build-path root "lint/review.rkt"))
-   (file-or-directory-permissions file 0)
-   (test-unless-skipped (and (readable? file) "the unreadable file reads (root?)")
-       "a .rkt grep cannot read fails the gate"
-     (match-define (list passed? output) (gate-on root))
-     (check-false passed? output)
-     (check-regexp-match #rx"lint/review.rkt: Permission denied" output))))
+(call-with-repo-copy (lambda (root)
+                       (define file (build-path root "lint/review.rkt"))
+                       (file-or-directory-permissions file 0)
+                       (test-unless-skipped (and (readable? file) "the unreadable file reads (root?)")
+                                            "a .rkt grep cannot read fails the gate"
+                         (match-define (list passed? output) (gate-on root))
+                         (check-false passed? output)
+                         (check-regexp-match #rx"lint/review.rkt: Permission denied" output))))
 
 (define rows
   '(("a facade's whole-file review mark in another library module fails"
      "review-ignore.txt"
      "cuml-lib/cuml/other.rkt"
      #rx"cuml-lib/cuml/other.rkt:2: lint suppression: teach lint/review.rkt")
-    ("a whole-file review mark in a new info.rkt passes"
-     "review-ignore.txt"
-     "lint/sub/info.rkt"
-     #f)
+    ("a whole-file review mark in a new info.rkt passes" "review-ignore.txt" "lint/sub/info.rkt" #f)
     ("a line lint mark in an info.rkt fails"
      "lint-ignore.txt"
      "lint/sub/info.rkt"

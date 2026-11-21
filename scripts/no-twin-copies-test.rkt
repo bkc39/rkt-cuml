@@ -38,15 +38,15 @@
   (check-false passed? output)
   (check-regexp-match #rx"^no-twin-copies: no cuml-test under " output))
 
-(call-with-clean-tree
- (lambda (tree)
-   (define file (build-path tree "cuml-test/cuml/tests/python/clean_twin.py"))
-   (file-or-directory-permissions file 0)
-   (test-unless-skipped (and (readable? file) "the unreadable file reads (root?)")
-       "a file grep cannot read fails the gate"
-     (match-define (list passed? output) (gate-on tree))
-     (check-false passed? output)
-     (check-regexp-match #rx"clean_twin.py: Permission denied" output))))
+(call-with-clean-tree (lambda (tree)
+                        (define file (build-path tree "cuml-test/cuml/tests/python/clean_twin.py"))
+                        (file-or-directory-permissions file 0)
+                        (test-unless-skipped (and (readable? file)
+                                                  "the unreadable file reads (root?)")
+                                             "a file grep cannot read fails the gate"
+                          (match-define (list passed? output) (gate-on tree))
+                          (check-false passed? output)
+                          (check-regexp-match #rx"clean_twin.py: Permission denied" output))))
 
 (define rows
   '(("def host( outside twin_common.py fails"

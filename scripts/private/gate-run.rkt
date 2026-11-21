@@ -1,10 +1,11 @@
 #lang racket/base
 
-(require (only-in racket/port with-output-to-string)
+(require (for-syntax racket/base
+                     syntax/parse/pre)
+         (only-in racket/port with-output-to-string)
          (only-in racket/system system*)
          (only-in rackunit test-case)
-         (for-syntax racket/base)
-         syntax/parse/define)
+         (only-in syntax/parse/define define-syntax-parse-rule))
 
 (provide readable?
          run-gate
@@ -13,10 +14,10 @@
 (define (run-gate gate . arguments)
   (define ok? #f)
   (define output
-    (with-output-to-string
-     (lambda ()
-       (parameterize ([current-error-port (current-output-port)])
-         (set! ok? (apply system* (find-executable-path "bash") gate arguments))))))
+    (with-output-to-string (lambda ()
+                             (parameterize ([current-error-port (current-output-port)])
+                               (set! ok?
+                                     (apply system* (find-executable-path "bash") gate arguments))))))
   (list ok? output))
 
 (define (readable? file)
