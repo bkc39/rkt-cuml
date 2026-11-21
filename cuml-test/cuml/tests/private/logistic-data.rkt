@@ -22,6 +22,7 @@
          centred-vector
          coef-flat
          correct
+         cutoff-exn?
          cutoff-message
          decision-label
          default-setting
@@ -54,6 +55,9 @@
   (list default-setting (setting 'l1 1.0 #f) (setting 'elasticnet 0.5 0.5) (setting 'none 1.0 #f)))
 
 (define cutoff-message #rx"first-order residual .* above the bound")
+
+(define (cutoff-exn? e)
+  (and (exn:fail? e) (regexp-match? cutoff-message (exn-message e))))
 
 (define unequal-weights-message
   (string-append "sample-weight: weights with 3 or more classes must be equal on every row "

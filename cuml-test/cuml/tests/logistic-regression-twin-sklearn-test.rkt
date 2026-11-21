@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-decision-function)
-         (only-in racket/match match match-define)
+         (only-in racket/match match match-define struct*)
          (only-in rackunit check-true test-case)
          (only-in raft device-matrix->list*)
          (only-in "private/linear-data.rkt" by-dtype dtypes on-matrix)
@@ -40,7 +40,7 @@
     (twin-trial dt c s #t)))
 
 (define (request r)
-  (match-define (twin-trial dt c s _) r)
+  (match-define (struct* twin-trial ([dt dt] (case c) [setting s])) r)
   (setting-twin "sklearn-fit" c dt s #:tol (tight-tol dt)))
 
 (define (centre-coef? penalty)
@@ -54,7 +54,7 @@
 (test-twin "the fit is near sklearn's optimum and predicts its labels off the decision boundary"
   (for ([r (in-list rows)]
         [theirs (in-list (logistic-twin-results (map request rows)))])
-    (match-define (twin-trial dt c s _) r)
+    (match-define (struct* twin-trial ([dt dt] (case c) [setting s])) r)
     (define centred? (centre-coef? (setting-penalty s)))
     (test-case (format "~a ~a ~a" dt (lr-case-name c) (setting-penalty s))
       (define fitted (setting-fit c dt s #:tol (tight-tol dt) #:max-iter tight-max-iter))

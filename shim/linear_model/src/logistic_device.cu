@@ -152,6 +152,26 @@ struct staged_row {
 };
 
 template <typename T>
+struct centred_row {
+  const T* x;
+  row_selection rows;
+  const int64_t* kept;
+  int64_t p;
+  int64_t d;
+  const int* shift;
+  const double* mean;
+  T* out;
+
+  __device__ void operator()(int64_t o) const {
+    const int64_t r = o / p;
+    const int64_t q = o - (r * p);
+    const double v =
+        static_cast<double>(x[(source_row(rows, r) * d) + kept[q]]) - mean[q];
+    out[o] = static_cast<T>(ldexp(v, shift[q]));
+  }
+};
+
+template <typename T>
 struct staged_target {
   const int32_t* codes;
   const double* weights;
@@ -373,6 +393,15 @@ void staged_targets(const raft::handle_t& handle, const int32_t* codes,
 }
 
 template <typename T>
+void stage_centred_rows(const raft::handle_t& handle,
+                        const matrix<T, int64_t>& x, row_selection rows,
+                        const int64_t* kept, int64_t p, const int* shift,
+                        const double* mean, T* out) {
+  each(handle, rows.count * p,
+       centred_row<T>{x.data, rows, kept, p, x.d, shift, mean, out});
+}
+
+template <typename T>
 void params_to_coef(const raft::handle_t& handle, const T* params,
                     const int64_t* slot, int64_t d, int64_t k, int shift,
                     bool fit_intercept, int64_t p, T* coef, T* intercept) {
@@ -419,6 +448,9 @@ residual_sums residuals_of(const raft::handle_t& handle, const T* x, const T* y,
   template void stage_rows<T>(const raft::handle_t&,                           \
                               const matrix<T, int64_t>&, row_selection,        \
                               const int64_t*, int64_t, int, T*);               \
+  template void stage_centred_rows<T>(                                         \
+      const raft::handle_t&, const matrix<T, int64_t>&, row_selection,         \
+      const int64_t*, int64_t, const int*, const double*, T*);                 \
   template void staged_targets<T>(const raft::handle_t&, const int32_t*,       \
                                   const double*, double, row_selection, T*,    \
                                   T*);                                         \
