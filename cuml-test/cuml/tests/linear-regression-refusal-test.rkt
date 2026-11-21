@@ -4,19 +4,23 @@
          (only-in cuml/linear-model
                   linear-regression-fit
                   linear-regression-predict
-                  linear-regression-result)
-         (only-in racket/match match-define)
-         (only-in rackunit check-equal? test-case)
+                  linear-regression-result
+                  linear-regression-result-coef)
+         (only-in racket/match match-define match-lambda)
+         (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix device-matrix->list* device-vector device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
+         (only-in threading ~>)
          (only-in "private/blob-data.rkt" uniform-source)
-         (only-in "private/common-data.rkt" [on-vector vector])
+         (only-in "private/common-data.rkt" unit-roundoff [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/linear-data.rkt"
                   algorithms
                   dtypes
                   dyadic
                   lcase-X
+                  oracle-lstsq
+                  solution-coef
                   summed-case
                   wobble
                   [on-matrix matrix])
@@ -193,7 +197,7 @@
                       (uneven-weights 5003)
                       not-least-squares)
                 (list 'qr 'float64 (collinear-rows 60) #f not-least-squares)
-                (list 'qr 'float64 (collinear-rows 5003) (uneven-weights 5003) not-least-squares)
+                (list 'qr 'float64 (collinear-rows 20011) (uneven-weights 20011) not-least-squares)
                 (list 'qr 'float32 (one-hot-rows 400 4) #f (collinear-refusal 'qr))
                 (list 'svd-qr 'float32 (one-hot-rows 400 4) #f (collinear-refusal 'svd-qr))))])
     (match-define (list algorithm dt rows w refusal) fixture)
@@ -205,6 +209,25 @@
                                                  (vector (noisy-targets rows) dt)
                                                  #:sample-weight (and w (vector w dt))
                                                  #:algorithm algorithm))))))
+
+(test-gpu "float64 'qr fits 5003 weighted collinear rows with the effective coefficients of the two free columns"
+  (define rows (collinear-rows 5003))
+  (define y (noisy-targets rows))
+  (define w (uneven-weights 5003))
+  (define fitted
+    (~> (linear-regression-fit (matrix rows 'float64)
+                               (vector y 'float64)
+                               #:sample-weight (vector w 'float64)
+                               #:algorithm 'qr)
+        linear-regression-result-coef
+        device-vector->list))
+  (match-define (list a b ab) (map inexact->exact fitted))
+  (define free
+    (~> (oracle-lstsq (map (match-lambda [(list a b _) (list a b)]) rows) y w #t) solution-coef))
+  (for ([got (list (+ a ab) (+ b ab))]
+        [want (in-list free)])
+    (check-true (<= (abs (- got want)) (* 4 (unit-roundoff 'float64) (+ (abs a) (abs b) (abs ab))))
+                (format "effective ~a, least squares ~a" (exact->inexact got) (exact->inexact want)))))
 
 (test-gpu "X, y and w are unchanged after every fit"
   (for* ([dt (in-list dtypes)]
