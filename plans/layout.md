@@ -1308,7 +1308,12 @@ Follow-ups are GitHub issues.
   on those different inputs, so neither solve's own rounding cancels: each
   adds its forward error, at worst the normal equations' u·κ²
   (`solve-roundings` 2). The twin holds float64 fits with an intercept to
-  u·d·(η·κ·(3 + κ) + 2κ²)·`fit-size`. That law does not discriminate the
+  u·d·(η·κ·(3 + κ) + 2κ²)·`fit-size`. The 2κ² is a nominal constant for
+  the two solves, not a bound on them: a solve's forward error is u·κ²
+  only up to a constant its analysis leaves open, and 1 per solve is the
+  stated choice. The intercept is covered only because x̄ ≈ 0 on P1:
+  b = ȳ − x̄·c moves by Σⱼ|x̄ⱼ||Δcⱼ|, small against the bound there and not
+  covered for a design with a large x̄. That law does not discriminate the
   float64 centring: a constant error δⱼ in a centre enters c only at second
   order (the centred columns and y sum to 0, so Xᵀ(δ_y·1) and the Gram's
   cross terms vanish) and b within u·|x̄ⱼcⱼ| ≤ u·`fit-size`. A plain mean in
@@ -2227,8 +2232,9 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   the widest column's σσ_y instead, a column of spread 2⁻²⁰ and correlation
   0.9 beside an orthogonal column of spread 1 (float64, 1000 rows) was
   zeroed at α = λ_max·(1 − 1.48·10⁻⁷), where the lasso coefficient is
-  0.1397 (`elastic-net-alpha-max-test`). One double ulp below λ_max is
-  ρ·λ_max·u ≤ u·σⱼσ_y of the binding column j, inside its allowance. On wine
+  0.1397 (`elastic-net-alpha-max-test`). One double ulp below λ_max moves
+  ρ·λ_max by at most 2u·ρ·λ_max ≤ 2u·σⱼσ_y of the binding column j, inside
+  its allowance. On wine
   (alcohol on the other 12 columns, raw X), λ_max, glmnet's value
   163.64265023355625, one ulp either side and 2·λ_max return zeros in both
   dtypes, lasso and l1-ratio 1/2 (`elastic-net-alpha-max-test`; at 0c590cc
