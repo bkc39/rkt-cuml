@@ -67,10 +67,9 @@ as above, at unit spread) gives u·√κ′ ≥ 2@superscript{-8}, u the dtype's
 one-hot design and an intercept (@tt{plans/layout.md}, L2-l, has remedies). A coefficient fixed only
 by rows of low weight w is accurate to about u·√(w@subscript{max}/w), a loss the refusal misses.
 
-Weighted fits with an intercept can differ in the last bits between runs
-from about 2000 rows, as in Python cuML; unweighted fits, and fits without an
-intercept, repeat bitwise. @racket[X], @racket[y] and @racket[sample-weight]
-are not modified.
+Fits repeat bitwise, weighted or not; Python cuML's weighted fits with an
+intercept can differ in the last bits between runs from about 2000 rows.
+@racket[X], @racket[y] and @racket[sample-weight] are not modified.
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 1) (1 1) (2 1) (3 1)) #:dtype 'float64))
 (define yc (list->device-vector '(1 3 5 7) #:dtype 'float64))

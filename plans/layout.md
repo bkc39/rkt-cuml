@@ -1168,8 +1168,8 @@ Follow-ups are GitHub issues.
   most 2). The weights' power of four moves every e_j by the same integer,
   so κ̃ does not see it; D and c̃ do, and with them T1's
   max(max|c̃*| + C1, 1).
-  The laws are the earlier ones restated there, plus cuML's centring error
-  (the next bullet), C1 and C3 below:
+  The laws are the earlier ones restated there, plus the centring error
+  (cuML's or the shim's, the next two bullets), C1 and C3 below:
   - T1: max|c̃ − c̃*| ≤ 128·u·κ̃′²·max(max|c̃*| + C1, 1) + C1.
   - T3: the residual cosine is invariant under D, the weights' power and
     y's power, so only κ changes: ≤ 64·u·κ̃′·S + C3.
@@ -1188,7 +1188,9 @@ Follow-ups are GitHub issues.
   being 128·2⁻²⁴·389.6² = 1.16 in float32, so the halved fit sits at 0.43
   to 0.46 of it (unchanged by C1 and C3 below: the raw columns' means are
   within a few spreads of 0).
-- **L1-e, cuML's centring error (L3r, #111).** With an intercept cuML
+- **L1-e, cuML's centring error (L3r, #111).** Since #112 OLS centres in
+  the shim (next bullet), so this model now covers ridge (#161) and the
+  host simulations (`check-lstsq-fit #:means 'device`). With an intercept cuML
   centres the staged problem with its own means, x̂̄ⱼ = x̄ⱼ + εⱼ and
   ŷ̄ = ȳ + ε_y, bounded as T4 bounds them: |εⱼ| ≤ ε̄ⱼ = γ_h·Σw|xⱼ|/Σw and
   |ε_y| ≤ ε̄_y = γ_(h_y)·Σw|y|/Σw, h and h_y for raft's order and the row
@@ -1263,9 +1265,33 @@ Follow-ups are GitHub issues.
     2¹⁰ weighted on it passes materially wrong fits (0.9·c* at 0.62 of
     T3's bound at 2¹⁰ weighted, 0.15 at 2¹² unweighted, 0.04 at 2¹²
     weighted; review r3 M1). The device's means are far better than their
-    worst case; the bound does not assume so. A library fix (centre with
-    the shim's compensated v̄ + ρ, then call olsFit without an intercept)
-    removes the term; it is its own issue (#112).
+    worst case; the bound does not assume so. The library fix (#112, next
+    bullet) removes the term for OLS.
+- **L1-e, the shim's centring (#112).** OLS with an intercept, every
+  algorithm and both dtypes, stages X and y centred by the shim's
+  compensated means (`centres_of`: the planner's mean v̄ⱼ in double and
+  the spread pass's remainder ρⱼ; `target_centre` for y), each value
+  (v − v̄) − ρ rounded once to the dtype and uncounted rows 0
+  (`stage_centred`), calls olsFit without an intercept, and takes
+  b = 2^(−e_y)·((ȳ + ρ_y) − Σⱼ(v̄ⱼ + ρⱼ)·c̃ⱼ), summed in double in column
+  order and rounded once (`weighted_intercept`, CD's). The staged columns'
+  weighted means are then within ε̄ⱼ of 0, where, with MADⱼ = Σw|xⱼ − x̄ⱼ|/Σw
+  and h = `column_sum_roundings` (256 + 3 + ⌈⌈n/2048⌉/256⌉ + 8: 268 up to
+  2¹⁹ rows; `vector_reduce` for y is the one-column case):
+  ε̄ⱼ = u_T·MADⱼ + γ_(h+3)(u_d)·(MADⱼ + γ_h(u_d)·Σw|xⱼ|/Σw).
+  v̄ⱼ is a sum of h roundings, so |v̄ⱼ − x̄ⱼ| ≤ γ_h(u_d)·Σw|xⱼ|/Σw; ρⱼ sums
+  w(v − v̄) with the product, the sum and the division, so its error is at
+  most γ_(h+3)(u_d)·(MADⱼ + |v̄ⱼ − x̄ⱼ|), and v̄ⱼ + ρⱼ carries only that; the
+  final rounding moves each value by at most u_T·|v − x̄ⱼ|, whose weighted
+  mean is u_T·MADⱼ. ε̄_y is the same on y. `check-lstsq-fit` takes this ε̄
+  by default (`shim-mean-error`, `#:means 'shim`) in C1, C3 and κ̃′, and T4's
+  sum is Σw·(u·|b| + γ_(d+3)(u_d)·(|ȳ| + Σⱼ|x̄ⱼcⱼ|) + δ_y + Σⱼ δⱼ|cⱼ|), δ
+  being ε̄ less its u_T·MAD term: the host formula's d + 3 double
+  roundings, the final rounding of b, and the centres' double errors (the
+  staged values' rounding does not enter b). u_T·MADⱼ dominates, so ε̄ no longer grows with the
+  offset and C1 and C3 vanish against T1's and T3's first terms. Float64
+  takes the same path: its old centring was already near u·|x̄|, and one
+  code path is kept. Ridge keeps cuML's centring (#161).
 - **L1-e, T4's intercept term (L3r, #111).** With an intercept every
   algorithm returns b = ȳ − Σⱼ x̄ⱼcⱼ from its own c, x̄ and ȳ the weighted
   means, so for any c the T4 sum is Σᵢ wᵢ(yᵢ − b − xᵢ·c) = Σw·(ȳ − Σⱼ x̄ⱼcⱼ − b)
@@ -1338,38 +1364,27 @@ Follow-ups are GitHub issues.
   model (h = 17 is raft's medium kernel) and the 0.63 is an empirical
   margin; the case stands as the old term's discriminator, not as a
   consequence of the model.
-- **L1-e, the offset set (L3r, #111).** Breast-cancer with every column
-  plus a power of two, every algorithm, only on arms where the laws
-  discriminate: float32 at 2¹⁰ unweighted, and float64 at 2¹⁰, 2¹² and
-  2¹⁴, unweighted and weighted (`offset-law-arms`, shared by the GPU file
-  and the host mutation test). The host test takes the exact c* scaled by
-  0.9 with a consistent intercept on every kept arm and requires a law to
-  fail: T3 at 2.39 in float32; T1 at 4.6·10⁷ to 4.9·10⁷ and T3 at
-  3.3·10¹⁰ to 3.4·10¹⁰ in float64. It also requires, on every kept arm,
-  that a halved intercept fail T4 (1.0·10⁵ of its bound in float32,
-  3.7·10¹³ to 5.4·10¹³ in float64), and on every float64 arm that c*
-  moved by a tenth of ‖c̃*‖ along G̃'s bottom eigenvector fail T1
-  (4.8·10⁷ to 7.9·10⁷).
-  The kept float32 arm detects a coefficient error only through T3, in
-  the well-conditioned directions: 0.99·c* is 0.218 of T3's bound and c*
-  plus 1% along the top eigenvector, in raw units, 0.949. Along the
-  bottom eigenvector, changes up to about 5·‖c̃*‖ fall inside the model's
-  allowed error and pass all four laws: c* plus a tenth of ‖c̃*‖ is T1
-  0.011 and T3 4.3·10⁻⁴, plus 5·‖c̃*‖ T1 0.567 and T3 0.016. There T1's
-  bound is about 29 in staged units against a reachable worst case of
-  about 2.3 + 3.8: the cap (11.8) is 5 times the largest move the box
-  makes (2.28), and max|c̃*| + C1 counts C1 again, at 128·u·κ̃′² ≈ 1.17
-  (review r4 L2). Raw float32 fails at 5·‖c̃*‖ (4.47). The other float32
-  arms are out:
-  2¹⁰ weighted and 2¹² both weightings pass that mutation (above), so a
-  law check there would be vacuous, and acceptance-only smoke is not kept.
-  Float32 at 2¹⁴ is out too: unweighted, every fit is accepted under a
-  bound that cannot fail, and weighted, the shim refuses every algorithm
+- **L1-e, the offset set (L3r, #111; #112).** Breast-cancer with every
+  column plus a power of two, every algorithm, at 2¹⁰, 2¹² and 2¹⁴,
+  unweighted and weighted, in both dtypes (`offset-law-arms`, shared by the
+  GPU file and the host mutation test). The host test takes the exact c*
+  scaled by 0.9 with a consistent intercept on every arm and requires a law
+  to fail: T3 at 61.4 to 63.3 in float32; T1 at 4.6·10⁷ to 4.9·10⁷ and T3
+  at 3.3·10¹⁰ to 3.4·10¹⁰ in float64. It also requires, on every arm, that
+  a halved intercept fail T4 (1.7·10⁷ of its bound in float32, 7.1·10¹³ to
+  7.8·10¹³ in float64), and on every float64 arm that c* moved by a tenth
+  of ‖c̃*‖ along G̃'s bottom eigenvector fail T1 (4.8·10⁷ to 7.9·10⁷).
+  In float32 0.99·c* fails T3 at 6.1 to 6.3 on every arm. Along the
+  bottom eigenvector a tenth of ‖c̃*‖ passes every law, ‖c̃*‖ fails T1 on
+  the weighted arms (1.46 to 1.54) and passes unweighted, and 5·‖c̃*‖ fails
+  T1 on every arm (4.42 to 7.70): T1's κ̃² term is 128·u·κ̃² ≈ 1.16, so a
+  move of order ‖c̃*‖ in the worst-conditioned direction is inside the
+  model's allowed error. Under cuML's centring (before #112) the float32
+  arms but 2¹⁰ unweighted passed 0.9·c*, and the shim refused 2¹⁴ weighted
   by V13 (the eig solve: residual cosine 7.7·10⁻³ > 2⁻⁸), a sound problem
-  (κ̃ = 389) refused because cuML centres with its own float32 means. All
-  of them return under the library fix above (#112), once the
-  compensated centring makes ε̄ small enough for the laws to
-  discriminate.
+  (κ̃ = 389) refused because cuML centred with its own float32 means; the
+  compensated centring makes ε̄ small enough for the laws to discriminate
+  on every arm, and accepts 2¹⁴ weighted.
 - **L1-e, ordering.** The workspace bound (V7) is checked after staging is
   planned, so it follows the compacted row index, plan_staging's d-sized
   scratch, the column profiles and, for svd, a gesvdj info handle; all are
@@ -1457,7 +1472,10 @@ Follow-ups are GitHub issues.
   'eig differ by 1 ulp between runs; 1000 rows repeat), through raft
   `weightedMean` (L1-h); unweighted fits and fits without an intercept repeat.
   The bitwise laws B5–B8 keep weighted intercepted cases at ≤ 1000 rows, and
-  both Scribble entries say so.
+  both Scribble entries say so. Since #112 OLS centres with the shim's
+  means, whose reductions have a fixed order, so its weighted intercepted
+  fits repeat (`linear-regression-test`, 100000 weighted rows); ridge
+  still centres with raft's (#161).
 - **L2-h.** `define-predictor` in `cuml/private/estimator-support.rkt` is
   `define-estimator` with `#:needs-y`, the resources setting, predict and the
   weighted `r2-score` scorer from a predict `/who` (`r2-scorer`);
