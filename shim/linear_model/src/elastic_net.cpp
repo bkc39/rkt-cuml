@@ -64,9 +64,9 @@ zero_fit zero_fit_at(const raft::handle_t& handle, const fit_inputs<T>& in,
       zeroed<T>(static_cast<int64_t>(s.kept.size()), stream);
   const residual_terms terms = residual_moments(
       handle, in.x, in.y, in.w, rows, s, zeros.data(), plan.fit_intercept);
-  return zero_fit_of<T>(terms, weight_of(in, rows, stream),
-                        std::ldexp(request.alpha, 2 * shared), request.l1_ratio,
-                        rows.count);
+  return zero_fit_of<T>(terms, {weight_of(in, rows, stream),
+                                std::ldexp(request.alpha, 2 * shared),
+                                request.l1_ratio, rows.count});
 }
 
 template <typename T>
@@ -93,8 +93,9 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
   const kkt_terms k =
       kkt_of(terms, coef, weight, {alpha * ratio, alpha * (1 - ratio)}, epochs);
   require_kkt(k, n_iter, request.tol);
-  require_resolved<T>(k, n_iter, request.tol, largest, request.alpha,
-                      std::ldexp(zero.alpha_max, -2 * scale.shared));
+  require_resolved<T>(k, n_iter,
+                      {request.tol, largest, request.alpha,
+                       std::ldexp(zero.alpha_max, -2 * scale.shared)});
 }
 
 template <typename T>

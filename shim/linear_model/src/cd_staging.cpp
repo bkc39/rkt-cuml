@@ -167,9 +167,8 @@ kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
 // column_reduce count (plans/layout.md L3-p); 2u_T·α·l1 is the penalty's
 // rounding into T.
 template <typename T>
-zero_fit zero_fit_of(const residual_terms& t, double weight, double alpha,
-                     double l1_ratio, int64_t rows) {
-  const long double total = weight;
+zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
+  const long double total = r.weight;
   const long double sigma_y = std::sqrt(value_of(t.y_square) / total);
   long double cross = 0;
   long double spread = 0;
@@ -178,15 +177,15 @@ zero_fit zero_fit_of(const residual_terms& t, double weight, double alpha,
     spread = std::max(spread, std::sqrt(value_of(m.square) / total) * sigma_y);
   }
   const long double count =
-      (5.0L * static_cast<long double>(column_sum_roundings(rows))) +
+      (5.0L * static_cast<long double>(column_sum_roundings(r.rows))) +
       zero_residual_roundings;
   const long double u = unit_roundoff<double>;
-  const long double penalty = static_cast<long double>(alpha) * l1_ratio;
+  const long double penalty = static_cast<long double>(r.alpha) * r.l1_ratio;
   return {static_cast<double>(cross - penalty),
           static_cast<double>((count * u / (1 - (count * u)) * spread) +
                               (2 * unit_roundoff<T> * penalty)),
-          l1_ratio > 0 ? static_cast<double>(cross / l1_ratio)
-                       : std::numeric_limits<double>::infinity()};
+          r.l1_ratio > 0 ? static_cast<double>(cross / r.l1_ratio)
+                         : std::numeric_limits<double>::infinity()};
 }
 
 bool accepts_zero(const zero_fit& z) {
@@ -206,9 +205,8 @@ void require_kkt(const kkt_terms& k, int n_iter, double tol) {
 }
 
 template <typename T>
-void require_resolved(const kkt_terms& k, int n_iter, double tol,
-                      double largest, double alpha, double alpha_max) {
-  const bool over = !k.residual || *k.residual > std::max(k.bound, tol);
+void require_resolved(const kkt_terms& k, int n_iter, const unresolved_fit& f) {
+  const bool over = !k.residual || *k.residual > std::max(k.bound, f.tol);
   if (!over || k.allowance <= k.bound) {
     return;
   }
@@ -220,23 +218,23 @@ void require_resolved(const kkt_terms& k, int n_iter, double tol,
         "X: coordinate descent stopped after {} epochs with every coefficient "
         "under tol {} and KKT residual {} > tol, within {}'s rounding of the "
         "solve; lower tol below the largest coefficient ({}){}",
-        n_iter, printed(tol), residual, dtype,
-        printed<T>(static_cast<T>(largest)),
+        n_iter, printed(f.tol), residual, dtype,
+        printed<T>(static_cast<T>(f.largest)),
         narrow ? " or fit in float64" : ""));
   }
   const std::string cause =
-      std::isfinite(alpha_max)
+      std::isfinite(f.alpha_max)
           ? std::format(
                 "alpha {} is that close below alpha-max {}, from "
                 "which every coefficient is 0: raise alpha to "
                 "alpha-max or lower it",
-                printed(alpha), printed(alpha_max))
+                printed(f.alpha), printed(f.alpha_max))
           : std::string("lower alpha");
   throw logic_error(std::format(
       "X: coordinate descent stopped after {} epochs with KKT residual {} > "
       "tol and every coefficient (largest {}) under {}'s rounding of the "
       "solve, which no tol resolves; {}{}",
-      n_iter, residual, printed<T>(static_cast<T>(largest)), dtype, cause,
+      n_iter, residual, printed<T>(static_cast<T>(f.largest)), dtype, cause,
       narrow ? ", or fit in float64" : ""));
 }
 
@@ -286,13 +284,13 @@ template int cd_shared_cap<float>(const staging&, int64_t);
 template int cd_shared_cap<double>(const staging&, int64_t);
 template cd_scale<float> cd_scale_of<float>(const staging&, int64_t, double);
 template cd_scale<double> cd_scale_of<double>(const staging&, int64_t, double);
-template zero_fit zero_fit_of<float>(const residual_terms&, double, double,
-                                     double, int64_t);
-template zero_fit zero_fit_of<double>(const residual_terms&, double, double,
-                                      double, int64_t);
-template void require_resolved<float>(const kkt_terms&, int, double, double,
-                                      double, double);
-template void require_resolved<double>(const kkt_terms&, int, double, double,
-                                       double, double);
+template zero_fit zero_fit_of<float>(const residual_terms&,
+                                     const zero_request&);
+template zero_fit zero_fit_of<double>(const residual_terms&,
+                                      const zero_request&);
+template void require_resolved<float>(const kkt_terms&, int,
+                                      const unresolved_fit&);
+template void require_resolved<double>(const kkt_terms&, int,
+                                       const unresolved_fit&);
 
 }  // namespace cumlrkt::glm
