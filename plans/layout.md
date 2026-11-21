@@ -2142,7 +2142,11 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   the zero vector's KKT residual R̂ = maxⱼ|Ĉⱼ|/Ŵ − α′ρ, Ĉⱼ = x′ⱼᵀW(y′ − ȳ′)
   in the staged coordinates of V16 (`residual_moments` at b = 0, so the
   residual r is the centred y′ exactly as summed), α′ = α·4^s in double and
-  ρ the l1-ratio as given. When R̂ ≤ γ_k·maxⱼ σ̂ⱼσ̂_y + 2u_T·α′ρ it returns
+  ρ the l1-ratio as given. When every column j has
+  |Ĉⱼ|/Ŵ − α′ρ ≤ γ_k·σ̂ⱼσ̂_y + 2u_T·α′ρ, each column held to its own
+  spread (#109 r1: the maximum of the left side against the maximum
+  σ̂ⱼσ̂_y let a wide column's allowance zero a narrow binding column), it
+  returns
   b = 0, the intercept ȳ (v̄ + ρ_y, unstaged and rounded once to the dtype)
   and n-iter 1, the epoch cdFit reports for a zero fit; it does not call
   cdFit. The allowance is the residual's own error bound, in double's u:
@@ -2160,9 +2164,13 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
     (1354 up to 2¹⁹ rows, γ_k = 1.5·10⁻¹³);
   - 2u_T·α′ρ is α's and ρ's rounding into the dtype the solve runs in (and,
     in float64, the host's long-double products).
-  So the allowance is c·u·λ̄ with λ̄ = maxⱼ σⱼσ_y ≥ ρ·λ_max and c = k: the
-  error of a sum is relative to Σ|terms|, not to |Σ terms|, so no constant c
-  makes it c·u·λ_max; against λ_max, c is k/maxⱼ|corr(xⱼ, y)|. One double
+  So column j's allowance is c·u·σⱼσ_y with c = k: the error of a sum is
+  relative to Σ|terms|, not to |Σ terms|, so no constant c makes it
+  c·u·λ_max; against column j's own |Cⱼ|/W, c is k/|corr(xⱼ, y)|. Against
+  the widest column's σσ_y instead, a column of spread 2⁻²⁰ and correlation
+  0.9 beside an orthogonal column of spread 1 (float64, 1000 rows) was
+  zeroed at α = λ_max·(1 − 1.48·10⁻⁷), where the lasso coefficient is
+  0.1397 (`elastic-net-alpha-max-test`). One double
   ulp below λ_max is ρ·λ_max·u ≤ u·λ̄, inside the allowance. On wine
   (alcohol on the other 12 columns, raw X), λ_max, glmnet's value
   163.64265023355625, one ulp either side and 2·λ_max return zeros in both
@@ -2177,11 +2185,21 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   take ȳ from v̄ + ρ_y, rounded once, instead of cuML's mean accumulated
   in the dtype: one ulp in all 18 (wine float64 13.000617977528087 to
   13.00061797752809, float32 13.000618934631348 to 13.000617980957031).
-  V16b keeps "lower tol below the largest coefficient" only while its
+  V16b keeps "lower tol below the largest coefficient" while its
   allowance A < 1. From A ≥ 1 rounding alone moves the coefficients by
-  their own size, so no tol resolves them; the refusal names the cause
-  instead: α within that rounding below alpha-max (named), raise α to it or
-  lower it (or, in float32, fit in float64); "lower alpha" when ρ = 0.
+  their own size. Whether a lower tol can still help depends on where the
+  exact coefficients are: A·max|b′| is the solve's rounding in the
+  coefficients, and times κⱼ = max(σⱼ² + α′(1 − ρ), σⱼΣσ), the KKT
+  curvature of the column j that sets alpha-max, it is that rounding in the
+  gradient's units. When (α_max − α)·ρ, alpha-max's distance in the same
+  units, is within it, that is (α_max − α)/α_max ≤ A·max|b′|·κⱼ/(ρ·α′_max),
+  the exact coefficients are themselves under the rounding, so no tol
+  resolves them: the refusal names α and alpha-max, raise α to it or lower
+  it (or, in float32, fit in float64). Otherwise, and when ρ = 0, the exact
+  coefficients are larger than the rounding, and an early absolute stop is
+  what left them under it, so a lower tol can still grow them: the refusal
+  says the coefficients are under the dtype's rounding of the solve and
+  advises a lower tol or a lower alpha.
 - **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
   against lstsq at tol 1e-14).
 - **L3-d.** K is computed only when n-iter < max-iter and

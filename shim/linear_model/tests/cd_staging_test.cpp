@@ -260,7 +260,7 @@ TEST(CdCheck, AResidualAboveBWithAnAllowanceAboveBIsRefused) {
   const kkt_terms unresolved{over_residual, epoch_tol, 2 * epoch_tol};
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>(unresolved, epoch_iters,
-                                      {epoch_tol, epoch_largest, 1, 2});
+                                      {epoch_tol, epoch_largest, 1, 2, 0});
             }),
             "X: coordinate descent stopped after 4 epochs with every "
             "coefficient under tol 0.1 and KKT residual 0.15 > tol, within "
@@ -268,7 +268,7 @@ TEST(CdCheck, AResidualAboveBWithAnAllowanceAboveBIsRefused) {
             "coefficient (0.0625) or fit in float64");
   EXPECT_EQ(refusal_of([&] {
               require_resolved<double>(unresolved, epoch_iters,
-                                       {epoch_tol, epoch_largest, 1, 2});
+                                       {epoch_tol, epoch_largest, 1, 2, 0});
             }),
             "X: coordinate descent stopped after 4 epochs with every "
             "coefficient under tol 0.1 and KKT residual 0.15 > tol, within "
@@ -277,38 +277,73 @@ TEST(CdCheck, AResidualAboveBWithAnAllowanceAboveBIsRefused) {
   EXPECT_NE(refusal_of([&] {
               require_resolved<float>({std::nullopt, epoch_tol, 2 * epoch_tol},
                                       epoch_iters,
-                                      {epoch_tol, epoch_largest, 1, 2});
+                                      {epoch_tol, epoch_largest, 1, 2, 0});
             }),
             "accepted");
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>({over_residual, epoch_tol, epoch_tol},
                                       epoch_iters,
-                                      {epoch_tol, epoch_largest, 1, 2});
+                                      {epoch_tol, epoch_largest, 1, 2, 0});
             }),
             "accepted");
 }
 
-TEST(CdCheck, AnAllowanceOfOneOrMoreNamesAlphaMaxNotTol) {
+TEST(CdCheck, AnAllowanceOfOneOrMoreNamesAlphaMaxOnlyWithinItsRounding) {
   const kkt_terms unresolvable{over_residual, epoch_tol, 1};
+  const double rounding = std::ldexp(1.0, -10);
+  const double near = 2 * (1 - std::ldexp(1.0, -11));
   EXPECT_EQ(refusal_of([&] {
-              require_resolved<double>(unresolvable, epoch_iters,
-                                       {epoch_tol, epoch_largest, 1, 2});
+              require_resolved<double>(
+                  unresolvable, epoch_iters,
+                  {epoch_tol, epoch_largest, near, 2, rounding});
             }),
             "X: coordinate descent stopped after 4 epochs with KKT residual "
             "0.15 > tol and every coefficient (largest 0.0625) under "
-            "float64's rounding of the solve, which no tol resolves; alpha 1 "
-            "is that close below alpha-max 2, from which every coefficient is "
-            "0: raise alpha to alpha-max or lower it");
+            "float64's rounding of the solve, which no tol resolves; alpha "
+            "1.9990234375 is that close below alpha-max 2, from which every "
+            "coefficient is 0: raise alpha to alpha-max or lower it");
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<float>(
+                  unresolvable, epoch_iters,
+                  {epoch_tol, epoch_largest, 2 * (1 - rounding), 2, rounding});
+            }),
+            "X: coordinate descent stopped after 4 epochs with KKT residual "
+            "0.15 > tol and every coefficient (largest 0.0625) under "
+            "float32's rounding of the solve, which no tol resolves; alpha "
+            "1.998046875 is that close below alpha-max 2, from which every "
+            "coefficient is 0: raise alpha to alpha-max or lower it, or fit "
+            "in float64");
+}
+
+TEST(CdCheck, AnAllowanceOfOneOrMoreFarBelowAlphaMaxKeepsTheTolAdvice) {
+  const kkt_terms unresolvable{over_residual, epoch_tol, 1};
+  const double rounding = std::ldexp(1.0, -10);
+  const std::string far =
+      "X: coordinate descent stopped after 4 epochs with KKT residual 0.15 > "
+      "tol and every coefficient (largest 0.0625) under float64's rounding "
+      "of the solve; lower tol below the largest coefficient or lower alpha";
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<double>(
+                  unresolvable, epoch_iters,
+                  {epoch_tol, epoch_largest, 2 * (1 - (2 * rounding)), 2,
+                   rounding});
+            }),
+            far);
+  EXPECT_EQ(refusal_of([&] {
+              require_resolved<double>(unresolvable, epoch_iters,
+                                       {epoch_tol, epoch_largest, 1, 2, 0});
+            }),
+            far);
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>(
                   unresolvable, epoch_iters,
                   {epoch_tol, epoch_largest, 1,
-                   std::numeric_limits<double>::infinity()});
+                   std::numeric_limits<double>::infinity(), rounding});
             }),
             "X: coordinate descent stopped after 4 epochs with KKT residual "
             "0.15 > tol and every coefficient (largest 0.0625) under "
-            "float32's rounding of the solve, which no tol resolves; lower "
-            "alpha, or fit in float64");
+            "float32's rounding of the solve; lower tol below the largest "
+            "coefficient or lower alpha, or fit in float64");
 }
 
 residual_terms one_column(double cross) {
@@ -335,10 +370,34 @@ TEST(CdZeroFit, TheAllowanceIsTheResidualsRoundingBound) {
       zero_fit_of<double>(one_column(0.75), {4, 0.5, 0, rows}).alpha_max));
 }
 
+residual_terms wide_and_narrow() {
+  return {{moment{scaled_sum{1, 2}, scaled_sum{0, 0}},
+           moment{scaled_sum{1, -38}, scaled_sum{0.875, 2}}},
+          {1, 1},
+          {1, 42}};
+}
+
+TEST(CdZeroFit, EachColumnIsHeldToItsOwnSpread) {
+  const double gap = std::ldexp(1.0, -30);
+  const double alpha = 0.875 - gap;
+  const zero_fit z = zero_fit_of<double>(wide_and_narrow(), {4, alpha, 1, rows});
+  const double count =
+      (5.0 * static_cast<double>(column_sum_roundings(rows))) + 14;
+  const double u = std::ldexp(1.0, -53);
+  EXPECT_DOUBLE_EQ(z.residual, gap);
+  EXPECT_DOUBLE_EQ(z.allowance,
+                   (count * u / (1 - (count * u))) + (2 * u * alpha));
+  EXPECT_DOUBLE_EQ(z.alpha_max, 0.875);
+  EXPECT_FALSE(accepts_zero(z));
+  const residual_terms wide{
+      {moment{scaled_sum{1, 2}, scaled_sum{0.875, 2}}}, {1}, {1, 42}};
+  EXPECT_TRUE(accepts_zero(zero_fit_of<double>(wide, {4, alpha, 1, rows})));
+}
+
 TEST(CdZeroFit, ZerosAreAcceptedUpToTheAllowance) {
-  EXPECT_TRUE(accepts_zero({1e-14, 1e-14, 1}));
-  EXPECT_TRUE(accepts_zero({-1, 0, 1}));
-  EXPECT_FALSE(accepts_zero({std::nextafter(1e-14, 1.0), 1e-14, 1}));
+  EXPECT_TRUE(accepts_zero({1e-14, 1e-14, 1, 1}));
+  EXPECT_TRUE(accepts_zero({-1, 0, 1, 1}));
+  EXPECT_FALSE(accepts_zero({std::nextafter(1e-14, 1.0), 1e-14, 1, 1}));
 }
 
 TEST(CdCheck, AResidualWithinBIsAcceptedWhateverTheAllowance) {
@@ -346,12 +405,12 @@ TEST(CdCheck, AResidualWithinBIsAcceptedWhateverTheAllowance) {
                              kkt_terms{epoch_tol, epoch_tol, 2 * epoch_tol}}) {
     EXPECT_EQ(refusal_of([&] {
                 require_resolved<float>(k, epoch_iters,
-                                        {epoch_tol, epoch_largest, 1, 2});
+                                        {epoch_tol, epoch_largest, 1, 2, 0});
               }),
               "accepted");
     EXPECT_EQ(refusal_of([&] {
                 require_resolved<double>(k, epoch_iters,
-                                         {epoch_tol, epoch_largest, 1, 2});
+                                         {epoch_tol, epoch_largest, 1, 2, 0});
               }),
               "accepted");
   }
@@ -365,7 +424,7 @@ TEST(CdCheck, AResidualBetweenAFloat32RoundedBAndTolIsAccepted) {
   ASSERT_LT(residual, tol);
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>({residual, bound, 2 * bound}, epoch_iters,
-                                      {tol, epoch_largest, 1, 2});
+                                      {tol, epoch_largest, 1, 2, 0});
             }),
             "accepted");
 }
@@ -377,7 +436,7 @@ TEST(CdCheck, AResidualBetweenTolAndAFloat32RoundedBIsAccepted) {
   ASSERT_LT(tol, residual);
   EXPECT_EQ(refusal_of([&] {
               require_resolved<float>({residual, bound, 2 * bound}, epoch_iters,
-                                      {tol, epoch_largest, 1, 2});
+                                      {tol, epoch_largest, 1, 2, 0});
             }),
             "accepted");
 }

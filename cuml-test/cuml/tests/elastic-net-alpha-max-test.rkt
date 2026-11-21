@@ -2,8 +2,10 @@
 
 (require (only-in cuml/linear-model lasso-fit)
          (only-in math/flonum flnext flprev)
+         (only-in racket/flonum flsingle)
+         (only-in racket/list argmin make-list)
          (only-in racket/match match match-define struct*)
-         (only-in rackunit check-equal? check-true test-case)
+         (only-in rackunit check-equal? check-exn check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/elastic-net-data.rkt"
@@ -15,27 +17,33 @@
                   en-run-coef
                   positive-rows-of)
          (only-in "private/elastic-net-oracle.rkt" alpha-max en-problem host-kkt kkt problem-of)
-         (only-in "private/linear-data.rkt" lcase-X lcase-w lcase-y)
+         (only-in "private/linear-data.rkt" lcase lcase-X lcase-w lcase-y)
          (only-in "private/real-linear-data.rkt" real-lcase))
 
 (define glmnet-lambda-max 163.64265023355625)
 
-(define rows
-  '((1 alpha-max zeros) (1 glmnet zeros)
-                        (1 ulp-above zeros)
-                        (1 ulp-below zeros-or-fit)
-                        (1 twice zeros)
-                        (1 inside fit)
-                        (1/2 alpha-max zeros)
-                        (1/2 glmnet zeros)
-                        (1/2 ulp-above zeros)
-                        (1/2 ulp-below zeros-or-fit)
-                        (1/2 twice zeros)
-                        (1/2 inside fit)))
-
 (define inside-share 0.95)
 
+(define (expected point)
+  (match point
+    ['ulp-below 'zeros-or-fit]
+    ['inside 'fit]
+    [_ 'zeros]))
+
+(define rows
+  (for*/list ([setup (in-list '((unweighted #t) (weighted #t) (unweighted #f)))]
+              [r (in-list '(1 1/2))]
+              [point (in-list '(alpha-max glmnet ulp-above ulp-below twice inside))]
+              #:unless (and (eq? point 'glmnet) (not (equal? setup '(unweighted #t)))))
+    (match-define (list weighting fi) setup)
+    (list weighting fi r point (expected point))))
+
 (define early-zeros '((1 9/10) (1/2 9/10)))
+
+(define (wine dt weighting fi r)
+  (define c (real-lcase 'wine (cons 'raw weighting) dt))
+  (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) fi))
+  (values c p (exact->inexact (alpha-max p r))))
 
 (define (point-alpha point top r)
   (match point
@@ -46,30 +54,46 @@
     ['twice (* 2 top)]
     ['inside (* inside-share top)]))
 
-(define (fit-at c dt r alpha)
-  (define options (hasheq '#:alpha alpha '#:tol default-tol))
+(define (zeros-like xs)
+  (make-list (length xs) 0.0))
+
+(define (fit-at c dt r fi alpha)
+  (define-values (key value)
+    (if (= r 1)
+        (values '#:fit lasso-fit)
+        (values '#:l1-ratio r)))
   (apply-keywords en-case-fit
-                  (if (= r 1)
-                      (hash-set options '#:fit lasso-fit)
-                      (hash-set options '#:l1-ratio r))
+                  (hasheq '#:alpha alpha '#:fit-intercept fi '#:tol default-tol key value)
                   (list c dt)))
+
+(define (single-step x k)
+  (floating-point-bytes->real
+   (integer->integer-bytes (+ k (integer-bytes->integer (real->floating-point-bytes x 4) #t)) 4 #t)))
+
+(define (correctly-rounded dt q)
+  (define near (real->double-flonum q))
+  (match dt
+    [_ #:when (zero? q) 0.0]
+    ['float64 near]
+    ['float32
+     (define s (flsingle near))
+     (argmin (lambda (v) (abs (- (inexact->exact v) q)))
+             (list (single-step s -1) s (single-step s 1)))]))
 
 (define (check-zeros dt p run)
   (match-define (struct* en-run ([coef coef] [intercept b])) run)
   (match-define (struct* en-problem ([my my])) p)
-  (check-equal? coef (map (lambda (_) 0.0) coef))
-  (check-true (<= (abs (- (inexact->exact b) my)) (* 2 (inexact->exact (unit-roundoff dt)) (abs my)))
-              (format "intercept ~a, weighted mean ~a" b (exact->inexact my))))
+  (check-equal? coef (zeros-like coef))
+  (check-equal? b (correctly-rounded dt my)))
 
 (test-gpu "wine lasso and elastic net at and past alpha-max return zeros and the mean, never a refusal"
   (for* ([dt (in-list '(float32 float64))]
          [row (in-list rows)])
-    (match-define (list r point expect) row)
-    (define c (real-lcase 'wine '(raw . unweighted) dt))
-    (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
-    (define alpha (point-alpha point (exact->inexact (alpha-max p r)) r))
-    (test-case (format "~a l1-ratio ~a ~a alpha ~a" dt r point alpha)
-      (define run (fit-at c dt r alpha))
+    (match-define (list weighting fi r point expect) row)
+    (define-values (c p top) (wine dt weighting fi r))
+    (define alpha (point-alpha point top r))
+    (test-case (format "~a ~a fit-intercept ~a l1-ratio ~a ~a alpha ~a" dt weighting fi r point alpha)
+      (define run (fit-at c dt r fi alpha))
       (define zeros? (andmap zero? (en-run-coef run)))
       (match expect
         ['zeros (check-zeros dt p run)]
@@ -83,12 +107,11 @@
   (for* ([dt (in-list '(float32 float64))]
          [row (in-list early-zeros)])
     (match-define (list r share) row)
-    (define c (real-lcase 'wine '(raw . unweighted) dt))
-    (define p (problem-of (lcase-X c) (lcase-y c) (lcase-w c) #t))
-    (define alpha (* (exact->inexact share) (exact->inexact (alpha-max p r))))
+    (define-values (c p top) (wine dt 'unweighted #t r))
+    (define alpha (* (exact->inexact share) top))
     (match-define (kkt K B A)
       (host-kkt p
-                (map (lambda (_) 0.0) (car (lcase-X c)))
+                (zeros-like (car (lcase-X c)))
                 alpha
                 r
                 default-tol
@@ -96,3 +119,43 @@
                 (positive-rows-of c)
                 (unit-roundoff dt)))
     (check-true (> K (+ B A)) (format "~a l1-ratio ~a: residual ~a, bound ~a" dt r K (+ B A)))))
+
+(test-gpu "float32 just past the zero test's reach below alpha-max is refused as within the solve's rounding of it"
+  (for ([r (in-list '(1 1/2))])
+    (define-values (c _p top) (wine 'float32 'unweighted #t r))
+    (define alpha (* top (- 1 (expt 2.0 -20))))
+    (test-case (format "l1-ratio ~a alpha ~a" r alpha)
+      (check-exn #rx"under float32's rounding of the solve, which no tol resolves; alpha [0-9.]+ is that close below alpha-max [0-9.]+, from which every coefficient is 0: raise alpha to alpha-max or lower it, or fit in float64$"
+                 (lambda () (fit-at c 'float32 r #t alpha))))))
+
+(define narrow-spread (expt 2 -20))
+
+(define (narrow-binding-case)
+  (define a (inexact->exact (+ 0.9 (sqrt 0.19))))
+  (define b (inexact->exact (- 0.9 (sqrt 0.19))))
+  (define pattern `((1 1 ,a) (1 -1 ,b) (-1 1 ,(- a)) (-1 -1 ,(- b))))
+  (define table
+    (for*/list ([_ (in-range 250)]
+                [row (in-list pattern)])
+      row))
+  (lcase "a narrow column with correlation 0.9 beside a wide orthogonal one"
+         (for/list ([row (in-list table)])
+           (match-define (list u v _) row)
+           (list (* narrow-spread u) v))
+         (for/list ([row (in-list table)])
+           (match-define (list _ _ y) row)
+           y)
+         #f))
+
+(test-gpu "a narrow column just inside alpha-max is fitted, not zeroed by a wide column's allowance"
+  (define c (narrow-binding-case))
+  (define p (problem-of (lcase-X c) (lcase-y c) #f #t))
+  (define top (alpha-max p 1))
+  (define alpha (* (exact->inexact top) (- 1 1.48e-7)))
+  (define run (fit-at c 'float64 1 #t alpha))
+  (match-define (list narrow wide) (en-run-coef run))
+  (define fitted (/ (- top (inexact->exact alpha)) (* narrow-spread narrow-spread)))
+  (check-true (< (abs (- (inexact->exact narrow) fitted)) (* 1/100 fitted))
+              (format "narrow coefficient ~a, expected ~a" narrow (exact->inexact fitted)))
+  (check-equal? wide 0.0)
+  (check-kkt-laws p run alpha 1 default-tol (positive-rows-of c) (unit-roundoff 'float64)))

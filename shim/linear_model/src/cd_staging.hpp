@@ -48,6 +48,7 @@ struct zero_fit {
   double residual;
   double allowance;
   double alpha_max;
+  double curvature;
 };
 
 template <typename T>
@@ -78,6 +79,7 @@ struct unresolved_fit {
   double largest;
   double alpha;
   double alpha_max;
+  double alpha_rounding;
 };
 
 template <typename T>

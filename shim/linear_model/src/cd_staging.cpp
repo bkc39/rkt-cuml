@@ -30,7 +30,7 @@ constexpr int32_t most_cd_rows = std::numeric_limits<int32_t>::max();
 constexpr int moment_sum_guard_bits = 6;
 constexpr int label_sum_guard_bits = 4;
 constexpr long double coefficient_rounding = 2;
-constexpr long double zero_residual_roundings = 14;
+constexpr long double roundings_besides_the_sums = 14;
 
 int half_floor(int x) {
   return even_floor(x) / 2;
@@ -84,6 +84,11 @@ void refuse_alpha(double alpha, int64_t rows, int shared) {
       std::format("alpha: expected at most {} for this X in {}, got {}",
                   printed(accepted_alpha_bound<T>(rows, shared)),
                   raftrkt::dtype_name(raftrkt::dtype_code<T>), printed(alpha)));
+}
+
+std::string stopped_after(int n_iter) {
+  return std::format("X: coordinate descent stopped after {} epochs with ",
+                     n_iter);
 }
 
 }  // namespace
@@ -163,29 +168,47 @@ kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
                           (coefficient_rounding + gradient))};
 }
 
-// γ_(5h+14)·max_j σ_jσ_y bounds the double residual's error, h the
-// column_reduce count (plans/layout.md L3-p); 2u_T·α·l1 is the penalty's
-// rounding into T.
 template <typename T>
 zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
   const long double total = r.weight;
   const long double sigma_y = std::sqrt(value_of(t.y_square) / total);
-  long double cross = 0;
-  long double spread = 0;
-  for (const moment& m : t.moments) {
-    cross = std::max(cross, std::abs(value_of(m.cross)) / total);
-    spread = std::max(spread, std::sqrt(value_of(m.square) / total) * sigma_y);
-  }
   const long double count =
       (5.0L * static_cast<long double>(column_sum_roundings(r.rows))) +
-      zero_residual_roundings;
+      roundings_besides_the_sums;
   const long double u = unit_roundoff<double>;
+  const long double gamma = count * u / (1 - (count * u));
   const long double penalty = static_cast<long double>(r.alpha) * r.l1_ratio;
-  return {static_cast<double>(cross - penalty),
-          static_cast<double>((count * u / (1 - (count * u)) * spread) +
-                              (2 * unit_roundoff<T> * penalty)),
-          r.l1_ratio > 0 ? static_cast<double>(cross / r.l1_ratio)
-                         : std::numeric_limits<double>::infinity()};
+  const long double penalty_rounding = 2 * unit_roundoff<T> * penalty;
+  const long double l2 = static_cast<long double>(r.alpha) * (1 - r.l1_ratio);
+  long double sigmas = 0;
+  for (const moment& m : t.moments) {
+    sigmas += std::sqrt(value_of(m.square) / total);
+  }
+  long double top = 0;
+  long double curvature = 0;
+  long double residual = -penalty;
+  long double allowance = penalty_rounding;
+  long double margin = -std::numeric_limits<long double>::infinity();
+  for (const moment& m : t.moments) {
+    const long double cross = std::abs(value_of(m.cross)) / total;
+    const long double spread =
+        std::sqrt(value_of(m.square) / total) * sigma_y;
+    const long double column = (gamma * spread) + penalty_rounding;
+    if (cross > top) {
+      const long double sigma = std::sqrt(value_of(m.square) / total);
+      top = cross;
+      curvature = std::max((sigma * sigma) + l2, sigma * sigmas);
+    }
+    if (cross - penalty - column > margin) {
+      margin = cross - penalty - column;
+      residual = cross - penalty;
+      allowance = column;
+    }
+  }
+  return {static_cast<double>(residual), static_cast<double>(allowance),
+          r.l1_ratio > 0 ? static_cast<double>(top / r.l1_ratio)
+                         : std::numeric_limits<double>::infinity(),
+          static_cast<double>(curvature)};
 }
 
 bool accepts_zero(const zero_fit& z) {
@@ -196,11 +219,10 @@ void require_kkt(const kkt_terms& k, int n_iter, double tol) {
   const double bound = k.bound + k.allowance;
   if (!k.residual || *k.residual > bound) {
     throw logic_error(std::format(
-        "X: coordinate descent stopped after {} epochs with every coefficient "
-        "under tol {} and KKT residual {} > {}; tol is absolute in the "
-        "coefficients' units, so scale y up or X down",
-        n_iter, printed(tol), k.residual ? printed(*k.residual) : "nan",
-        printed(bound)));
+        "{}every coefficient under tol {} and KKT residual {} > {}; tol is "
+        "absolute in the coefficients' units, so scale y up or X down",
+        stopped_after(n_iter), printed(tol),
+        k.residual ? printed(*k.residual) : "nan", printed(bound)));
   }
 }
 
@@ -213,28 +235,29 @@ void require_resolved(const kkt_terms& k, int n_iter, const unresolved_fit& f) {
   constexpr bool narrow = std::is_same_v<T, float>;
   const std::string dtype = raftrkt::dtype_name(raftrkt::dtype_code<T>);
   const std::string residual = k.residual ? printed(*k.residual) : "nan";
+  const std::string largest = printed<T>(static_cast<T>(f.largest));
   if (k.allowance < 1) {
     throw logic_error(std::format(
-        "X: coordinate descent stopped after {} epochs with every coefficient "
-        "under tol {} and KKT residual {} > tol, within {}'s rounding of the "
-        "solve; lower tol below the largest coefficient ({}){}",
-        n_iter, printed(f.tol), residual, dtype,
-        printed<T>(static_cast<T>(f.largest)),
+        "{}every coefficient under tol {} and KKT residual {} > tol, within "
+        "{}'s rounding of the solve; lower tol below the largest coefficient "
+        "({}){}",
+        stopped_after(n_iter), printed(f.tol), residual, dtype, largest,
         narrow ? " or fit in float64" : ""));
   }
-  const std::string cause =
-      std::isfinite(f.alpha_max)
-          ? std::format(
-                "alpha {} is that close below alpha-max {}, from "
-                "which every coefficient is 0: raise alpha to "
-                "alpha-max or lower it",
-                printed(f.alpha), printed(f.alpha_max))
-          : std::string("lower alpha");
+  const bool near = std::isfinite(f.alpha_max) &&
+                    (f.alpha_max - f.alpha) / f.alpha_max <= f.alpha_rounding;
+  const std::string advice =
+      near ? std::format(
+                 ", which no tol resolves; alpha {} is that close below "
+                 "alpha-max {}, from which every coefficient is 0: raise "
+                 "alpha to alpha-max or lower it",
+                 printed(f.alpha), printed(f.alpha_max))
+           : std::string("; lower tol below the largest coefficient or lower "
+                         "alpha");
   throw logic_error(std::format(
-      "X: coordinate descent stopped after {} epochs with KKT residual {} > "
-      "tol and every coefficient (largest {}) under {}'s rounding of the "
-      "solve, which no tol resolves; {}{}",
-      n_iter, residual, printed<T>(static_cast<T>(f.largest)), dtype, cause,
+      "{}KKT residual {} > tol and every coefficient (largest {}) under {}'s "
+      "rounding of the solve{}{}",
+      stopped_after(n_iter), residual, largest, dtype, advice,
       narrow ? ", or fit in float64" : ""));
 }
 
