@@ -58,20 +58,41 @@
 (define fixtures (hasheq 'a '(1.0)))
 
 (define run-rows
-  `(("no fixtures sends only the cases" #f #f ,(hasheq 'cases requests) passed)
-    ("the fixtures reach the request" ,fixtures
-                                      #f
-                                      ,(hasheq 'cases requests 'fixtures fixtures)
-                                      passed)
-    ("the native libcuml given is checked" #f "26.10.00" ,(hasheq 'cases requests) ,native)))
+  `(((name . "no fixtures sends only the cases") (version . ,pinned)
+                                                 (fixtures . #f)
+                                                 (expected . #f)
+                                                 (request . ,(hasheq 'cases requests))
+                                                 (outcome . passed))
+    ((name . "the fixtures reach the request") (version . ,pinned)
+                                               (fixtures . ,fixtures)
+                                               (expected . #f)
+                                               (request . ,(hasheq 'cases requests
+                                                                   'fixtures fixtures))
+                                               (outcome . passed))
+    ((name . "the native libcuml given is checked") (version . ,pinned)
+                                                    (fixtures . #f)
+                                                    (expected . "26.10.00")
+                                                    (request . ,(hasheq 'cases requests))
+                                                    (outcome . ,native))
+    ((name . "an unpinned twin fails without a native libcuml") (version . ,unpinned)
+                                                                (fixtures . #f)
+                                                                (expected . #f)
+                                                                (request . ,(hasheq 'cases requests))
+                                                                (outcome . ,pin))))
 
 (for ([row (in-list run-rows)])
-  (match-define (list name sent-fixtures expected request outcome) row)
+  (match-define (hash-table ('name name)
+                            ('version version)
+                            ('fixtures sent-fixtures)
+                            ('expected expected)
+                            ('request request)
+                            ('outcome outcome))
+    (make-immutable-hasheq row))
   (test-case name
     (define sent '())
     (define (run script input)
       (set! sent (list script input))
-      (answer pinned))
+      (answer version))
     (check-equal? (failed-message (lambda ()
                                     (twin-results "twin.py"
                                                   requests

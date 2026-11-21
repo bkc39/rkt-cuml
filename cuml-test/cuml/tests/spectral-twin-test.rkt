@@ -159,7 +159,9 @@
 
 (test-twin "cuml's SpectralClustering default parameters are spectral-clustering-params'"
   (define mapped
-    (hash-update (twin-default-params twin '()) 'random-state (lambda (seed) (or seed 0))))
+    (hash-update (twin-default-params twin #:expected-cuml libcuml-version)
+                 'random-state
+                 (lambda (seed) (or seed 0))))
   (define ours-params (spectral-clustering-params))
   (check-equal? (sort (hash-keys mapped) symbol<?) (sort (hash-keys ours-params) symbol<?))
   (check-equal? mapped ours-params)

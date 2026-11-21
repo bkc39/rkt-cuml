@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/manifold umap-fit umap-result umap-result-embedding umap-transform)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in cuml/metrics trustworthiness)
          (only-in json json-null)
          (only-in racket/list drop last range take)
@@ -11,7 +12,7 @@
          (only-in "blob-data.rkt" centred-blobs uniform-source)
          (only-in "estimator-data.rkt" apply-options)
          (only-in "metrics-data.rkt" median)
-         (only-in "python-env.rkt" run-cases)
+         (only-in "python-env.rkt" twin-results)
          (only-in "scaler-data.rkt" bits-equal?))
 
 (provide (struct-out fixture)
@@ -128,7 +129,7 @@
 
 (define (digits)
   (match-define (list (hash-table ['X rows] ['y labels]))
-    (run-cases twin (list (hasheq 'op "digits"))))
+    (twin-results twin (list (hasheq 'op "digits")) #:expected-cuml libcuml-version))
   (fixture "digits" rows labels))
 
 (define (tail-split f)
@@ -162,9 +163,10 @@
       (umap-fit (fixture-X f) #:init init)))
   (define held-result (umap-fit (fixture-X held) #:init init))
   (define found
-    (run-cases twin
-               (append (map quality-case fits results)
-                       (list (quality-case held held-result #:transform (fixture-rows new))))))
+    (twin-results twin
+                  (append (map quality-case fits results)
+                          (list (quality-case held held-result #:transform (fixture-rows new))))
+                  #:expected-cuml libcuml-version))
   (for ([f (in-list fits)]
         [result (in-list results)]
         [theirs (in-list found)])
@@ -192,9 +194,10 @@
     (for/list ([options (in-list configs)])
       (ours f new options)))
   (define theirs
-    (run-cases twin
-               (for/list ([r (in-list runs)])
-                 (case-of f new (outcome-result r)))))
+    (twin-results twin
+                  (for/list ([r (in-list runs)])
+                    (case-of f new (outcome-result r)))
+                  #:expected-cuml libcuml-version))
   (for ([options (in-list configs)]
         [r (in-list runs)]
         [found (in-list theirs)])

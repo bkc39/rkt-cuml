@@ -11,6 +11,7 @@
                   tsne-result-embedding
                   umap
                   umap-model)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in racket/match match-define struct*)
          (only-in racket/promise delay force)
          racket/runtime-path
@@ -79,7 +80,8 @@
               labels
               coarse
               tsne-seed-1
-              (make-immutable-hash (map cons (map car cases) (checked-results answer)))
+              (make-immutable-hash
+               (map cons (map car cases) (checked-results answer #:expected-cuml libcuml-version)))
               (hash-ref answer 'version))))
 
 (define (theirs key field)

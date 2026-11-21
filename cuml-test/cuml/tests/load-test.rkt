@@ -6,6 +6,7 @@
          (only-in cuml/decomposition pca-fit tsvd-fit)
          (only-in cuml/linear-model linear-regression-fit)
          (only-in cuml/manifold spectral-embedding-fit spectral-embedding-fit-graph tsne-fit umap-fit)
+         (only-in cuml/manifold/private/native [libcuml-version manifold-libcuml-version])
          (only-in cuml/preprocessing standard-scaler-fit)
          (only-in rackunit check-equal? check-false check-not-exn test-case)
          (only-in raft raft-version)
@@ -25,6 +26,9 @@
 
 (test-case "the cluster shim was built against the RAPIDS release of raft"
   (check-equal? libcuml-version (raft-version)))
+
+(test-case "the manifold shim was built against the cluster shim's libcuml"
+  (check-equal? manifold-libcuml-version libcuml-version))
 
 (test-case "cuml/core loads no family's native library"
   (parameterize ([current-namespace (fresh-namespace)])

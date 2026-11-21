@@ -1,7 +1,10 @@
 #lang racket/base
 
 (require (only-in cuml/core exn:fail:cuml)
-         (only-in cuml/core/private/native cuml-family-library load-family)
+         (only-in cuml/core/private/native
+                  cuml-family-library
+                  cuml-family-libcuml-version
+                  load-family)
          (only-in ffi/unsafe _double _double* _int32 _int64 _uint64)
          racket/runtime-path
          (only-in raft/unsafe define-job))
@@ -10,11 +13,14 @@
          cuml-manifold-spectral-embedding-fit-job
          cuml-manifold-tsne-fit-job
          cuml-manifold-umap-fit-job
-         cuml-manifold-umap-transform-job)
+         cuml-manifold-umap-transform-job
+         libcuml-version)
 
 (define-runtime-path native-libs-dir "../native-libs")
 
-(define library (cuml-family-library (load-family "manifold" native-libs-dir)))
+(define manifold (load-family "manifold" native-libs-dir))
+(define library (cuml-family-library manifold))
+(define libcuml-version (cuml-family-libcuml-version manifold))
 
 (define-job cuml-manifold-tsne-fit-job
             library

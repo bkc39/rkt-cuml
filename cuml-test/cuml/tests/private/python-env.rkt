@@ -18,7 +18,6 @@
 (provide checked-results
          or-null
          python-cuml-version
-         run-cases
          run-twin
          test-python
          test-twin
@@ -80,9 +79,6 @@
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))
 
-(define (run-cases script cases)
-  (hash-ref (run-twin script (hasheq 'cases cases)) 'results))
-
 (define (checked-results answer #:expected-cuml [expected #f])
   (match answer
     [(hash-table ('results results) ('version (hash-table ('cuml version))))
@@ -107,8 +103,9 @@
       (values key value)))
   (checked-results (run script request) #:expected-cuml expected))
 
-(define (twin-default-params script unbound)
-  (match-define (list theirs) (twin-results script (list (hasheq 'op "params"))))
+(define (twin-default-params script #:unbound [unbound '()] #:expected-cuml [expected #f])
+  (match-define (list theirs)
+    (twin-results script (list (hasheq 'op "params")) #:expected-cuml expected))
   (twin-params theirs unbound))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)

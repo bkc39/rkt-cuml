@@ -6,6 +6,7 @@
                   spectral-embedding-result-embedding
                   spectral-embedding-result-n-neighbors
                   spectral-embedding-result-params)
+         (only-in cuml/manifold/private/native libcuml-version)
          (only-in racket/flonum flsingle)
          (only-in racket/list append* argmax make-list)
          (only-in racket/match match match-define match-lambda)
@@ -17,7 +18,7 @@
          (only-in "dbscan-data.rkt" seeded)
          (only-in "estimator-data.rkt" apply-options)
          (only-in "exact-algebra.rkt" dot)
-         (only-in "python-env.rkt" run-cases)
+         (only-in "python-env.rkt" twin-results)
          (only-in "scaler-data.rkt" bits-equal? transpose)
          (only-in "spectral-data.rkt"
                   graph
@@ -264,7 +265,7 @@
            [(list _ twin-case _) twin-case])
          entries))
   (for ([entry (in-list entries)]
-        [found (in-list (run-cases twin cases))])
+        [found (in-list (twin-results twin cases #:expected-cuml libcuml-version))])
     (match-define (list label _ check) entry)
     (test-case label
       (check (hash-ref found 'embedding)))))
