@@ -2,7 +2,7 @@
 
 (require (only-in cuml/linear-model/private/native libcuml-version)
          (only-in racket/list make-list)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          racket/runtime-path
          (only-in rackunit check-equal? check-true test-case)
          (only-in "common-data.rkt" unit-roundoff)
@@ -108,18 +108,36 @@
     (test-case (format "~a ~a ~a ~a" (lcase-name c) fi dt a)
       (define fitted (case-fit c dt #:algorithm a #:fit-intercept fi))
       (define kappa (kappa-of c fi))
-      (define u (unit-roundoff dt))
-      (define size (fit-size fitted))
-      (cond
-        [(eq? c one-column)
-         (check-law "one column, staged" (fit-gap fitted (theirs dt s)) (* 4 u kappa size))]
-        [(and fi (eq? dt 'float64))
-         (check-law "float64 with an intercept, staged"
-                    (fit-gap fitted (theirs dt s))
-                    (* mean-order-roundings u kappa (+ 3 kappa) size))]
-        [else (check-equal? fitted (theirs dt s) "staged, bitwise")])
+      (match (staged-law c fi dt fitted kappa)
+        [(list name bound) (check-law name (fit-gap fitted (theirs dt s)) bound)]
+        [#f (check-equal? fitted (theirs dt s) "staged, bitwise")])
       (unless (eq? c with-constant)
-        (check-law "raw" (fit-gap fitted (theirs dt r)) (* 128 u kappa kappa size))))))
+        (check-law "raw"
+                   (fit-gap fitted (theirs dt r))
+                   (* 128 (unit-roundoff dt) kappa kappa (fit-size fitted)))))))
+
+(define (staged-law c fi dt fitted kappa)
+  (define u (unit-roundoff dt))
+  (define size (fit-size fitted))
+  (cond
+    [(eq? c one-column) (list "one column, staged" (* 4 u kappa size))]
+    [(and fi (eq? dt 'float64))
+     (list "float64 with an intercept, staged" (* mean-order-roundings u kappa (+ 3 kappa) size))]
+    [else #f]))
+
+(module+ test
+  (define (stub-gap c fi dt scale)
+    (match-define (solution c* b _) (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi))
+    (define fitted (list (map real->double-flonum c*) (real->double-flonum b)))
+    (define stub (list (map (lambda (x) (real->double-flonum (* scale x))) c*) (real->double-flonum b)))
+    (match-define (list _ bound) (staged-law c fi dt fitted (kappa-of c fi)))
+    (list (fit-gap fitted stub) bound))
+  (for ([row (in-list '((#t float64 13/10 #f) (#t float64 1 #t)))])
+    (match-define (list fi dt scale passes?) row)
+    (test-case (format "with-constant ~a ~a, coefficients times ~a" fi dt scale)
+      (match-define (list got bound) (stub-gap with-constant fi dt scale))
+      (check-true (rational? bound) (format "the bound is ~a" bound))
+      (check-equal? (<= got bound) passes? (format "gap ~a against ~a" got bound)))))
 
 (define (staged-relative coef c* factors y-factor)
   (define (staged xs)
