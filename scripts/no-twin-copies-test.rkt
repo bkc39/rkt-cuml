@@ -70,7 +70,11 @@
     ("a quoted sklearn pin outside python-env.rkt fails"
      "sklearn-pin.rkt"
      "cuml-test/cuml/tests/private/scaler-data.rkt"
-     #rx"private/scaler-data.rkt:5: a pinned Python version outside [^\n]*python-env.rkt")))
+     #rx"private/scaler-data.rkt:5: a pinned Python version outside [^\n]*python-env.rkt")
+    ("a quoted cuML pin in a Python twin fails"
+     "pin_twin.py"
+     "cuml-test/cuml/tests/python/pin_twin.py"
+     #rx"python/pin_twin.py:5: a pinned Python version outside [^\n]*python-env.rkt")))
 
 (for ([row (in-list rows)])
   (match-define (list name violation target message) row)

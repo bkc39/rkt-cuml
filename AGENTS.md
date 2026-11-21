@@ -447,10 +447,13 @@ Its times on a loaded host (#128), the first four past the 120 s default, so ski
 `match-define` or `match-lambda`. `lint/tests/positional-access-test.rkt` and
 `pattern-oracle-test.rkt` hold the exact cases, and its flake check runs the
 script under the flake's racket (`racketGate`).
-`no-twin-copies` refuses, under `cuml-test`, a `def host(` or `json.dump(` in a `.py` file other than
-`python/twin_common.py`, and a quoted `"26.08.00"` or `"1.8.0"` outside `private/python-env.rkt`;
+`no-twin-copies` refuses, under `cuml-test`, a `def host(`, `json.dump(` or `sys.argv[2]` in a `.py`
+file other than `python/twin_common.py`, and a quoted `"26.08.00"` or `"1.8.0"` in any file outside
+`private/python-env.rkt`; it fails on a root without `cuml-test` and on a file grep cannot read;
 `scripts/no-twin-copies-test.rkt` runs it on the fixture tree `scripts/fixtures/no-twin-copies`
-(the `test` gate and the `racket` flake check). The
+(the `test` gate and the `racket` flake check). `no-noqa` and `no-twin-copies` source
+`scripts/grep-gate.sh`: `hits` (grep, failing on its exit status 2) and `refuse` (one line per hit
+a predicate does not allow, plus a GitHub `::error` annotation under Actions). The
 `racket-review` flake check builds the package build's Racket home
 (`installRacketHome`), Resyntax with its catalog dependencies
 (`resyntaxSources` in `nix/racket-tools.nix`, at the devshell's
