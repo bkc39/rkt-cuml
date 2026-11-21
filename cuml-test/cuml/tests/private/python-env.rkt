@@ -3,22 +3,30 @@
 (require (only-in json json-null read-json write-json)
          (only-in racket/dict in-dict)
          (only-in racket/file delete-directory/files make-temporary-directory)
-         (only-in racket/match == match)
+         (only-in racket/match == match match-define)
          (only-in racket/port open-output-nowhere)
          (only-in racket/promise delay force)
          (only-in racket/string string-replace)
          (only-in racket/system system*)
+         (only-in rackunit check-equal?)
          (only-in raft/private/resource with-release)
          (only-in raft/tests/private/gpu gpu-skip test-unless-skipped)
          ;; whole-module: its syntax classes come with it
          syntax/parse/define
          (only-in threading ~>))
 
-(provide or-null
+(provide checked-results
+         or-null
+         python-cuml-version
          run-cases
          run-twin
+         test-python
          test-twin
-         twin-params)
+         twin-default-params
+         twin-params
+         twin-results)
+
+(define python-cuml-version "26.08.00")
 
 (define python (find-executable-path "python3"))
 
@@ -41,13 +49,18 @@
                                             [current-error-port (open-output-nowhere)])
                                (system* python "-c" (format "import ~a" module)))))))
 
+(define python-skip
+  (delay
+    (cond
+      [(not python) "no Python twin (python3 is not on PATH)"]
+      [(not (python-imports? "numpy")) "no Python twin (import numpy failed)"]
+      [else #f])))
+
 (define twin-skip ;; noqa
   (delay
     (or gpu-skip
-        (cond
-          [(not python) "no Python twin (python3 is not on PATH)"]
-          [(not (python-imports? "cuml")) "no Python twin (import cuml failed)"]
-          [else #f]))))
+        (force python-skip)
+        (and (not (python-imports? "cuml")) "no Python twin (import cuml failed)"))))
 
 (define (run-twin script input)
   (with-release ([dir
@@ -70,8 +83,39 @@
 (define (run-cases script cases)
   (hash-ref (run-twin script (hasheq 'cases cases)) 'results))
 
+(define (checked-results answer #:expected-cuml [expected #f])
+  (match answer
+    [(hash-table ('results results) ('version (hash-table ('cuml version))))
+     (check-equal? version python-cuml-version "the twin's Python cuML is not the pinned release")
+     (when expected
+       (check-equal? version expected "the twin's Python cuML is not the native libcuml"))
+     results]
+    [(hash-table ('results _))
+     (error 'twin-results
+            "the twin wrote no version.cuml (got ~e); write its output with twin_common.run"
+            (hash-ref answer 'version #f))]
+    [_ (error 'twin-results "the twin wrote no results; write its output with twin_common.run")]))
+
+(define (twin-results script
+                      requests
+                      #:expected-cuml [expected #f]
+                      #:fixtures [fixtures #f]
+                      #:run [run run-twin])
+  (define request
+    (for/hasheq ([(key value) (in-dict `((cases . ,requests) (fixtures . ,fixtures)))]
+                 #:when value)
+      (values key value)))
+  (checked-results (run script request) #:expected-cuml expected))
+
+(define (twin-default-params script unbound)
+  (match-define (list theirs) (twin-results script (list (hasheq 'op "params"))))
+  (twin-params theirs unbound))
+
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)
   (test-unless-skipped (force twin-skip) name body ...))
+
+(define-syntax-parse-rule (test-python name:expr body:expr ...+)
+  (test-unless-skipped (force python-skip) name body ...))
 
 (define unbound-twin-params '(verbose output-type))
 

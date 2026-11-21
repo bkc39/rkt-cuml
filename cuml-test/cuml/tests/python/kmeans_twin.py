@@ -1,17 +1,11 @@
 """Twin of cuml/tests/kmeans-twin-test.rkt: cuml.KMeans fits and applies the
 data and parameters the Racket side used, and scikit-learn scores the labels."""
 
-import json
-import sys
-
 import numpy as np
 from sklearn.metrics import adjusted_rand_score
+from twin_common import host, params_of, run
 
 import cuml
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
 
 
 def weights(case, dtype):
@@ -61,18 +55,5 @@ def apply(case):
     }
 
 
-def params(case):
-    return cuml.KMeans().get_params()
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {"fit": fit, "apply": apply, "params": params}
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": cuml.__version__}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run({"fit": fit, "apply": apply, "params": params_of(cuml.KMeans)})

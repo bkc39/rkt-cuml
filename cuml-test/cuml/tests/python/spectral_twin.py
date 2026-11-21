@@ -2,19 +2,11 @@
 the data, graphs and parameters the Racket side used; sklearn's
 spectral_clustering partitions the graphs."""
 
-import json
-import sys
-
 import numpy as np
 import scipy.sparse as sp
 from cuml.cluster import SpectralClustering
 from sklearn.cluster import spectral_clustering
-
-import cuml
-
-
-def host(a):
-    return np.asarray(a.get() if hasattr(a, "get") else a)
+from twin_common import host, params_of, run
 
 
 def model(case, affinity):
@@ -58,23 +50,12 @@ def sklearn_fit(case):
     return {"labels": found.astype(np.int64).tolist()}
 
 
-def params(case):
-    return SpectralClustering().get_params()
-
-
-def main():
-    with open(sys.argv[1]) as f:
-        cases = json.load(f)["cases"]
-    ops = {
-        "fit": fit,
-        "precomputed": precomputed,
-        "sklearn": sklearn_fit,
-        "params": params,
-    }
-    results = [ops[case["op"]](case) for case in cases]
-    with open(sys.argv[2], "w") as f:
-        json.dump({"results": results, "version": cuml.__version__}, f)
-
-
 if __name__ == "__main__":
-    main()
+    run(
+        {
+            "fit": fit,
+            "precomputed": precomputed,
+            "sklearn": sklearn_fit,
+            "params": params_of(SpectralClustering),
+        }
+    )

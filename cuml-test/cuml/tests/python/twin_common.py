@@ -1,12 +1,10 @@
-"""The bits-only payload and the runner shared by the linear-model twins."""
+"""The runner, the version record and the bits-only payload the twins share."""
 
+import importlib
 import json
 import sys
 
 import numpy as np
-import sklearn
-
-import cuml
 
 BITS = {np.dtype(np.float32): np.uint32, np.dtype(np.float64): np.uint64}
 WIDTH = {"float32": np.uint32, "float64": np.uint64}
@@ -41,15 +39,24 @@ def fitted(m, dtype):
     return out
 
 
-def run(ops):
+def versions():
+    out = {}
+    for name in ("sklearn", "cuml"):
+        try:
+            out[name] = importlib.import_module(name).__version__
+        except ImportError:
+            pass
+    return out
+
+
+def params_of(cls):
+    return lambda *_: cls().get_params()
+
+
+def run(ops, *, fixtures=False):
     with open(sys.argv[1]) as f:
         given = json.load(f)
-    results = [ops[case["op"]](case) for case in given["cases"]]
+    shared = (given.get("fixtures", {}),) if fixtures else ()
+    results = [ops[case["op"]](*shared, case) for case in given["cases"]]
     with open(sys.argv[2], "w") as f:
-        json.dump(
-            {
-                "results": results,
-                "version": {"sklearn": sklearn.__version__, "cuml": cuml.__version__},
-            },
-            f,
-        )
+        json.dump({"results": results, "version": versions()}, f)

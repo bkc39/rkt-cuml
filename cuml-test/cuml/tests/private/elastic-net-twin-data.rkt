@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in racket/match match-define struct*)
+(require (only-in cuml/linear-model/private/native libcuml-version)
+         (only-in racket/match match-define struct*)
          racket/runtime-path
          (only-in rackunit check-equal? test-case)
          (only-in "common-data.rkt" unit-roundoff)
@@ -66,7 +67,8 @@
   (define fits
     (twin-results twin
                   (for/list ([row (in-list rows)])
-                    (request "cuml" row dt))))
+                    (request "cuml" row dt))
+                  #:expected-cuml libcuml-version))
   (for ([row (in-list rows)]
         [t (in-list fits)])
     (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r] [selection s])) row)
@@ -91,7 +93,8 @@
   (define fits
     (twin-results twin
                   (for/list ([row (in-list rows)])
-                    (request "sklearn" row dt))))
+                    (request "sklearn" row dt))
+                  #:expected-cuml libcuml-version))
   (define ran
     (for/sum ([row (in-list rows)] [t (in-list fits)])
              (match-define (struct* twin-row ([source c] [fit-intercept fi] [l1-ratio r])) row)
