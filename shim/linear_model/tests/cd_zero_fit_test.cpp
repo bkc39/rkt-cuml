@@ -42,16 +42,21 @@ TEST(CdZeroFit, TheAllowanceIsTheResidualsRoundingBound) {
       zero_fit_of<double>(one_column(0.75), {4, 0.5, 0, rows}).alpha_max));
 }
 
+constexpr int narrow_exponent = -38;
+constexpr double binding_cross = 0.875;
+constexpr int spread_y_exponent = 42;
+
 residual_terms wide_and_narrow() {
-  return {{moment{scaled_sum{1, 2}, scaled_sum{0, 0}},
-           moment{scaled_sum{1, -38}, scaled_sum{0.875, 2}}},
-          {1, 1},
-          {1, 42}};
+  return {
+      {moment{scaled_sum{1, 2}, scaled_sum{0, 0}},
+       moment{scaled_sum{1, narrow_exponent}, scaled_sum{binding_cross, 2}}},
+      {1, 1},
+      {1, spread_y_exponent}};
 }
 
 TEST(CdZeroFit, EachColumnIsHeldToItsOwnSpread) {
   const double gap = std::ldexp(1.0, -30);
-  const double alpha = 0.875 - gap;
+  const double alpha = binding_cross - gap;
   const zero_fit z =
       zero_fit_of<double>(wide_and_narrow(), {4, alpha, 1, rows});
   const double count =
@@ -60,10 +65,12 @@ TEST(CdZeroFit, EachColumnIsHeldToItsOwnSpread) {
   EXPECT_DOUBLE_EQ(z.residual, gap);
   EXPECT_DOUBLE_EQ(z.allowance,
                    (count * u / (1 - (count * u))) + (2 * u * alpha));
-  EXPECT_DOUBLE_EQ(z.alpha_max, 0.875);
+  EXPECT_DOUBLE_EQ(z.alpha_max, binding_cross);
   EXPECT_FALSE(accepts_zero(z));
   const residual_terms wide{
-      {moment{scaled_sum{1, 2}, scaled_sum{0.875, 2}}}, {1}, {1, 42}};
+      {moment{scaled_sum{1, 2}, scaled_sum{binding_cross, 2}}},
+      {1},
+      {1, spread_y_exponent}};
   EXPECT_TRUE(accepts_zero(zero_fit_of<double>(wide, {4, alpha, 1, rows})));
 }
 
