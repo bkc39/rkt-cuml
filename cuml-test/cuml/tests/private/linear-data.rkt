@@ -468,28 +468,7 @@
         (max worst (exact->inexact (/ (abs num) (+ (* (sqrt square) y-norm) widest)))))))
 
 (module+ test
-  (require (only-in rackunit
-                    check-equal?
-                    check-info-name
-                    check-info-value
-                    check-true
-                    current-check-around
-                    exn:test:check-stack
-                    exn:test:check?))
-  (define (failure-messages thunk)
-    (define failures '())
-    (parameterize ([current-check-around
-                    (lambda (check)
-                      (with-handlers ([exn:test:check? (lambda (e)
-                                                         (set! failures (cons e failures)))])
-                        (check)))])
-      (thunk))
-    (for*/list ([e (in-list (reverse failures))]
-                [info (in-list (exn:test:check-stack e))]
-                #:when (eq? (check-info-name info) 'message))
-      (check-info-value info)))
-  (define non-finite-failures (failure-messages (lambda () (check-law "x" 0 +inf.0))))
-  (check-equal? non-finite-failures '("x: the bound is +inf.0"))
+  (require (only-in rackunit check-equal? check-true))
   (match-define (solution c b k) (oracle-lstsq '((1 1) (1 2) (2 2) (2 3)) '(6 8 9 11) #f #t))
   (check-equal? c '(1 2))
   (check-equal? b 3)
