@@ -5,7 +5,7 @@
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" [on-vector vector])
+         (only-in "private/common-data.rkt" gamma unit-roundoff [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/linear-data.rkt"
                   exact-fit
@@ -26,7 +26,14 @@
 (define remedy-bound (expt 2 -18))
 (define float64-min-norm-bound (expt 2 -40))
 (define eig-prediction-bound (expt 2 -12))
-(define svd-prediction-bound (expt 2 -10))
+
+(define (rounded-prediction-bound rows y fit)
+  (match-define (list coef b) fit)
+  (define mass
+    (for/fold ([worst 0])
+              ([row (in-list rows)])
+      (max worst (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))))
+  (/ (* (gamma (add1 (length coef)) (unit-roundoff 'float32)) mass) (max-abs y)))
 
 (define (one-hot-case n k)
   (define (level i)
@@ -86,7 +93,8 @@
     (match-define (list rows y) (apply one-hot-case shape))
     (define fit (lstsq rows y 'float32 algorithm))
     (test-case (format "~a ~a" algorithm shape)
-      (check-true (< (prediction-gap rows y fit) svd-prediction-bound))
+      (define exact (exact-fit fit))
+      (check-true (< (prediction-gap rows y fit) (rounded-prediction-bound rows y exact)))
       (check-true (> (min-norm-gap rows y fit) 1)))))
 
 (test-gpu "float32 ridge at alpha 0 and 1e-12 fits one-hot columns as least squares does"

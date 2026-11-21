@@ -1887,7 +1887,21 @@ Follow-ups are GitHub issues.
   'auto / 'eig fit k = 3, n = 500 off the minimum norm (predictions 5e-5) and
   refuse the other five as not least squares; 'svd / 'svd-jacobi fit with
   coefficients 800–5200× max|c*| off the minimum norm and predictions within
-  3.3e-4; ridge at α = 0 and 1e-12 (negligible) matches least squares fit
+  3.3e-4 at 099f0c1 (since #112's centring the null-direction size moves
+  with the centred values' bits: max|c| 1.9e3–9.2e4, predictions up to
+  1.3e-3·max|y|). Their bound is derived, not picked
+  (`linear-regression-one-hot-test`): the centred design X_c has an exact
+  null vector v (the levels sum to the intercept), so the exact predictions
+  X_c(c* + t·v) are the minimum-norm ones for any t, and the fit's null
+  component t ≈ (u_Tᵀr)/σ̃_min, set by the centred values' rounding, enters
+  the predictions only through the rounding of c and b to the dtype:
+  c = V·z is a d-term sum per coefficient and b one more rounding, so the
+  prediction error is at most
+  γ_(d+1)(u_T)·maxᵢ(|b| + Σⱼ|xᵢⱼcⱼ|) over max|y|, the range-space error
+  being of order u_T against that. Measured against it (6 shapes, both
+  solvers equal): 0.16–0.24 on the head, 0.16–0.37 on the shim before
+  #112, so the old 2⁻¹⁰'s 1.34 was the null component's size, not the
+  centring's error; ridge at α = 0 and 1e-12 (negligible) matches least squares fit
   for fit. Dropping a level or fitting without an intercept fits under
   float32 'qr within 7.5e-7 of the least-squares predictions; float64 'auto
   gives the minimum-norm fit within 6.4e-14. Nearly collinear X
