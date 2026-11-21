@@ -1894,7 +1894,14 @@ Follow-ups are GitHub issues.
   'qr and 'svd-qr refuse all 60; 'svd and 'svd-jacobi fit 12 / 22 with
   |c| up to 3.5e4 and predictions within 2.2e-3·max|y| (rms 0.005 against a
   residual of 0.1), refusing the rest as not least squares; 'auto and 'eig
-  fit 0 / 1 and refuse the rest. A full one-hot design with an intercept
+  fit 0 / 1 and refuse the rest. Weighted x₁, x₂, x₁ + x₂ (5003 rows),
+  float64 'qr fits each effective coefficient (a + ab, b + ab) within
+  u·(|own| + |ab|) + 2⁻³⁰ of the exact least squares
+  (`linear-regression-refusal-test`). That bound is measured, not derived:
+  the back-substitution's c·u·|ab| term needs R's entries, which the test
+  does not see, so c = 1 is stated, and the accepted fit's errors are 0.34
+  and 0.13 of it; coefficients 30% off beside a 10¹⁵ null component fail
+  it. A full one-hot design with an intercept
   (k = 3, 5, 12 levels, n = 500, 5003): float32 'qr and 'svd-qr refuse it;
   'auto / 'eig fit k = 3, n = 500 off the minimum norm (predictions 5e-5) and
   refuse the other five as not least squares; 'svd / 'svd-jacobi fit with
