@@ -223,11 +223,18 @@
         device-vector->list))
   (match-define (list a b ab) (map inexact->exact fitted))
   (define free
-    (~> (oracle-lstsq (map (match-lambda [(list a b _) (list a b)]) rows) y w #t) solution-coef))
+    (~> (oracle-lstsq (map (match-lambda
+                             [(list a b _) (list a b)])
+                           rows)
+                      y
+                      w
+                      #t)
+        solution-coef))
   (for ([got (list (+ a ab) (+ b ab))]
         [want (in-list free)])
-    (check-true (<= (abs (- got want)) (* 4 (unit-roundoff 'float64) (+ (abs a) (abs b) (abs ab))))
-                (format "effective ~a, least squares ~a" (exact->inexact got) (exact->inexact want)))))
+    (check-true
+     (<= (abs (- got want)) (* 4 (unit-roundoff 'float64) (+ (abs a) (abs b) (abs ab))))
+     (format "effective ~a, least squares ~a" (exact->inexact got) (exact->inexact want)))))
 
 (test-gpu "X, y and w are unchanged after every fit"
   (for* ([dt (in-list dtypes)]

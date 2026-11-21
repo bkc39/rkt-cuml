@@ -73,7 +73,9 @@
 (define (correctly-rounded dt q)
   (define near (real->double-flonum q))
   (match dt
-    [_ #:when (zero? q) 0.0]
+    [_
+     #:when (zero? q)
+     0.0]
     ['float64 near]
     ['float32
      (define s (flsingle near))
@@ -125,8 +127,9 @@
     (define-values (c _p top) (wine 'float32 'unweighted #t r))
     (define alpha (* top (- 1 (expt 2.0 -20))))
     (test-case (format "l1-ratio ~a alpha ~a" r alpha)
-      (check-exn #rx"under float32's rounding of the solve, which no tol resolves; alpha [0-9.]+ is that close below alpha-max [0-9.]+, from which every coefficient is 0: raise alpha to alpha-max or lower it, or fit in float64$"
-                 (lambda () (fit-at c 'float32 r #t alpha))))))
+      (check-exn
+       #rx"under float32's rounding of the solve, which no tol resolves; alpha [0-9.]+ is that close below alpha-max [0-9.]+, from which every coefficient is 0: raise alpha to alpha-max or lower it, or fit in float64$"
+       (lambda () (fit-at c 'float32 r #t alpha))))))
 
 (define narrow-spread (expt 2 -20))
 

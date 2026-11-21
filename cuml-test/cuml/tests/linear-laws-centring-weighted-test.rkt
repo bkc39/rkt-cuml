@@ -28,7 +28,8 @@
       (* s (radius column))))
   (define fit (moved-solve c epsilon (worst-y-epsilon c u epsilon)))
   (check-equal? (failed-laws c 'float32 fit exact #:means device-means) '())
-  (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:coef-centring? #f #:means device-means)))
+  (check-pred (fails? "T1")
+              (failed-laws c 'float32 fit exact #:coef-centring? #f #:means device-means)))
 
 (define (atomic-case)
   (define big (+ 1 (expt 2 -23)))

@@ -323,10 +323,9 @@ TEST(CdCheck, AnAllowanceOfOneOrMoreFarBelowAlphaMaxKeepsTheTolAdvice) {
       "tol and every coefficient (largest 0.0625) under float64's rounding "
       "of the solve; lower tol below the largest coefficient or lower alpha";
   EXPECT_EQ(refusal_of([&] {
-              require_resolved<double>(
-                  unresolvable, epoch_iters,
-                  {epoch_tol, epoch_largest, 2 * (1 - (2 * rounding)), 2,
-                   rounding});
+              require_resolved<double>(unresolvable, epoch_iters,
+                                       {epoch_tol, epoch_largest,
+                                        2 * (1 - (2 * rounding)), 2, rounding});
             }),
             far);
   EXPECT_EQ(refusal_of([&] {
@@ -380,7 +379,8 @@ residual_terms wide_and_narrow() {
 TEST(CdZeroFit, EachColumnIsHeldToItsOwnSpread) {
   const double gap = std::ldexp(1.0, -30);
   const double alpha = 0.875 - gap;
-  const zero_fit z = zero_fit_of<double>(wide_and_narrow(), {4, alpha, 1, rows});
+  const zero_fit z =
+      zero_fit_of<double>(wide_and_narrow(), {4, alpha, 1, rows});
   const double count =
       (5.0 * static_cast<double>(column_sum_roundings(rows))) + 14;
   const double u = std::ldexp(1.0, -53);

@@ -30,8 +30,7 @@
 (define (rounded-prediction-bound rows y fit)
   (match-define (list coef b) fit)
   (define mass
-    (for/fold ([worst 0])
-              ([row (in-list rows)])
+    (for/fold ([worst 0]) ([row (in-list rows)])
       (max worst (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))))
   (/ (* (gamma (add1 (length coef)) (unit-roundoff 'float32)) mass) (max-abs y)))
 

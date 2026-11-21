@@ -93,15 +93,14 @@ void check_stop(const raft::handle_t& handle, const fit_inputs<T>& in,
   const kkt_terms k =
       kkt_of(terms, coef, weight, {alpha * ratio, alpha * (1 - ratio)}, epochs);
   require_kkt(k, n_iter, request.tol);
-  const double rounding =
-      std::isfinite(zero.alpha_max)
-          ? k.allowance * largest * zero.curvature /
-                (zero.alpha_max * request.l1_ratio)
-          : 0;
-  require_resolved<T>(k, n_iter,
-                      {request.tol, largest, request.alpha,
-                       std::ldexp(zero.alpha_max, -2 * scale.shared),
-                       rounding});
+  const double rounding = std::isfinite(zero.alpha_max)
+                              ? k.allowance * largest * zero.curvature /
+                                    (zero.alpha_max * request.l1_ratio)
+                              : 0;
+  require_resolved<T>(
+      k, n_iter,
+      {request.tol, largest, request.alpha,
+       std::ldexp(zero.alpha_max, -2 * scale.shared), rounding});
 }
 
 template <typename T>

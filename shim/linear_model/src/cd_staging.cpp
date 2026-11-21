@@ -191,8 +191,7 @@ zero_fit zero_fit_of(const residual_terms& t, const zero_request& r) {
   long double margin = -std::numeric_limits<long double>::infinity();
   for (const moment& m : t.moments) {
     const long double cross = std::abs(value_of(m.cross)) / total;
-    const long double spread =
-        std::sqrt(value_of(m.square) / total) * sigma_y;
+    const long double spread = std::sqrt(value_of(m.square) / total) * sigma_y;
     const long double column = (gamma * spread) + penalty_rounding;
     if (cross > top) {
       const long double sigma = std::sqrt(value_of(m.square) / total);
@@ -252,8 +251,9 @@ void require_resolved(const kkt_terms& k, int n_iter, const unresolved_fit& f) {
                  "alpha-max {}, from which every coefficient is 0: raise "
                  "alpha to alpha-max or lower it",
                  printed(f.alpha), printed(f.alpha_max))
-           : std::string("; lower tol below the largest coefficient or lower "
-                         "alpha");
+           : std::string(
+                 "; lower tol below the largest coefficient or lower "
+                 "alpha");
   throw logic_error(std::format(
       "{}KKT residual {} > tol and every coefficient (largest {}) under {}'s "
       "rounding of the solve{}{}",
