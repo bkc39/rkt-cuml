@@ -1,4 +1,4 @@
-status=0
+# shellcheck shell=bash
 
 hits() {
   local code=0
@@ -10,15 +10,16 @@ hits() {
 }
 
 refuse() {
-  local found=$1 message=$2 file line text
+  local found=$1 message=$2 refused=0 file line text
   shift 2
   while IFS=: read -r file line text; do
     [ -n "$file" ] || continue
     "$@" "$file" "$text" && continue
-    status=1
+    refused=1
     echo "$file:$line: $message"
     if [ -n "${GITHUB_ACTIONS:-}" ]; then
       echo "::error file=$file,line=$line::$message"
     fi
   done <<<"$found"
+  return "$refused"
 }
