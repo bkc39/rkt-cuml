@@ -19,7 +19,6 @@
 (provide bits-of
          checked-results
          decoded
-         floats->bits
          matrix->bits
          or-null
          python-cuml-version
@@ -153,8 +152,5 @@
   (for/list ([b (in-list bits)])
     (floating-point-bytes->real (integer->integer-bytes b (float-size dt) #f))))
 
-(define (floats->bits dt xs)
-  (bits-of dt (map exact->inexact xs)))
-
 (define (matrix->bits dt rows)
-  (floats->bits dt (append* rows)))
+  (bits-of dt (append* rows)))

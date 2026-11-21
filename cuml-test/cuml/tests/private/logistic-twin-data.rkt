@@ -11,7 +11,7 @@
                   setting-C
                   setting-l1-ratio
                   setting-penalty)
-         (only-in "python-env.rkt" decoded floats->bits matrix->bits twin-results))
+         (only-in "python-env.rkt" bits-of decoded matrix->bits twin-results))
 
 (provide (struct-out twin-trial)
          logistic-twin
@@ -37,7 +37,7 @@
           'X (matrix->bits dt (lr-case-X c))
           'y (lr-case-y c)
           'w (if (lr-case-w c)
-                 (floats->bits dt (lr-case-w c))
+                 (bits-of dt (lr-case-w c))
                  'null)
           'penalty (symbol->string penalty)
           'C C

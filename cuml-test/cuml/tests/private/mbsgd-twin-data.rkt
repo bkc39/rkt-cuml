@@ -9,7 +9,7 @@
          (only-in "elastic-net-data.rkt" apply-keywords)
          (only-in "linear-data.rkt" on-matrix)
          (only-in "mbsgd-data.rkt" clf-parts reg-parts)
-         (only-in "python-env.rkt" decoded floats->bits matrix->bits twin-results))
+         (only-in "python-env.rkt" bits-of decoded matrix->bits twin-results))
 
 (provide clf-fit
          clf-result
@@ -76,7 +76,7 @@
                       'n (length X)
                       'X (matrix->bits dt X)
                       'y (if y
-                             (floats->bits dt y)
+                             (bits-of dt y)
                              'null)
                       'codes (or codes 'null)
                       'loss (python-value loss)

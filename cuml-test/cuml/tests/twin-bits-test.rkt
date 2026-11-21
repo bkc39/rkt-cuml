@@ -2,18 +2,15 @@
 
 (require (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
-         (only-in "private/python-env.rkt" bits-of decoded floats->bits matrix->bits))
+         (only-in "private/python-env.rkt" bits-of decoded matrix->bits))
 
 (define rows
-  `(("floats->bits, exact float32" ,floats->bits
-                                   float32
-                                   (1 1/2 -2)
-                                   (#x3f800000 #x3f000000 #xc0000000))
-    ("floats->bits, a float32 rounding" ,floats->bits float32 (1/3) (#x3eaaaaab))
-    ("floats->bits, float64" ,floats->bits
-                             float64
-                             (1/3 1.5 -0.0)
-                             (#x3fd5555555555555 #x3ff8000000000000 #x8000000000000000))
+  `(("bits-of, exact float32" ,bits-of float32 (1 1/2 -2) (#x3f800000 #x3f000000 #xc0000000))
+    ("bits-of, a float32 rounding" ,bits-of float32 (1/3) (#x3eaaaaab))
+    ("bits-of, float64" ,bits-of
+                        float64
+                        (1/3 1.5 -0.0)
+                        (#x3fd5555555555555 #x3ff8000000000000 #x8000000000000000))
     ("matrix->bits, row-major" ,matrix->bits
                                float32
                                ((1 2) (3 4))
