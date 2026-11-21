@@ -21,7 +21,7 @@
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
          (only-in "private/guide-data.rkt" boundary-margin host scaled-matrix)
-         (only-in "private/python-env.rkt" checked-results python-sklearn-version run-twin test-twin)
+         (only-in "private/python-env.rkt" python-sklearn-version test-twin twin-results)
          (only-in "private/scaler-data.rkt" [float32-roundoff u]))
 
 (define-runtime-path twin "python/guide_twin.py")
@@ -43,21 +43,19 @@
   (define measurements (features 'wine "cultivar"))
   (define raw (table->device-matrix (load-dataset-table 'wine) #:columns measurements))
   (define scaled (scaled-matrix 'wine measurements))
-  (define answer
-    (run-twin twin
-              (hasheq 'cases (list (twin-case "pca" raw 2)
-                                   (twin-case "pca" scaled 13)
-                                   (twin-case "tsvd" scaled 2)
-                                   (twin-case "reconstruction" scaled 2)))))
   (match-define (list (hash-table ['ratio raw-ratio])
                       (hash-table ['ratio ratio]
                                   ['singular_values singular]
                                   ['explained_variance variance])
                       (hash-table ['ratio svd-ratio] ['singular_values svd-singular])
                       (hash-table ['error reconstruction-error]))
-    (checked-results answer #:expected-cuml libcuml-version))
-  (match-define (hash-table ['version (hash-table ['sklearn sklearn])]) answer)
-  (check-equal? sklearn python-sklearn-version)
+    (twin-results twin
+                  (list (twin-case "pca" raw 2)
+                        (twin-case "pca" scaled 13)
+                        (twin-case "tsvd" scaled 2)
+                        (twin-case "reconstruction" scaled 2))
+                  #:expected-cuml libcuml-version
+                  #:expected-sklearn python-sklearn-version))
   (define raw-fit (pca-fit raw #:n-components 2))
   (define scaled-fit (pca-fit scaled))
   (define svd-fit (tsvd-fit scaled #:n-components 2))

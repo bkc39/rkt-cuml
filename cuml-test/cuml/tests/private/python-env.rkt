@@ -86,12 +86,23 @@
       (error 'run-twin "~a failed:\n~a" script (get-output-string err)))
     (call-with-input-file out-path read-json)))
 
-(define (checked-results answer #:expected-cuml [expected #f])
+(define (sklearn-of version)
+  (match version
+    [(hash-table ('sklearn sklearn)) sklearn]
+    [_ #f]))
+
+(define (checked-results answer
+                         #:expected-cuml [expected #f]
+                         #:expected-sklearn [expected-sklearn #f])
   (match answer
-    [(hash-table ('results results) ('version (hash-table ('cuml version))))
-     (check-equal? version python-cuml-version "the twin's Python cuML is not the pinned release")
+    [(hash-table ('results results) ('version (and version (hash-table ('cuml cuml)))))
+     (check-equal? cuml python-cuml-version "the twin's Python cuML is not the pinned release")
      (when expected
-       (check-equal? version expected "the twin's Python cuML is not the native libcuml"))
+       (check-equal? cuml expected "the twin's Python cuML is not the native libcuml"))
+     (when expected-sklearn
+       (check-equal? (sklearn-of version)
+                     expected-sklearn
+                     "the twin's scikit-learn is not the pinned release"))
      results]
     [(hash-table ('results _))
      (error 'twin-results
@@ -102,17 +113,26 @@
 (define (twin-results script
                       requests
                       #:expected-cuml [expected #f]
+                      #:expected-sklearn [expected-sklearn #f]
                       #:fixtures [fixtures #f]
                       #:run [run run-twin])
   (define request
     (for/hasheq ([(key value) (in-dict `((cases . ,requests) (fixtures . ,fixtures)))]
                  #:when value)
       (values key value)))
-  (checked-results (run script request) #:expected-cuml expected))
+  (checked-results (run script request) #:expected-cuml expected #:expected-sklearn expected-sklearn))
 
-(define (twin-default-params script #:unbound [unbound '()] #:expected-cuml [expected #f])
+(define (twin-default-params script
+                             #:unbound [unbound '()]
+                             #:expected-cuml [expected #f]
+                             #:expected-sklearn [expected-sklearn #f]
+                             #:run [run run-twin])
   (match-define (list theirs)
-    (twin-results script (list (hasheq 'op "params")) #:expected-cuml expected))
+    (twin-results script
+                  (list (hasheq 'op "params"))
+                  #:expected-cuml expected
+                  #:expected-sklearn expected-sklearn
+                  #:run run))
   (twin-params theirs #:unbound unbound))
 
 (define-syntax-parse-rule (test-twin name:expr body:expr ...+)

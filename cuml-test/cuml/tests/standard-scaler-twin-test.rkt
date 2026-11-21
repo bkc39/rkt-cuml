@@ -18,21 +18,14 @@
          (only-in "private/common-data.rkt" unit-roundoff)
          (only-in "private/estimator-data.rkt" listed)
          (only-in "private/python-env.rkt"
-                  checked-results
                   floats->bits
                   python-sklearn-version
-                  run-twin
                   test-twin
-                  twin-default-params)
+                  twin-default-params
+                  twin-results)
          (only-in "private/scaler-data.rkt" constant-rows generated-rows ulp))
 
 (define-runtime-path twin "python/standard_scaler_twin.py")
-
-(define (twin-results cases)
-  (define answer (run-twin twin (hasheq 'cases cases)))
-  (match-define (hash-table ['version (hash-table ['sklearn sklearn])]) answer)
-  (check-equal? sklearn python-sklearn-version)
-  (checked-results answer))
 
 (struct dataset (name rows))
 
@@ -90,9 +83,11 @@
                 [flags (in-list flag-pairs)])
       (list dt data flags)))
   (define results
-    (twin-results (for/list ([c (in-list cases)])
+    (twin-results twin
+                  (for/list ([c (in-list cases)])
                     (match-define (list dt data flags) c)
-                    (case-of "fit" data dt flags))))
+                    (case-of "fit" data dt flags))
+                  #:expected-sklearn python-sklearn-version))
   (for ([c (in-list cases)]
         [result (in-list results)])
     (match-define (list dt data flags) c)
@@ -131,9 +126,11 @@
                 [flags (in-list flag-pairs)])
       (list fit-dt y-dt data flags)))
   (define results
-    (twin-results (for/list ([c (in-list cases)])
+    (twin-results twin
+                  (for/list ([c (in-list cases)])
                     (match-define (list fit-dt y-dt data flags) c)
-                    (case-of "transform" data fit-dt flags #:y-dtype y-dt))))
+                    (case-of "transform" data fit-dt flags #:y-dtype y-dt))
+                  #:expected-sklearn python-sklearn-version))
   (for ([c (in-list cases)]
         [result (in-list results)])
     (match-define (list fit-dt y-dt data flags) c)
@@ -167,4 +164,6 @@
          (check-true (within? back x-sk inverse-tolerance) "inverse")]))))
 
 (test-twin "the hyperparameters are sklearn's but copy"
-  (check-equal? (standard-scaler-params) (twin-default-params twin #:unbound '(copy))))
+  (check-equal?
+   (standard-scaler-params)
+   (twin-default-params twin #:unbound '(copy) #:expected-sklearn python-sklearn-version)))

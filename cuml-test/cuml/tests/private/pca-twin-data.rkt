@@ -24,7 +24,10 @@
                   fixtures
                   norm
                   over-bound)
-         (only-in "python-env.rkt" test-twin [twin-results python-twin-results])
+         (only-in "python-env.rkt"
+                  python-sklearn-version
+                  test-twin
+                  [twin-results python-twin-results])
          (only-in "scaler-data.rkt" rows-of))
 
 (provide (struct-out ours)
@@ -79,7 +82,11 @@
     (for*/hasheq ([f (in-list fixtures)]
                   [dt (in-list '(float32 float64))])
       (values (string->symbol (twin-key f dt)) (append* (twin-rows f dt)))))
-  (python-twin-results twin cases #:fixtures payload #:expected-cuml libcuml-version))
+  (python-twin-results twin
+                       cases
+                       #:fixtures payload
+                       #:expected-cuml libcuml-version
+                       #:expected-sklearn python-sklearn-version))
 
 (struct ours (fitted noise n-samples transform))
 
