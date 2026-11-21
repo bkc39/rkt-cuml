@@ -5,6 +5,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/grep-gate.sh"
 
 cd "${1:-$(dirname "${BASH_SOURCE[0]}")/..}"
 
+if [ ! -d cuml-test ]; then
+  echo "no-twin-copies: no cuml-test under $PWD: pass the root of an rkt-cuml checkout"
+  exit 2
+fi
+
 common=cuml-test/cuml/tests/python/twin_common.py
 pins=cuml-test/cuml/tests/private/python-env.rkt
 
