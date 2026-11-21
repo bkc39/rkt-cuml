@@ -451,9 +451,12 @@ script under the flake's racket (`racketGate`).
 file other than `python/twin_common.py`, and a quoted `"26.08.00"` or `"1.8.0"` in any file outside
 `private/python-env.rkt`; it fails on a root without `cuml-test` and on a file grep cannot read;
 `scripts/no-twin-copies-test.rkt` runs it on the fixture tree `scripts/fixtures/no-twin-copies`
-(the `test` gate and the `racket` flake check). `no-noqa` and `no-twin-copies` source
-`scripts/grep-gate.sh`: `hits` (grep, failing on its exit status 2) and `refuse` (one line per hit
-a predicate does not allow, plus a GitHub `::error` annotation under Actions). The
+and `scripts/no-noqa-test.rkt` runs `no-noqa` on a copy of the checkout's `.rkt` and `.scrbl` files
+with `scripts/fixtures/no-noqa` added (both in the `test` gate and the `racket` flake check; an
+unreadable-file case prints a `SKIP:` line when the file still reads, as under root).
+`no-noqa` and `no-twin-copies` source `scripts/grep-gate.sh`: `hits` (grep, failing on its exit
+status 2) and `refuse` (one line per hit whose `file:text` matches none of the anchored regexes
+it is given, plus a GitHub `::error` annotation under Actions). The
 `racket-review` flake check builds the package build's Racket home
 (`installRacketHome`), Resyntax with its catalog dependencies
 (`resyntaxSources` in `nix/racket-tools.nix`, at the devshell's

@@ -285,7 +285,7 @@
           racket scripts/check-layout.rkt
           raco test scripts/check-bindings.rkt
           racket scripts/check-bindings.rkt
-          raco test scripts/no-twin-copies-test.rkt
+          raco test scripts/no-twin-copies-test.rkt scripts/no-noqa-test.rkt
           runHook postCheck
         '';
         installPhase = "touch $out";
