@@ -54,8 +54,10 @@ def stage(X, y, w, fi):
 
 
 def centred(v, w):
-    """Centre as the shim does: the mean in double less the remainder of its
-    rounding, each value rounded once to the dtype."""
+    """Centre as the shim's stage_centred (shim/linear_model/src/cd_device.cu)
+    does with the means of centres_of and target_centre: the mean in double
+    less the remainder of its rounding, each value rounded once to the dtype,
+    uncounted rows zeroed. Returns the centred values and mean + remainder."""
     weights = np.ones(len(v)) if w is None else w.astype(np.float64)
     wide = v.astype(np.float64)
     shape = (-1,) + (1,) * (wide.ndim - 1)
@@ -104,10 +106,36 @@ def staged_fit(case):
     ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
     staged = host(m.coef_).astype(dt)
     coef[kept] = np.ldexp(staged, e[kept] - f).astype(dt)
-    fitted = float(np.dot(xbar, staged.astype(np.float64))) if fi else 0.0
-    intercept = dt(np.ldexp(ybar - fitted, -f)) if fi else dt(0)
+    intercept = dt(np.ldexp(intercept_of(xbar, ybar, staged), -f)) if fi else dt(0)
     put(out, "coef", coef)
     put(out, "intercept", np.asarray([intercept], dtype=dt))
+    return out
+
+
+def intercept_of(xbar, ybar, coef):
+    """The shim's weighted_intercept: mean + remainder less the fitted part,
+    summed in double in column order."""
+    fitted = 0.0
+    for m, b in zip(xbar, coef):
+        fitted += float(m) * float(b)
+    return ybar - fitted
+
+
+def centred_fit(case):
+    """cuML-Python's fit on rows the twin centres itself, as the shim does."""
+    if not case["fit_intercept"]:
+        return raw_fit(case)
+    X, y, w = inputs(case)
+    dt = X.dtype.type
+    Xc, xbar = centred(X, w)
+    yc, ybar = centred(y, w)
+    m = CuLinearRegression(
+        algorithm=case["algorithm"], fit_intercept=False, output_type="numpy"
+    ).fit(np.asfortranarray(Xc), yc, sample_weight=w)
+    coef = host(m.coef_).astype(dt)
+    out = {}
+    put(out, "coef", coef)
+    put(out, "intercept", np.asarray([intercept_of(xbar, ybar, coef)], dtype=dt))
     return out
 
 
@@ -158,6 +186,7 @@ if __name__ == "__main__":
     run(
         {
             "cuml": raw_fit,
+            "cuml-centred": centred_fit,
             "cuml-staged": staged_fit,
             "sklearn": sklearn_fit,
             "predict": predict,
