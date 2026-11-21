@@ -155,10 +155,10 @@
 
 (struct mean-model (mean-error sum-bound))
 
-(struct centring (c u weights total columns y coef b))
+(struct fit-terms (c u weights total columns y coef b))
 
 (define (mean-of t xs)
-  (/ (dot (centring-weights t) xs) (centring-total t)))
+  (/ (dot (fit-terms-weights t) xs) (fit-terms-total t)))
 
 (define (abs-mean t xs)
   (mean-of t (map abs xs)))
@@ -168,17 +168,17 @@
   (mean-of t (map (lambda (x) (abs (- x mean))) xs)))
 
 (define (coef-sum t term)
-  (for/sum ([column (in-list (centring-columns t))] [cj (in-list (centring-coef t))])
+  (for/sum ([column (in-list (fit-terms-columns t))] [cj (in-list (fit-terms-coef t))])
            (term column cj)))
 
 (define (host-error t xs)
-  (define h (column-sum-roundings (positive-rows (centring-c t))))
+  (define h (column-sum-roundings (positive-rows (fit-terms-c t))))
   (* (gamma (+ h 3) double-u) (+ (abs-deviation t xs) (* (gamma h double-u) (abs-mean t xs)))))
 
 (define device-means
   (mean-model (lambda (t g xs) (* g (abs-mean t xs)))
               (lambda (t)
-                (match-define (centring c u _ total _ y coef b) t)
+                (match-define (fit-terms c u _ total _ y coef b) t)
                 (* total
                    (+ (* u (abs b))
                       (* (y-centring-gamma c u) (abs-mean t y))
@@ -186,9 +186,9 @@
                          (coef-sum t (lambda (column cj) (* (abs-mean t column) (abs cj))))))))))
 
 (define shim-means
-  (mean-model (lambda (t _g xs) (+ (* (centring-u t) (abs-deviation t xs)) (host-error t xs)))
+  (mean-model (lambda (t _g xs) (+ (* (fit-terms-u t) (abs-deviation t xs)) (host-error t xs)))
               (lambda (t)
-                (match-define (centring _ u _ total _ y coef b) t)
+                (match-define (fit-terms _ u _ total _ y coef b) t)
                 (* total
                    (+ (* u (abs b))
                       (* (gamma (+ (length coef) 3) double-u)
@@ -216,7 +216,7 @@
   (define columns (columns-of X))
   (define mean-gamma (centring-gamma c u))
   (define y-gamma (y-centring-gamma c u))
-  (define terms (centring c u weights total columns y coef b))
+  (define terms (fit-terms c u weights total columns y coef b))
   (define ((mean-error g) xs)
     (if fi
         ((mean-model-mean-error means) terms g xs)

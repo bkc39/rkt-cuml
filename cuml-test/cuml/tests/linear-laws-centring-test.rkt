@@ -8,7 +8,6 @@
                   case-weights
                   centred-solve
                   check-host-fit
-                  device-means
                   failed-laws
                   fails?
                   medium-kernel-mean
@@ -17,6 +16,7 @@
                   sherman-morrison-step
                   weighted-mean)
          (only-in "private/linear-data.rkt" lcase-X lcase-y oracle-lstsq solution-coef)
+         (only-in "private/linear-laws.rkt" device-means)
          (only-in "private/real-linear-data.rkt" real-lcase))
 
 (test-case "breast-cancer float32 offset by 2^14: the exact solve of the problem centred with medium-kernel means meets T1 to T4"

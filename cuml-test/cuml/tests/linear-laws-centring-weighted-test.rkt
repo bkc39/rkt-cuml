@@ -5,7 +5,6 @@
          (only-in "private/common-data.rkt" columns-of unit-roundoff)
          (only-in "private/exact-algebra.rkt" dot)
          (only-in "private/linear-centring-data.rkt"
-                  device-means
                   failed-laws
                   fails?
                   mean-radius
@@ -13,6 +12,7 @@
                   strided-weighted-mean
                   worst-y-epsilon)
          (only-in "private/linear-data.rkt" lcase lcase-X lcase-w lcase-y oracle-lstsq solution-coef)
+         (only-in "private/linear-laws.rkt" device-means)
          (only-in "private/real-linear-data.rkt" real-lcase))
 
 (define corner-signs '(1 -1 -1 0 1 1 0 -1 0 -1 1 1 1 -1 -1 -1 -1 -1 0 -1 -1 1 1 1 -1 1 -1 1 1))

@@ -36,7 +36,6 @@
          centred-solve
          check-host-fit
          consistent
-         device-means
          exact-norm
          failed-laws
          fails?
