@@ -6,40 +6,27 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" on-vector)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
-         (only-in "private/svm-data.rkt" case-fit fresh-rows kkt-cases svm-case))
-
-(define label-sets
-  '((reals (0 1) #f) (named ("no" "yes") #f)
-                     (symbols (no yes) #f)
-                     (int32 (0 1) int32)
-                     (int64 (3 7) int64)
-                     (float32 (0 1) float32)
-                     (float64 (-1 1) float64)))
+         (only-in "private/svm-data.rkt"
+                  case-fit
+                  encoded-labels
+                  fresh-rows
+                  kkt-cases
+                  label-encodings
+                  svm-case))
 
 (test-gpu "predict is classes[1] exactly where the decision is at least 0"
   (define c (first (kkt-cases)))
   (match-define (struct* svm-case ([X X] [y y] [dtype dt])) c)
   (define rows (fresh-rows 200 (length (first X)) 5))
-  (for ([set (in-list label-sets)])
-    (match-define (list name classes device) set)
-    (match-define (list lo hi) classes)
-    (define labels
-      (for/list ([v (in-list y)])
-        (if (zero? v) lo hi)))
+  (for ([encoding (in-list label-encodings)])
+    (match-define (list name (and classes (list lo hi)) device) encoding)
     (define (as-given v)
       (if (memq device '(float32 float64))
           (exact->inexact v)
           v))
     (test-case (format "~a" name)
-      (define r
-        (case-fit (struct-copy svm-case
-                               c
-                               [y
-                                (if device
-                                    (on-vector labels device)
-                                    labels)])))
+      (define r (case-fit (struct-copy svm-case c [y (encoded-labels encoding y)])))
       (define decisions (device-vector->list (svc-decision-function r (on-matrix rows dt))))
       (define predicted (svc-predict r (on-matrix rows dt)))
       (law-case "R2"

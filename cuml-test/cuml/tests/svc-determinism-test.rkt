@@ -6,7 +6,7 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
-         (only-in "private/svm-data.rkt" dyadic-blobs fit-parts fresh-rows kernels svm-case)
+         (only-in "private/svm-data.rkt" dyadic-blobs fresh-rows kernels svc-result->svm-fit svm-case)
          (only-in "private/svm-oracle.rkt" check-kkt))
 
 (define-values (big-rows big-labels) (dyadic-blobs 20000 20 9))
@@ -18,7 +18,7 @@
       (define X (on-matrix big-rows dt))
       (match-define (list first-fit second-fit third-fit)
         (for/list ([_ (in-range 3)])
-          (fit-parts (svc-fit X big-labels #:kernel kernel))))
+          (svc-result->svm-fit (svc-fit X big-labels #:kernel kernel))))
       (law-case "D1"
         (check-equal? second-fit first-fit)
         (check-equal? third-fit first-fit)))))
@@ -33,7 +33,7 @@
       (define X (on-matrix rows dt))
       (match-define (list middle large)
         (for/list ([cache (in-list '(1024 4096))])
-          (fit-parts (svc-fit X labels #:kernel kernel #:cache-size cache))))
+          (svc-result->svm-fit (svc-fit X labels #:kernel kernel #:cache-size cache))))
       (law-case "D2"
         (check-equal? large middle)))))
 
@@ -45,11 +45,11 @@
       (define c (svm-case (format "cache ~a" cache) rows labels #f 1 kernel dt 'scale))
       (check-kkt
        c
-       (fit-parts (svc-fit (on-matrix rows dt) labels #:kernel kernel #:cache-size cache))))))
+       (svc-result->svm-fit (svc-fit (on-matrix rows dt) labels #:kernel kernel #:cache-size cache))))))
 
 (test-gpu "predicting twice gives bit-identical results"
   (for* ([dt (in-list dtypes)]
-         [kernel (in-list '(linear poly rbf sigmoid))])
+         [kernel (in-list kernels)])
     (test-case (format "~a ~a" dt kernel)
       (define r (svc-fit (on-matrix rows dt) labels #:kernel kernel))
       (define P (on-matrix probe dt))

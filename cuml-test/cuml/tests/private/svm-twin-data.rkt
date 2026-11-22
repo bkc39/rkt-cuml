@@ -24,7 +24,7 @@
                   twin-default-params
                   twin-results)
          (only-in "real-logistic-data.rkt" labelled-case labelled-set)
-         (only-in "svm-data.rkt" dyadic-blobs fit-parts svm-fit))
+         (only-in "svm-data.rkt" dyadic-blobs svc-result->svm-fit svm-fit))
 
 (provide (struct-out fixture)
          (struct-out trial)
@@ -32,6 +32,7 @@
          check-cuml-twins
          check-sklearn-twins
          separable-blobs
+         sklearn-trials
          svc-twin-params
          trial-fit
          twin-fixtures
@@ -59,7 +60,7 @@
 
 (define twin-gammas '(0.25 auto scale))
 
-(define (as-json gamma)
+(define (gamma->json gamma)
   (if (symbol? gamma)
       (symbol->string gamma)
       (real->double-flonum gamma)))
@@ -83,7 +84,7 @@
           'y labels
           'w (json-null)
           'kernel (symbol->string kernel)
-          'gamma (as-json gamma)
+          'gamma (gamma->json gamma)
           'degree 3
           'coef0 0.0
           'C 1.0
@@ -107,12 +108,12 @@
                                [r (in-list fits)])
                       (twin-request op t (gamma-of t r)))))
 
-(define (fitted-trials trials op gamma-of)
+(define (fitted-trials op trials gamma-of)
   (define fits (map trial-fit trials))
   (values fits (requested op trials fits gamma-of)))
 
-(define (ours-of r rows dt)
-  (match-define (struct* svm-fit ([sv sv] [dual dual] [b b])) (fit-parts r))
+(define (svc-result->hash r rows dt)
+  (match-define (struct* svm-fit ([sv sv] [dual dual] [b b])) (svc-result->svm-fit r))
   (define X (on-matrix rows dt))
   (hasheq 'support (device-vector->list (svc-result-support r))
           'n_iter (svc-result-n-iter r)
@@ -125,7 +126,7 @@
 (define compared
   '(support n_iter predict support_vectors_bits dual_coef_bits intercept_bits decision_bits))
 
-;; 'scale gamma's distance from Python's in ulps where it is not 0 (the spec's §7 item 1);
+;; 'scale gamma's distance from Python's in ulps where it is not 0;
 ;; T1 for those fixtures runs with our gamma passed to Python as a number.
 (define scale-ulps (hash '("blobs 300x4 sep 3/2" float64) 1))
 
@@ -145,7 +146,7 @@
   (trial-gamma t))
 
 (define (check-cuml-twins trials)
-  (define-values (fits answers) (fitted-trials trials "cuml-fit" as-given))
+  (define-values (fits answers) (fitted-trials "cuml-fit" trials as-given))
   (define pinned
     (if (ormap (lambda (t) (positive? (scale-ulps-of t))) trials)
         (requested "cuml-fit" trials fits resolved)
@@ -163,10 +164,16 @@
     (test-case (format "~a ~a ~a gamma ~a" name dt kernel gamma)
       (when (eq? gamma 'scale)
         (check-equal? (ulps (svc-result-gamma r) theirs) departs "T2"))
-      (define ours (ours-of r rows dt))
+      (define ours (svc-result->hash r rows dt))
       (define reference (if (positive? departs) at-ours theirs))
       (for ([key (in-list compared)])
         (check-equal? (hash-ref ours key) (hash-ref reference key) (format "T1 ~a" key))))))
+
+(define sklearn-kernels '(linear poly rbf))
+
+(define (sklearn-trials fx dt)
+  (for/list ([kernel (in-list sklearn-kernels)])
+    (trial fx dt kernel 'scale)))
 
 (define sklearn-bounds (hasheq 'linear 0.04 'poly 0.064 'rbf 0.002))
 
@@ -176,7 +183,7 @@
   (svc-result-gamma r))
 
 (define (check-sklearn-twins trials #:separable? [separable? #f])
-  (define-values (fits answers) (fitted-trials trials "sklearn-fit" resolved))
+  (define-values (fits answers) (fitted-trials "sklearn-fit" trials resolved))
   (for ([t (in-list trials)]
         [r (in-list fits)]
         [theirs (in-list answers)])

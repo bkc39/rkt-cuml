@@ -17,6 +17,7 @@
          (only-in racket/match match-define)
          (only-in racket/math exact-floor)
          (only-in raft device-matrix->list* device-vector->list)
+         (only-in threading ~>)
          (only-in "blob-data.rkt" normal-source uniform-source)
          (only-in "common-data.rkt" on-vector)
          (only-in "linear-data.rkt" dtypes on-matrix))
@@ -25,10 +26,12 @@
          (struct-out svm-fit)
          case-fit
          dyadic-blobs
-         fit-parts
+         encoded-labels
          fresh-rows
          kernels
          kkt-cases
+         label-encodings
+         svc-result->svm-fit
          weighted-cases)
 
 (struct svm-case (name X y w C kernel dtype gamma))
@@ -37,10 +40,28 @@
 
 (define kernels '(linear poly rbf sigmoid))
 
+(define label-encodings
+  '((reals (0 1) #f) (three-seven (3 7) #f)
+                     (strings ("no" "yes") #f)
+                     (symbols (no yes) #f)
+                     (int32 (0 1) int32)
+                     (int64 (3 7) int64)
+                     (float32 (0 1) float32)
+                     (float64 (-1 1) float64)))
+
+(define (encoded-labels encoding codes)
+  (match-define (list _ (list lo hi) device) encoding)
+  (define labels
+    (for/list ([v (in-list codes)])
+      (if (zero? v) lo hi)))
+  (if device
+      (on-vector labels device)
+      labels))
+
 (define dyadic-step (expt 2 -6))
 
 (define (dyadic v)
-  (* dyadic-step (round (/ (inexact->exact v) dyadic-step))))
+  (~> v inexact->exact (/ dyadic-step) round (* dyadic-step)))
 
 (define (dyadic-blobs n d seed #:sep [sep 3/2] #:flip [flip 1/20])
   (define next (normal-source seed))
@@ -103,7 +124,7 @@
            #:gamma (svm-case-gamma c)
            #:C (exact->inexact (svm-case-C c))))
 
-(define (fit-parts r)
+(define (svc-result->svm-fit r)
   (svm-fit (device-matrix->list* (svc-result-support-vectors r))
            (device-vector->list (svc-result-support r))
            (first (device-matrix->list* (svc-result-dual-coef r)))

@@ -7,9 +7,16 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in "private/common-data.rkt" on-vector)
+         (only-in threading ~>)
          (only-in "private/linear-data.rkt" check-law-case dtypes law-case on-matrix)
-         (only-in "private/svm-data.rkt" dyadic-blobs fit-parts fresh-rows svm-case svm-fit)
+         (only-in "private/svm-data.rkt"
+                  dyadic-blobs
+                  encoded-labels
+                  fresh-rows
+                  label-encodings
+                  svc-result->svm-fit
+                  svm-case
+                  svm-fit)
          (only-in "private/svm-oracle.rkt" check-kkt))
 
 (define-values (rows labels) (dyadic-blobs 300 4 2))
@@ -19,27 +26,20 @@
   (for/list ([v (in-list labels)])
     (if (zero? v) lo hi)))
 
-(define encodings
-  `((reals ,labels) (three-seven ,(relabelled 3 7))
-                    (strings ,(relabelled "no" "yes"))
-                    (symbols ,(relabelled 'no 'yes))
-                    (int32 ,(on-vector labels 'int32))
-                    (int64 ,(on-vector (relabelled 3 7) 'int64))
-                    (float64 ,(on-vector (relabelled -1 1) 'float64))))
-
 (define (without-classes r)
-  (struct-copy svm-fit (fit-parts r) [classes #f]))
+  (struct-copy svm-fit (svc-result->svm-fit r) [classes #f]))
 
 (test-gpu "relabelling y leaves the fit bit for bit as it was"
   (for* ([dt (in-list dtypes)]
          [kernel (in-list '(linear rbf))])
     (define X (on-matrix rows dt))
     (define reference (without-classes (svc-fit X labels #:kernel kernel)))
-    (for ([encoding (in-list encodings)])
-      (match-define (list name y) encoding)
+    (for ([encoding (in-list label-encodings)])
+      (match-define (list name _ _) encoding)
       (test-case (format "~a ~a ~a" dt kernel name)
         (law-case "L1"
-          (check-equal? (without-classes (svc-fit X y #:kernel kernel)) reference))))))
+          (check-equal? (without-classes (svc-fit X (encoded-labels encoding labels) #:kernel kernel))
+                        reference))))))
 
 (define (largest-sum ds es)
   (for/fold ([m 0.0])
@@ -58,7 +58,7 @@
       (law-case "L2 classes"
         (check-equal? (svc-result-classes r) '(no yes))
         (check-equal? (svc-result-classes s) '(no yes)))
-      (check-kkt (svm-case "swapped" rows swapped #f 1 kernel dt 'scale) (fit-parts s))
+      (check-kkt (svm-case "swapped" rows swapped #f 1 kernel dt 'scale) (svc-result->svm-fit s))
       (define P (on-matrix probe dt))
       (define ds (device-vector->list (svc-decision-function r P)))
       (define es (device-vector->list (svc-decision-function s P)))
@@ -86,4 +86,4 @@
       (define predicted (svc-predict (svc-fit X y #:kernel 'rbf) X))
       (law-case "L3"
         (check-equal? (score e X truth)
-                      (exact->inexact (/ (count equal? predicted truth) (length truth))))))))
+                      (~> (count equal? predicted truth) (/ (length truth)) exact->inexact))))))

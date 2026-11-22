@@ -11,8 +11,8 @@
          (only-in "private/svm-data.rkt"
                   case-fit
                   dyadic-blobs
-                  fit-parts
                   fresh-rows
+                  svc-result->svm-fit
                   svm-case
                   svm-case-name
                   svm-fit
@@ -68,8 +68,8 @@
       (define g (base-gamma dt))
       (define zeroed (blob-case "zeroed" dt kernel #:w w #:gamma g))
       (define deleted (blob-case "deleted" dt kernel #:X (kept rows) #:y (kept labels) #:gamma g))
-      (match-define (struct* svm-fit ([support zs])) (fit-parts (case-fit zeroed)))
-      (match-define (struct* svm-fit ([support ds])) (fit-parts (case-fit deleted)))
+      (match-define (struct* svm-fit ([support zs])) (svc-result->svm-fit (case-fit zeroed)))
+      (match-define (struct* svm-fit ([support ds])) (svc-result->svm-fit (case-fit deleted)))
       (law-case "W2 support"
         (check-equal? zs
                       (for/list ([i (in-list ds)])
@@ -102,5 +102,5 @@
     (match-define (list dt kernel) arm)
     (test-case (format "~a ~a" dt kernel)
       (law-case "W4"
-        (check-equal? (fit-parts (case-fit (blob-case "ones" dt kernel #:w (make-list 300 1))))
-                      (fit-parts (case-fit (blob-case "none" dt kernel))))))))
+        (check-equal? (svc-result->svm-fit (case-fit (blob-case "ones" dt kernel #:w (make-list 300 1))))
+                      (svc-result->svm-fit (case-fit (blob-case "none" dt kernel))))))))

@@ -8,8 +8,8 @@
                   svc-result-n-support
                   svc-result-support)
          (only-in racket/list append*)
-         (only-in racket/match match-define)
-         (only-in rackunit check-equal? check-true test-case)
+         (only-in racket/match match match-define)
+         (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" unit-roundoff)
@@ -48,12 +48,11 @@
          [shape (in-list gamma-shapes)]
          [arm (in-list '(blobs shifted))])
     (match-define (list n d) shape)
+    (define-values (blob-rows labels) (dyadic-blobs n d 5))
     (define rows
-      (if (eq? arm 'blobs)
-          (let-values ([(rows _labels) (dyadic-blobs n d 5)])
-            rows)
-          (shifted n d)))
-    (define-values (_rows labels) (dyadic-blobs n d 5))
+      (match arm
+        ['blobs blob-rows]
+        ['shifted (shifted n d)]))
     (test-case (format "~a ~a ~a" dt arm shape)
       (define r (svc-fit (on-matrix rows dt) labels #:kernel 'rbf))
       (define bound
@@ -74,7 +73,6 @@
 (test-gpu "a numeric gamma is kept as given, for every kernel"
   (define-values (rows labels) (dyadic-blobs 60 3 3))
   (for ([kernel (in-list kernels)])
-    (check-true
-     (= (svc-result-gamma (svc-fit (on-matrix rows 'float64) labels #:kernel kernel #:gamma 0.25))
-        0.25)
-     (format "~a" kernel))))
+    (check-equal? (svc-result-gamma (svc-fit (on-matrix rows 'float64) labels #:kernel kernel #:gamma 0.25))
+                  0.25
+                  (format "~a" kernel))))
