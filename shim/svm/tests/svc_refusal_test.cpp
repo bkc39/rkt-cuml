@@ -17,6 +17,7 @@ constexpr int64_t rows = 8;
 constexpr int64_t cols = 2;
 constexpr int64_t quiet_peak = int64_t{64} << 10;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
+constexpr int64_t forged_side = 46341;
 
 struct fit_case {
   std::vector<double> x;
@@ -152,6 +153,26 @@ TEST(svc_refusal, F_an_overlong_row_is_refused) {
   EXPECT_EQ(got.rfind("X: row 1: expected a squared norm of at most", 0), 0U)
       << got;
   EXPECT_NE(got.find("; rescale X"), std::string::npos) << got;
+}
+
+TEST(svc_refusal, F_an_index_overflow_is_refused) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  const filled<float> x(res, narrowed<float>(grid()), {rows, cols});
+  const filled<int32_t> codes(res, alternating(), {rows});
+  const rr_view forged = shaped(*x.view(), {forged_side, forged_side});
+  record out(res);
+  double gamma = 0.0;
+  int32_t n_iter = 0;
+  int32_t negative = 0;
+  int32_t positive = 0;
+  const int status = cuml_svm_svc_fit(
+      res.handle, &forged, codes.view(), nullptr, &out.r, CUML_SVM_KERNEL_RBF,
+      3, CUML_SVM_GAMMA_SCALE, 0.0, 0.0, 1.0, 1e-3, 1024.0, -1, 1000, &gamma,
+      &n_iter, &negative, &positive);
+  expect_untouched(out);
+  EXPECT_EQ(outcome(status),
+            "X: 46341x46341 elements do not fit the index type");
 }
 
 TEST(svc_refusal, V0c_a_fit_without_support_vectors_is_refused) {
