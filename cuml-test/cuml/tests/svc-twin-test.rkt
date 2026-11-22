@@ -5,7 +5,7 @@
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/svm-twin-data.rkt" svc-twin-params))
 
-(test-twin "T3: the hyperparameters are Python cuML's, with max-iter #f for its -1"
+(test-twin "the hyperparameters are Python cuML's, with max-iter #f for its -1"
   (define theirs
     (svc-twin-params #:unbound '(class-weight decision-function-shape random-state epsilon)))
   (check-equal? (hash-ref theirs 'max-iter) -1)

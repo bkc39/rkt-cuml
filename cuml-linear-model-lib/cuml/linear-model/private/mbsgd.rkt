@@ -10,6 +10,15 @@
                   define-codes
                   define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
+         (only-in cuml/core/private/labels
+                  class-view
+                  decode-labels
+                  device-kind?
+                  fit-labels/who
+                  label-codes/who
+                  label-kind?
+                  list-kind?
+                  y-kind/who)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/flonum flsingle)
          (only-in racket/match match match-define struct*)
@@ -31,15 +40,6 @@
                   nonnegative-value/who
                   penalty-code
                   positive-value/who)
-         (only-in cuml/core/private/labels
-                  class-view
-                  decode-labels
-                  device-kind?
-                  fit-labels/who
-                  label-codes/who
-                  label-kind?
-                  list-kind?
-                  y-kind/who)
          (only-in "native.rkt"
                   cuml-linear-model-mbsgd-classifier-fit-job
                   cuml-linear-model-mbsgd-regressor-fit-job

@@ -43,7 +43,7 @@
 
 (define gamma-shapes '((40 3) (300 4) (2000 10)))
 
-(test-gpu "G1: gamma 'scale is 1/(d·var) with var within its bound of the exact variance"
+(test-gpu "gamma 'scale is 1/(d·var) with var within its bound of the exact variance"
   (for* ([dt (in-list dtypes)]
          [shape (in-list gamma-shapes)]
          [arm (in-list '(blobs shifted))])
@@ -62,7 +62,7 @@
                       (abs (- (* (inexact->exact (svc-result-gamma r)) d (exact-variance rows)) 1))
                       bound))))
 
-(test-gpu "G2: gamma 'auto is exactly 1/d"
+(test-gpu "gamma 'auto is exactly 1/d"
   (for* ([dt (in-list dtypes)]
          [d (in-list '(1 3 7 10))])
     (define-values (rows labels) (dyadic-blobs 60 d 3))

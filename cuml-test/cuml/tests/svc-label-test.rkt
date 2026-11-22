@@ -30,7 +30,7 @@
 (define (without-classes r)
   (struct-copy svm-fit (fit-parts r) [classes #f]))
 
-(test-gpu "L1: relabelling y leaves the fit bit for bit as it was"
+(test-gpu "relabelling y leaves the fit bit for bit as it was"
   (for* ([dt (in-list dtypes)]
          [kernel (in-list '(linear rbf))])
     (define X (on-matrix rows dt))
@@ -47,7 +47,7 @@
              [e (in-list es)])
     (max m (abs (+ d e)))))
 
-(test-gpu "L2: reversing the class order negates the decision"
+(test-gpu "reversing the class order negates the decision"
   (define swapped (map (lambda (v) (if (zero? v) 'yes 'no)) labels))
   (for* ([dt (in-list dtypes)]
          [kernel (in-list '(linear poly rbf))])
@@ -73,7 +73,7 @@
                             '(yes no)
                             '(no yes))))))))
 
-(test-gpu "L3: score is the exact accuracy of predict, an unseen label counting as wrong"
+(test-gpu "score is the exact accuracy of predict, an unseen label counting as wrong"
   (define y (relabelled 'no 'yes))
   (define truth
     (for/list ([v (in-list y)]

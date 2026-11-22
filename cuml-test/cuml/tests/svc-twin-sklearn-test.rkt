@@ -15,8 +15,8 @@
               [kernel (in-list sklearn-kernels)])
     (trial fx dt kernel 'scale)))
 
-(test-twin "S1, S2: standardised breast-cancer decisions are near sklearn's, labels equal off the boundary"
+(test-twin "standardised breast-cancer decisions are near sklearn's, labels equal off the boundary"
   (check-sklearn-twins (trials (breast-cancer))))
 
-(test-twin "S3: separable blobs give sklearn's labels and support count"
+(test-twin "separable blobs give sklearn's labels and support count"
   (check-sklearn-twins (trials (separable-blobs)) #:separable? #t))

@@ -11,7 +11,7 @@
          (only-in "private/svm-data.rkt" case-fit fresh-rows kkt-cases svm-case)
          (only-in "private/svm-oracle.rkt" check-referee))
 
-(test-gpu "R1: the linear and poly decisions are within B of the exact decision"
+(test-gpu "the linear and poly decisions are within B of the exact decision"
   (check-referee '(linear poly)))
 
 (define label-sets
@@ -22,7 +22,7 @@
                      (float32 (0 1) float32)
                      (float64 (-1 1) float64)))
 
-(test-gpu "R2: predict is classes[1] exactly where the decision is at least 0"
+(test-gpu "predict is classes[1] exactly where the decision is at least 0"
   (define c (first (kkt-cases)))
   (match-define (struct* svm-case ([X X] [y y] [dtype dt])) c)
   (define rows (fresh-rows 200 (length (first X)) 5))
@@ -54,7 +54,7 @@
                         (as-given (if (>= d 0) hi lo))))
         (check-equal? (svc-result-classes r) (map as-given classes))))))
 
-(test-gpu "R2: a decision of exactly 0 predicts classes[1]"
+(test-gpu "a decision of exactly 0 predicts classes[1]"
   (for ([dt (in-list dtypes)])
     (test-case (format "~a" dt)
       (define r (svc-fit (on-matrix '((-1) (1) (-2) (2)) dt) '(a b a b) #:kernel 'linear))

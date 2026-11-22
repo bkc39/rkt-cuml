@@ -46,7 +46,7 @@
   (define next (normal-source seed))
   (define coin (uniform-source (+ seed 7919)))
   (define shift (/ sep (sqrt d)))
-  (for/lists (rows labels)
+  (for/lists (rows labels #:result (values rows labels))
              ([_ (in-range n)])
              (define label (if (< (coin) 0.5) 0 1))
              (define row

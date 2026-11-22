@@ -11,7 +11,7 @@
 
 (define-values (big-rows big-labels) (dyadic-blobs 20000 20 9))
 
-(test-gpu "D1: three 20000×20 fits in one process are bit-identical"
+(test-gpu "three 20000×20 fits in one process are bit-identical"
   (for* ([dt (in-list dtypes)]
          [kernel (in-list '(linear rbf))])
     (test-case (format "~a ~a" dt kernel)
@@ -26,7 +26,7 @@
 (define-values (rows labels) (dyadic-blobs 300 4 4))
 (define probe (fresh-rows 200 4 4))
 
-(test-gpu "D2: a cache that holds the kernel leaves the fit bit for bit as it was"
+(test-gpu "a cache that holds the kernel leaves the fit bit for bit as it was"
   (for* ([dt (in-list dtypes)]
          [kernel (in-list kernels)])
     (test-case (format "~a ~a" dt kernel)
@@ -37,7 +37,7 @@
       (law-case "D2"
         (check-equal? large middle)))))
 
-(test-gpu "D2: a small cache changes the path, and the fit still passes K"
+(test-gpu "a small cache changes the path, and the fit still passes K"
   (for* ([dt (in-list dtypes)]
          [kernel (in-list kernels)]
          [cache (in-list '(1 100))])
@@ -47,7 +47,7 @@
        c
        (fit-parts (svc-fit (on-matrix rows dt) labels #:kernel kernel #:cache-size cache))))))
 
-(test-gpu "D3: predicting twice gives bit-identical results"
+(test-gpu "predicting twice gives bit-identical results"
   (for* ([dt (in-list dtypes)]
          [kernel (in-list '(linear poly rbf sigmoid))])
     (test-case (format "~a ~a" dt kernel)

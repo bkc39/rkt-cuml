@@ -110,25 +110,25 @@
                                  (cons (cons (car ps) (cadr* ps)) (loop (cddr ps))))))])
     (values (car p) (cdr p))))
 
-(test-gpu "F: every fit refusal, in both dtypes"
+(test-gpu "every fit refusal, in both dtypes"
   (for* ([dt (in-list dtypes)]
          [row (in-list fit-rows)])
     (match-define (list* given message keywords) row)
     (test-case (format "~a ~a" dt message)
       (check-refused message (fit-call dt (given-of given) keywords)))))
 
-(test-gpu "F: a non-finite or overlong row and a steep poly kernel are refused in float32"
+(test-gpu "a non-finite or overlong row and a steep poly kernel are refused in float32"
   (check-refused "svc-fit: X: row 0: expected a squared norm of at most"
                  (fit-call 'float32 (hasheq 'X (scaled 1e19)) '()))
   (check-refused "svc-fit: the kernel can overflow (bound "
                  (fit-call 'float32 (hash) '(#:kernel poly #:degree 40 #:coef0 1 #:gamma 1))))
 
-(test-gpu "F: tol 0 is refused at once"
+(test-gpu "tol 0 is refused at once"
   (define started (current-inexact-milliseconds))
   (check-refused "svc-fit: tol:" (fit-call 'float64 (hash) '(#:tol 0)))
   (check-true (< (- (current-inexact-milliseconds) started) 1000)))
 
-(test-gpu "F: predict and decision refusals"
+(test-gpu "predict and decision refusals"
   (define r (svc-fit (on-matrix rows 'float64) labels))
   (for ([apply-svc (in-list (list svc-predict svc-decision-function))]
         [who (in-list '(svc-predict svc-decision-function))])
