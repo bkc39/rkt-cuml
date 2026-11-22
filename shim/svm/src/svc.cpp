@@ -1,9 +1,10 @@
+#include <cuml/svm/svm_model.h>
+#include <cuml/svm/svm_parameter.h>
+
 #include <cstdint>
 #include <cuml/common/logger.hpp>
 #include <cuml/matrix/kernel_params.hpp>
 #include <cuml/svm/svc.hpp>
-#include <cuml/svm/svm_model.h>
-#include <cuml/svm/svm_parameter.h>
 #include <format>
 #include <memory>
 #include <raft/core/handle.hpp>
@@ -123,8 +124,8 @@ void deposit_parts(const raft::handle_t& handle, svc_parts<T> parts, int64_t d,
   const rr_view sv = raftrkt::region(owned->support_vectors.data(), ns, d,
                                      raftrkt::layout::row_major);
   const rr_view support = raftrkt::region(owned->support);
-  const rr_view dual = raftrkt::region(owned->dual.data(), 1, ns,
-                                       raftrkt::layout::row_major);
+  const rr_view dual =
+      raftrkt::region(owned->dual.data(), 1, ns, raftrkt::layout::row_major);
   const rr_view intercept = raftrkt::region(owned->intercept);
   settle(handle);
   raftrkt::deposit(out, "out", handle, std::move(owned),
@@ -144,8 +145,8 @@ fit_report fit_into(const raft::handle_t& handle, const fit_views& views,
       raftrkt::vector_data<int32_t, int32_t>(views.codes, "y", x.n);
   const int64_t bad = first_bad_code(codes, x.n, stream);
   if (bad >= 0) {
-    throw logic_error(std::format("y: row {}: expected a class code 0 or 1",
-                                  bad));
+    throw logic_error(
+        std::format("y: row {}: expected a class code 0 or 1", bad));
   }
   const T* w = checked_weights<T>(views.weight, x.n, stream);
   const int32_t empty = empty_class(w, codes, x.n, stream);
@@ -203,16 +204,18 @@ int cuml_svm_svc_fit(void* handle, const rr_view* x, const rr_view* codes,
                      double gamma, double coef0, double C, double tol,
                      double cache_size, int32_t max_iter,
                      int32_t nochange_steps, double* gamma_used,
-                     int32_t* n_iter, int32_t* n_negative,
-                     int32_t* n_positive, int32_t* empty_class) {
+                     int32_t* n_iter, int32_t* n_negative, int32_t* n_positive,
+                     int32_t* empty_class) {
   return cumlrkt::guarded(
       handle, {{"X", x}, {"y", codes}, {"sample-weight", sample_weight}},
       [&](const raft::handle_t& h) {
         rr_deposit* const into = raftrkt::require(out, "out");
         double* const gamma_out = raftrkt::require(gamma_used, "gamma_used");
         int32_t* const iter_out = raftrkt::require(n_iter, "n_iter");
-        int32_t* const negative_out = raftrkt::require(n_negative, "n_negative");
-        int32_t* const positive_out = raftrkt::require(n_positive, "n_positive");
+        int32_t* const negative_out =
+            raftrkt::require(n_negative, "n_negative");
+        int32_t* const positive_out =
+            raftrkt::require(n_positive, "n_positive");
         int32_t* const empty_out = raftrkt::require(empty_class, "empty_class");
         if (kernel < CUML_SVM_KERNEL_LINEAR ||
             kernel > CUML_SVM_KERNEL_SIGMOID) {
@@ -223,8 +226,8 @@ int cuml_svm_svc_fit(void* handle, const rr_view* x, const rr_view* codes,
           throw cumlrkt::logic_error("gamma-mode: expected a code from 0 to 2");
         }
         const cumlrkt::svm::fit_settings s{
-            kernel, degree,     gamma_mode, gamma,    coef0,
-            C,      tol,        cache_size, max_iter, nochange_steps};
+            kernel, degree, gamma_mode, gamma,    coef0,
+            C,      tol,    cache_size, max_iter, nochange_steps};
         cumlrkt::on_floats(x, "X", [&](auto tag) {
           const cumlrkt::svm::fit_report r =
               cumlrkt::svm::fit_into<decltype(tag)>(

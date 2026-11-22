@@ -183,26 +183,25 @@ void threshold_labels(const T* decision, int64_t n, const L* classes, L* out,
                      thresholded<T, L>{decision, classes, out});
 }
 
-#define CUMLRKT_SVM_LABELS(T, L)                                            \
-  template void threshold_labels<T, L>(const T*, int64_t, const L*, L*,     \
+#define CUMLRKT_SVM_LABELS(T, L)                                        \
+  template void threshold_labels<T, L>(const T*, int64_t, const L*, L*, \
                                        rmm::cuda_stream_view);
 
-#define CUMLRKT_SVM_FLOAT(T)                                                \
-  template void codes_to<T>(const int32_t*, int64_t, T*,                    \
-                            rmm::cuda_stream_view);                         \
-  template std::pair<double, double> class_weights<T>(                      \
-      const int32_t*, const T*, int64_t, rmm::cuda_stream_view);            \
-  template double penalty_total<T>(const T*, int64_t, double,               \
-                                   rmm::cuda_stream_view);                  \
-  template double largest_squared_norm<T>(const T*, int64_t, int64_t,       \
-                                          rmm::cuda_stream_view);           \
-  template double absolute_total<T>(const T*, int64_t,                      \
-                                    rmm::cuda_stream_view);                 \
-  template std::pair<int64_t, int64_t> sign_counts<T>(const T*, int64_t,    \
-                                                      rmm::cuda_stream_view); \
-  CUMLRKT_SVM_LABELS(T, int32_t)                                            \
-  CUMLRKT_SVM_LABELS(T, int64_t)                                            \
-  CUMLRKT_SVM_LABELS(T, float)                                              \
+#define CUMLRKT_SVM_FLOAT(T)                                                   \
+  template void codes_to<T>(const int32_t*, int64_t, T*,                       \
+                            rmm::cuda_stream_view);                            \
+  template std::pair<double, double> class_weights<T>(                         \
+      const int32_t*, const T*, int64_t, rmm::cuda_stream_view);               \
+  template double penalty_total<T>(const T*, int64_t, double,                  \
+                                   rmm::cuda_stream_view);                     \
+  template double largest_squared_norm<T>(const T*, int64_t, int64_t,          \
+                                          rmm::cuda_stream_view);              \
+  template double absolute_total<T>(const T*, int64_t, rmm::cuda_stream_view); \
+  template std::pair<int64_t, int64_t> sign_counts<T>(const T*, int64_t,       \
+                                                      rmm::cuda_stream_view);  \
+  CUMLRKT_SVM_LABELS(T, int32_t)                                               \
+  CUMLRKT_SVM_LABELS(T, int64_t)                                               \
+  CUMLRKT_SVM_LABELS(T, float)                                                 \
   CUMLRKT_SVM_LABELS(T, double)
 
 CUMLRKT_SVM_FLOAT(float)

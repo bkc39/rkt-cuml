@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cuda_runtime_api.h>
+#include <cuml/svm/svm_parameter.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -10,11 +11,10 @@
 #include <cstring>
 #include <cuda/memory_resource>
 #include <cuml/common/logger.hpp>
-#include <cuml/svm/svm_parameter.h>
-#include <random>
-#include <raft/core/handle.hpp>
-#include <rmm/device_uvector.hpp>
 #include <initializer_list>
+#include <raft/core/handle.hpp>
+#include <random>
+#include <rmm/device_uvector.hpp>
 #include <rmm/mr/cuda_memory_resource.hpp>
 #include <rmm/mr/per_device_resource.hpp>
 #include <rmm/mr/statistics_resource_adaptor.hpp>
@@ -25,8 +25,8 @@
 
 #include "cumlrkt/support.hpp"
 #include "cumlrkt/svm.h"
-#include "raftrkt/error.hpp"
 #include "raftrkt/c_api.h"
+#include "raftrkt/error.hpp"
 
 namespace cumlrkt::test {
 
@@ -260,11 +260,10 @@ template <typename T>
 rmm::device_uvector<T> on_device(const std::vector<T>& host,
                                  const raft::handle_t& h) {
   rmm::device_uvector<T> d(host.size(), stream_of(h));
-  raftrkt::cuda_check(cudaMemcpyAsync(d.data(), host.data(),
-                                      host.size() * sizeof(T),
-                                      cudaMemcpyHostToDevice,
-                                      stream_of(h).value()),
-                      "cudaMemcpyAsync");
+  raftrkt::cuda_check(
+      cudaMemcpyAsync(d.data(), host.data(), host.size() * sizeof(T),
+                      cudaMemcpyHostToDevice, stream_of(h).value()),
+      "cudaMemcpyAsync");
   return d;
 }
 

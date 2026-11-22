@@ -1,9 +1,9 @@
+#include <cuml/svm/svm_model.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
 #include <cuml/matrix/kernel_params.hpp>
 #include <cuml/svm/svc.hpp>
-#include <cuml/svm/svm_model.h>
 #include <raft/core/handle.hpp>
 #include <stdexcept>
 #include <vector>

@@ -1,9 +1,10 @@
+#include <cuml/svm/svm_model.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cuml/matrix/kernel_params.hpp>
 #include <cuml/svm/svc.hpp>
-#include <cuml/svm/svm_model.h>
 #include <raft/core/handle.hpp>
 #include <rmm/cuda_stream_view.hpp>
 #include <utility>
@@ -61,8 +62,8 @@ buffer<T> decision_of(const raft::handle_t& handle, const apply_views& views,
   require_row_norms("X", x_norm, x.data, x.n, x.d, stream);
   const double sv_norm = largest_squared_norm(sv.data, sv.n, sv.d, stream);
   const kernel_shape k{s.kernel, s.degree, s.gamma, s.coef0};
-  const bool inner = s.kernel == CUML_SVM_KERNEL_LINEAR ||
-                     s.kernel == CUML_SVM_KERNEL_POLY;
+  const bool inner =
+      s.kernel == CUML_SVM_KERNEL_LINEAR || s.kernel == CUML_SVM_KERNEL_POLY;
   require_kernel<T>(k,
                     inner ? std::sqrt(x_norm) * std::sqrt(sv_norm)
                           : std::max(x_norm, sv_norm),
@@ -122,11 +123,11 @@ void apply_into(const raft::handle_t& handle, const apply_views& views,
 extern "C" {
 
 int cuml_svm_svc_apply(void* handle, const rr_view* x,
-                       const rr_view* support_vectors,
-                       const rr_view* dual_coef, const rr_view* intercept,
-                       const rr_view* classes, rr_deposit* out, int32_t kernel,
-                       int32_t degree, double gamma, double coef0,
-                       double cache_size, int32_t mode) {
+                       const rr_view* support_vectors, const rr_view* dual_coef,
+                       const rr_view* intercept, const rr_view* classes,
+                       rr_deposit* out, int32_t kernel, int32_t degree,
+                       double gamma, double coef0, double cache_size,
+                       int32_t mode) {
   return cumlrkt::guarded(
       handle,
       {{"X", x},

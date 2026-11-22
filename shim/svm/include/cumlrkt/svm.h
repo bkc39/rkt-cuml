@@ -37,30 +37,24 @@ CUMLRKT_API const char* cuml_svm_libcuml_version(void);
    the 1 x n_s dual coefficients y*alpha; region 3 the intercept.
    empty_class: -1, or the code of a class whose rows all have weight 0, in
    which case nothing is fitted or deposited. */
-CUMLRKT_API int cuml_svm_svc_fit(void* handle, const rr_view* x,
-                                 const rr_view* codes,
-                                 const rr_view* sample_weight, rr_deposit* out,
-                                 int32_t kernel, int32_t degree,
-                                 int32_t gamma_mode, double gamma, double coef0,
-                                 double C, double tol, double cache_size,
-                                 int32_t max_iter, int32_t nochange_steps,
-                                 double* gamma_used, int32_t* n_iter,
-                                 int32_t* n_negative, int32_t* n_positive,
-                                 int32_t* empty_class);
+CUMLRKT_API int cuml_svm_svc_fit(
+    void* handle, const rr_view* x, const rr_view* codes,
+    const rr_view* sample_weight, rr_deposit* out, int32_t kernel,
+    int32_t degree, int32_t gamma_mode, double gamma, double coef0, double C,
+    double tol, double cache_size, int32_t max_iter, int32_t nochange_steps,
+    double* gamma_used, int32_t* n_iter, int32_t* n_negative,
+    int32_t* n_positive, int32_t* empty_class);
 CUMLRKT_API void cuml_svm_svc_fit_job(void* args, size_t args_len,
                                       rr_job_outcome* outcome);
 
 /* Deposits in out one value per row of x: the decision function in x's
    dtype (mode 0), or classes[decision >= 0] in classes' dtype (mode 1;
    int32 0/1 when classes is NULL). */
-CUMLRKT_API int cuml_svm_svc_apply(void* handle, const rr_view* x,
-                                   const rr_view* support_vectors,
-                                   const rr_view* dual_coef,
-                                   const rr_view* intercept,
-                                   const rr_view* classes, rr_deposit* out,
-                                   int32_t kernel, int32_t degree, double gamma,
-                                   double coef0, double cache_size,
-                                   int32_t mode);
+CUMLRKT_API int cuml_svm_svc_apply(
+    void* handle, const rr_view* x, const rr_view* support_vectors,
+    const rr_view* dual_coef, const rr_view* intercept, const rr_view* classes,
+    rr_deposit* out, int32_t kernel, int32_t degree, double gamma, double coef0,
+    double cache_size, int32_t mode);
 CUMLRKT_API void cuml_svm_svc_apply_job(void* args, size_t args_len,
                                         rr_job_outcome* outcome);
 

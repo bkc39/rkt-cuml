@@ -21,9 +21,9 @@ void require_integral(const L* y, int64_t n, rmm::cuda_stream_view stream) {
   if constexpr (!std::is_integral_v<L>) {
     const int64_t i = first_non_integral(y, n, stream);
     if (i >= 0) {
-      throw logic_error(std::format(
-          "y: expected integral class labels, got {}",
-          printed(static_cast<double>(read_one(y, i, stream)))));
+      throw logic_error(
+          std::format("y: expected integral class labels, got {}",
+                      printed(static_cast<double>(read_one(y, i, stream)))));
     }
   }
 }
@@ -76,22 +76,21 @@ inline int label_encode(void* handle, const rr_view* y, const rr_view* classes,
 inline int label_classes(void* handle, const rr_view* y, rr_deposit* out) {
   return guarded(handle, {{"y", y}}, [&](const raft::handle_t& h) {
     rr_deposit* const into = raftrkt::require(out, "out");
-    on_class_labels(
-        y, "y", [&](auto tag) { classes_into<decltype(tag)>(h, y, into); });
+    on_class_labels(y, "y",
+                    [&](auto tag) { classes_into<decltype(tag)>(h, y, into); });
   });
 }
 
 }  // namespace cumlrkt
 
-#define CUMLRKT_LABEL_ENTRIES(prefix)                               \
-  int cuml_##prefix##_label_encode(void* handle, const rr_view* y,  \
-                                   const rr_view* classes,          \
-                                   rr_deposit* out) {               \
-    return cumlrkt::label_encode(handle, y, classes, out);          \
-  }                                                                 \
-  CUMLRKT_JOB(cuml_##prefix##_label_encode)                         \
-  int cuml_##prefix##_label_classes(void* handle, const rr_view* y, \
-                                    rr_deposit* out) {              \
-    return cumlrkt::label_classes(handle, y, out);                  \
-  }                                                                 \
+#define CUMLRKT_LABEL_ENTRIES(prefix)                                         \
+  int cuml_##prefix##_label_encode(void* handle, const rr_view* y,            \
+                                   const rr_view* classes, rr_deposit* out) { \
+    return cumlrkt::label_encode(handle, y, classes, out);                    \
+  }                                                                           \
+  CUMLRKT_JOB(cuml_##prefix##_label_encode)                                   \
+  int cuml_##prefix##_label_classes(void* handle, const rr_view* y,           \
+                                    rr_deposit* out) {                        \
+    return cumlrkt::label_classes(handle, y, out);                            \
+  }                                                                           \
   CUMLRKT_JOB(cuml_##prefix##_label_classes)

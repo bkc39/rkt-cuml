@@ -1,4 +1,6 @@
 #include <cuda_runtime_api.h>
+#include <cuml/svm/svm_model.h>
+#include <cuml/svm/svm_parameter.h>
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -6,11 +8,9 @@
 #include <cuml/common/logger.hpp>
 #include <cuml/matrix/kernel_params.hpp>
 #include <cuml/svm/svc.hpp>
-#include <cuml/svm/svm_model.h>
-#include <cuml/svm/svm_parameter.h>
 #include <optional>
-#include <random>
 #include <raft/core/handle.hpp>
+#include <random>
 #include <rmm/device_uvector.hpp>
 #include <string>
 #include <tuple>
@@ -65,13 +65,15 @@ void expect_rebuilt_bitwise(int kernel, int n, int d) {
   cumlrkt::svm::svc_parts<T>& parts = *kept;
   const int ns = static_cast<int>(parts.n_support);
   ASSERT_GT(ns, 0);
-  rmm::device_uvector<T> columns(static_cast<std::size_t>(ns) * d, stream_of(h));
+  rmm::device_uvector<T> columns(static_cast<std::size_t>(ns) * d,
+                                 stream_of(h));
   to_columns(h, parts.support_vectors.data(), ns, d,
              static_cast<const T*>(nullptr), columns.data(), 0);
   const T b = on_host(parts.intercept.data(), 1, h)[0];
   ML::SVM::SvmModel<T> again =
       rebuilt<T>(ns, d, b, parts.dual.data(), columns.data());
-  EXPECT_TRUE(bitwise(predicted(h, x.data(), n, d, k, again, false), decisions));
+  EXPECT_TRUE(
+      bitwise(predicted(h, x.data(), n, d, k, again, false), decisions));
   auto classes = on_device(unique, h);
   again.n_classes = 2;
   again.unique_labels = classes.data();
@@ -79,8 +81,8 @@ void expect_rebuilt_bitwise(int kernel, int n, int d) {
   EXPECT_EQ(parts.n_negative + parts.n_positive, ns);
 }
 
-class ownership
-    : public ::testing::TestWithParam<std::tuple<int, bool, bool>> {};
+class ownership : public ::testing::TestWithParam<std::tuple<int, bool, bool>> {
+};
 
 constexpr int small_rows = 200;
 constexpr int small_cols = 4;
@@ -99,15 +101,17 @@ TEST_P(ownership, O1_rebuilt_predicts_bitwise) {
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(
-    svc, ownership,
-    ::testing::Combine(::testing::Values(0, 1, 2, 3), ::testing::Bool(),
-                       ::testing::Bool()),
-    [](const auto& info) {
-      return std::string("kernel") + std::to_string(std::get<0>(info.param)) +
-             (std::get<1>(info.param) ? "_f64" : "_f32") +
-             (std::get<2>(info.param) ? "_large" : "_small");
-    });
+INSTANTIATE_TEST_SUITE_P(svc, ownership,
+                         ::testing::Combine(::testing::Values(0, 1, 2, 3),
+                                            ::testing::Bool(),
+                                            ::testing::Bool()),
+                         [](const auto& info) {
+                           return std::string("kernel") +
+                                  std::to_string(std::get<0>(info.param)) +
+                                  (std::get<1>(info.param) ? "_f64" : "_f32") +
+                                  (std::get<2>(info.param) ? "_large"
+                                                           : "_small");
+                         });
 
 TEST(ownership_null, O2_free_of_a_zeroed_model_is_a_no_op) {
   CUMLRKT_REQUIRE_GPU();

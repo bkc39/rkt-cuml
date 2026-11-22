@@ -1,3 +1,5 @@
+#include "kernel_checks.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cmath>
@@ -7,7 +9,6 @@
 
 #include "cumlrkt/limits.hpp"
 #include "cumlrkt/svm.h"
-#include "kernel_checks.hpp"
 
 namespace cumlrkt::svm {
 namespace {
@@ -93,7 +94,8 @@ TEST(kernel_checks, the_kernel_cache_index_fits_int32) {
   EXPECT_FALSE(cached<float>(16384.0, 300));
   EXPECT_FALSE(cached<double>(1e6, 300));
   EXPECT_FALSE(cached<double>(1e30, 300));
-  for (const int64_t n : {int64_t{1}, int64_t{300}, int64_t{569}, int64_t{20000}}) {
+  for (const int64_t n :
+       {int64_t{1}, int64_t{300}, int64_t{569}, int64_t{20000}}) {
     EXPECT_TRUE(cached<float>(most_cache_size<float>(n), n)) << n;
     EXPECT_TRUE(cached<double>(most_cache_size<double>(n), n)) << n;
     EXPECT_FALSE(cached<float>(2 * most_cache_size<float>(n), n)) << n;

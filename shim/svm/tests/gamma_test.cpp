@@ -1,3 +1,5 @@
+#include "gamma.hpp"
+
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -6,7 +8,6 @@
 #include <vector>
 
 #include "cumlrkt/support.hpp"
-#include "gamma.hpp"
 #include "svm_fixture.hpp"
 
 namespace cumlrkt::test {
@@ -47,9 +48,10 @@ void expect_scale() {
   const raft::handle_t h;
   const std::vector<T> host = shifted_columns<T>();
   auto x = on_device(host, h);
-  const double var = exact_variance(std::vector<double>(host.begin(), host.end()));
-  EXPECT_EQ(static_cast<double>(element_variance(x.data(), rows * cols,
-                                                 stream_of(h))),
+  const double var =
+      exact_variance(std::vector<double>(host.begin(), host.end()));
+  EXPECT_EQ(static_cast<double>(
+                element_variance(x.data(), rows * cols, stream_of(h))),
             var);
   EXPECT_EQ(scale_gamma(x.data(), rows, cols, stream_of(h)),
             1.0 / (static_cast<double>(cols) * var));

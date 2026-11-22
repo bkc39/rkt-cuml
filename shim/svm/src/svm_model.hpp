@@ -1,11 +1,11 @@
 #pragma once
 
 #include <cuda_runtime_api.h>
+#include <cuml/svm/svm_model.h>
 
 #include <cstdint>
 #include <cstdio>
 #include <cuml/svm/svc.hpp>
-#include <cuml/svm/svm_model.h>
 #include <exception>
 #include <raft/core/handle.hpp>
 #include <string_view>
@@ -77,8 +77,8 @@ svc_parts<T> copy_out(const raft::handle_t& handle,
                      ns,
                      0,
                      0};
-  to_rows(handle, model.support_matrix.data, ns, d, static_cast<const T*>(nullptr),
-          parts.support_vectors.data());
+  to_rows(handle, model.support_matrix.data, ns, d,
+          static_cast<const T*>(nullptr), parts.support_vectors.data());
   copy_device(model.support_idx, ns, parts.support.data(), stream);
   copy_device(model.dual_coefs, ns, parts.dual.data(), stream);
   raftrkt::cuda_check(
@@ -118,8 +118,7 @@ auto stall_translated(Fn&& fn) {
   } catch (const std::exception& e) {
     if (std::string_view(e.what()).find(stalled_working_set) !=
         std::string_view::npos) {
-      throw logic_error(
-          "the SMO solver stopped making progress; raise #:tol");
+      throw logic_error("the SMO solver stopped making progress; raise #:tol");
     }
     throw;
   }
