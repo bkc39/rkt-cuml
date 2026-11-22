@@ -12,7 +12,7 @@
          (only-in json json-null)
          (only-in racket/match match-define struct*)
          (only-in racket/runtime-path define-runtime-path)
-         (only-in rackunit check-equal? test-case)
+         (only-in rackunit check-equal? check-true test-case)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in "common-data.rkt" worst)
          (only-in "linear-data.rkt" check-law-case law-case on-matrix)
@@ -24,7 +24,7 @@
                   twin-default-params
                   twin-results)
          (only-in "real-logistic-data.rkt" labelled-case labelled-set)
-         (only-in "svm-data.rkt" dyadic-blobs fit-parts svm-fit svm-fit-n-support))
+         (only-in "svm-data.rkt" dyadic-blobs fit-parts svm-fit))
 
 (provide (struct-out fixture)
          (struct-out trial)
@@ -195,7 +195,10 @@
         [separable?
          (law-case "S3"
            (check-equal? labels their-labels)
-           (check-equal? (apply + (svm-fit-n-support (fit-parts r))) (hash-ref theirs 'n_support)))]
+           (check-true (margin-only? (device-vector->list (svc-result-support r))
+                                     (hash-ref theirs 'support)
+                                     ours
+                                     their-decisions)))]
         [else
          (check-law-case "S1" (worst ours their-decisions) (hash-ref sklearn-bounds kernel))
          (law-case "S2"
@@ -205,3 +208,15 @@
                  #:when (> (abs d) sklearn-margin))
              (check-equal? l l-sk)))
          (check-equal? (correct labels truth) (correct their-labels truth) "train accuracy")]))))
+
+(define margin-tol 2e-3)
+
+(define (on-margin? d)
+  (<= (abs (- (abs d) 1.0)) margin-tol))
+
+(define (margin-only? ours theirs ds es)
+  (for/and ([d (in-list ds)]
+            [e (in-list es)]
+            [i (in-naturals)]
+            #:unless (eq? (and (memv i ours) #t) (and (memv i theirs) #t)))
+    (and (on-margin? d) (on-margin? e))))

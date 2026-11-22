@@ -51,7 +51,7 @@ def sklearn_fit(case):
     return {
         "decision": [float(v) for v in m.decision_function(X.astype(np.float64))],
         "predict": [int(v) for v in m.predict(X.astype(np.float64))],
-        "n_support": int(np.sum(m.n_support_)),
+        "support": [int(i) for i in m.support_],
     }
 
 
