@@ -14,6 +14,8 @@ namespace cumlrkt::svm {
 namespace {
 
 constexpr double inf = std::numeric_limits<double>::infinity();
+constexpr double rounds_to_most_float = 3.4028235e38;
+constexpr double float_halfway = 0x1p128 - 0x1p103;
 
 template <typename T>
 bool accepted(const kernel_shape& k, double magnitude, double weight) {
@@ -90,6 +92,9 @@ bool narrowed(double v, bool positive) {
 
 TEST(kernel_checks, parameters_are_checked_after_narrowing) {
   EXPECT_TRUE(narrowed<float>(most_float, true));
+  EXPECT_TRUE(narrowed<float>(rounds_to_most_float, true));
+  EXPECT_TRUE(narrowed<float>(std::nextafter(float_halfway, 0.0), true));
+  EXPECT_FALSE(narrowed<float>(float_halfway, true));
   EXPECT_FALSE(narrowed<float>(1e39, true));
   EXPECT_FALSE(narrowed<float>(1e39, false));
   EXPECT_TRUE(narrowed<double>(1e39, true));

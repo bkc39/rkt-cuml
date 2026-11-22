@@ -28,12 +28,12 @@ template <typename T>
 inline constexpr const char* float_name =
     std::is_same_v<T, float> ? "float32" : "float64";
 
-// cuML narrows C, tol, gamma and coef0 to T; a double that passes as finite
-// and positive can be +inf or 0 there.
+// cuML narrows C, tol, gamma and coef0 to T, rounding to nearest; a double
+// that passes as finite and positive can be +inf or 0 there.
 template <typename T>
 void require_narrowed(const char* key, double v, bool positive) {
-  const bool finite = std::fabs(v) <= most_value<T>;
-  if (!finite || (positive && !(static_cast<T>(v) > T{0}))) {
+  const T held = static_cast<T>(v);
+  if (!std::isfinite(held) || (positive && !(held > T{0}))) {
     throw logic_error(std::format("{}: expected a {} finite in {}, got {}", key,
                                   positive ? "positive value" : "value",
                                   float_name<T>, printed(v)));
