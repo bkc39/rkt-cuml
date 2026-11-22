@@ -26,4 +26,13 @@
          (list "svc-fit: the fit has no support vectors; lower #:tol or raise #:max-iter"
                (lambda () (svc-fit small small-labels #:tol 3))))))
 
-(test-fit-memory "svc" #:rounds 100 #:sample-every 10 #:setup setup)
+(define fit-and-apply-buffers 7)
+
+(define encoded-codes 1)
+
+(test-fit-memory "svc"
+                 #:rounds 100
+                 #:sample-every 10
+                 #:setup setup
+                 #:buffers-per-round fit-and-apply-buffers
+                 #:buffers-per-refusal encoded-codes)
