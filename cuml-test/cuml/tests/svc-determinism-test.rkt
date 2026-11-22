@@ -6,7 +6,8 @@
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
-         (only-in "private/svm-data.rkt" dyadic-blobs fit-parts fresh-rows))
+         (only-in "private/svm-data.rkt" dyadic-blobs fit-parts fresh-rows kernels svm-case)
+         (only-in "private/svm-oracle.rkt" check-kkt))
 
 (define-values (big-rows big-labels) (dyadic-blobs 20000 20 9))
 
@@ -25,17 +26,24 @@
 (define-values (rows labels) (dyadic-blobs 300 4 4))
 (define probe (fresh-rows 200 4 4))
 
-(test-gpu "D2: the cache size leaves the fit bit for bit as it was"
+(test-gpu "D2: a cache that holds the kernel leaves the fit bit for bit as it was"
   (for* ([dt (in-list dtypes)]
-         [kernel (in-list '(linear poly rbf sigmoid))])
+         [kernel (in-list kernels)])
     (test-case (format "~a ~a" dt kernel)
       (define X (on-matrix rows dt))
-      (match-define (list small middle large)
-        (for/list ([cache (in-list '(1 1024 1e6))])
+      (match-define (list middle large)
+        (for/list ([cache (in-list '(1024 4096))])
           (fit-parts (svc-fit X labels #:kernel kernel #:cache-size cache))))
       (law-case "D2"
-        (check-equal? small middle)
         (check-equal? large middle)))))
+
+(test-gpu "D2: a small cache changes the path, and the fit still passes K"
+  (for* ([dt (in-list dtypes)]
+         [kernel (in-list kernels)]
+         [cache (in-list '(1 100))])
+    (test-case (format "~a ~a cache ~a" dt kernel cache)
+      (define c (svm-case (format "cache ~a" cache) rows labels #f 1 kernel dt 'scale))
+      (check-kkt c (fit-parts (svc-fit (on-matrix rows dt) labels #:kernel kernel #:cache-size cache))))))
 
 (test-gpu "D3: predicting twice gives bit-identical results"
   (for* ([dt (in-list dtypes)]

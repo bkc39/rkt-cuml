@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
 #include <string>
 
@@ -73,6 +74,41 @@ TEST(kernel_checks, the_refusal_names_its_remedy) {
     EXPECT_EQ(std::string(e.what()),
               "the kernel can overflow (bound 1e+30); lower #:gamma, #:degree "
               "or #:coef0, or rescale X");
+  }
+}
+
+template <typename T>
+bool cached(double cache_size, int64_t n) {
+  try {
+    require_cache<T>(cache_size, n);
+    return true;
+  } catch (const logic_error&) {
+    return false;
+  }
+}
+
+TEST(kernel_checks, the_kernel_cache_index_fits_int32) {
+  EXPECT_EQ(cache_elements<float>(1024.0, 300), int64_t{894784} * 300);
+  EXPECT_TRUE(cached<float>(1024.0, 300));
+  EXPECT_FALSE(cached<float>(16384.0, 300));
+  EXPECT_FALSE(cached<double>(1e6, 300));
+  EXPECT_FALSE(cached<double>(1e30, 300));
+  for (const int64_t n : {int64_t{1}, int64_t{300}, int64_t{569}, int64_t{20000}}) {
+    EXPECT_TRUE(cached<float>(most_cache_size<float>(n), n)) << n;
+    EXPECT_TRUE(cached<double>(most_cache_size<double>(n), n)) << n;
+    EXPECT_FALSE(cached<float>(2 * most_cache_size<float>(n), n)) << n;
+    EXPECT_FALSE(cached<double>(2 * most_cache_size<double>(n), n)) << n;
+  }
+}
+
+TEST(kernel_checks, the_cache_refusal_names_its_remedy) {
+  try {
+    require_cache<double>(1e6, 300);
+    FAIL() << "accepted";
+  } catch (const logic_error& e) {
+    EXPECT_EQ(std::string(e.what()),
+              "cache-size: 1e+06 MiB overflows the kernel cache's index for "
+              "300 rows; pass at most 16383");
   }
 }
 

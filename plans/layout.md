@@ -3139,7 +3139,7 @@ names; l1-ratio range-checked always; L4's label code moved to
 **Q5. Determinism.**
 - **Bitwise repeatable.** 3 in-process repeats of 20000×20, f32/f64 × linear/rbf, gave 1 distinct result each (p4).
 - **Python parity.** Python cuML equals raw `svcFit` bitwise (Q2).
-- **Cache size has no effect.** `cache_size` 0, 1e-6 and 1e9 gave identical `b`, `n_iter` and support count (p3).
+- **Cache size (p3).** `cache_size` 0, 1e-6 and 1e9 gave identical `b`, `n_iter` and support count on p3's fixture; the branch's wider grid shows it changes the path (U8, "Measured on the branch").
 - **Where results are not bitwise:**
   - **Class swap** is not bitwise (p6). |d + d_swap| is 0.0038 (linear), 0.0147 (poly) and 0.0011 (rbf), and 20.5 (sigmoid, a different stationary point).
   - **Zero weights against deleted rows:** the support (mapped back) is equal in 8/8 cases and the duals are bitwise in 5/8. The decision values differ by at most 1.86e-3 (f32 linear) and 6.4e-4 (f64 poly).
@@ -3211,3 +3211,6 @@ names; l1-ratio range-checked always; L4's label code moved to
 
 - O1: the rebuilt model's decisions and labels are bit-identical to cuML's own in 16 of 16 cases (4 kernels × 2 dtypes × 200×4 and 3000×12).
 - R1: the worst |D̂ − F|/B over the law grid is 0.032 (float32 poly); linear 0.015/0.022, poly 0.032/0.025, rbf 0.015/0.013, sigmoid 0.021/0.022 (float32/float64).
+- K2, the balance bound. In exact arithmetic SMO keeps Σᵢ yᵢαᵢ = 0: each pair update moves αᵢ and αⱼ by amounts whose signed sum is 0. In the dtype each update rounds each of the two new α once, an error of at most u·Cᵢ, so after n-iter updates |Σ dualᵢ| ≤ 2u·n-iter·maxᵢ Cᵢ; a host check that sums the n_s returned duals in the dtype adds γ_{n_s}·Σ|dualᵢ|. K2 is |Σ dualᵢ| ≤ 2u·n-iter·maxᵢ Cᵢ + γ_{n_s}·Σ|dualᵢ|, in both arms and both dtypes. The spec's relative bound (2⁻²² and 2⁻⁵⁰ of Σ|dual|) was measured on unweighted fits and is not a law: the weighted arm broke it in 3 of its 144 cases (2.20× in float32 linear 120×3 seed 3 C 1). On the grid (both arms, both dtypes, 288 fits) the worst |Σ dualᵢ| over the bound is 0.035 (weighted float64 linear 120×3 seed 3 C 1); float32's is 0.027.
+- D2, the cache size. Not bitwise, and not rounding: the cache changes the SMO path (U8). A 1 MiB cache gives another fit than 1024 MiB in 96/96 cases (120×3, 300×4, 1000×8 × 4 seeds × 4 kernels × 2 dtypes), 100 MiB in 32/96; max |Δdecision| 0.020 (linear, poly, rbf), 6.6 (sigmoid), max |Δdual| 0.117, every fit with K3 ≤ 0.9995 tol. 1024 and 4096 MiB agree bitwise in all 96. D2 is: caches of 1024 and 4096 MiB give bit-identical fits; 1 and 100 MiB fits pass K. A cache-size whose `raft::cache::Cache` index overflows int32 is refused (U9).
+- Poly degree 40 in float64 (40×3 blobs, γ 1, coef0 1) passes the kernel bound and fits (n-iter 253, n-support (7 4), 0.2 s): U1 is not reached.

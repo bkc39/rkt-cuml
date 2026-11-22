@@ -59,7 +59,9 @@ exactly two classes: integral numbers on the device, or a list of reals, strings
 @racket['scale] is 1/(d·Var X) over every element, @racket['auto] 1/d; @racket['sigmoid] is
 tanh(γ⟨x, x′⟩ + coef0), @racket['poly] (γ⟨x, x′⟩ + coef0)^degree. @racket[max-iter] bounds the
 pair updates (@racket[#f]: none). X is used as given: kernel SVMs are not scale-invariant, so
-standardise it. @racket[cache-size] (MiB) changes only speed; scikit-learn's default is 200. The
+standardise it. @racket[cache-size] (MiB) is the kernel cache cuML allocates. A smaller cache can
+take another path to another fit within @racket[tol] (up to 0.02 in the decision on 300×4 at 1 MiB);
+one whose index would overflow int32 is refused. scikit-learn's default is 200. The
 sigmoid kernel is not positive semidefinite, so its fit is one stationary point among several.
 The fit repeats bitwise.
 @examples[#:eval ev #:label #f

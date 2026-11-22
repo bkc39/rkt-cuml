@@ -149,6 +149,7 @@ fit_report fit_into(const raft::handle_t& handle, const fit_views& views,
           ? static_cast<double>(x.n) * static_cast<double>(static_cast<T>(s.C))
           : penalty_total(w, x.n, s.C, stream);
   require_kernel<T>({s.kernel, s.degree, gamma, s.coef0}, largest, weight);
+  require_cache<T>(s.cache_size, x.n);
 
   buffer<T> columns = scratch<T>(x.n * x.d, stream);
   to_columns(handle, x.data, x.n, x.d, static_cast<const T*>(nullptr),

@@ -76,4 +76,39 @@ void require_row_norms(const char* name, double largest, const T* x, int64_t n,
   }
 }
 
+inline constexpr int64_t cache_associativity = 32;
+
+inline constexpr double mebibyte = 1024.0 * 1024.0;
+
+// raft::cache::Cache (raft/util/cache.cuh) keeps int(MiB·2^20 / (sizeof(T)·n))
+// vectors, rounded down to whole sets, and sizes its store as vectors·n in
+// int: past most_index that wraps, and a wrapped positive size is a store too
+// small for the writes into it.
+template <typename T>
+int64_t cache_elements(double cache_size, int64_t n) {
+  const float vectors = (static_cast<float>(cache_size) * 1024 * 1024) /
+                        static_cast<float>(sizeof(T) * n);
+  if (!(vectors < static_cast<float>(most_index))) {
+    return std::numeric_limits<int64_t>::max();
+  }
+  const auto whole = static_cast<int64_t>(vectors);
+  return (whole / cache_associativity) * cache_associativity * n;
+}
+
+template <typename T>
+double most_cache_size(int64_t n) {
+  return std::floor(static_cast<double>((most_index / n) * n) *
+                    static_cast<double>(sizeof(T)) / mebibyte);
+}
+
+template <typename T>
+void require_cache(double cache_size, int64_t n) {
+  if (cache_elements<T>(cache_size, n) > most_index) {
+    throw logic_error(std::format(
+        "cache-size: {} MiB overflows the kernel cache's index for {} rows; "
+        "pass at most {}",
+        printed(cache_size), n, printed(most_cache_size<T>(n))));
+  }
+}
+
 }  // namespace cumlrkt::svm
