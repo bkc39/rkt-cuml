@@ -67,7 +67,75 @@ struct weighted_element {
   }
 };
 
+template <typename T>
+struct centred_cell {
+  const T* x;
+  const T* w;
+  row_selection rows;
+  const int64_t* kept;
+  const power_of_two<T>* stage;
+  const double* mean;
+  const double* remainder;
+  int64_t d;
+  T* out;
+
+  __device__ void operator()(int64_t o) const {
+    const int64_t k = o / rows.count;
+    const int64_t i = source_row(rows, o - (k * rows.count));
+    const double v =
+        static_cast<double>(scaled_by(x[(i * d) + kept[k]], stage[k]));
+    out[o] =
+        counted(w, i) ? static_cast<T>((v - mean[k]) - remainder[k]) : T{0};
+  }
+};
+
+template <typename T>
+struct centred_label {
+  staged_target<T> y;
+  const T* w;
+  row_selection rows;
+  centre c;
+  T* out;
+
+  __device__ void operator()(int64_t p) const {
+    const int64_t i = source_row(rows, p);
+    out[p] =
+        counted(w, i) ? static_cast<T>((y(i) - c.mean) - c.remainder) : T{0};
+  }
+};
+
 }  // namespace
+
+template <typename T>
+staged_problem<T> stage_centred(const raft::handle_t& handle,
+                                const matrix<T, int64_t>& x, const T* y,
+                                const T* w, row_selection rows,
+                                const staging& s, const cd_centres& c) {
+  const rmm::cuda_stream_view stream = stream_of(handle);
+  const auto count = static_cast<int64_t>(s.kept.size());
+  staged_problem<T> p{scratch<T>(rows.count * count, stream),
+                      scratch<T>(rows.count, stream),
+                      scratch<T>(w == nullptr ? 0 : rows.count, stream)};
+  std::vector<power_of_two<T>> stage(count);
+  for (int64_t k = 0; k < count; ++k) {
+    stage[k] = power_of_two_of<T>(s.column_exponent[s.kept[k]]);
+  }
+  const buffer<int64_t> kept = to_device(s.kept, stream);
+  const buffer<power_of_two<T>> stages = to_device(stage, stream);
+  const buffer<double> means = to_device(c.mean, stream);
+  const buffer<double> remainders = to_device(c.remainder, stream);
+  each(handle, rows.count * count,
+       centred_cell<T>{x.data, w, rows, kept.data(), stages.data(),
+                       means.data(), remainders.data(), x.d, p.x.data()});
+  each(handle, rows.count,
+       centred_label<T>{staged_target<T>{y, power_of_two_of<T>(s.y_exponent)},
+                        w, rows, c.y, p.y.data()});
+  if (w != nullptr) {
+    stage_elements(handle, w, w, rows, 0, p.w.data());
+  }
+  settle(handle);
+  return p;
+}
 
 template <typename T>
 std::optional<cd_centres> centres_of(const T* y, const T* w, row_selection rows,
@@ -132,6 +200,12 @@ template std::optional<cd_centres> centres_of<double>(const double*,
                                                       row_selection,
                                                       const staging&, bool,
                                                       rmm::cuda_stream_view);
+template staged_problem<float> stage_centred<float>(
+    const raft::handle_t&, const matrix<float, int64_t>&, const float*,
+    const float*, row_selection, const staging&, const cd_centres&);
+template staged_problem<double> stage_centred<double>(
+    const raft::handle_t&, const matrix<double, int64_t>&, const double*,
+    const double*, row_selection, const staging&, const cd_centres&);
 template double weight_total<float>(const float*, row_selection,
                                     rmm::cuda_stream_view);
 template double weight_total<double>(const double*, row_selection,

@@ -4,7 +4,7 @@
          (only-in racket/contract/base -> integer-in)
          (only-in racket/contract/region define/contract)
          (only-in racket/list count)
-         (only-in racket/match match-define)
+         (only-in racket/match match match-define)
          (only-in rackunit test-case)
          (only-in raft device-vector->list)
          (only-in threading ~>)
@@ -39,6 +39,8 @@
          check-lstsq-fit
          check-oracle-laws
          check-prediction-law
+         device-means
+         shim-means
          staging-of
          y-centring-gamma)
 
@@ -137,6 +139,64 @@
 (define (y-centring-gamma c u)
   (gamma (y-roundings (positive-rows c) (lcase-w c)) u))
 
+(define chunk-rows 2048)
+(define lane-rows 256)
+(define lane-levels 3)
+(define fold-threads 256)
+(define fold-levels 8)
+
+(define (column-sum-roundings rows)
+  (+ lane-rows
+     lane-levels
+     (ceiling (/ (max 1 (ceiling (/ rows chunk-rows))) fold-threads))
+     fold-levels))
+
+(define double-u (unit-roundoff 'float64))
+
+(struct mean-model (mean-error sum-bound))
+
+(struct fit-terms (c u weights total columns y coef b))
+
+(define (mean-of t xs)
+  (/ (dot (fit-terms-weights t) xs) (fit-terms-total t)))
+
+(define (abs-mean t xs)
+  (mean-of t (map abs xs)))
+
+(define (abs-deviation t xs)
+  (define mean (mean-of t xs))
+  (mean-of t (map (lambda (x) (abs (- x mean))) xs)))
+
+(define (coef-sum t term)
+  (for/sum ([column (in-list (fit-terms-columns t))] [cj (in-list (fit-terms-coef t))])
+           (term column cj)))
+
+(define (host-error t xs)
+  (define h (column-sum-roundings (positive-rows (fit-terms-c t))))
+  (* (gamma (+ h 3) double-u) (+ (abs-deviation t xs) (* (gamma h double-u) (abs-mean t xs)))))
+
+(define device-means
+  (mean-model (lambda (t g xs) (* g (abs-mean t xs)))
+              (lambda (t)
+                (match-define (fit-terms c u _ total _ y coef b) t)
+                (* total
+                   (+ (* u (abs b))
+                      (* (y-centring-gamma c u) (abs-mean t y))
+                      (* (+ (centring-gamma c u) (gamma (length coef) u))
+                         (coef-sum t (lambda (column cj) (* (abs-mean t column) (abs cj))))))))))
+
+(define shim-means
+  (mean-model (lambda (t _g xs) (+ (* (fit-terms-u t) (abs-deviation t xs)) (host-error t xs)))
+              (lambda (t)
+                (match-define (fit-terms _ u _ total _ y coef b) t)
+                (* total
+                   (+ (* u (abs b))
+                      (* (gamma (+ (length coef) 3) double-u)
+                         (+ (abs (mean-of t y))
+                            (coef-sum t (lambda (column cj) (abs (* (mean-of t column) cj))))))
+                      (host-error t y)
+                      (coef-sum t (lambda (column cj) (* (host-error t column) (abs cj)))))))))
+
 (define (check-lstsq-fit c
                          fi
                          u
@@ -144,7 +204,8 @@
                          exact
                          staged
                          #:coef-centring? [coef-centring? #t]
-                         #:cap-scale [cap-scale 1])
+                         #:cap-scale [cap-scale 1]
+                         #:means [means shim-means])
   (match-define (solution c* b* _) exact)
   (match-define (staging scale y-scale weight-scale kept _ top bottom) staged)
   (match-define (list coef b) (exact-fit fit))
@@ -155,11 +216,10 @@
   (define columns (columns-of X))
   (define mean-gamma (centring-gamma c u))
   (define y-gamma (y-centring-gamma c u))
-  (define (abs-sum xs)
-    (dot weights (map abs xs)))
+  (define terms (fit-terms c u weights total columns y coef b))
   (define ((mean-error g) xs)
     (if fi
-        (/ (* g (abs-sum xs)) total)
+        ((mean-model-mean-error means) terms g xs)
         0))
   (define errors (map (mean-error mean-gamma) columns))
   (define y-error ((mean-error y-gamma) y))
@@ -209,15 +269,10 @@
                   (host-cosine X y (lcase-w c) coef b fi)
                   (+ (* 64 u solved-kappa stretch) centring-cosine))
   (when fi
-    (define sum-bound
-      (+ (* u total (abs b))
-         (* y-gamma (abs-sum y))
-         (* (+ mean-gamma (gamma (length coef) u))
-            (for/sum ([column (in-list columns)] [cj (in-list coef)])
-                     (* (abs-sum column) (abs cj))))))
+    (define sum-bound ((mean-model-sum-bound means) terms))
     (define staged-means
       (for/sum ([column (in-list columns)] [dj (in-list scale)] [k (in-list kept)] #:when k)
-               (* (abs (/ (dot weights column) total)) dj)))
+               (* (abs (mean-of terms column)) dj)))
     (check-law-case "T2"
                     (abs (- b b*))
                     (+ (/ sum-bound total) (/ (* staged-means coef-bound) y-scale)))

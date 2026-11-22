@@ -16,6 +16,7 @@
          float32-of
          inexact-rows
          integer-scaled
+         kept-gram
          map-diagonal
          mat*vec
          min-norm-solve
@@ -373,7 +374,7 @@
             +inf.0
             (/ top-hi bottom-lo))))
 
-(define (varying-inner G inner)
+(define (kept-gram G)
   (define kept
     (for/list ([row (in-list G)]
                [i (in-naturals)]
@@ -381,11 +382,15 @@
       i))
   (define (kept-of row)
     (map (lambda (i) (list-ref row i)) kept))
+  (map kept-of (kept-of G)))
+
+(define (varying-inner G inner)
+  (define kept (kept-gram G))
   (cond
     [(= (length kept) (length G)) inner]
     [(null? kept) (cons 0 0)]
     [else
-     (define-values (varying _) (eigen-bracket (map kept-of (kept-of G))))
+     (define-values (varying _) (eigen-bracket kept))
      varying]))
 
 (module+ test
@@ -478,7 +483,8 @@
   (check-true (<= kappa-lo 7/5 kappa-hi) "1/6 off the diagonal: (1 + 1/6)/(1 - 1/6)")
   (check-true (< (- kappa-hi kappa-lo) (expt 2 -100)))
   (check-equal? (varying-inner (diagonal '(0 0)) '(0 . 0)) '(0 . 0))
-  (check-equal? (varying-inner (diagonal '(4 1)) 'kept) 'kept))
+  (check-equal? (varying-inner (diagonal '(4 1)) 'kept) 'kept)
+  (check-equal? (kept-gram '((4 0 2) (0 0 0) (2 0 1))) '((4 2) (2 1))))
 
 (define (float32-of x)
   (flsingle (real->double-flonum x)))

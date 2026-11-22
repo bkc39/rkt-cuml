@@ -13,7 +13,10 @@
                   case-result
                   check-law
                   dtypes
+                  fit-gap
+                  fit-size
                   gap
+                  kappa-of
                   lcase
                   lcase-X
                   lcase-name
@@ -48,7 +51,7 @@
          (max-scaled (lcase-y c))
          w))
 
-(test-twin "on already-staged data the fit is raw Python cuML's, bitwise"
+(test-twin "on already-staged data the fit is Python cuML's on rows centred as the shim centres, bitwise"
   (define c (already-staged))
   (define rows
     (for*/list ([fi (in-list '(#t #f))]
@@ -58,10 +61,16 @@
   (for ([g (in-list rows)]
         [r (in-list (results (for/list ([g (in-list rows)])
                                (match-define (list fi dt a) g)
-                               (request "cuml" c dt a fi))))])
+                               (request "cuml-centred" c dt a fi))))])
     (match-define (list fi dt a) g)
     (test-case (format "~a ~a ~a" fi dt a)
-      (check-equal? (case-fit c dt #:algorithm a #:fit-intercept fi) (theirs dt r)))))
+      (define fitted (case-fit c dt #:algorithm a #:fit-intercept fi))
+      (cond
+        [(and fi (eq? dt 'float64))
+         (check-law "float64, centred in another order"
+                    (fit-gap fitted (theirs dt r))
+                    (* 128 (unit-roundoff dt) (sqr (kappa-of c fi)) (fit-size fitted)))]
+        [else (check-equal? fitted (theirs dt r))]))))
 
 (test-twin "sklearn's float64 fit is within the oracle bound"
   (define rows
