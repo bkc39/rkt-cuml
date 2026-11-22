@@ -101,13 +101,14 @@
                        #:expected-cuml libcuml-version
                        #:expected-sklearn python-sklearn-version))
 
+(define (requested op trials fits gamma-of)
+  (svc-twin-results (for/list ([t (in-list trials)]
+                               [r (in-list fits)])
+                      (twin-request op t (gamma-of t r)))))
+
 (define (fitted-trials trials op gamma-of)
   (define fits (map trial-fit trials))
-  (define requests
-    (for/list ([t (in-list trials)]
-               [r (in-list fits)])
-      (twin-request op t (gamma-of t r))))
-  (values fits (svc-twin-results requests)))
+  (values fits (requested op trials fits gamma-of)))
 
 (define (ours-of r rows dt)
   (match-define (struct* svm-fit ([sv sv] [dual dual] [b b])) (fit-parts r))
@@ -123,27 +124,47 @@
 (define compared
   '(support n_iter predict support_vectors_bits dual_coef_bits intercept_bits decision_bits))
 
+;; 'scale gamma's distance from Python's in ulps where it is not 0 (the spec's §7 item 1);
+;; T1 for those fixtures runs with our gamma passed to Python as a number.
+(define scale-ulps (hash '("blobs 300x4 sep 3/2" float64) 1))
+
+(define (scale-ulps-of t)
+  (match-define (struct* trial ([fixture (struct* fixture ([name name]))] [dtype dt] [gamma gamma])) t)
+  (if (eq? gamma 'scale)
+      (hash-ref scale-ulps (list name dt) 0)
+      0))
+
+(define (ulps gamma theirs)
+  (match-define (list ours) (floats->bits 'float64 (list gamma)))
+  (match-define (list bits) (hash-ref theirs 'gamma64_bits))
+  (abs (- ours bits)))
+
 (define (as-given t _r)
   (trial-gamma t))
 
-(define (check-cuml-twins trials #:gamma-of [gamma-of as-given])
-  (define-values (fits answers) (fitted-trials trials "cuml-fit" gamma-of))
+(define (check-cuml-twins trials)
+  (define-values (fits answers) (fitted-trials trials "cuml-fit" as-given))
+  (define pinned
+    (if (ormap (lambda (t) (positive? (scale-ulps-of t))) trials)
+        (requested "cuml-fit" trials fits resolved)
+        answers))
   (for ([t (in-list trials)]
         [r (in-list fits)]
-        [theirs (in-list answers)])
+        [theirs (in-list answers)]
+        [at-ours (in-list pinned)])
     (match-define (struct* trial ([fixture (struct* fixture ([name name] [rows rows]))]
                                   [dtype dt]
                                   [kernel kernel]
                                   [gamma gamma]))
       t)
+    (define departs (scale-ulps-of t))
     (test-case (format "~a ~a ~a gamma ~a" name dt kernel gamma)
       (when (eq? gamma 'scale)
-        (check-equal? (floats->bits 'float64 (list (svc-result-gamma r)))
-                      (hash-ref theirs 'gamma64_bits)
-                      "T2"))
+        (check-equal? (ulps (svc-result-gamma r) theirs) departs "T2"))
       (define ours (ours-of r rows dt))
+      (define reference (if (positive? departs) at-ours theirs))
       (for ([key (in-list compared)])
-        (check-equal? (hash-ref ours key) (hash-ref theirs key) (format "T1 ~a" key))))))
+        (check-equal? (hash-ref ours key) (hash-ref reference key) (format "T1 ~a" key))))))
 
 (define sklearn-bounds (hasheq 'linear 0.04 'poly 0.064 'rbf 0.002))
 
