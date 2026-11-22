@@ -208,10 +208,15 @@
 
 (define fresh 200)
 
-(define (check-referee kernels #:dtypes [dtypes '(float32 float64)])
-  (for ([c (in-list (kkt-cases))]
-        #:when (memq (svm-case-kernel c) kernels)
-        #:when (memq (svm-case-dtype c) dtypes))
+(define (check-referee kernels #:dtypes [dtypes '(float32 float64)] #:half [half #f])
+  (define chosen
+    (for/list ([c (in-list (kkt-cases))]
+               #:when (memq (svm-case-kernel c) kernels)
+               #:when (memq (svm-case-dtype c) dtypes))
+      c))
+  (for ([c (in-list chosen)]
+        [i (in-naturals)]
+        #:when (or (not half) (= (modulo i 2) half)))
     (match-define (struct* svm-case ([X X] [dtype dt])) c)
     (test-case (svm-case-name c)
       (define r (case-fit c))
