@@ -27,6 +27,10 @@ constexpr std::size_t row_2_column_1 = 5;
 constexpr double faint_weight = 1e-45;
 constexpr double small_C = 0.1;
 constexpr double loose_tol = 3.0;
+constexpr double heavy_weight = 1e10;
+constexpr std::size_t heavy_row = 3;
+constexpr double float_overflowing_C = 1e30;
+constexpr double double_overflowing_C = 1e300;
 
 struct fit_case {
   std::vector<double> x;
@@ -229,6 +233,28 @@ TEST(svc_refusal, F_a_class_whose_penalties_narrow_to_zero_is_empty) {
   c.C = small_C;
   EXPECT_EQ(fitted<float>(res, c), "empty class 1");
   EXPECT_EQ(fitted<double>(res, c), "accepted");
+}
+
+TEST(svc_refusal, F_a_penalty_that_overflows_is_refused_for_every_kernel) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  std::vector<double> heavy(rows, 1.0);
+  heavy[heavy_row] = heavy_weight;
+  for (const int32_t kernel : {CUML_SVM_KERNEL_LINEAR, CUML_SVM_KERNEL_POLY,
+                               CUML_SVM_KERNEL_RBF, CUML_SVM_KERNEL_SIGMOID}) {
+    fit_case c = with_weight(heavy);
+    c.kernel = kernel;
+    c.C = float_overflowing_C;
+    EXPECT_EQ(fitted<float>(res, c),
+              "sample-weight: row 3: C*w overflows float32; lower #:C or "
+              "rescale the weights")
+        << kernel;
+    c.C = double_overflowing_C;
+    EXPECT_EQ(fitted<double>(res, c),
+              "sample-weight: row 3: C*w overflows float64; lower #:C or "
+              "rescale the weights")
+        << kernel;
+  }
 }
 
 TEST(svc_refusal, F_an_overlong_row_is_refused) {

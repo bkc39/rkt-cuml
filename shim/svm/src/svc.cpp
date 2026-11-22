@@ -161,6 +161,14 @@ fit_report fit_into(const raft::handle_t& handle, const fit_views& views,
   if (empty >= 0) {
     return {.empty_class = empty};
   }
+  const int64_t infinite =
+      w == nullptr ? -1 : first_infinite_penalty(w, x.n, s.C, stream);
+  if (infinite >= 0) {
+    throw logic_error(std::format(
+        "sample-weight: row {}: C*w overflows {}; lower #:C or rescale the "
+        "weights",
+        infinite, float_name<T>));
+  }
   require_finite("X", x, stream);
   const double largest = largest_squared_norm(x.data, x.n, x.d, stream);
   require_row_norms("X", largest, x.data, x.n, x.d, stream);

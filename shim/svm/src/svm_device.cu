@@ -61,6 +61,16 @@ struct penalty {
 };
 
 template <typename T>
+struct infinite_penalty {
+  const T* w;
+  T C;
+
+  __device__ bool operator()(int64_t i) const {
+    return !isfinite(C * w[i]);
+  }
+};
+
+template <typename T>
 struct squared_norm {
   const T* x;
   int64_t d;
@@ -150,6 +160,16 @@ std::pair<double, double> class_penalties(const int32_t* codes, const T* w,
 }
 
 template <typename T>
+int64_t first_infinite_penalty(const T* w, int64_t n, double C,
+                               rmm::cuda_stream_view stream) {
+  const auto begin = thrust::counting_iterator<int64_t>(0);
+  const auto found = thrust::find_if(rmm::exec_policy(stream), begin, begin + n,
+                                     infinite_penalty<T>{w, static_cast<T>(C)});
+  const int64_t i = *found;
+  return i < n ? i : -1;
+}
+
+template <typename T>
 double penalty_total(const T* w, int64_t n, double C,
                      rmm::cuda_stream_view stream) {
   return total(n, penalty<T>{w, static_cast<T>(C)}, stream);
@@ -195,6 +215,8 @@ void threshold_labels(const T* decision, int64_t n, const L* classes, L* out,
                             rmm::cuda_stream_view);                            \
   template std::pair<double, double> class_penalties<T>(                       \
       const int32_t*, const T*, int64_t, double, rmm::cuda_stream_view);       \
+  template int64_t first_infinite_penalty<T>(const T*, int64_t, double,        \
+                                             rmm::cuda_stream_view);           \
   template double penalty_total<T>(const T*, int64_t, double,                  \
                                    rmm::cuda_stream_view);                     \
   template double largest_squared_norm<T>(const T*, int64_t, int64_t,          \

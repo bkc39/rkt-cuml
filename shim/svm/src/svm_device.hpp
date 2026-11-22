@@ -19,6 +19,10 @@ std::pair<double, double> class_penalties(const int32_t* codes, const T* w,
                                           rmm::cuda_stream_view stream);
 
 template <typename T>
+int64_t first_infinite_penalty(const T* w, int64_t n, double C,
+                               rmm::cuda_stream_view stream);
+
+template <typename T>
 double penalty_total(const T* w, int64_t n, double C,
                      rmm::cuda_stream_view stream);
 
