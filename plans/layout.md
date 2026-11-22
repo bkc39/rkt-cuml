@@ -3199,13 +3199,15 @@ names; l1-ratio range-checked always; L4's label code moved to
 | V0-e | `intercept` as a device-vector (1), or a flonum like the linear models? | Device-vector of 1 in X's dtype: Python's shape, and V3 extends it to k(k−1)/2. | A flonum, as `linear-regression-result`. |
 | V0-f | Result layout with V1 in mind | Flat `svc-result` fields. V1's `svr-result` repeats the kernel fields; `kernel.rkt` and `svm_apply.cpp` are shared. | A nested `svm-kernel` struct field, which is less like Python's attributes. |
 | V0-g | `#:max-iter` unlimited spelling | `#f` (Python's −1), else a positive int32. | −1 as Python, or a positive default. |
-| V0-h | The `'precomputed` refusal's advice | Name the supported kernels. The message says "not supported yet", with no issue number (the manual names no future work). | Name #170 in the message, as the brief suggests. |
+| V0-h | The `'precomputed` refusal's advice | Name the supported kernels. The message says "is not supported", with no issue number (the manual names no future work). | Name #170 in the message, as the brief suggests. |
 | V0-i | Validation beyond memory safety: C > 0, tol > 0, cache-size > 0, degree ≥ 0 and integral, gamma ≥ 0, finite coef0, no negative weights | Refuse all of them, as sklearn does (Python cuML accepts them and gives garbage, U3/U4/U7). tol ≤ 0 and cache < 0 also throw or spin upstream. | Refuse only what throws (tol ≤ 0, cache < 0, overflow) and keep Python's permissiveness. |
 | V0-j | gamma 0 | Allow it (sklearn and Python do; K ≡ 1 is degenerate but safe). | Refuse ≤ 0. |
 | V0-k | Kernel overflow bound for rbf and sigmoid | γ·max‖x‖² ≤ 1/(16u_T): f32 2²⁰, f64 2⁴⁹. It refuses γ 1e30 and passes standardised data at any sane γ. | Probe a looser bound from cuVS's RBF expansion. |
 | V0-l | X's dtype at predict when it differs from the fit's | Refuse, naming the fit's dtype. | Convert, as Python does. |
 | V0-m | The sigmoid kernel's oracles | K, R, T and D only. No sklearn twin and no class-swap or weight agreement: it is not PSD, and p5/p6 show other stationary points (Δdecision 14–20). The entry says so. | Keep the sklearn twin with labels only. It fails (37 mismatches). |
 | V0-n | `n-iter` | An exact integer (Python's `n_iter_[0]`). | A one-element list, Python's array shape, for V3's concatenation. |
+| V0-o | S3, separable blobs against sklearn: equal support counts? | No. Labels are equal, and every row in exactly one of the two support sets has \|\|decision\| − 1\| ≤ 2·tol in both fits. sklearn at tol 1e-3 keeps a row at α 0.00115 that ours drops; at tol 1e-8 the sets are equal. | n_s equal, which fails on that margin row. |
+| V0-p | Hyperparameters that pass as exact reals but convert to 0 or ±inf (10⁻⁴⁰⁰, 10⁴⁰⁰, float32 1e39) | Check after converting: the flonum, and for float32 X the float32 value, must be finite and positive (C, tol; gamma at least 0) or finite (coef0). The shim checks the same in T, and a `'scale` γ that is not finite in T. | Check the given value only, as before; the shim then runs C = +inf or tol = 0. |
 
 ### The refusals
 
@@ -3215,15 +3217,15 @@ names; l1-ratio range-checked always; L4's label code moved to
 |---|---|---|
 | 1 | Racket | X not a float32 or float64 device-matrix |
 | 2 | Racket | y's kind (`y-kind/who`) |
-| 3 | Racket | the hyperparameters, in `svc-params` order: kernel (`'precomputed` not supported yet), degree, gamma, coef0, C, tol, cache-size, max-iter, nochange-steps |
+| 3 | Racket | the hyperparameters, in `svc-params` order: kernel (`'precomputed` not supported), degree, gamma, coef0, C, tol, cache-size, max-iter, nochange-steps; gamma, coef0, C and tol after converting to a flonum and, for float32 X, to float32 |
 | 4 | Racket | sample-weight not a device-vector or #f |
-| 5 | Racket | y's length is not X's rows |
+| 5 | Racket | X has no rows, then y's length is not X's rows (`y-rows/who`) |
 | 6 | Racket | not exactly two classes |
-| 7 | shim | `require_index`, then no rows or no columns |
-| 8 | shim, then Racket | sample-weight: length, finite, negative; then a class with no row of positive weight. The shim returns that class's code in `empty_class` and fits nothing; Racket raises with the label from `classes`. |
+| 7 | shim | C, tol, coef0 and a numeric gamma not finite (C, tol: not positive) in X's dtype; `require_index`, then no rows or no columns |
+| 8 | shim, then Racket | sample-weight: length, finite, negative; then a class with no row of positive penalty fl_T(C·wᵢ). The shim returns that class's code in `empty_class` and fits nothing; Racket raises with the label from `classes`. |
 | 9 | shim | X not finite |
 | 10 | shim | a row's squared norm past the bound ("rescale X") |
-| 11 | shim | `'scale` on X of zero variance |
+| 11 | shim | `'scale` on X of zero variance, or a resolved gamma not finite in X's dtype |
 | 12 | shim | the kernel bound (V0-k) |
 | 13 | shim | `require_cache`: "cache-size: X MiB overflows the kernel cache's index for n rows; pass at most M" (U9) |
 | 14 | shim | no support vectors (V0-c) |

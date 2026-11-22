@@ -7,6 +7,7 @@
 
 @(define ev (make-base-eval #:lang 'racket/base '(require cuml raft)))
 @(define int32-count @racket[(integer-in 1 2147483647)])
+@(define int32-natural @racket[(integer-in 0 2147483647)])
 
 @title[#:tag "svm"]{Support vector machines}
 
@@ -42,14 +43,14 @@ each class, as scikit-learn's does. @racket[label-kind] is opaque, as
                   [y (or/c device-vector? list?)]
                   [#:sample-weight sample-weight (or/c #f device-vector?) #f]
                   [#:kernel kernel (or/c 'linear 'poly 'rbf 'sigmoid) 'rbf]
-                  [#:degree degree exact-nonnegative-integer? 3]
+                  [#:degree degree #,int32-natural 3]
                   [#:gamma gamma (or/c 'scale 'auto (and/c rational? (>=/c 0))) 'scale]
                   [#:coef0 coef0 rational? 0.0]
                   [#:C C (and/c rational? positive?) 1.0]
                   [#:tol tol (and/c rational? positive?) 1e-3]
                   [#:cache-size cache-size (and/c rational? positive?) 1024.0]
                   [#:max-iter max-iter (or/c #f #,int32-count) #f]
-                  [#:nochange-steps nochange-steps exact-nonnegative-integer? 1000]
+                  [#:nochange-steps nochange-steps #,int32-natural 1000]
                   [#:params params (or/c #f hash?) #f]
                   [#:resources resources device-resources? (current-device-resources)])
          svc-result?]{
@@ -61,8 +62,10 @@ tanh(γ⟨x, x′⟩ + coef0), @racket['poly] (γ⟨x, x′⟩ + coef0)^degree. 
 pair updates (@racket[#f]: none). X is used as given: kernel SVMs are not scale-invariant, so
 standardise it. @racket[cache-size] (MiB) is the kernel cache; the fit allocates all of it on the
 device, so the default takes 1 GiB. A smaller cache can take another path to another fit within
-@racket[tol] (up to 0.02 in the decision on 300×4 at 1 MiB). A cache whose index overflows int32 for
-X's rows is refused, naming the largest that fits. scikit-learn's default is 200. The
+@racket[tol]. A cache whose index overflows int32 for X's rows is refused, naming the largest that
+fits. @racket[C], @racket[tol] and a numeric @racket[gamma] are refused unless their flonums, and for
+a float32 X their float32 values, are finite and positive (@racket[gamma]: at least 0);
+@racket[coef0] likewise must be finite, and so must a @racket['scale] γ in X's dtype. The
 sigmoid kernel is not positive semidefinite, so its fit is one stationary point among several.
 The fit repeats bitwise.
 @examples[#:eval ev #:label #f
@@ -94,14 +97,14 @@ given.
 
 @defproc[(svc-params [base (or/c #f hash?) #f]
                      [#:kernel kernel (or/c 'linear 'poly 'rbf 'sigmoid) 'rbf]
-                     [#:degree degree exact-nonnegative-integer? 3]
+                     [#:degree degree #,int32-natural 3]
                      [#:gamma gamma (or/c 'scale 'auto (and/c rational? (>=/c 0))) 'scale]
                      [#:coef0 coef0 rational? 0.0]
                      [#:C C (and/c rational? positive?) 1.0]
                      [#:tol tol (and/c rational? positive?) 1e-3]
                      [#:cache-size cache-size (and/c rational? positive?) 1024.0]
                      [#:max-iter max-iter (or/c #f #,int32-count) #f]
-                     [#:nochange-steps nochange-steps exact-nonnegative-integer? 1000])
+                     [#:nochange-steps nochange-steps #,int32-natural 1000])
          (and/c hash? hash-eq? immutable?)]{
 The hyperparameters of @racket[svc-fit] and @racket[svc], as @racket[kmeans-params].}
 
@@ -111,14 +114,14 @@ The hyperparameters of @racket[svc-fit] and @racket[svc], as @racket[kmeans-para
 
 @defproc[(svc [params (or/c #f hash?) #f]
               [#:kernel kernel (or/c 'linear 'poly 'rbf 'sigmoid) 'rbf]
-              [#:degree degree exact-nonnegative-integer? 3]
+              [#:degree degree #,int32-natural 3]
               [#:gamma gamma (or/c 'scale 'auto (and/c rational? (>=/c 0))) 'scale]
               [#:coef0 coef0 rational? 0.0]
               [#:C C (and/c rational? positive?) 1.0]
               [#:tol tol (and/c rational? positive?) 1e-3]
               [#:cache-size cache-size (and/c rational? positive?) 1024.0]
               [#:max-iter max-iter (or/c #f #,int32-count) #f]
-              [#:nochange-steps nochange-steps exact-nonnegative-integer? 1000]
+              [#:nochange-steps nochange-steps #,int32-natural 1000]
               [#:resources resources (or/c #f device-resources?) #f])
          svc?]{
 The estimator: @racket[fit] is @racket[svc-fit] with @racket[#:sample-weight] and needs
