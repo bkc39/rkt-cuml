@@ -43,9 +43,9 @@
          [cache (in-list '(1 100))])
     (test-case (format "~a ~a cache ~a" dt kernel cache)
       (define c (svm-case (format "cache ~a" cache) rows labels #f 1 kernel dt 'scale))
-      (check-kkt
-       c
-       (svc-result->svm-fit (svc-fit (on-matrix rows dt) labels #:kernel kernel #:cache-size cache))))))
+      (check-kkt c
+                 (svc-result->svm-fit
+                  (svc-fit (on-matrix rows dt) labels #:kernel kernel #:cache-size cache))))))
 
 (test-gpu "predicting twice gives bit-identical results"
   (for* ([dt (in-list dtypes)]

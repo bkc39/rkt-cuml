@@ -73,6 +73,7 @@
 (test-gpu "a numeric gamma is kept as given, for every kernel"
   (define-values (rows labels) (dyadic-blobs 60 3 3))
   (for ([kernel (in-list kernels)])
-    (check-equal? (svc-result-gamma (svc-fit (on-matrix rows 'float64) labels #:kernel kernel #:gamma 0.25))
-                  0.25
-                  (format "~a" kernel))))
+    (check-equal?
+     (svc-result-gamma (svc-fit (on-matrix rows 'float64) labels #:kernel kernel #:gamma 0.25))
+     0.25
+     (format "~a" kernel))))

@@ -50,5 +50,6 @@
       (check-equal? (score e X labels)
                     (~> (count equal? (svc-predict r X) labels) (/ 120) exact->inexact))
       (check-equal?
-       (svc-result->svm-fit (svc-model (fit (svc) X labels #:sample-weight (on-vector (make-list 120 1.0) dt))))
+       (svc-result->svm-fit
+        (svc-model (fit (svc) X labels #:sample-weight (on-vector (make-list 120 1.0) dt))))
        (svc-result->svm-fit (svc-model (fit (svc) X labels)))))))

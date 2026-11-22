@@ -38,7 +38,8 @@
 
 (define fit-rows
   `(#hasheq((message
-             . "svc-fit: kernel: 'precomputed is not supported; pass X with 'linear, 'poly, 'rbf or 'sigmoid")
+             .
+             "svc-fit: kernel: 'precomputed is not supported; pass X with 'linear, 'poly, 'rbf or 'sigmoid")
             (kernel . precomputed))
     #hasheq((message . "svc-fit: kernel: expected 'linear, 'poly, 'rbf or 'sigmoid, got 'cubic")
             (kernel . cubic))
@@ -55,9 +56,9 @@
     #hasheq((message . "svc-fit: C: expected a positive finite real, got 0") (C . 0))
     #hasheq((message . "svc-fit: C: expected a positive finite real, got -1.0") (C . -1.0))
     #hasheq((message . "svc-fit: C: expected a positive finite real, got +nan.0") (C . +nan.0))
-    #hasheq((message . "svc-fit: C: expected a positive finite real, got 1000")
-            (C . ,(expt 10 400)))
-    #hasheq((message . "svc-fit: C: expected a positive real representable as a nonzero flonum, got 1/1000")
+    #hasheq((message . "svc-fit: C: expected a positive finite real, got 1000") (C . ,(expt 10 400)))
+    #hasheq((message
+             . "svc-fit: C: expected a positive real representable as a nonzero flonum, got 1/1000")
             (C . ,(expt 10 -400)))
     #hasheq((message . "svc-fit: tol: expected a positive finite real, got 0") (tol . 0))
     #hasheq((message . "svc-fit: tol: expected a positive finite real, got -1") (tol . -1))
@@ -70,9 +71,11 @@
             (cache-size . -1)
             (tol . 0)
             (C . 0))
-    #hasheq((message . "svc-fit: tol: expected a positive finite real, got 0") (cache-size . -1) (tol . 0))
-    #hasheq((message
-             . "svc-fit: max-iter: expected #f or an exact integer from 1 to 2147483647, got 0")
+    #hasheq((message . "svc-fit: tol: expected a positive finite real, got 0")
+            (cache-size . -1)
+            (tol . 0))
+    #hasheq((message .
+                     "svc-fit: max-iter: expected #f or an exact integer from 1 to 2147483647, got 0")
             (max-iter . 0))
     #hasheq((message
              . "svc-fit: nochange-steps: expected an exact integer from 0 to 2147483647, got -1")
@@ -108,7 +111,8 @@
             (w . ,(cons +nan.0 (make-list 39 1.0))))
     #hasheq((message . "svc-fit: the kernel can overflow (bound ") (gamma . 1e30))
     #hasheq((message
-             . "svc-fit: cache-size: 1e+06 MiB overflows the kernel cache's index for 40 rows; pass at most ")
+             .
+             "svc-fit: cache-size: 1e+06 MiB overflows the kernel cache's index for 40 rows; pass at most ")
             (cache-size . 1e6))
     #hasheq((message . "svc-fit: the fit has no support vectors; lower #:tol or raise #:max-iter")
             (tol . 3))))
@@ -168,9 +172,9 @@
 
 (test-gpu "a fit on no rows is refused"
   (for ([dt (in-list dtypes)])
-    (check-refused "svc-fit: X: expected at least 1 row, got 0"
-                   (lambda ()
-                     (svc-fit (device-matrix 0 3 #:dtype dt) (list->device-vector '() #:dtype 'int32))))))
+    (check-refused
+     "svc-fit: X: expected at least 1 row, got 0"
+     (lambda () (svc-fit (device-matrix 0 3 #:dtype dt) (list->device-vector '() #:dtype 'int32))))))
 
 (test-gpu "tol 0 is refused at once"
   (for ([tol (in-list (list 0 (expt 10 -400)))])

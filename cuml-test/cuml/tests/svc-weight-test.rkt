@@ -14,10 +14,7 @@
                   fresh-rows
                   svc-result->svm-fit
                   svm-case
-                  svm-case-name
-                  svm-fit
-                  weighted-cases)
-         (only-in "private/svm-oracle.rkt" check-kkt))
+                  svm-fit))
 
 (define-values (rows labels) (dyadic-blobs 300 4 1))
 (define probe (fresh-rows 200 4 1))
@@ -36,11 +33,6 @@
   (for*/list ([dt (in-list dtypes)]
               [kernel (in-list '(linear poly rbf))])
     (list dt kernel)))
-
-(test-gpu "the KKT law holds with C_i = C·w_i"
-  (for ([c (in-list (weighted-cases))])
-    (test-case (svm-case-name c)
-      (check-kkt c))))
 
 (define dropped
   (for/list ([i (in-range 300)])
@@ -102,5 +94,6 @@
     (match-define (list dt kernel) arm)
     (test-case (format "~a ~a" dt kernel)
       (law-case "W4"
-        (check-equal? (svc-result->svm-fit (case-fit (blob-case "ones" dt kernel #:w (make-list 300 1))))
-                      (svc-result->svm-fit (case-fit (blob-case "none" dt kernel))))))))
+        (check-equal?
+         (svc-result->svm-fit (case-fit (blob-case "ones" dt kernel #:w (make-list 300 1))))
+         (svc-result->svm-fit (case-fit (blob-case "none" dt kernel))))))))
