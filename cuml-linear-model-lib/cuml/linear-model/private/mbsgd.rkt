@@ -31,7 +31,7 @@
                   nonnegative-value/who
                   penalty-code
                   positive-value/who)
-         (only-in "labels.rkt"
+         (only-in cuml/core/private/labels
                   class-view
                   decode-labels
                   device-kind?
@@ -43,7 +43,8 @@
          (only-in "native.rkt"
                   cuml-linear-model-mbsgd-classifier-fit-job
                   cuml-linear-model-mbsgd-regressor-fit-job
-                  cuml-linear-model-threshold-labels-job))
+                  cuml-linear-model-threshold-labels-job
+                  linear-model-label-jobs))
 
 (provide (struct-out mbsgd-classifier-result)
          (struct-out mbsgd-regressor-result)
@@ -80,7 +81,7 @@
   #:property prop:label-codes
   (lambda (who result y resources)
     (match-define (struct* mbsgd-classifier-result ([classes classes] [label-kind kind])) result)
-    (label-codes/who who classes kind y resources)))
+    (label-codes/who who linear-model-label-jobs classes kind y resources)))
 
 (define-syntax-parse-rule (define-sgd-params name:id loss-default:expr)
   (define-hyperparameters name
@@ -263,7 +264,7 @@
   (cond
     [(device-kind? kind) (values y #f)]
     [else
-     (define-values (codes classes _weights) (fit-labels/who who kind rows y #f resources))
+     (define-values (codes classes _weights) (fit-labels/who who linear-model-label-jobs kind rows y #f resources))
      (unless (= (length classes) 2)
        (logic-error "~a: y: expected exactly 2 classes, got ~a" who (length classes)))
      (values codes classes)]))

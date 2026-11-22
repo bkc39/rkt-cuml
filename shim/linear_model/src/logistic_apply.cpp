@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "cumlrkt/common.hpp"
+#include "cumlrkt/label_entries.hpp"
 #include "cumlrkt/labels.hpp"
 #include "cumlrkt/linear_model.h"
 #include "cumlrkt/support.hpp"
@@ -123,32 +124,6 @@ void apply_into(const raft::handle_t& handle, const apply_views& views,
   }
 }
 
-template <typename L>
-void encode_into(const raft::handle_t& handle, const rr_view* yv,
-                 const rr_view* classesv, rr_deposit* out) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const L* y = raftrkt::vector_data<L, int32_t>(yv, "y", raftrkt::any_extent);
-  const int64_t n = raftrkt::require(yv, "y")->shape[0];
-  const L* classes = raftrkt::vector_data<L, int32_t>(classesv, "classes",
-                                                      raftrkt::any_extent);
-  const int64_t k = raftrkt::require(classesv, "classes")->shape[0];
-  buffer<int32_t> codes = scratch<int32_t>(n, stream);
-  encode_against<L>(y, n, classes, k, codes.data(), stream);
-  deposit_rows(handle, out, std::move(codes), n, std::nullopt);
-}
-
-template <typename L>
-void classes_into(const raft::handle_t& handle, const rr_view* yv,
-                  rr_deposit* out) {
-  const rmm::cuda_stream_view stream = stream_of(handle);
-  const L* y = raftrkt::vector_data<L, int32_t>(yv, "y", raftrkt::any_extent);
-  const int64_t n = raftrkt::require(yv, "y")->shape[0];
-  require_integral(y, n, stream);
-  dense_labels<L> labels = dense_codes(y, n, stream);
-  const int64_t k = labels.k;
-  deposit_rows(handle, out, std::move(labels.values), k, std::nullopt);
-}
-
 }  // namespace
 
 }  // namespace cumlrkt::glm::logistic
@@ -224,29 +199,5 @@ int cuml_linear_model_logistic_regression_apply(void* handle, const rr_view* x,
 
 CUMLRKT_JOB(cuml_linear_model_logistic_regression_apply)
 
-int cuml_linear_model_label_encode(void* handle, const rr_view* y,
-                                   const rr_view* classes, rr_deposit* out) {
-  return cumlrkt::guarded(
-      handle, {{"y", y}, {"classes", classes}}, [&](const raft::handle_t& h) {
-        rr_deposit* const into = raftrkt::require(out, "out");
-        cumlrkt::on_class_labels(y, "y", [&](auto tag) {
-          cumlrkt::glm::logistic::encode_into<decltype(tag)>(h, y, classes,
-                                                             into);
-        });
-      });
-}
-
-CUMLRKT_JOB(cuml_linear_model_label_encode)
-
-int cuml_linear_model_label_classes(void* handle, const rr_view* y,
-                                    rr_deposit* out) {
-  return cumlrkt::guarded(handle, {{"y", y}}, [&](const raft::handle_t& h) {
-    rr_deposit* const into = raftrkt::require(out, "out");
-    cumlrkt::on_class_labels(y, "y", [&](auto tag) {
-      cumlrkt::glm::logistic::classes_into<decltype(tag)>(h, y, into);
-    });
-  });
-}
-
-CUMLRKT_JOB(cuml_linear_model_label_classes)
+CUMLRKT_LABEL_ENTRIES(linear_model)
 }

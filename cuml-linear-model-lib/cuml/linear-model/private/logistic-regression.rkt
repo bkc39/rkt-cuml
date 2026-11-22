@@ -21,7 +21,7 @@
                   nonnegative-value/who
                   penalty-code
                   positive-value/who)
-         (only-in "labels.rkt"
+         (only-in cuml/core/private/labels
                   class-view
                   decode-labels
                   device-kind?
@@ -32,7 +32,8 @@
                   y-kind/who)
          (only-in "native.rkt"
                   cuml-linear-model-logistic-regression-apply-job
-                  cuml-linear-model-logistic-regression-fit-job))
+                  cuml-linear-model-logistic-regression-fit-job
+                  linear-model-label-jobs))
 
 (provide (struct-out logistic-regression-result)
          logistic-regression-decision-function
@@ -56,7 +57,7 @@
   #:property prop:label-codes
   (lambda (who result y resources)
     (match-define (struct* logistic-regression-result ([classes classes] [label-kind kind])) result)
-    (label-codes/who who classes kind y resources)))
+    (label-codes/who who linear-model-label-jobs classes kind y resources)))
 
 (define-hyperparameters logistic-regression-params
   [penalty 'l2]
@@ -176,7 +177,7 @@
   (define settings (qn-settings/who who (bound-params logistic-regression-params)))
   (define w (weight-view who sample-weight))
   (match-define (list rows _) (shape X))
-  (define-values (y-view classes weights) (fit-labels/who who kind rows y class-weight resources))
+  (define-values (y-view classes weights) (fit-labels/who who linear-model-label-jobs kind rows y class-weight resources))
   (define out (deposit-for/who who resources))
   (define n-iter (fit-job who resources X y-view w weights out settings))
   (match-define (list coef intercept device-classes) (deposit->list out))
