@@ -206,6 +206,15 @@
              gauge-predict/who)
     (define-cd-result gauge-result gauge-predict)))
 
+(define label-jobs-definition
+  '((provide current-label-classes-job
+             family-label-jobs)
+    (define (classes-job . args)
+      args)
+    (define (encode-job . args)
+      args)
+    (define-label-jobs family-label-jobs current-label-classes-job classes-job encode-job)))
+
 (define titles-with-spec-ids
   '((require (only-in rackunit check-true test-case)
              (only-in raft/tests/private/gpu test-gpu)
@@ -290,6 +299,9 @@
 
 (test-case "define-cd-result binds the result struct, the predict and its who form"
   (check-equal? (problems-in cd-result-definition) '()))
+
+(test-case "define-label-jobs binds the family's jobs and its classes-job parameter"
+  (check-equal? (problems-in label-jobs-definition) '()))
 
 (test-case "a binding used only in a macro's template is used"
   (check-equal? (problems-in helper-used-in-a-template) '()))

@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/core exn:fail:cuml)
-         (only-in cuml/core/private/labels label-jobs)
+         (only-in cuml/core/private/labels define-label-jobs)
          (only-in cuml/core/private/native
                   cuml-family-libcuml-version
                   cuml-family-library
@@ -106,12 +106,7 @@
             (handle view view deposit)
             #:exn exn:fail:cuml)
 
-(define current-label-classes-job
-  (make-parameter cuml-linear-model-label-classes-job #f 'current-label-classes-job))
-
-(define linear-model-label-jobs
-  (label-jobs (lambda args (apply (current-label-classes-job) args))
-              cuml-linear-model-label-encode-job))
+(define-label-jobs linear-model-label-jobs current-label-classes-job cuml-linear-model-label-classes-job cuml-linear-model-label-encode-job)
 
 (define-job cuml-linear-model-mbsgd-regressor-fit-job
             library

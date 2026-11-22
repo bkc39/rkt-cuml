@@ -13,9 +13,9 @@
                   list-kind?
                   weight-view/who
                   y-kind/who
-                  y-length)
+                  y-rows/who)
          (only-in cuml/core/private/logic-error logic-error)
-         (only-in racket/match match match-define struct*)
+         (only-in racket/match match match* match-define struct*)
          (only-in raft current-device-resources device-matrix? dtype shape)
          (only-in raft/unsafe deposit->list)
          (only-in "kernel.rkt" kernel-code svm-kernel svm-settings/who svm-solver)
@@ -66,10 +66,10 @@
 
 (define float-dtypes '(float32 float64))
 
-(define (float-matrix who X)
-  (if (and (device-matrix? X) (memq (dtype X) float-dtypes))
+(define (float-matrix who X #:dtype [dt #f])
+  (if (and (device-matrix? X) (memq (dtype X) (if dt (list dt) float-dtypes)))
       X
-      (logic-error "~a: X: expected a device-matrix of float32 or float64, got ~e" who X)))
+      (logic-error "~a: X: expected a device-matrix of ~a, got ~e" who (or dt "float32 or float64") X)))
 
 (define ((two-classes who) classes)
   (match classes
@@ -77,11 +77,14 @@
     [(list only) (logic-error "~a: y: expected two classes, got one (~e)" who only)]
     [(list* a b _)
      (logic-error
-      "~a: y: expected two classes, got ~a (~e ~e ...); multiclass svc is not supported yet"
+      "~a: y: expected two classes, got ~a (~e ~e ...); multiclass svc is not supported"
       who
       (length classes)
       a
       b)]))
+
+(define (empty-class who label)
+  (logic-error "~a: sample-weight: class ~e has no row of positive weight" who label))
 
 (define/who (svc-fit who
                      X
@@ -92,13 +95,14 @@
   (float-matrix who X)
   (define kind (y-kind/who who y))
   (define params (bound-params svc-params))
-  (define-values (kernel-settings solver-settings) (svm-settings/who who params))
-  (match-define (svm-kernel code degree* mode gamma* coef0* cache) kernel-settings)
-  (match-define (svm-solver C* tol* max-iter* nochange) solver-settings)
+  (define-values (kernel-settings solver-settings) (svm-settings/who who params (dtype X)))
+  (match-define (svm-kernel code degree₀ mode gamma₀ coef0₀ cache) kernel-settings)
+  (match-define (svm-solver C₀ tol₀ max-iter₀ nochange) solver-settings)
   (define w (weight-view/who who sample-weight))
   (match-define (list rows _) (shape X))
-  (unless (= (y-length y) rows)
-    (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y)))
+  (when (zero? rows)
+    (logic-error "~a: X: expected at least 1 row, got 0" who))
+  (y-rows/who who rows y)
   (define-values (classes codes)
     (class-codes/who who svm-label-jobs kind y (two-classes who) resources))
   (define out (deposit-for/who who resources))
@@ -110,20 +114,19 @@
                           w
                           out
                           code
-                          degree*
+                          degree₀
                           mode
-                          gamma*
-                          coef0*
-                          C*
-                          tol*
+                          gamma₀
+                          coef0₀
+                          C₀
+                          tol₀
                           cache
-                          max-iter*
+                          max-iter₀
                           nochange))
-  (match-define (list negative positive) classes)
-  (unless (= empty -1)
-    (logic-error "~a: sample-weight: class ~e has no row of positive weight"
-                 who
-                 (if (zero? empty) negative positive)))
+  (match* (empty classes)
+    [(-1 _) (void)]
+    [(0 (list negative _)) (empty-class who negative)]
+    [(1 (list _ positive)) (empty-class who positive)])
   (match-define (list support-vectors support dual intercept) (deposit->list out))
   (svc-result support-vectors
               support
@@ -134,9 +137,9 @@
               kind
               n-iter
               kernel
-              degree*
+              degree₀
               resolved
-              coef0*
+              coef0₀
               cache))
 
 (define (checked-result who result X)
@@ -144,8 +147,7 @@
     (logic-error "~a: result: expected an svc-result, got ~e" who result))
   (match-define (struct* svc-result ([support-vectors sv])) result)
   (match-define (list _ columns) (shape sv))
-  (unless (and (device-matrix? X) (eq? (dtype X) (dtype sv)))
-    (logic-error "~a: X: expected a device-matrix of ~a, got ~e" who (dtype sv) X))
+  (float-matrix who X #:dtype (dtype sv))
   (match-define (list _ given) (shape X))
   (unless (= given columns)
     (logic-error "~a: X: expected ~a columns, got ~a" who columns given)))

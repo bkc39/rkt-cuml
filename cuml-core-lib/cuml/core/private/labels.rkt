@@ -1,9 +1,12 @@
 #lang racket/base
 
-(require (only-in racket/list filter-not remove-duplicates)
+(require (for-syntax racket/base
+                     (only-in syntax/parse/pre expr id))
+         (only-in racket/list filter-not remove-duplicates)
          (only-in racket/match match match-define)
          (only-in raft device-vector->list device-vector? dtype list->device-vector shape)
          (only-in raft/unsafe deposit->list)
+         (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "define-who.rkt" define/who)
          (only-in "deposit.rkt" deposit-for/who)
          (only-in "logic-error.rkt" logic-error))
@@ -12,6 +15,7 @@
          class-codes/who
          class-view
          decode-labels
+         define-label-jobs
          device-kind
          device-kind?
          fit-labels/who
@@ -21,11 +25,16 @@
          list-kind?
          weight-view/who
          y-kind/who
-         y-length)
+         y-rows/who)
 
 (define label-dtypes '(int32 int64 float32 float64))
 
 (struct label-jobs (classes encode))
+
+(define-syntax-parse-rule (define-label-jobs jobs:id parameter:id classes-job:expr encode-job:expr)
+  (begin
+    (define parameter (make-parameter classes-job #f 'parameter))
+    (define jobs (label-jobs (lambda args (apply (parameter) args)) encode-job))))
 
 (struct label-kind ())
 (struct list-kind label-kind (member? <? =? key unified?))
@@ -132,12 +141,14 @@
     [(? list?) (length y)]
     [(app shape (list n)) n]))
 
+(define/who (y-rows who rows y)
+  (define n (y-length y))
+  (if (= n rows)
+      y
+      (logic-error "~a: y: expected ~a elements, got ~a" who rows n)))
+
 (define (class-weighted? who rows y cw)
-  (cond
-    [(not (hash? cw)) #f]
-    [(not (= (y-length y) rows))
-     (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y))]
-    [else #t]))
+  (and (hash? cw) (y-rows/who who rows y) #t))
 
 (define (class-weight-view who kind classes cw resources)
   (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources))
