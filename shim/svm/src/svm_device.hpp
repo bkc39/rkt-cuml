@@ -14,9 +14,9 @@ void codes_to(const int32_t* codes, int64_t n, T* out,
               rmm::cuda_stream_view stream);
 
 template <typename T>
-std::pair<double, double> class_weights(const int32_t* codes, const T* w,
-                                        int64_t n,
-                                        rmm::cuda_stream_view stream);
+std::pair<double, double> class_penalties(const int32_t* codes, const T* w,
+                                          int64_t n, double C,
+                                          rmm::cuda_stream_view stream);
 
 template <typename T>
 double penalty_total(const T* w, int64_t n, double C,

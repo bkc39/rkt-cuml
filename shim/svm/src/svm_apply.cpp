@@ -45,6 +45,8 @@ struct apply_settings {
 template <typename T>
 buffer<T> decision_of(const raft::handle_t& handle, const apply_views& views,
                       const apply_settings& s) {
+  require_narrowed<T>("gamma", s.gamma, false);
+  require_narrowed<T>("coef0", s.coef0, false);
   const rmm::cuda_stream_view stream = stream_of(handle);
   const matrix<T, int64_t> x = rows_of<T, int64_t>(
       views.x, "X", raftrkt::any_extent, raftrkt::any_extent);

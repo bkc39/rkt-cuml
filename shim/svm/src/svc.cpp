@@ -77,12 +77,12 @@ const T* checked_weights(const rr_view* view, int64_t n,
 }
 
 template <typename T>
-int32_t empty_class(const T* w, const int32_t* codes, int64_t n,
+int32_t empty_class(const T* w, const int32_t* codes, int64_t n, double C,
                     rmm::cuda_stream_view stream) {
   if (w == nullptr) {
     return -1;
   }
-  const auto [first, second] = class_weights(codes, w, n, stream);
+  const auto [first, second] = class_penalties(codes, w, n, C, stream);
   if (!(first > 0.0)) {
     return 0;
   }
@@ -135,6 +135,12 @@ void deposit_parts(const raft::handle_t& handle, svc_parts<T> parts, int64_t d,
 template <typename T>
 fit_report fit_into(const raft::handle_t& handle, const fit_views& views,
                     const fit_settings& s, rr_deposit* out) {
+  require_narrowed<T>("C", s.C, true);
+  require_narrowed<T>("tol", s.tol, true);
+  require_narrowed<T>("coef0", s.coef0, false);
+  if (s.gamma_mode == CUML_SVM_GAMMA_NUMBER) {
+    require_narrowed<T>("gamma", s.gamma, false);
+  }
   const rmm::cuda_stream_view stream = stream_of(handle);
   const matrix<T, int64_t> x = rows_of<T, int64_t>(
       views.x, "X", raftrkt::any_extent, raftrkt::any_extent);
@@ -149,7 +155,7 @@ fit_report fit_into(const raft::handle_t& handle, const fit_views& views,
         std::format("y: row {}: expected a class code 0 or 1", bad));
   }
   const T* w = checked_weights<T>(views.weight, x.n, stream);
-  const int32_t empty = empty_class(w, codes, x.n, stream);
+  const int32_t empty = empty_class(w, codes, x.n, s.C, stream);
   if (empty >= 0) {
     return {.empty_class = empty};
   }
@@ -157,6 +163,7 @@ fit_report fit_into(const raft::handle_t& handle, const fit_views& views,
   const double largest = largest_squared_norm(x.data, x.n, x.d, stream);
   require_row_norms("X", largest, x.data, x.n, x.d, stream);
   const double gamma = resolved_gamma(s, x, stream);
+  require_narrowed<T>("gamma", gamma, false);
   const double weight =
       w == nullptr
           ? static_cast<double>(x.n) * static_cast<double>(static_cast<T>(s.C))

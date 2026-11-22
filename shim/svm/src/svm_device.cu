@@ -37,13 +37,15 @@ struct code_value {
 };
 
 template <typename T>
-struct class_weight {
+struct class_penalty {
   const int32_t* codes;
   const T* w;
+  T C;
   int32_t code;
 
   __device__ double operator()(int64_t i) const {
-    return codes[i] == code && w[i] > T{0} ? static_cast<double>(w[i]) : 0.0;
+    const T c = C * w[i];
+    return codes[i] == code && c > T{0} ? static_cast<double>(c) : 0.0;
   }
 };
 
@@ -139,11 +141,12 @@ void codes_to(const int32_t* codes, int64_t n, T* out,
 }
 
 template <typename T>
-std::pair<double, double> class_weights(const int32_t* codes, const T* w,
-                                        int64_t n,
-                                        rmm::cuda_stream_view stream) {
-  return {total(n, class_weight<T>{codes, w, 0}, stream),
-          total(n, class_weight<T>{codes, w, 1}, stream)};
+std::pair<double, double> class_penalties(const int32_t* codes, const T* w,
+                                          int64_t n, double C,
+                                          rmm::cuda_stream_view stream) {
+  const auto c = static_cast<T>(C);
+  return {total(n, class_penalty<T>{codes, w, c, 0}, stream),
+          total(n, class_penalty<T>{codes, w, c, 1}, stream)};
 }
 
 template <typename T>
@@ -190,8 +193,8 @@ void threshold_labels(const T* decision, int64_t n, const L* classes, L* out,
 #define CUMLRKT_SVM_FLOAT(T)                                                   \
   template void codes_to<T>(const int32_t*, int64_t, T*,                       \
                             rmm::cuda_stream_view);                            \
-  template std::pair<double, double> class_weights<T>(                         \
-      const int32_t*, const T*, int64_t, rmm::cuda_stream_view);               \
+  template std::pair<double, double> class_penalties<T>(                       \
+      const int32_t*, const T*, int64_t, double, rmm::cuda_stream_view);       \
   template double penalty_total<T>(const T*, int64_t, double,                  \
                                    rmm::cuda_stream_view);                     \
   template double largest_squared_norm<T>(const T*, int64_t, int64_t,          \

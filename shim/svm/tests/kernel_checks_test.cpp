@@ -79,6 +79,32 @@ TEST(kernel_checks, the_refusal_names_its_remedy) {
 }
 
 template <typename T>
+bool narrowed(double v, bool positive) {
+  try {
+    require_narrowed<T>("C", v, positive);
+    return true;
+  } catch (const logic_error&) {
+    return false;
+  }
+}
+
+TEST(kernel_checks, parameters_are_checked_after_narrowing) {
+  EXPECT_TRUE(narrowed<float>(most_float, true));
+  EXPECT_FALSE(narrowed<float>(1e39, true));
+  EXPECT_FALSE(narrowed<float>(1e39, false));
+  EXPECT_TRUE(narrowed<double>(1e39, true));
+  EXPECT_FALSE(narrowed<float>(1e-50, true));
+  EXPECT_TRUE(narrowed<float>(1e-50, false));
+  EXPECT_TRUE(narrowed<double>(1e-50, true));
+  EXPECT_FALSE(narrowed<double>(0.0, true));
+  EXPECT_TRUE(narrowed<double>(0.0, false));
+  EXPECT_FALSE(narrowed<double>(-1.0, true));
+  EXPECT_TRUE(narrowed<double>(-1.0, false));
+  EXPECT_FALSE(narrowed<double>(inf, false));
+  EXPECT_FALSE(narrowed<double>(std::nan(""), false));
+}
+
+template <typename T>
 bool cached(double cache_size, int64_t n) {
   try {
     require_cache<T>(cache_size, n);
