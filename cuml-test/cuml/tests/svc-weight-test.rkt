@@ -5,7 +5,7 @@
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in cuml/svm svc-decision-function)
+         (only-in cuml/svm svc-decision-function svc-result-gamma)
          (only-in "private/linear-data.rkt" check-law-case dtypes law-case on-matrix)
          (only-in "private/svm-data.rkt"
                   case-fit
@@ -21,8 +21,11 @@
 (define-values (rows labels) (dyadic-blobs 300 4 1))
 (define probe (fresh-rows 200 4 1))
 
-(define (blob-case name dt kernel #:X [X rows] #:y [y labels] #:w [w #f])
-  (svm-case name X y w 1 kernel dt))
+(define (blob-case name dt kernel #:X [X rows] #:y [y labels] #:w [w #f] #:gamma [gamma 'scale])
+  (svm-case name X y w 1 kernel dt gamma))
+
+(define (base-gamma dt)
+  (svc-result-gamma (case-fit (blob-case "base" dt 'rbf))))
 
 (define (decisions c)
   (match-define (struct* svm-case ([dtype dt])) c)
@@ -57,8 +60,10 @@
   (for ([arm (in-list arms)])
     (match-define (list dt kernel) arm)
     (test-case (format "~a ~a" dt kernel)
-      (define zeroed (blob-case "zeroed" dt kernel #:w w))
-      (define deleted (blob-case "deleted" dt kernel #:X (kept rows) #:y (kept labels)))
+      (define g (base-gamma dt))
+      (define zeroed (blob-case "zeroed" dt kernel #:w w #:gamma g))
+      (define deleted
+        (blob-case "deleted" dt kernel #:X (kept rows) #:y (kept labels) #:gamma g))
       (match-define (struct* svm-fit ([support zs])) (fit-parts (case-fit zeroed)))
       (match-define (struct* svm-fit ([support ds])) (fit-parts (case-fit deleted)))
       (law-case "W2 support"
@@ -72,9 +77,11 @@
   (for ([arm (in-list arms)])
     (match-define (list dt kernel) arm)
     (test-case (format "~a ~a" dt kernel)
-      (define ds (decisions (blob-case "weighted" dt kernel #:w counts)))
+      (define g (base-gamma dt))
+      (define ds (decisions (blob-case "weighted" dt kernel #:w counts #:gamma g)))
       (define es
-        (decisions (blob-case "repeated" dt kernel #:X (repeated rows) #:y (repeated labels))))
+        (decisions
+         (blob-case "repeated" dt kernel #:X (repeated rows) #:y (repeated labels) #:gamma g)))
       (check-law-case "W3" (largest-gap ds es) 0.005)
       (law-case "W3 signs"
         (for ([d (in-list ds)] [e (in-list es)] #:when (> (abs d) 0.005))

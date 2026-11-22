@@ -31,7 +31,7 @@
          kkt-cases
          weighted-cases)
 
-(struct svm-case (name X y w C kernel dtype))
+(struct svm-case (name X y w C kernel dtype gamma))
 
 (struct svm-fit (sv support dual b classes n-support n-iter kernel gamma degree coef0) #:transparent)
 
@@ -79,7 +79,8 @@
               (weights-of seed (length y))
               C
               kernel
-              dt)))
+              dt
+              'scale)))
 
 (define (kkt-cases)
   (grid-cases (lambda (_seed _n) #f) "kkt"))
@@ -99,6 +100,7 @@
            #:sample-weight (on-vector (and (svm-case-w c) (map exact->inexact (svm-case-w c)))
                                       (svm-case-dtype c))
            #:kernel (svm-case-kernel c)
+           #:gamma (svm-case-gamma c)
            #:C (exact->inexact (svm-case-C c))))
 
 (define (fit-parts r)

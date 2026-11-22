@@ -56,7 +56,7 @@
       (law-case "L2 classes"
         (check-equal? (svc-result-classes r) '(no yes))
         (check-equal? (svc-result-classes s) '(no yes)))
-      (check-kkt (svm-case "swapped" rows swapped #f 1 kernel dt) (fit-parts s))
+      (check-kkt (svm-case "swapped" rows swapped #f 1 kernel dt 'scale) (fit-parts s))
       (define P (on-matrix probe dt))
       (define ds (device-vector->list (svc-decision-function r P)))
       (define es (device-vector->list (svc-decision-function s P)))
