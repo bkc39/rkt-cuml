@@ -6,13 +6,13 @@
          (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
+         (only-in cuml/core/private/scalars bounded-count/who)
          (only-in racket/match match match-define)
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "glm.rkt"
                   alpha-value/who
-                  bounded-count/who
                   glm-predict/who
                   intercept-flag/who
                   real-value/who)

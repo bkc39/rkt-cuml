@@ -15,17 +15,18 @@
                   weight-view/who
                   y-kind/who)
          (only-in cuml/core/private/logic-error logic-error)
+         (only-in cuml/core/private/scalars
+                  bounded-count/who
+                  nonnegative-value/who
+                  positive-value/who)
          (only-in racket/match match match-define struct*)
          (only-in raft current-device-resources device-matrix? device-vector->list shape)
          (only-in raft/unsafe deposit->list)
          (only-in "glm.rkt"
-                  bounded-count/who
                   checked-coef/who
                   flag/who
                   intercept-flag/who
-                  nonnegative-value/who
-                  penalty-code
-                  positive-value/who)
+                  penalty-code)
          (only-in "native.rkt"
                   cuml-linear-model-logistic-regression-apply-job
                   cuml-linear-model-logistic-regression-fit-job

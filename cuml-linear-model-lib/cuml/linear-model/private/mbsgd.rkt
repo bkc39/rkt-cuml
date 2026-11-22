@@ -20,7 +20,11 @@
                   list-kind?
                   y-kind/who)
          (only-in cuml/core/private/logic-error logic-error)
-         (only-in racket/flonum flsingle)
+         (only-in cuml/core/private/scalars
+                  bounded-count/who
+                  in-dtype/who
+                  nonnegative-value/who
+                  positive-value/who)
          (only-in racket/match match match-define struct*)
          (only-in raft
                   current-device-resources
@@ -32,14 +36,11 @@
          (only-in raft/unsafe deposit->list)
          (only-in syntax/parse/define define-syntax-parse-rule)
          (only-in "glm.rkt"
-                  bounded-count/who
                   checked-coef/who
                   flag/who
                   glm-predict/who
                   intercept-flag/who
-                  nonnegative-value/who
-                  penalty-code
-                  positive-value/who)
+                  penalty-code)
          (only-in "native.rkt"
                   cuml-linear-model-mbsgd-classifier-fit-job
                   cuml-linear-model-mbsgd-regressor-fit-job
@@ -124,16 +125,6 @@
       s
       (logic-error "~a: random-state: expected #f or an integer in [0, ~a], got ~e" who seed-most s)))
 
-(define (in-dtype who key f dt #:positive [positive #f])
-  (define held
-    (if (eq? dt 'float32)
-        (flsingle f)
-        f))
-  (cond
-    [(= held +inf.0) (logic-error "~a: ~a: ~a overflows ~a" who key f dt)]
-    [(and positive (zero? held)) (logic-error "~a: ~a: ~a rounds to 0 in ~a" who key f dt)]
-    [else f]))
-
 (struct sgd-settings
         (penalty alpha
                  l1-ratio
@@ -152,9 +143,9 @@
   (define (ref key)
     (hash-ref params key))
   (define (positive key)
-    (in-dtype who key (positive-value/who who key (ref key)) dt #:positive #t))
+    (in-dtype/who who key (positive-value/who who key (ref key)) dt #:positive #t))
   (define (nonnegative key)
-    (in-dtype who key (nonnegative-value/who who key (ref key)) dt))
+    (in-dtype/who who key (nonnegative-value/who who key (ref key)) dt))
   (sgd-settings (coded who 'penalty penalty-code (ref 'penalty) "one of 'none 'l1 'l2 'elasticnet")
                 (positive 'alpha)
                 (ratio-value who (ref 'l1-ratio))
