@@ -79,8 +79,11 @@ buffer<T> decision_of(const raft::handle_t& handle, const apply_views& views,
              sv_columns.data(), 0);
   const T b = read_one(intercept, 0, stream);
   const ML::SVM::SvmModel<T> model =
-      rebuilt<T>(static_cast<int>(sv.n), static_cast<int>(sv.d), b, dual,
-                 sv_columns.data());
+      rebuilt<T>({.n_support = static_cast<int>(sv.n),
+                  .n_cols = static_cast<int>(sv.d),
+                  .b = b,
+                  .dual = dual,
+                  .support_columns = sv_columns.data()});
   ML::matrix::KernelParams kernel{static_cast<ML::matrix::KernelType>(s.kernel),
                                   s.degree, s.gamma, s.coef0};
   buffer<T> out = scratch<T>(x.n, stream);

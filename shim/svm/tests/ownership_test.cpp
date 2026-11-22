@@ -28,12 +28,16 @@ using cumlrkt::svm::copy_out;
 using cumlrkt::svm::model_guard;
 using cumlrkt::svm::rebuilt;
 
+constexpr double predict_cache_mib = 1024.0;
+constexpr double kernel_coef0 = 0.5;
+
 template <typename T>
 std::vector<T> predicted(const raft::handle_t& h, T* columns, int n, int d,
                          ML::matrix::KernelParams& k,
                          const ML::SVM::SvmModel<T>& m, bool labels) {
   rmm::device_uvector<T> out(static_cast<std::size_t>(n), stream_of(h));
-  ML::SVM::svcPredict(h, columns, n, d, k, m, out.data(), T{1024}, labels);
+  ML::SVM::svcPredict(h, columns, n, d, k, m, out.data(),
+                      static_cast<T>(predict_cache_mib), labels);
   return on_host(out.data(), out.size(), h);
 }
 
@@ -44,7 +48,7 @@ void expect_rebuilt_bitwise(int kernel, int n, int d) {
   auto x = on_device(p.columns, h);
   auto y = on_device(p.labels, h);
   ML::matrix::KernelParams k{static_cast<ML::matrix::KernelType>(kernel), 3,
-                             1.0 / d, 0.5};
+                             1.0 / d, kernel_coef0};
   const ML::SVM::SvmParameter param = defaults();
   std::vector<T> decisions;
   std::vector<T> labels;
@@ -70,8 +74,11 @@ void expect_rebuilt_bitwise(int kernel, int n, int d) {
   to_columns(h, parts.support_vectors.data(), ns, d,
              static_cast<const T*>(nullptr), columns.data(), 0);
   const T b = on_host(parts.intercept.data(), 1, h)[0];
-  ML::SVM::SvmModel<T> again =
-      rebuilt<T>(ns, d, b, parts.dual.data(), columns.data());
+  ML::SVM::SvmModel<T> again = rebuilt<T>({.n_support = ns,
+                                           .n_cols = d,
+                                           .b = b,
+                                           .dual = parts.dual.data(),
+                                           .support_columns = columns.data()});
   EXPECT_TRUE(
       bitwise(predicted(h, x.data(), n, d, k, again, false), decisions));
   auto classes = on_device(unique, h);
@@ -113,15 +120,18 @@ INSTANTIATE_TEST_SUITE_P(svc, ownership,
                                                            : "_small");
                          });
 
+template <typename T>
+void expect_zeroed_free_is_a_no_op(const raft::handle_t& h) {
+  ML::SVM::SvmModel<T> model{};
+  model.support_matrix.nnz = -1;
+  EXPECT_NO_THROW(ML::SVM::svmFreeBuffers(h, model));
+}
+
 TEST(ownership_null, O2_free_of_a_zeroed_model_is_a_no_op) {
   CUMLRKT_REQUIRE_GPU();
   const raft::handle_t h;
-  ML::SVM::SvmModel<float> narrow{};
-  narrow.support_matrix.nnz = -1;
-  ML::SVM::SvmModel<double> wide{};
-  wide.support_matrix.nnz = -1;
-  EXPECT_NO_THROW(ML::SVM::svmFreeBuffers(h, narrow));
-  EXPECT_NO_THROW(ML::SVM::svmFreeBuffers(h, wide));
+  expect_zeroed_free_is_a_no_op<float>(h);
+  expect_zeroed_free_is_a_no_op<double>(h);
   settle(h);
 }
 

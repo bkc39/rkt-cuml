@@ -114,7 +114,8 @@ int64_t cache_elements(double cache_size, int64_t n) {
 
 template <typename T>
 double most_cache_size(int64_t n) {
-  return std::floor(static_cast<double>((most_index / n) * n) *
+  const int64_t whole_rows = (most_index / n) * n;
+  return std::floor(static_cast<double>(whole_rows) *
                     static_cast<double>(sizeof(T)) / mebibyte);
 }
 

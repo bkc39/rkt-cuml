@@ -93,15 +93,23 @@ svc_parts<T> copy_out(const raft::handle_t& handle,
 }
 
 template <typename T>
-ML::SVM::SvmModel<T> rebuilt(int n_support, int n_cols, T b, T* dual,
-                             T* support_columns) {
+struct model_parts {
+  int n_support;
+  int n_cols;
+  T b;
+  T* dual;
+  T* support_columns;
+};
+
+template <typename T>
+ML::SVM::SvmModel<T> rebuilt(const model_parts<T>& parts) {
   ML::SVM::SvmModel<T> model{};
-  model.n_support = n_support;
-  model.n_cols = n_cols;
-  model.b = b;
-  model.dual_coefs = dual;
+  model.n_support = parts.n_support;
+  model.n_cols = parts.n_cols;
+  model.b = parts.b;
+  model.dual_coefs = parts.dual;
   model.support_matrix.nnz = -1;
-  model.support_matrix.data = support_columns;
+  model.support_matrix.data = parts.support_columns;
   model.support_idx = nullptr;
   model.n_classes = 0;
   model.unique_labels = nullptr;

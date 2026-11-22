@@ -114,24 +114,34 @@ bool cached(double cache_size, int64_t n) {
   }
 }
 
+constexpr int64_t cache_rows = 300;
+constexpr double overflowing_cache = 1e6;
+
+template <typename T>
+void expect_most_cache_size_is_the_bound(int64_t n) {
+  EXPECT_TRUE(cached<T>(most_cache_size<T>(n), n)) << n;
+  EXPECT_FALSE(cached<T>(2 * most_cache_size<T>(n), n)) << n;
+}
+
 TEST(kernel_checks, the_kernel_cache_index_fits_int32) {
   EXPECT_EQ(cache_elements<float>(1024.0, 300), int64_t{894784} * 300);
   EXPECT_TRUE(cached<float>(1024.0, 300));
   EXPECT_FALSE(cached<float>(16384.0, 300));
   EXPECT_FALSE(cached<double>(1e6, 300));
   EXPECT_FALSE(cached<double>(1e30, 300));
+}
+
+TEST(kernel_checks, most_cache_size_is_the_largest_cache_that_fits) {
   for (const int64_t n :
        {int64_t{1}, int64_t{300}, int64_t{569}, int64_t{20000}}) {
-    EXPECT_TRUE(cached<float>(most_cache_size<float>(n), n)) << n;
-    EXPECT_TRUE(cached<double>(most_cache_size<double>(n), n)) << n;
-    EXPECT_FALSE(cached<float>(2 * most_cache_size<float>(n), n)) << n;
-    EXPECT_FALSE(cached<double>(2 * most_cache_size<double>(n), n)) << n;
+    expect_most_cache_size_is_the_bound<float>(n);
+    expect_most_cache_size_is_the_bound<double>(n);
   }
 }
 
 TEST(kernel_checks, the_cache_refusal_names_its_remedy) {
   try {
-    require_cache<double>(1e6, 300);
+    require_cache<double>(overflowing_cache, cache_rows);
     FAIL() << "accepted";
   } catch (const logic_error& e) {
     EXPECT_EQ(std::string(e.what()),

@@ -18,13 +18,16 @@ using cumlrkt::svm::scale_gamma;
 
 constexpr int64_t rows = 64;
 constexpr int64_t cols = 4;
+constexpr int64_t row_period = 8;
+constexpr int64_t column_shift = 16;
+constexpr float constant_value = 2.5F;
 
 template <typename T>
 std::vector<T> shifted_columns() {
   std::vector<T> x(static_cast<std::size_t>(rows * cols));
   for (int64_t i = 0; i < rows; ++i) {
     for (int64_t j = 0; j < cols; ++j) {
-      x[(i * cols) + j] = static_cast<T>((i % 8) + (16 * j));
+      x[(i * cols) + j] = static_cast<T>((i % row_period) + (column_shift * j));
     }
   }
   return x;
@@ -70,7 +73,7 @@ TEST(gamma, G1_scale_is_over_every_element_double) {
 TEST(gamma, a_constant_X_is_refused) {
   CUMLRKT_REQUIRE_GPU();
   const raft::handle_t h;
-  auto x = on_device(std::vector<float>(rows * cols, 2.5F), h);
+  auto x = on_device(std::vector<float>(rows * cols, constant_value), h);
   try {
     scale_gamma(x.data(), rows, cols, stream_of(h));
     FAIL() << "accepted";

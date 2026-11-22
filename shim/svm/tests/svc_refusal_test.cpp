@@ -19,6 +19,14 @@ constexpr int64_t quiet_peak = int64_t{64} << 10;
 constexpr double nan = std::numeric_limits<double>::quiet_NaN();
 constexpr double inf = std::numeric_limits<double>::infinity();
 constexpr int64_t forged_side = 46341;
+constexpr double default_tol = 1e-3;
+constexpr int64_t second_period = 5;
+constexpr double constant_value = 1.5;
+constexpr double steep_gamma = 1e30;
+constexpr std::size_t row_2_column_1 = 5;
+constexpr double faint_weight = 1e-45;
+constexpr double small_C = 0.1;
+constexpr double loose_tol = 3.0;
 
 struct fit_case {
   std::vector<double> x;
@@ -29,20 +37,22 @@ struct fit_case {
   double gamma = 0.0;
   double coef0 = 0.0;
   double C = 1.0;
-  double tol = 1e-3;
+  double tol = default_tol;
 };
 
 std::vector<double> grid() {
   std::vector<double> x;
+  x.reserve(static_cast<std::size_t>(rows * cols));
   for (int64_t i = 0; i < rows; ++i) {
     x.push_back(static_cast<double>(i % 4));
-    x.push_back(static_cast<double>((i * 3) % 5));
+    x.push_back(static_cast<double>((i * 3) % second_period));
   }
   return x;
 }
 
 std::vector<int32_t> alternating() {
   std::vector<int32_t> codes;
+  codes.reserve(static_cast<std::size_t>(rows));
   for (int64_t i = 0; i < rows; ++i) {
     codes.push_back(static_cast<int32_t>(i % 2));
   }
@@ -97,11 +107,17 @@ fit_case with_weight(std::vector<double> w) {
   return c;
 }
 
-fit_case with_settings(double C, double tol, double coef0) {
+struct settings {
+  double C = 1.0;
+  double tol = default_tol;
+  double coef0 = 0.0;
+};
+
+fit_case with_settings(const settings& s) {
   fit_case c = base();
-  c.C = C;
-  c.tol = tol;
-  c.coef0 = coef0;
+  c.C = s.C;
+  c.tol = s.tol;
+  c.coef0 = s.coef0;
   return c;
 }
 
@@ -133,19 +149,18 @@ std::vector<refusal> refusals() {
   fit_case bad_code = base();
   bad_code.codes[0] = 2;
   fit_case constant = base();
-  constant.x.assign(rows * cols, 1.5);
+  constant.x.assign(rows * cols, constant_value);
   fit_case wide = base();
   wide.gamma_mode = CUML_SVM_GAMMA_NUMBER;
-  wide.gamma = 1e30;
+  wide.gamma = steep_gamma;
   fit_case unbounded_gamma = base();
   unbounded_gamma.gamma_mode = CUML_SVM_GAMMA_NUMBER;
   unbounded_gamma.gamma = inf;
   return {
-      {with_settings(inf, 1e-3, 0.0), "C: expected a positive value finite in"},
-      {with_settings(0.0, 1e-3, 0.0), "C: expected a positive value finite in"},
-      {with_settings(1.0, 0.0, 0.0),
-       "tol: expected a positive value finite in"},
-      {with_settings(1.0, 1e-3, nan), "coef0: expected a value finite in"},
+      {with_settings({.C = inf}), "C: expected a positive value finite in"},
+      {with_settings({.C = 0.0}), "C: expected a positive value finite in"},
+      {with_settings({.tol = 0.0}), "tol: expected a positive value finite in"},
+      {with_settings({.coef0 = nan}), "coef0: expected a value finite in"},
       {unbounded_gamma, "gamma: expected a value finite in"},
       {bad_code, "y: row 0: expected a class code 0 or 1"},
       {with_weight(undefined), "sample-weight: row 0: expected a finite value"},
@@ -153,7 +168,8 @@ std::vector<refusal> refusals() {
       {with_weight(lopsided), "empty class 1"},
       {with_weight(unweighted_first), "empty class 0"},
       {with_weight(std::vector<double>(rows, 0.0)), "empty class 0"},
-      {with_x(nan, 5), "X: row 2, column 1: expected a finite value"},
+      {with_x(nan, row_2_column_1),
+       "X: row 2, column 1: expected a finite value"},
       {constant, "gamma 'scale: X has zero variance; pass a numeric #:gamma"},
       {wide, "the kernel can overflow (bound "},
   };
@@ -184,16 +200,21 @@ TEST(svc_refusal, F_refusals_come_before_the_fit_double) {
 TEST(svc_refusal, F_float32_refuses_what_narrows_to_zero_or_infinity) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
-  EXPECT_EQ(fitted<float>(res, with_settings(1e39, 1e-3, 0.0)),
+  EXPECT_EQ(fitted<float>(res, with_settings({.C = 1e39})),
             "C: expected a positive value finite in float32, got 1e+39");
-  EXPECT_EQ(fitted<float>(res, with_settings(1e-50, 1e-3, 0.0)),
+  EXPECT_EQ(fitted<float>(res, with_settings({.C = 1e-50})),
             "C: expected a positive value finite in float32, got 1e-50");
-  EXPECT_EQ(fitted<float>(res, with_settings(1.0, 1e-3, 1e39)),
+  EXPECT_EQ(fitted<float>(res, with_settings({.coef0 = 1e39})),
             "coef0: expected a value finite in float32, got 1e+39");
   const std::string got = fitted<float>(res, scaled_x(1e-20));
   EXPECT_EQ(got.rfind("gamma: expected a value finite in float32, got ", 0), 0U)
       << got;
-  EXPECT_EQ(fitted<double>(res, with_settings(1e39, 1e-3, 0.0)), "accepted");
+}
+
+TEST(svc_refusal, F_float64_keeps_what_float32_cannot_hold) {
+  CUMLRKT_REQUIRE_GPU();
+  const resources res;
+  EXPECT_EQ(fitted<double>(res, with_settings({.C = 1e39})), "accepted");
   EXPECT_EQ(fitted<double>(res, scaled_x(1e-20)), "accepted");
 }
 
@@ -202,10 +223,10 @@ TEST(svc_refusal, F_a_class_whose_penalties_narrow_to_zero_is_empty) {
   const resources res;
   std::vector<double> faint(rows, 1.0);
   for (int64_t i = 1; i < rows; i += 2) {
-    faint[i] = 1e-45;
+    faint[i] = faint_weight;
   }
   fit_case c = with_weight(faint);
-  c.C = 0.1;
+  c.C = small_C;
   EXPECT_EQ(fitted<float>(res, c), "empty class 1");
   EXPECT_EQ(fitted<double>(res, c), "accepted");
 }
@@ -244,7 +265,7 @@ TEST(svc_refusal, V0c_a_fit_without_support_vectors_is_refused) {
   CUMLRKT_REQUIRE_GPU();
   const resources res;
   fit_case loose = base();
-  loose.tol = 3.0;
+  loose.tol = loose_tol;
   EXPECT_EQ(fitted<double>(res, loose),
             "the fit has no support vectors; lower #:tol or raise #:max-iter");
   EXPECT_EQ(fitted<double>(res, base()), "accepted");

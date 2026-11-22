@@ -6,6 +6,7 @@
 #include <cuml/svm/svc.hpp>
 #include <raft/core/handle.hpp>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "cumlrkt/support.hpp"
@@ -20,6 +21,7 @@ using cumlrkt::svm::stall_translated;
 
 constexpr int rows = 300;
 constexpr int cols = 4;
+constexpr unsigned blob_seed = 5;
 
 template <typename T>
 void guarded_fit(const raft::handle_t& h, T* x, T* y, int n) {
@@ -35,23 +37,32 @@ void guarded_fit(const raft::handle_t& h, T* x, T* y, int n) {
 }
 
 template <typename T>
+std::string fit_failure(const raft::handle_t& h, T* x, T* y) {
+  std::string what;
+  try {
+    guarded_fit(h, x, y, rows);
+  } catch (const std::exception& e) {
+    what = e.what();
+  }
+  settle(h);
+  return what;
+}
+
+template <typename T>
 void expect_flat() {
   const allocation_meter meter;
   const raft::handle_t h;
-  problem<T> p = blobs<T>(rows, cols, 5);
+  problem<T> p = blobs<T>(rows, cols, blob_seed);
   auto x = on_device(p.columns, h);
   auto y = on_device(p.labels, h);
   std::vector<T> one(p.labels.size(), static_cast<T>(label_low));
   auto single = on_device(one, h);
   settle(h);
-  EXPECT_THROW(guarded_fit(h, x.data(), y.data(), rows), std::runtime_error);
-  settle(h);
+  EXPECT_EQ(fit_failure(h, x.data(), y.data()), "after the fit");
   const int64_t before = meter.current();
-  EXPECT_THROW(guarded_fit(h, x.data(), y.data(), rows), std::runtime_error);
-  settle(h);
+  EXPECT_EQ(fit_failure(h, x.data(), y.data()), "after the fit");
   EXPECT_EQ(meter.current(), before);
-  EXPECT_ANY_THROW(guarded_fit(h, x.data(), single.data(), rows));
-  settle(h);
+  EXPECT_FALSE(fit_failure(h, x.data(), single.data()).empty());
   EXPECT_EQ(meter.current(), before);
 }
 
@@ -77,10 +88,19 @@ TEST(model_guard, a_stalled_working_set_names_its_remedy) {
     EXPECT_STREQ(e.what(),
                  "the SMO solver stopped making progress; raise #:tol");
   }
-  EXPECT_THROW(stall_translated([]() -> int {
-                 throw std::runtime_error("another failure");
-               }),
-               std::runtime_error);
+}
+
+TEST(model_guard, other_failures_pass_through) {
+  try {
+    stall_translated(
+        []() -> int { throw std::runtime_error("another failure"); });
+    FAIL() << "accepted";
+  } catch (const std::exception& e) {
+    EXPECT_STREQ(e.what(), "another failure");
+  }
+}
+
+TEST(model_guard, results_pass_through) {
   EXPECT_EQ(stall_translated([] { return 3; }), 3);
 }
 

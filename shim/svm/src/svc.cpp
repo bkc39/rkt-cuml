@@ -102,6 +102,8 @@ double resolved_gamma(const fit_settings& s, const matrix<T, int64_t>& x,
   }
 }
 
+constexpr double svr_epsilon = 0.1;
+
 ML::SVM::SvmParameter solver_of(const fit_settings& s) {
   ML::SVM::SvmParameter p{};
   p.C = s.C;
@@ -111,7 +113,7 @@ ML::SVM::SvmParameter solver_of(const fit_settings& s) {
   p.nochange_steps = s.nochange_steps;
   p.tol = s.tol;
   p.verbosity = rapids_logger::level_enum::off;
-  p.epsilon = 0.1;
+  p.epsilon = svr_epsilon;
   p.svmType = ML::SVM::C_SVC;
   return p;
 }
