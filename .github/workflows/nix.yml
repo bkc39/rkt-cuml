@@ -9,7 +9,7 @@ jobs:
   lint:
     name: Format and lint
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/nix-cache
