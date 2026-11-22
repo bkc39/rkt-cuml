@@ -6,8 +6,8 @@
          (only-in cuml/core/private/scalars
                   bounded-count/who
                   finite-value/who
-                  in-dtype/who
-                  int32-max
+                  flonum-of
+                  narrowed/who
                   positive-value/who))
 
 (provide (struct-out svm-kernel)
@@ -34,36 +34,31 @@
     [else (logic-error "~a: kernel: expected 'linear, 'poly, 'rbf or 'sigmoid, got ~e" who kernel)]))
 
 (define/who (gamma-value who gamma dt)
-  (define f (and (real? gamma) (real->double-flonum gamma)))
+  (define f (flonum-of gamma))
   (cond
     [(memq gamma '(scale auto)) (values (gamma-mode gamma) 0.0)]
-    [(and f (>= gamma 0) (< f +inf.0)) (values (gamma-mode 'number) (in-dtype/who who 'gamma f dt))]
+    [(and f (>= gamma 0) (< f +inf.0)) (values (gamma-mode 'number) (narrowed/who who 'gamma f dt))]
     [else
      (logic-error "~a: gamma: expected 'scale, 'auto or a finite real at least 0, got ~e"
                   who
                   gamma)]))
 
 (define/who (max-iter-value who v)
-  (cond
-    [(not v) -1]
-    [(and (exact-integer? v) (<= 1 v int32-max)) v]
-    [else
-     (logic-error "~a: max-iter: expected #f or an exact integer from 1 to ~a, got ~e"
-                  who
-                  int32-max
-                  v)]))
+  (if v
+      (bounded-count/who who 'max-iter v)
+      -1))
 
 (define/who (svm-settings who params dt)
   (define (ref key)
     (hash-ref params key))
-  (define (narrowed key v #:positive [positive #f])
-    (in-dtype/who who key v dt #:positive positive))
+  (define (narrow key v #:positive [positive #f])
+    (narrowed/who who key v dt #:positive positive))
   (define code (kernel-value/who who (ref 'kernel)))
   (define degree (bounded-count/who who 'degree (ref 'degree) #:least 0))
   (define-values (mode gamma) (gamma-value/who who (ref 'gamma) dt))
-  (define coef0 (narrowed 'coef0 (finite-value/who who 'coef0 (ref 'coef0))))
-  (define C (narrowed 'C (positive-value/who who 'C (ref 'C)) #:positive #t))
-  (define tol (narrowed 'tol (positive-value/who who 'tol (ref 'tol)) #:positive #t))
+  (define coef0 (narrow 'coef0 (finite-value/who who 'coef0 (ref 'coef0))))
+  (define C (narrow 'C (positive-value/who who 'C (ref 'C)) #:positive #t))
+  (define tol (narrow 'tol (positive-value/who who 'tol (ref 'tol)) #:positive #t))
   (define cache-size (positive-value/who who 'cache-size (ref 'cache-size)))
   (values (svm-kernel code degree mode gamma coef0 cache-size)
           (svm-solver C

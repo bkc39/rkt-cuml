@@ -67,16 +67,14 @@
 (define float-dtypes '(float32 float64))
 
 (define (float-matrix who X #:dtype [dt #f])
-  (if (and (device-matrix? X)
-           (memq (dtype X)
-                 (if dt
-                     (list dt)
-                     float-dtypes)))
+  (define allowed
+    (if dt
+        (list dt)
+        float-dtypes))
+  (define wanted (or dt "float32 or float64"))
+  (if (and (device-matrix? X) (memq (dtype X) allowed))
       X
-      (logic-error "~a: X: expected a device-matrix of ~a, got ~e"
-                   who
-                   (or dt "float32 or float64")
-                   X)))
+      (logic-error "~a: X: expected a device-matrix of ~a, got ~e" who wanted X)))
 
 (define ((two-classes who) classes)
   (match classes

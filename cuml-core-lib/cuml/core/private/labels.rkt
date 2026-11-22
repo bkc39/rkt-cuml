@@ -143,12 +143,15 @@
 
 (define/who (y-rows who rows y)
   (define n (y-length y))
-  (if (= n rows)
-      y
-      (logic-error "~a: y: expected ~a elements, got ~a" who rows n)))
+  (unless (= n rows)
+    (logic-error "~a: y: expected ~a elements, got ~a" who rows n)))
 
 (define (class-weighted? who rows y cw)
-  (and (hash? cw) (y-rows/who who rows y) #t))
+  (cond
+    [(hash? cw)
+     (y-rows/who who rows y)
+     #t]
+    [else #f]))
 
 (define (class-weight-view who kind classes cw resources)
   (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources))

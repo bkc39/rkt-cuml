@@ -6,8 +6,9 @@
 
 (provide bounded-count/who
          finite-value/who
-         in-dtype/who
+         flonum-of
          int32-max
+         narrowed/who
          nonnegative-value/who
          positive-value/who)
 
@@ -50,7 +51,7 @@
                    int32-max
                    n)))
 
-(define/who (in-dtype who key f dt #:positive [positive #f])
+(define/who (narrowed who key f dt #:positive [positive #f])
   (define held
     (if (eq? dt 'float32)
         (flsingle f)

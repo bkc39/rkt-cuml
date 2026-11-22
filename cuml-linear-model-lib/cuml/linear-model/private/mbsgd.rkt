@@ -22,7 +22,7 @@
          (only-in cuml/core/private/logic-error logic-error)
          (only-in cuml/core/private/scalars
                   bounded-count/who
-                  in-dtype/who
+                  narrowed/who
                   nonnegative-value/who
                   positive-value/who)
          (only-in racket/match match match-define struct*)
@@ -138,9 +138,9 @@
   (define (ref key)
     (hash-ref params key))
   (define (positive key)
-    (in-dtype/who who key (positive-value/who who key (ref key)) dt #:positive #t))
+    (narrowed/who who key (positive-value/who who key (ref key)) dt #:positive #t))
   (define (nonnegative key)
-    (in-dtype/who who key (nonnegative-value/who who key (ref key)) dt))
+    (narrowed/who who key (nonnegative-value/who who key (ref key)) dt))
   (sgd-settings (coded who 'penalty penalty-code (ref 'penalty) "one of 'none 'l1 'l2 'elasticnet")
                 (positive 'alpha)
                 (ratio-value who (ref 'l1-ratio))
