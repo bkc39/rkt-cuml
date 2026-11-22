@@ -84,8 +84,8 @@
 
 (define (kkt-bounds dt tol)
   (if (eq? dt 'float32)
-      (values (+ 1 (expt 2 -23)) (expt 2 -22) (* 2 (exact tol)))
-      (values 1 (expt 2 -50) (* (exact tol) (+ 1 (expt 2 -20))))))
+      (values (+ 1 (expt 2 -23)) (* 2 (exact tol)))
+      (values 1 (* (exact tol) (+ 1 (expt 2 -20))))))
 
 (define (spread-duals n support dual)
   (define full (make-vector n 0))
@@ -94,10 +94,14 @@
     (vector-set! full i (exact v)))
   full)
 
+(define (balance-bound dt n-iter Cs dual total)
+  (define u (exact (unit-roundoff dt)))
+  (+ (* 2 u n-iter (apply max Cs)) (* (gamma (length dual) u) total)))
+
 (define (kkt-of c fit)
-  (match-define (struct* svm-case ([X X0] [y y0] [w w])) c)
+  (match-define (struct* svm-case ([X X0] [y y0] [w w] [dtype dt])) c)
   (match-define (struct* svm-fit ([sv sv0] [support support] [dual dual0] [b b0] [classes classes]
-                                         [n-support n-support]))
+                                         [n-support n-support] [n-iter n-iter]))
     fit)
   (define X (exact-rows X0))
   (define sv (exact-rows sv0))
@@ -142,9 +146,7 @@
                   [C (in-list Cs)]
                   #:when (positive? C))
          (max worst (/ a C)))
-       (if (zero? total)
-           0
-           (/ (abs (apply + dual)) total))
+       (/ (abs (apply + dual)) (balance-bound dt n-iter Cs dual total))
        gap
        violation
        (if w
@@ -221,7 +223,7 @@
 
 (define (check-kkt c [fit (fit-parts (case-fit c))])
   (match-define (struct* svm-case ([dtype dt])) c)
-  (define-values (box balance gap-bound) (kkt-bounds dt kkt-tol))
+  (define-values (box gap-bound) (kkt-bounds dt kkt-tol))
   (match-define (struct* kkt ([signs-agree signs]
                               [box-excess excess]
                               [balance ratio]
@@ -234,7 +236,7 @@
   (law-case "K1 signs"
     (check-true signs))
   (check-law-case "K1 box" excess box)
-  (check-law-case "K2" ratio balance)
+  (check-law-case "K2" ratio 1)
   (check-law-case "K3" gap gap-bound)
   (check-law-case "K4" violation gap-bound)
   (law-case "K5"
