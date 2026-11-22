@@ -16,6 +16,7 @@
                   sherman-morrison-step
                   weighted-mean)
          (only-in "private/linear-data.rkt" lcase-X lcase-y oracle-lstsq solution-coef)
+         (only-in "private/linear-laws.rkt" device-means)
          (only-in "private/real-linear-data.rkt" real-lcase))
 
 (test-case "breast-cancer float32 offset by 2^14: the exact solve of the problem centred with medium-kernel means meets T1 to T4"
@@ -59,8 +60,9 @@
   (define c (offset-grid 16))
   (define exact (oracle-lstsq (lcase-X c) (lcase-y c) #f #t))
   (define-values (_epsilon fit) (bottom-grid-fit c (unit-roundoff 'float32)))
-  (check-equal? (failed-laws c 'float32 fit exact) '())
-  (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:coef-centring? #f)))
+  (check-equal? (failed-laws c 'float32 fit exact #:means device-means) '())
+  (check-pred (fails? "T1")
+              (failed-laws c 'float32 fit exact #:coef-centring? #f #:means device-means)))
 
 (test-case "float32 columns offset by 2^20, means off by their bound along G~'s bottom eigenvector: C1 is the Sherman–Morrison cap, and T1 fails with it halved"
   (define c (offset-grid 20))
@@ -68,5 +70,5 @@
   (define-values (epsilon fit) (bottom-grid-fit c (unit-roundoff 'float32)))
   (define step (sherman-morrison-step c epsilon))
   (check-true (<= 1/2 step 1) (format "the Sherman–Morrison step ~a" (exact->inexact step)))
-  (check-equal? (failed-laws c 'float32 fit exact) '())
-  (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:cap-scale 1/2)))
+  (check-equal? (failed-laws c 'float32 fit exact #:means device-means) '())
+  (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:cap-scale 1/2 #:means device-means)))

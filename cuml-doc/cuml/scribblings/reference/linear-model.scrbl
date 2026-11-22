@@ -67,10 +67,9 @@ as above, at unit spread) gives u·√κ′ ≥ 2@superscript{-8}, u the dtype's
 one-hot design and an intercept (@tt{plans/layout.md}, L2-l, has remedies). A coefficient fixed only
 by rows of low weight w is accurate to about u·√(w@subscript{max}/w), a loss the refusal misses.
 
-Weighted fits with an intercept can differ in the last bits between runs
-from about 2000 rows, as in Python cuML; unweighted fits, and fits without an
-intercept, repeat bitwise. @racket[X], @racket[y] and @racket[sample-weight]
-are not modified.
+Fits repeat bitwise, weighted or not; Python cuML's weighted fits with an
+intercept can differ in the last bits between runs from about 2000 rows.
+@racket[X], @racket[y] and @racket[sample-weight] are not modified.
 @examples[#:eval ev #:label #f
 (define Xc (list*->device-matrix '((0 1) (1 1) (2 1) (3 1)) #:dtype 'float64))
 (define yc (list->device-vector '(1 3 5 7) #:dtype 'float64))
@@ -276,10 +275,11 @@ exceeds @racket[tol] is refused where the dtype's rounding could hide it. The ch
 where u(λ@subscript{max} + λ)/(λ@subscript{min} + λ) is 1 or more,
 λ = @racket[alpha](1 − @racket[l1-ratio]), λ@subscript{max} and λ@subscript{min} being the extreme
 eigenvalues of XᵀWX/Σw, X centred as for @racket[ridge-fit], and u the dtype's unit roundoff;
-@tt{plans/layout.md} (L3-b) has the error bound and the measurements. An
-@racket[alpha] more than rounding above max@subscript{j}|x@subscript{j}ᵀW(y − ȳ)|/(Σw·@racket[l1-ratio]),
-or max@subscript{j}|x@subscript{j}ᵀWy|/(Σw·@racket[l1-ratio]) without @racket[fit-intercept], gives
-coefficients 0. A column constant over the rows of positive weight (zero, without
+@tt{plans/layout.md} (L3-b) has the error bound and the measurements. An @racket[alpha] at which
+every column j has |x@subscript{j}ᵀW(y − ȳ)|/Σw, or |x@subscript{j}ᵀWy|/Σw without
+@racket[fit-intercept], at most @racket[alpha]·@racket[l1-ratio] plus that column's rounding bound
+(L3-p) gives coefficients 0 and the intercept ȳ (0 without @racket[fit-intercept]) without running
+coordinate descent; @racket[n-iter] is 1. A column constant over the rows of positive weight (zero, without
 @racket[fit-intercept]) gets coefficient 0.
 
 Unlike scikit-learn, the default @racket[tol] is 10@superscript{−3}, not 10@superscript{−4}, and it

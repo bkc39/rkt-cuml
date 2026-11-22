@@ -22,6 +22,7 @@
                   dot
                   eigen-bracket
                   integer-scaled
+                  kept-gram
                   min-norm-solve
                   varying-inner))
 
@@ -218,7 +219,8 @@
      (max-abs y)))
 
 (define (kappa-of c fi)
-  (solution-kappa (oracle-lstsq (lcase-X c) (lcase-y c) (lcase-w c) fi)))
+  (define-values (G _b _mx _my) (weighted-gram (lcase-X c) (lcase-y c) (lcase-w c) fi))
+  (condition (kept-gram G)))
 
 (define (scaled-case c #:X [x-factor 1] #:y [y-factor 1] #:w [w-factor 1])
   (define (by f xs)
@@ -336,6 +338,7 @@
       (exact->inexact (/ got bound))))
 
 (define (check-law name got bound)
+  (check-true (rational? bound) (format "~a: the bound is ~a" name bound))
   (define ratio (within got bound))
   (check-true (<= ratio 1) (format "~a: ~a of the bound" name ratio)))
 

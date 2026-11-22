@@ -44,6 +44,15 @@ struct kkt_terms {
   double allowance;
 };
 
+struct zero_fit {
+  double residual;
+  double allowance;
+  double alpha_max;
+  double curvature;
+  double sigma;
+  double sigma_y;
+};
+
 template <typename T>
 int cd_shared_cap(const staging& s, int64_t rows);
 
@@ -53,11 +62,33 @@ cd_scale<T> cd_scale_of(const staging& s, int64_t rows, double alpha);
 kkt_terms kkt_of(const residual_terms& t, const std::vector<double>& coef,
                  double weight, cd_penalty penalty, cd_epochs epochs);
 
-void require_kkt(const kkt_terms& k, int n_iter, double tol);
+struct zero_request {
+  double weight;
+  double alpha;
+  double l1_ratio;
+  int64_t rows;
+};
 
 template <typename T>
-void require_resolved(const kkt_terms& k, int n_iter, double tol,
-                      double largest);
+zero_fit zero_fit_of(const residual_terms& t, const zero_request& r);
+
+bool accepts_zero(const zero_fit& z);
+
+double alpha_rounding(const zero_fit& z, double largest,
+                      const cd_epochs& epochs, double l1_ratio);
+
+void require_kkt(const kkt_terms& k, int n_iter, double tol);
+
+struct unresolved_fit {
+  double tol;
+  double largest;
+  double alpha;
+  double alpha_max;
+  double alpha_rounding;
+};
+
+template <typename T>
+void require_resolved(const kkt_terms& k, int n_iter, const unresolved_fit& f);
 
 bool absolute_stop(int n_iter, int max_iter, double largest, double tol);
 

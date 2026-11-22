@@ -1,11 +1,12 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model ridge-fit)
+         (only-in racket/flonum flsingle)
          (only-in racket/match match match-define match-lambda)
          (only-in rackunit check-equal? check-true test-case)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in threading ~>)
-         (only-in "private/common-data.rkt" [on-vector vector])
+         (only-in "private/common-data.rkt" gamma unit-roundoff [on-vector vector])
          (only-in "private/cuml-error.rkt" check-cuml-error)
          (only-in "private/linear-data.rkt"
                   exact-fit
@@ -26,7 +27,18 @@
 (define remedy-bound (expt 2 -18))
 (define float64-min-norm-bound (expt 2 -40))
 (define eig-prediction-bound (expt 2 -12))
-(define svd-prediction-bound (expt 2 -10))
+
+(define (prediction-mass rows fit)
+  (match-define (list coef b) fit)
+  (for/fold ([worst 0]) ([row (in-list rows)])
+    (max worst (+ (abs b) (for/sum ([x (in-list row)] [cj (in-list coef)]) (abs (* x cj)))))))
+
+(define (coefficient-rounding fit)
+  (match-define (list coef _) fit)
+  (gamma (add1 (length coef)) (unit-roundoff 'float32)))
+
+(define (rounded-prediction-bound rows y fit)
+  (/ (* (coefficient-rounding fit) (+ (prediction-mass rows fit) (max-abs y))) (max-abs y)))
 
 (define (one-hot-case n k)
   (define (level i)
@@ -44,6 +56,16 @@
   (match-define (list coef b) fit)
   (define o (oracle-lstsq rows y #f #t))
   (/ (gap (cons b coef) (cons (solution-intercept o) (solution-coef o))) (max-abs (solution-coef o))))
+
+(test-case "the svd bound admits the range-space error of y rounded to float32"
+  (for ([k (in-list '(3 5 12))])
+    (match-define (list rows integral-y) (one-hot-case 500 k))
+    (define y (map (lambda (v) (/ v 3)) integral-y))
+    (define rounded-y (map (lambda (v) (inexact->exact (flsingle (real->double-flonum v)))) y))
+    (define o (oracle-lstsq rows rounded-y #f #t))
+    (define fit (list (solution-coef o) (solution-intercept o)))
+    (test-case (format "~a levels" k)
+      (check-true (< 0 (prediction-gap rows y fit) (rounded-prediction-bound rows y fit))))))
 
 (test-gpu "float32 'qr and 'svd-qr refuse one-hot columns with an intercept"
   (for* ([shape (in-list shapes)]
@@ -86,7 +108,8 @@
     (match-define (list rows y) (apply one-hot-case shape))
     (define fit (lstsq rows y 'float32 algorithm))
     (test-case (format "~a ~a" algorithm shape)
-      (check-true (< (prediction-gap rows y fit) svd-prediction-bound))
+      (define exact (exact-fit fit))
+      (check-true (< (prediction-gap rows y fit) (rounded-prediction-bound rows y exact)))
       (check-true (> (min-norm-gap rows y fit) 1)))))
 
 (test-gpu "float32 ridge at alpha 0 and 1e-12 fits one-hot columns as least squares does"

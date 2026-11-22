@@ -225,8 +225,8 @@
   (for* ([dt (in-list dtypes)]
          [a (in-list algorithms)])
     (test-case (format "~a ~a" dt a)
-      (for ([c (in-list (list base big big-weighted mid-weighted))]
-            [fi (in-list '(#t #t #f #t))])
+      (for* ([c (in-list (list base big big-weighted mid-weighted))]
+             [fi (in-list '(#t #f))])
         (define X (on-matrix (lcase-X c) dt))
         (define y (on-vector (lcase-y c) dt))
         (define w (on-vector (lcase-w c) dt))

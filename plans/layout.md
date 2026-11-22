@@ -1168,8 +1168,8 @@ Follow-ups are GitHub issues.
   most 2). The weights' power of four moves every e_j by the same integer,
   so κ̃ does not see it; D and c̃ do, and with them T1's
   max(max|c̃*| + C1, 1).
-  The laws are the earlier ones restated there, plus cuML's centring error
-  (the next bullet), C1 and C3 below:
+  The laws are the earlier ones restated there, plus the centring error
+  (cuML's or the shim's, the next two bullets), C1 and C3 below:
   - T1: max|c̃ − c̃*| ≤ 128·u·κ̃′²·max(max|c̃*| + C1, 1) + C1.
   - T3: the residual cosine is invariant under D, the weights' power and
     y's power, so only κ changes: ≤ 64·u·κ̃′·S + C3.
@@ -1188,7 +1188,9 @@ Follow-ups are GitHub issues.
   being 128·2⁻²⁴·389.6² = 1.16 in float32, so the halved fit sits at 0.43
   to 0.46 of it (unchanged by C1 and C3 below: the raw columns' means are
   within a few spreads of 0).
-- **L1-e, cuML's centring error (L3r, #111).** With an intercept cuML
+- **L1-e, cuML's centring error (L3r, #111).** Since #112 OLS centres in
+  the shim (next bullet), so this model now covers ridge (#161) and the
+  host simulations (`check-lstsq-fit #:means 'device`). With an intercept cuML
   centres the staged problem with its own means, x̂̄ⱼ = x̄ⱼ + εⱼ and
   ŷ̄ = ȳ + ε_y, bounded as T4 bounds them: |εⱼ| ≤ ε̄ⱼ = γ_h·Σw|xⱼ|/Σw and
   |ε_y| ≤ ε̄_y = γ_(h_y)·Σw|y|/Σw, h and h_y for raft's order and the row
@@ -1263,9 +1265,63 @@ Follow-ups are GitHub issues.
     2¹⁰ weighted on it passes materially wrong fits (0.9·c* at 0.62 of
     T3's bound at 2¹⁰ weighted, 0.15 at 2¹² unweighted, 0.04 at 2¹²
     weighted; review r3 M1). The device's means are far better than their
-    worst case; the bound does not assume so. A library fix (centre with
-    the shim's compensated v̄ + ρ, then call olsFit without an intercept)
-    removes the term; it is its own issue (#112).
+    worst case; the bound does not assume so. The library fix (#112, next
+    bullet) removes the term for OLS.
+- **L1-e, the shim's centring (#112).** OLS with an intercept, every
+  algorithm and both dtypes, stages X and y centred by the shim's
+  compensated means (`centres_of`: the planner's mean v̄ⱼ in double and
+  the spread pass's remainder ρⱼ; `target_centre` for y), each value
+  (v − v̄) − ρ rounded once to the dtype and uncounted rows 0
+  (`stage_centred`), calls olsFit without an intercept, and takes
+  b = 2^(−e_y)·((ȳ + ρ_y) − Σⱼ(v̄ⱼ + ρⱼ)·c̃ⱼ), summed in double in column
+  order and rounded once (`weighted_intercept`, CD's). The staged columns'
+  weighted means are then within ε̄ⱼ of 0, where, with MADⱼ = Σw|xⱼ − x̄ⱼ|/Σw
+  and h = `column_sum_roundings` (256 + 3 + ⌈⌈n/2048⌉/256⌉ + 8: 268 up to
+  2¹⁹ rows; `vector_reduce` for y is the one-column case):
+  ε̄ⱼ = u_T·MADⱼ + γ_(h+3)(u_d)·(MADⱼ + γ_h(u_d)·Σw|xⱼ|/Σw).
+  v̄ⱼ is a sum of h roundings, so |v̄ⱼ − x̄ⱼ| ≤ γ_h(u_d)·Σw|xⱼ|/Σw; ρⱼ sums
+  w(v − v̄) with the product, the sum and the division, so its error is at
+  most γ_(h+3)(u_d)·(MADⱼ + |v̄ⱼ − x̄ⱼ|), and v̄ⱼ + ρⱼ carries only that; the
+  final rounding moves each value by at most u_T·|v − x̄ⱼ|, whose weighted
+  mean is u_T·MADⱼ. ε̄_y is the same on y. `check-lstsq-fit` takes this ε̄
+  by default (`shim-means`, `check-lstsq-fit`'s `#:means`; `device-means` is cuML's) in C1, C3 and κ̃′, and T4's
+  sum is Σw·(u·|b| + γ_(d+3)(u_d)·(|ȳ| + Σⱼ|x̄ⱼcⱼ|) + δ_y + Σⱼ δⱼ|cⱼ|), δ
+  being ε̄ less its u_T·MAD term: the host formula's d + 3 double
+  roundings, the final rounding of b, and the centres' double errors (the
+  staged values' rounding does not enter b). u_T·MADⱼ dominates, so ε̄ no longer grows with the
+  offset and C1 and C3 vanish against T1's and T3's first terms. Float64
+  takes the same path: its old centring was already near u·|x̄|, and one
+  code path is kept. Ridge keeps cuML's centring (#161).
+  The sklearn twin's `fit_centred` centres with the same formula but numpy's
+  pairwise sums, where `column_reduce` sums in its tree. Both v̄ⱼ + ρⱼ are
+  within γ_(h+3)(u_d)·(MADⱼ + γ_h(u_d)·Σw|xⱼ|/Σw) of x̄ⱼ, so they differ
+  by twice that, second order against MADⱼ. Each centred value
+  fl(fl(v − v̄) − ρ) rounds twice in each, so the two differ by at most
+  4u_d·|v − x̄ⱼ| plus that second-order term: the twin and the shim solve
+  the same problem up to a componentwise perturbation η = 4u of X and y
+  (`mean-order-roundings`). Least squares moves c by at most
+  η·κ·(2 + (κ + 1)·‖r‖/(‖X‖‖c‖)) relative to its size to first order
+  (Wedin), in 2-norms with ‖ΔX‖₂ ≤ η‖X‖_F ≤ η√rank·‖X‖₂; the test
+  measures max|Δc| against `fit-size` ≥ max|c| ≥ ‖c‖₂/√d, so the norms cost
+  √rank·√d ≤ d. The P1 cases have ‖r‖ ≤ 0.058·‖X‖₂‖c‖₂ (exact, with an
+  intercept, so the premise ‖r‖ ≤ ‖X‖‖c‖ holds). The two cuML solves run
+  on those different inputs, so neither solve's own rounding cancels: each
+  adds its forward error, at worst the normal equations' u·κ²
+  (`solve-roundings` 2). The twin holds float64 fits with an intercept to
+  u·d·(η·κ·(3 + κ) + 2κ²)·`fit-size`. The 2κ² is a nominal constant for
+  the two solves, not a bound on them: a solve's forward error is u·κ²
+  only up to a constant its analysis leaves open, and 1 per solve is the
+  stated choice. The intercept is covered only because x̄ ≈ 0 on P1:
+  b = ȳ − x̄·c moves by Σⱼ|x̄ⱼ||Δcⱼ|, small against the bound there and not
+  covered for a design with a large x̄. That law does not discriminate the
+  float64 centring: a constant error δⱼ in a centre enters c only at second
+  order (the centred columns and y sum to 0, so Xᵀ(δ_y·1) and the Gram's
+  cross terms vanish) and b within u·|x̄ⱼcⱼ| ≤ u·`fit-size`. A plain mean in
+  double (part 2's mutant shim) passes it on P1 and on P1's first case
+  offset by 2²⁰, so float64 centring is discriminated only by the offset
+  arms (`offset-law-arms`, the breast-cancer offset set). In float32 the final
+  rounding to the dtype absorbs the two sums' last bits, and those fits are
+  held bitwise, as is every fit without an intercept.
 - **L1-e, T4's intercept term (L3r, #111).** With an intercept every
   algorithm returns b = ȳ − Σⱼ x̄ⱼcⱼ from its own c, x̄ and ȳ the weighted
   means, so for any c the T4 sum is Σᵢ wᵢ(yᵢ − b − xᵢ·c) = Σw·(ȳ − Σⱼ x̄ⱼcⱼ − b)
@@ -1338,38 +1394,27 @@ Follow-ups are GitHub issues.
   model (h = 17 is raft's medium kernel) and the 0.63 is an empirical
   margin; the case stands as the old term's discriminator, not as a
   consequence of the model.
-- **L1-e, the offset set (L3r, #111).** Breast-cancer with every column
-  plus a power of two, every algorithm, only on arms where the laws
-  discriminate: float32 at 2¹⁰ unweighted, and float64 at 2¹⁰, 2¹² and
-  2¹⁴, unweighted and weighted (`offset-law-arms`, shared by the GPU file
-  and the host mutation test). The host test takes the exact c* scaled by
-  0.9 with a consistent intercept on every kept arm and requires a law to
-  fail: T3 at 2.39 in float32; T1 at 4.6·10⁷ to 4.9·10⁷ and T3 at
-  3.3·10¹⁰ to 3.4·10¹⁰ in float64. It also requires, on every kept arm,
-  that a halved intercept fail T4 (1.0·10⁵ of its bound in float32,
-  3.7·10¹³ to 5.4·10¹³ in float64), and on every float64 arm that c*
-  moved by a tenth of ‖c̃*‖ along G̃'s bottom eigenvector fail T1
-  (4.8·10⁷ to 7.9·10⁷).
-  The kept float32 arm detects a coefficient error only through T3, in
-  the well-conditioned directions: 0.99·c* is 0.218 of T3's bound and c*
-  plus 1% along the top eigenvector, in raw units, 0.949. Along the
-  bottom eigenvector, changes up to about 5·‖c̃*‖ fall inside the model's
-  allowed error and pass all four laws: c* plus a tenth of ‖c̃*‖ is T1
-  0.011 and T3 4.3·10⁻⁴, plus 5·‖c̃*‖ T1 0.567 and T3 0.016. There T1's
-  bound is about 29 in staged units against a reachable worst case of
-  about 2.3 + 3.8: the cap (11.8) is 5 times the largest move the box
-  makes (2.28), and max|c̃*| + C1 counts C1 again, at 128·u·κ̃′² ≈ 1.17
-  (review r4 L2). Raw float32 fails at 5·‖c̃*‖ (4.47). The other float32
-  arms are out:
-  2¹⁰ weighted and 2¹² both weightings pass that mutation (above), so a
-  law check there would be vacuous, and acceptance-only smoke is not kept.
-  Float32 at 2¹⁴ is out too: unweighted, every fit is accepted under a
-  bound that cannot fail, and weighted, the shim refuses every algorithm
+- **L1-e, the offset set (L3r, #111; #112).** Breast-cancer with every
+  column plus a power of two, every algorithm, at 2¹⁰, 2¹² and 2¹⁴,
+  unweighted and weighted, in both dtypes (`offset-law-arms`, shared by the
+  GPU file and the host mutation test). The host test takes the exact c*
+  scaled by 0.9 with a consistent intercept on every arm and requires a law
+  to fail: T3 at 61.4 to 63.3 in float32; T1 at 4.6·10⁷ to 4.9·10⁷ and T3
+  at 3.3·10¹⁰ to 3.4·10¹⁰ in float64. It also requires, on every arm, that
+  a halved intercept fail T4 (1.7·10⁷ of its bound in float32, 7.1·10¹³ to
+  7.8·10¹³ in float64), and on every float64 arm that c* moved by a tenth
+  of ‖c̃*‖ along G̃'s bottom eigenvector fail T1 (4.8·10⁷ to 7.9·10⁷).
+  In float32 0.99·c* fails T3 at 6.1 to 6.3 on every arm. Along the
+  bottom eigenvector a tenth of ‖c̃*‖ passes every law, ‖c̃*‖ fails T1 on
+  the weighted arms (1.46 to 1.54) and passes unweighted, and 5·‖c̃*‖ fails
+  T1 on every arm (4.42 to 7.70): T1's κ̃² term is 128·u·κ̃² ≈ 1.16, so a
+  move of order ‖c̃*‖ in the worst-conditioned direction is inside the
+  model's allowed error. Under cuML's centring (before #112) the float32
+  arms but 2¹⁰ unweighted passed 0.9·c*, and the shim refused 2¹⁴ weighted
   by V13 (the eig solve: residual cosine 7.7·10⁻³ > 2⁻⁸), a sound problem
-  (κ̃ = 389) refused because cuML centres with its own float32 means. All
-  of them return under the library fix above (#112), once the
-  compensated centring makes ε̄ small enough for the laws to
-  discriminate.
+  (κ̃ = 389) refused because cuML centred with its own float32 means; the
+  compensated centring makes ε̄ small enough for the laws to discriminate
+  on every arm, and accepts 2¹⁴ weighted.
 - **L1-e, ordering.** The workspace bound (V7) is checked after staging is
   planned, so it follows the compacted row index, plan_staging's d-sized
   scratch, the column profiles and, for svd, a gesvdj info handle; all are
@@ -1457,7 +1502,10 @@ Follow-ups are GitHub issues.
   'eig differ by 1 ulp between runs; 1000 rows repeat), through raft
   `weightedMean` (L1-h); unweighted fits and fits without an intercept repeat.
   The bitwise laws B5–B8 keep weighted intercepted cases at ≤ 1000 rows, and
-  both Scribble entries say so.
+  both Scribble entries say so. Since #112 OLS centres with the shim's
+  means, whose reductions have a fixed order, so its weighted intercepted
+  fits repeat (`linear-regression-test`, 100000 weighted rows); ridge
+  still centres with raft's (#161).
 - **L2-h.** `define-predictor` in `cuml/private/estimator-support.rkt` is
   `define-estimator` with `#:needs-y`, the resources setting, predict and the
   weighted `r2-score` scorer from a predict `/who` (`r2-scorer`);
@@ -1851,12 +1899,44 @@ Follow-ups are GitHub issues.
   'qr and 'svd-qr refuse all 60; 'svd and 'svd-jacobi fit 12 / 22 with
   |c| up to 3.5e4 and predictions within 2.2e-3·max|y| (rms 0.005 against a
   residual of 0.1), refusing the rest as not least squares; 'auto and 'eig
-  fit 0 / 1 and refuse the rest. A full one-hot design with an intercept
+  fit 0 / 1 and refuse the rest. Weighted x₁, x₂, x₁ + x₂ (5003 rows),
+  float64 'qr fits each effective coefficient (a + ab, b + ab) within
+  u·(|own| + |ab|) + 2⁻³⁰ of the exact least squares
+  (`linear-regression-refusal-test`). That bound is measured, not derived:
+  the back-substitution's c·u·|ab| term needs R's entries, which the test
+  does not see, so c = 1 is stated, and the accepted fit's errors are 0.34
+  and 0.13 of it; coefficients 30% off beside a 10¹⁵ null component fail
+  it. A full one-hot design with an intercept
   (k = 3, 5, 12 levels, n = 500, 5003): float32 'qr and 'svd-qr refuse it;
   'auto / 'eig fit k = 3, n = 500 off the minimum norm (predictions 5e-5) and
   refuse the other five as not least squares; 'svd / 'svd-jacobi fit with
   coefficients 800–5200× max|c*| off the minimum norm and predictions within
-  3.3e-4; ridge at α = 0 and 1e-12 (negligible) matches least squares fit
+  3.3e-4 at 099f0c1 (since #112's centring the null-direction size moves
+  with the centred values' bits: max|c| 1.9e3–9.2e4, predictions up to
+  1.3e-3·max|y|). Their bound is derived, not picked
+  (`linear-regression-one-hot-test`): the centred design X_c has an exact
+  null vector v (the levels sum to the intercept), so the exact predictions
+  X_c(c* + t·v) are the minimum-norm ones for any t, and the fit's null
+  component t ≈ (u_Tᵀr)/σ̃_min, set by the centred values' rounding, enters
+  the predictions only through the rounding of c and b to the dtype:
+  c = V·z is a d-term sum per coefficient and b one more rounding, so the
+  prediction error is at most
+  γ_(d+1)(u_T)·(maxᵢ(|b| + Σⱼ|xᵢⱼcⱼ|) + max|y|) over max|y|, the last
+  term the range-space error. Its size u_T·max|y| is stated, not derived:
+  y rounded to the dtype, δ = fl_T(y) − y with |δᵢ| ≤ u_T·|yᵢ|, moves the
+  exact predictions by Pδ (P the projection onto the centred design's
+  range), and ‖Pδ‖∞ ≤ ‖P‖∞·u_T·max|y|, where ‖P‖∞ is ≈ 1 for level means
+  but not bounded by 1 in general. The test's stub is that error itself:
+  the exact fit of y/3 rounded to float32 (the test's own y is exact in
+  float32), 500 rows, 3, 5 and 12 levels, is 0.09–0.35% of the bound and
+  0.5–5% of it with γ₁ in place of γ_(d+1), so no stub of this kind
+  catches that mutant; the float32 'svd and 'svd-jacobi fits do (8 of 12
+  fail it).
+  This checks predictions, not centring: the offset arms are what check
+  the shim's centring. Measured against it (6 shapes, both
+  solvers equal): 0.16–0.24 on the head, 0.16–0.37 on the shim before
+  #112, so the old 2⁻¹⁰'s 1.34 was the null component's size, not the
+  centring's error; ridge at α = 0 and 1e-12 (negligible) matches least squares fit
   for fit. Dropping a level or fitting without an intercept fits under
   float32 'qr within 7.5e-7 of the least-squares predictions; float64 'auto
   gives the minimum-norm fit within 6.4e-14. Nearly collinear X
@@ -2120,6 +2200,86 @@ Probed on the 3090 Ti (libcuml 26.8.0, Python cuML 26.08.00, sklearn
   the least eigenvalue of XᵀWX/Σw on the centred columns (F14; 7.9e-2 of
   max|b| at correlation 0.99 is sound under it); fits at max-iter (L3-e);
   and, as for ridge (L2-k), fits where u(λ_max + λ₂)/(λ_min + λ₂) ≥ 1.
+- **L3-p, the zero fit at alpha-max (#109).** Before CD the shim computes
+  the zero vector's KKT residual R̂ = maxⱼ|Ĉⱼ|/Ŵ − α′ρ, Ĉⱼ = x′ⱼᵀW(y′ − ȳ′)
+  in the staged coordinates of V16 (`residual_moments` at b = 0, so the
+  residual r is the centred y′ exactly as summed), α′ = α·4^s in double and
+  ρ the l1-ratio as given. When every column j has
+  |Ĉⱼ|/Ŵ − α′ρ ≤ γ_k·σ̂ⱼσ̂_y + 2u_T·α′ρ, each column held to its own
+  spread (#109 r1: the maximum of the left side against the maximum
+  σ̂ⱼσ̂_y let a wide column's allowance zero a narrow binding column), it
+  returns
+  b = 0, the intercept ȳ (v̄ + ρ_y, unstaged and rounded once to the dtype)
+  and n-iter 1, the epoch cdFit reports for a zero fit; it does not call
+  cdFit. The allowance is the residual's own error bound, in double's u:
+  - each term wᵢvᵢrᵢ is 6 roundings off its exact value (v = (x′ − v̄) − ρ
+    and r the same for y, two each; w·v; the product), and `column_reduce`
+    adds it in h = 256 + 3 + ⌈chunks/256⌉ + 8 more (a lane's 256 rows of a
+    2048-row chunk, the 8-lane tree, a fold thread's chunks, the 256-thread
+    tree; `column_sum_roundings`), so |Ĉⱼ − Cⱼ| ≤ γ_(h+6)·Σw|vr| ≤
+    γ_(h+6)·W·σⱼσ_y by Cauchy–Schwarz;
+  - Ŵ is a sum of the same depth, so |Ĉⱼ/Ŵ − Cⱼ/W| ≤ γ_(3h+7)·σⱼσ_y, since
+    |Cⱼ|/W ≤ σⱼσ_y;
+  - σ̂ⱼσ̂_y, from the same sums, is within γ_(2h+6) of σⱼσ_y, so the
+    computed bound is γ_(5h+13)·σ̂ⱼσ̂_y; one more rounding covers the
+    second-order W·δⱼδ_y the centring's constant error leaves, so k = 5h + 14
+    (1354 up to 2¹⁹ rows, γ_k = 1.5·10⁻¹³);
+  - 2u_T·α′ρ is α's and ρ's rounding into the dtype the solve runs in (and,
+    in float64, the host's long-double products).
+  So column j's allowance is c·u·σⱼσ_y with c = k: the error of a sum is
+  relative to Σ|terms|, not to |Σ terms|, so no constant c makes it
+  c·u·λ_max; against column j's own |Cⱼ|/W, c is k/|corr(xⱼ, y)|. Against
+  the widest column's σσ_y instead, a column of spread 2⁻²⁰ and correlation
+  0.9 beside an orthogonal column of spread 1 (float64, 1000 rows) was
+  zeroed at α = λ_max·(1 − 1.48·10⁻⁷), where the lasso coefficient is
+  0.1397 (`elastic-net-alpha-max-test`). One double ulp below λ_max moves
+  ρ·λ_max by at most 2u·ρ·λ_max ≤ 2u·σⱼσ_y of the binding column j, inside
+  its allowance. On wine
+  (alcohol on the other 12 columns, raw X), λ_max, glmnet's value
+  163.64265023355625, one ulp either side and 2·λ_max return zeros in both
+  dtypes, lasso and l1-ratio 1/2 (`elastic-net-alpha-max-test`; at 0c590cc
+  the float64 λ_max and glmnet's value were refused by V16b at any tol); the
+  test holds those zero fits' intercept `equal?` to the exact ȳ correctly
+  rounded to the dtype, which on wine is stronger than the documented
+  bound (ȳ to within its centring error ε̄_y). The
+  pass costs one more column-moments pass per fit (L3-d's 10 ms at
+  1e6 × 100 float32). CD's inputs are not touched: over the elastic-net
+  twin, real-data and glmnet suites (3268 requests) every fit CD still runs
+  is `equal?` before and after (3246, coefficients, intercept and n-iter),
+  and the 36 refusals are the same. The 18 fits that were already zeros
+  (unweighted, α above alpha-max) keep their coefficients and n-iter but
+  take ȳ from v̄ + ρ_y, rounded once, instead of cuML's mean accumulated
+  in the dtype: one ulp in all 18 (wine float64 13.000617977528087 to
+  13.00061797752809, float32 13.000618934631348 to 13.000617980957031).
+  V16b keeps "lower tol below the largest coefficient" while its
+  allowance A < 1. From A ≥ 1 rounding alone moves the coefficients by
+  their own size. Whether a lower tol can still help depends on where the
+  exact coefficients are. Near alpha-max only the columns that can be
+  active at α move off 0: those with |Ĉₖ|/Ŵ ≥ α′ρ, or within their own
+  allowance of the largest (so every column tied with the one that sets
+  alpha-max). Each one's gradient Ĉₖ/Ŵ − κₖb′ₖ is off by the solve's
+  rounding in that column's own terms, with κₖ = max(σₖ² + α′(1 − ρ),
+  σₖΣσ) its KKT curvature. κₖ grows with σₖ, so the largest of those
+  roundings is the widest active column j's (`zero_fit`'s σⱼ, σ_y and κⱼ),
+  whatever the column order: over n epochs
+  u√n·(2·max|b′|·κⱼ + √rows·σ_y·σⱼ) (`alpha_rounding`), the coefficient's
+  two roundings through κⱼ and the column's √rows-term dot product. With
+  the σ = 1 column given the binding one's cross, the band is σ = 1's in
+  either order (`cd_zero_fit_test`; at 5938ec8 the first tied column set
+  it, so the order chose the advice). A's
+  gradient term is √rows·σ_y·maxₖ σₖ/κₖ instead, a maximum over every
+  column, which with ρ < 1 and a narrow binding column beside a wide one
+  (σ 2⁻¹⁰ and 1, ρ = 0.01) is about 80 times column j's own and called a
+  fit near that was 10 times farther below alpha-max than the band
+  (`cd_zero_fit_test`). When (α_max − α)·ρ, alpha-max's distance in the
+  gradient's units, is within that band, that is (α_max − α)/α_max ≤
+  u√n·(2·max|b′|·κⱼ + √rows·σ_y·σⱼ)/(ρ·α′_max), the exact coefficients are
+  themselves under the rounding, so no tol resolves them: the refusal names α and alpha-max, raise α to it or lower
+  it (or, in float32, fit in float64). Otherwise, and when ρ = 0, the exact
+  coefficients are larger than the rounding, and an early absolute stop is
+  what left them under it, so a lower tol can still grow them: the refusal
+  says the coefficients are under the dtype's rounding of the solve and
+  advises a lower tol or a lower alpha.
 - **L3-c.** α = 0 runs CD, as Python cuML and sklearn do (F17: 7.7e-15
   against lstsq at tol 1e-14).
 - **L3-d.** K is computed only when n-iter < max-iter and

@@ -12,6 +12,7 @@
                   strided-weighted-mean
                   worst-y-epsilon)
          (only-in "private/linear-data.rkt" lcase lcase-X lcase-w lcase-y oracle-lstsq solution-coef)
+         (only-in "private/linear-laws.rkt" device-means)
          (only-in "private/real-linear-data.rkt" real-lcase))
 
 (define corner-signs '(1 -1 -1 0 1 1 0 -1 0 -1 1 1 1 -1 -1 -1 -1 -1 0 -1 -1 1 1 1 -1 1 -1 1 1))
@@ -26,8 +27,9 @@
                [column (in-list (columns-of (lcase-X c)))])
       (* s (radius column))))
   (define fit (moved-solve c epsilon (worst-y-epsilon c u epsilon)))
-  (check-equal? (failed-laws c 'float32 fit exact) '())
-  (check-pred (fails? "T1") (failed-laws c 'float32 fit exact #:coef-centring? #f)))
+  (check-equal? (failed-laws c 'float32 fit exact #:means device-means) '())
+  (check-pred (fails? "T1")
+              (failed-laws c 'float32 fit exact #:coef-centring? #f #:means device-means)))
 
 (define (atomic-case)
   (define big (+ 1 (expt 2 -23)))
@@ -67,4 +69,4 @@
   (check-true (> (abs residual-sum) coalesced-term)
               (format "residual sum ~a of the coalesced-count term"
                       (exact->inexact (/ (abs residual-sum) coalesced-term))))
-  (check-equal? (failed-laws c 'float32 (list '(0) b) exact) '()))
+  (check-equal? (failed-laws c 'float32 (list '(0) b) exact #:means device-means) '()))

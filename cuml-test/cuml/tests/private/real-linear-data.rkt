@@ -73,11 +73,12 @@
   '((raw . unweighted) (raw . weighted) (standardised . unweighted) (standardised . weighted)))
 (define all-dtypes '(float32 float64))
 
-(define offset-law-arms
-  (hasheq 'float32 '(((offset . 10) . unweighted))
-          'float64 (for*/list ([power (in-list '(10 12 14))]
-                               [weighting (in-list '(unweighted weighted))])
-                     (cons (cons 'offset power) weighting))))
+(define offset-arms
+  (for*/list ([power (in-list '(10 12 14))]
+              [weighting (in-list '(unweighted weighted))])
+    (cons (cons 'offset power) weighting)))
+
+(define offset-law-arms (hasheq 'float32 offset-arms 'float64 offset-arms))
 
 (define lstsq-algorithms '(auto eig svd svd-jacobi qr svd-qr))
 (define l1-ratios '(1 0.5 0.1))

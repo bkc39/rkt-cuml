@@ -53,7 +53,40 @@ def stage(X, y, w, fi):
     return e, f, g, kept, counted, wide
 
 
+def centred(v, w):
+    """The shim's stage_centred (cd_device.cu): double mean less its remainder."""
+    weights = np.ones(len(v)) if w is None else w.astype(np.float64)
+    wide = v.astype(np.float64)
+    shape = (-1,) + (1,) * (wide.ndim - 1)
+    total = weights.sum()
+    mean = (weights.reshape(shape) * wide).sum(axis=0) / total
+    remainder = (weights.reshape(shape) * (wide - mean)).sum(axis=0) / total
+    counted = (weights > 0).reshape(shape)
+    out = np.where(counted, (wide - mean) - remainder, 0).astype(v.dtype)
+    return out, mean + remainder
+
+
+def intercept_of(xbar, ybar, coef):
+    """The shim's weighted_intercept, summed in double in column order."""
+    fitted = 0.0
+    for m, b in zip(xbar, coef):
+        fitted += float(m) * float(b)
+    return ybar - fitted
+
+
+def fit_centred(X, y, w, algorithm):
+    """cuML-Python without an intercept on rows centred as the shim centres."""
+    Xc, xbar = centred(X, w)
+    yc, ybar = centred(y, w)
+    m = CuLinearRegression(
+        algorithm=algorithm, fit_intercept=False, output_type="numpy"
+    ).fit(np.asfortranarray(Xc), yc, sample_weight=w)
+    coef = host(m.coef_).astype(X.dtype)
+    return coef, intercept_of(xbar, ybar, coef)
+
+
 def staged_fit(case):
+    """cuML-Python on the rows staged as the shim stages them."""
     X, y, w = inputs(case)
     fi = case["fit_intercept"]
     dt = X.dtype.type
@@ -80,15 +113,31 @@ def staged_fit(case):
     Xs = np.ldexp(X[:, kept], e[kept]).astype(dt) * zero[:, None]
     if 2 <= counted.sum() < len(y):
         Xs, ys, ws = Xs[counted], ys[counted], ws[counted]
-    m = CuLinearRegression(
-        algorithm="svd" if wide else case["algorithm"],
-        fit_intercept=fi,
-        output_type="numpy",
-    ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
-    coef[kept] = np.ldexp(host(m.coef_).astype(dt), e[kept] - f).astype(dt)
-    intercept = dt(np.ldexp(dt(m.intercept_), -f)) if fi else dt(0)
+    algorithm = "svd" if wide else case["algorithm"]
+    if fi:
+        staged, intercept = fit_centred(Xs, ys, ws, algorithm)
+        intercept = dt(np.ldexp(intercept, -f))
+    else:
+        m = CuLinearRegression(
+            algorithm=algorithm, fit_intercept=False, output_type="numpy"
+        ).fit(np.asfortranarray(Xs), ys, sample_weight=ws)
+        staged = host(m.coef_).astype(dt)
+        intercept = dt(0)
+    coef[kept] = np.ldexp(staged, e[kept] - f).astype(dt)
     put(out, "coef", coef)
     put(out, "intercept", np.asarray([intercept], dtype=dt))
+    return out
+
+
+def centred_fit(case):
+    """cuML-Python's fit on rows the twin centres itself, as the shim does."""
+    if not case["fit_intercept"]:
+        return raw_fit(case)
+    X, y, w = inputs(case)
+    coef, intercept = fit_centred(X, y, w, case["algorithm"])
+    out = {}
+    put(out, "coef", coef)
+    put(out, "intercept", np.asarray([intercept], dtype=X.dtype))
     return out
 
 
@@ -139,6 +188,7 @@ if __name__ == "__main__":
     run(
         {
             "cuml": raw_fit,
+            "cuml-centred": centred_fit,
             "cuml-staged": staged_fit,
             "sklearn": sklearn_fit,
             "predict": predict,

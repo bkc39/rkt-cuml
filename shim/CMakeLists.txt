@@ -149,6 +149,7 @@ cumlrkt_family(linear_model
           common/src/labels.cu
   TESTS linear_model/tests/glm_staging_test.cpp
         linear_model/tests/cd_staging_test.cpp
+        linear_model/tests/cd_zero_fit_test.cpp
         linear_model/src/cd_staging.cpp linear_model/src/cd_device.cu
         linear_model/tests/linear_model_refusal_test.cpp
         linear_model/tests/logistic_checks_test.cpp
