@@ -1,14 +1,5 @@
 #lang racket/base
 
-(require (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/svm-twin-data.rkt"
-                  breast-cancer
-                  check-sklearn-twins
-                  separable-blobs
-                  sklearn-trials))
+(require (only-in "private/svm-twin-data.rkt" check-sklearn-dtype))
 
-(test-twin "standardised breast-cancer float32 decisions are near sklearn's, labels equal off the boundary"
-  (check-sklearn-twins (sklearn-trials (breast-cancer) 'float32)))
-
-(test-twin "separable float32 blobs give sklearn's labels; the support sets differ only on the margin"
-  (check-sklearn-twins (sklearn-trials (separable-blobs) 'float32) #:separable? #t))
+(check-sklearn-dtype 'float32)

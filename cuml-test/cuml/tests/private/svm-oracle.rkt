@@ -20,11 +20,13 @@
                   svm-case-dtype
                   svm-case-kernel
                   svm-case-name
-                  svm-fit))
+                  svm-fit
+                  weighted-cases))
 
 (provide (struct-out kkt)
          check-kkt
          check-referee
+         check-weighted-kkt
          decision-bound
          decision-ratio
          exact-decision
@@ -80,9 +82,8 @@
     (if (equal? v positive) 1 -1)))
 
 (define (rounded dt v)
-  (if (eq? dt 'float32)
-      (~> v exact->inexact flsingle exact)
-      (~> v exact->inexact exact)))
+  (define narrow (if (eq? dt 'float32) flsingle values))
+  (~> v exact->inexact narrow exact))
 
 (define (penalties c)
   (match-define (struct* svm-case ([C C] [w w] [y y] [dtype dt])) c)
@@ -163,17 +164,23 @@
     (if w
         (for/sum ([a (in-list alphas)] [wi (in-list w)] #:when (zero? wi)) (abs a))
         0))
-  (define support-exact (and (andmap (lambda (d) (not (zero? d))) dual) (apply < support)))
+  (define lengths-agree (= (length sv) (length support) (length dual) (apply + n-support)))
+  (define support-exact
+    (and lengths-agree (andmap (lambda (d) (not (zero? d))) dual) (apply < support)))
   (define rows-exact
-    (for/and ([s (in-list sv)]
-              [i (in-list support)])
-      (equal? s (map (lambda (v) (rounded dt v)) (vector-ref rows i)))))
+    (and lengths-agree
+         (for/and ([s (in-list sv)]
+                   [i (in-list support)])
+           (equal? s (map (lambda (v) (rounded dt v)) (vector-ref rows i))))))
   (define counts (equal? n-support (list (count negative? dual) (count positive? dual))))
+  (define balance (/ (abs (apply + dual)) (balance-bound dt n-iter Cs dual total)))
+  (define gap (- highest-low lowest-up))
+  (define violation (max (+ highest-low b) (- (- b) lowest-up)))
   (kkt signs-agree
        box-excess
-       (/ (abs (apply + dual)) (balance-bound dt n-iter Cs dual total))
-       (- highest-low lowest-up)
-       (max (+ highest-low b) (- (- b) lowest-up))
+       balance
+       gap
+       violation
        zero-weight-alpha
        support-exact
        rows-exact
@@ -272,3 +279,9 @@
     (check-true counts))
   (law-case "K7"
     (check-true rows)))
+
+(define (check-weighted-kkt dt)
+  (for ([c (in-list (weighted-cases))]
+        #:when (eq? (svm-case-dtype c) dt))
+    (test-case (svm-case-name c)
+      (check-kkt c))))

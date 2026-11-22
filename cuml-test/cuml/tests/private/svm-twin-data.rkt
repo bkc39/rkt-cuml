@@ -21,6 +21,7 @@
                   floats->bits
                   matrix->bits
                   python-sklearn-version
+                  test-twin
                   twin-default-params
                   twin-results)
          (only-in "real-logistic-data.rkt" labelled-case labelled-set)
@@ -30,6 +31,7 @@
          (struct-out trial)
          breast-cancer
          check-cuml-twins
+         check-sklearn-dtype
          check-sklearn-twins
          separable-blobs
          sklearn-trials
@@ -227,3 +229,13 @@
             [i (in-naturals)]
             #:unless (eq? (and (memv i ours) #t) (and (memv i theirs) #t)))
     (and (on-margin? d) (on-margin? e))))
+
+(define (check-sklearn-dtype dt)
+  (test-twin (format
+              "standardised breast-cancer ~a decisions are near sklearn's, labels equal off the boundary"
+              dt)
+    (check-sklearn-twins (sklearn-trials (breast-cancer) dt)))
+  (test-twin (format
+              "separable ~a blobs give sklearn's labels; the support sets differ only on the margin"
+              dt)
+    (check-sklearn-twins (sklearn-trials (separable-blobs) dt) #:separable? #t)))
