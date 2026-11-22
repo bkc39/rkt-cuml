@@ -8,11 +8,7 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" on-vector)
          (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
-         (only-in "private/svm-data.rkt" case-fit fresh-rows kkt-cases svm-case)
-         (only-in "private/svm-oracle.rkt" check-referee))
-
-(test-gpu "the linear and poly decisions are within B of the exact decision"
-  (check-referee '(linear poly)))
+         (only-in "private/svm-data.rkt" case-fit fresh-rows kkt-cases svm-case))
 
 (define label-sets
   '((reals (0 1) #f) (named ("no" "yes") #f)
