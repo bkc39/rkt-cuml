@@ -10,6 +10,7 @@
          cuml/manifold
          cuml/metrics
          cuml/preprocessing
+         cuml/svm
          cuml/table
          "private/agglomerative-estimator.rkt"
          "private/dbscan-estimator.rkt"
@@ -25,6 +26,7 @@
          "private/spectral-embedding-estimator.rkt"
          "private/spectral-estimator.rkt"
          "private/standard-scaler-estimator.rkt"
+         "private/svc-estimator.rkt"
          "private/truncated-svd-estimator.rkt"
          "private/tsne-estimator.rkt"
          "private/umap-estimator.rkt")
@@ -37,6 +39,7 @@
                        cuml/manifold
                        cuml/metrics
                        cuml/preprocessing
+                       cuml/svm
                        cuml/table
                        "private/agglomerative-estimator.rkt"
                        "private/dbscan-estimator.rkt"
@@ -52,6 +55,8 @@
                        "private/spectral-embedding-estimator.rkt"
                        "private/spectral-estimator.rkt"
                        "private/standard-scaler-estimator.rkt"
+                       "private/svc-estimator.rkt"
+         "private/svc-estimator.rkt"
                        "private/truncated-svd-estimator.rkt"
                        "private/tsne-estimator.rkt"
                        "private/umap-estimator.rkt"))

@@ -10,6 +10,7 @@
                "cuml-linear-model-lib"
                "cuml-manifold-lib"
                "cuml-preprocessing-lib"
+               "cuml-svm-lib"
                ("datasets-core" #:version "0.2")
                "datasets"
                ("raft" #:version "0.2")

@@ -1,0 +1,177 @@
+#lang racket/base
+
+(require (only-in math/bigfloat bf bf-precision bfexp bftanh bigfloat->rational)
+         (only-in racket/flonum flsingle)
+         (only-in racket/match match match-define struct*)
+         (only-in "common-data.rkt" gamma unit-roundoff)
+         (only-in "svm-data.rkt" svm-case svm-fit))
+
+(provide (struct-out kkt)
+         decision-bound
+         exact-decision
+         exact-kernel
+         kkt-bounds
+         kkt-of
+         penalties
+         signed-labels)
+
+(struct kkt (signs-agree box-excess balance gap violation zero-weight-alpha support-exact counts)
+  #:transparent)
+
+(define (exact v)
+  (inexact->exact v))
+
+(define (dot a b)
+  (for/sum ([x (in-list a)] [y (in-list b)]) (* x y)))
+
+(define (abs-dot a b)
+  (for/sum ([x (in-list a)] [y (in-list b)]) (abs (* x y))))
+
+(define (transcendental f q)
+  (parameterize ([bf-precision 192])
+    (bigfloat->rational (f (bf q)))))
+
+(define (exact-kernel kernel g degree coef0)
+  (define γ (exact g))
+  (define c0 (exact coef0))
+  (match kernel
+    ['linear dot]
+    ['poly (lambda (a b) (expt (+ (* γ (dot a b)) c0) degree))]
+    ['rbf
+     (lambda (a b)
+       (transcendental bfexp (- (* γ (for/sum ([x (in-list a)] [y (in-list b)]) (expt (- x y) 2))))))]
+    ['sigmoid (lambda (a b) (transcendental bftanh (+ (* γ (dot a b)) c0)))]))
+
+(define (fit-kernel fit)
+  (match-define (struct* svm-fit ([kernel kernel] [gamma g] [degree degree] [coef0 coef0])) fit)
+  (exact-kernel kernel g degree coef0))
+
+(define (exact-rows rows)
+  (for/list ([row (in-list rows)])
+    (map exact row)))
+
+(define (signed-labels classes y)
+  (match-define (list _ positive) classes)
+  (for/list ([v (in-list y)])
+    (if (equal? v positive) 1 -1)))
+
+(define (rounded dt v)
+  (if (eq? dt 'float32)
+      (exact (flsingle (exact->inexact v)))
+      (exact (exact->inexact v))))
+
+(define (penalties c)
+  (match-define (struct* svm-case ([C C] [w w] [y y] [dtype dt])) c)
+  (define CT (rounded dt C))
+  (for/list ([wi (in-list (or w (map (lambda (_) 1) y)))])
+    (rounded dt (* CT wi))))
+
+(define (kkt-bounds dt tol)
+  (if (eq? dt 'float32)
+      (values (+ 1 (expt 2 -23)) (expt 2 -22) (* 2 (exact tol)))
+      (values 1 (expt 2 -50) (* (exact tol) (+ 1 (expt 2 -20))))))
+
+(define (spread-duals n support dual)
+  (define full (make-vector n 0))
+  (for ([i (in-list support)]
+        [v (in-list dual)])
+    (vector-set! full i (exact v)))
+  full)
+
+(define (kkt-of c fit)
+  (match-define (struct* svm-case ([X X0] [y y0] [w w])) c)
+  (match-define (struct* svm-fit ([sv sv0] [support support] [dual dual0] [b b0] [classes classes]
+                                         [n-support n-support]))
+    fit)
+  (define X (exact-rows X0))
+  (define sv (exact-rows sv0))
+  (define dual (map exact dual0))
+  (define b (exact b0))
+  (define ys (signed-labels classes y0))
+  (define Cs (penalties c))
+  (define n (length X))
+  (define k (fit-kernel fit))
+  (define duals (spread-duals n support dual))
+  (define alphas
+    (for/list ([y (in-list ys)]
+               [i (in-naturals)])
+      (* y (vector-ref duals i))))
+  (define fs
+    (for/list ([x (in-list X)]
+               [y (in-list ys)])
+      (- (for/sum ([s (in-list sv)] [d (in-list dual)]) (* d (k s x))) y)))
+  (define (in-up? y a C)
+    (or (and (> y 0) (< a C)) (and (< y 0) (> a 0))))
+  (define (in-low? y a C)
+    (or (and (< y 0) (< a C)) (and (> y 0) (> a 0))))
+  (define (over pred)
+    (for/list ([f (in-list fs)]
+               [y (in-list ys)]
+               [a (in-list alphas)]
+               [C (in-list Cs)]
+               #:when (pred y a C))
+      f))
+  (define ups (over in-up?))
+  (define lows (over in-low?))
+  (define gap (- (apply max lows) (apply min ups)))
+  (define violation
+    (max (apply max (map (lambda (f) (+ f b)) lows)) (apply max (map (lambda (f) (- (- b) f)) ups))))
+  (define total (for/sum ([d (in-list dual)]) (abs d)))
+  (define signs (list->vector ys))
+  (kkt (for/and ([i (in-list support)]
+                 [d (in-list dual)])
+         (= (if (positive? d) 1 -1) (vector-ref signs i)))
+       (for/fold ([worst 0])
+                 ([a (in-list alphas)]
+                  [C (in-list Cs)]
+                  #:when (positive? C))
+         (max worst (/ a C)))
+       (if (zero? total)
+           0
+           (/ (abs (apply + dual)) total))
+       gap
+       violation
+       (if w
+           (for/sum ([a (in-list alphas)] [wi (in-list w)] #:when (zero? wi)) (abs a))
+           0)
+       (and (for/and ([d (in-list dual)])
+              (not (zero? d)))
+            (equal? support (sort support <)))
+       (equal? n-support
+               (list (for/sum ([d (in-list dual)]) (if (negative? d) 1 0))
+                     (for/sum ([d (in-list dual)]) (if (positive? d) 1 0))))))
+
+(define (exact-decision fit x)
+  (match-define (struct* svm-fit ([sv sv] [dual dual] [b b])) fit)
+  (define k (fit-kernel fit))
+  (define ex (map exact x))
+  (+ (for/sum ([s (in-list sv)] [d (in-list dual)]) (* (exact d) (k (map exact s) ex))) (exact b)))
+
+(define (kernel-error fit u s x)
+  (match-define (struct* svm-fit ([kernel kernel] [gamma g] [degree degree] [coef0 coef0])) fit)
+  (define γ (exact g))
+  (define c0 (abs (exact coef0)))
+  (define d (length x))
+  (define sx (abs-dot s x))
+  (define e-a (+ (* γ (gamma (+ d 1) u) sx) (* u c0)))
+  (match kernel
+    ['linear (* (gamma d u) sx)]
+    ['poly
+     (define a (abs (+ (* γ (dot s x)) (exact coef0))))
+     (+ (* degree (expt (+ a e-a) (max 0 (- degree 1))) e-a) (* 4 u (expt a degree)))]
+    ['rbf
+     (define e-r (* γ (gamma (+ d 3) u) (+ (dot x x) (dot s s) (* 2 sx))))
+     (define k ((fit-kernel fit) s x))
+     (* k (+ e-r (* e-r e-r) (* 4 u)))]
+    ['sigmoid (+ e-a (* 4 u))]))
+
+(define (decision-bound fit dt x)
+  (match-define (struct* svm-fit ([sv sv] [dual dual] [b b])) fit)
+  (define u (exact (unit-roundoff dt)))
+  (define k (fit-kernel fit))
+  (define ex (map exact x))
+  (define rows (map (lambda (s) (map exact s)) sv))
+  (+ (for/sum ([s (in-list rows)] [d (in-list dual)]) (* (abs (exact d)) (kernel-error fit u s ex)))
+     (* (gamma (+ (length sv) 1) u)
+        (+ (for/sum ([s (in-list rows)] [d (in-list dual)]) (abs (* (exact d) (k s ex))))
+           (abs (exact b))))))

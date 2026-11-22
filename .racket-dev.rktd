@@ -21,7 +21,7 @@
   (gpu-suite-signals ("scripts/gpu-suite-signals.sh" #:shell ""))
   (gate-constants ("scripts/gate-constants.sh" #:shell ""))
   (layout         "racket scripts/check-layout.rkt")
-  (pkg-deps       "scripts/pkg-deps.sh cuml-core-lib cuml-cluster-lib cuml-decomposition-lib cuml-linear-model-lib cuml-manifold-lib cuml-metrics-lib cuml-preprocessing-lib cuml-lib cuml-doc cuml-test cuml-glmnet-test cuml")
+  (pkg-deps       "scripts/pkg-deps.sh cuml-core-lib cuml-cluster-lib cuml-decomposition-lib cuml-linear-model-lib cuml-manifold-lib cuml-metrics-lib cuml-preprocessing-lib cuml-svm-lib cuml-lib cuml-doc cuml-test cuml-glmnet-test cuml")
   (review         "scripts/review.sh")
   (compile        "raco make -v cuml-lib/cuml/main.rkt cuml-doc/cuml/scribblings/cuml.scrbl scripts/check-layout.rkt scripts/check-bindings.rkt scripts/check-doc-links.rkt")
   (test           "raco test --process --timeout 45 cuml-test cuml-glmnet-test lint scripts/check-layout.rkt scripts/check-bindings.rkt scripts/check-doc-links.rkt scripts/no-twin-copies-test.rkt scripts/no-noqa-test.rkt")
