@@ -25,6 +25,10 @@
   (for/list ([l (in-list labels)])
     (if (= l at-zero) 0.0 1.0)))
 
+(define word-labels
+  (for/list ([l (in-list labels)])
+    (if (= l 1) "yes" "no")))
+
 (define negative-weights (cons -1.0 (make-list 39 1.0)))
 
 (define fit-rows
@@ -42,6 +46,8 @@
     (() "svc-fit: tol: expected a positive finite real, got 0" #:tol 0)
     (() "svc-fit: tol: expected a positive finite real, got -1" #:tol -1)
     (() "svc-fit: cache-size: expected a positive finite real, got -1" #:cache-size -1)
+    (() "svc-fit: C: expected a positive finite real, got 0" #:cache-size -1 #:tol 0 #:C 0)
+    (() "svc-fit: tol: expected a positive finite real, got 0" #:cache-size -1 #:tol 0)
     (() "svc-fit: max-iter: expected #f or an exact integer from 1 to 2147483647, got 0" #:max-iter 0)
     (()
      "svc-fit: nochange-steps: expected an exact integer from 0 to 2147483647, got -1"
@@ -59,9 +65,14 @@
     ((w ,(make-list 40 0.0)) "svc-fit: sample-weight: class 0 has no row of positive weight")
     ((w ,negative-weights) "svc-fit: sample-weight: negative weight -1 at row 0")
     ((w ,(weights 1)) "svc-fit: sample-weight: class 1 has no row of positive weight")
+    ((y ,word-labels w ,(weights 1))
+     "svc-fit: sample-weight: class \"yes\" has no row of positive weight")
     ((w ,(cons +nan.0 (make-list 39 1.0)))
      "svc-fit: sample-weight: row 0: expected a finite value, got nan")
     (() "svc-fit: the kernel can overflow (bound " #:gamma 1e30)
+    (()
+     "svc-fit: cache-size: 1e+06 MiB overflows the kernel cache's index for 40 rows; pass at most "
+     #:cache-size 1e6)
     (() "svc-fit: the fit has no support vectors; lower #:tol or raise #:max-iter" #:tol 3)))
 
 (define (fit-call dt given keywords)

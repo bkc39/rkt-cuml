@@ -1,6 +1,7 @@
 #lang racket/base
 
-(require (only-in cuml/core/private/define-who define/who)
+(require (only-in cuml/core exn:fail:cuml?)
+         (only-in cuml/core/private/define-who define/who)
          (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
@@ -23,9 +24,8 @@
          (only-in raft/unsafe deposit->list)
          (only-in "kernel.rkt"
                   kernel-code
-                  kernel-settings/who
-                  solver-settings/who
                   svm-kernel
+                  svm-settings/who
                   svm-solver)
          (only-in "native.rkt" cuml-svm-svc-apply-job cuml-svm-svc-fit-job svm-label-jobs))
 
@@ -100,6 +100,17 @@
                   a
                   b)]))
 
+;; The shim knows the classes only by their codes 0 and 1.
+(define ((class-named who classes) e)
+  (match-define (list negative positive) classes)
+  (match (regexp-match #rx"^[^:]+: sample-weight: class ([01]) has no row of positive weight$"
+                       (exn-message e))
+    [(list _ code)
+     (logic-error "~a: sample-weight: class ~e has no row of positive weight"
+                  who
+                  (if (equal? code "0") negative positive))]
+    [_ (raise e)]))
+
 (define/who (svc-fit who
                      X
                      y
@@ -109,8 +120,9 @@
   (float-matrix who X)
   (define kind (y-kind/who who y))
   (define params (bound-params svc-params))
-  (match-define (svm-kernel code degree* mode gamma* coef0* cache) (kernel-settings/who who params))
-  (match-define (svm-solver C* tol* max-iter* nochange) (solver-settings/who who params))
+  (define-values (kernel-settings solver-settings) (svm-settings/who who params))
+  (match-define (svm-kernel code degree* mode gamma* coef0* cache) kernel-settings)
+  (match-define (svm-solver C* tol* max-iter* nochange) solver-settings)
   (define w (weight-view who sample-weight))
   (match-define (list rows _) (shape X))
   (unless (= (y-length y) rows)
@@ -118,22 +130,23 @@
   (define-values (classes codes) (class-codes/who who svm-label-jobs kind y (two-classes who) resources))
   (define out (deposit-for/who who resources))
   (define-values (resolved n-iter negatives positives)
-    (cuml-svm-svc-fit-job who
-                          resources
-                          X
-                          codes
-                          w
-                          out
-                          code
-                          degree*
-                          mode
-                          gamma*
-                          coef0*
-                          C*
-                          tol*
-                          cache
-                          max-iter*
-                          nochange))
+    (with-handlers ([exn:fail:cuml? (class-named who classes)])
+      (cuml-svm-svc-fit-job who
+                            resources
+                            X
+                            codes
+                            w
+                            out
+                            code
+                            degree*
+                            mode
+                            gamma*
+                            coef0*
+                            C*
+                            tol*
+                            cache
+                            max-iter*
+                            nochange)))
   (match-define (list support-vectors support dual intercept) (deposit->list out))
   (svc-result support-vectors
               support

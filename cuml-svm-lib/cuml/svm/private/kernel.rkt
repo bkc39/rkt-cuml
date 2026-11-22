@@ -7,8 +7,7 @@
          (struct-out svm-solver)
          gamma-mode
          kernel-code
-         kernel-settings/who
-         solver-settings/who)
+         svm-settings/who)
 
 (struct svm-kernel (code degree gamma-mode gamma coef0 cache-size))
 
@@ -60,19 +59,18 @@
     [else
      (logic-error "~a: max-iter: expected #f or an exact integer from 1 to 2147483647, got ~e" who v)]))
 
-(define (kernel-settings/who who params)
+(define (svm-settings/who who params)
   (define (ref key)
     (hash-ref params key))
   (define code (kernel-value who (ref 'kernel)))
   (define degree (count-value who 'degree (ref 'degree) 0))
   (define-values (mode gamma) (gamma-value who (ref 'gamma)))
   (define coef0 (finite-value who 'coef0 (ref 'coef0)))
-  (svm-kernel code degree mode gamma coef0 (positive-value who 'cache-size (ref 'cache-size))))
-
-(define (solver-settings/who who params)
-  (define (ref key)
-    (hash-ref params key))
-  (svm-solver (positive-value who 'C (ref 'C))
-              (positive-value who 'tol (ref 'tol))
-              (max-iter-value who (ref 'max-iter))
-              (count-value who 'nochange-steps (ref 'nochange-steps) 0)))
+  (define C (positive-value who 'C (ref 'C)))
+  (define tol (positive-value who 'tol (ref 'tol)))
+  (define cache-size (positive-value who 'cache-size (ref 'cache-size)))
+  (values (svm-kernel code degree mode gamma coef0 cache-size)
+          (svm-solver C
+                      tol
+                      (max-iter-value who (ref 'max-iter))
+                      (count-value who 'nochange-steps (ref 'nochange-steps) 0))))
