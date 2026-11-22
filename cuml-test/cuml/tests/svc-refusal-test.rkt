@@ -67,6 +67,8 @@
     ((w ,(weights 1)) "svc-fit: sample-weight: class 1 has no row of positive weight")
     ((y ,word-labels w ,(weights 1))
      "svc-fit: sample-weight: class \"yes\" has no row of positive weight")
+    ((y ,word-labels w ,(weights 0))
+     "svc-fit: sample-weight: class \"no\" has no row of positive weight")
     ((w ,(cons +nan.0 (make-list 39 1.0)))
      "svc-fit: sample-weight: row 0: expected a finite value, got nan")
     (() "svc-fit: the kernel can overflow (bound " #:gamma 1e30)

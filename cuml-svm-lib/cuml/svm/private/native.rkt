@@ -45,6 +45,7 @@
                     (out _double)
                     (out _int32)
                     (out _int32)
+                    (out _int32)
                     (out _int32))
             #:exn exn:fail:cuml)
 

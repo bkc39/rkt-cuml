@@ -34,7 +34,9 @@ CUMLRKT_API const char* cuml_svm_libcuml_version(void);
 /* codes: int32 0/1 per row of x, 1 for the second class. sample_weight: NULL
    or one per row in x's dtype. Deposits in out: region 0 the n_s x d support
    vectors, row-major; region 1 their int32 row indices, ascending; region 2
-   the 1 x n_s dual coefficients y*alpha; region 3 the intercept. */
+   the 1 x n_s dual coefficients y*alpha; region 3 the intercept.
+   empty_class: -1, or the code of a class whose rows all have weight 0, in
+   which case nothing is fitted or deposited. */
 CUMLRKT_API int cuml_svm_svc_fit(void* handle, const rr_view* x,
                                  const rr_view* codes,
                                  const rr_view* sample_weight, rr_deposit* out,
@@ -43,7 +45,8 @@ CUMLRKT_API int cuml_svm_svc_fit(void* handle, const rr_view* x,
                                  double C, double tol, double cache_size,
                                  int32_t max_iter, int32_t nochange_steps,
                                  double* gamma_used, int32_t* n_iter,
-                                 int32_t* n_negative, int32_t* n_positive);
+                                 int32_t* n_negative, int32_t* n_positive,
+                                 int32_t* empty_class);
 CUMLRKT_API void cuml_svm_svc_fit_job(void* args, size_t args_len,
                                       rr_job_outcome* outcome);
 

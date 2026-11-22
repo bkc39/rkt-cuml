@@ -64,12 +64,16 @@ std::string fitted(const resources& res, const fit_case& c) {
   int32_t n_iter = 0;
   int32_t negative = 0;
   int32_t positive = 0;
+  int32_t empty = 2;
   const int status = cuml_svm_svc_fit(
       res.handle, x.view(), codes.view(), w ? w->view() : nullptr, &out.r,
       c.kernel, 3, c.gamma_mode, c.gamma, 0.0, 1.0, c.tol, 1024.0, -1, 1000,
-      &gamma, &n_iter, &negative, &positive);
-  if (status != RR_OK) {
+      &gamma, &n_iter, &negative, &positive, &empty);
+  if (status != RR_OK || empty >= 0) {
     expect_untouched(out);
+  }
+  if (status == RR_OK && empty >= 0) {
+    return "empty class " + std::to_string(empty);
   }
   return outcome(status);
 }
@@ -100,8 +104,10 @@ std::vector<refusal> refusals() {
   std::vector<double> negative = ones;
   negative[3] = -1.0;
   std::vector<double> lopsided = ones;
-  for (int64_t i = 1; i < rows; i += 2) {
-    lopsided[i] = 0.0;
+  std::vector<double> unweighted_first = ones;
+  for (int64_t i = 0; i < rows; i += 2) {
+    lopsided[i + 1] = 0.0;
+    unweighted_first[i] = 0.0;
   }
   std::vector<double> undefined = ones;
   undefined[0] = nan;
@@ -116,8 +122,9 @@ std::vector<refusal> refusals() {
       {bad_code, "y: row 0: expected a class code 0 or 1"},
       {with_weight(undefined), "sample-weight: row 0: expected a finite value"},
       {with_weight(negative), "sample-weight: negative weight -1 at row 3"},
-      {with_weight(lopsided),
-       "sample-weight: class 1 has no row of positive weight"},
+      {with_weight(lopsided), "empty class 1"},
+      {with_weight(unweighted_first), "empty class 0"},
+      {with_weight(std::vector<double>(rows, 0.0)), "empty class 0"},
       {with_x(nan, 5), "X: row 2, column 1: expected a finite value"},
       {constant, "gamma 'scale: X has zero variance; pass a numeric #:gamma"},
       {wide, "the kernel can overflow (bound "},
@@ -166,10 +173,11 @@ TEST(svc_refusal, F_an_index_overflow_is_refused) {
   int32_t n_iter = 0;
   int32_t negative = 0;
   int32_t positive = 0;
+  int32_t empty = 2;
   const int status = cuml_svm_svc_fit(
       res.handle, &forged, codes.view(), nullptr, &out.r, CUML_SVM_KERNEL_RBF,
       3, CUML_SVM_GAMMA_SCALE, 0.0, 0.0, 1.0, 1e-3, 1024.0, -1, 1000, &gamma,
-      &n_iter, &negative, &positive);
+      &n_iter, &negative, &positive, &empty);
   expect_untouched(out);
   EXPECT_EQ(outcome(status),
             "X: 46341x46341 elements do not fit the index type");
@@ -183,6 +191,8 @@ TEST(svc_refusal, V0c_a_fit_without_support_vectors_is_refused) {
   EXPECT_EQ(fitted<double>(res, loose),
             "the fit has no support vectors; lower #:tol or raise #:max-iter");
   EXPECT_EQ(fitted<double>(res, base()), "accepted");
+  EXPECT_EQ(fitted<double>(res, with_weight(std::vector<double>(rows, 1.0))),
+            "accepted");
 }
 
 }  // namespace

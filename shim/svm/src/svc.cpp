@@ -46,14 +46,15 @@ struct fit_views {
 };
 
 struct fit_report {
-  double gamma;
-  int32_t n_iter;
-  int64_t n_negative;
-  int64_t n_positive;
+  double gamma = 0.0;
+  int32_t n_iter = 0;
+  int64_t n_negative = 0;
+  int64_t n_positive = 0;
+  int32_t empty_class = -1;
 };
 
 template <typename T>
-const T* checked_weights(const rr_view* view, const int32_t* codes, int64_t n,
+const T* checked_weights(const rr_view* view, int64_t n,
                          rmm::cuda_stream_view stream) {
   if (view == nullptr) {
     return nullptr;
@@ -71,13 +72,20 @@ const T* checked_weights(const rr_view* view, const int32_t* codes, int64_t n,
         "sample-weight: negative weight {} at row {}",
         printed(static_cast<double>(read_one(w, negative, stream))), negative));
   }
-  const auto [first, second] = class_weights(codes, w, n, stream);
-  if (!(first > 0.0) || !(second > 0.0)) {
-    throw logic_error(
-        std::format("sample-weight: class {} has no row of positive weight",
-                    first > 0.0 ? 1 : 0));
-  }
   return w;
+}
+
+template <typename T>
+int32_t empty_class(const T* w, const int32_t* codes, int64_t n,
+                    rmm::cuda_stream_view stream) {
+  if (w == nullptr) {
+    return -1;
+  }
+  const auto [first, second] = class_weights(codes, w, n, stream);
+  if (!(first > 0.0)) {
+    return 0;
+  }
+  return second > 0.0 ? -1 : 1;
 }
 
 template <typename T>
@@ -139,7 +147,11 @@ fit_report fit_into(const raft::handle_t& handle, const fit_views& views,
     throw logic_error(std::format("y: row {}: expected a class code 0 or 1",
                                   bad));
   }
-  const T* w = checked_weights<T>(views.weight, codes, x.n, stream);
+  const T* w = checked_weights<T>(views.weight, x.n, stream);
+  const int32_t empty = empty_class(w, codes, x.n, stream);
+  if (empty >= 0) {
+    return {.empty_class = empty};
+  }
   require_finite("X", x, stream);
   const double largest = largest_squared_norm(x.data, x.n, x.d, stream);
   require_row_norms("X", largest, x.data, x.n, x.d, stream);
@@ -192,7 +204,7 @@ int cuml_svm_svc_fit(void* handle, const rr_view* x, const rr_view* codes,
                      double cache_size, int32_t max_iter,
                      int32_t nochange_steps, double* gamma_used,
                      int32_t* n_iter, int32_t* n_negative,
-                     int32_t* n_positive) {
+                     int32_t* n_positive, int32_t* empty_class) {
   return cumlrkt::guarded(
       handle, {{"X", x}, {"y", codes}, {"sample-weight", sample_weight}},
       [&](const raft::handle_t& h) {
@@ -201,6 +213,7 @@ int cuml_svm_svc_fit(void* handle, const rr_view* x, const rr_view* codes,
         int32_t* const iter_out = raftrkt::require(n_iter, "n_iter");
         int32_t* const negative_out = raftrkt::require(n_negative, "n_negative");
         int32_t* const positive_out = raftrkt::require(n_positive, "n_positive");
+        int32_t* const empty_out = raftrkt::require(empty_class, "empty_class");
         if (kernel < CUML_SVM_KERNEL_LINEAR ||
             kernel > CUML_SVM_KERNEL_SIGMOID) {
           throw cumlrkt::logic_error("kernel: expected a code from 0 to 3");
@@ -220,6 +233,7 @@ int cuml_svm_svc_fit(void* handle, const rr_view* x, const rr_view* codes,
           *iter_out = r.n_iter;
           *negative_out = static_cast<int32_t>(r.n_negative);
           *positive_out = static_cast<int32_t>(r.n_positive);
+          *empty_out = r.empty_class;
         });
       });
 }
