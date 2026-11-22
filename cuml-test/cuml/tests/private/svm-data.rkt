@@ -61,7 +61,7 @@
 (define dyadic-step (expt 2 -6))
 
 (define (dyadic v)
-  (~> v inexact->exact (/ dyadic-step) round (* dyadic-step)))
+  (* dyadic-step (~> v inexact->exact (/ dyadic-step) round)))
 
 (define (dyadic-blobs n d seed #:sep [sep 3/2] #:flip [flip 1/20])
   (define next (normal-source seed))
