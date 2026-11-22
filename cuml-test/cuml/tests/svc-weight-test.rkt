@@ -1,11 +1,12 @@
 #lang racket/base
 
-(require (only-in racket/list append-map make-list)
+(require (only-in cuml/svm svc-decision-function svc-result-gamma)
+         (only-in racket/list append-map make-list)
          (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
-         (only-in cuml/svm svc-decision-function svc-result-gamma)
+         (only-in "private/common-data.rkt" worst)
          (only-in "private/linear-data.rkt" check-law-case dtypes law-case on-matrix)
          (only-in "private/svm-data.rkt"
                   case-fit
@@ -31,18 +32,12 @@
   (match-define (struct* svm-case ([dtype dt])) c)
   (device-vector->list (svc-decision-function (case-fit c) (on-matrix probe dt))))
 
-(define (largest-gap ds es)
-  (for/fold ([m 0.0])
-            ([d (in-list ds)]
-             [e (in-list es)])
-    (max m (abs (- d e)))))
-
 (define arms
   (for*/list ([dt (in-list dtypes)]
               [kernel (in-list '(linear poly rbf))])
     (list dt kernel)))
 
-(test-gpu "W1: the KKT law holds with C_i = C·w_i"
+(test-gpu "the KKT law holds with C_i = C·w_i"
   (for ([c (in-list (weighted-cases))])
     (test-case (svm-case-name c)
       (check-kkt c))))
@@ -63,7 +58,7 @@
                #:unless drop?)
     i))
 
-(test-gpu "W2: zero-weight rows fit as deleted rows"
+(test-gpu "zero-weight rows fit as deleted rows"
   (define w
     (for/list ([drop? (in-list dropped)])
       (if drop? 0 1)))
@@ -79,9 +74,9 @@
         (check-equal? zs
                       (for/list ([i (in-list ds)])
                         (vector-ref kept-index i))))
-      (check-law-case "W2" (largest-gap (decisions zeroed) (decisions deleted)) 0.004))))
+      (check-law-case "W2" (worst (decisions zeroed) (decisions deleted)) 0.004))))
 
-(test-gpu "W3: integer weights fit as repeated rows"
+(test-gpu "integer weights fit as repeated rows"
   (define counts
     (for/list ([i (in-range 300)])
       (add1 (modulo (* 7 i) 3))))
@@ -95,14 +90,14 @@
       (define es
         (decisions
          (blob-case "repeated" dt kernel #:X (repeated rows) #:y (repeated labels) #:gamma g)))
-      (check-law-case "W3" (largest-gap ds es) 0.005)
+      (check-law-case "W3" (worst ds es) 0.005)
       (law-case "W3 signs"
         (for ([d (in-list ds)]
               [e (in-list es)]
               #:when (> (abs d) 0.005))
           (check-equal? (>= d 0) (>= e 0)))))))
 
-(test-gpu "W4: all weights 1 is bit-identical to no weights"
+(test-gpu "all weights 1 is bit-identical to no weights"
   (for ([arm (in-list arms)])
     (match-define (list dt kernel) arm)
     (test-case (format "~a ~a" dt kernel)

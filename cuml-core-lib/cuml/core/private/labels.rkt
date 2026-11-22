@@ -19,7 +19,9 @@
          label-dtypes
          label-kind?
          list-kind?
-         y-kind/who)
+         weight-view/who
+         y-kind/who
+         y-length)
 
 (define label-dtypes '(int32 int64 float32 float64))
 
@@ -119,6 +121,11 @@
   ((label-jobs-classes jobs) who resources y out)
   (match-define (list classes) (deposit->list out))
   (device-vector->list classes))
+
+(define/who (weight-view who w)
+  (if (or (not w) (device-vector? w))
+      w
+      (logic-error "~a: sample-weight: expected a device-vector or #f, got ~e" who w)))
 
 (define (y-length y)
   (match y

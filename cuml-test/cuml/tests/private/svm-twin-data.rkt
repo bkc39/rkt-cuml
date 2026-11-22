@@ -14,8 +14,9 @@
          (only-in racket/runtime-path define-runtime-path)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix->list* device-vector->list)
+         (only-in "common-data.rkt" worst)
          (only-in "linear-data.rkt" check-law-case law-case on-matrix)
-         (only-in "logistic-data.rkt" lr-case-X lr-case-y)
+         (only-in "logistic-data.rkt" correct lr-case-X lr-case-y)
          (only-in "python-env.rkt"
                   floats->bits
                   matrix->bits
@@ -171,12 +172,6 @@
 
 (define sklearn-margin 0.05)
 
-(define (largest-gap ds es)
-  (for/fold ([m 0.0])
-            ([d (in-list ds)]
-             [e (in-list es)])
-    (max m (abs (- d e)))))
-
 (define (resolved _t r)
   (svc-result-gamma r))
 
@@ -202,7 +197,7 @@
            (check-equal? labels their-labels)
            (check-equal? (apply + (svm-fit-n-support (fit-parts r))) (hash-ref theirs 'n_support)))]
         [else
-         (check-law-case "S1" (largest-gap ours their-decisions) (hash-ref sklearn-bounds kernel))
+         (check-law-case "S1" (worst ours their-decisions) (hash-ref sklearn-bounds kernel))
          (law-case "S2"
            (for ([l (in-list labels)]
                  [l-sk (in-list their-labels)]
@@ -210,6 +205,3 @@
                  #:when (> (abs d) sklearn-margin))
              (check-equal? l l-sk)))
          (check-equal? (correct labels truth) (correct their-labels truth) "train accuracy")]))))
-
-(define (correct labels truth)
-  (for/sum ([l (in-list labels)] [y (in-list truth)]) (if (equal? l y) 1 0)))

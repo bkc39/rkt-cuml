@@ -7,6 +7,7 @@
          (only-in rackunit check-true test-case)
          (only-in raft device-vector->list)
          (only-in "common-data.rkt" gamma unit-roundoff)
+         (only-in "exact-algebra.rkt" dot)
          (only-in "linear-data.rkt" check-law-case law-case on-matrix)
          (only-in "svm-data.rkt"
                   case-fit
@@ -36,9 +37,6 @@
 
 (define (exact v)
   (inexact->exact v))
-
-(define (dot a b)
-  (for/sum ([x (in-list a)] [y (in-list b)]) (* x y)))
 
 (define (abs-dot a b)
   (for/sum ([x (in-list a)] [y (in-list b)]) (abs (* x y))))

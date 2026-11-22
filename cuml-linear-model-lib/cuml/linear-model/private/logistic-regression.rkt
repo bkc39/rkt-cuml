@@ -4,14 +4,19 @@
          (only-in cuml/core/private/deposit deposit-for/who)
          (only-in cuml/core/private/hyperparameters bound-params define-codes define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
+         (only-in cuml/core/private/labels
+                  class-view
+                  decode-labels
+                  device-kind?
+                  fit-labels/who
+                  label-codes/who
+                  label-kind?
+                  list-kind?
+                  weight-view/who
+                  y-kind/who)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/match match match-define struct*)
-         (only-in raft
-                  current-device-resources
-                  device-matrix?
-                  device-vector->list
-                  device-vector?
-                  shape)
+         (only-in raft current-device-resources device-matrix? device-vector->list shape)
          (only-in raft/unsafe deposit->list)
          (only-in "glm.rkt"
                   bounded-count/who
@@ -21,15 +26,6 @@
                   nonnegative-value/who
                   penalty-code
                   positive-value/who)
-         (only-in cuml/core/private/labels
-                  class-view
-                  decode-labels
-                  device-kind?
-                  fit-labels/who
-                  label-codes/who
-                  label-kind?
-                  list-kind?
-                  y-kind/who)
          (only-in "native.rkt"
                   cuml-linear-model-logistic-regression-apply-job
                   cuml-linear-model-logistic-regression-fit-job
@@ -105,11 +101,6 @@
       who
       cw)]))
 
-(define (weight-view who w)
-  (if (or (not w) (device-vector? w))
-      w
-      (logic-error "~a: sample-weight: expected a device-vector or #f, got ~e" who w)))
-
 (struct qn-settings
         (penalty C
                  l1-ratio
@@ -175,7 +166,7 @@
     (logic-error "~a: X: expected a device-matrix, got ~e" who X))
   (define kind (y-kind/who who y))
   (define settings (qn-settings/who who (bound-params logistic-regression-params)))
-  (define w (weight-view who sample-weight))
+  (define w (weight-view/who who sample-weight))
   (match-define (list rows _) (shape X))
   (define-values (y-view classes weights)
     (fit-labels/who who linear-model-label-jobs kind rows y class-weight resources))

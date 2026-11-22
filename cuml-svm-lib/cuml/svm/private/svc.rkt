@@ -11,10 +11,12 @@
                   label-codes/who
                   label-kind?
                   list-kind?
-                  y-kind/who)
+                  weight-view/who
+                  y-kind/who
+                  y-length)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/match match match-define struct*)
-         (only-in raft current-device-resources device-matrix? device-vector? dtype shape)
+         (only-in raft current-device-resources device-matrix? dtype shape)
          (only-in raft/unsafe deposit->list)
          (only-in "kernel.rkt" kernel-code svm-kernel svm-settings/who svm-solver)
          (only-in "native.rkt" cuml-svm-svc-apply-job cuml-svm-svc-fit-job svm-label-jobs))
@@ -69,16 +71,6 @@
       X
       (logic-error "~a: X: expected a device-matrix of float32 or float64, got ~e" who X)))
 
-(define (weight-view who w)
-  (if (or (not w) (device-vector? w))
-      w
-      (logic-error "~a: sample-weight: expected a device-vector or #f, got ~e" who w)))
-
-(define (y-length y)
-  (match y
-    [(? list?) (length y)]
-    [(app shape (list n)) n]))
-
 (define ((two-classes who) classes)
   (match classes
     [(list _ _) (void)]
@@ -103,7 +95,7 @@
   (define-values (kernel-settings solver-settings) (svm-settings/who who params))
   (match-define (svm-kernel code degree* mode gamma* coef0* cache) kernel-settings)
   (match-define (svm-solver C* tol* max-iter* nochange) solver-settings)
-  (define w (weight-view who sample-weight))
+  (define w (weight-view/who who sample-weight))
   (match-define (list rows _) (shape X))
   (unless (= (y-length y) rows)
     (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y)))
