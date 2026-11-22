@@ -1,0 +1,190 @@
+#lang racket/base
+
+(require (for-syntax racket/base)
+         (only-in cuml/svm
+                  svc-decision-function
+                  svc-fit
+                  svc-predict
+                  svc-result-gamma
+                  svc-result-n-iter
+                  svc-result-support)
+         (only-in cuml/svm/private/native libcuml-version)
+         (only-in json json-null)
+         (only-in racket/match match-define struct*)
+         (only-in racket/runtime-path define-runtime-path)
+         (only-in rackunit check-equal? test-case)
+         (only-in raft device-matrix->list* device-vector->list)
+         (only-in "linear-data.rkt" check-law-case law-case on-matrix)
+         (only-in "logistic-data.rkt" lr-case-X lr-case-y)
+         (only-in "python-env.rkt"
+                  floats->bits
+                  matrix->bits
+                  python-sklearn-version
+                  twin-default-params
+                  twin-results)
+         (only-in "real-logistic-data.rkt" labelled-case labelled-set)
+         (only-in "svm-data.rkt" dyadic-blobs fit-parts svm-fit svm-fit-n-support))
+
+(provide (struct-out fixture)
+         (struct-out trial)
+         breast-cancer
+         check-cuml-twins
+         check-sklearn-twins
+         separable-blobs
+         svc-twin-params
+         trial-fit
+         twin-fixtures
+         twin-gammas)
+
+(define-runtime-path twin "../python/svc_twin.py")
+
+(struct fixture (name rows labels))
+
+(struct trial (fixture dtype kernel gamma))
+
+(define (blobs n d seed #:sep [sep 3/2] #:flip [flip 1/20])
+  (define-values (rows labels) (dyadic-blobs n d seed #:sep sep #:flip flip))
+  (fixture (format "blobs ~ax~a sep ~a" n d sep) rows labels))
+
+(define (separable-blobs)
+  (blobs 300 4 8 #:sep 8 #:flip 0))
+
+(define (breast-cancer)
+  (define set (labelled-set 'breast-cancer "diagnosis" '("id") #:standardise? #t))
+  (fixture "breast cancer" (lr-case-X (labelled-case set)) (lr-case-y (labelled-case set))))
+
+(define (twin-fixtures)
+  (list (blobs 300 4 5) (blobs 2000 10 6)))
+
+(define twin-gammas '(0.25 auto scale))
+
+(define (as-json gamma)
+  (if (symbol? gamma)
+      (symbol->string gamma)
+      (real->double-flonum gamma)))
+
+(define (trial-fit t)
+  (match-define (struct* trial ([fixture (struct* fixture ([rows rows] [labels labels]))]
+                                [dtype dt]
+                                [kernel kernel]
+                                [gamma gamma]))
+    t)
+  (svc-fit (on-matrix rows dt) labels #:kernel kernel #:gamma gamma))
+
+(define (twin-request op t gamma)
+  (match-define (struct* trial ([fixture (struct* fixture ([rows rows] [labels labels]))]
+                                [dtype dt]
+                                [kernel kernel]))
+    t)
+  (hasheq 'op op
+          'dtype (symbol->string dt)
+          'X (matrix->bits dt (device-matrix->list* (on-matrix rows dt)))
+          'y labels
+          'w (json-null)
+          'kernel (symbol->string kernel)
+          'gamma (as-json gamma)
+          'degree 3
+          'coef0 0.0
+          'C 1.0
+          'tol 1e-3
+          'cache_size 1024.0))
+
+(define (svc-twin-results requests)
+  (twin-results twin
+                requests
+                #:expected-cuml libcuml-version
+                #:expected-sklearn python-sklearn-version))
+
+(define (svc-twin-params #:unbound unbound)
+  (twin-default-params twin
+                       #:unbound unbound
+                       #:expected-cuml libcuml-version
+                       #:expected-sklearn python-sklearn-version))
+
+(define (fitted-trials trials op gamma-of)
+  (define fits (map trial-fit trials))
+  (define requests
+    (for/list ([t (in-list trials)]
+               [r (in-list fits)])
+      (twin-request op t (gamma-of t r))))
+  (values fits (svc-twin-results requests)))
+
+(define (ours-of r rows dt)
+  (match-define (struct* svm-fit ([sv sv] [dual dual] [b b])) (fit-parts r))
+  (define X (on-matrix rows dt))
+  (hasheq 'support (device-vector->list (svc-result-support r))
+          'n_iter (svc-result-n-iter r)
+          'predict (svc-predict r X)
+          'support_vectors_bits (matrix->bits dt sv)
+          'dual_coef_bits (floats->bits dt dual)
+          'intercept_bits (floats->bits dt (list b))
+          'decision_bits (floats->bits dt (device-vector->list (svc-decision-function r X)))))
+
+(define compared
+  '(support n_iter predict support_vectors_bits dual_coef_bits intercept_bits decision_bits))
+
+(define (as-given t _r)
+  (trial-gamma t))
+
+(define (check-cuml-twins trials #:gamma-of [gamma-of as-given])
+  (define-values (fits answers) (fitted-trials trials "cuml-fit" gamma-of))
+  (for ([t (in-list trials)]
+        [r (in-list fits)]
+        [theirs (in-list answers)])
+    (match-define (struct* trial ([fixture (struct* fixture ([name name] [rows rows]))]
+                                  [dtype dt]
+                                  [kernel kernel]
+                                  [gamma gamma]))
+      t)
+    (test-case (format "~a ~a ~a gamma ~a" name dt kernel gamma)
+      (when (eq? gamma 'scale)
+        (check-equal? (floats->bits 'float64 (list (svc-result-gamma r)))
+                      (hash-ref theirs 'gamma64_bits)
+                      "T2"))
+      (define ours (ours-of r rows dt))
+      (for ([key (in-list compared)])
+        (check-equal? (hash-ref ours key) (hash-ref theirs key) (format "T1 ~a" key))))))
+
+(define sklearn-bounds (hasheq 'linear 0.04 'poly 0.064 'rbf 0.002))
+
+(define sklearn-margin 0.05)
+
+(define (largest-gap ds es)
+  (for/fold ([m 0.0]) ([d (in-list ds)] [e (in-list es)])
+    (max m (abs (- d e)))))
+
+(define (resolved _t r)
+  (svc-result-gamma r))
+
+(define (check-sklearn-twins trials #:separable? [separable? #f])
+  (define-values (fits answers) (fitted-trials trials "sklearn-fit" resolved))
+  (for ([t (in-list trials)]
+        [r (in-list fits)]
+        [theirs (in-list answers)])
+    (match-define (struct* trial ([fixture (struct* fixture ([name name] [rows rows] [labels truth]))]
+                                  [dtype dt]
+                                  [kernel kernel]))
+      t)
+    (test-case (format "~a ~a ~a" name dt kernel)
+      (define X (on-matrix rows dt))
+      (define ours (device-vector->list (svc-decision-function r X)))
+      (define labels (svc-predict r X))
+      (define their-decisions (hash-ref theirs 'decision))
+      (define their-labels (hash-ref theirs 'predict))
+      (cond
+        [separable?
+         (law-case "S3"
+           (check-equal? labels their-labels)
+           (check-equal? (apply + (svm-fit-n-support (fit-parts r))) (hash-ref theirs 'n_support)))]
+        [else
+         (check-law-case "S1" (largest-gap ours their-decisions) (hash-ref sklearn-bounds kernel))
+         (law-case "S2"
+           (for ([l (in-list labels)]
+                 [l-sk (in-list their-labels)]
+                 [d (in-list their-decisions)]
+                 #:when (> (abs d) sklearn-margin))
+             (check-equal? l l-sk)))
+         (check-equal? (correct labels truth) (correct their-labels truth) "train accuracy")]))))
+
+(define (correct labels truth)
+  (for/sum ([l (in-list labels)] [y (in-list truth)]) (if (equal? l y) 1 0)))
