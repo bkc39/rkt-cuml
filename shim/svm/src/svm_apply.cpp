@@ -47,6 +47,7 @@ buffer<T> decision_of(const raft::handle_t& handle, const apply_views& views,
                       const apply_settings& s) {
   require_narrowed<T>("gamma", s.gamma, false);
   require_narrowed<T>("coef0", s.coef0, false);
+  require_narrowed<T>("cache-size", s.cache_size, true);
   const rmm::cuda_stream_view stream = stream_of(handle);
   const matrix<T, int64_t> x = rows_of<T, int64_t>(
       views.x, "X", raftrkt::any_extent, raftrkt::any_extent);
@@ -59,6 +60,7 @@ buffer<T> decision_of(const raft::handle_t& handle, const apply_views& views,
   require_index("X", x.n, x.d);
   require_index("support-vectors", sv.n, sv.d);
   require_some("support-vectors", "row", sv.n);
+  require_cache<T>(s.cache_size, sv.n);
   require_finite("X", x, stream);
   const double x_norm = largest_squared_norm(x.data, x.n, x.d, stream);
   require_row_norms("X", x_norm, x.data, x.n, x.d, stream);
