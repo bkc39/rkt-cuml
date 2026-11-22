@@ -3207,6 +3207,28 @@ names; l1-ratio range-checked always; L4's label code moved to
 | V0-m | The sigmoid kernel's oracles | K, R, T and D only. No sklearn twin and no class-swap or weight agreement: it is not PSD, and p5/p6 show other stationary points (Δdecision 14–20). The entry says so. | Keep the sklearn twin with labels only. It fails (37 mismatches). |
 | V0-n | `n-iter` | An exact integer (Python's `n_iter_[0]`). | A one-element list, Python's array shape, for V3's concatenation. |
 
+### The refusals
+
+`svc-fit` refuses in this order, every message prefixed "svc-fit: ", all `exn:fail:cuml`.
+
+| step | where | refusal |
+|---|---|---|
+| 1 | Racket | X not a float32 or float64 device-matrix |
+| 2 | Racket | y's kind (`y-kind/who`) |
+| 3 | Racket | the hyperparameters, in `svc-params` order: kernel (`'precomputed` not supported yet), degree, gamma, coef0, C, tol, cache-size, max-iter, nochange-steps |
+| 4 | Racket | sample-weight not a device-vector or #f |
+| 5 | Racket | y's length is not X's rows |
+| 6 | Racket | not exactly two classes |
+| 7 | shim | `require_index`, then no rows or no columns |
+| 8 | shim, then Racket | sample-weight: length, finite, negative; then a class with no row of positive weight. The shim returns that class's code in `empty_class` and fits nothing; Racket raises with the label from `classes`. |
+| 9 | shim | X not finite |
+| 10 | shim | a row's squared norm past the bound ("rescale X") |
+| 11 | shim | `'scale` on X of zero variance |
+| 12 | shim | the kernel bound (V0-k) |
+| 13 | shim | `require_cache`: "cache-size: X MiB overflows the kernel cache's index for n rows; pass at most M" (U9) |
+| 14 | shim | no support vectors (V0-c) |
+| 15 | shim | the U1 stall |
+
 ### Measured on the branch
 
 - O1: the rebuilt model's decisions and labels are bit-identical to cuML's own in 16 of 16 cases (4 kernels × 2 dtypes × 200×4 and 3000×12).
