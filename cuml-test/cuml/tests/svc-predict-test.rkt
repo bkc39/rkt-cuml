@@ -10,6 +10,7 @@
          (only-in "private/svm-data.rkt"
                   case-fit
                   encoded-labels
+                  encoding
                   fresh-rows
                   kkt-cases
                   label-encodings
@@ -19,14 +20,16 @@
   (define c (first (kkt-cases)))
   (match-define (struct* svm-case ([X X] [y y] [dtype dt])) c)
   (define rows (fresh-rows 200 (length (first X)) 5))
-  (for ([encoding (in-list label-encodings)])
-    (match-define (list name (and classes (list lo hi)) device) encoding)
+  (for ([e (in-list label-encodings)])
+    (match-define (struct* encoding
+                           ([name name] [classes (and classes (list lo hi))] [device device]))
+      e)
     (define (as-given v)
       (if (memq device '(float32 float64))
           (exact->inexact v)
           v))
     (test-case (format "~a" name)
-      (define r (case-fit (struct-copy svm-case c [y (encoded-labels encoding y)])))
+      (define r (case-fit (struct-copy svm-case c [y (encoded-labels e y)])))
       (define decisions (device-vector->list (svc-decision-function r (on-matrix rows dt))))
       (define predicted (svc-predict r (on-matrix rows dt)))
       (law-case "R2"

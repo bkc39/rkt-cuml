@@ -14,7 +14,7 @@
                   svc-result-support
                   svc-result-support-vectors)
          (only-in racket/list first)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in racket/math exact-floor)
          (only-in raft device-matrix->list* device-vector->list)
          (only-in threading ~>)
@@ -22,7 +22,8 @@
          (only-in "common-data.rkt" on-vector)
          (only-in "linear-data.rkt" dtypes on-matrix))
 
-(provide (struct-out svm-case)
+(provide (struct-out encoding)
+         (struct-out svm-case)
          (struct-out svm-fit)
          case-fit
          dyadic-blobs
@@ -40,17 +41,20 @@
 
 (define kernels '(linear poly rbf sigmoid))
 
-(define label-encodings
-  '((reals (0 1) #f) (three-seven (3 7) #f)
-                     (strings ("no" "yes") #f)
-                     (symbols (no yes) #f)
-                     (int32 (0 1) int32)
-                     (int64 (3 7) int64)
-                     (float32 (0 1) float32)
-                     (float64 (-1 1) float64)))
+(struct encoding (name classes device))
 
-(define (encoded-labels encoding codes)
-  (match-define (list _ (list lo hi) device) encoding)
+(define label-encodings
+  (for/list ([row (in-list '((reals (0 1) #f) (three-seven (3 7) #f)
+                                              (strings ("no" "yes") #f)
+                                              (symbols (no yes) #f)
+                                              (int32 (0 1) int32)
+                                              (int64 (3 7) int64)
+                                              (float32 (0 1) float32)
+                                              (float64 (-1 1) float64)))])
+    (apply encoding row)))
+
+(define (encoded-labels e codes)
+  (match-define (struct* encoding ([classes (list lo hi)] [device device])) e)
   (define labels
     (for/list ([v (in-list codes)])
       (if (zero? v) lo hi)))

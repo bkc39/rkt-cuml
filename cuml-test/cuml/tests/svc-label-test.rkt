@@ -3,7 +3,7 @@
 (require (only-in cuml fit score svc)
          (only-in cuml/svm svc-decision-function svc-fit svc-predict svc-result-classes)
          (only-in racket/list count)
-         (only-in racket/match match-define)
+         (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
@@ -12,6 +12,7 @@
          (only-in "private/svm-data.rkt"
                   dyadic-blobs
                   encoded-labels
+                  encoding
                   fresh-rows
                   label-encodings
                   svc-result->svm-fit
@@ -22,9 +23,7 @@
 (define-values (rows labels) (dyadic-blobs 300 4 2))
 (define probe (fresh-rows 200 4 2))
 
-(define (relabelled lo hi)
-  (for/list ([v (in-list labels)])
-    (if (zero? v) lo hi)))
+(define symbol-labels (encoded-labels (encoding 'symbols '(no yes) #f) labels))
 
 (define (without-classes r)
   (struct-copy svm-fit (svc-result->svm-fit r) [classes #f]))
@@ -34,11 +33,11 @@
          [kernel (in-list '(linear rbf))])
     (define X (on-matrix rows dt))
     (define reference (without-classes (svc-fit X labels #:kernel kernel)))
-    (for ([encoding (in-list label-encodings)])
-      (match-define (list name _ _) encoding)
+    (for ([e (in-list label-encodings)])
+      (match-define (struct* encoding ([name name])) e)
       (test-case (format "~a ~a ~a" dt kernel name)
         (law-case "L1"
-          (check-equal? (without-classes (svc-fit X (encoded-labels encoding labels) #:kernel kernel))
+          (check-equal? (without-classes (svc-fit X (encoded-labels e labels) #:kernel kernel))
                         reference))))))
 
 (define (largest-sum ds es)
@@ -53,7 +52,7 @@
          [kernel (in-list '(linear poly rbf))])
     (test-case (format "~a ~a" dt kernel)
       (define X (on-matrix rows dt))
-      (define r (svc-fit X (relabelled 'no 'yes) #:kernel kernel))
+      (define r (svc-fit X symbol-labels #:kernel kernel))
       (define s (svc-fit X swapped #:kernel kernel))
       (law-case "L2 classes"
         (check-equal? (svc-result-classes r) '(no yes))
@@ -74,7 +73,7 @@
                             '(no yes))))))))
 
 (test-gpu "score is the exact accuracy of predict, an unseen label counting as wrong"
-  (define y (relabelled 'no 'yes))
+  (define y symbol-labels)
   (define truth
     (for/list ([v (in-list y)]
                [i (in-naturals)])
