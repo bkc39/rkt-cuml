@@ -65,7 +65,8 @@ device, so the default takes 1 GiB. A smaller cache can take another path to ano
 @racket[tol]. A cache whose index overflows int32 for X's rows is refused, naming the largest that
 fits. @racket[C], @racket[tol] and a numeric @racket[gamma] are refused unless their flonums, and for
 a float32 X their float32 values, are finite and positive (@racket[gamma]: at least 0);
-@racket[coef0] likewise must be finite, and so must a @racket['scale] γ in X's dtype. The
+@racket[coef0] likewise must be finite, and so must a @racket['scale] γ in X's dtype. A row
+whose penalty C·wᵢ overflows X's dtype is refused. The
 sigmoid kernel is not positive semidefinite, so its fit is one stationary point among several.
 The fit repeats bitwise.
 @examples[#:eval ev #:label #f

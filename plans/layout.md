@@ -3222,7 +3222,7 @@ names; l1-ratio range-checked always; L4's label code moved to
 | 5 | Racket | X has no rows, then y's length is not X's rows (`y-rows/who`) |
 | 6 | Racket | not exactly two classes |
 | 7 | shim | C, tol, coef0 and a numeric gamma not finite (C, tol: not positive) in X's dtype; `require_index`, then no rows or no columns |
-| 8 | shim, then Racket | sample-weight: length, finite, negative; then a class with no row of positive penalty fl_T(C·wᵢ). The shim returns that class's code in `empty_class` and fits nothing; Racket raises with the label from `classes`. |
+| 8 | shim, then Racket | sample-weight: length, finite, negative; then a class with no row of positive penalty fl_T(C·wᵢ). The shim returns that class's code in `empty_class` and fits nothing; Racket raises with the label from `classes`. Then, for every kernel, the first row whose fl_T(C·wᵢ) is not finite: "sample-weight: row i: C*w overflows T; lower #:C or rescale the weights". The weights are on the device, so Racket does not form the product. |
 | 9 | shim | X not finite |
 | 10 | shim | a row's squared norm past the bound ("rescale X") |
 | 11 | shim | `'scale` on X of zero variance, or a resolved gamma not finite in X's dtype |

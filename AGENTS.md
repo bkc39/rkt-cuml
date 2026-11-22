@@ -33,7 +33,7 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-svm-lib/` | cuml-svm-lib | `cuml/svm`: `svc-params`, `svc-fit`, `svc-decision-function`, `svc-predict` and the `svc-result` struct (binary; `'precomputed` and multiclass refused) |
 | `cuml-svm-lib/` (private) | cuml-svm-lib | `cuml/svm/private/`: `kernel.rkt` (the kernel and solver settings and their refusals), `svc.rkt` (the bodies and `/who` forms), `native.rkt` (the loader of `libcumlrkt_svm.so`, `svm-label-jobs`, `current-label-classes-job`) |
 | `cuml-core-lib/` (labels) | cuml-core-lib | `cuml/core/private/labels.rkt`: the label kinds, codes and class views every classifier shares, over a `label-jobs` struct of the family's `label_classes` and `label_encode` jobs (each family exports them with `CUMLRKT_LABEL_ENTRIES`, `shim/common/include/cumlrkt/label_entries.hpp`, and binds them with `define-label-jobs`, which also defines the family's `current-label-classes-job` parameter); `weight-view/who` (a device-vector or `#f`) and `y-rows/who` (y's length against X's rows); a device y's classes come from `label_classes`: `class-codes/who` runs it on every device y (svc), `fit-labels/who` only for a class-weight hash on at least one row, so a one-row y meets the same class-weight refusals as a host y before the shim's two-row minimum |
-| `cuml-core-lib/` (scalars) | cuml-core-lib | `cuml/core/private/scalars.rkt`: the hyperparameter checkers the families share, each converting to a flonum before it checks: `positive-value/who`, `nonnegative-value/who`, `finite-value/who`, `bounded-count/who` (`#:least`, default 1, to `int32-max`) and `in-dtype/who` (a value that overflows float32, or rounds to 0 there when `#:positive`) |
+| `cuml-core-lib/` (scalars) | cuml-core-lib | `cuml/core/private/scalars.rkt`: the hyperparameter checkers the families share, each converting to a flonum before it checks: `positive-value/who`, `nonnegative-value/who`, `finite-value/who`, `bounded-count/who` (`#:least`, default 1, to `int32-max`) and `narrowed/who` (a value that overflows float32, or rounds to 0 there when `#:positive`) |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` and `define-predictor` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, `spectral-embedding`, `linear-regression`, `ridge`, `lasso`, `elastic-net`, `logistic-regression`, `mbsgd-regressor`, `mbsgd-classifier`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
@@ -299,8 +299,10 @@ For SVMs (`svc.rkt`; the full rules are `plans/layout.md`'s V0 section):
   (`kernel_checks.hpp`) at most `most_kernel_value<T>` (linear, poly) or
   `most_kernel_exponent<T>` (rbf, sigmoid), and a cache-size whose
   `raft::cache::Cache` index fits int32 (`require_cache`); C, tol, coef0 and gamma are
-  checked after narrowing to T (`require_narrowed`); a negative weight, a class with no
-  positive penalty fl_T(C·wᵢ) and one or three classes are refused, never fitted.
+  checked after narrowing to T with round-to-nearest (`require_narrowed`), at fit and at
+  predict, where cache-size is too; a negative weight, a class with no positive penalty
+  fl_T(C·wᵢ), a row whose fl_T(C·wᵢ) overflows, and one or three classes are refused,
+  never fitted.
 - *svm-twin.* `python/svc_twin.py` (ops `cuml-fit`, `sklearn-fit`,
   `params`) through `twin_common`; cuML is bitwise, sklearn at 2× the p5
   measurement.
