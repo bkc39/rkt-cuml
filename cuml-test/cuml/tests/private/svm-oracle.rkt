@@ -1,13 +1,27 @@
 #lang racket/base
 
-(require (only-in math/bigfloat bf bf-precision bfexp bftanh bigfloat->rational)
+(require (only-in cuml/svm svc-decision-function)
+         (only-in math/bigfloat bf bf-precision bfexp bftanh bigfloat->rational)
          (only-in racket/flonum flsingle)
          (only-in racket/match match match-define struct*)
+         (only-in rackunit test-case)
+         (only-in raft device-vector->list)
          (only-in "common-data.rkt" gamma unit-roundoff)
-         (only-in "svm-data.rkt" svm-case svm-fit))
+         (only-in "linear-data.rkt" check-law-case on-matrix)
+         (only-in "svm-data.rkt"
+                  case-fit
+                  fit-parts
+                  fresh-rows
+                  kkt-cases
+                  svm-case
+                  svm-case-kernel
+                  svm-case-name
+                  svm-fit))
 
 (provide (struct-out kkt)
+         check-referee
          decision-bound
+         decision-ratio
          exact-decision
          exact-kernel
          kkt-bounds
@@ -175,3 +189,27 @@
      (* (gamma (+ (length sv) 1) u)
         (+ (for/sum ([s (in-list rows)] [d (in-list dual)]) (abs (* (exact d) (k s ex))))
            (abs (exact b))))))
+
+(define (decision-ratio fit dt rows decisions)
+  (for/fold ([worst 0])
+            ([x (in-list rows)]
+             [d (in-list decisions)])
+    (define gap (abs (- (exact d) (exact-decision fit x))))
+    (define bound (decision-bound fit dt x))
+    (max worst
+         (cond
+           [(positive? bound) (/ gap bound)]
+           [(zero? gap) 0]
+           [else +inf.0]))))
+
+(define fresh 200)
+
+(define (check-referee kernels)
+  (for ([c (in-list (kkt-cases))]
+        #:when (memq (svm-case-kernel c) kernels))
+    (match-define (struct* svm-case ([X X] [dtype dt])) c)
+    (test-case (svm-case-name c)
+      (define r (case-fit c))
+      (define rows (fresh-rows fresh (length (car X)) (length X)))
+      (define decisions (device-vector->list (svc-decision-function r (on-matrix rows dt))))
+      (check-law-case "R1" (decision-ratio (fit-parts r) dt rows decisions) 1))))
