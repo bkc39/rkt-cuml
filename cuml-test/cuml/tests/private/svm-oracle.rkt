@@ -100,8 +100,13 @@
 
 (define (kkt-of c fit)
   (match-define (struct* svm-case ([X X0] [y y0] [w w] [dtype dt])) c)
-  (match-define (struct* svm-fit ([sv sv0] [support support] [dual dual0] [b b0] [classes classes]
-                                         [n-support n-support] [n-iter n-iter]))
+  (match-define (struct* svm-fit
+                         ([sv sv0] [support support]
+                                   [dual dual0]
+                                   [b b0]
+                                   [classes classes]
+                                   [n-support n-support]
+                                   [n-iter n-iter]))
     fit)
   (define X (exact-rows X0))
   (define sv (exact-rows sv0))
@@ -229,14 +234,14 @@
 (define (check-kkt c [fit (fit-parts (case-fit c))])
   (match-define (struct* svm-case ([dtype dt])) c)
   (define-values (box gap-bound) (kkt-bounds dt kkt-tol))
-  (match-define (struct* kkt ([signs-agree signs]
-                              [box-excess excess]
-                              [balance ratio]
-                              [gap gap]
-                              [violation violation]
-                              [zero-weight-alpha zero-alpha]
-                              [support-exact support]
-                              [counts counts]))
+  (match-define (struct* kkt
+                         ([signs-agree signs] [box-excess excess]
+                                              [balance ratio]
+                                              [gap gap]
+                                              [violation violation]
+                                              [zero-weight-alpha zero-alpha]
+                                              [support-exact support]
+                                              [counts counts]))
     (kkt-of c fit))
   (law-case "K1 signs"
     (check-true signs))

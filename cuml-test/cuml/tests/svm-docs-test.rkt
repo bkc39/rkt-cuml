@@ -22,7 +22,13 @@
   (define r (svc-fit (X) y #:kernel 'linear))
   (check-equal? (svc-result-n-support r) '(2 1))
   (check-equal? (device-vector->list (svc-result-support r)) '(1 2 3))
-  (check-equal? (device-vector->list (svc-decision-function r (X))) '(-1.4000236012070328 -1.0000590030175827 -0.9999704984912083 1.0000295015087912 1.3999940996982414 1.4000826042246157))
+  (check-equal? (device-vector->list (svc-decision-function r (X)))
+                (list -1.4000236012070328
+                      -1.0000590030175827
+                      -0.9999704984912083
+                      1.0000295015087912
+                      1.3999940996982414
+                      1.4000826042246157))
   (check-equal? (svc-predict r (X)) y))
 
 (test-gpu "the manual: svc-fit's refusals"

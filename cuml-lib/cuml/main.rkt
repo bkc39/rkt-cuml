@@ -56,7 +56,6 @@
                        "private/spectral-estimator.rkt"
                        "private/standard-scaler-estimator.rkt"
                        "private/svc-estimator.rkt"
-         "private/svc-estimator.rkt"
                        "private/truncated-svd-estimator.rkt"
                        "private/tsne-estimator.rkt"
                        "private/umap-estimator.rkt"))

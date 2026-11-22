@@ -64,17 +64,17 @@
       (real->double-flonum gamma)))
 
 (define (trial-fit t)
-  (match-define (struct* trial ([fixture (struct* fixture ([rows rows] [labels labels]))]
-                                [dtype dt]
-                                [kernel kernel]
-                                [gamma gamma]))
+  (match-define (struct* trial
+                         ([fixture (struct* fixture ([rows rows] [labels labels]))] [dtype dt]
+                                                                                    [kernel kernel]
+                                                                                    [gamma gamma]))
     t)
   (svc-fit (on-matrix rows dt) labels #:kernel kernel #:gamma gamma))
 
 (define (twin-request op t gamma)
-  (match-define (struct* trial ([fixture (struct* fixture ([rows rows] [labels labels]))]
-                                [dtype dt]
-                                [kernel kernel]))
+  (match-define (struct* trial
+                         ([fixture (struct* fixture ([rows rows] [labels labels]))] [dtype dt]
+                                                                                    [kernel kernel]))
     t)
   (hasheq 'op op
           'dtype (symbol->string dt)
@@ -129,7 +129,8 @@
 (define scale-ulps (hash '("blobs 300x4 sep 3/2" float64) 1))
 
 (define (scale-ulps-of t)
-  (match-define (struct* trial ([fixture (struct* fixture ([name name]))] [dtype dt] [gamma gamma])) t)
+  (match-define (struct* trial ([fixture (struct* fixture ([name name]))] [dtype dt] [gamma gamma]))
+    t)
   (if (eq? gamma 'scale)
       (hash-ref scale-ulps (list name dt) 0)
       0))
@@ -152,10 +153,10 @@
         [r (in-list fits)]
         [theirs (in-list answers)]
         [at-ours (in-list pinned)])
-    (match-define (struct* trial ([fixture (struct* fixture ([name name] [rows rows]))]
-                                  [dtype dt]
-                                  [kernel kernel]
-                                  [gamma gamma]))
+    (match-define (struct* trial
+                           ([fixture (struct* fixture ([name name] [rows rows]))] [dtype dt]
+                                                                                  [kernel kernel]
+                                                                                  [gamma gamma]))
       t)
     (define departs (scale-ulps-of t))
     (test-case (format "~a ~a ~a gamma ~a" name dt kernel gamma)
@@ -171,7 +172,9 @@
 (define sklearn-margin 0.05)
 
 (define (largest-gap ds es)
-  (for/fold ([m 0.0]) ([d (in-list ds)] [e (in-list es)])
+  (for/fold ([m 0.0])
+            ([d (in-list ds)]
+             [e (in-list es)])
     (max m (abs (- d e)))))
 
 (define (resolved _t r)
@@ -182,9 +185,10 @@
   (for ([t (in-list trials)]
         [r (in-list fits)]
         [theirs (in-list answers)])
-    (match-define (struct* trial ([fixture (struct* fixture ([name name] [rows rows] [labels truth]))]
-                                  [dtype dt]
-                                  [kernel kernel]))
+    (match-define (struct* trial
+                           ([fixture (struct* fixture ([name name] [rows rows] [labels truth]))]
+                            [dtype dt]
+                            [kernel kernel]))
       t)
     (test-case (format "~a ~a ~a" name dt kernel)
       (define X (on-matrix rows dt))

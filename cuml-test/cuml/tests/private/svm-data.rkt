@@ -48,14 +48,14 @@
   (define shift (/ sep (sqrt d)))
   (for/lists (rows labels)
              ([_ (in-range n)])
-    (define label (if (< (coin) 0.5) 0 1))
-    (define row
-      (for/list ([_ (in-range d)])
-        (dyadic (+ (next) (* shift (- (* 2 label) 1))))))
-    (values row
-            (if (< (coin) flip)
-                (- 1 label)
-                label))))
+             (define label (if (< (coin) 0.5) 0 1))
+             (define row
+               (for/list ([_ (in-range d)])
+                 (dyadic (+ (next) (* shift (- (* 2 label) 1))))))
+             (values row
+                     (if (< (coin) flip)
+                         (- 1 label)
+                         label))))
 
 (define (fresh-rows n d seed)
   (define-values (rows _labels) (dyadic-blobs n d (+ seed 1000003)))

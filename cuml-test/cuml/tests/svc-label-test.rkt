@@ -42,7 +42,9 @@
           (check-equal? (without-classes (svc-fit X y #:kernel kernel)) reference))))))
 
 (define (largest-sum ds es)
-  (for/fold ([m 0.0]) ([d (in-list ds)] [e (in-list es)])
+  (for/fold ([m 0.0])
+            ([d (in-list ds)]
+             [e (in-list es)])
     (max m (abs (+ d e)))))
 
 (test-gpu "L2: reversing the class order negates the decision"
@@ -66,7 +68,10 @@
               [p (in-list (svc-predict r P))]
               [q (in-list (svc-predict s P))]
               #:when (> (abs d) 0.03))
-          (check-equal? (list p q) (if (>= d 0) '(yes no) '(no yes))))))))
+          (check-equal? (list p q)
+                        (if (>= d 0)
+                            '(yes no)
+                            '(no yes))))))))
 
 (test-gpu "L3: score is the exact accuracy of predict, an unseen label counting as wrong"
   (define y (relabelled 'no 'yes))

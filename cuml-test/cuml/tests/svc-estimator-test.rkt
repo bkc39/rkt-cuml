@@ -35,7 +35,10 @@
   (for ([dt (in-list dtypes)])
     (test-case (format "~a" dt)
       (define X (on-matrix rows dt))
-      (define w (on-vector (for/list ([i (in-range 120)]) (if (odd? i) 2.0 1.0)) dt))
+      (define w
+        (on-vector (for/list ([i (in-range 120)])
+                     (if (odd? i) 2.0 1.0))
+                   dt))
       (define e (fit (svc #:kernel 'rbf #:C 2.0) X labels #:sample-weight w))
       (define r (svc-fit X labels #:kernel 'rbf #:C 2.0 #:sample-weight w))
       (check-true (fitted? e))
@@ -44,9 +47,9 @@
       (check-equal? (device-vector->list (decision-function e X))
                     (device-vector->list (svc-decision-function r X)))
       (check-equal? (score e X labels)
-                    (exact->inexact (/ (for/sum ([p (in-list (svc-predict r X))]
-                                                 [l (in-list labels)])
-                                         (if (equal? p l) 1 0))
+                    (exact->inexact (/ (for/sum ([p (in-list (svc-predict r X))] [l (in-list labels)])
+                                                (if (equal? p l) 1 0))
                                        120)))
-      (check-equal? (fit-parts (svc-model (fit (svc) X labels #:sample-weight (on-vector (make-list 120 1.0) dt))))
-                    (fit-parts (svc-model (fit (svc) X labels)))))))
+      (check-equal?
+       (fit-parts (svc-model (fit (svc) X labels #:sample-weight (on-vector (make-list 120 1.0) dt))))
+       (fit-parts (svc-model (fit (svc) X labels)))))))

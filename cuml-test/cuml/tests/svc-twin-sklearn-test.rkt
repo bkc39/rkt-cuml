@@ -2,7 +2,11 @@
 
 (require (only-in "private/linear-data.rkt" dtypes)
          (only-in "private/python-env.rkt" test-twin)
-         (only-in "private/svm-twin-data.rkt" breast-cancer check-sklearn-twins separable-blobs trial))
+         (only-in "private/svm-twin-data.rkt"
+                  breast-cancer
+                  check-sklearn-twins
+                  separable-blobs
+                  trial))
 
 (define sklearn-kernels '(linear poly rbf))
 

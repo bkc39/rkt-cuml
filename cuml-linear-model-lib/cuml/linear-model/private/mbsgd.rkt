@@ -264,7 +264,8 @@
   (cond
     [(device-kind? kind) (values y #f)]
     [else
-     (define-values (codes classes _weights) (fit-labels/who who linear-model-label-jobs kind rows y #f resources))
+     (define-values (codes classes _weights)
+       (fit-labels/who who linear-model-label-jobs kind rows y #f resources))
      (unless (= (length classes) 2)
        (logic-error "~a: y: expected exactly 2 classes, got ~a" who (length classes)))
      (values codes classes)]))

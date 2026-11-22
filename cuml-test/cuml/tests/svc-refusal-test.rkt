@@ -49,13 +49,13 @@
     (() "svc-fit: C: expected a positive finite real, got 0" #:cache-size -1 #:tol 0 #:C 0)
     (() "svc-fit: tol: expected a positive finite real, got 0" #:cache-size -1 #:tol 0)
     (() "svc-fit: max-iter: expected #f or an exact integer from 1 to 2147483647, got 0" #:max-iter 0)
-    (()
-     "svc-fit: nochange-steps: expected an exact integer from 0 to 2147483647, got -1"
-     #:nochange-steps -1)
+    (() "svc-fit: nochange-steps: expected an exact integer from 0 to 2147483647, got -1"
+        #:nochange-steps -1)
     (() "svc-fit: sample-weight: expected a device-vector or #f, got 'w" #:sample-weight w)
     ((y (0 1)) "svc-fit: y: expected 40 elements, got 2")
     ((y ,(make-list 40 0)) "svc-fit: y: expected two classes, got one (0)")
-    ((y ,(for/list ([i (in-range 40)]) (modulo i 3)))
+    ((y ,(for/list ([i (in-range 40)])
+           (modulo i 3)))
      "svc-fit: y: expected two classes, got 3 (0 1 ...); multiclass svc is not supported yet")
     ((y ,(cons 1.5 (cdr labels))) "svc-fit: y: expected integral class labels, got 1.5")
     ((X ,(with-cell +nan.0)) "svc-fit: X: row 0, column 0: expected a finite value, got nan")
@@ -72,9 +72,8 @@
     ((w ,(cons +nan.0 (make-list 39 1.0)))
      "svc-fit: sample-weight: row 0: expected a finite value, got nan")
     (() "svc-fit: the kernel can overflow (bound " #:gamma 1e30)
-    (()
-     "svc-fit: cache-size: 1e+06 MiB overflows the kernel cache's index for 40 rows; pass at most "
-     #:cache-size 1e6)
+    (() "svc-fit: cache-size: 1e+06 MiB overflows the kernel cache's index for 40 rows; pass at most "
+        #:cache-size 1e6)
     (() "svc-fit: the fit has no support vectors; lower #:tol or raise #:max-iter" #:tol 3)))
 
 (define (fit-call dt given keywords)
@@ -92,8 +91,7 @@
                 (cons (cons (car kws) (cadr* kws)) (loop (cddr kws)))))
           keyword<?
           #:key car))
-  (lambda ()
-    (keyword-apply svc-fit (map car pairs) (map cdr pairs) (list X y))))
+  (lambda () (keyword-apply svc-fit (map car pairs) (map cdr pairs) (list X y))))
 
 (define (cadr* kws)
   (match-define (list* _ v _) kws)

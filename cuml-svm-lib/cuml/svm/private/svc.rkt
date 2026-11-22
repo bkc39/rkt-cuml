@@ -14,18 +14,9 @@
                   y-kind/who)
          (only-in cuml/core/private/logic-error logic-error)
          (only-in racket/match match match-define struct*)
-         (only-in raft
-                  current-device-resources
-                  device-matrix?
-                  device-vector?
-                  dtype
-                  shape)
+         (only-in raft current-device-resources device-matrix? device-vector? dtype shape)
          (only-in raft/unsafe deposit->list)
-         (only-in "kernel.rkt"
-                  kernel-code
-                  svm-kernel
-                  svm-settings/who
-                  svm-solver)
+         (only-in "kernel.rkt" kernel-code svm-kernel svm-settings/who svm-solver)
          (only-in "native.rkt" cuml-svm-svc-apply-job cuml-svm-svc-fit-job svm-label-jobs))
 
 (provide (struct-out svc-result)
@@ -93,11 +84,12 @@
     [(list _ _) (void)]
     [(list only) (logic-error "~a: y: expected two classes, got one (~e)" who only)]
     [(list* a b _)
-     (logic-error "~a: y: expected two classes, got ~a (~e ~e ...); multiclass svc is not supported yet"
-                  who
-                  (length classes)
-                  a
-                  b)]))
+     (logic-error
+      "~a: y: expected two classes, got ~a (~e ~e ...); multiclass svc is not supported yet"
+      who
+      (length classes)
+      a
+      b)]))
 
 (define/who (svc-fit who
                      X
@@ -115,7 +107,8 @@
   (match-define (list rows _) (shape X))
   (unless (= (y-length y) rows)
     (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y)))
-  (define-values (classes codes) (class-codes/who who svm-label-jobs kind y (two-classes who) resources))
+  (define-values (classes codes)
+    (class-codes/who who svm-label-jobs kind y (two-classes who) resources))
   (define out (deposit-for/who who resources))
   (define-values (resolved n-iter negatives positives empty)
     (cuml-svm-svc-fit-job who
@@ -169,15 +162,16 @@
 
 (define (applied who result X mode resources)
   (checked-result who result X)
-  (match-define (struct* svc-result ([support-vectors sv] [dual-coef dual]
-                                                          [intercept intercept]
-                                                          [classes classes]
-                                                          [label-kind kind]
-                                                          [kernel kernel]
-                                                          [degree degree]
-                                                          [gamma gamma]
-                                                          [coef0 coef0]
-                                                          [cache-size cache]))
+  (match-define (struct* svc-result
+                         ([support-vectors sv] [dual-coef dual]
+                                               [intercept intercept]
+                                               [classes classes]
+                                               [label-kind kind]
+                                               [kernel kernel]
+                                               [degree degree]
+                                               [gamma gamma]
+                                               [coef0 coef0]
+                                               [cache-size cache]))
     result)
   (define classes-view (and (eq? mode 'labels) (class-view kind classes resources)))
   (define out (deposit-for/who who resources))
@@ -204,5 +198,6 @@
 (define/who (svc-predict who result X #:resources [resources (current-device-resources)])
   (define labels (applied who result X 'labels resources))
   (match result
-    [(struct* svc-result ([classes classes] [label-kind (? list-kind?)])) (decode-labels classes labels)]
+    [(struct* svc-result ([classes classes] [label-kind (? list-kind?)]))
+     (decode-labels classes labels)]
     [_ labels]))

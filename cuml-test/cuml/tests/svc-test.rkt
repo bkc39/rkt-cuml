@@ -27,7 +27,8 @@
       (check-equal? (svc-predict r X) docs-y)
       (check-equal? (map (lambda (d) (>= d 0)) (device-vector->list (svc-decision-function r X)))
                     '(#f #f #f #t #t #t))
-      (check-equal? (apply + (svc-result-n-support r)) (length (device-vector->list (svc-result-support r)))))))
+      (check-equal? (apply + (svc-result-n-support r))
+                    (length (device-vector->list (svc-result-support r)))))))
 
 (define (exact-variance rows)
   (define cells (map inexact->exact (append* rows)))
@@ -49,15 +50,14 @@
     (match-define (list n d) shape)
     (define rows
       (if (eq? arm 'blobs)
-          (let-values ([(rows _labels) (dyadic-blobs n d 5)]) rows)
+          (let-values ([(rows _labels) (dyadic-blobs n d 5)])
+            rows)
           (shifted n d)))
     (define-values (_rows labels) (dyadic-blobs n d 5))
     (test-case (format "~a ~a ~a" dt arm shape)
       (define r (svc-fit (on-matrix rows dt) labels #:kernel 'rbf))
       (define bound
-        (+ (* (+ (* 2 (integer-length (* n d))) 1) (expt 2 -53))
-           (unit-roundoff dt)
-           (expt 2 -52)))
+        (+ (* (+ (* 2 (integer-length (* n d))) 1) (expt 2 -53)) (unit-roundoff dt) (expt 2 -52)))
       (check-law-case "G1"
                       (abs (- (* (inexact->exact (svc-result-gamma r)) d (exact-variance rows)) 1))
                       bound))))
@@ -74,9 +74,7 @@
 (test-gpu "a numeric gamma is kept as given, for every kernel"
   (define-values (rows labels) (dyadic-blobs 60 3 3))
   (for ([kernel (in-list kernels)])
-    (check-true (= (svc-result-gamma (svc-fit (on-matrix rows 'float64) labels
-                                              #:kernel kernel
-                                              #:gamma 0.25))
-                   0.25)
-                (format "~a" kernel))))
-
+    (check-true
+     (= (svc-result-gamma (svc-fit (on-matrix rows 'float64) labels #:kernel kernel #:gamma 0.25))
+        0.25)
+     (format "~a" kernel))))

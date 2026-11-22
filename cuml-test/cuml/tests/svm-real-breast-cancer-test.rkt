@@ -6,7 +6,12 @@
          (only-in "private/python-env.rkt" test-twin)
          (only-in "private/svm-data.rkt" kernels svm-case)
          (only-in "private/svm-oracle.rkt" check-kkt)
-         (only-in "private/svm-twin-data.rkt" breast-cancer check-cuml-twins fixture trial twin-gammas))
+         (only-in "private/svm-twin-data.rkt"
+                  breast-cancer
+                  check-cuml-twins
+                  fixture
+                  trial
+                  twin-gammas))
 
 (define tumours (breast-cancer))
 
@@ -14,7 +19,8 @@
   (match-define (struct* fixture ([rows rows] [labels labels])) tumours)
   (for* ([dt (in-list dtypes)]
          [kernel (in-list '(linear rbf))])
-    (check-kkt (svm-case (format "breast cancer ~a ~a" dt kernel) rows labels #f 1 kernel dt 'scale))))
+    (check-kkt
+     (svm-case (format "breast cancer ~a ~a" dt kernel) rows labels #f 1 kernel dt 'scale))))
 
 (test-twin "standardised breast cancer: T1, T2 against Python cuML"
   (check-cuml-twins (for*/list ([dt (in-list dtypes)]

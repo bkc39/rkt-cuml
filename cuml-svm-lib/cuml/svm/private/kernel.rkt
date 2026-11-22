@@ -34,13 +34,20 @@
 (define (count-value who key v least)
   (if (and (exact-integer? v) (<= least v most-int32))
       v
-      (logic-error "~a: ~a: expected an exact integer from ~a to 2147483647, got ~e" who key least v)))
+      (logic-error "~a: ~a: expected an exact integer from ~a to 2147483647, got ~e"
+                   who
+                   key
+                   least
+                   v)))
 
 (define (gamma-value who gamma)
   (cond
     [(memq gamma '(scale auto)) (values (gamma-mode gamma) 0.0)]
     [(and (finite? gamma) (>= gamma 0)) (values (gamma-mode 'number) (real->double-flonum gamma))]
-    [else (logic-error "~a: gamma: expected 'scale, 'auto or a finite real at least 0, got ~e" who gamma)]))
+    [else
+     (logic-error "~a: gamma: expected 'scale, 'auto or a finite real at least 0, got ~e"
+                  who
+                  gamma)]))
 
 (define (finite-value who key v)
   (if (finite? v)
@@ -57,7 +64,9 @@
     [(not v) -1]
     [(and (exact-integer? v) (<= 1 v most-int32)) v]
     [else
-     (logic-error "~a: max-iter: expected #f or an exact integer from 1 to 2147483647, got ~e" who v)]))
+     (logic-error "~a: max-iter: expected #f or an exact integer from 1 to 2147483647, got ~e"
+                  who
+                  v)]))
 
 (define (svm-settings/who who params)
   (define (ref key)

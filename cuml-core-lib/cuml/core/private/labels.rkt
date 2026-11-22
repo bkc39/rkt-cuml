@@ -138,11 +138,12 @@
 (define/who (fit-labels who jobs kind rows y cw resources)
   (match kind
     [(? device-kind?)
-     (values y
-             #f
-             (and (class-weighted? who rows y cw)
-                  (positive? rows)
-                  (class-weight-view who real-labels (device-classes who jobs y resources) cw resources)))]
+     (values
+      y
+      #f
+      (and (class-weighted? who rows y cw)
+           (positive? rows)
+           (class-weight-view who real-labels (device-classes who jobs y resources) cw resources)))]
     [_
      (define-values (classes codes) (host-labels who kind y))
      (values (list->device-vector codes #:dtype 'int32 #:resources resources)
