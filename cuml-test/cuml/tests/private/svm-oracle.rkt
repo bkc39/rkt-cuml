@@ -4,21 +4,23 @@
          (only-in math/bigfloat bf bf-precision bfexp bftanh bigfloat->rational)
          (only-in racket/flonum flsingle)
          (only-in racket/match match match-define struct*)
-         (only-in rackunit test-case)
+         (only-in rackunit check-true test-case)
          (only-in raft device-vector->list)
          (only-in "common-data.rkt" gamma unit-roundoff)
-         (only-in "linear-data.rkt" check-law-case on-matrix)
+         (only-in "linear-data.rkt" check-law-case law-case on-matrix)
          (only-in "svm-data.rkt"
                   case-fit
                   fit-parts
                   fresh-rows
                   kkt-cases
                   svm-case
+                  svm-case-dtype
                   svm-case-kernel
                   svm-case-name
                   svm-fit))
 
 (provide (struct-out kkt)
+         check-kkt
          check-referee
          decision-bound
          decision-ratio
@@ -204,12 +206,39 @@
 
 (define fresh 200)
 
-(define (check-referee kernels)
+(define (check-referee kernels #:dtypes [dtypes '(float32 float64)])
   (for ([c (in-list (kkt-cases))]
-        #:when (memq (svm-case-kernel c) kernels))
+        #:when (memq (svm-case-kernel c) kernels)
+        #:when (memq (svm-case-dtype c) dtypes))
     (match-define (struct* svm-case ([X X] [dtype dt])) c)
     (test-case (svm-case-name c)
       (define r (case-fit c))
       (define rows (fresh-rows fresh (length (car X)) (length X)))
       (define decisions (device-vector->list (svc-decision-function r (on-matrix rows dt))))
       (check-law-case "R1" (decision-ratio (fit-parts r) dt rows decisions) 1))))
+
+(define kkt-tol 1e-3)
+
+(define (check-kkt c [fit (fit-parts (case-fit c))])
+  (match-define (struct* svm-case ([dtype dt])) c)
+  (define-values (box balance gap-bound) (kkt-bounds dt kkt-tol))
+  (match-define (struct* kkt ([signs-agree signs]
+                              [box-excess excess]
+                              [balance ratio]
+                              [gap gap]
+                              [violation violation]
+                              [zero-weight-alpha zero-alpha]
+                              [support-exact support]
+                              [counts counts]))
+    (kkt-of c fit))
+  (law-case "K1 signs"
+    (check-true signs))
+  (check-law-case "K1 box" excess box)
+  (check-law-case "K2" ratio balance)
+  (check-law-case "K3" gap gap-bound)
+  (check-law-case "K4" violation gap-bound)
+  (law-case "K5"
+    (check-true (zero? zero-alpha)))
+  (law-case "K6"
+    (check-true support)
+    (check-true counts)))

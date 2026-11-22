@@ -47,6 +47,9 @@
                              spectral-clustering
                              spectral-embedding
                              standard-scaler
+                             svc
+                             svc-model
+                             svc?
                              truncated-svd
                              tsne
                              umap))

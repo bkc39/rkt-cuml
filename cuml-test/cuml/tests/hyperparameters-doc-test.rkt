@@ -87,6 +87,7 @@
                                                "decomposition.scrbl"
                                                "manifold.scrbl"
                                                "linear-model.scrbl"
+                                               "svm.scrbl"
                                                "estimators.scrbl"
                                                "pca-estimator.scrbl"
                                                "truncated-svd-estimator.scrbl"))))

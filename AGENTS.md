@@ -12,7 +12,7 @@ Scope: clustering (k-means, DBSCAN, single-linkage agglomerative,
 spectral, HDBSCAN) and metrics (contingency, adjusted Rand, silhouette,
 trustworthiness, R², accuracy, mean squared error), preprocessing (standard
 scaling), decomposition (PCA) and manifold (UMAP, t-SNE, spectral embedding); epic #53 adds the rest of decomposition and
-manifold, and epic #97 linear models (ordinary least squares, `linear-regression`; ridge, `ridge`; lasso and elastic net, `lasso` and `elastic-net`; logistic regression, `logistic-regression`; minibatch SGD, `mbsgd-regressor` and `mbsgd-classifier`). `plans/layout.md` holds the owner's decisions;
+manifold, and epic #97 linear models (ordinary least squares, `linear-regression`; ridge, `ridge`; lasso and elastic net, `lasso` and `elastic-net`; logistic regression, `logistic-regression`; minibatch SGD, `mbsgd-regressor` and `mbsgd-classifier`), and epic #167 support vector machines (binary `svc` in leg V0, #168). `plans/layout.md` holds the owner's decisions;
 `plans/starting-notes.md` what rkt-raft established.
 
 ## Layout
@@ -29,7 +29,10 @@ A multi-package repository in typed-racket's style: every package is
 | `cuml-decomposition-lib/` | cuml-decomposition-lib | `cuml/decomposition` (`pca-params`, `pca-fit`, `pca-transform`, `pca-inverse-transform`, `pca-fit-transform`, and the `pca-result` struct; `tsvd-params`, `tsvd-fit`, `tsvd-transform`, `tsvd-inverse-transform`, `tsvd-fit-transform`, and the `tsvd-result` struct), `cuml/decomposition/private/` (the bodies, their `/who` forms, and the loader of `libcumlrkt_decomposition.so`) |
 | `cuml-manifold-lib/` | cuml-manifold-lib | `cuml/manifold` (`umap-params`, `umap-fit`, `umap-transform`, `umap-fit-transform`, the `umap-result` struct, `tsne-params`, `tsne-fit`, `tsne-fit-transform`, the `tsne-result` struct, `spectral-embedding-params`, `spectral-embedding-fit`, `spectral-embedding-fit-graph`, `spectral-embedding-fit-transform` and the `spectral-embedding-result` struct), `cuml/manifold/private/` (the bodies, their `/who` forms, `curve.rkt`'s a, b fit, `support.rkt`'s `drawn-seed`, `finite-real?`, `metric-code`, `rows-of` and `boolean->int` (from `hyperparameters.rkt`), shared by UMAP, t-SNE and spectral embedding, and the loader of `libcumlrkt_manifold.so`) |
 | `cuml-linear-model-lib/` | cuml-linear-model-lib | `cuml/linear-model`: for each of `linear-regression`, `ridge`, `lasso` and `elastic-net`, its `-params` table, `-fit`, `-predict` and `-result` struct; `logistic-regression`'s table, `-fit`, `-decision-function`, `-predict`, `-predict-proba`, `-predict-log-proba` and `-result`; `mbsgd-regressor`'s table, `-fit`, `-predict` and `-result`; `mbsgd-classifier`'s table, `-fit`, `-decision-function`, `-predict` and `-result` |
-| `cuml-linear-model-lib/` (private) | cuml-linear-model-lib | `cuml/linear-model/private/`: the bodies and their `/who` forms; `glm.rkt`'s `glm-predict`, `flag`, `intercept-flag`, `alpha-value`, `real-value` and `bounded-count`, shared by the linear models; `elastic-net.rkt`'s `define-cd-result`, each coordinate-descent result struct with its predict; `labels.rkt`, the label kinds, codes and class views logistic regression and the MBSGD classifier share (a device y's classes come from the shim's `label_classes`, run only for a class-weight hash on at least one row, so a one-row y meets the same class-weight refusals as a host y before the shim's two-row minimum, `min_rows` in `min_rows.hpp`; tests count those jobs by parameterizing `current-label-classes-job`); `mbsgd.rkt`, both MBSGD estimators over one `sgdFit` job; the loader of `libcumlrkt_linear_model.so` |
+| `cuml-linear-model-lib/` (private) | cuml-linear-model-lib | `cuml/linear-model/private/`: the bodies and their `/who` forms; `glm.rkt`'s `glm-predict`, `flag`, `intercept-flag`, `alpha-value`, `real-value` and `bounded-count`, shared by the linear models; `elastic-net.rkt`'s `define-cd-result`, each coordinate-descent result struct with its predict; `native.rkt`'s `linear-model-label-jobs` and `current-label-classes-job` (tests count the label jobs by parameterizing it); `mbsgd.rkt`, both MBSGD estimators over one `sgdFit` job; the loader of `libcumlrkt_linear_model.so` |
+| `cuml-svm-lib/` | cuml-svm-lib | `cuml/svm`: `svc-params`, `svc-fit`, `svc-decision-function`, `svc-predict` and the `svc-result` struct (binary; `'precomputed` and multiclass refused) |
+| `cuml-svm-lib/` (private) | cuml-svm-lib | `cuml/svm/private/`: `kernel.rkt` (the kernel and solver settings and their refusals), `svc.rkt` (the bodies and `/who` forms), `native.rkt` (the loader of `libcumlrkt_svm.so`, `svm-label-jobs`, `current-label-classes-job`) |
+| `cuml-core-lib/` (labels) | cuml-core-lib | `cuml/core/private/labels.rkt`: the label kinds, codes and class views every classifier shares, over a `label-jobs` struct of the family's `label_classes` and `label_encode` jobs (each family exports them with `CUMLRKT_LABEL_ENTRIES`, `shim/common/include/cumlrkt/label_entries.hpp`); a device y's classes come from `label_classes`, run only for a class-weight hash on at least one row, so a one-row y meets the same class-weight refusals as a host y before the shim's two-row minimum |
 | `cuml-lib/` | cuml-lib | `cuml/main.rkt`, re-exporting `cuml/core`, `cuml/estimator`, `cuml/table` and every family; `cuml/table` (`table->device-matrix`, a `datasets-core` table to a device matrix, loading no cuML family or cuML native library); `cuml/private/` (`define-estimator` and `define-predictor` in `estimator-support.rkt`, the estimator wrappers: `kmeans`, `dbscan`, `agglomerative-clustering`, `spectral-clustering`, `hdbscan`, `standard-scaler`, `pca`, `truncated-svd`, `umap`, `tsne`, `spectral-embedding`, `linear-regression`, `ridge`, `lasso`, `elastic-net`, `logistic-regression`, `mbsgd-regressor`, `mbsgd-classifier`, and `table.rkt`, the conversion's body) |
 | `cuml-doc/` | cuml-doc | the one manual, `cuml/scribblings/cuml.scrbl` |
 | `cuml-test/` | cuml-test | every Racket test, `cuml/tests/`, and the twin harness |
@@ -140,6 +143,8 @@ A fitted model whose state cuML keeps in C++ is a `cumlrkt::model`
 (`shim/common/include/cumlrkt/model.hpp`), published with `publish_model` as
 a raft deposit owner. Region 0 is its anchor, a one-int32 device array
 holding its `model_kind` code; the other regions are the model's arrays.
+The SVM family keeps no native model: the fit copies `SvmModel`'s buffers
+into a deposit and frees them in the call.
 
 Native side:
 
@@ -274,6 +279,28 @@ For a classifier:
   `#:no-sample-weight` for a fit that has none (`sgdFit` has none): the
   estimator's `fit` offers no `#:sample-weight`; `score`'s stays, it is the
   scorer's.
+
+For SVMs (`svc.rkt`; the full rules are `plans/layout.md`'s V0 section):
+
+- *svm-ownership.* `svcFit`'s model is guarded by `model_guard`
+  (`svm_model.hpp`), whose destructor calls `svmFreeBuffers` on every path;
+  `copy_out` moves the support vectors (row-major), support, dual
+  coefficients and intercept into raft buffers, and predict rebuilds a
+  borrowed `SvmModel` with `rebuilt`. `ownership_test` pins that the
+  rebuilt model's decisions are bit-identical to cuML's own.
+- *svm-labels.* y goes through `cuml/core/private/labels` with
+  `svm-label-jobs`: exactly two classes, `classes[1]` positive; predict is
+  `classes[1]` where the decision is at least 0.
+- *svm-gamma.* `'scale` is 1/(d·var), var the variance of all of X's
+  elements in double two-pass, rounded once to the dtype; `'auto` is 1/d.
+- *svm-bounds.* Every refusal comes before `svcFit` allocates: finite X,
+  row squared norms at most `most_row_norm<T>`, and the kernel bound
+  (`kernel_checks.hpp`) at most `most_kernel_value<T>` (linear, poly) or
+  `most_kernel_exponent<T>` (rbf, sigmoid); a negative weight, a class with
+  no positive weight and one or three classes are refused, never fitted.
+- *svm-twin.* `python/svc_twin.py` (ops `cuml-fit`, `sklearn-fit`,
+  `params`) through `twin_common`; cuML is bitwise, sklearn at 2× the p5
+  measurement.
 
 For MBSGD (`mbsgd.rkt`; the full rules are `plans/layout.md`'s L5 section):
 
@@ -475,7 +502,7 @@ replace each when raft offers a public form:
 |---|---|---|
 | `raft/private/array` | `buffer->device-array`, `device-array-buffer` (a strided view) | `private/scaler-data` |
 | `raft/private/resource` | `with-release` | `loader-test`, `device-memory-test`, `private/device-memory`, `private/program`, `private/python-env` |
-| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test`, `tsvd-memory-test`, `linear-model-memory-test`, `private/process-memory` |
+| `raft/private/foreign/memory` | `buffer-drop-count`, `release-failure-count`, `resources-drop-count` | `model-test` (`release-failure-count`, `resources-drop-count`), `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test`, `tsvd-memory-test`, `linear-model-memory-test`, the `svc-*` and `svm-*` tests, `private/process-memory` |
 | `raft/private/job` | `executor-threads`, `jobs-live` | `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `standard-scaler-memory-test`, `pca-memory-test`, `tsvd-memory-test`, `linear-model-memory-test`, `private/process-memory` |
 | `raft/tests/private/collect` | `collect-until`, `drain-finalizers!`, `settled-count` | `model-test`, `model-memory-test`, `memory-test`, `kmeans-memory-test`, `kmeans-estimator-memory-test`, `dbscan-memory-test`, `linkage-memory-test`, `spectral-memory-test`, `metrics-memory-test`, `linear-model-memory-test`, `standard-scaler-memory-test`, `standard-scaler-refusal-test`, `pca-memory-test`, `pca-refusal-test`, `tsvd-memory-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test`, `private/process-memory` |
 | `raft/tests/private/probe` | `probe-pool-used`, `test-pools` (needs `RAFT_SHIM_PROBE`) | `private/process-memory`, `model-memory-test`, `standard-scaler-refusal-test`, `pca-refusal-test`, `tsvd-refusal-test`, `umap-refusal-test`, `tsne-refusal-test`, `spectral-embedding-refusal-test`, `table-refusal-test` |
@@ -517,6 +544,8 @@ The repo's own test support, in `cuml-test/cuml/tests/private/`:
 | `linear-centring-data` | the helpers `linear-laws-centring-test`, `linear-laws-centring-arms-test` and `linear-laws-centring-weighted-test` share: the float32 emulations of the shim's means (`medium-kernel-mean`, `strided-weighted-mean`, `serial-mean`), `weighted-mean`, the exact solves of a centred or moved problem (`centred-solve`, `moved-solve`), `failed-laws` (the T-laws a fit fails), `consistent`, `check-host-fit`, the bottom-eigenvector perturbations (`staged-bottom-vector`, `mean-radius`, `worst-y-epsilon`, `sherman-morrison-step`, `offset-grid`, `bottom-grid-fit`), `case-weights`, `case-staging` and `exact-norm` |
 | `real-linear-data` | the real-data cases (diabetes, mtcars, wine and breast-cancer from `datasets/core` by response, raw and standardised, unweighted and with seeded integer weights 1 to 4, in each dtype; each a `real-case` of the narrowed `lcase`, its exact `en-problem` and its `eigen-bracket`, made once per process; `real-lcase name arm dt` is one narrowed `lcase` alone; `offset-law-arms` is the offset arms by dtype on which the laws discriminate, every arm in both dtypes since #112, L1-e), and their checks against the exact solve: `check-real-lstsq` (every algorithm), `check-real-ridge` (both solvers over the ridge path), `check-real-elastic-net` (lasso, l1-ratio 0.5 and 0.1 over α_max·10^(−3k/5), and zeros just above α_max), `check-real-score` (each estimator's score against the exact R² of its own predictions, within `r2-bound`) and `check-real-refusal` (l1-ratio 0 at the ridge path's start); `test-real-set name` takes `#:dtypes`, `#:arms` (pairs of raw, standardised or `(offset . k)` (every column plus 2^k) and unweighted or weighted) and `#:checks` (lstsq, ridge, elastic-net and score by default, and refusal), so a slow set splits across files |
 | `logistic-data` | the logistic-regression fixtures: `blob-case` (dyadic Gaussian blobs as an `lr-case`), `separable-case`, `with-column`, `scaled-case`, `case-fit`, `setting-fit`, `case-y`; `fit-parts` as an `lr-fit`, `fit-flat`, `coef-flat`, `scaled-parts`, `gauged-fit`, `gauged-case-fit` (a case's gauged float64 fit at the tight tol and max-iter, with `#:C`, `#:sample-weight` and `#:class-weight`), `gauged-sklearn`, `correct`; the shared `setting`s (`default-setting`, `penalty-settings`), `default-tol`, `tight-tol`, `default-tol-cap`, `cutoff-message` and `cutoff-exn?`, `balanced-class-weights ys` (each class's exact n/(k n_c), as a hash), `repeated-rows c counts` (each row repeated its count of times, unweighted) and its inverse on labels, `collapsed labels counts` (one label per row of nonzero count) |
+| `svm-data` | the svc fixtures: `svm-case`, `svm-fit`, `dyadic-blobs n d seed #:sep #:flip`, `fresh-rows`, `kernels`, `kkt-cases` and `weighted-cases` (the law grid), `case-fit`, `fit-parts` |
+| `svm-oracle` | the exact svc oracle: `exact-kernel` (rational for linear and poly, 192-bit bigfloat for rbf and sigmoid), `kkt-of` and `check-kkt` (K1-K6), `exact-decision`, `decision-bound`, `decision-ratio` and `check-referee` (R1) |
 | `logistic-twin-data` | `logistic-twin op c dt #:penalty #:C ...` (an `lr-case`'s payload for `python/logistic_regression_twin.py`), `setting-twin`, `logistic-twin-results`, `their-fit`; `twin-trial`, a twin test's row |
 | `logistic-sklearn-twin` | `optimum-gap-bound dt` (a tight fit's gap to sklearn's optimum), `sklearn-trials cases settings #:dtypes` `check-sklearn-twins rows #:repeated?` and `check-weighted-sklearn-twins dt` (the weighted multiclass cases under the penalised settings, repeated): each fit at the tight tol within T3 of sklearn's optimum, at the default tol within its cap, predicting sklearn's labels off the boundary; `#:repeated? #t` gives sklearn the integer-weighted case's repeated rows (its saga does not converge under sample weights) and adds the gap of our fit of those rows to T3 (#124) |
 | `logistic-twin-rows` | the split twin files' shared grid: `rows` (dtype × case × penalty × fit-intercept), `request`, `for-each-twin proc trials #:request` (one Python batch, then `proc` on each trial and its answer), `row-fit`, `row-name`, `repeatable?`, `classes-of`, `float32-binary-bound` |
