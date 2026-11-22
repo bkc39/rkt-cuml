@@ -1,13 +1,13 @@
 #lang racket/base
 
-(require (only-in cuml/svm svc-decision-function svc-predict svc-result-classes)
+(require (only-in cuml/svm svc-decision-function svc-fit svc-predict svc-result-classes)
          (only-in racket/list first)
          (only-in racket/match match-define struct*)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-vector->list)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/common-data.rkt" on-vector)
-         (only-in "private/linear-data.rkt" law-case on-matrix)
+         (only-in "private/linear-data.rkt" dtypes law-case on-matrix)
          (only-in "private/svm-data.rkt" case-fit fresh-rows kkt-cases svm-case)
          (only-in "private/svm-oracle.rkt" check-referee))
 
@@ -53,3 +53,12 @@
                       (for/list ([d (in-list decisions)])
                         (as-given (if (>= d 0) hi lo))))
         (check-equal? (svc-result-classes r) (map as-given classes))))))
+
+(test-gpu "R2: a decision of exactly 0 predicts classes[1]"
+  (for ([dt (in-list dtypes)])
+    (test-case (format "~a" dt)
+      (define r (svc-fit (on-matrix '((-1) (1) (-2) (2)) dt) '(a b a b) #:kernel 'linear))
+      (define origin (on-matrix '((0)) dt))
+      (law-case "R2 at 0"
+        (check-equal? (device-vector->list (svc-decision-function r origin)) '(0.0))
+        (check-equal? (svc-predict r origin) '(b))))))
