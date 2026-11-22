@@ -95,8 +95,10 @@ TEST(model_guard, other_failures_pass_through) {
     stall_translated(
         []() -> int { throw std::runtime_error("another failure"); });
     FAIL() << "accepted";
-  } catch (const std::exception& e) {
+  } catch (const std::runtime_error& e) {
     EXPECT_STREQ(e.what(), "another failure");
+  } catch (...) {
+    FAIL() << "rethrown as another type";
   }
 }
 
