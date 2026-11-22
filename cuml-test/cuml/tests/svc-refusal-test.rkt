@@ -8,8 +8,8 @@
                   svc-result
                   svc-result?
                   svc-result-support-vectors)
-         (only-in racket/list make-list)
          (only-in math/flonum flprev)
+         (only-in racket/list make-list)
          (only-in racket/match match match-define)
          (only-in racket/string string-prefix?)
          (only-in rackunit check-pred check-true test-case)
@@ -153,6 +153,13 @@
             (#:coef0 . 1)
             (#:gamma . 1))))
 
+(define float64-rows
+  `(#hasheq((message
+             .
+             "svc-fit: sample-weight: row 0: C*w overflows float64; lower #:C or rescale the weights")
+            (#:C . 1e300)
+            (weight-list . ,heavy-weights))))
+
 (define (fit-call dt row)
   (define X (on-matrix (hash-ref row 'X rows) dt))
   (define y (hash-ref row 'y labels))
@@ -179,13 +186,6 @@
     (define message (hash-ref row 'message))
     (test-case (format "~a ~a" dt message)
       (check-refused message (fit-call dt row)))))
-
-(define float64-rows
-  `(#hasheq((message
-             .
-             "svc-fit: sample-weight: row 0: C*w overflows float64; lower #:C or rescale the weights")
-            (#:C . 1e300)
-            (weight-list . ,heavy-weights))))
 
 (test-gpu "what narrows to 0 or infinity in float32 or float64, an overlong row and a steep poly kernel"
   (for* ([dt-rows (in-list (list (cons 'float32 float32-rows) (cons 'float64 float64-rows)))]
