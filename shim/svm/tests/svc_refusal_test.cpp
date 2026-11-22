@@ -143,7 +143,8 @@ std::vector<refusal> refusals() {
   return {
       {with_settings(inf, 1e-3, 0.0), "C: expected a positive value finite in"},
       {with_settings(0.0, 1e-3, 0.0), "C: expected a positive value finite in"},
-      {with_settings(1.0, 0.0, 0.0), "tol: expected a positive value finite in"},
+      {with_settings(1.0, 0.0, 0.0),
+       "tol: expected a positive value finite in"},
       {with_settings(1.0, 1e-3, nan), "coef0: expected a value finite in"},
       {unbounded_gamma, "gamma: expected a value finite in"},
       {bad_code, "y: row 0: expected a class code 0 or 1"},

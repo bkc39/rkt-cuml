@@ -43,7 +43,12 @@
 (define/who (bounded-count who key n #:least [least 1])
   (if (and (exact-integer? n) (<= least n int32-max))
       n
-      (logic-error "~a: ~a: expected an exact integer from ~a to ~a, got ~e" who key least int32-max n)))
+      (logic-error "~a: ~a: expected an exact integer from ~a to ~a, got ~e"
+                   who
+                   key
+                   least
+                   int32-max
+                   n)))
 
 (define/who (in-dtype who key f dt #:positive [positive #f])
   (define held

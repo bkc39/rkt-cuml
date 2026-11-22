@@ -106,7 +106,10 @@
             (handle view view deposit)
             #:exn exn:fail:cuml)
 
-(define-label-jobs linear-model-label-jobs current-label-classes-job cuml-linear-model-label-classes-job cuml-linear-model-label-encode-job)
+(define-label-jobs linear-model-label-jobs
+                   current-label-classes-job
+                   cuml-linear-model-label-classes-job
+                   cuml-linear-model-label-encode-job)
 
 (define-job cuml-linear-model-mbsgd-regressor-fit-job
             library

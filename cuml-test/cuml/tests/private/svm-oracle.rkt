@@ -35,7 +35,14 @@
          signed-labels)
 
 (struct kkt
-        (signs-agree box-excess balance gap violation zero-weight-alpha support-exact rows-exact counts)
+        (signs-agree box-excess
+                     balance
+                     gap
+                     violation
+                     zero-weight-alpha
+                     support-exact
+                     rows-exact
+                     counts)
   #:transparent)
 
 (define (exact v)
@@ -156,8 +163,7 @@
     (if w
         (for/sum ([a (in-list alphas)] [wi (in-list w)] #:when (zero? wi)) (abs a))
         0))
-  (define support-exact
-    (and (andmap (lambda (d) (not (zero? d))) dual) (apply < support)))
+  (define support-exact (and (andmap (lambda (d) (not (zero? d))) dual) (apply < support)))
   (define rows-exact
     (for/and ([s (in-list sv)]
               [i (in-list support)])

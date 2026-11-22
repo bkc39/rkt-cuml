@@ -22,11 +22,7 @@
          (only-in racket/match match match-define struct*)
          (only-in raft current-device-resources device-matrix? device-vector->list shape)
          (only-in raft/unsafe deposit->list)
-         (only-in "glm.rkt"
-                  checked-coef/who
-                  flag/who
-                  intercept-flag/who
-                  penalty-code)
+         (only-in "glm.rkt" checked-coef/who flag/who intercept-flag/who penalty-code)
          (only-in "native.rkt"
                   cuml-linear-model-logistic-regression-apply-job
                   cuml-linear-model-logistic-regression-fit-job

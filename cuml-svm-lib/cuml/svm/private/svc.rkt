@@ -67,21 +67,27 @@
 (define float-dtypes '(float32 float64))
 
 (define (float-matrix who X #:dtype [dt #f])
-  (if (and (device-matrix? X) (memq (dtype X) (if dt (list dt) float-dtypes)))
+  (if (and (device-matrix? X)
+           (memq (dtype X)
+                 (if dt
+                     (list dt)
+                     float-dtypes)))
       X
-      (logic-error "~a: X: expected a device-matrix of ~a, got ~e" who (or dt "float32 or float64") X)))
+      (logic-error "~a: X: expected a device-matrix of ~a, got ~e"
+                   who
+                   (or dt "float32 or float64")
+                   X)))
 
 (define ((two-classes who) classes)
   (match classes
     [(list _ _) (void)]
     [(list only) (logic-error "~a: y: expected two classes, got one (~e)" who only)]
     [(list* a b _)
-     (logic-error
-      "~a: y: expected two classes, got ~a (~e ~e ...); multiclass svc is not supported"
-      who
-      (length classes)
-      a
-      b)]))
+     (logic-error "~a: y: expected two classes, got ~a (~e ~e ...); multiclass svc is not supported"
+                  who
+                  (length classes)
+                  a
+                  b)]))
 
 (define (empty-class who label)
   (logic-error "~a: sample-weight: class ~e has no row of positive weight" who label))

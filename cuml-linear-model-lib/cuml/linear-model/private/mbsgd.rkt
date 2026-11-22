@@ -35,12 +35,7 @@
                   shape)
          (only-in raft/unsafe deposit->list)
          (only-in syntax/parse/define define-syntax-parse-rule)
-         (only-in "glm.rkt"
-                  checked-coef/who
-                  flag/who
-                  glm-predict/who
-                  intercept-flag/who
-                  penalty-code)
+         (only-in "glm.rkt" checked-coef/who flag/who glm-predict/who intercept-flag/who penalty-code)
          (only-in "native.rkt"
                   cuml-linear-model-mbsgd-classifier-fit-job
                   cuml-linear-model-mbsgd-regressor-fit-job

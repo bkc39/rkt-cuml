@@ -67,4 +67,7 @@
             (handle view view deposit)
             #:exn exn:fail:cuml)
 
-(define-label-jobs svm-label-jobs current-label-classes-job cuml-svm-label-classes-job cuml-svm-label-encode-job)
+(define-label-jobs svm-label-jobs
+                   current-label-classes-job
+                   cuml-svm-label-classes-job
+                   cuml-svm-label-encode-job)

@@ -11,11 +11,7 @@
          (only-in raft current-device-resources)
          (only-in raft/unsafe deposit->list)
          (only-in syntax/parse/define define-syntax-parse-rule)
-         (only-in "glm.rkt"
-                  alpha-value/who
-                  glm-predict/who
-                  intercept-flag/who
-                  real-value/who)
+         (only-in "glm.rkt" alpha-value/who glm-predict/who intercept-flag/who real-value/who)
          (only-in "native.rkt" cuml-linear-model-elastic-net-fit-job))
 
 (provide (struct-out elastic-net-result)
