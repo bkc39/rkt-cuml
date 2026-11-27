@@ -212,7 +212,7 @@
     (check-true (< (- (current-inexact-milliseconds) started) 1000))))
 
 (test-gpu "predict and decision refusals"
-  (define r (svc-fit (on-matrix rows 'float64) labels))
+  (define r64 (svc-fit (on-matrix rows 'float64) labels))
   (define r32 (svc-fit (on-matrix rows 'float32) labels))
   (define r32-sigmoid (svc-fit (on-matrix rows 'float32) labels #:kernel 'sigmoid))
   (define forged
@@ -225,11 +225,11 @@
     (check-refused (format "~a: result: expected an svc-result, got 'r" who)
                    (lambda () (apply-svc 'r (on-matrix rows 'float64))))
     (check-refused (format "~a: X: expected a device-matrix of float64, got" who)
-                   (lambda () (apply-svc r (on-matrix rows 'float32))))
+                   (lambda () (apply-svc r64 (on-matrix rows 'float32))))
     (check-refused (format "~a: X: expected 3 columns, got 2" who)
-                   (lambda () (apply-svc r (on-matrix '((1.0 2.0)) 'float64))))
+                   (lambda () (apply-svc r64 (on-matrix '((1.0 2.0)) 'float64))))
     (check-refused (format "~a: X: row 0, column 0: expected a finite value, got nan" who)
-                   (lambda () (apply-svc r (on-matrix (with-cell +nan.0) 'float64))))
+                   (lambda () (apply-svc r64 (on-matrix (with-cell +nan.0) 'float64))))
     (check-refused (format "~a: the kernel can overflow (bound " who)
                    (lambda () (apply-svc r32 (on-matrix (scaled (expt 2 11)) 'float32))))
     (check-refused (format "~a: X: row 0: expected a squared norm of at most" who)
@@ -240,12 +240,12 @@
       (check-refused (format "~a: ~a" who message) (lambda () (apply-svc result X))))))
 
 (test-gpu "predict narrows cache-size to a finite value and checks nothing more"
-  (define r (svc-fit (on-matrix rows 'float64) labels))
+  (define r64 (svc-fit (on-matrix rows 'float64) labels))
   (define r32 (svc-fit (on-matrix rows 'float32) labels))
   (define accepted
     (list (struct-copy svc-result r32 [cache-size 8200.0])
-          (struct-copy svc-result r [cache-size 8200.0])
-          (struct-copy svc-result r [cache-size 1e39])
+          (struct-copy svc-result r64 [cache-size 8200.0])
+          (struct-copy svc-result r64 [cache-size 1e39])
           (svc-fit (on-matrix rows 'float32) labels #:cache-size 1e-50)))
   (for ([result (in-list accepted)])
     (define X (on-matrix rows (dtype (svc-result-support-vectors result))))

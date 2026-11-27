@@ -81,8 +81,8 @@
   (for ([dt (in-list dtypes)])
     (test-case (format "~a" dt)
       (define X (on-matrix rows dt))
-      (define e (fit (svc #:kernel 'rbf) X symbol-labels))
+      (define estimator (fit (svc #:kernel 'rbf) X symbol-labels))
       (define predicted (svc-predict (svc-fit X symbol-labels #:kernel 'rbf) X))
       (law-case "L3"
-        (check-equal? (score e X truth)
+        (check-equal? (score estimator X truth)
                       (~> (count equal? predicted truth) (/ (length truth)) exact->inexact))))))
