@@ -17,7 +17,8 @@
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/linear-data.rkt" dtypes on-matrix)
-         (only-in "private/svm-data.rkt" dyadic-blobs))
+         (only-in "private/svm-data.rkt" dyadic-blobs svc-result->svm-fit)
+         (only-in "private/svm-oracle.rkt" decision-bound))
 
 (define-values (rows labels) (dyadic-blobs 40 3 17))
 
@@ -239,15 +240,23 @@
       (define X (on-matrix rows (dtype (svc-result-support-vectors result))))
       (check-refused (format "~a: ~a" who message) (lambda () (apply-svc result X))))))
 
-(test-gpu "predict narrows cache-size to a finite value and checks nothing more"
+(test-gpu "cache-size only batches predict: the same labels, decisions within twice R1's bound"
   (define r64 (svc-fit (on-matrix rows 'float64) labels))
   (define r32 (svc-fit (on-matrix rows 'float32) labels))
-  (define accepted
-    (list (struct-copy svc-result r32 [cache-size 8200.0])
-          (struct-copy svc-result r64 [cache-size 8200.0])
-          (struct-copy svc-result r64 [cache-size 1e39])
-          (svc-fit (on-matrix rows 'float32) labels #:cache-size 1e-50)))
-  (for ([result (in-list accepted)])
+  (define (applied result)
     (define X (on-matrix rows (dtype (svc-result-support-vectors result))))
-    (check-equal? (length (svc-predict result X)) (length rows))
-    (check-equal? (length (device-vector->list (svc-decision-function result X))) (length rows))))
+    (list (svc-predict result X) (device-vector->list (svc-decision-function result X))))
+  (for ([original (in-list (list r32 r64 r64))]
+        [size (in-list '(8200.0 8200.0 1e39))])
+    (check-equal? (applied (struct-copy svc-result original [cache-size size])) (applied original)))
+  (define tiny (svc-fit (on-matrix rows 'float32) labels #:cache-size 1e-50))
+  (match-define (list tiny-labels tiny-decisions) (applied tiny))
+  (match-define (list whole-labels whole-decisions)
+    (applied (struct-copy svc-result tiny [cache-size 1024.0])))
+  (check-equal? tiny-labels whole-labels)
+  (define fit (svc-result->svm-fit tiny))
+  (for ([x (in-list rows)]
+        [batched (in-list tiny-decisions)]
+        [whole (in-list whole-decisions)])
+    (check-true (<= (abs (- (inexact->exact batched) (inexact->exact whole)))
+                    (* 2 (decision-bound fit 'float32 x))))))
