@@ -23,16 +23,6 @@ namespace cumlrkt::glm::logistic {
 
 namespace {
 
-template <typename L>
-struct non_integral {
-  const L* y;
-
-  __device__ bool operator()(int64_t i) const {
-    const double v = static_cast<double>(y[i]);
-    return !(isfinite(v) && v == floor(v));
-  }
-};
-
 template <typename T>
 struct folded_weight {
   const T* w;
@@ -277,16 +267,6 @@ struct residual_entry {
 
 }  // namespace
 
-template <typename L>
-int64_t first_non_integral(const L* y, int64_t n,
-                           rmm::cuda_stream_view stream) {
-  const auto begin = thrust::counting_iterator<int64_t>(0);
-  const auto found = thrust::find_if(rmm::exec_policy(stream), begin, begin + n,
-                                     non_integral<L>{y});
-  const int64_t i = *found;
-  return i < n ? i : -1;
-}
-
 template <typename T>
 buffer<double> effective_weights(const raft::handle_t& handle, const T* w,
                                  const int32_t* codes,
@@ -461,15 +441,7 @@ residual_sums residuals_of(const raft::handle_t& handle, const T* x, const T* y,
                                          const T*, const T*, const T*,         \
                                          qn_shape);
 
-#define CUMLRKT_LOGISTIC_LABEL(L)                           \
-  template int64_t first_non_integral<L>(const L*, int64_t, \
-                                         rmm::cuda_stream_view);
-
 CUMLRKT_LOGISTIC_FLOAT(float)
 CUMLRKT_LOGISTIC_FLOAT(double)
-CUMLRKT_LOGISTIC_LABEL(int32_t)
-CUMLRKT_LOGISTIC_LABEL(int64_t)
-CUMLRKT_LOGISTIC_LABEL(float)
-CUMLRKT_LOGISTIC_LABEL(double)
 
 }  // namespace cumlrkt::glm::logistic

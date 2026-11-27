@@ -1,10 +1,12 @@
 #include <thrust/binary_search.h>
 #include <thrust/copy.h>
+#include <thrust/find.h>
 #include <thrust/for_each.h>
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/sort.h>
 #include <thrust/unique.h>
 
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <rmm/cuda_stream_view.hpp>
@@ -41,6 +43,16 @@ struct encoded {
   }
 };
 
+template <typename T>
+struct non_integral {
+  const T* labels;
+
+  __device__ bool operator()(int64_t i) const {
+    const double v = static_cast<double>(labels[i]);
+    return !(isfinite(v) && v == floor(v));
+  }
+};
+
 }  // namespace
 
 template <typename T>
@@ -72,11 +84,23 @@ void encode_against(const T* labels, int64_t n, const T* classes, int64_t k,
                      encoded<T>{labels, classes, k, codes});
 }
 
+template <typename T>
+int64_t first_non_integral(const T* labels, int64_t n,
+                           rmm::cuda_stream_view stream) {
+  const auto begin = thrust::counting_iterator<int64_t>(0);
+  const auto found = thrust::find_if(rmm::exec_policy(stream), begin, begin + n,
+                                     non_integral<T>{labels});
+  const int64_t i = *found;
+  return i < n ? i : -1;
+}
+
 #define CUMLRKT_LABELS(T)                                               \
   template dense_labels<T> dense_codes<T>(const T*, int64_t,            \
                                           rmm::cuda_stream_view);       \
   template void encode_against<T>(const T*, int64_t, const T*, int64_t, \
-                                  int32_t*, rmm::cuda_stream_view);
+                                  int32_t*, rmm::cuda_stream_view);     \
+  template int64_t first_non_integral<T>(const T*, int64_t,             \
+                                         rmm::cuda_stream_view);
 
 CUMLRKT_LABELS(int32_t)
 CUMLRKT_LABELS(int64_t)

@@ -1,6 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/core exn:fail:cuml)
+         (only-in cuml/core/private/labels define-label-jobs)
          (only-in cuml/core/private/native
                   cuml-family-libcuml-version
                   cuml-family-library
@@ -10,7 +11,8 @@
          racket/runtime-path
          (only-in raft/unsafe define-job))
 
-(provide cuml-linear-model-elastic-net-fit-job
+(provide current-label-classes-job
+         cuml-linear-model-elastic-net-fit-job
          cuml-linear-model-gemm-predict-job
          cuml-linear-model-label-classes-job
          cuml-linear-model-label-encode-job
@@ -21,7 +23,8 @@
          cuml-linear-model-mbsgd-regressor-fit-job
          cuml-linear-model-ridge-fit-job
          cuml-linear-model-threshold-labels-job
-         libcuml-version)
+         libcuml-version
+         linear-model-label-jobs)
 
 (define-runtime-path native-libs-dir "../native-libs")
 
@@ -102,6 +105,11 @@
             "cuml_linear_model_label_encode_job"
             (handle view view deposit)
             #:exn exn:fail:cuml)
+
+(define-label-jobs linear-model-label-jobs
+                   current-label-classes-job
+                   cuml-linear-model-label-classes-job
+                   cuml-linear-model-label-encode-job)
 
 (define-job cuml-linear-model-mbsgd-regressor-fit-job
             library

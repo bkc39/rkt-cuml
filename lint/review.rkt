@@ -106,6 +106,7 @@
                      define-predictor
                      define-refactoring-rule
                      define-hyperparameters
+                     define-label-jobs
                      define-page-helpers
                      define-splicing-syntax-class
                      define-syntax-class
@@ -160,6 +161,12 @@
     #:attr review (lambda ()
                     (recur #'head)
                     (for-each track-binding (attribute name))))
+  (pattern ((~and head define-label-jobs) jobs:id parameter:id classes-job:expr encode-job:expr)
+    #:attr review (lambda ()
+                    (recur #'head)
+                    (track-binding #'jobs #:check-usages? #f)
+                    (track-binding #'parameter #:check-usages? #f)
+                    (mark-uses #'(classes-job encode-job))))
   (pattern ((~and head define-cd-result) result:id predict:id)
     #:with predict/who (format-id #'predict "~a/who" #'predict #:source #'predict)
     #:attr review (lambda ()

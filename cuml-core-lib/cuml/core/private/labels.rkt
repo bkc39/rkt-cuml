@@ -1,19 +1,21 @@
 #lang racket/base
 
-(require (only-in cuml/core/private/define-who define/who)
-         (only-in cuml/core/private/deposit deposit-for/who)
-         (only-in cuml/core/private/logic-error logic-error)
+(require (for-syntax racket/base
+                     (only-in syntax/parse/pre expr id))
          (only-in racket/list filter-not remove-duplicates)
          (only-in racket/match match match-define)
          (only-in raft device-vector->list device-vector? dtype list->device-vector shape)
          (only-in raft/unsafe deposit->list)
-         (only-in "native.rkt"
-                  cuml-linear-model-label-classes-job
-                  cuml-linear-model-label-encode-job))
+         (only-in syntax/parse/define define-syntax-parse-rule)
+         (only-in "define-who.rkt" define/who)
+         (only-in "deposit.rkt" deposit-for/who)
+         (only-in "logic-error.rkt" logic-error))
 
-(provide class-view
-         current-label-classes-job
+(provide (struct-out label-jobs)
+         class-codes/who
+         class-view
          decode-labels
+         define-label-jobs
          device-kind
          device-kind?
          fit-labels/who
@@ -21,11 +23,18 @@
          label-dtypes
          label-kind?
          list-kind?
-         y-kind/who)
+         weight-view/who
+         y-kind/who
+         y-rows/who)
 
 (define label-dtypes '(int32 int64 float32 float64))
-(define current-label-classes-job
-  (make-parameter cuml-linear-model-label-classes-job #f 'current-label-classes-job))
+
+(struct label-jobs (classes encode))
+
+(define-syntax-parse-rule (define-label-jobs jobs:id parameter:id classes-job:expr encode-job:expr)
+  (begin
+    (define parameter (make-parameter classes-job #f 'parameter))
+    (define jobs (label-jobs (lambda args (apply (parameter) args)) encode-job))))
 
 (struct label-kind ())
 (struct list-kind label-kind (member? <? =? key unified?))
@@ -116,35 +125,46 @@
         (real->double-flonum (hash-ref cw k))
         1.0)))
 
-(define (device-classes who y resources)
+(define (device-classes who jobs y resources)
   (define out (deposit-for/who who resources))
-  ((current-label-classes-job) who resources y out)
+  ((label-jobs-classes jobs) who resources y out)
   (match-define (list classes) (deposit->list out))
   (device-vector->list classes))
+
+(define/who (weight-view who w)
+  (if (or (not w) (device-vector? w))
+      w
+      (logic-error "~a: sample-weight: expected a device-vector or #f, got ~e" who w)))
 
 (define (y-length y)
   (match y
     [(? list?) (length y)]
     [(app shape (list n)) n]))
 
+(define/who (y-rows who rows y)
+  (define n (y-length y))
+  (unless (= n rows)
+    (logic-error "~a: y: expected ~a elements, got ~a" who rows n)))
+
 (define (class-weighted? who rows y cw)
   (cond
-    [(not (hash? cw)) #f]
-    [(not (= (y-length y) rows))
-     (logic-error "~a: y: expected ~a elements, got ~a" who rows (y-length y))]
-    [else #t]))
+    [(hash? cw)
+     (y-rows/who who rows y)
+     #t]
+    [else #f]))
 
 (define (class-weight-view who kind classes cw resources)
   (list->device-vector (host-weights who kind classes cw) #:dtype 'float64 #:resources resources))
 
-(define/who (fit-labels who kind rows y cw resources)
+(define/who (fit-labels who jobs kind rows y cw resources)
   (match kind
     [(? device-kind?)
-     (values y
-             #f
-             (and (class-weighted? who rows y cw)
-                  (positive? rows)
-                  (class-weight-view who real-labels (device-classes who y resources) cw resources)))]
+     (values
+      y
+      #f
+      (and (class-weighted? who rows y cw)
+           (positive? rows)
+           (class-weight-view who real-labels (device-classes who jobs y resources) cw resources)))]
     [_
      (define-values (classes codes) (host-labels who kind y))
      (values (list->device-vector codes #:dtype 'int32 #:resources resources)
@@ -157,11 +177,11 @@
     [(device-kind dt) (list->device-vector classes #:dtype dt #:resources resources)]
     [(? list-kind?) #f]))
 
-(define/who (label-codes who classes kind y resources)
+(define/who (label-codes who jobs classes kind y resources)
   (match kind
     [(? device-kind?)
      (define out (deposit-for/who who resources))
-     (cuml-linear-model-label-encode-job who resources y (class-view kind classes resources) out)
+     ((label-jobs-encode jobs) who resources y (class-view kind classes resources) out)
      (match-define (list codes) (deposit->list out))
      codes]
     [(? list-kind?)
@@ -170,6 +190,17 @@
      (define (code v)
        (hash-ref table (key-of kind v #:unify? unify?) -1))
      (list->device-vector (map code y) #:dtype 'int32 #:resources resources)]))
+
+(define/who (class-codes who jobs kind y check resources)
+  (match kind
+    [(? device-kind?)
+     (define classes (device-classes who jobs y resources))
+     (check classes)
+     (values classes (label-codes/who who jobs classes kind y resources))]
+    [_
+     (define-values (classes codes) (host-labels who kind y))
+     (check classes)
+     (values classes (list->device-vector codes #:dtype 'int32 #:resources resources))]))
 
 (define (decode-labels classes codes)
   (define table (list->vector classes))

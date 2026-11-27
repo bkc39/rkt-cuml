@@ -1,7 +1,7 @@
 #lang racket/base
 
 (require (only-in cuml/linear-model logistic-regression-fit)
-         (only-in cuml/linear-model/private/labels current-label-classes-job)
+         (only-in cuml/linear-model/private/native current-label-classes-job)
          (only-in racket/match match-define)
          (only-in rackunit check-equal? test-case)
          (only-in raft device-matrix device-vector)

@@ -10,8 +10,21 @@
                   define-codes
                   define-hyperparameters)
          (only-in cuml/core/private/label-codes prop:label-codes)
+         (only-in cuml/core/private/labels
+                  class-view
+                  decode-labels
+                  device-kind?
+                  fit-labels/who
+                  label-codes/who
+                  label-kind?
+                  list-kind?
+                  y-kind/who)
          (only-in cuml/core/private/logic-error logic-error)
-         (only-in racket/flonum flsingle)
+         (only-in cuml/core/private/scalars
+                  bounded-count/who
+                  narrowed/who
+                  nonnegative-value/who
+                  positive-value/who)
          (only-in racket/match match match-define struct*)
          (only-in raft
                   current-device-resources
@@ -22,28 +35,12 @@
                   shape)
          (only-in raft/unsafe deposit->list)
          (only-in syntax/parse/define define-syntax-parse-rule)
-         (only-in "glm.rkt"
-                  bounded-count/who
-                  checked-coef/who
-                  flag/who
-                  glm-predict/who
-                  intercept-flag/who
-                  nonnegative-value/who
-                  penalty-code
-                  positive-value/who)
-         (only-in "labels.rkt"
-                  class-view
-                  decode-labels
-                  device-kind?
-                  fit-labels/who
-                  label-codes/who
-                  label-kind?
-                  list-kind?
-                  y-kind/who)
+         (only-in "glm.rkt" checked-coef/who flag/who glm-predict/who intercept-flag/who penalty-code)
          (only-in "native.rkt"
                   cuml-linear-model-mbsgd-classifier-fit-job
                   cuml-linear-model-mbsgd-regressor-fit-job
-                  cuml-linear-model-threshold-labels-job))
+                  cuml-linear-model-threshold-labels-job
+                  linear-model-label-jobs))
 
 (provide (struct-out mbsgd-classifier-result)
          (struct-out mbsgd-regressor-result)
@@ -80,7 +77,7 @@
   #:property prop:label-codes
   (lambda (who result y resources)
     (match-define (struct* mbsgd-classifier-result ([classes classes] [label-kind kind])) result)
-    (label-codes/who who classes kind y resources)))
+    (label-codes/who who linear-model-label-jobs classes kind y resources)))
 
 (define-syntax-parse-rule (define-sgd-params name:id loss-default:expr)
   (define-hyperparameters name
@@ -123,16 +120,6 @@
       s
       (logic-error "~a: random-state: expected #f or an integer in [0, ~a], got ~e" who seed-most s)))
 
-(define (in-dtype who key f dt #:positive [positive #f])
-  (define held
-    (if (eq? dt 'float32)
-        (flsingle f)
-        f))
-  (cond
-    [(= held +inf.0) (logic-error "~a: ~a: ~a overflows ~a" who key f dt)]
-    [(and positive (zero? held)) (logic-error "~a: ~a: ~a rounds to 0 in ~a" who key f dt)]
-    [else f]))
-
 (struct sgd-settings
         (penalty alpha
                  l1-ratio
@@ -151,9 +138,9 @@
   (define (ref key)
     (hash-ref params key))
   (define (positive key)
-    (in-dtype who key (positive-value/who who key (ref key)) dt #:positive #t))
+    (narrowed/who who key (positive-value/who who key (ref key)) dt #:positive #t))
   (define (nonnegative key)
-    (in-dtype who key (nonnegative-value/who who key (ref key)) dt))
+    (narrowed/who who key (nonnegative-value/who who key (ref key)) dt))
   (sgd-settings (coded who 'penalty penalty-code (ref 'penalty) "one of 'none 'l1 'l2 'elasticnet")
                 (positive 'alpha)
                 (ratio-value who (ref 'l1-ratio))
@@ -263,7 +250,8 @@
   (cond
     [(device-kind? kind) (values y #f)]
     [else
-     (define-values (codes classes _weights) (fit-labels/who who kind rows y #f resources))
+     (define-values (codes classes _weights)
+       (fit-labels/who who linear-model-label-jobs kind rows y #f resources))
      (unless (= (length classes) 2)
        (logic-error "~a: y: expected exactly 2 classes, got ~a" who (length classes)))
      (values codes classes)]))

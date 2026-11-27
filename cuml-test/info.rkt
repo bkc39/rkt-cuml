@@ -15,6 +15,7 @@
                  "cuml-manifold-lib"
                  "cuml-metrics-lib"
                  "cuml-preprocessing-lib"
+                 "cuml-svm-lib"
                  "data-lib"
                  ("datasets-core" #:version "0.2")
                  "datasets"

@@ -11,14 +11,11 @@
          (only-in "native.rkt" cuml-linear-model-gemm-predict-job))
 
 (provide alpha-value/who
-         bounded-count/who
          checked-coef/who
          flag/who
          glm-predict/who
          intercept-flag/who
-         nonnegative-value/who
          penalty-code
-         positive-value/who
          real-value/who)
 
 (define-codes penalty-code [none 0] [l1 1] [l2 2] [elasticnet 3])
@@ -37,34 +34,6 @@
       (logic-error "~a: ~a: expected a real number, got ~e" who key v)))
 
 (define/who (alpha-value who alpha) (real-value/who who 'alpha alpha))
-
-(define (flonum-of v)
-  (and (real? v) (real->double-flonum v)))
-
-(define/who (positive-value who key v)
-  (define f (flonum-of v))
-  (cond
-    [(not (and f (positive? v) (< f +inf.0)))
-     (logic-error "~a: ~a: expected a positive finite real, got ~e" who key v)]
-    [(zero? f)
-     (logic-error "~a: ~a: expected a positive real representable as a nonzero flonum, got ~e"
-                  who
-                  key
-                  v)]
-    [else f]))
-
-(define/who (nonnegative-value who key v)
-  (define f (flonum-of v))
-  (if (and f (>= v 0) (< f +inf.0))
-      f
-      (logic-error "~a: ~a: expected a nonnegative finite real, got ~e" who key v)))
-
-(define int32-max (sub1 (expt 2 31)))
-
-(define/who (bounded-count who key n)
-  (if (and (exact-integer? n) (<= 1 n int32-max))
-      n
-      (logic-error "~a: ~a: expected an exact integer from 1 to ~a, got ~e" who key int32-max n)))
 
 (define (intercept-value who intercept)
   (if (real? intercept)

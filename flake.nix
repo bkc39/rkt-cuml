@@ -51,6 +51,7 @@
         "manifold"
         "metrics"
         "preprocessing"
+        "svm"
       ];
       cumlPackages = map (f: "cuml-${f}-lib") families ++ [
         "cuml-core-lib"

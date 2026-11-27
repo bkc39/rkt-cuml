@@ -121,7 +121,8 @@
                          #:sample-every every
                          #:setup setup
                          #:refusals-per-sample [refusals-per-sample 5]
-                         #:buffers-per-round [buffers-per-round 2])
+                         #:buffers-per-round [buffers-per-round 2]
+                         #:buffers-per-refusal [buffers-per-refusal 0])
   (define (refuse-all calls)
     (for* ([call (in-list calls)]
            [_ (in-range refusals-per-sample)])
@@ -156,7 +157,8 @@
                       (sample-used sample)
                       "a refused call holds no pool memory once it returns")
         (values (cons sample samples) (cons refused refused-drops))))
-    (define wanted (* buffers-per-round rounds))
+    (define refused-per-sample (* buffers-per-refusal refusals-per-sample (length calls)))
+    (define wanted (+ (* buffers-per-round rounds) (* refused-per-sample (length samples))))
     (check-true (collect-until (lambda () (>= (buffer-drop-count) (+ drops wanted)))))
     (define freed (- (buffer-drop-count) drops))
     (void/reference-sink one-round calls)
@@ -177,8 +179,8 @@
      refused-drops)
     (check-equal? freed wanted)
     (check-equal? refused-drops
-                  (make-list (length samples) 0)
-                  "refusals hand Racket no buffer to drop")
+                  (make-list (length samples) refused-per-sample)
+                  "refusals hand Racket only the inputs they encode")
     (check-equal? (- (release-failure-count) failures) 0)
     (check-true (collect-until (lambda () (= (jobs-live) live))))
     (check-true (<= (executor-threads) (add1 threads)))

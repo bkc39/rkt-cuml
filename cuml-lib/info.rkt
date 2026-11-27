@@ -13,6 +13,7 @@
            "cuml-manifold-lib"
            "cuml-metrics-lib"
            "cuml-preprocessing-lib"
+           "cuml-svm-lib"
            ("datasets-core" #:version "0.1")))
 (define implies
   '("cuml-core-lib" "cuml-cluster-lib"
@@ -20,7 +21,8 @@
                     "cuml-linear-model-lib"
                     "cuml-manifold-lib"
                     "cuml-metrics-lib"
-                    "cuml-preprocessing-lib"))
+                    "cuml-preprocessing-lib"
+                    "cuml-svm-lib"))
 (define pkg-desc "Racket bindings to NVIDIA cuML (no documentation)")
 (define pkg-authors '(bkc))
 (define license 'Apache-2.0)

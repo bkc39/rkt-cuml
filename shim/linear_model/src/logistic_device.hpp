@@ -35,9 +35,6 @@ struct qn_shape {
   bool fit_intercept;
 };
 
-template <typename L>
-int64_t first_non_integral(const L* y, int64_t n, rmm::cuda_stream_view stream);
-
 template <typename T>
 buffer<double> effective_weights(const raft::handle_t& handle, const T* w,
                                  const int32_t* codes,

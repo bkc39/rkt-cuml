@@ -3074,3 +3074,175 @@ finite; no predict-proba; power-t nonnegative finite; gemmPredict plus a
 threshold-labels job; one class refused; two result structs; cuML's loss
 names; l1-ratio range-checked always; L4's label code moved to
 `private/labels.rkt`; hinge's tol passed through unchanged (U4).
+
+## Decisions recorded in leg V0 (#168): binary support vector classification
+
+### The probes the decisions rest on
+
+**Q1. Ownership (Q-S4): the plan holds.** Probe p1: 4 kernels × 2 dtypes × (200×4, 3000×12), labels {3, 7}.
+- **Bit-identical predict.** Predicting from a rebuilt struct matches predicting from cuML's own struct, bit for bit, in 16/16 cases. The rebuilt struct uses fresh copies of `dual_coefs` and `support_matrix.data`, the same `n_support`, `n_cols` and `b`, and the original struct is already freed by `svmFreeBuffers`. This holds for decision values (`predict_class=false`) and labels (`true`).
+- **Optional fields.** It also holds with `support_idx = nullptr`, `unique_labels = nullptr` and `n_classes = 0` for the decision values.
+- **What `svcPredictX` reads:** `n_support`, `n_cols` (asserts equality unless the kernel is precomputed), `b`, `dual_coefs` and `support_matrix` (`data`, `nnz`, and `indptr`/`indices` when sparse).
+  - `support_idx` is read only for PRECOMPUTED.
+  - `unique_labels` is read only when `predict_class`.
+  - `n_classes` is never read.
+  - The `buffer_size` argument (cache MiB) only batches the prediction.
+- **Null struct.** `svmFreeBuffers` on a zero-initialised struct (`nnz = -1`, every pointer null) is a no-op.
+- **Allocator.** `svcFit` allocates through `rmm::mr::get_current_device_resource_ref()` on the handle's stream, and `svmFreeBuffers` frees the same way.
+
+**Q2. The label contract.**
+- `svcFit` takes any two distinct values in X's dtype.
+  - `getUniquelabels` gives the sorted `unique_labels`, with `n_classes = 2`.
+  - `getOvrlabels` maps `labels == unique_labels[1]` to +1 and everything else to −1.
+- Python 26.08 never calls `svcFit`. It encodes y to ±1 itself (class index 0 → −1) and calls **`svrFit` with `svmType = C_SVC`**.
+  - Probe p1: `svcFit` with {3, 7} equals `svrFit`/C_SVC with ±1 equals Python `SVC.fit`, bitwise, in 16/16 cases: dual, support, b, n_iter and decision values.
+- Predict:
+  - `predict_class` gives `val + b < 0 ? labels[0] : labels[1]`.
+  - Python gives `decision >= 0` → `classes_[1]`.
+  - They agree on finite values; NaN gives labels[1] in C++ and classes_[0] in Python.
+- One class or more than two: `svcFit` allocates `unique_labels`, then throws "Only binary classification is implemented at the moment". The allocation is owned by the model.
+- Python's own refusals:
+  - one class: "needs samples of at least 2 classes";
+  - fewer than 2 rows: refused;
+  - float labels such as 1.5: "Unknown label type: continuous".
+
+**Q3. Parameter mapping (Python 26.08 `SVMBase._fit`, `SVC.__init__`).**
+- **Defaults:** C 1.0, kernel `rbf`, degree 3, gamma `scale`, coef0 0.0, tol 1e-3, cache_size 1024.0 (sklearn: 200), max_iter −1, nochange_steps 1000.
+  - `epsilon` is passed but SVC ignores it.
+  - `random_state` is used only by `probability`, which is refused.
+- **Gamma:**
+  - `'scale'` is `1/(n_cols·x_var)`, with `x_var = X.var().item()`, the variance over **all n·d elements**. It is computed in Python with CuPy in X's dtype, then the division is done in double.
+  - `'auto'` is `1/n_cols`.
+  - A constant X gives a Python ZeroDivisionError.
+- **Iterations:** `max_outer_iter = -1` becomes `max(100000, 100·n)`; `max_iter` is the total of inner SMO pair updates, with −1 meaning no limit.
+- **Kernel names:** `'sigmoid'` → `TANH`.
+- **Stopping:** `nochange_steps` stops after that many consecutive outer iterations in which |diff − diff_prev| < 0.001·tol.
+- **Sample weights:** C_i = C·w_i in X's dtype (`InitPenalty`). A row with C_i ≤ 0 is in neither I_up nor I_low, so it never moves.
+- **Out-of-range values Python accepts:** C ≤ 0, gamma < 0, degree < 0, a degree of 2.5, negative weights, and a class whose rows all have zero weight.
+- **Where sklearn's `SVC` differs:** `cache_size` 200, and `n_support_` per class (cuML's is the int total). sklearn also has `shrinking`, `probability` and `break_ties`, and validates C > 0, gamma ≥ 0, degree ≥ 0, cache_size > 0 and tol > 0.
+
+**Q4. Objective and stopping.**
+- The solver minimises W(α) = ½αᵀQα − 1ᵀα with 0 ≤ α_i ≤ C_i and yᵀα = 0.
+- With f_i = Σ_j dual_j K_ij − y_i (dual = yα), it stops when diff = max_{I_low} f − min_{I_up} f < tol. This is libsvm's maximal violating pair, taken over the working set: all rows when n ≤ 1024, otherwise the 1024 most violating.
+  - I_up = {y>0, α<C} ∪ {y<0, α>0}; I_low = {y<0, α<C} ∪ {y>0, α>0}.
+- Support vectors are the rows with dual ≠ 0, so α = 0 is excluded and α = C bounded vectors are kept, in ascending index order.
+- b = −mean(f over free SVs), or −(b_up + b_low)/2 when every SV is bound.
+- **Measured (p2, 288 fits):** 4 kernels, sizes {100×3, 500×8, 2000×16, 6000×10}, 3 seeds, C ∈ {0.1, 1, 10}, default tol, gamma `scale`, 5% label noise. Gap and margin violation are recomputed in float64 on the host from the returned attributes.
+
+| dtype | max gap/tol | max margin violation/tol | max α/C_i − 1 | max \|Σdual\|/Σ\|dual\| | α=0 SVs |
+|---|---|---|---|---|---|
+| float64 | 0.9994 | 0.704 | 0 | 9.9e-17 | 0 |
+| float32 | 1.618 (linear, 6000×10, C 10, 1808 bound, 235k iters) | 0.916 | 8.94e-8 | 3.6e-8 | 0 |
+
+- Every returned dual has the sign of its row's y.
+
+**Q5. Determinism.**
+- **Bitwise repeatable.** 3 in-process repeats of 20000×20, f32/f64 × linear/rbf, gave 1 distinct result each (p4).
+- **Python parity.** Python cuML equals raw `svcFit` bitwise (Q2).
+- **Cache size (p3).** `cache_size` 0, 1e-6 and 1e9 gave identical `b`, `n_iter` and support count on p3's fixture; the branch's wider grid shows it changes the path (U8, "Measured on the branch").
+- **Where results are not bitwise:**
+  - **Class swap** is not bitwise (p6). |d + d_swap| is 0.0038 (linear), 0.0147 (poly) and 0.0011 (rbf), and 20.5 (sigmoid, a different stationary point).
+  - **Zero weights against deleted rows:** the support (mapped back) is equal in 8/8 cases and the duals are bitwise in 5/8. The decision values differ by at most 1.86e-3 (f32 linear) and 6.4e-4 (f64 poly).
+  - **Integer weights against repeated rows** are not bitwise: |Δdecision| ≤ 2.3e-3, Δb ≤ 8e-5, signs agree 100% (400×5, counts 1–3).
+- **sklearn (p5, breast cancer standardised).** Our resolved gamma, tol 1e-3 on both sides, max |Δdecision| on the training rows:
+  - linear 0.0196 (f32), 0.0185 (f64);
+  - poly 0.0254, 0.0321, with 1 label mismatch where |decision| < 1e-2;
+  - rbf 9.7e-4, 8.4e-4.
+  - At sklearn tol 1e-10: linear 0.0094, poly 0.0274, rbf 6.5e-4.
+  - `n_support` was equal for linear, poly and rbf.
+  - **sigmoid:** 37 label mismatches, Δdecision 14.3, b −0.056 against 0.598. The kernel is not PSD, so the two solvers reach different stationary points.
+  - **Separable blobs (400×4):** labels exact, Δdecision ≤ 7.2e-4.
+
+**Q6/Q7. Edge cases.** p3: raw `svcFit` in a subprocess, 300×4, each dtype; p7: Python. A C++ throw through ctypes aborts (status 134). Behind `translate_exceptions` it becomes a catchable throw.
+
+| case | upstream behaviour |
+|---|---|
+| C 0, −1, NaN | silent, n_s 0, b = 0.06 (mean y), it 0 |
+| C +inf | runs, 59k iterations |
+| cache 0, 1e-6, 1e9 | fine, same result |
+| cache −1 | throws "Cache size should not be negative" |
+| degree 0 | K ≡ 1, b 1.0 |
+| degree −1 | runs |
+| degree 40, coef0 1, γ 1 | throws "Working set has already been initialized!" (non-finite kernel) |
+| gamma 0 | K ≡ 1 |
+| gamma −1 | f32: b 2.06e15, non-finite decisions |
+| gamma 1e30 | throws "Working set has already been initialized!" |
+| max_iter 0 | n_s 0, b = mean y |
+| nochange 0 | fine |
+| tol 0 or −1 | spins 14 s (f32) / 37 s (f64), then throws "Working set has already been initialized!" |
+| 1 row or 1 class | throws "Only binary…" |
+| 3 classes | throws "Only binary…" |
+| 2 rows | n_s 2, b −0 |
+| 1 feature | fine |
+| identical rows | fine |
+| NaN or inf in X | **silent**: n_s 2, b −0, non-finite decisions |
+| X·1e18 (f32, ‖x‖² ≈ 2^125) | silent garbage (n_s 282, b 1.0) |
+| all weights 0 | silent n_s 0, b 0.06 |
+| a negative weight | silent: runs, n_s 124, b −0.0214 (both dtypes) |
+| a class at zero weight | silent n_s 0, b 0.06 |
+| 50 zero weights | fine |
+| raw precomputed | works (n_s 113, it 1087 f32 / 1020 f64) |
+| Python precomputed | works (n_iter 1020) |
+| Python dim mismatch at predict | ValueError |
+
+- No case hangs. The longest was tol 0 in f64 (37 s before the throw). The outer loop is bounded by max(1e5, 100n).
+- `max_iter = 0`, or tol ≥ 2, returns n_s = 0: at α = 0 the gap is exactly 2.
+
+### The decisions
+
+| id | question | recommendation | alternative |
+|---|---|---|---|
+| V0-a | Where do label kinds and codes live, now a second family needs them? | Move `labels.rkt` to `cuml-core-lib/cuml/core/private/labels.rkt` with the jobs passed in as a `label-jobs` struct. Each family exports `cuml_<family>_label_classes`/`_label_encode` through `CUMLRKT_LABEL_ENTRIES` over `common/src/labels.cu`. linear-model's behaviour is unchanged. | svm accepts host-list y only in V0. That breaks AGENTS's classifier rule and V3 inherits the gap. |
+| V0-b | Fit through `svcFit` or Python's `svrFit`/C_SVC? | `svcFit` with 0/1 codes. It is bitwise equal to Python (16/16) and its labels contract is explicit. | `svrFit` with ±1, as Python does. Same bits, but it reads as SVR. |
+| V0-c | A fit with no support vectors (tol ≥ 2, max-iter 0) | Refuse: "the fit has no support vectors; lower #:tol or raise #:max-iter". No zero-extent regions; `n-features` comes from `support-vectors`. | Python's intercept-only model, which needs a zero-row deposit and an `n-features` field. |
+| V0-d | `n-support`: Python cuML's int total, or sklearn's per class? | Per class, `(list n₀ n₁)`. V3 needs it and sklearn has it; the entry names the departure. | Python cuML's int. |
+| V0-e | `intercept` as a device-vector (1), or a flonum like the linear models? | Device-vector of 1 in X's dtype: Python's shape, and V3 extends it to k(k−1)/2. | A flonum, as `linear-regression-result`. |
+| V0-f | Result layout with V1 in mind | Flat `svc-result` fields. V1's `svr-result` repeats the kernel fields; `kernel.rkt` and `svm_apply.cpp` are shared. | A nested `svm-kernel` struct field, which is less like Python's attributes. |
+| V0-g | `#:max-iter` unlimited spelling | `#f` (Python's −1), else a positive int32. | −1 as Python, or a positive default. |
+| V0-h | The `'precomputed` refusal's advice | Name the supported kernels. The message says "is not supported", with no issue number (the manual names no future work). | Name #170 in the message, as the brief suggests. |
+| V0-i | Validation beyond memory safety: C > 0, tol > 0, cache-size > 0, degree ≥ 0 and integral, gamma ≥ 0, finite coef0, no negative weights | Refuse all of them, as sklearn does (Python cuML accepts them and gives garbage, U3/U4/U7). tol ≤ 0 and cache < 0 also throw or spin upstream. | Refuse only what throws (tol ≤ 0, cache < 0, overflow) and keep Python's permissiveness. |
+| V0-j | gamma 0 | Allow it (sklearn and Python do; K ≡ 1 is degenerate but safe). | Refuse ≤ 0. |
+| V0-k | Kernel overflow bound for rbf and sigmoid | γ·max‖x‖² ≤ 1/(16u_T): f32 2²⁰, f64 2⁴⁹. It refuses γ 1e30 and passes standardised data at any sane γ. | Probe a looser bound from cuVS's RBF expansion. |
+| V0-l | X's dtype at predict when it differs from the fit's | Refuse, naming the fit's dtype. | Convert, as Python does. |
+| V0-m | The sigmoid kernel's oracles | K, R, T and D only. No sklearn twin and no class-swap or weight agreement: it is not PSD, and p5/p6 show other stationary points (Δdecision 14–20). The entry says so. | Keep the sklearn twin with labels only. It fails (37 mismatches). |
+| V0-n | `n-iter` | An exact integer (Python's `n_iter_[0]`). | A one-element list, Python's array shape, for V3's concatenation. |
+| V0-o | S3, separable blobs against sklearn: equal support counts? | No. Labels are equal, and every row in exactly one of the two support sets has \|\|decision\| − 1\| ≤ 2·tol in both fits. sklearn at tol 1e-3 keeps a row at α 0.00115 that ours drops; at tol 1e-8 the sets are equal. | n_s equal, which fails on that margin row. |
+| V0-p | Hyperparameters that pass as exact reals but convert to 0 or ±inf (10⁻⁴⁰⁰, 10⁴⁰⁰, float32 1e39) | Check after converting: the flonum, and for float32 X the float32 value, must be finite and positive (C, tol; gamma at least 0) or finite (coef0). The shim checks the same in T, and a `'scale` γ that is not finite in T. | Check the given value only, as before; the shim then runs C = +inf or tol = 0. |
+
+### The refusals
+
+`svc-fit` refuses in this order, every message prefixed "svc-fit: ", all `exn:fail:cuml`.
+
+| step | where | refusal |
+|---|---|---|
+| 1 | Racket | X not a float32 or float64 device-matrix |
+| 2 | Racket | y's kind (`y-kind/who`) |
+| 3 | Racket | the hyperparameters, in `svc-params` order: kernel (`'precomputed` not supported), degree, gamma, coef0, C, tol, cache-size, max-iter, nochange-steps; gamma, coef0, C and tol after converting to a flonum and, for float32 X, to float32 |
+| 4 | Racket | sample-weight not a device-vector or #f |
+| 5 | Racket | X has no rows, then y's length is not X's rows (`y-rows/who`) |
+| 6 | Racket | not exactly two classes |
+| 7 | shim | C, tol, coef0 and a numeric gamma not finite (C, tol: not positive) in X's dtype; `require_index`, then no rows or no columns |
+| 8 | shim, then Racket | sample-weight: length, finite, negative; then a class with no row of positive penalty fl_T(C·wᵢ). The shim returns that class's code in `empty_class` and fits nothing; Racket raises with the label from `classes`. Then, for every kernel, the first row whose fl_T(C·wᵢ) is not finite: "sample-weight: row i: C*w overflows T; lower #:C or rescale the weights". The weights are on the device, so Racket does not form the product. |
+| 9 | shim | X not finite |
+| 10 | shim | a row's squared norm past the bound ("rescale X") |
+| 11 | shim | `'scale` on X of zero variance, or a resolved gamma not finite in X's dtype |
+| 12 | shim | the kernel bound (V0-k) |
+| 13 | shim | `require_cache`: "cache-size: X MiB overflows the kernel cache's index for n rows; pass at most M" (U9). Fit only: at predict cache-size has no cache-index check, since `svcPredict` sizes its kernel tile n_batch × n_support and builds no `raft::cache::Cache` |
+| 14 | shim | no support vectors (V0-c) |
+| 15 | shim | the U1 stall |
+
+`svc-predict` and `svc-decision-function` add, in the shim, before `svcPredict` allocates:
+
+| step | where | refusal |
+|---|---|---|
+| P1 | shim | the result's cache-size not positive, on the double ("cache-size: expected a positive value, got v"), then not finite in X's dtype; a positive value that narrows to 0 is accepted (one row per batch) |
+| P2 | shim | `require_predict_tile`: "X: the kernel tile for n rows against m support vectors overflows an int index; predict on at most k rows at a time". The tile is `svcPredictX`'s n_batch × n_support (`svc_impl.cuh:244-257`, mirrored in T by `predict_tile_elements`); cuVS's `KernelOp` views it through an int index (`sparse_util.cuh:59`), and cuVS's own `kernel_matrices.cu` is not in the store (only the `libcuvs-cu13-26.8.1` binary), so its 64-bit-ness is unverified and the tile is held to int32. A batched tile is at most buffer/sizeof(T) elements (2²⁸ at the 1024 MiB default) or one row of support vectors, so the default never trips it |
+
+### Measured on the branch
+
+- O1: the rebuilt model's decisions and labels are bit-identical to cuML's own in 16 of 16 cases (4 kernels × 2 dtypes × 200×4 and 3000×12).
+- R1: the worst |D̂ − F|/B over the law grid is 0.032 (float32 poly); linear 0.015/0.022, poly 0.032/0.025, rbf 0.015/0.013, sigmoid 0.021/0.022 (float32/float64).
+- K2, the balance bound. In exact arithmetic SMO keeps Σᵢ yᵢαᵢ = 0: each pair update moves αᵢ and αⱼ by amounts whose signed sum is 0. In the dtype each update rounds each of the two new α once, an error of at most u·Cᵢ, so after n-iter updates |Σ dualᵢ| ≤ 2u·n-iter·maxᵢ Cᵢ; a host check that sums the n_s returned duals in the dtype adds γ_{n_s}·Σ|dualᵢ|. K2 is |Σ dualᵢ| ≤ 2u·n-iter·maxᵢ Cᵢ + γ_{n_s}·Σ|dualᵢ|, in both arms and both dtypes. The spec's relative bound (2⁻²² and 2⁻⁵⁰ of Σ|dual|) was measured on unweighted fits and is not a law: the weighted arm broke it in 3 of its 144 cases (2.20× in float32 linear 120×3 seed 3 C 1). On the grid (both arms, both dtypes, 288 fits) the worst |Σ dualᵢ| over the bound is 0.035 (weighted float64 linear 120×3 seed 3 C 1); float32's is 0.027.
+- D2, the cache size. Not bitwise, and not rounding: the cache changes the SMO path (U8). A 1 MiB cache gives another fit than 1024 MiB in 96/96 cases (120×3, 300×4, 1000×8 × 4 seeds × 4 kernels × 2 dtypes), 100 MiB in 32/96; max |Δdecision| 0.020 (linear, poly, rbf), 6.6 (sigmoid), max |Δdual| 0.117, every fit with K3 ≤ 0.9995 tol. 1024 and 4096 MiB agree bitwise in all 96. D2 is: caches of 1024 and 4096 MiB give bit-identical fits; 1 and 100 MiB fits pass K. A cache-size whose `raft::cache::Cache` index overflows int32 is refused (U9).
+- T2, `'scale` against Python cuML's `_gamma`: bitwise in float32 on both blob fixtures and breast cancer, and in float64 on 2000×10 and breast cancer. Float64 300×4 is 1 ulp above Python's (CuPy's `var()` sums in another order), so T1 there runs with our gamma passed to Python as a number (the spec's §7 item 1); with Python's own gamma it was bitwise too.
+- Poly degree 40 in float64 (40×3 blobs, γ 1, coef0 1) passes the kernel bound and fits (n-iter 253, n-support (7 4), 0.2 s): U1 is not reached.

@@ -202,6 +202,18 @@ cumlrkt_family(manifold
         common/src/largest_positive.cu manifold/src/spectral_residual.cu
 )
 
+cumlrkt_family(svm
+  SOURCES svm/src/svm.cpp svm/src/svc.cpp svm/src/svm_apply.cpp
+          svm/src/gamma.cu svm/src/svm_device.cu common/src/transpose.cu
+  TESTS svm/tests/ownership_test.cpp svm/tests/model_guard_test.cpp
+        svm/tests/kernel_checks_test.cpp svm/tests/gamma_test.cpp
+        svm/tests/svc_refusal_test.cpp svm/src/gamma.cu svm/src/svm_device.cu
+        common/src/transpose.cu common/src/rows.cu
+)
+if(TARGET cumlrkt_svm_tests)
+  target_link_libraries(cumlrkt_svm_tests PRIVATE cuml_runtime)
+endif()
+
 cumlrkt_family(probe TEST_ONLY
   SOURCES probe/src/probe.cpp
   TESTS probe/tests/model_test.cpp

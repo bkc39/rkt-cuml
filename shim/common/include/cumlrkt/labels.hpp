@@ -21,4 +21,8 @@ template <typename T>
 void encode_against(const T* labels, int64_t n, const T* classes, int64_t k,
                     int32_t* codes, rmm::cuda_stream_view stream);
 
+template <typename T>
+int64_t first_non_integral(const T* labels, int64_t n,
+                           rmm::cuda_stream_view stream);
+
 }  // namespace cumlrkt
