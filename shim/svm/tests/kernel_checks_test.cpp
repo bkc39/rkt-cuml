@@ -161,10 +161,16 @@ TEST(kernel_checks, the_cache_refusal_names_its_remedy) {
   }
 }
 
+constexpr double large_cache = 8200.0;
+constexpr int64_t many = 50000;
+constexpr int64_t some_rows = 1000;
+constexpr double default_cache = 1024.0;
+constexpr double vanishing_cache = 1e-50;
+
 template <typename T>
-bool tiled(double cache_size, int64_t n_rows, int64_t n_support) {
+bool tiled(double cache_size, predict_shape shape) {
   try {
-    require_predict_tile<T>(cache_size, n_rows, n_support);
+    require_predict_tile<T>(cache_size, shape);
     return true;
   } catch (const logic_error&) {
     return false;
@@ -172,30 +178,30 @@ bool tiled(double cache_size, int64_t n_rows, int64_t n_support) {
 }
 
 TEST(kernel_checks, the_predict_tile_fits_an_int_index) {
-  EXPECT_EQ(predict_tile_elements<float>(8200.0, 50000, 50000),
-            int64_t{42991} * 50000);
-  EXPECT_FALSE(tiled<float>(8200.0, 50000, 50000));
-  EXPECT_TRUE(tiled<float>(8200.0, 1000, 50000));
-  EXPECT_EQ(predict_tile_elements<float>(1e-50, 40, 20), 20);
-  EXPECT_EQ(predict_tile_elements<double>(1e39, 40, 20), 800);
+  EXPECT_EQ(predict_tile_elements<float>(large_cache, {many, many}),
+            int64_t{42991} * many);
+  EXPECT_FALSE(tiled<float>(large_cache, {many, many}));
+  EXPECT_TRUE(tiled<float>(large_cache, {some_rows, many}));
+  EXPECT_EQ(predict_tile_elements<float>(vanishing_cache, {40, 20}), 20);
+  EXPECT_EQ(predict_tile_elements<double>(1e39, {40, 20}), 800);
 }
 
 TEST(kernel_checks, the_default_cache_never_refuses_a_predict_tile) {
-  for (const int64_t n_support :
+  for (const int64_t support :
        {int64_t{1}, int64_t{20}, int64_t{1000}, int64_t{4096}}) {
-    for (const int64_t n_rows : {int64_t{1}, int64_t{1000}, int64_t{1} << 20,
-                                 int64_t{1} << 26, most_index}) {
-      EXPECT_TRUE(tiled<float>(1024.0, n_rows, n_support))
-          << n_rows << " " << n_support;
-      EXPECT_TRUE(tiled<double>(1024.0, n_rows, n_support))
-          << n_rows << " " << n_support;
+    for (const int64_t rows : {int64_t{1}, some_rows, int64_t{1} << 20,
+                               int64_t{1} << 26, most_index}) {
+      EXPECT_TRUE(tiled<float>(default_cache, {rows, support}))
+          << rows << " " << support;
+      EXPECT_TRUE(tiled<double>(default_cache, {rows, support}))
+          << rows << " " << support;
     }
   }
 }
 
 TEST(kernel_checks, the_predict_tile_refusal_names_its_remedy) {
   try {
-    require_predict_tile<float>(8200.0, 50000, 50000);
+    require_predict_tile<float>(large_cache, {many, many});
     FAIL() << "accepted";
   } catch (const logic_error& e) {
     EXPECT_EQ(std::string(e.what()),
@@ -205,11 +211,20 @@ TEST(kernel_checks, the_predict_tile_refusal_names_its_remedy) {
   }
 }
 
+bool positive_cache(double cache_size) {
+  try {
+    require_positive_cache(cache_size);
+    return true;
+  } catch (const logic_error&) {
+    return false;
+  }
+}
+
 TEST(kernel_checks, predict_refuses_a_cache_size_that_is_not_positive) {
   for (const double cache_size : {-1.0, -1e300, 0.0, std::nan("")}) {
-    EXPECT_THROW(require_positive_cache(cache_size), logic_error) << cache_size;
+    EXPECT_FALSE(positive_cache(cache_size)) << cache_size;
   }
-  require_positive_cache(1e-50);
+  EXPECT_TRUE(positive_cache(vanishing_cache));
 }
 
 }  // namespace
