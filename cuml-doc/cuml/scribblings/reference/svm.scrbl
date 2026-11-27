@@ -82,7 +82,9 @@ The fit repeats bitwise.
                                 [#:resources resources device-resources? (current-device-resources)])
          device-vector?]{
 Σᵢ dual-coefᵢ·k(svᵢ, x) + intercept for each row, in the fit's dtype. The result's
-@racket[cache-size] only batches the rows here, so it need only be finite in that dtype.
+@racket[cache-size] only batches the rows here, so it need only be positive and finite in that dtype.
+X is refused when one batch's kernel tile, its rows by the support vectors, overflows an int index,
+naming how many rows to predict on at a time.
 @examples[#:eval ev #:label #f
 (device-vector->list (svc-decision-function r X))
 ]}

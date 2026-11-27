@@ -220,7 +220,11 @@
     `((,(struct-copy svc-result r32-sigmoid [coef0 1e39]) "coef0: expected a value finite in float32")
       (,(struct-copy svc-result r32 [gamma 1e39]) "gamma: expected a value finite in float32")
       (,(struct-copy svc-result r32 [cache-size 1e39])
-       "cache-size: expected a value finite in float32")))
+       "cache-size: expected a value finite in float32")
+      (,(struct-copy svc-result r32 [cache-size -1.0])
+       "cache-size: expected a positive value, got -1")
+      (,(struct-copy svc-result r64 [cache-size -1.0])
+       "cache-size: expected a positive value, got -1")))
   (for ([apply-svc (in-list (list svc-predict svc-decision-function))]
         [who (in-list '(svc-predict svc-decision-function))])
     (check-refused (format "~a: result: expected an svc-result, got 'r" who)

@@ -1,6 +1,8 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <format>
 #include <limits>
@@ -126,6 +128,41 @@ void require_cache(double cache_size, int64_t n) {
         "cache-size: {} MiB overflows the kernel cache's index for {} rows; "
         "pass at most {}",
         printed(cache_size), n, printed(most_cache_size<T>(n))));
+  }
+}
+
+inline void require_positive_cache(double cache_size) {
+  if (!(cache_size > 0)) {
+    throw logic_error(std::format(
+        "cache-size: expected a positive value, got {}", printed(cache_size)));
+  }
+}
+
+// svcPredictX (cuml svm/svc_impl.cuh) mirrored in T: every row in one tile when
+// n_rows·n_support·sizeof(T) fits buffer_size·2^20, else
+// ⌊buffer/(n_support·sizeof(T))⌋ rows, at least one. cuVS's KernelOp views the
+// n_batch × n_support tile through an int index.
+template <typename T>
+int64_t predict_tile_elements(double cache_size, int64_t n_rows,
+                              int64_t n_support) {
+  const T buffer = static_cast<T>(cache_size) * 1024 * 1024;
+  const std::size_t row_bytes = static_cast<std::size_t>(n_support) * sizeof(T);
+  int64_t n_batch = n_rows;
+  if (static_cast<T>(static_cast<std::size_t>(n_rows) * row_bytes) > buffer) {
+    n_batch = std::max<int64_t>(
+        1, static_cast<int64_t>(buffer / static_cast<T>(row_bytes)));
+  }
+  return n_batch * n_support;
+}
+
+template <typename T>
+void require_predict_tile(double cache_size, int64_t n_rows,
+                          int64_t n_support) {
+  if (predict_tile_elements<T>(cache_size, n_rows, n_support) > most_index) {
+    throw logic_error(std::format(
+        "X: the kernel tile for {} rows against {} support vectors overflows "
+        "an int index; predict on at most {} rows at a time",
+        n_rows, n_support, most_index / n_support));
   }
 }
 

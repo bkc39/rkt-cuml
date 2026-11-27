@@ -300,8 +300,11 @@ For SVMs (`svc.rkt`; the full rules are `plans/layout.md`'s V0 section):
   `most_kernel_exponent<T>` (rbf, sigmoid), and a cache-size whose
   `raft::cache::Cache` index fits int32 (`require_cache`); C, tol, coef0 and gamma are
   checked after narrowing to T with round-to-nearest (`require_narrowed`), at fit and at
-  predict; at predict cache-size is only narrowed to a finite T, with no cache-index check,
-  since `svcPredict` builds no `raft::cache::Cache`; a negative weight, a class with no positive penalty
+  predict; at predict cache-size is only refused when not positive (on the double) or not
+  finite in T, with no cache-index check, since `svcPredict` builds no `raft::cache::Cache`;
+  instead predict refuses an X whose kernel tile, `svcPredictX`'s n_batch × n_support
+  (`predict_tile_elements`, mirroring its batching in T), overflows int32
+  (`require_predict_tile`; the cuVS source that indexes it is not in the store); a negative weight, a class with no positive penalty
   fl_T(C·wᵢ), a row whose fl_T(C·wᵢ) overflows, and one or three classes are refused,
   never fitted.
 - *svm-twin.* `python/svc_twin.py` (ops `cuml-fit`, `sklearn-fit`,

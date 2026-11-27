@@ -3227,9 +3227,16 @@ names; l1-ratio range-checked always; L4's label code moved to
 | 10 | shim | a row's squared norm past the bound ("rescale X") |
 | 11 | shim | `'scale` on X of zero variance, or a resolved gamma not finite in X's dtype |
 | 12 | shim | the kernel bound (V0-k) |
-| 13 | shim | `require_cache`: "cache-size: X MiB overflows the kernel cache's index for n rows; pass at most M" (U9). Fit only: at predict cache-size is narrowed to a finite T and has no cache-index check, since `svcPredict` sizes its kernel tile n_batch × n_support and builds no `raft::cache::Cache` |
+| 13 | shim | `require_cache`: "cache-size: X MiB overflows the kernel cache's index for n rows; pass at most M" (U9). Fit only: at predict cache-size has no cache-index check, since `svcPredict` sizes its kernel tile n_batch × n_support and builds no `raft::cache::Cache` |
 | 14 | shim | no support vectors (V0-c) |
 | 15 | shim | the U1 stall |
+
+`svc-predict` and `svc-decision-function` add, in the shim, before `svcPredict` allocates:
+
+| step | where | refusal |
+|---|---|---|
+| P1 | shim | the result's cache-size not positive, on the double ("cache-size: expected a positive value, got v"), then not finite in X's dtype; a positive value that narrows to 0 is accepted (one row per batch) |
+| P2 | shim | `require_predict_tile`: "X: the kernel tile for n rows against m support vectors overflows an int index; predict on at most k rows at a time". The tile is `svcPredictX`'s n_batch × n_support (`svc_impl.cuh:244-257`, mirrored in T by `predict_tile_elements`); cuVS's `KernelOp` views it through an int index (`sparse_util.cuh:59`), and cuVS's own `kernel_matrices.cu` is not in the store (only the `libcuvs-cu13-26.8.1` binary), so its 64-bit-ness is unverified and the tile is held to int32. A batched tile is at most buffer/sizeof(T) elements (2²⁸ at the 1024 MiB default) or one row of support vectors, so the default never trips it |
 
 ### Measured on the branch
 

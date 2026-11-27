@@ -161,5 +161,56 @@ TEST(kernel_checks, the_cache_refusal_names_its_remedy) {
   }
 }
 
+template <typename T>
+bool tiled(double cache_size, int64_t n_rows, int64_t n_support) {
+  try {
+    require_predict_tile<T>(cache_size, n_rows, n_support);
+    return true;
+  } catch (const logic_error&) {
+    return false;
+  }
+}
+
+TEST(kernel_checks, the_predict_tile_fits_an_int_index) {
+  EXPECT_EQ(predict_tile_elements<float>(8200.0, 50000, 50000),
+            int64_t{42991} * 50000);
+  EXPECT_FALSE(tiled<float>(8200.0, 50000, 50000));
+  EXPECT_TRUE(tiled<float>(8200.0, 1000, 50000));
+  EXPECT_EQ(predict_tile_elements<float>(1e-50, 40, 20), 20);
+  EXPECT_EQ(predict_tile_elements<double>(1e39, 40, 20), 800);
+}
+
+TEST(kernel_checks, the_default_cache_never_refuses_a_predict_tile) {
+  for (const int64_t n_support :
+       {int64_t{1}, int64_t{20}, int64_t{1000}, int64_t{4096}}) {
+    for (const int64_t n_rows : {int64_t{1}, int64_t{1000}, int64_t{1} << 20,
+                                 int64_t{1} << 26, most_index}) {
+      EXPECT_TRUE(tiled<float>(1024.0, n_rows, n_support))
+          << n_rows << " " << n_support;
+      EXPECT_TRUE(tiled<double>(1024.0, n_rows, n_support))
+          << n_rows << " " << n_support;
+    }
+  }
+}
+
+TEST(kernel_checks, the_predict_tile_refusal_names_its_remedy) {
+  try {
+    require_predict_tile<float>(8200.0, 50000, 50000);
+    FAIL() << "accepted";
+  } catch (const logic_error& e) {
+    EXPECT_EQ(std::string(e.what()),
+              "X: the kernel tile for 50000 rows against 50000 support "
+              "vectors overflows an int index; predict on at most 42949 rows "
+              "at a time");
+  }
+}
+
+TEST(kernel_checks, predict_refuses_a_cache_size_that_is_not_positive) {
+  for (const double cache_size : {-1.0, -1e300, 0.0, std::nan("")}) {
+    EXPECT_THROW(require_positive_cache(cache_size), logic_error) << cache_size;
+  }
+  require_positive_cache(1e-50);
+}
+
 }  // namespace
 }  // namespace cumlrkt::svm
