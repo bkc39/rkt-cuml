@@ -300,7 +300,8 @@ For SVMs (`svc.rkt`; the full rules are `plans/layout.md`'s V0 section):
   `most_kernel_exponent<T>` (rbf, sigmoid), and a cache-size whose
   `raft::cache::Cache` index fits int32 (`require_cache`); C, tol, coef0 and gamma are
   checked after narrowing to T with round-to-nearest (`require_narrowed`), at fit and at
-  predict, where cache-size is too; a negative weight, a class with no positive penalty
+  predict; at predict cache-size is only narrowed to a finite T, with no cache-index check,
+  since `svcPredict` builds no `raft::cache::Cache`; a negative weight, a class with no positive penalty
   fl_T(C·wᵢ), a row whose fl_T(C·wᵢ) overflows, and one or three classes are refused,
   never fitted.
 - *svm-twin.* `python/svc_twin.py` (ops `cuml-fit`, `sklearn-fit`,

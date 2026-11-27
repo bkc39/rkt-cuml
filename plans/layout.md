@@ -3227,7 +3227,7 @@ names; l1-ratio range-checked always; L4's label code moved to
 | 10 | shim | a row's squared norm past the bound ("rescale X") |
 | 11 | shim | `'scale` on X of zero variance, or a resolved gamma not finite in X's dtype |
 | 12 | shim | the kernel bound (V0-k) |
-| 13 | shim | `require_cache`: "cache-size: X MiB overflows the kernel cache's index for n rows; pass at most M" (U9) |
+| 13 | shim | `require_cache`: "cache-size: X MiB overflows the kernel cache's index for n rows; pass at most M" (U9). Fit only: at predict cache-size is narrowed to a finite T and has no cache-index check, since `svcPredict` sizes its kernel tile n_batch × n_support and builds no `raft::cache::Cache` |
 | 14 | shim | no support vectors (V0-c) |
 | 15 | shim | the U1 stall |
 

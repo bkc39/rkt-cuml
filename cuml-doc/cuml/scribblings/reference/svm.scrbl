@@ -81,7 +81,8 @@ The fit repeats bitwise.
                                 [X device-matrix?]
                                 [#:resources resources device-resources? (current-device-resources)])
          device-vector?]{
-Σᵢ dual-coefᵢ·k(svᵢ, x) + intercept for each row, in the fit's dtype.
+Σᵢ dual-coefᵢ·k(svᵢ, x) + intercept for each row, in the fit's dtype. The result's
+@racket[cache-size] only batches the rows here, so it need only be finite in that dtype.
 @examples[#:eval ev #:label #f
 (device-vector->list (svc-decision-function r X))
 ]}
