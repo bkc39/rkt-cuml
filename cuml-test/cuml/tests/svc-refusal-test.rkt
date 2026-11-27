@@ -12,8 +12,8 @@
          (only-in racket/list make-list)
          (only-in racket/match match match-define)
          (only-in racket/string string-prefix?)
-         (only-in rackunit check-pred check-true test-case)
-         (only-in raft device-matrix dtype list->device-vector)
+         (only-in rackunit check-equal? check-pred check-true test-case)
+         (only-in raft device-matrix device-vector->list dtype list->device-vector)
          (only-in raft/tests/private/gpu test-gpu)
          (only-in "private/cuml-error.rkt" raised)
          (only-in "private/linear-data.rkt" dtypes on-matrix)
@@ -218,9 +218,7 @@
     `((,(struct-copy svc-result r32-sigmoid [coef0 1e39]) "coef0: expected a value finite in float32")
       (,(struct-copy svc-result r32 [gamma 1e39]) "gamma: expected a value finite in float32")
       (,(struct-copy svc-result r32 [cache-size 1e39])
-       "cache-size: expected a positive value finite in float32")
-      (,(struct-copy svc-result r [cache-size 1e39])
-       "cache-size: 1e+39 MiB overflows the kernel cache's index for")))
+       "cache-size: expected a positive value finite in float32"))))
   (for ([apply-svc (in-list (list svc-predict svc-decision-function))]
         [who (in-list '(svc-predict svc-decision-function))])
     (check-refused (format "~a: result: expected an svc-result, got 'r" who)
@@ -239,3 +237,15 @@
       (match-define (list result message) f)
       (define X (on-matrix rows (dtype (svc-result-support-vectors result))))
       (check-refused (format "~a: ~a" who message) (lambda () (apply-svc result X))))))
+
+(test-gpu "predict narrows cache-size to a finite value and checks nothing more"
+  (define r (svc-fit (on-matrix rows 'float64) labels))
+  (define r32 (svc-fit (on-matrix rows 'float32) labels))
+  (define accepted
+    (list (struct-copy svc-result r32 [cache-size 8200.0])
+          (struct-copy svc-result r [cache-size 8200.0])
+          (struct-copy svc-result r [cache-size 1e39])))
+  (for ([result (in-list accepted)])
+    (define X (on-matrix rows (dtype (svc-result-support-vectors result))))
+    (check-equal? (length (svc-predict result X)) (length rows))
+    (check-equal? (length (device-vector->list (svc-decision-function result X))) (length rows))))

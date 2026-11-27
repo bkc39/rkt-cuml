@@ -136,6 +136,11 @@ TEST(kernel_checks, the_kernel_cache_index_fits_int32) {
   EXPECT_FALSE(cached<double>(1e30, 300));
 }
 
+TEST(kernel_checks, the_cache_index_bound_is_not_monotone_in_rows) {
+  EXPECT_LE(cache_elements<float>(8200.0, 100000), most_index);
+  EXPECT_GT(cache_elements<float>(8200.0, 4000), most_index);
+}
+
 TEST(kernel_checks, most_cache_size_is_the_largest_cache_that_fits) {
   for (const int64_t n :
        {int64_t{1}, int64_t{300}, int64_t{569}, int64_t{20000}}) {

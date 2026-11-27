@@ -60,7 +60,6 @@ buffer<T> decision_of(const raft::handle_t& handle, const apply_views& views,
   require_index("X", x.n, x.d);
   require_index("support-vectors", sv.n, sv.d);
   require_some("support-vectors", "row", sv.n);
-  require_cache<T>(s.cache_size, sv.n);
   require_finite("X", x, stream);
   const double x_norm = largest_squared_norm(x.data, x.n, x.d, stream);
   require_row_norms("X", x_norm, x.data, x.n, x.d, stream);
