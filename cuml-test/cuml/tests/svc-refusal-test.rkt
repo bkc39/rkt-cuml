@@ -45,7 +45,7 @@
 
 (define heavy-weights (make-list 40 1e10))
 
-(define float-halfway (- (expt 2.0 128) (expt 2.0 103)))
+(define float32-overflow-boundary (- (expt 2.0 128) (expt 2.0 103)))
 
 (define fit-rows
   `(#hasheq((message
@@ -108,19 +108,19 @@
     #hasheq((message . "svc-fit: gamma 'scale: X has zero variance; pass a numeric #:gamma")
             (X . ,(make-list 40 '(1.5 1.5 1.5))))
     #hasheq((message . "svc-fit: sample-weight: class 0 has no row of positive weight")
-            (weight-list . ,(make-list 40 0.0)))
+            (host-weights . ,(make-list 40 0.0)))
     #hasheq((message . "svc-fit: sample-weight: negative weight -1 at row 0")
-            (weight-list . ,negative-weights))
+            (host-weights . ,negative-weights))
     #hasheq((message . "svc-fit: sample-weight: class 1 has no row of positive weight")
-            (weight-list . ,(weights 1)))
+            (host-weights . ,(weights 1)))
     #hasheq((message . "svc-fit: sample-weight: class \"yes\" has no row of positive weight")
             (y . ,word-labels)
-            (weight-list . ,(weights 1)))
+            (host-weights . ,(weights 1)))
     #hasheq((message . "svc-fit: sample-weight: class \"no\" has no row of positive weight")
             (y . ,word-labels)
-            (weight-list . ,(weights 0)))
+            (host-weights . ,(weights 0)))
     #hasheq((message . "svc-fit: sample-weight: row 0: expected a finite value, got nan")
-            (weight-list . ,(cons +nan.0 (make-list 39 1.0))))
+            (host-weights . ,(cons +nan.0 (make-list 39 1.0))))
     #hasheq((message . "svc-fit: the kernel can overflow (bound ") (#:gamma . 1e30))
     #hasheq((message
              .
@@ -139,14 +139,15 @@
             (X . ,(scaled 1e-20)))
     #hasheq((message . "svc-fit: sample-weight: class 1 has no row of positive weight")
             (#:C . 0.1)
-            (weight-list . ,(faint 1)))
+            (host-weights . ,(faint 1)))
     #hasheq((message . "svc-fit: X: row 0: expected a squared norm of at most") (X . ,(scaled 1e19)))
     #hasheq((message
              .
              "svc-fit: sample-weight: row 0: C*w overflows float32; lower #:C or rescale the weights")
             (#:C . 1e30)
-            (weight-list . ,heavy-weights))
-    #hasheq((message . "svc-fit: C: 3.4028235677973366e+38 overflows float32") (#:C . ,float-halfway))
+            (host-weights . ,heavy-weights))
+    #hasheq((message . "svc-fit: C: 3.4028235677973366e+38 overflows float32")
+            (#:C . ,float32-overflow-boundary))
     #hasheq((message . "svc-fit: the kernel can overflow (bound ")
             (#:kernel . poly)
             (#:degree . 40)
@@ -158,7 +159,7 @@
              .
              "svc-fit: sample-weight: row 0: C*w overflows float64; lower #:C or rescale the weights")
             (#:C . 1e300)
-            (weight-list . ,heavy-weights))))
+            (host-weights . ,heavy-weights))))
 
 (define (fit-call dt row)
   (define X (on-matrix (hash-ref row 'X rows) dt))
@@ -168,7 +169,7 @@
                  #:when (keyword? key))
       (values key v)))
   (define kws
-    (match (hash-ref row 'weight-list #f)
+    (match (hash-ref row 'host-weights #f)
       [#f given]
       [w (hash-set given '#:sample-weight (list->device-vector w #:dtype dt))]))
   (define pairs (sort (hash->list kws) keyword<? #:key car))
@@ -188,14 +189,14 @@
       (check-refused message (fit-call dt row)))))
 
 (test-gpu "what narrows to 0 or infinity in float32 or float64, an overlong row and a steep poly kernel"
-  (for* ([dt-rows (in-list (list (cons 'float32 float32-rows) (cons 'float64 float64-rows)))]
-         [row (in-list (cdr dt-rows))])
+  (for* ([(dt narrowing-rows) (in-parallel '(float32 float64) (list float32-rows float64-rows))]
+         [row (in-list narrowing-rows)])
     (define message (hash-ref row 'message))
     (test-case message
-      (check-refused message (fit-call (car dt-rows) row)))))
+      (check-refused message (fit-call dt row)))))
 
 (test-gpu "C at float32's rounding boundary is accepted below it"
-  (for ([C (in-list (list (flprev float-halfway) 3.4028235e38))])
+  (for ([C (in-list (list (flprev float32-overflow-boundary) 3.4028235e38))])
     (check-pred svc-result? (svc-fit (on-matrix rows 'float32) labels #:C C))))
 
 (test-gpu "a fit on no rows is refused"
@@ -218,7 +219,7 @@
     `((,(struct-copy svc-result r32-sigmoid [coef0 1e39]) "coef0: expected a value finite in float32")
       (,(struct-copy svc-result r32 [gamma 1e39]) "gamma: expected a value finite in float32")
       (,(struct-copy svc-result r32 [cache-size 1e39])
-       "cache-size: expected a value finite in float32"))))
+       "cache-size: expected a value finite in float32")))
   (for ([apply-svc (in-list (list svc-predict svc-decision-function))]
         [who (in-list '(svc-predict svc-decision-function))])
     (check-refused (format "~a: result: expected an svc-result, got 'r" who)

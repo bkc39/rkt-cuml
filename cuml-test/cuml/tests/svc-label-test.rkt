@@ -17,13 +17,14 @@
                   label-encodings
                   svc-result->svm-fit
                   svm-case
-                  svm-fit)
+                  svm-fit
+                  symbols-encoding)
          (only-in "private/svm-oracle.rkt" check-kkt))
 
 (define-values (rows labels) (dyadic-blobs 300 4 2))
 (define probe (fresh-rows 200 4 2))
 
-(define symbol-labels (encoded-labels (encoding 'symbols '(no yes) #f) labels))
+(define symbol-labels (encoded-labels symbols-encoding labels))
 
 (define (without-classes r)
   (struct-copy svm-fit (svc-result->svm-fit r) [classes #f]))
@@ -33,11 +34,11 @@
          [kernel (in-list '(linear rbf))])
     (define X (on-matrix rows dt))
     (define reference (without-classes (svc-fit X labels #:kernel kernel)))
-    (for ([e (in-list label-encodings)])
-      (match-define (struct* encoding ([name name])) e)
+    (for ([enc (in-list label-encodings)])
+      (match-define (struct* encoding ([name name])) enc)
       (test-case (format "~a ~a ~a" dt kernel name)
         (law-case "L1"
-          (check-equal? (without-classes (svc-fit X (encoded-labels e labels) #:kernel kernel))
+          (check-equal? (without-classes (svc-fit X (encoded-labels enc labels) #:kernel kernel))
                         reference))))))
 
 (define (largest-sum ds es)
@@ -73,16 +74,15 @@
                             '(no yes))))))))
 
 (test-gpu "score is the exact accuracy of predict, an unseen label counting as wrong"
-  (define y symbol-labels)
   (define truth
-    (for/list ([v (in-list y)]
+    (for/list ([v (in-list symbol-labels)]
                [i (in-naturals)])
       (if (zero? (modulo i 11)) 'maybe v)))
   (for ([dt (in-list dtypes)])
     (test-case (format "~a" dt)
       (define X (on-matrix rows dt))
-      (define e (fit (svc #:kernel 'rbf) X y))
-      (define predicted (svc-predict (svc-fit X y #:kernel 'rbf) X))
+      (define e (fit (svc #:kernel 'rbf) X symbol-labels))
+      (define predicted (svc-predict (svc-fit X symbol-labels #:kernel 'rbf) X))
       (law-case "L3"
         (check-equal? (score e X truth)
                       (~> (count equal? predicted truth) (/ (length truth)) exact->inexact))))))
